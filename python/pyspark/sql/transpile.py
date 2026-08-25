@@ -45,63 +45,46 @@ Python rather than risk the wrong body.
 A lowered UDF computes each argument it uses once per row (SPARK-58626): the
 argument becomes a column on the operator's input, and however many times the
 body reads that parameter it reads that one column. Two parameters bound to the
-same deterministic argument share the column too, so ``f(a + 1, a + 1)``
-computes ``a + 1`` once.
+same deterministic argument share the column, so ``f(a + 1, a + 1)`` computes
+``a + 1`` once.
+
+Some positions have nowhere to put that column -- inside a higher-order
+function's lambda, in a command such as ``DELETE FROM``, under an operator with
+more than one input such as a join. There a body reading the parameter more than
+once stays an interpreted Python UDF, which computes its inputs once wherever it
+sits, rather than being lowered into an argument evaluated per read. One
+evaluation per parameter per row either way; ``f(rand(), rand())`` is two
+parameters and so still two draws::
+
+    body = lambda x: x if x > 0.5 else 0.0
+    clamp = udf(body, "double")
+    df.select(clamp(rand()))  # never a value the body's own condition rejects
 
 The column is computed for every row reaching the operator, which makes an
 argument eager even where the call sits in a branch that may not run: under ANSI
 ``when(cond, f(a / b))`` raises on a row with ``b = 0`` and ``cond`` false. That
 matches the interpreted Python UDF this replaces, which evaluates its inputs in
 a projection feeding the Python worker, below the conditional -- it does not
-match a bare Catalyst ``when``, which is lazy. Python's semantics win here.
+match a bare Catalyst ``when``, which is lazy. Python's semantics win here. An
+argument left inline goes back to being lazy, so how many times a body mentions
+a parameter can decide whether an ANSI error surfaces at all.
 
-Four positions cannot take that column, and there a repeated argument is
-computed once per use -- so a nondeterministic one is drawn more than once and
-the body can see two different values for one parameter:
+A ``groupBy`` does take a column, because the aggregate is split first: grouping
+and aggregate expressions below, results above, and each half can hold one -- so
+``agg(sum(f(rand())))`` draws once per input row.
 
-* inside a higher-order function's lambda (``transform`` and friends), because
-  a column is computed per row where the body runs per element;
-* anywhere under a ``groupBy`` or ``agg``, because a result expression there
-  has to be built from the grouping expressions rather than read a column, so
-  the whole aggregate is left alone -- ``agg(sum(f(a + 1)))`` included;
-* in a command (``DELETE FROM``), or under an operator with more than one input
-  such as a join, where there is no single side to compute on. A lateral join is
-  the exception that proves the rule -- it has one input, so its condition does
-  get a column when the argument reads only the left side;
-* as an argument to another lowered UDF -- ``f(g(x))`` computes ``x`` once for
-  ``g``, but ``g``'s result once per parameter read in ``f``.
-
-Where an argument is left inline it also goes back to being lazy, and that is
-visible: ``when(cond, f(a / b))`` for a body that reads its parameter once
-returns rows under ANSI where the interpreted UDF raises, because interpreted
-Python computes its inputs whatever the branch does. So how many times a body
-happens to mention a parameter decides whether an ANSI error surfaces at all.
-
-An argument no projection can hold is left alone too: one that is itself an
-aggregate (``f(sum(a))``), and one reading an outer query's column when
+Two arguments no projection can hold count as those positions too: one that is
+itself an aggregate (``f(sum(a))``), and one reading an outer query's column when
 correlated-subquery decorrelation is disabled.
 
-Bound to a name on its own line, per the rule above, or none of this applies
-because the body is never lowered in the first place. ``clamp`` reads its
-parameter twice, so a single draw is what keeps it from returning a value its
-own condition rejected::
-
-    body = lambda x: x if x > 0.5 else 0.0
-    clamp = udf(body, "double")
-    df.select(clamp(rand()))                          # one draw per row
-    df.select(transform(arr, lambda e: clamp(rand())))  # one draw per element
-
-Elsewhere the count is best effort. An argument the body reads only once is left
-where it is, since one read is one evaluation anyway, and one cheap enough to
-recompute gets no column either -- a bare column, a literal, or a Python UDF
-call over those. Arithmetic does not count as cheap, so a repeated ``a + 1``
-does get a column; a later filter pushdown may still substitute it back and
-compute it twice, which costs arithmetic and changes no answers.
-
-The one guarantee to rely on: wherever a column is placed, every read of that
-parameter sees one value.
-
-An argument the body never uses is not computed at all.
+An argument read once gets no column, since one read is one evaluation anyway,
+and neither does one as cheap to repeat as to read -- a bare column or a literal.
+Anything more, arithmetic included, is either computed once or left to
+interpreted Python; a repeated ``a + 1`` gets a column where one fits and stops
+the UDF being lowered where one does not. The one hole in that: a later filter
+pushdown can substitute a deterministic column back and compute it twice, which
+costs work and changes no answers. An argument the body never reads is not
+computed at all.
 """
 
 import ast

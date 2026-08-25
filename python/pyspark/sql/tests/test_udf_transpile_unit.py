@@ -1497,15 +1497,15 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual([0, 1, 4], [r[0] for r in col_df.collect()])
 
     def test_udf_transpile_shares_a_python_udf_argument(self):
-        # SPARK-58626: an argument that is itself a Python UDF. CollapseProject.isCheap counts a
-        # PythonUDF as cheap, so it goes back inline at both use sites rather than reading a shared
-        # column -- but ExtractPythonUDFs points every occurrence of one call at a single result
-        # attribute, so both sites still read one value. With a nondeterministic call that is the
-        # whole ballgame: two independent draws would make `a - a` nonzero.
+        # SPARK-58626: an argument that is itself a nondeterministic Python UDF gets a column like
+        # any other draw the body reads twice, even though CollapseProject.isCheap counts a
+        # PythonUDF as cheap. Cheapness is about wasted work; two calls would be two draws, and
+        # `a - a` would come out nonzero.
         #
-        # What inlining does cost is a second Python round trip, because the dedup that would fold
-        # the copies goes through an ExpressionSet and that holds a nondeterministic expression
-        # once per add. Wasted work, not a wrong answer, so it is not asserted here.
+        # ExtractPythonUDFs would have pointed both copies at one result attribute anyway, so this
+        # was the right answer before the column too -- by accident, from an unrelated rule, and at
+        # the cost of a second Python round trip (the dedup runs through an ExpressionSet, which
+        # holds a nondeterministic expression once per add).
         import random
 
         draw = lambda x: random.random()  # noqa: E731
@@ -1514,8 +1514,72 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             rand_udf = UserDefinedFunction(draw, DoubleType()).asNondeterministic()
             diff = UserDefinedFunction(subtract_self, DoubleType())
             self.assertTrue(diff.transpiled)
-            vals = [r[0] for r in self.spark.range(20).select(diff(rand_udf("id"))).collect()]
-            self.assertEqual([0.0] * 20, vals, "Both uses must read the same draw")
+            df = self.spark.range(20).select(diff(rand_udf("id")))
+            self.assertTrue(self._shares_an_argument(df), self._optimized_plan(df))
+            self.assertEqual([0.0] * 20, [r[0] for r in df.collect()], "One draw, read twice")
+
+    def test_udf_transpile_declines_where_a_draw_cannot_be_shared(self):
+        # SPARK-58626: one draw per parameter per row is a promise, not best effort. A higher-order
+        # function's lambda has nowhere to put the column -- a column is computed per row where the
+        # body runs per element -- so a body reading a nondeterministic argument twice is left as
+        # interpreted Python, which computes its inputs once wherever it sits, rather than lowered
+        # into two draws.
+        #
+        # `clamp` returns its input or 0.0, so a value in (0.0, 0.5] is proof of two draws: the
+        # condition saw one and the branch another.
+        from pyspark.sql.functions import array, col, lit, rand, transform
+
+        clamp = lambda x: x if x > 0.5 else 0.0  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            c = self._transpiled_udf(clamp, DoubleType())
+            arr = self.spark.range(500).select(array(lit(1.0), lit(2.0)).alias("a"))
+            hof = arr.select(transform(col("a"), lambda e: c(rand())).alias("v"))
+            self.assertGreater(self._eval_python_count(hof), 0, self._optimized_plan(hof))
+            vals = [v for r in hof.collect() for v in r["v"]]
+            self.assertTrue(vals and all(v == 0.0 or v > 0.5 for v in vals), vals)
+
+    def test_udf_transpile_splits_an_aggregate_for_a_column(self):
+        # SPARK-58626: an Aggregate can't host the column on its own -- a result expression no
+        # aggregate function wraps has to be built from the grouping expressions, and a column is
+        # not one -- so ConvertToCatalyst splits it: grouping and aggregate expressions below,
+        # result expressions in a Project above, both able to hold a column. Same trick
+        # RewriteWithExpression uses. Without the split a nondeterministic argument read twice has
+        # nowhere to go and the call falls back to interpreted Python.
+        from pyspark.sql.functions import col, rand
+
+        clamp = lambda x: x if x > 0.5 else 0.0  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            c = self._transpiled_udf(clamp, DoubleType())
+            rows = self.spark.range(500)
+
+            agg = rows.groupBy(col("id").alias("g")).agg(c(rand()).alias("v"))
+            self.assertEqual(0, self._eval_python_count(agg), self._optimized_plan(agg))
+            self.assertTrue(self._shares_an_argument(agg), self._optimized_plan(agg))
+            vals = [r["v"] for r in agg.collect()]
+            self.assertTrue(all(v == 0.0 or v > 0.5 for v in vals), vals)
+            self.assertTrue(any(v == 0.0 for v in vals) and any(v > 0.5 for v in vals), vals)
+
+            # A deterministic argument equal to the grouping key reads the key's column, so it needs
+            # no column of its own.
+            fixed = (col("id") % 2).cast("double")
+            det = rows.groupBy(fixed.alias("g")).agg(c(fixed).alias("v"))
+            self.assertEqual(0, self._eval_python_count(det), self._optimized_plan(det))
+            self.assertEqual(2, len(det.collect()))
+
+    def test_udf_transpile_gives_each_call_its_own_draw(self):
+        # SPARK-58626: one draw per parameter, not one per operator. Two calls each passing their
+        # own `rand()` owe two draws, so the doubled values differ on every row. Keying a shared
+        # column on the parameter index alone put both bodies on one draw and made this exactly 0.0.
+        from pyspark.sql.functions import rand
+
+        add_self = lambda x: x + x  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            u = self._transpiled_udf(add_self, DoubleType())
+            df = self.spark.range(500).select((u(rand()) - u(rand())).alias("v"))
+            self.assertEqual(0, self._eval_python_count(df))
+            self.assertEqual(2, self._optimized_plan(df).count("AS " + self._SHARED_ARG_ALIAS))
+            diffs = [r["v"] for r in df.collect()]
+            self.assertTrue(all(d != 0.0 for d in diffs), "each call draws for itself")
 
     def test_udf_transpile_position_can_rule_out_sharing(self):
         # SPARK-58626: a lambda is the position where an argument is NOT pre-evaluated. A column is

@@ -291,10 +291,11 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
  * `index`th argument (SPARK-58626).
  *
  * A reference and not a copy, so the argument stays put in [[TranspiledPythonUDF.arguments]] and
- * `ConvertToCatalyst` gets to decide per call whether to compute it once in a Project below the
- * operator. Often it can't, and [[substitute]] drops a copy at each use site instead, so don't read
- * a single evaluation into this class. `ConvertToCatalyst` lists the cases; `transpile.py` writes
- * up what's left as a contract for whoever's writing the UDF.
+ * `ConvertToCatalyst` decides per call whether to compute it once in a Project below the operator.
+ * [[substitute]] copies the argument to each use site only where repeating it is as cheap as a
+ * column read -- a bare column or a literal. An argument worth more than that, a draw or a regex,
+ * is either computed once or not transpiled at all: `ConvertToCatalyst` keeps the interpreted Python
+ * UDF, which evaluates its inputs once wherever it sits. `transpile.py` says so for UDF authors.
  */
 case class TranspiledUDFParameter(
     index: Int,

@@ -24,9 +24,10 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{Column, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, Expression, Multiply, TranspiledPythonUDF, TranspiledUDFParameter}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, BaseEvalPython}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connector.catalog.InMemoryRowLevelOperationTableCatalog
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{array, col, max, rand, sum, transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
@@ -37,9 +38,13 @@ import org.apache.spark.sql.types.LongType
  * place that still sees the placeholders.
  *
  * Plus the operator shapes that decide whether an argument gets pre-evaluated: a Project and a
- * MergeRows, which get a column, and an Aggregate, which doesn't. Asserted on the plan where a
- * deterministic argument gives the same answer either way, and on a raised error under MERGE, where
- * an argument that mods by zero only blows up if the column is really there.
+ * MergeRows host the column, an Aggregate is split so both halves can, and a lambda can't at all.
+ * Asserted on the plan where a deterministic argument gives the same answer either way, and on a
+ * raised error under MERGE, where an argument that mods by zero only blows up if the column is
+ * really there.
+ *
+ * A nondeterministic argument is the case where the column is not an optimization: with no column
+ * to read, a body reading the parameter twice would draw twice, so we leave the Python UDF.
  */
 class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
 
@@ -47,6 +52,10 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
   private val argB = AttributeReference("b", LongType)()
 
   private def param(index: Int): Expression = UnresolvedAttribute(s"_udf_param_$index")
+
+  /** A nondeterministic argument, LONG-typed to match what `udfWith` declares. A `def`, so two
+   *  uses are two draws with their own seeds. */
+  private def draw: Column = (rand() * 3).cast(LongType)
 
   /**
    * A transpiled UDF of `arity` numeric parameters carrying the given option body. `func` is null
@@ -106,10 +115,10 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("leaves an Aggregate's arguments at their use sites") {
+  test("reads the grouping key's column for an argument equal to it") {
     transpileOn {
-      // No column under an Aggregate: a result expression no aggregate function wraps has to be
-      // built from the grouping expressions, and a column isn't.
+      // An Aggregate is split before conversion, so an argument in a result expression is already
+      // the grouping key's attribute by the time we look at it -- cheap, and no column of its own.
       //
       // The grouping key has to be the bare argument, not the call -- with the call as the key both
       // it and the result would read the same column and bind fine, proving nothing. And `id % 3`
@@ -118,8 +127,66 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
       val square = udfWith(Multiply(param(0), param(0)), arity = 1)
       val df = spark.range(0, 6).groupBy(col("id") % 3).agg(square(col("id") % 3).as("sq"))
       val plan = df.queryExecution.optimizedPlan.toString
-      assert(!plan.contains("_udf_param_"), s"Expected no column under an Aggregate:\n$plan")
+      assert(!plan.contains("_udf_param_"), s"Expected no column of its own:\n$plan")
       checkAnswer(df, Seq(Row(0L, 0L), Row(1L, 1L), Row(2L, 4L)))
+    }
+  }
+
+  test("splits an Aggregate so a nondeterministic argument gets a column") {
+    transpileOn {
+      // An Aggregate holds no Project of its own, so the rule splits it -- result expressions into
+      // a Project above -- and the column goes there. Without the split there is nowhere to put
+      // `rand()`, copying it to both reads would draw twice for one parameter, and the call would
+      // fall back to Python.
+      val square = udfWith(Multiply(param(0), param(0)), arity = 1)
+      val df = spark.range(0, 6).groupBy(col("id") % 3).agg(square(draw).as("sq"))
+      val plan = df.queryExecution.optimizedPlan
+      assert("AS _udf_param_".r.findAllIn(plan.toString).length == 1,
+        s"Expected one pre-evaluated column:\n$plan")
+      assert(!plan.exists(_.isInstanceOf[BaseEvalPython]), s"Expected no fallback:\n$plan")
+      assert(df.collect().length == 3)
+    }
+  }
+
+  test("leaves an Aggregate alone when its only call is inside a subquery") {
+    transpileOn {
+      // The split fires on the operator's own expressions, not on the tree-pattern bit: a
+      // SubqueryExpression carries its inner plan's bits, so this Aggregate looks from the outside
+      // like it holds a call. Splitting it rebuilt it on every pass -- the split can't reach into
+      // the subquery to convert the call, so the bit was still set on what it built -- and the
+      // query died with a StackOverflowError.
+      val square = udfWith(Multiply(param(0), param(0)), arity = 1)
+      val inner = spark.range(0, 3).select(square(col("id") % 3).as("m")).agg(max(col("m")))
+      val df = spark.range(0, 6).groupBy(col("id") % 2).agg(sum(col("id") + inner.scalar()))
+      assert(df.queryExecution.optimizedPlan.collect { case a: Aggregate => a }.nonEmpty)
+      assert(df.collect().length == 2)
+    }
+  }
+
+  test("keeps the Python UDF for a nondeterministic argument inside a lambda") {
+    transpileOn {
+      // The position no Project can serve: a column is computed per row where a lambda body runs
+      // per element. Copying `rand()` to both reads would draw twice for one parameter, so we
+      // decline, and the Python eval node in the plan is what says we did.
+      val square = udfWith(Multiply(param(0), param(0)), arity = 1)
+      val df = spark.range(0, 6).select(
+        transform(array(col("id")), _ => square(draw)).as("sq"))
+      val plan = df.queryExecution.optimizedPlan
+      assert(plan.exists(_.isInstanceOf[BaseEvalPython]), s"Expected a Python fallback:\n$plan")
+      assert(!plan.toString.contains("_udf_param_"), s"Expected no column:\n$plan")
+    }
+  }
+
+  test("gives two calls' nondeterministic arguments a column each") {
+    transpileOn {
+      // Two calls in one Project, each reading its own draw twice: a column apiece. Keying a
+      // column on the parameter index alone made both bodies read one draw, which is not an answer
+      // any evaluation order produces.
+      val square = udfWith(Multiply(param(0), param(0)), arity = 1)
+      val df = spark.range(0, 6).select(square(draw).as("a"), square(draw).as("b"))
+      val plan = df.queryExecution.optimizedPlan.toString
+      assert("AS _udf_param_".r.findAllIn(plan).length == 2,
+        s"Expected one pre-evaluated column per call:\n$plan")
     }
   }
 

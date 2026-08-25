@@ -24,18 +24,9 @@ Transpilation is only attempted when both
 we fall back to the regular non-transpiled code path.
 
 These classes re-run the shared UDF mixins under that configuration to confirm
-turning the feature on does not change UDF results. Two divergences are known
-and deliberate, both in the same direction -- the transpiled body evaluates less
-than interpreted Python, so an ANSI error becomes rows -- and both pinned by
-``test_udf_transpile_unit.py`` rather than here:
-
-* an argument the body never uses is not evaluated at all;
-* an argument the body reads once is left at its use site, so inside a branch
-  that does not run it is not evaluated either.
-
-Where the body reads an argument more than once it is evaluated once per row
-instead, which is eager, and that matches interpreted Python rather than
-diverging from it. See ``transpile.py`` for the evaluation-count contract.
+turning the feature on does not change UDF results. In two cases the transpiled body
+evaluates less than interpreted Python, so if evaluating the input would cause an
+error the transpiled code may succeed where the regular path would not.
 
 Transpilation is currently only supported in regular (non-Connect) Spark, so
 these classes are guarded with ``is_remote_only()`` and are intentionally not
@@ -44,12 +35,10 @@ the transpiler directly live in ``test_udf_transpile_unit.py`` and
 ``test_udf_transpile_hypothesis.py``.
 
 Note on configuration: enabling transpilation requires ANSI mode, so an "on"
-run is unavoidably also an ANSI run. All inherited tests currently pass as-is
-under this configuration, so no per-test overrides are defined here. If a future
-change makes an inherited test diverge purely due to ANSI semantics or because
-transpilation bypasses a Python-side effect (rather than a genuine result
-change), override it here with a documented ``unittest.skip`` rather than
-editing the inherited test body.
+run is unavoidably also an ANSI run.
+
+When an inherited test diverges in an acceptable way, override it here with a
+documented ``unittest.skip`` rather than editing the inherited test body.
 """
 
 import unittest
