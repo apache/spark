@@ -33,8 +33,10 @@ class InMemoryTableWithV2Filter(
     name: String,
     columns: Array[Column],
     partitioning: Array[Transform],
-    properties: util.Map[String, String])
-  extends InMemoryBaseTable(name, columns, partitioning, properties) with SupportsDeleteV2 {
+    properties: util.Map[String, String],
+    numRowsPerSplit: Int = Int.MaxValue)
+  extends InMemoryBaseTable(name, columns, partitioning, properties,
+    numRowsPerSplit = numRowsPerSplit) with SupportsDeleteV2 {
 
   override def canDeleteWhere(predicates: Array[Predicate]): Boolean = {
     InMemoryTableWithV2Filter.supportsPredicates(predicates)

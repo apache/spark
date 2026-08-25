@@ -18,15 +18,18 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, DynamicPruning, DynamicPruningExpression, EqualTo, Expression, GreaterThan, Literal, RLike}
-import org.apache.spark.sql.connector.catalog.{InMemoryCatalystRuntimeFilterTable, InMemoryTableCatalystRuntimeFilterCatalog}
-import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, DynamicPruning, DynamicPruningExpression, EqualTo, Expression, GetStructField, GreaterThan, Literal, RLike}
+import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
+import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
+import org.apache.spark.sql.connector.catalog.{Column, InMemoryCatalystRuntimeFilterTable, InMemoryTable, InMemoryTableCatalystRuntimeFilterCatalog}
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, SupportsRuntimeV2Filtering}
+import org.apache.spark.sql.connector.read.{Batch, HasPartitionKey, InputPartition, PartitionReaderFactory, Scan, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.execution.{FilterExec, ScalarSubquery => ExecScalarSubquery}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, DataSourceV2Strategy}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, DataSourceV2Strategy, PushDownUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
 import org.apache.spark.sql.test.SharedSparkSession
@@ -73,6 +76,13 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       assertPushedCatalystPredicatesEqual(df, EqualTo(part, Literal(3)))
       // `part` is not declared fully pushed, so Spark still evaluates the filter after the scan.
       assertScalarSubqueryEvaluatedAfterScan(df, expected = true)
+
+      // The answer alone would be right even without pruning, since that post-scan filter drops
+      // the extra rows.
+      val batchScan = collectBatchScan(df)
+      assert(batchScan.inputPartitions.size === 5)
+      assert(batchScan.filteredPartitions.flatten.size === 1,
+        s"expected 1 partition after pruning, got ${batchScan.filteredPartitions.flatten.size}")
     }
   }
 
@@ -228,6 +238,40 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
+  test("DPP filter on a nested partition field -> pushed with the nested access intact") {
+    val fact = s"$catalogName.fact_nested_dpp"
+    val dim = s"$catalogName.dim_nested_dpp"
+    withTable(fact, dim) {
+      sql(s"CREATE TABLE $fact (id INT, s STRUCT<part: INT>) USING $v2Source " +
+        "PARTITIONED BY (s.part)")
+      for (i <- 0 until 5) {
+        sql(s"INSERT INTO $fact VALUES ($i, named_struct('part', $i))")
+      }
+      sql(s"CREATE TABLE $dim (dim_id INT, dim_val STRING) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES (2, 'two')")
+
+      withDPPConf {
+        val df = sql(
+          s"""SELECT f.id FROM $fact f JOIN $dim d
+             |ON f.s.part = d.dim_id WHERE d.dim_val = 'two'""".stripMargin)
+        checkAnswer(df, Row(2))
+
+        assertDPPRuntimeFilters(df)
+        // The scan only reports `s`, the struct holding the partition field, but the predicate it
+        // receives keeps the nested access, so it can still tell which partition to keep.
+        val pushed = getPushedCatalystPredicates(df)
+        assert(pushed.size === 1, s"expected a single pushed predicate, got $pushed")
+        assert(pushed.head.exists(_.isInstanceOf[GetStructField]),
+          s"expected the pushed predicate to keep the nested access, got ${pushed.head}")
+
+        val batchScan = collectBatchScan(df)
+        assert(batchScan.inputPartitions.size === 5)
+        assert(batchScan.filteredPartitions.flatten.size === 1,
+          s"expected 1 partition after pruning, got ${batchScan.filteredPartitions.flatten.size}")
+      }
+    }
+  }
+
   test("scan implementing both runtime filtering interfaces -> rejected") {
     val tbl = s"$catalogName.tbl_both_interfaces"
     withTable(tbl) {
@@ -247,26 +291,126 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
-  test("filter on column outside filterAttributes -> not pushed") {
+  test("filter on column outside filterAttributes -> not pushed, even if declared fully pushed") {
     val tbl = s"$catalogName.tbl4"
     val dim = s"$catalogName.dim4"
     withTable(tbl, dim) {
+      // p2 is a partition column but is not declared filterable, so no runtime filter is derived
+      // for it. Declaring it fully pushed as well, which the interface forbids for an attribute
+      // that is not filterable, must not cost it the post-scan filter: nothing was pushed, so the
+      // scan prunes nothing and the nonmatching rows would come back.
       sql(s"CREATE TABLE $tbl (id INT, p1 INT, p2 INT) USING $v2Source " +
         "PARTITIONED BY (p1, p2) " +
-        "TBLPROPERTIES('filter-attributes' = 'p1')")
+        "TBLPROPERTIES('filter-attributes' = 'p1', 'fully-pushed-filter-attributes' = 'p2')")
       for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, $i, 10)")
+        sql(s"INSERT INTO $tbl VALUES ($i, $i, $i)")
       }
       sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
-      sql(s"INSERT INTO $dim VALUES (10)")
+      sql(s"INSERT INTO $dim VALUES (3)")
 
-      // p2 is a partition column but is not declared filterable, so no runtime filter is derived.
       val df = sql(s"SELECT * FROM $tbl WHERE p2 = (SELECT max(val) FROM $dim)")
-      checkAnswer(df, (0 until 5).map(i => Row(i, i, 10)))
+      checkAnswer(df, Row(3, 3, 3))
 
       assert(collectBatchScan(df).runtimeFilters.isEmpty,
         "Expected no runtime filters for a column outside filterAttributes")
       assertPushedCatalystPredicates(df, 0)
+      assertScalarSubqueryEvaluatedAfterScan(df, expected = true)
+    }
+  }
+
+  test("two predicates on filter attributes -> pushed together in a single filter() call") {
+    val tbl = s"$catalogName.tbl_two_predicates"
+    val dim1 = s"$catalogName.dim_two_predicates1"
+    val dim2 = s"$catalogName.dim_two_predicates2"
+    withTable(tbl, dim1, dim2) {
+      sql(s"CREATE TABLE $tbl (id INT, p1 INT, p2 INT) USING $v2Source PARTITIONED BY (p1, p2)")
+      for (i <- 0 until 5) {
+        sql(s"INSERT INTO $tbl VALUES ($i, $i, ${i * 10})")
+      }
+      sql(s"CREATE TABLE $dim1 (val INT) USING $v2Source")
+      sql(s"INSERT INTO $dim1 VALUES (3)")
+      sql(s"CREATE TABLE $dim2 (val INT) USING $v2Source")
+      sql(s"INSERT INTO $dim2 VALUES (30)")
+
+      val df = sql(s"SELECT * FROM $tbl WHERE p1 = (SELECT max(val) FROM $dim1) " +
+        s"AND p2 = (SELECT max(val) FROM $dim2)")
+      checkAnswer(df, Row(3, 3, 30))
+
+      assertScalarSubqueryRuntimeFilters(df, expectedCount = 2)
+      val p1 = AttributeReference("p1", IntegerType, nullable = false)()
+      val p2 = AttributeReference("p2", IntegerType, nullable = false)()
+      assertPushedCatalystPredicatesEqual(
+        df, EqualTo(p1, Literal(3)), EqualTo(p2, Literal(30)))
+      assert(getCatalystScan(df).filterCallCount === 1,
+        "expected both predicates pushed in a single filter() call")
+    }
+  }
+
+  test("nested field of a filter attribute -> pushed with the nested access intact") {
+    val tbl = s"$catalogName.tbl_nested"
+    val dim = s"$catalogName.dim_nested"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, s STRUCT<tz: STRING>) USING $v2Source " +
+        "PARTITIONED BY (s.tz)")
+      for (i <- 0 until 3) {
+        sql(s"INSERT INTO $tbl VALUES ($i, named_struct('tz', 'tz$i'))")
+      }
+      sql(s"CREATE TABLE $dim (val STRING) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES ('tz1')")
+
+      // The scan declares the top-level struct column `s` as its filter attribute, so the
+      // predicate qualifies for pushdown even though it reaches into `s.tz`. Matching the nested
+      // access against the partition layout is left to the scan, which the fixture does not do.
+      val df = sql(s"SELECT * FROM $tbl WHERE s.tz = (SELECT max(val) FROM $dim)")
+      checkAnswer(df, Row(1, Row("tz1")))
+
+      assertScalarSubqueryRuntimeFilters(df)
+      val pushed = getPushedCatalystPredicates(df)
+      assert(pushed.size === 1, s"expected a single pushed predicate, got $pushed")
+      val nestedAccesses = pushed.head.collect { case g: GetStructField => g }
+      assert(nestedAccesses.size === 1,
+        s"expected the pushed predicate to keep the nested access, got ${pushed.head}")
+      assert(nestedAccesses.head.childSchema.fieldNames.contains("tz"))
+    }
+  }
+
+  test("filterAttributes that is not a top-level scan attribute") {
+    val tbl = s"$catalogName.tbl_unresolvable_attr"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT, s STRUCT<tz: STRING>) USING $v2Source " +
+        "PARTITIONED BY (part)")
+      sql(s"INSERT INTO $tbl VALUES (1, 1, named_struct('tz', 'a'))")
+
+      val scanRelation = sql(s"SELECT * FROM $tbl").queryExecution.optimizedPlan.collectFirst {
+        case r: DataSourceV2ScanRelation => r
+      }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
+
+      // An attribute the read schema does not carry, such as one pruned out of the projection.
+      val missing = intercept[AnalysisException] {
+        scanRelation.copy(scan = new MissingFilterAttributeScan).runtimeFilterAttrs
+      }
+      checkError(
+        exception = missing,
+        condition = "_LEGACY_ERROR_TEMP_1137",
+        parameters = Map("name" -> "missing", "outputStr" -> "id,part,s"))
+
+      // A nested reference is resolved as a field extraction on the top-level attribute, which
+      // fails as soon as that attribute is not a struct.
+      val nested = intercept[AnalysisException] {
+        scanRelation.copy(scan = new NestedFilterAttributeScan).runtimeFilterAttrs
+      }
+      checkError(
+        exception = nested,
+        condition = "INVALID_EXTRACT_BASE_FIELD_TYPE",
+        parameters = Map("base" -> "\"part\"", "other" -> "\"INT\""))
+
+      // Over a struct it does not fail at all: the reference widens to the struct column, so
+      // declaring `s.tz` makes filters over every field of `s` eligible, not just `s.tz`. This
+      // is shared with the two predicate-based interfaces, which resolve the same way.
+      val widened = scanRelation.copy(scan = new StructNestedFilterAttributeScan)
+        .runtimeFilterAttrs
+      assert(widened.map(_.name).toSeq === Seq("s"),
+        s"expected the nested reference to widen to the struct column, got $widened")
     }
   }
 
@@ -284,6 +428,38 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       assert(collectBatchScan(df).runtimeFilters.isEmpty)
       assertPushedCatalystPredicates(df, 0)
     }
+  }
+
+  /**
+   * While SPJ is active the scan's partitioning has to survive runtime filtering, so the
+   * post-filter partitions still line up with the other side of the join: splits may be pruned,
+   * but the source may not drop a partition key, invent one, or grow a key's split count.
+   */
+  test("data source that breaks the partitioning it reported -> rejected") {
+    val partAttr = AttributeReference("part", IntegerType)()
+    val table = new InMemoryTable("t", Array(Column.create("part", IntegerType)),
+      Array.empty[Transform], java.util.Collections.emptyMap[String, String])
+    val partitioning = KeyedPartitioning(
+      Seq(partAttr),
+      Seq(InternalRowComparableWrapper(InternalRow(1), Seq(partAttr))),
+      isGrouped = false)
+
+    def replanAfterFiltering(afterFilter: Seq[InputPartition]): Unit = {
+      val scan = new PartitioningBreakingScan(Seq(KeyedInputPartition(1)), afterFilter)
+      PushDownUtils.replanWithRuntimeFilters(scan, Seq(EqualTo(partAttr, Literal(1))), table,
+        Seq(partAttr), partitioning, originalPartitions = Seq.empty)
+    }
+
+    val keyDropped = intercept[SparkException](replanAfterFiltering(Seq(new InputPartition {})))
+    assert(keyDropped.getMessage.contains("must have preserved the original partitioning"))
+
+    val keyInvented = intercept[SparkException](replanAfterFiltering(Seq(KeyedInputPartition(99))))
+    assert(keyInvented.getMessage.contains("must not report new partition keys"))
+
+    val splitsGrown = intercept[SparkException] {
+      replanAfterFiltering(Seq(KeyedInputPartition(1), KeyedInputPartition(1)))
+    }
+    assert(splitsGrown.getMessage.contains("must not report new partitions for a given key"))
   }
 
   // ---------------------------------------------------------------------------
@@ -339,13 +515,18 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }.getOrElse(fail("Expected BatchScanExec in plan"))
   }
 
-  private def getPushedCatalystPredicates(df: DataFrame): Seq[Expression] = {
+  private type CatalystScan =
+    InMemoryCatalystRuntimeFilterTable#InMemoryCatalystRuntimeFilterBatchScan
+
+  private def getCatalystScan(df: DataFrame): CatalystScan = {
     collectBatchScan(df).scan match {
-      case s: InMemoryCatalystRuntimeFilterTable#InMemoryCatalystRuntimeFilterBatchScan =>
-        s.pushedCatalystPredicates
-      case other =>
-        fail(s"Expected InMemoryCatalystRuntimeFilterBatchScan, got $other")
+      case s: CatalystScan => s
+      case other => fail(s"Expected InMemoryCatalystRuntimeFilterBatchScan, got $other")
     }
+  }
+
+  private def getPushedCatalystPredicates(df: DataFrame): Seq[Expression] = {
+    getCatalystScan(df).pushedCatalystPredicates
   }
 
   private def assertPushedCatalystPredicates(df: DataFrame, expected: Int): Unit = {
@@ -397,4 +578,74 @@ private class BothRuntimeFilteringInterfacesScan
   override def filter(predicates: Array[Predicate]): Unit = {}
 
   override def filter(expressions: Array[Expression]): Unit = {}
+}
+
+/** A scan declaring a filter attribute the read schema does not carry. */
+private class MissingFilterAttributeScan extends Scan with SupportsRuntimeCatalystFiltering {
+
+  override def readSchema(): StructType = new StructType().add("part", IntegerType)
+
+  override def filterAttributes(): Array[NamedReference] = Array(FieldReference("missing"))
+
+  override def filter(expressions: Array[Expression]): Unit = {}
+}
+
+/**
+ * A scan breaking the rule that a filter attribute must be a top level read schema column: it
+ * reports `part.nested` over the int column `part`, so resolving it fails on the extract base.
+ */
+private class NestedFilterAttributeScan extends Scan with SupportsRuntimeCatalystFiltering {
+
+  override def readSchema(): StructType = new StructType().add("part", IntegerType)
+
+  override def filterAttributes(): Array[NamedReference] =
+    Array(FieldReference(Seq("part", "nested")))
+
+  override def filter(expressions: Array[Expression]): Unit = {}
+}
+
+/**
+ * A scan breaking the same rule over a struct column: it reports `s.tz` where `s` is a struct, so
+ * resolving it succeeds and widens to `s` rather than failing.
+ */
+private class StructNestedFilterAttributeScan extends Scan with SupportsRuntimeCatalystFiltering {
+
+  override def readSchema(): StructType =
+    new StructType().add("s", new StructType().add("tz", StringType))
+
+  override def filterAttributes(): Array[NamedReference] = Array(FieldReference(Seq("s", "tz")))
+
+  override def filter(expressions: Array[Expression]): Unit = {}
+}
+
+private case class KeyedInputPartition(key: Int) extends InputPartition with HasPartitionKey {
+  override def partitionKey(): InternalRow = InternalRow(key)
+}
+
+/**
+ * A scan reporting one set of partitions before filtering and another after, so it can break the
+ * requirement to preserve the partitioning it originally reported.
+ */
+private class PartitioningBreakingScan(
+    initialPartitions: Seq[InputPartition],
+    afterFilter: Seq[InputPartition])
+  extends Scan with Batch with SupportsRuntimeCatalystFiltering {
+
+  private var filtered = false
+
+  override def readSchema(): StructType = new StructType().add("part", IntegerType)
+
+  override def toBatch: Batch = this
+
+  override def planInputPartitions(): Array[InputPartition] =
+    if (filtered) afterFilter.toArray else initialPartitions.toArray
+
+  override def createReaderFactory(): PartitionReaderFactory =
+    throw new UnsupportedOperationException()
+
+  override def filterAttributes(): Array[NamedReference] = Array(FieldReference("part"))
+
+  override def filter(expressions: Array[Expression]): Unit = {
+    filtered = true
+  }
 }
