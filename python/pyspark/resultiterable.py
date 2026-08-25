@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import TypeVar, TYPE_CHECKING, Iterator, Iterable
+from typing import TYPE_CHECKING, Iterable, Iterator, TypeVar
 
 if TYPE_CHECKING:
     from pyspark._typing import SizedIterable

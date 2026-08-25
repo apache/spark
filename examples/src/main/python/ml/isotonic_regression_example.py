@@ -23,6 +23,7 @@ Run with:
 """
 # $example on$
 from pyspark.ml.regression import IsotonicRegression
+
 # $example off$
 from pyspark.sql import SparkSession
 

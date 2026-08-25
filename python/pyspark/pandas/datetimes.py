@@ -26,12 +26,12 @@ import pandas as pd
 from pandas.tseries.offsets import DateOffset
 
 import pyspark.pandas as ps
-from pyspark.loose_version import LooseVersion
 import pyspark.sql.functions as F
-from pyspark.sql.types import DateType, TimestampType, TimestampNTZType, IntegerType
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas import DataFrame
-from pyspark.pandas.config import option_context
 from pyspark.pandas._typing import Dtype
+from pyspark.pandas.config import option_context
+from pyspark.sql.types import DateType, IntegerType, TimestampNTZType, TimestampType
 
 
 class DatetimeMethods:
@@ -913,11 +913,12 @@ class DatetimeMethods:
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.datetimes
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

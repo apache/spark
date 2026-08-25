@@ -22,11 +22,12 @@ import functools
 import inspect
 import sys
 import warnings
-from typing import Callable, Any, TYPE_CHECKING, Optional, cast, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union, cast
 
-
-from pyspark.util import PythonEvalType
+from pyspark.errors import PySparkNotImplementedError, PySparkRuntimeError, PySparkTypeError
 from pyspark.sql.column import Column
+from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import (
     DataType,
     StringType,
@@ -34,14 +35,13 @@ from pyspark.sql.types import (
     _parse_datatype_string,
 )
 from pyspark.sql.utils import get_active_spark_context
-from pyspark.sql.pandas.types import to_arrow_type
-from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
-from pyspark.errors import PySparkTypeError, PySparkNotImplementedError, PySparkRuntimeError
+from pyspark.util import PythonEvalType
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+
     from pyspark.core.context import SparkContext
-    from pyspark.sql._typing import DataTypeOrString, ColumnOrName, UserDefinedFunctionLike
+    from pyspark.sql._typing import ColumnOrName, DataTypeOrString, UserDefinedFunctionLike
     from pyspark.sql.session import SparkSession
 
 __all__ = ["UDFRegistration"]
@@ -994,8 +994,9 @@ class UDFRegistration:
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.sql.udf
+    from pyspark.sql import SparkSession
     from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.udf.__dict__.copy()

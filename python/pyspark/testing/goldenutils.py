@@ -15,10 +15,10 @@
 # limitations under the License.
 #
 
-from typing import Any, Callable, List, Optional, Union
 import inspect
 import os
 import time
+from typing import Any, Callable, List, Optional, Union
 
 try:
     import numpy as np
@@ -316,13 +316,16 @@ class GoldenFileTestMixin:
         """
         Render one PyArrow scalar for a golden cell via PyArrow's own ``str(scalar)``.
 
-        Some values are valid in Arrow yet unrenderable via ``str``:
+        Some values that Arrow stores are unrenderable via ``str``:
         - a temporal value past Python's ``datetime`` range (e.g. date32 past year 9999)
           raises ``OverflowError`` -> the marker ``temporal overflow``;
         - an unsafe ``binary``->``string`` cast relabels bytes without UTF-8 validation,
           so non-UTF-8 bytes raise ``UnicodeDecodeError`` -> the raw bytes, so the golden
-          still tracks what Arrow stored for them.
-        An unexpected error (non-temporal overflow, non-string decode error) propagates.
+          still tracks what Arrow stored for them;
+        - a nanosecond ``time64`` holding INT64_MIN collides with pandas' NaT sentinel and
+          raises ``ValueError`` -> the marker ``NaT collision``.
+        An unexpected error (non-temporal overflow, non-string decode error, or a
+        ValueError from any other value) propagates.
         """
         try:
             return str(scalar).replace("\x00", "\\0")
@@ -340,6 +343,13 @@ class GoldenFileTestMixin:
             # on a non-string type is unexpected, so re-raise.
             if pa.types.is_string(scalar.type) or pa.types.is_large_string(scalar.type):
                 return repr(scalar.as_buffer().to_pybytes())
+            raise
+        except ValueError:
+            # A nanosecond time64 renders through pandas (Python's ``time`` is microsecond
+            # resolution), and pandas reads INT64_MIN as its NaT sentinel, so it refuses
+            # that one value.  Any other ValueError is unexpected, so re-raise.
+            if pa.types.is_time(scalar.type) and scalar.value == pd.NaT.value:
+                return "NaT collision"
             raise
 
     @classmethod

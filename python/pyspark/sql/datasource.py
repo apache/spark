@@ -19,6 +19,7 @@ from collections import UserDict
 from collections.abc import MutableMapping
 from dataclasses import dataclass
 from typing import (
+    TYPE_CHECKING,
     Any,
     Iterable,
     Iterator,
@@ -28,16 +29,16 @@ from typing import (
     Tuple,
     Type,
     Union,
-    TYPE_CHECKING,
 )
 
+from pyspark.errors import PySparkNotImplementedError
 from pyspark.sql import Row
 from pyspark.sql.streaming.datasource import ReadAllAvailable, ReadLimit
 from pyspark.sql.types import StructType
-from pyspark.errors import PySparkNotImplementedError
 
 if TYPE_CHECKING:
     from pyarrow import RecordBatch
+
     from pyspark.sql.session import SparkSession
 
 __all__ = [
