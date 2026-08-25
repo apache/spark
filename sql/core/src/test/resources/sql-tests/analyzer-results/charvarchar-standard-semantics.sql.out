@@ -223,6 +223,44 @@ Project [typeof(concat(cast(cast(a as char(2)) as string), cast(cast(b as char(3
 
 
 -- !query
+SELECT typeof(concat(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+  cast('b' AS CHAR(3) COLLATE UTF8_LCASE)))
+-- !query analysis
+Project [typeof(concat(cast(cast(cast(a as char(2) collate UTF8_LCASE) as char(3) collate UTF8_LCASE) as string collate UTF8_LCASE), cast(cast(b as char(3) collate UTF8_LCASE) as string collate UTF8_LCASE))) AS typeof(concat(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(b AS CHAR(3) COLLATE UTF8_LCASE)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT concat('<', concat(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+  cast('b' AS CHAR(3) COLLATE UTF8_LCASE)), '>')
+-- !query analysis
+Project [concat(<, concat(cast(cast(cast(a as char(2) collate UTF8_LCASE) as char(3) collate UTF8_LCASE) as string collate UTF8_LCASE), cast(cast(b as char(3) collate UTF8_LCASE) as string collate UTF8_LCASE)), >) AS concat('<' collate UTF8_LCASE, concat(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(b AS CHAR(3) COLLATE UTF8_LCASE)), '>' collate UTF8_LCASE)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(elt(
+  1,
+  cast('ab' AS CHAR(5) COLLATE UTF8_LCASE),
+  cast('x' AS CHAR(1) COLLATE UTF8_LCASE)))
+-- !query analysis
+Project [typeof(elt(1, cast(cast(ab as char(5) collate UTF8_LCASE) as string collate UTF8_LCASE), cast(cast(cast(x as char(1) collate UTF8_LCASE) as char(5) collate UTF8_LCASE) as string collate UTF8_LCASE), true)) AS typeof(elt(1, CAST(ab AS CHAR(5) COLLATE UTF8_LCASE), CAST(x AS CHAR(1) COLLATE UTF8_LCASE)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT concat('<', elt(
+  1,
+  cast('ab' AS CHAR(5) COLLATE UTF8_LCASE),
+  cast('x' AS CHAR(1) COLLATE UTF8_LCASE)), '>')
+-- !query analysis
+Project [concat(<, elt(1, cast(cast(ab as char(5) collate UTF8_LCASE) as string collate UTF8_LCASE), cast(cast(cast(x as char(1) collate UTF8_LCASE) as char(5) collate UTF8_LCASE) as string collate UTF8_LCASE), true), >) AS concat('<' collate UTF8_LCASE, elt(1, CAST(ab AS CHAR(5) COLLATE UTF8_LCASE), CAST(x AS CHAR(1) COLLATE UTF8_LCASE)), '>' collate UTF8_LCASE)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT typeof(trim(cast('ab  ' AS CHAR(4))))
 -- !query analysis
 Project [typeof(trim(cast(cast(ab   as char(4)) as string), None)) AS typeof(trim(CAST(ab   AS CHAR(4))))#x]
@@ -267,7 +305,7 @@ Project [typeof(split(cast(cast(a,b as char(3)) as string), ,, -1)) AS typeof(sp
 -- !query
 SELECT typeof(mask(cast('ab' AS CHAR(2))))
 -- !query analysis
-Project [typeof(mask(cast(ab as char(2)), X, x, n, null)) AS typeof(mask(CAST(ab AS CHAR(2)), X, x, n, NULL))#x]
+Project [typeof(mask(cast(cast(ab as char(2)) as string), X, x, n, null)) AS typeof(mask(CAST(ab AS CHAR(2)), X, x, n, NULL))#x]
 +- OneRowRelation
 
 
@@ -337,14 +375,14 @@ Project [hex(cast(cast(ab as char(5)) as string)) AS hex(CAST(ab AS CHAR(5)))#x]
 -- !query
 SELECT typeof(array_join(array(cast('ab' AS CHAR(5)), cast('cd' AS CHAR(5))), '-'))
 -- !query analysis
-Project [typeof(array_join(array(cast(ab as char(5)), cast(cd as char(5))), -, None)) AS typeof(array_join(array(CAST(ab AS CHAR(5)), CAST(cd AS CHAR(5))), -))#x]
+Project [typeof(array_join(cast(array(cast(ab as char(5)), cast(cd as char(5))) as array<string>), -, None)) AS typeof(array_join(array(CAST(ab AS CHAR(5)), CAST(cd AS CHAR(5))), -))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT concat('<', array_join(array(cast('ab' AS CHAR(5)), cast('cd' AS CHAR(5))), '-'), '>')
 -- !query analysis
-Project [concat(<, array_join(array(cast(ab as char(5)), cast(cd as char(5))), -, None), >) AS concat(<, array_join(array(CAST(ab AS CHAR(5)), CAST(cd AS CHAR(5))), -), >)#x]
+Project [concat(<, array_join(cast(array(cast(ab as char(5)), cast(cd as char(5))) as array<string>), -, None), >) AS concat(<, array_join(array(CAST(ab AS CHAR(5)), CAST(cd AS CHAR(5))), -), >)#x]
 +- OneRowRelation
 
 
@@ -358,7 +396,7 @@ Project [typeof(reverse(array(1, 2))) AS typeof(reverse(array(1, 2)))#x]
 -- !query
 SELECT typeof(str_to_map(cast('a:1,b:2' AS CHAR(7))))
 -- !query analysis
-Project [typeof(str_to_map(cast(a:1,b:2 as char(7)), ,, :)) AS typeof(str_to_map(CAST(a:1,b:2 AS CHAR(7)), ,, :))#x]
+Project [typeof(str_to_map(cast(cast(a:1,b:2 as char(7)) as string), ,, :)) AS typeof(str_to_map(CAST(a:1,b:2 AS CHAR(7)), ,, :))#x]
 +- OneRowRelation
 
 
@@ -368,7 +406,7 @@ SELECT typeof(c0) FROM (SELECT json_tuple(cast('{"a":"1"}' AS CHAR(9)), 'a') AS 
 Project [typeof(c0#x) AS typeof(c0)#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Project [c0#x]
-      +- Generate json_tuple(cast({"a":"1"} as char(9)), a), false, [c0#x]
+      +- Generate json_tuple(cast(cast({"a":"1"} as char(9)) as string), a), false, [c0#x]
          +- OneRowRelation
 
 

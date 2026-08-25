@@ -618,7 +618,7 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
   override def dataType: DataType =
-    ArrayType(StringHelper.transformingStringResultType(str.dataType), containsNull = false)
+    ArrayType(str.dataType, containsNull = false)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeBinaryLcase, StringTypeWithCollation, IntegerType)
   override def first: Expression = str
@@ -767,7 +767,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   }
 
   override def dataType: DataType =
-    StringHelper.transformingStringResultType(subject.dataType)
+    subject.dataType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeBinaryLcase,
       StringTypeWithCollation, StringTypeBinaryLcase, IntegerType)
@@ -943,7 +943,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   }
 
   override def dataType: DataType =
-    StringHelper.transformingStringResultType(subject.dataType)
+    subject.dataType
   override def prettyName: String = "regexp_extract"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1020,7 +1020,7 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
   }
 
   override def dataType: DataType =
-    ArrayType(StringHelper.transformingStringResultType(subject.dataType))
+    ArrayType(subject.dataType)
   override def prettyName: String = "regexp_extract_all"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

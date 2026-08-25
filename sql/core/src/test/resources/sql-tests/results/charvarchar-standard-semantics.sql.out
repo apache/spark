@@ -265,6 +265,48 @@ string
 
 
 -- !query
+SELECT typeof(concat(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+  cast('b' AS CHAR(3) COLLATE UTF8_LCASE)))
+-- !query schema
+struct<typeof(concat(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(b AS CHAR(3) COLLATE UTF8_LCASE))):string>
+-- !query output
+string collate UTF8_LCASE
+
+
+-- !query
+SELECT concat('<', concat(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+  cast('b' AS CHAR(3) COLLATE UTF8_LCASE)), '>')
+-- !query schema
+struct<concat('<' collate UTF8_LCASE, concat(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(b AS CHAR(3) COLLATE UTF8_LCASE)), '>' collate UTF8_LCASE):string collate UTF8_LCASE>
+-- !query output
+<a  b  >
+
+
+-- !query
+SELECT typeof(elt(
+  1,
+  cast('ab' AS CHAR(5) COLLATE UTF8_LCASE),
+  cast('x' AS CHAR(1) COLLATE UTF8_LCASE)))
+-- !query schema
+struct<typeof(elt(1, CAST(ab AS CHAR(5) COLLATE UTF8_LCASE), CAST(x AS CHAR(1) COLLATE UTF8_LCASE))):string>
+-- !query output
+string collate UTF8_LCASE
+
+
+-- !query
+SELECT concat('<', elt(
+  1,
+  cast('ab' AS CHAR(5) COLLATE UTF8_LCASE),
+  cast('x' AS CHAR(1) COLLATE UTF8_LCASE)), '>')
+-- !query schema
+struct<concat('<' collate UTF8_LCASE, elt(1, CAST(ab AS CHAR(5) COLLATE UTF8_LCASE), CAST(x AS CHAR(1) COLLATE UTF8_LCASE)), '>' collate UTF8_LCASE):string collate UTF8_LCASE>
+-- !query output
+<ab   >
+
+
+-- !query
 SELECT typeof(trim(cast('ab  ' AS CHAR(4))))
 -- !query schema
 struct<typeof(trim(CAST(ab   AS CHAR(4)))):string>
