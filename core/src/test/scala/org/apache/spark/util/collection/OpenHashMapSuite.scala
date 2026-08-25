@@ -27,6 +27,14 @@ import org.apache.spark.util.SizeEstimator
 
 class OpenHashMapSuite extends SparkFunSuite with Matchers {
 
+  test("build with index") {
+    val map = Utils.toOpenHashMapWithIndex(Array("a", "b", "c"), indexOffset = 1)
+    assert(map.size === 3)
+    assert(map("a") === 1)
+    assert(map("b") === 2)
+    assert(map("c") === 3)
+  }
+
   test("size for specialized, primitive value (int)") {
     val capacity = 1024
     val map = new OpenHashMap[String, Int](capacity)

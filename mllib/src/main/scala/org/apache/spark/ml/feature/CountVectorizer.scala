@@ -294,13 +294,14 @@ class CountVectorizerModel(
   def setBinary(value: Boolean): this.type = set(binary, value)
 
   /** Dictionary created from [[vocabulary]] and its indices, broadcast once for [[transform()]] */
-  private var broadcastDict: Option[Broadcast[Map[String, Int]]] = None
+  private var broadcastDict: Option[Broadcast[OpenHashMap[String, Int]]] = None
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
     if (broadcastDict.isEmpty) {
-      val dict = Utils.toMapWithIndex(vocabulary)
+      // Reserve 0 for missing terms, which avoids allocating an Option for every lookup.
+      val dict = Utils.toOpenHashMapWithIndex(vocabulary, indexOffset = 1)
       broadcastDict = Some(dataset.sparkSession.sparkContext.broadcast(dict))
     }
     val dictBr = broadcastDict.get
@@ -310,9 +311,9 @@ class CountVectorizerModel(
       val termCounts = new OpenHashMap[Int, Int]
       var tokenCount = 0L
       document.foreach { term =>
-        dictBr.value.get(term) match {
-          case Some(index) => termCounts.changeValue(index, 1, _ + 1)
-          case None => // ignore terms not in the vocabulary
+        val encodedIndex = dictBr.value(term)
+        if (encodedIndex != 0) {
+          termCounts.changeValue(encodedIndex - 1, 1, _ + 1)
         }
         tokenCount += 1
       }

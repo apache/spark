@@ -21,6 +21,7 @@ import java.util.Collections
 
 import scala.collection.immutable
 import scala.jdk.CollectionConverters._
+import scala.reflect.ClassTag
 
 import com.google.common.collect.{Iterators => GuavaIterators, Ordering => GuavaOrdering}
 
@@ -30,6 +31,24 @@ import org.apache.spark.util.SparkCollectionUtils
  * Utility functions for collections.
  */
 private[spark] object Utils extends SparkCollectionUtils {
+
+  /**
+   * Same function as `keys.zipWithIndex.toMap`, but uses an [[OpenHashMap]] and allows the first
+   * index to be specified.
+  */
+  def toOpenHashMapWithIndex[K: ClassTag](
+      keys: Array[K],
+      indexOffset: Int = 0): OpenHashMap[K, Int] = {
+    val map = new OpenHashMap[K, Int](keys.length)
+    var keyIndex = 0
+    var index = indexOffset
+    while (keyIndex < keys.length) {
+      map.update(keys(keyIndex), index)
+      keyIndex += 1
+      index += 1
+    }
+    map
+  }
 
   /**
    * Returns the first K elements from the input as defined by the specified implicit Ordering[T]
