@@ -5029,6 +5029,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if axis == 0:
             return self._apply_series_op(lambda psser: psser._diff(periods), should_resolve=True)
         else:
+            if not isinstance(periods, int):
+                raise TypeError(
+                    "periods should be an int; however, got [%s]" % type(periods).__name__
+                )
             column_labels = self._internal.column_labels
             data_col_names = self._internal.data_spark_column_names
             new_columns: list[PySparkColumn] = []

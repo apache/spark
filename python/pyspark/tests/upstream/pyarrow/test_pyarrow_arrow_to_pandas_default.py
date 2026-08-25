@@ -92,9 +92,10 @@ class _PyArrowToPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
         conversion raises.
         """
         try:
-            return self.repr_value(arr.to_pandas(**to_pandas_kwargs), max_len=0)
+            result = arr.to_pandas(**to_pandas_kwargs)
         except Exception as e:
             return f"ERR@{type(e).__name__}"
+        return self.repr_value(result, max_len=0)
 
     def _numeric_sources(self):
         """Integer, float, and boolean arrays."""
