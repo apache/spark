@@ -20,7 +20,6 @@ package org.apache.spark.sql.connector.catalog
 import java.util
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, NoSuchViewException, TableAlreadyExistsException, ViewAlreadyExistsException}
@@ -46,13 +45,6 @@ class InMemoryRelationCatalog extends RelationCatalog with SupportsNamespaces {
   override def loadRelation(ident: Identifier): Relation = {
     val key = (ident.namespace().toSeq, ident.name())
     Option(store.get(key)).getOrElse(throw new NoSuchTableException(ident))
-  }
-
-  override def loadRelation(
-      ident: Identifier,
-      stateOptions: CaseInsensitiveStringMap): Relation = {
-    _loadRelationCalls += stateOptions
-    loadRelation(ident)
   }
 
   // ----- TableCatalog -----------------------------------------------------------------
@@ -225,11 +217,6 @@ class InMemoryRelationCatalog extends RelationCatalog with SupportsNamespaces {
   }
 
   // Test-only accessors --------------------------------------------------------------
-
-  private val _loadRelationCalls = mutable.ArrayBuffer.empty[CaseInsensitiveStringMap]
-  def loadRelationCalls: Seq[CaseInsensitiveStringMap] = _loadRelationCalls.toSeq
-  def resetLoadRelationCalls(): Unit = _loadRelationCalls.clear()
-  def lastLoadRelationOptions: Option[CaseInsensitiveStringMap] = _loadRelationCalls.lastOption
 
   /** Returns the stored entry (table or view) for the identifier, or throws if missing. */
   def getStoredInfo(namespace: Array[String], name: String): Relation = {
