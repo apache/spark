@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, MetadataColumnHelper}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, quoteIfNeeded, MetadataColumnHelper}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -111,6 +111,8 @@ private[sql] object V2TableUtil extends SQLConfHelper {
    *  - Column ID changes (top-level and nested field IDs)
    *  - Metadata column type or nullability changes
    *  - Removed metadata columns (missing from current table)
+   *  - Metadata columns hidden by a same-named data column added after capture (when the connector
+   *    suppresses rather than renames the conflict)
    *
    * @param table the current table metadata
    * @param originMetaCols the originally captured metadata columns
@@ -130,7 +132,41 @@ private[sql] object V2TableUtil extends SQLConfHelper {
     val originMetaSchema = CatalogV2Util.toStructType(originMetaCols)
     val metaCols = filter(originMetaColNames, metadataColumns(table))
     val metaSchema = CatalogV2Util.toStructType(metaCols)
-    SchemaUtils.validateSchemaCompatibility(originMetaSchema, metaSchema, resolver, mode, checkIds)
+    val schemaErrors = SchemaUtils.validateSchemaCompatibility(
+      originMetaSchema, metaSchema, resolver, mode, checkIds)
+    schemaErrors ++ shadowedMetadataColumnErrors(table, metaCols)
+  }
+
+  /**
+   * Reports captured metadata columns that a data column of the same name now hides.
+   *
+   * When a data column takes a metadata column's name, a connector that does not rename the
+   * conflict (`canRenameConflictingMetadataColumns` is false) suppresses the metadata column via
+   * `metadataOutputWithOutConflicts`. A suppressed metadata column can no longer be resolved, so a
+   * captured reference to it is broken, and on a partially pruned scan it silently reads the data
+   * column's values instead. The `SupportsMetadataColumns` contract advises a non-renaming source
+   * to reject such a data-column name but does not enforce it, so this reports the conflict
+   * rather than leaving it silent.
+   */
+  private def shadowedMetadataColumnErrors(
+      table: Table,
+      reportedMetaCols: Seq[MetadataColumn]): Seq[String] = {
+    if (reportedMetaCols.isEmpty || renamesConflictingMetadataColumns(table)) {
+      Nil
+    } else {
+      val dataColNames = table.columns.iterator.map(c => normalize(c.name)).toSet
+      reportedMetaCols
+        .filter(metaCol => dataColNames.contains(normalize(metaCol.name)))
+        .map { metaCol =>
+          s"${quoteIdentifier(metaCol.name)} metadata column is hidden by a data column " +
+            "with the same name"
+        }
+    }
+  }
+
+  private def renamesConflictingMetadataColumns(table: Table): Boolean = table match {
+    case hasMeta: SupportsMetadataColumns => hasMeta.canRenameConflictingMetadataColumns
+    case _ => false
   }
 
   private def filter(colNames: Seq[String], cols: Seq[MetadataColumn]): Seq[MetadataColumn] = {
