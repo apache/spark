@@ -1850,7 +1850,7 @@ class Analyzer(
                 // The insert action is used when not matched, so its condition and value can only
                 // access columns from the source table.
                 val resolvedInsertCondition = insertCondition.map(
-                  resolveExpressionByPlanOutput(_, m.sourceTable))
+                  resolveExpressionByPlanOutput(_, m.sourceTable, includeLastResort = true))
                 InsertAction(
                   resolvedInsertCondition,
                   resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE, throws))
@@ -1858,7 +1858,7 @@ class Analyzer(
                 // The insert action is used when not matched, so its condition and value can only
                 // access columns from the source table.
                 val resolvedInsertCondition = insertCondition.map(
-                  resolveExpressionByPlanOutput(_, m.sourceTable))
+                  resolveExpressionByPlanOutput(_, m.sourceTable, includeLastResort = true))
                 // Expand star to top level source columns.  If source has less columns than target,
                 // assignments will be added by ResolveRowLevelCommandAssignments later.
                 val assignments = if (m.schemaEvolutionEnabled) {
