@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 import io.fabric8.kubernetes.api.model.{HasMetadata, ServiceBuilder}
 
 import org.apache.spark.deploy.k8s.{KubernetesDriverConf, SparkPod}
-import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH, KUBERNETES_DRIVER_SERVICE_IP_FAMILIES, KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY, KUBERNETES_DRIVER_SERVICE_PUBLISH_NOT_READY_ADDRESSES}
+import org.apache.spark.deploy.k8s.Config.{KUBERNETES_CLUSTER_DOMAIN, KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH, KUBERNETES_DRIVER_SERVICE_IP_FAMILIES, KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY, KUBERNETES_DRIVER_SERVICE_PUBLISH_NOT_READY_ADDRESSES}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.{config, Logging}
 
@@ -56,7 +56,9 @@ private[spark] class DriverServiceFeatureStep(
   override def configurePod(pod: SparkPod): SparkPod = pod
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
-    val driverHostname = s"$resolvedServiceName.${kubernetesConf.namespace}.svc"
+    val clusterDomain = kubernetesConf.sparkConf.get(KUBERNETES_CLUSTER_DOMAIN)
+    val driverHostname =
+      s"$resolvedServiceName.${kubernetesConf.namespace}.svc.$clusterDomain."
     Map(DRIVER_HOST_KEY -> driverHostname,
       config.DRIVER_PORT.key -> driverPort.toString,
       config.DRIVER_BLOCK_MANAGER_PORT.key -> driverBlockManagerPort.toString)
