@@ -613,9 +613,12 @@ case class KeyedPartitioning(
       val joinKeyPositions = result.keyPositions.map(_.nonEmpty).zipWithIndex.filter(_._1).map(_._2)
       val projectedExpressions = joinKeyPositions.map(expressions)
       val projectedKeys = projectKeys(joinKeyPositions)._2
-      val distinctProjectedKeys = projectedKeys.distinct
+      // Sort the distinct projected keys the same way `GroupPartitionsExec` does. Otherwise, when
+      // only the keyed side is grouped and the other side is re-shuffled using this spec, the two
+      // `KeyedPartitioning`s carry the same keys in a different order and
+      // `PartitioningCollection.fromPartitionings` rejects them.
       val projectedPartitioning =
-        KeyedPartitioning(projectedExpressions, distinctProjectedKeys, isGrouped = true)
+        new KeyedPartitioning(projectedExpressions, projectedKeys, isGrouped = false).toGrouped
       result.copy(partitioning = projectedPartitioning, joinKeyPositions = Some(joinKeyPositions))
     } else {
       result
