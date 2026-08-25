@@ -61,7 +61,16 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 private[spark] class UserCredentialManager(
     sparkConf: SparkConf,
     tokenIngestor: TokenIngestor,
-    onCredentialsUpdate: (Long, Array[Byte]) => Unit) extends Logging {
+    onCredentialsUpdate: (Long, Array[Byte]) => Unit,
+    credentialProviderLoader: CredentialProviderLoader)
+  extends Logging {
+
+  def this(
+      sparkConf: SparkConf,
+      tokenIngestor: TokenIngestor,
+      onCredentialsUpdate: (Long, Array[Byte]) => Unit) = {
+    this(sparkConf, tokenIngestor, onCredentialsUpdate, new CredentialProviderLoader())
+  }
 
   private val safetyMargin = sparkConf.get(SECURITY_OIDC_RENEWAL_SAFETY_MARGIN)
   private val minInterval = sparkConf.get(SECURITY_OIDC_RENEWAL_MIN_INTERVAL)
@@ -166,21 +175,35 @@ private[spark] class UserCredentialManager(
   }
 
   def stop(): Unit = {
+    var interrupted = false
     if (renewalExecutor != null) {
       renewalExecutor.shutdownNow()
+      try {
+        if (!renewalExecutor.awaitTermination(
+            UserCredentialManager.RENEWAL_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+          logWarning(log"Timed out waiting for credential renewal to stop; " +
+            log"closing credential providers while renewal may still be running.")
+        }
+      } catch {
+        case e: InterruptedException =>
+          interrupted = true
+          logWarning(log"Interrupted while waiting for credential renewal to stop.", e)
+      }
     }
     // Close all initialized credential providers to release resources (e.g., HTTP clients).
-    // CredentialProviderLoader.closeAll() operates on global static state, which is safe
-    // because Spark enforces a single SparkContext (and thus a single UserCredentialManager)
-    // per JVM.
+    // This loader belongs to this manager, so closing it cannot affect a later SparkContext.
     try {
-      CredentialProviderLoader.closeAll()
+      credentialProviderLoader.closeAll()
     } catch {
       case e: InterruptedException =>
-        Thread.currentThread().interrupt()
+        interrupted = true
         logWarning(log"Interrupted while closing credential providers during shutdown.", e)
       case NonFatal(e) =>
         logWarning(log"Error closing credential providers during shutdown.", e)
+    } finally {
+      if (interrupted) {
+        Thread.currentThread().interrupt()
+      }
     }
   }
 
@@ -262,7 +285,7 @@ private[spark] class UserCredentialManager(
 
     for (scheme <- schemes) {
       try {
-        val providerOpt = CredentialProviderLoader.providerFor(scheme, credentialConfMap)
+        val providerOpt = credentialProviderLoader.providerFor(scheme, credentialConfMap)
         if (providerOpt.isPresent) {
           val provider = providerOpt.get()
           // Use a synthetic target URI with just the scheme for initial resolution.
@@ -339,7 +362,7 @@ private[spark] class UserCredentialManager(
       // available on the classpath by probing CredentialProviderLoader.
       // This covers both built-in providers (e.g., connector/credential-aws for "s3a")
       // and third-party providers registered via ServiceLoader.
-      CredentialProviderLoader.discoverAllSchemes().asScala.toSet
+      credentialProviderLoader.discoverAllSchemes().asScala.toSet
     }
   }
 
@@ -414,6 +437,8 @@ private[spark] class UserCredentialManager(
 }
 
 private[spark] object UserCredentialManager {
+
+  private val RENEWAL_SHUTDOWN_TIMEOUT_SECONDS = 10L
 
   /**
    * Synthetic authority used in target URIs for scheme-based provider resolution.
