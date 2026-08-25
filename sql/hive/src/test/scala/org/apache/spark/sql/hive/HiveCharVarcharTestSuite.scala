@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql.{CharVarcharTestSuite, Row}
+import org.apache.spark.sql.{CharVarcharTestSuite, QueryTest, Row}
 import org.apache.spark.sql.execution.command.CharVarcharDDLTestBase
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -94,17 +94,17 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
     }
   }
 
-  test("SPARK-58794: CHAR partition filters use the same Hive prune path as STRING") {
+  test("SPARK-59001: CHAR/VARCHAR partition filters prune client-side") {
     // Keep the relation a HiveTableRelation, otherwise the scan is converted to a file index
-    // and never reaches HiveShim's metastore filter conversion.
+    // and never reaches HiveShim's metastore filter conversion. Hive convertFilters still
+    // skips CHAR/VARCHAR keys; pruning is client-side under standardSemantics.
     withSQLConf(
         SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
         SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> "true",
         HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
       val partitionValues = Seq("a", "b", "c", "d", "e")
 
-      def partitionsFetched(partitionType: String, literal: String): Long = {
-        var fetched = 0L
+      def withHivePartTable(partitionType: String)(body: => Unit): Unit = {
         withTable("std_hive_part") {
           sql(
             s"""CREATE TABLE std_hive_part (i INT, p $partitionType)
@@ -112,20 +112,35 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
           partitionValues.foreach { v =>
             sql(s"INSERT INTO std_hive_part PARTITION (p='$v') VALUES (1)")
           }
-          HiveCatalogMetrics.reset()
-          checkAnswer(sql(s"SELECT i FROM std_hive_part WHERE p = $literal"), Row(1))
-          fetched = HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount
+          body
         }
-        fetched
       }
 
-      val stringFetched = partitionsFetched("STRING", "'a'")
-      // Standard semantics compare CHAR without PAD SPACE, so the literal carries the pad.
-      val charFetched = partitionsFetched("CHAR(5)", "'a    '")
-      assert(stringFetched < partitionValues.length,
-        s"STRING baseline did not prune: fetched $stringFetched of ${partitionValues.length}")
-      assert(charFetched === stringFetched,
-        s"CHAR fetched $charFetched partitions but STRING fetched $stringFetched")
+      withHivePartTable("CHAR(5)") {
+        HiveCatalogMetrics.reset()
+        // Store assignment pads CHAR(5); compare is not PAD SPACE, so the literal must match.
+        // checkToRDD = false: checkAnswer would otherwise scan twice and double the metric.
+        QueryTest.checkAnswer(
+          sql("SELECT i FROM std_hive_part WHERE p = 'a    '"),
+          Seq(Row(1)),
+          checkToRDD = false)
+        assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount === 1)
+        HiveCatalogMetrics.reset()
+        QueryTest.checkAnswer(
+          sql("SELECT i FROM std_hive_part WHERE p = 'a'"),
+          Nil,
+          checkToRDD = false)
+        assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount === 0)
+      }
+
+      withHivePartTable("VARCHAR(5)") {
+        HiveCatalogMetrics.reset()
+        QueryTest.checkAnswer(
+          sql("SELECT i FROM std_hive_part WHERE p = 'a'"),
+          Seq(Row(1)),
+          checkToRDD = false)
+        assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount === 1)
+      }
     }
   }
 }

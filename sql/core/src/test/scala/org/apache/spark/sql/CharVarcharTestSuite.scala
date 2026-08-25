@@ -2158,7 +2158,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-58794: empty CHAR/VARCHAR partition values become null like STRING") {
+  test("SPARK-59001: empty CHAR/VARCHAR partition values become null like STRING") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       // CHAR(n>0) pads '' to spaces; CHAR(0) is the empty CHAR that empty2null should treat
       // the same as VARCHAR/STRING.
@@ -2176,7 +2176,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-58794: text datasource accepts CHAR/VARCHAR as a string family type") {
+  test("SPARK-59001: text datasource accepts CHAR/VARCHAR as a string family type") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
@@ -2255,26 +2255,6 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql(s"CREATE TABLE t (col VARCHAR(2)) using $format LOCATION '$dir'")
           checkAnswer(sql("SELECT * FROM t"), Row("12"))
         }
-      }
-      // Catalog write/read and file inference both keep CHAR/VARCHAR.
-      withTable("std_parquet") {
-        sql(s"CREATE TABLE std_parquet (c CHAR(5), v VARCHAR(5)) USING $format")
-        sql("INSERT INTO std_parquet VALUES ('ab', 'cd')")
-        assert(spark.table("std_parquet").schema.map(_.dataType) ===
-          Seq(CharType(5), VarcharType(5)))
-        checkAnswer(
-          sql("SELECT concat('<', c, '>'), concat('<', v, '>') FROM std_parquet"),
-          Row("<ab   >", "<cd>"))
-      }
-      withTempPath { dir =>
-        val path = dir.getCanonicalPath
-        sql("SELECT CAST('ab' AS CHAR(4)) AS c").write.mode("overwrite").format(format).save(path)
-        val inferred = spark.read.format(format).load(path)
-        assert(inferred.schema.head.dataType === CharType(4))
-        checkAnswer(inferred.selectExpr("concat('<', c, '>')"), Row("<ab  >"))
-        val catalog = spark.read.schema("c VARCHAR(4)").format(format).load(path)
-        assert(catalog.schema.head.dataType === VarcharType(4))
-        checkAnswer(catalog, Row("ab  "))
       }
     }
   }

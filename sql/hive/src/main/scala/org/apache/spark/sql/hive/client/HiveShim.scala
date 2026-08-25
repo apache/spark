@@ -409,15 +409,29 @@ private[client] class Shim_v2_0 extends Shim with Logging {
     }
 
     // CHAR/VARCHAR partition keys are excluded from the metastore filter (see
-    // SupportedAttribute), because Hive compares them with its own trailing-blank rules. Under
-    // standard semantics that would leave such a query fetching every partition, so prune on the
-    // client instead, where Spark's own comparison semantics apply.
-    val charVarcharPartitionKey = SQLConf.get.charVarcharStandardSemantics &&
-      catalogTable.partitionSchema.exists(f => CharVarcharUtils.hasCharVarchar(f.dataType))
+    // SupportedAttribute), because Hive compares them with its own trailing-blank rules. When
+    // a predicate actually mentions such a key, prune on the client instead. Other empty-filter
+    // or MetaException fallbacks still honor metastorePartitionPruningFastFallback.
+    def referencesCharVarcharPartitionKey: Boolean = {
+      SQLConf.get.charVarcharStandardSemantics && {
+        val charVarcharPartNames = catalogTable.partitionSchema.fields.collect {
+          case f if CharVarcharUtils.hasCharVarchar(f.dataType) => f.name
+        }
+        charVarcharPartNames.nonEmpty && {
+          val resolver = SQLConf.get.resolver
+          predicates.exists(_.exists {
+            case a: Attribute => charVarcharPartNames.exists(n => resolver(n, a.name))
+            case _ => false
+          })
+        }
+      }
+    }
+    val useClientSidePrune = SQLConf.get.metastorePartitionPruningFastFallback ||
+      referencesCharVarcharPartitionKey
 
-    if ((!SQLConf.get.metastorePartitionPruningFastFallback && !charVarcharPartitionKey) ||
-      predicates.isEmpty ||
-      predicates.exists(hasTimeZoneAwareExpression)) {
+    if (!useClientSidePrune ||
+        predicates.isEmpty ||
+        predicates.exists(hasTimeZoneAwareExpression)) {
       recordHiveCall()
       hive.getAllPartitionsOf(table)
     } else {
