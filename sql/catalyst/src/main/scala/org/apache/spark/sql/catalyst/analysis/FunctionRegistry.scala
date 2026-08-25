@@ -515,6 +515,15 @@ object FunctionRegistry {
     expression[TryMod]("try_mod"),
     expression[TrySubtract]("try_subtract"),
     expression[TryMultiply]("try_multiply"),
+    // Arithmetic that widens its operands so a transpiled Python UDF does not raise on an
+    // intermediate Python would have carried -- see PythonNumericPromotion. Registered because
+    // the transpiler builds its lowerings out of `call_function`, the same way it reaches `div`.
+    // Not intended for hand-written SQL: there, `a + b` overflowing is the ANSI contract, and
+    // getting a decimal back instead would be a surprise.
+    expression[PythonPromotingAdd]("python_promoting_add"),
+    expression[PythonPromotingSubtract]("python_promoting_subtract"),
+    expression[PythonPromotingMultiply]("python_promoting_multiply"),
+    expression[PythonPromotingAbs]("python_promoting_abs"),
     expression[Unhex]("unhex")
   )
 

@@ -31,9 +31,11 @@ untyped parameter is transpiled into one option per input-type category
 (numeric and string) and the JVM picks the one matching the bound column
 types -- falling back to interpreted Python when none fit. Annotating the
 UDF's parameters (e.g. ``def f(a: int, b: str)``) pins each category and
-keeps the option matrix small; prefer doing so. To bound plan growth,
-functions with more than three untyped parameters only emit the
-all-numeric and all-string variants.
+keeps the option matrix small; prefer doing so. To bound plan growth, a
+function with more than three untyped parameters only emits one uniform
+variant per category -- more than *two* when the body needs the
+integral/fractional split described below, since that tries three
+categories per parameter rather than two.
 
 ``len(s)`` lowers to Catalyst ``length`` for a string operand (SPARK-55214).
 Other ``len`` arguments (numbers, lists, ...) stay interpreted Python.
@@ -90,9 +92,140 @@ inline a deterministic one again where that is faster, as they may for any other
 expression. A draw is never inlined, because those rules check determinism.
 
 An argument the body never reads is not computed at all.
+
+Exactness and the integral/fractional split
+-------------------------------------------
+We only lower an operator when it matches CPython exactly, or when it raises
+where CPython returns a value (the ANSI overflow case below). Anything that
+would be silently wrong isn't lowered at all, so the UDF falls back.
+
+Some operators can't meet that bar until we know the *kind* of number, since
+``numeric`` covers both integers and doubles: ``**`` lowers to repeated
+multiplication (exact on ints, rounds per step on doubles, where CPython
+calls libm ``pow``), ``//`` needs ``div``, which rejects fractional input,
+and the bitwise operators and shifts are int-only in Python. ``/`` is the
+mirror image: it needs a fractional operand, or two int32 ones. Bodies using
+any of those emit one option per kind, tagged ``"integral"`` or
+``"fractional"``; everything else keeps the single ``"numeric"`` option it
+always had. Annotating ``int`` / ``float`` pins the kind to one option.
+
+A word on "float", which is unavoidably overloaded here: Python's ``float``
+*is* an IEEE binary64, so it corresponds to Spark's ``DoubleType``, and this
+docstring says "double" for that throughout. Spark's ``FloatType`` is
+single-precision and has no Python counterpart at all -- see the last
+fall-back below.
+
+No exact lowering exists for these, so they fall back:
+
+* ``a / b`` on two bigints. Python divides the exact integers and rounds
+  once, Spark casts each to double first, so past 2^53 they differ by an
+  ULP. int32 columns are exact (both operands are representable, so the
+  double division is correctly rounded), and so is any ``/`` with a double
+  operand.
+* ``round()`` on a double. ``bround`` rounds the shortest decimal repr, so
+  ``bround(2.675, 2)`` is 2.68 where Python's ``round(2.675, 2)`` is 2.67.
+* ``//``, ``**``, ``min()`` and ``max()`` on doubles -- the last two because
+  Python's NaN comparisons are all False, so ``min`` / ``max`` return their
+  first argument, while ``least`` / ``greatest`` order NaN highest either way.
+* Anything on a ``FloatType`` column. Python has no single-precision float:
+  the value arrives widened to a Python float (a double) and every step runs
+  in double, while an expression that stays in ``FloatType`` rounds to 24 bits
+  per step. Under ANSI coercion a literal promotes the expression to double
+  (``x + 4`` and ``x * 3.0`` are double, and so is ``x / y``), but two float
+  operands keep it there -- ``x + y``, ``x * y`` and ``x % y`` all diverge, on
+  398 of 398 sampled random pairs for ``(x + y) * y``. Nor is it only trailing
+  digits: float32 overflows to infinity where Python has room to spare
+  (``-9.726323523430302e29 * -260872823898112.0`` is ``inf`` in FloatType and
+  ``2.5373334837038975e44`` in double). A FloatType *return* type would mask
+  the rounding for one operation but not for a chain, and not the overflow at
+  all. ``ResolveTranspiledPythonUDFOptions`` therefore excludes ``FloatType``
+  from every numeric category, next to ``DecimalType``.
+
+  That exclusion is deliberately coarser than exactness alone requires:
+  comparisons, ``abs`` and unary minus *are* exact on a float column (ANSI
+  coercion sends a float-vs-integral comparison to double, and comparing two
+  floats gives the same answer at either width). Refusing them too costs those
+  bodies a lowering, which is throughput rather than correctness, and buys a
+  boundary drawn per column type instead of per operator -- the same trade
+  ``DecimalType`` already takes. Making it per-operator is a reasonable
+  follow-up, not a prerequisite.
+
+Three tiers of divergence
+-------------------------
+Not every difference between the lowered expression and CPython is a defect.
+They sort into three tiers. Most rows below are pinned by a test in
+``test_udf_transpile_hypothesis.py`` (see its "Bounds 4" section for the
+tier-2 pins) or ``test_udf_transpile_unit.py``; the "evaluation count" row is
+a plan-shape property with no result to assert, so it is documentation only.
+
+**1. Semantically equal.** The two sides are indistinguishable to any
+consumer of the UDF's declared return type, so these are documented rather
+than guarded:
+
+* *Which exception object.* Where both sides raise, the type and message
+  differ -- Python's ``ZeroDivisionError`` against ANSI's ``DIVIDE_BY_ZERO``,
+  ``ValueError`` on a negative shift count against our ``raise_error``. The
+  UDF contract is "this input raises", and both honour it.
+* *The sign of a zero.* ``_python_mod`` follows the dividend for a zero
+  result where Python follows the divisor, so ``4.0 % -2.0`` is ``0.0`` here
+  and ``-0.0`` in Python. They compare equal, hash equal, and print
+  differently only through ``math.copysign`` / ``repr``.
+* *Intermediate width.* ``**`` and the shifts cast their operand to
+  ``LongType`` before operating, so a tinyint input runs its arithmetic wider
+  than the column type. Python has no width at all, so widening moves the
+  lowering *towards* Python; the declared return type is what either side
+  finally produces. Visible in ``explain()``, not in results.
+* *Evaluation count.* ``//``, ``<<`` and ``min``/``max`` reference an operand
+  more than once (a floor correction, an overflow round-trip, a NULL guard)
+  where Python evaluates it once. Operands here are pure column reads, so
+  this costs plan size and nothing else.
+
+**2. Value-visible, and deliberately kept.** These need runtime values rather
+than types to detect, so no static check can route around them. They are
+accepted, documented, and pinned:
+
+* *A result too wide for the declared return type.* Python has no width at all,
+  so it just answers; a UDF declared ``-> LongType`` cannot return
+  13835058055282163709 however wide we compute, and raises CAST_OVERFLOW on the
+  final cast. Interpreted Python does not raise here -- ``makeFromJava`` accepts
+  only Byte/Short/Int/Long for LongType, so a wider Python int matches no case
+  and the row becomes NULL. We deliberately don't copy that: raising tells the
+  caller their return type is too narrow, where a NULL silently loses the row.
+  For a *narrower* declared type the interpreted path is worse still -- it
+  applies ``.toByte`` / ``.toShort`` / ``.toInt``, so a UDF declared
+  ``-> ByteType`` turns 500 into -12 without a word. Raising beats reproducing
+  that.
+
+  This used to be a much blunter edge, and ``+``, ``-``, ``*``, ``**`` and
+  ``abs()`` no longer reach it merely by overflowing an *intermediate*. Operand
+  promotion (see ``_promoting`` and ``PythonNumericPromotion``) widens the
+  arithmetic to a type the input widths prove cannot overflow, so ``x + 4`` on
+  an int column at Integer.MaxValue and ``abs(x)`` on a smallint holding -32768
+  both compute now instead of raising. ``<<`` and a negative ``round()`` scale
+  are the two that still overflow on their own terms.
+* *NULL against TypeError.* Numeric arithmetic is not NULL-guarded: ``x + 1``
+  on NULL is NULL, where Python raises ``TypeError``. The comparison,
+  ``min``/``max`` and string-concat lowerings *do* guard, because there Spark
+  would otherwise return a plausible wrong answer (or a wrong string) rather
+  than a NULL. Guarding every arithmetic operand too would cost a branch per
+  operand on the hottest path for a divergence that at least never produces a
+  wrong *number*.
+
+NaN used to sit in this tier. It no longer does: Spark treats ``NaN = NaN`` as
+true and orders NaN above every value where Python makes every NaN comparison
+False, but NaN-ness is a runtime test rather than a static one, so
+``_nan_guard`` reproduces Python exactly. It is emitted only where NaN can
+actually occur -- both operands numeric, and not both provably integral -- and
+never for strings, where ANSI ``isnan`` would raise CAST_INVALID_INPUT.
+
+**3. Refused.** Everything else -- the fall-backs listed above. Where a
+Python error has no Catalyst equivalent we raise rather than return a
+different value: both shifts on a negative count, and ``min()`` / ``max()``
+on NULL, which ``least`` / ``greatest`` would silently skip.
 """
 
 import ast
+import builtins
 import contextlib
 import inspect
 import itertools
@@ -100,7 +233,7 @@ import sys
 import textwrap
 import threading
 import warnings
-from typing import TYPE_CHECKING, Any, Callable, Iterator, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Union
 
 from pyspark.errors import UnsupportedOperationException
 from pyspark.sql.column import Column
@@ -108,13 +241,17 @@ from pyspark.sql.functions import (
     abs as _abs,
 )
 from pyspark.sql.functions import (
+    bitwise_not,
+    bround,
+    call_function,
     coalesce,
     col,
     concat,
+    greatest,
     isnan,
+    least,
     length,
     lit,
-    pmod,
     raise_error,
     repeat,
     when,
@@ -124,6 +261,8 @@ from pyspark.sql.types import (
     BooleanType,
     DataType,
     DecimalType,
+    DoubleType,
+    FloatType,
     NumericType,
     StringType,
 )
@@ -154,6 +293,167 @@ def _wider_numeric(lc: str, rc: str) -> str:
     return "integer"
 
 
+# Input-type categories. "numeric" spans every numeric column type that has a
+# faithful Python counterpart -- Byte/Short/Integer/Long/DoubleType, so neither
+# DecimalType nor FloatType (see the module docstring); "integral" and
+# "fractional" narrow it for the lowerings that are only exact on one kind of
+# number, and "integral32" narrows "integral" further to the widths whose values
+# are all exactly representable as a double. The JVM side of this vocabulary
+# lives in ResolveTranspiledPythonUDFOptions.
+_INTEGRAL_CATEGORIES = frozenset({"integral", "integral32"})
+_NUMERIC_CATEGORIES = frozenset({"numeric", "fractional"}) | _INTEGRAL_CATEGORIES
+# Categories a lowering may tighten (see ``CatalystTranspiler._narrow``). Only the
+# numeric ones that span more than one kind of number: narrowing "fractional" to
+# an integral category would change the assumption rather than tighten it, and the
+# non-numeric categories have nothing to narrow to.
+_NARROWABLE_CATEGORIES = frozenset({"numeric"}) | _INTEGRAL_CATEGORIES
+# Increasing narrowness, so a later entry matches strictly fewer column types than
+# an earlier one. Requirements from different lowerings in one option are
+# conjunctive -- every one of them has to hold for the option to be exact -- so
+# when two apply to the same parameter the narrowest wins.
+_NARROWING_ORDER = ("numeric", "integral", "integral32")
+# Python builtins the transpiler can lower. Only reached after the name is proven
+# to still refer to the builtin (see ``_resolvable_builtins``).
+_SUPPORTED_BUILTINS = frozenset({"abs", "min", "max", "round"})
+# `x ** k` expands to k-1 multiplications, so cap k to keep plans small. Raising
+# the cap buys little: past it, all but the smallest bases overflow LongType.
+_MAX_POW_EXPANSION = 8
+# An int literal past this is conservatively treated as too wide for IntegerType,
+# so Spark would promote the expression to LongType and the int32 exactness
+# argument for `/` stops holding. (-2**31 does fit; we don't bother.)
+_INT32_MAX = 2**31 - 1
+# Shifts widen their operand to a long, so this is the count at which Python has
+# shifted every bit out -- and the point at which Spark's masked shift stops
+# agreeing with it.
+_LONG_BITS = 64
+
+
+def _promoting_if_numeric(
+    op: str, categories: List[Optional[str]], plain: Callable[[], Column], *cols: Column
+) -> Column:
+    """``_promoting(op, ...)`` when every operand is a number, else ``plain()``.
+
+    The gate is on *numeric* rather than *integral* deliberately, and getting that wrong is worth
+    a note. An unannotated parameter's category is plain ``"numeric"`` -- it could be an int
+    column or a double one, and only the JVM finds out which. Gating on ``_INTEGRAL_CATEGORIES``
+    therefore refuses promotion for exactly the common case, `udf(lambda x, y: x + y)` over two
+    int columns, which is the shape this whole exercise is about. It has to be the coarse
+    category here and the concrete type over there.
+
+    Nothing is lost by handing a double to the promoting operator: ``PythonNumericPromotion``
+    declines to widen a fractional type (IEEE arithmetic saturates to infinity, which is what
+    Python does too), and aligns the operands so the replacement still resolves.
+    """
+    if all(_is_numeric_cat(c) for c in categories):
+        return _promoting(op, *cols)
+    return plain()
+
+
+def _promoting(op: str, *cols: Column) -> Column:
+    """Emit the operand-widening version of ``op``.
+
+    Python integers have no width, so `x * 100` on a tinyint column is fine there and
+    ARITHMETIC_OVERFLOW here -- `Multiply` keeps its operands' type. The JVM side widens the
+    operands far enough that the worst case the *column types* allow cannot overflow; see
+    ``PythonNumericPromotion``. It has to happen over there rather than in this file, because
+    only the analyzer knows the concrete column widths -- we only ever see a category, and
+    "integral" spans tinyint through bigint.
+
+    Reached through ``call_function`` for the same reason ``div`` is: these are real Catalyst
+    expressions, and that is the door PySpark gives us to them.
+    """
+    return call_function(f"python_promoting_{op}", *cols)
+
+
+def _is_numeric_cat(category: Optional[str]) -> bool:
+    """True for every category that denotes a number column."""
+    return category in _NUMERIC_CATEGORIES
+
+
+def _coarse_category(category: Optional[str]) -> Optional[str]:
+    """Collapse the numeric refinements back to plain ``"numeric"``.
+
+    Comparability doesn't care which kind of number it is -- Python is happy
+    with ``1 < 1.5`` and ``2 == 2.0`` -- so the comparison lowerings gate on
+    this instead of the refined category, which would refuse mixed int/float
+    comparisons that used to transpile.
+    """
+    return "numeric" if _is_numeric_cat(category) else category
+
+
+def _unify_numeric(left: str, right: str) -> Optional[str]:
+    """Merge two numeric categories the way Python promotes, or ``None`` when
+    either side isn't a number.
+
+    ``int op float`` is a float so "fractional" wins, and an unrefined
+    "numeric" operand keeps the result unrefined.
+    """
+    if not (_is_numeric_cat(left) and _is_numeric_cat(right)):
+        return None
+    if "fractional" in (left, right):
+        return "fractional"
+    if "numeric" in (left, right):
+        return "numeric"
+    return "integral"
+
+
+def _int_constant(node: ast.AST) -> Optional[int]:
+    """The value of an integer literal, or ``None`` for anything else.
+
+    Handles the unary forms too, since ``x ** -1`` parses as ``Pow`` over
+    ``UnaryOp(USub, Constant(1))`` rather than a negative constant. ``bool`` is
+    excluded even though it subclasses ``int``: ``x ** True`` is legal Python
+    with no faithful lowering.
+    """
+    match node:
+        case ast.Constant(value=v) if isinstance(v, int) and not isinstance(v, bool):
+            return v
+        case ast.UnaryOp(op=ast.USub(), operand=operand):
+            inner = _int_constant(operand)
+            return None if inner is None else -inner
+        case ast.UnaryOp(op=ast.UAdd(), operand=operand):
+            return _int_constant(operand)
+        case _:
+            return None
+
+
+def _is_negative_int_constant(node: ast.AST) -> bool:
+    value = _int_constant(node)
+    return value is not None and value < 0
+
+
+def _resolvable_builtins(func: Optional[Callable], params: List[str]) -> Set[str]:
+    """The ``_SUPPORTED_BUILTINS`` that ``func`` still resolves to the builtin.
+
+    ``abs`` / ``min`` / ``max`` / ``round`` are ordinary names a UDF can rebind
+    (``from mymath import round``, a closure variable, a parameter, a module
+    global). Lowering builtin semantics for a rebound name would run different
+    code than the UDF does, so we drop those and refuse the call. No ``func``
+    means no lowered calls, which is just a missed optimization.
+    """
+    if func is None:
+        return set()
+    shadowed = set(params)
+    code = getattr(func, "__code__", None) or getattr(
+        getattr(func, "__call__", None), "__code__", None
+    )
+    if code is not None:
+        # Closures and locals: a name bound anywhere in the function shadows the
+        # builtin for the whole body, regardless of statement order.
+        shadowed.update(code.co_freevars)
+        shadowed.update(code.co_varnames)
+    globals_dict = getattr(func, "__globals__", None) or getattr(
+        getattr(func, "__call__", None), "__globals__", {}
+    )
+    return {
+        name
+        for name in _SUPPORTED_BUILTINS
+        if name not in shadowed
+        and name not in globals_dict
+        and getattr(builtins, name, None) is not None
+    }
+
+
 class AbstractTranspiler(object):
     """Base class for transpilers. All experimental."""
 
@@ -174,6 +474,7 @@ class AbstractTranspiler(object):
         params: List[str],
         returnType: "DataTypeOrString",
         param_categories: Optional[dict] = None,
+        func: Optional[Callable] = None,
     ) -> Optional[Column]:
         """Lower ``function_ast`` to a :class:`Column`, or return ``None`` to decline.
 
@@ -206,6 +507,11 @@ def _is_definitely_basic_type(node: ast.AST) -> bool:
         case ast.Call(func=ast.Name(id="len"), args=[_], keywords=[]):
             # len() always returns an int: CPython raises if __len__ returns anything else.
             return True
+        case ast.Call(func=ast.Name(id=name), args=args) if name in _SUPPORTED_BUILTINS:
+            # abs/min/max/round of basic types are basic types. A name that no
+            # longer refers to the builtin is caught when the call is lowered
+            # (``_lower_builtin_call``), which raises there rather than here.
+            return all(_is_definitely_basic_type(a) for a in args)
         case _:
             return False
 
@@ -305,7 +611,13 @@ class CatalystTranspiler(AbstractTranspiler):
     variety = "catalyst"
 
     def __init__(self) -> None:
+        # All four are reset per input-type variant by ``_transpile_from_ast``:
+        # the categories assumed for this variant, the builtin names the UDF has
+        # not rebound, the narrower category a lowering needs for some parameter,
+        # and the per-lowering category cache.
         self._param_categories: dict[int, str] = {}
+        self._allowed_builtins: set[str] = set()
+        self._narrowed: dict[int, str] = {}
         self._category_cache: dict[int, str] = {}
         self._nonnull_params: frozenset = frozenset()
         self._null_guard_emitted: bool = False
@@ -347,6 +659,381 @@ class CatalystTranspiler(AbstractTranspiler):
             case _:
                 return False
 
+    def _builtin_call_category(self, params: List[str], name: str, args: List[ast.expr]) -> str:
+        """Category of a supported builtin call, following Python's own typing."""
+        if name == "abs" and len(args) == 1:
+            return self._category(params, args[0])
+        if name in ("min", "max") and len(args) == 2:
+            left = self._category(params, args[0])
+            right = self._category(params, args[1])
+            numeric = _unify_numeric(left, right)
+            if numeric is not None:
+                return numeric
+            if left == right:
+                return left  # min/max over two strings compares codepoints
+            raise UnsupportedOperationException(
+                f"`{name}()` operands have incompatible categories ({left} vs "
+                f"{right}); Python would raise TypeError, so the transpiler falls "
+                "back to interpreted Python"
+            )
+        if name == "round" and len(args) in (1, 2):
+            # `round(x)` returns an int in Python whatever x is; `round(x, n)`
+            # preserves x's kind.
+            return "integral" if len(args) == 1 else self._category(params, args[0])
+        raise UnsupportedOperationException(
+            f"`{name}()` with {len(args)} argument(s) is not supported by the transpiler"
+        )
+
+    def _result_is_python_float(self, params: List[str], node: Optional[ast.AST]) -> bool:
+        """True when the body provably returns a Python ``float``.
+
+        Such a body can't take an integral return type: ``makeFromJava`` accepts
+        only Byte/Short/Int/Long for LongType, so the interpreted UDF nulls the
+        float while the lowered expression would cast the double and return a
+        truncated number. We refuse and stay interpreted.
+
+        Only provable cases count, so the same divergence is still reachable
+        through an unrefined body (``udf(lambda x: x * 2, LongType())`` on a
+        double column): a bare parameter is a float exactly when its column is,
+        which we only know for a "fractional" variant.
+        """
+        match node:
+            case None:
+                return False
+            case ast.Return(value=value):
+                return self._result_is_python_float(params, value)
+            case ast.Constant(value=v):
+                return isinstance(v, float)
+            case ast.Name(id=name) if name in params:
+                return self._category(params, node) == "fractional"
+            case ast.BinOp(left=left, op=op, right=right):
+                if isinstance(op, ast.Div):
+                    return True  # true division is always float in Python
+                if isinstance(op, ast.Pow) and _is_negative_int_constant(right):
+                    return True  # `2 ** -1` is 0.5
+                return self._result_is_python_float(params, left) or self._result_is_python_float(
+                    params, right
+                )
+            case ast.UnaryOp(op=(ast.USub() | ast.UAdd()), operand=operand):
+                return self._result_is_python_float(params, operand)
+            case ast.IfExp(body=body, orelse=orelse):
+                return self._result_is_python_float(params, body) or self._result_is_python_float(
+                    params, orelse
+                )
+            case ast.If(body=body, orelse=orelse):
+                return any(self._result_is_python_float(params, s) for s in body) or any(
+                    self._result_is_python_float(params, s) for s in orelse
+                )
+            case ast.Call(func=ast.Name(id=name), args=args) if name in _SUPPORTED_BUILTINS:
+                if name == "round":
+                    # `round(x)` narrows to int; `round(x, n)` keeps x's kind.
+                    return len(args) == 2 and self._result_is_python_float(params, args[0])
+                return any(self._result_is_python_float(params, a) for a in args)
+            case _:
+                return False
+
+    def _int32_exact(self, params: List[str], node: ast.AST, seen: Set[int]) -> bool:
+        """True when ``node`` provably evaluates within IntegerType.
+
+        This is what makes ``a / b`` safe on integer columns. Spark divides by
+        casting both sides to double, so it only matches Python's exact int/int
+        division when both operands are exactly representable -- then IEEE
+        division is correctly rounded, as CPython's is. If every leaf is an int32
+        column or an int32 literal, ANSI keeps every intermediate in IntegerType
+        (overflow raises rather than widening), so nothing exceeds 2^31.
+
+        Records each parameter reached in ``seen`` so the caller narrows exactly
+        those, and no more: we only walk value positions (an ``IfExp``'s branches,
+        not its test), so a parameter used just in a condition isn't dragged in.
+
+        Only operators whose Spark result stays IntegerType: ``//`` is out because
+        ``div`` returns LongType, and calls are out.
+        """
+        match node:
+            case ast.Constant(value=v) if isinstance(v, int) and not isinstance(v, bool):
+                return abs(v) <= _INT32_MAX
+            case ast.Name(id=name) if name in params:
+                # An integral parameter qualifies only once narrowed to int32,
+                # which the caller does for everything recorded here.
+                if self._category(params, node) not in _INTEGRAL_CATEGORIES:
+                    return False
+                seen.add(self._param_index(params, name))
+                return True
+            case ast.BinOp(
+                left=left, op=ast.Add() | ast.Sub() | ast.Mult() | ast.Mod(), right=right
+            ):
+                return self._int32_exact(params, left, seen) and self._int32_exact(
+                    params, right, seen
+                )
+            case ast.UnaryOp(op=ast.USub() | ast.UAdd(), operand=operand):
+                return self._int32_exact(params, operand, seen)
+            case ast.IfExp(body=body, orelse=orelse):
+                return self._int32_exact(params, body, seen) and self._int32_exact(
+                    params, orelse, seen
+                )
+            case _:
+                return False
+
+    def _param_index(self, params: List[str], name: str) -> int:
+        """Public-parameter index of ``name``, accounting for a leading ``self``."""
+        index = params.index(name)
+        if params and params[0] == "self":
+            index -= 1
+        return index
+
+    def _narrow(self, params: List[str], category: str, *nodes: ast.AST) -> None:
+        """Require every parameter under ``nodes`` to be ``category``.
+
+        For lowerings that are exact only on a narrower column type than the
+        variant assumed: ``/`` needs int32 operands and a string repeat needs an
+        integral count (``"ab" * 2.5`` is a TypeError in Python). Narrowing is
+        safe -- it only ever matches fewer column types, so the JVM drops the
+        option and falls back rather than picking a wrong one.
+        """
+        for node in nodes:
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.Name) and sub.id in params:
+                    self._record_narrowing(self._param_index(params, sub.id), category)
+
+    def _narrow_indexes(self, indexes: Set[int], category: str) -> None:
+        """``_narrow`` for parameter indexes already identified."""
+        for index in indexes:
+            self._record_narrowing(index, category)
+
+    def _record_narrowing(self, index: int, category: str) -> None:
+        """Keep the narrowest requirement for a parameter.
+
+        Several lowerings in one option can each need something of the same
+        parameter, and those needs are conjunctive. Plain assignment would let a
+        later, wider request undo an earlier one: in ``s * (n if n / 3 > 1 else
+        1)`` the repeat's "integral" would replace the division's "integral32",
+        and the option would then be kept for a bigint column -- exactly what the
+        division can't reproduce.
+        """
+        current = self._narrowed.get(index)
+        if current is None or _NARROWING_ORDER.index(category) > _NARROWING_ORDER.index(current):
+            self._narrowed[index] = category
+
+    def _python_mod(self, left_col: Column, right_col: Column) -> Column:
+        """Python's ``%``, which takes the sign of the divisor where Spark's takes
+        the dividend's.
+
+        Same shape as CPython's ``long_mod`` / ``float_rem``: take the remainder,
+        then add the divisor back when the signs disagree. That is exact for both
+        kinds of number and can't overflow -- ``|r| < |b|`` with opposite signs
+        means ``|r + b| < |b|``. The sign of a *zero* result still follows the
+        dividend rather than the divisor (Python's ``4.0 % -2.0`` is ``-0.0``,
+        ours is ``0.0``); the two compare equal, so nothing downstream sees it.
+
+        ``sign(b) * pmod(sign(b) * a, abs(b))`` was the older form. It lost small
+        dividends on doubles (``7.5 % -1e17`` gave ``-0.0`` instead of ``-1e17``,
+        because the intermediate ``-7.5 + 1e17`` rounds to ``1e17``) and raised at
+        the LongType boundaries where the negate or the ``abs`` overflowed.
+        """
+        remainder = left_col.__mod__(right_col)
+        signs_differ = (remainder < lit(0)) != (right_col < lit(0))
+        return when((remainder != lit(0)) & signs_differ, remainder + right_col).otherwise(
+            remainder
+        )
+
+    def _lower_int_pow(self, base_col: Column, exponent: ast.AST) -> Column:
+        """Lower ``base ** k`` for a constant non-negative integer ``k``.
+
+        Repeated multiplication is exact on integers, unlike Spark's ``pow``,
+        which is DOUBLE and loses precision past 2^53 -- the reason ``**`` was
+        refused outright before. Overflow raises under ANSI where Python promotes
+        to a big int, the same caveat ``*`` carries (``**`` just gets there fast).
+        """
+        k = _int_constant(exponent)
+        if k is None:
+            raise UnsupportedOperationException(
+                "`**` is only lowered for a constant integer exponent: a column "
+                "exponent has no bounded expansion into multiplications, so the "
+                "UDF falls back to interpreted Python"
+            )
+        if k < 0:
+            raise UnsupportedOperationException(
+                "`**` with a negative exponent returns a float in Python and has "
+                "no exact integral lowering, so the UDF falls back to interpreted "
+                "Python"
+            )
+        if k > _MAX_POW_EXPANSION:
+            raise UnsupportedOperationException(
+                f"`**` exponents above {_MAX_POW_EXPANSION} are not lowered (the "
+                "expansion into multiplications would bloat the plan, and past it "
+                "all but the smallest bases overflow LongType), so the UDF falls "
+                "back to interpreted Python"
+            )
+        if k == 0:
+            # `x ** 0` is 1 for any x that exists -- `None ** 0` raises TypeError.
+            # Folding to a bare `lit(1)` would drop the base, inventing 1 for a
+            # NULL input and swallowing errors from computing the base, so keep it
+            # in the condition.
+            return when(base_col.isNull(), lit(None)).otherwise(lit(1))
+        # Each step is a promoting multiply, so the expansion widens as it grows rather than
+        # all at once: `x ** 2` on an int column lands on bigint, `x ** 2` on a bigint on
+        # decimal(38, 0), and a longer chain keeps climbing until the precision runs out and
+        # the operator is left to raise as it did before. That is why this no longer casts to
+        # long up front -- doing so would throw away the operand's real width and make every
+        # power look like a bigint one, promoting further than the column actually needs.
+        result = base_col
+        for _ in range(k - 1):
+            result = _promoting("multiply", result, base_col)
+        return result
+
+    def _lower_shift(self, left_col: Column, right_col: Column, left_shift: bool) -> Column:
+        """Lower ``a << n`` / ``a >> n``, handling Python's error cases exactly.
+
+        Java -- and so Spark -- masks the shift distance to the operand's width
+        (``& 63`` for a long, ``& 31`` for an int) where Python shifts by the full
+        count. That means two things, and both are silently wrong if missed:
+
+        * We widen the operand to a long. Otherwise ``x >> 32`` on an int column
+          masks to a no-op and returns ``x`` instead of 0. It also drops spurious
+          ``<<`` overflows on narrow columns, since Python has no width.
+        * A count of 64+ needs its own branch. Shifting back and comparing can't
+          catch it -- masking makes the shift a no-op, so the round trip agrees
+          with itself. ``>>`` has an exact answer (every bit shifts out, leaving 0
+          or -1 for a negative operand, as both languages shift arithmetically);
+          ``<<`` only agrees for a zero operand and otherwise overflows.
+
+        Then: a negative count raises like Python's ValueError, and a ``<<`` that
+        drops bits raises the way ``*`` reports overflow under ANSI. Under 64 the
+        round trip is a real check, since nothing is masked. The count is clamped
+        before the cast below, so both of those report the transpiler's own error
+        rather than a cast overflow however far out of range the count is.
+        """
+        # The count must be IntegerType (BitShiftOperation's inputTypes). Implicit
+        # coercion would insert that cast itself, but then an out-of-range count
+        # would hit it before the clamp -- and Python is fine with such counts
+        # (`48 >> 2**40` is 0, not an error). Clamp first: every count at or past
+        # the width behaves the same and every negative one raises, so clamping
+        # leaves the branches below exact.
+        count = (
+            when(right_col > lit(_LONG_BITS), lit(_LONG_BITS))
+            .when(right_col < lit(0), lit(-1))
+            .otherwise(right_col)
+            .cast("int")
+        )
+        base = left_col.cast("long")
+        negative_count = lit(
+            "Python UDF transpiler: negative shift count; Python would raise ValueError here."
+        )
+        guarded: Column = when(count < lit(0), raise_error(negative_count))
+        if not left_shift:
+            # The NULL check has to be explicit: `base < 0` is NULL for a NULL
+            # operand, so without it the zero branch fires and invents a value
+            # where every other lowering here (and `>>` under 64) yields NULL.
+            return (
+                guarded.when(base.isNull(), lit(None))
+                .when(count >= lit(_LONG_BITS), when(base < lit(0), lit(-1)).otherwise(lit(0)))
+                .otherwise(call_function("shiftright", base, count))
+            )
+        shifted = call_function("shiftleft", base, count)
+        overflow = lit(
+            "Python UDF transpiler: `<<` overflowed the column type; Python "
+            "would promote to an arbitrary-precision int here."
+        )
+        return (
+            # A zero operand survives any count, so it falls through to the round
+            # trip and agrees; anything else has lost every bit.
+            guarded.when((count >= lit(_LONG_BITS)) & (base != lit(0)), raise_error(overflow))
+            .when(call_function("shiftright", shifted, count) != base, raise_error(overflow))
+            .otherwise(shifted)
+        )
+
+    def _lower_builtin_call(self, params: List[str], node: ast.Call) -> Column:
+        """Lower a call to one of ``abs`` / ``min`` / ``max`` / ``round``."""
+        if node.keywords or not isinstance(node.func, ast.Name):
+            raise UnsupportedOperationException(
+                "only positional calls to a small set of builtins are supported by the transpiler"
+            )
+        name = node.func.id
+        if name not in self._allowed_builtins:
+            # Either an unsupported callable, or a supported name the UDF rebound
+            # (`from mymath import round`, a local, a closure variable). Lowering
+            # builtin semantics for a rebound name would run different code than
+            # the UDF does, so refuse.
+            raise UnsupportedOperationException(
+                f"call to {name!r} is not supported by the transpiler: it is "
+                "either not a lowerable builtin or no longer refers to the "
+                "builtin in this UDF's scope"
+            )
+        args = node.args
+        if any(isinstance(a, ast.Starred) for a in args):
+            raise UnsupportedOperationException(
+                f"`{name}(*args)` is not supported by the transpiler"
+            )
+        # Validates the argument count and that the operand categories are
+        # compatible with each other; the result is the call's own category.
+        result_cat = self._builtin_call_category(params, name, args)
+        if name == "abs":
+            # Exact for either kind of number; `abs(Long.MinValue)` raises, the
+            # usual overflow caveat. A string operand would be promoted by ANSI
+            # (`abs('-5')` is 5.0) and a bool/binary one fails Abs's input check,
+            # breaking the query instead of falling back.
+            if not _is_numeric_cat(result_cat):
+                raise UnsupportedOperationException(
+                    "`abs()` is only supported for numeric operands (Python raises "
+                    "TypeError otherwise, and Spark would coerce or fail analysis); "
+                    "the transpiler falls back to interpreted Python"
+                )
+            # Promoting, because `Abs` keeps its operand's type and two's complement has no
+            # positive counterpart for a width's minimum: `abs(x)` on a smallint holding
+            # -32768 raised where Python answers 32768.
+            abs_col = self._convert_chunk(params, args[0])
+            return _promoting_if_numeric("abs", [result_cat], lambda: _abs(abs_col), abs_col)
+        if name in ("min", "max"):
+            # `least`/`greatest` skip nulls, so `min(None, 3)` would return 3 where
+            # Python raises -- guard rather than diverge. Floats are out because
+            # Python returns the first argument for a NaN operand while Spark orders
+            # NaN highest; checking the unified category covers both orders. Only a
+            # pair is handled: `least`/`greatest` are variadic, but the NULL guard
+            # and category unification here are written for two operands.
+            if _is_numeric_cat(result_cat) and result_cat not in _INTEGRAL_CATEGORIES:
+                raise UnsupportedOperationException(
+                    f"`{name}()` is only lowered for integral or string "
+                    "operands: on floats Python returns whichever argument came "
+                    "first while Spark orders NaN highest, so the UDF falls back "
+                    "to interpreted Python"
+                )
+            cols = [self._convert_chunk(params, a) for a in args]
+            err = lit(
+                f"Python UDF transpiler: cannot apply `{name}()` to NULL; Python "
+                "would raise TypeError here. Add an `is not None` guard or filter "
+                "NULLs upstream."
+            )
+            picked = least(*cols) if name == "min" else greatest(*cols)
+            return when(cols[0].isNull() | cols[1].isNull(), raise_error(err)).otherwise(picked)
+        # round: HALF_EVEN, like Python. Integral operands only. A negative scale
+        # can overflow the column type (`round(Long.MaxValue, -1)` raises where
+        # Python promotes) -- the usual overflow caveat.
+        if self._category(params, args[0]) not in _INTEGRAL_CATEGORIES:
+            raise UnsupportedOperationException(
+                "`round()` is only lowered for integral operands: Spark's `bround` "
+                "rounds the shortest decimal representation of a double, which "
+                "differs from Python's rounding of the exact binary value, so the "
+                "UDF falls back to interpreted Python"
+            )
+        # `round(x)` is `round(x, 0)`; a non-literal scale can't be lowered
+        # because Spark's `bround` requires a foldable one.
+        scale = 0 if len(args) == 1 else _int_constant(args[1])
+        if scale is None:
+            raise UnsupportedOperationException(
+                "`round()`'s second argument must be an integer literal (Spark's "
+                "`bround` requires a foldable scale), so the UDF falls back to "
+                "interpreted Python"
+            )
+        if abs(scale) > _INT32_MAX:
+            # `bround`'s scale is IntegerType, and ANSI narrows a bigint literal to
+            # it with a cast that fails CAST_OVERFLOW -- breaking the query instead
+            # of falling back. Python takes any scale (`round(5, 2**40)` is 5).
+            raise UnsupportedOperationException(
+                "`round()`'s scale does not fit in an int, which Spark's `bround` "
+                "requires; the transpiler falls back to interpreted Python"
+            )
+        return bround(self._convert_chunk(params, args[0]), scale)
+
     def _safe_category(self, params: List[str], node: Optional[ast.AST]) -> Optional[str]:
         """Best-effort input-type category for an if/else branch, or ``None`` when
         it can't be pinned down statically.
@@ -372,13 +1059,9 @@ class CatalystTranspiler(AbstractTranspiler):
             body_c = self._safe_category(params, node.body[0]) if node.body else None
             else_c = self._safe_category(params, node.orelse[0]) if node.orelse else None
             if body_c is not None and else_c is not None and body_c != else_c:
-                # Numeric sub-categories are mutually compatible; return the
-                # wider one. Truly mismatched families (e.g. numeric vs string)
-                # return None so the branch-compatibility check in
-                # _convert_if_like raises and the variant is dropped.
-                if _is_numeric_cat(body_c) and _is_numeric_cat(else_c):
-                    return _wider_numeric(body_c, else_c)
-                return None
+                # Two numeric branches of different kinds still have a common
+                # type (the wider of the two), so unify rather than give up.
+                return _unify_numeric(body_c, else_c)
             return body_c if body_c is not None else else_c
         if isinstance(node, ast.Constant) and node.value is None:
             return None
@@ -432,17 +1115,48 @@ class CatalystTranspiler(AbstractTranspiler):
         # (e.g. a bare ``None``) are treated as compatible and don't force this.
         body_cat = self._safe_category(params, body_node)
         else_cat = self._safe_category(params, else_node)
-        if body_cat is not None and else_cat is not None and body_cat != else_cat:
-            # Numeric sub-categories (integer/float) are compatible: Spark widens
-            # to double in the CASE WHEN expression. Truly mismatched families
-            # (e.g. numeric vs string) are still refused.
-            if not (_is_numeric_cat(body_cat) and _is_numeric_cat(else_cat)):
-                raise UnsupportedOperationException(
-                    f"if/else branches have incompatible categories ({body_cat} vs "
-                    f"{else_cat}); the lowered CASE WHEN has no common type under ANSI, "
-                    "so the transpiler falls back to interpreted Python"
-                )
+        if (
+            body_cat is not None
+            and else_cat is not None
+            and _coarse_category(body_cat) != _coarse_category(else_cat)
+        ):
+            raise UnsupportedOperationException(
+                f"if/else branches have incompatible categories ({body_cat} vs "
+                f"{else_cat}); the lowered CASE WHEN has no common type under ANSI, "
+                "so the transpiler falls back to interpreted Python"
+            )
         return when(safe_test, body_col).otherwise(else_col)
+
+    def _nan_guard(
+        self,
+        left_cat: Optional[str],
+        right_cat: Optional[str],
+        left_col: Column,
+        right_col: Column,
+    ) -> Optional[Column]:
+        """``isnan(l) | isnan(r)``, or ``None`` when NaN cannot arise here.
+
+        Python makes every comparison involving NaN False (so ``!=`` is True),
+        while Spark treats ``NaN = NaN`` as true and orders NaN above every
+        value. NaN-ness is a runtime test rather than a static one, so this is
+        guarded exactly rather than refused -- but only where it can happen:
+
+        * both operands have to be numbers. Strings are excluded for a concrete
+          reason and not just tidiness: under ANSI ``isnan`` casts its argument,
+          so ``isnan('x')`` raises CAST_INVALID_INPUT at runtime rather than
+          returning false, which would break a working string comparison.
+        * not both provably integral, since an integral column has no NaN to
+          find and the extra branch would only grow the plan. An unrefined
+          ``"numeric"`` operand might still be a double, so it does get guarded.
+
+        Returning ``None`` rather than ``lit(False)`` lets the callers leave the
+        branch out of the plan altogether instead of emitting a dead one.
+        """
+        if not (_is_numeric_cat(left_cat) and _is_numeric_cat(right_cat)):
+            return None
+        if left_cat in _INTEGRAL_CATEGORIES and right_cat in _INTEGRAL_CATEGORIES:
+            return None
+        return isnan(left_col) | isnan(right_col)
 
     def _lower_eq(
         self,
@@ -471,25 +1185,24 @@ class CatalystTranspiler(AbstractTranspiler):
         Numeric sub-categories (``"integer"`` vs ``"float"``) are treated as
         compatible; Spark widens to double in the comparison.
 
-        A NaN guard is added unless both operands are provably ``"integer"``:
-        ``NaN == NaN`` is ``False`` in Python (IEEE 754), but Spark's
-        ``EqualTo`` returns ``True``. ``"numeric"`` is an unknown sub-type
-        that may resolve to a float column, so it keeps the guard.
-
-        One value-level difference remains for ordering comparisons (tracked
-        separately): Spark orders NaN as greater than every value, whereas
-        Python's NaN comparisons are all False.
+        Spark treats ``NaN = NaN`` as true, while Python's ``nan == nan`` is
+        False, so a numeric variant that could hold a double tests for NaN
+        before evaluating the Spark comparison -- see ``_nan_guard``. NULL is
+        checked first, which is also Python's order: ``None == nan`` is False
+        because the operands are of different types, not because of NaN.
         """
         lc = self._safe_category(params, left_node)
         rc = self._safe_category(params, right_node)
-        if lc is not None and rc is not None and lc != rc:
-            # Numeric sub-categories are mutually compatible for equality.
-            if not (_is_numeric_cat(lc) and _is_numeric_cat(rc)):
-                raise UnsupportedOperationException(
-                    f"`==`/`!=` operands have incompatible categories ({lc} vs {rc}); "
-                    "Python compares across types as unequal while Spark would coerce "
-                    "or fail analysis, so the transpiler falls back to interpreted Python"
-                )
+        # Compare coarsely: `2 == 2.0` is True in Python and in Spark, so an
+        # int-vs-float pairing is compatible even though the refined categories
+        # differ. Only a genuine cross-kind pairing (numeric vs string/bool)
+        # forces the fallback.
+        if lc is not None and rc is not None and _coarse_category(lc) != _coarse_category(rc):
+            raise UnsupportedOperationException(
+                f"`==`/`!=` operands have incompatible categories ({lc} vs {rc}); "
+                "Python compares across types as unequal while Spark would coerce "
+                "or fail analysis, so the transpiler falls back to interpreted Python"
+            )
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
         left_null = left_col.isNull()
@@ -515,14 +1228,20 @@ class CatalystTranspiler(AbstractTranspiler):
         if equal:
             both_null_val: Column = lit(True)
             one_null_val: Column = lit(False)
+            nan_val: Column = lit(False)
+            value_cmp = left_col == right_col
         else:
             both_null_val = lit(False)
             one_null_val = lit(True)
-        return (
-            when(left_null & right_null, both_null_val)
-            .when(left_null | right_null, one_null_val)
-            .otherwise(value_cmp)
+            nan_val = lit(True)
+            value_cmp = left_col != right_col
+        nan_guard = self._nan_guard(lc, rc, left_col, right_col)
+        branches = when(left_null & right_null, both_null_val).when(
+            left_null | right_null, one_null_val
         )
+        if nan_guard is not None:
+            branches = branches.when(nan_guard, nan_val)
+        return branches.otherwise(value_cmp)
 
     def _lower_value_compare(
         self,
@@ -549,14 +1268,17 @@ class CatalystTranspiler(AbstractTranspiler):
         mismatch raises so this variant is dropped and the UDF falls back to
         interpreted Python rather than silently diverging.
 
-        One value-level difference from Python remains (it needs runtime
-        value info, so it is documented, not guarded): Spark orders ``NaN``
-        as greater than every value, whereas Python's ``NaN`` comparisons
-        are all ``False``.
+        Spark orders ``NaN`` as greater than every value, whereas Python's
+        ``NaN`` comparisons are all ``False``, so a numeric variant that could
+        hold a double returns false when either operand is NaN -- see
+        ``_nan_guard``. The NULL raise comes first, matching Python, which
+        raises TypeError on ``None > 0`` regardless of the other operand.
         """
         lc = self._category(params, left_node)
         rc = self._category(params, right_node)
-        if lc != rc and not (_is_numeric_cat(lc) and _is_numeric_cat(rc)):
+        # Coarse comparison: Python orders ints against floats happily, so only a
+        # cross-kind pairing (numeric vs string, ...) is the TypeError case.
+        if _coarse_category(lc) != _coarse_category(rc):
             raise UnsupportedOperationException(
                 f"`{op_repr}` compares operands of different categories "
                 f"({lc} vs {rc}); Python would raise TypeError, so the "
@@ -573,10 +1295,14 @@ class CatalystTranspiler(AbstractTranspiler):
             "`is not None` guard or filter NULLs upstream."
         )
         self._null_guard_emitted = True
-        return when(null_guard, raise_error(err)).otherwise(op(left_col, right_col))
+        nan_guard = self._nan_guard(lc, rc, left_col, right_col)
+        guarded = when(null_guard, raise_error(err))
+        if nan_guard is not None:
+            guarded = guarded.when(nan_guard, lit(False))
+        return guarded.otherwise(op(left_col, right_col))
 
     def _category(self, params: List[str], node: ast.AST) -> str:
-        """Infer the scalar category of ``node`` under the current
+        """Infer a category for ``node`` under the current
         ``self._param_categories`` assumption (set per input-type variant).
 
         Returns one of ``"integer"``, ``"float"``, ``"numeric"`` (unknown
@@ -586,6 +1312,11 @@ class CatalystTranspiler(AbstractTranspiler):
         repeat) and raises ``UnsupportedOperationException`` when an operator's
         operands are type-incompatible, so the caller drops that variant and the
         JVM picks another option / falls back to the Python UDF.
+
+        Numeric results carry their kind (``"integral"`` / ``"fractional"``)
+        when it is known, since several lowerings are only exact for one of
+        them; ``"numeric"`` means "a number, kind unknown" and comes from an
+        unrefined parameter. ``_unify_numeric`` promotes the way Python does.
         """
         cache_key = id(node)
         cached = self._category_cache.get(cache_key)
@@ -598,21 +1329,20 @@ class CatalystTranspiler(AbstractTranspiler):
     def _category_uncached(self, params: List[str], node: ast.AST) -> str:
         match node:
             case ast.Constant(value=v):
-                # bool subclasses int, so classify it first.
-                # int -> "integer", float -> "float", str -> "string",
-                # bool -> "bool", bytes -> "binary".
-                # None/complex/Ellipsis have no usable Spark column type, so
-                # raise to drop this variant and fall back rather than emit an
+                # bool subclasses int, so classify it first: int -> integral,
+                # float -> fractional, str -> string, bool -> bool, bytes ->
+                # binary. None/complex/Ellipsis have no usable Spark column type,
+                # so raise to drop this variant and fall back rather than emit an
                 # option that fails CheckAnalysis or silently diverges (e.g.
                 # `x + None` -> NULL where Python raises TypeError).
                 if isinstance(v, bool):
                     return "bool"
                 if isinstance(v, bytes):
                     return "binary"
-                if isinstance(v, float):
-                    return "float"
                 if isinstance(v, int):
-                    return "integer"
+                    return "integral"
+                if isinstance(v, float):
+                    return "fractional"
                 if isinstance(v, str):
                     return "string"
                 raise UnsupportedOperationException(
@@ -626,25 +1356,42 @@ class CatalystTranspiler(AbstractTranspiler):
             case ast.BinOp(left=left, op=op, right=right):
                 lc = self._category(params, left)
                 rc = self._category(params, right)
+                numeric = _unify_numeric(lc, rc)
                 if isinstance(op, ast.Add):
-                    if lc == rc:
-                        return lc  # str+str, integer+integer, float+float
-                    if _is_numeric_cat(lc) and _is_numeric_cat(rc):
-                        return _wider_numeric(lc, rc)  # integer+float -> float
+                    if numeric is not None:
+                        return numeric  # num + num -> num
+                    if lc == rc == "string":
+                        return "string"  # str + str -> str
                 if isinstance(op, ast.Mult):
-                    if _is_numeric_cat(lc) and _is_numeric_cat(rc):
-                        return _wider_numeric(lc, rc)
-                    # repeat(str, n): second operand must be integral (not float).
-                    # Python raises TypeError for `str * float`, so we allow only
-                    # "integer" or the legacy "numeric" catch-all (which the JVM
-                    # will validate against the actual column type at query time).
-                    if lc == "string" and rc in ("integer", "numeric"):
-                        return "string"
-                    if rc == "string" and lc in ("integer", "numeric"):
-                        return "string"
-                if isinstance(op, (ast.Sub, ast.Mod)):
-                    if _is_numeric_cat(lc) and _is_numeric_cat(rc):
-                        return _wider_numeric(lc, rc)
+                    if numeric is not None:
+                        return numeric
+                    if (lc == "string" and _is_numeric_cat(rc)) or (
+                        _is_numeric_cat(lc) and rc == "string"
+                    ):
+                        return "string"  # str * int / int * str -> repeat
+                if isinstance(op, (ast.Sub, ast.Mod, ast.FloorDiv)) and numeric is not None:
+                    # `//` follows Python: int // int stays an int, and a float
+                    # operand makes the result a float.
+                    return numeric
+                if isinstance(op, ast.Div) and numeric is not None:
+                    # True division always produces a float in Python, even for
+                    # `4 / 2`. The return-type gate keys off this.
+                    return "fractional"
+                if isinstance(op, ast.Pow) and numeric is not None:
+                    # Only non-negative integer exponents are lowered, and those
+                    # keep an integral base integral. A negative exponent yields a
+                    # float in Python; report that faithfully so the return-type
+                    # gate sees it (the lowering refuses it separately).
+                    if _is_negative_int_constant(right):
+                        return "fractional"
+                    return numeric
+                if (
+                    isinstance(op, (ast.BitAnd, ast.BitOr, ast.BitXor, ast.LShift, ast.RShift))
+                    and numeric is not None
+                ):
+                    # Integer-only in Python; the lowering enforces that the
+                    # operands really are integral.
+                    return numeric
                 raise UnsupportedOperationException(
                     f"operands of `{type(op).__name__}` are not type-compatible "
                     "for this input-type variant"
@@ -658,6 +1405,16 @@ class CatalystTranspiler(AbstractTranspiler):
                         "types fall back to interpreted Python"
                     )
                 return "numeric"
+            case ast.Call(func=ast.Name(id=name), args=args) if name in _SUPPORTED_BUILTINS:
+                return self._builtin_call_category(params, name, args)
+            case ast.UnaryOp(op=(ast.USub() | ast.UAdd() | ast.Invert()), operand=operand):
+                # Negation, unary plus, and `~` all preserve the operand's kind,
+                # so `-3` stays integral and `x // -3` keeps its exact lowering.
+                # `not` is deliberately not here: it falls through to the boolean
+                # arm below. (These are separate from the catch-all because that
+                # would report the unrefined "numeric" and cost the integral
+                # lowerings.)
+                return self._category(params, operand)
             case ast.Return(value=value) if value is not None:
                 return self._category(params, value)
             case ast.IfExp(body=if_body, orelse=if_orelse):
@@ -677,15 +1434,17 @@ class CatalystTranspiler(AbstractTranspiler):
                 body_cat = branch_category(if_body)
                 else_cat = branch_category(if_orelse)
                 if body_cat is not None and else_cat is not None and body_cat != else_cat:
-                    # Numeric sub-categories (integer/float) are mutually
-                    # compatible: `1 if c else 1.0` is valid Python and Spark
-                    # widens to double in the CASE WHEN.
-                    if _is_numeric_cat(body_cat) and _is_numeric_cat(else_cat):
-                        return _wider_numeric(body_cat, else_cat)
-                    raise UnsupportedOperationException(
-                        f"ternary branches have mismatched categories ({body_cat} "
-                        f"vs {else_cat}) and cannot drive operator selection"
-                    )
+                    # Two numeric branches of different kinds are fine -- Python's
+                    # `1 if c else 2.5` is an int or a float depending on the test,
+                    # and the lowered CASE WHEN promotes to the wider type -- so
+                    # unify those instead of refusing.
+                    unified = _unify_numeric(body_cat, else_cat)
+                    if unified is None:
+                        raise UnsupportedOperationException(
+                            f"ternary branches have mismatched categories ({body_cat} "
+                            f"vs {else_cat}) and cannot drive operator selection"
+                        )
+                    return unified
                 result_cat = body_cat if body_cat is not None else else_cat
                 if result_cat is None:
                     raise UnsupportedOperationException(
@@ -749,6 +1508,22 @@ class CatalystTranspiler(AbstractTranspiler):
                     return self._convert_chunk(params, operand).__neg__()
                 # `+x` -- identity, kept for symmetry with USub.
                 return self._convert_chunk(params, operand)
+            case ast.UnaryOp(op=ast.Invert(), operand=operand):
+                # `~x` is `-x - 1` in both languages, but int-only: Python raises
+                # on a float and BitwiseNot fails analysis for a double child,
+                # which breaks the query instead of falling back (options are
+                # type-checked as children of TranspiledPythonUDF).
+                if self._category(params, operand) not in _INTEGRAL_CATEGORIES:
+                    raise UnsupportedOperationException(
+                        "`~` is only supported for integral operands (Python raises "
+                        "TypeError on floats and strings, and Spark would fail "
+                        "analysis); the transpiler falls back to interpreted Python"
+                    )
+                # Cast to long for the same reason the bitwise binary operators do:
+                # a promoted operand can arrive as a decimal (`~(x + 1)` on a bigint
+                # column), and `BitwiseNot` rejects a decimal child in analysis --
+                # which breaks the query rather than falling back.
+                return bitwise_not(self._convert_chunk(params, operand).cast("long"))
             case ast.BoolOp(op=op, values=values):
                 # Python `and` / `or` short-circuit and return one of the
                 # operands rather than a strict boolean. For the booleans
@@ -891,56 +1666,176 @@ class CatalystTranspiler(AbstractTranspiler):
                 # (str+int, str-str, ...) raise so this variant is dropped and
                 # the JVM picks another option or falls back to the Python UDF.
                 #
-                # `**` is intentionally NOT lowered: Spark's `pow` is DOUBLE and
-                # loses precision for large integers, so it would silently return
-                # wrong results. TODO (SPARK-55210): add an exact integer-power
-                # lowering and re-enable it.
-                #
-                # Value-level divergences remain documented (need runtime value
-                # info, not type): overflow raises ARITHMETIC_OVERFLOW under ANSI
-                # where Python promotes to a big int; arithmetic is not
-                # NULL-guarded (`x + 1` on NULL -> NULL vs Python TypeError).
-                # TODO (SPARK-55210): map overflow / divide-by-zero precisely.
+                # `//`, `**` and the bitwise operators also need *integral*
+                # operands; `/` needs a fractional or int32-exact one. The module
+                # docstring has the reasoning and the resulting fall-backs;
+                # SPARK-55220 tracks the strictness knob for the value-level ones.
                 lc = self._category(params, left)
                 rc = self._category(params, right)
+                both_numeric = _unify_numeric(lc, rc) is not None
+                both_integral = lc in _INTEGRAL_CATEGORIES and rc in _INTEGRAL_CATEGORIES
                 left_col = self._convert_chunk(params, left)
                 right_col = self._convert_chunk(params, right)
                 match op:
                     case ast.Add():
                         if lc == rc == "string":
-                            return concat(left_col, right_col)
-                        if _is_numeric_cat(lc) and _is_numeric_cat(rc):
-                            return left_col.__add__(right_col)
+                            # `concat` propagates NULL where Python raises
+                            # TypeError on `'a' + None`, so guard rather than
+                            # return a value Python never would. Numeric `+` is
+                            # deliberately *not* guarded this way -- see the
+                            # tier-2 "NULL against TypeError" row in the module
+                            # docstring -- because there the unguarded answer is
+                            # NULL, which is at least not a wrong number, and
+                            # guarding every arithmetic operand would cost a
+                            # branch per operand on the common path.
+                            concat_null = lit(
+                                "Python UDF transpiler: cannot concatenate NULL; "
+                                "Python would raise TypeError here. Add an `is not "
+                                "None` guard or filter NULLs upstream."
+                            )
+                            return when(
+                                left_col.isNull() | right_col.isNull(),
+                                raise_error(concat_null),
+                            ).otherwise(concat(left_col, right_col))
+                        if both_numeric:
+                            return _promoting_if_numeric(
+                                "add",
+                                [lc, rc],
+                                lambda: left_col.__add__(right_col),
+                                left_col,
+                                right_col,
+                            )
                     case ast.Sub():
-                        if _is_numeric_cat(lc) and _is_numeric_cat(rc):
-                            return left_col.__sub__(right_col)
+                        if both_numeric:
+                            return _promoting_if_numeric(
+                                "subtract",
+                                [lc, rc],
+                                lambda: left_col.__sub__(right_col),
+                                left_col,
+                                right_col,
+                            )
                     case ast.Mult():
-                        if _is_numeric_cat(lc) and _is_numeric_cat(rc):
-                            return left_col.__mul__(right_col)
-                        if lc == "string" and rc in ("integer", "numeric"):
+                        if both_numeric:
+                            return _promoting_if_numeric(
+                                "multiply",
+                                [lc, rc],
+                                lambda: left_col.__mul__(right_col),
+                                left_col,
+                                right_col,
+                            )
+                        # The repeat count has to be an int -- `"ab" * 2.5` is a
+                        # TypeError, not a truncation. A float literal shows up as
+                        # "fractional" here; for a parameter only the JVM knows, so
+                        # narrow the count and let a double column drop the option.
+                        if lc == "string" and _is_numeric_cat(rc) and rc != "fractional":
+                            self._narrow(params, "integral", right)
                             return repeat(left_col, right_col.cast("int"))
-                        if lc in ("integer", "numeric") and rc == "string":
+                        if _is_numeric_cat(lc) and lc != "fractional" and rc == "string":
+                            self._narrow(params, "integral", left)
                             return repeat(right_col, left_col.cast("int"))
                     case ast.Mod():
-                        if _is_numeric_cat(lc) and _is_numeric_cat(rc):
-                            # Python's `%` takes the sign of the divisor; Spark's
-                            # takes the dividend's. `sign(b) * pmod(sign(b) * a,
-                            # abs(b))` reproduces Python for every non-zero divisor
-                            # except at the LongType overflow boundaries -- `a =
-                            # Long.MinValue` with `b < 0` (the `sign(b) * a` negate
-                            # overflows) and `b = Long.MinValue` (the `abs(b)`
-                            # overflows) -- where this raises ARITHMETIC_OVERFLOW
-                            # under ANSI while Python returns a value. That matches
-                            # the documented overflow caveat for `+`/`-`/`*` above.
-                            # Use a CASE-based integer sign rather than sign() to
-                            # avoid promoting operands to DoubleType, which loses
-                            # precision near LongType boundaries.
-                            sb = (
-                                when(right_col > 0, lit(1))
-                                .when(right_col < 0, lit(-1))
-                                .otherwise(lit(0))
+                        if both_numeric:
+                            return self._python_mod(left_col, right_col)
+                    case ast.Div():
+                        # `/` is always float division in Python, and ANSI's
+                        # DIVIDE_BY_ZERO lines up with ZeroDivisionError. A
+                        # fractional operand makes it exact, since Python converts
+                        # the other side to double just as we do -- but both sides
+                        # still have to be numbers, or ANSI string promotion would
+                        # compute `10.0 / '2'` where Python raises. Two integers
+                        # only match while every value stays in IntegerType: past
+                        # 2^53 Spark rounds on the cast to double before dividing,
+                        # where Python divides the exact integers. Narrow to int32
+                        # so a bigint column drops the option rather than using it.
+                        if both_numeric and (lc == "fractional" or rc == "fractional"):
+                            return left_col.__div__(right_col)
+                        if both_numeric:
+                            int32_params: Set[int] = set()
+                            if not (
+                                self._int32_exact(params, left, int32_params)
+                                and self._int32_exact(params, right, int32_params)
+                            ):
+                                raise UnsupportedOperationException(
+                                    "`/` on integers is only lowered when both "
+                                    "operands provably stay within IntegerType; a "
+                                    "bigint operand above 2^53 would round before "
+                                    "dividing and diverge from Python, so the UDF "
+                                    "falls back to interpreted Python"
+                                )
+                            self._narrow_indexes(int32_params, "integral32")
+                            return left_col.__div__(right_col)
+                    case ast.FloorDiv():
+                        # Python floors toward -inf where `div` truncates toward
+                        # zero, so subtract one when the remainder is non-zero and
+                        # its sign differs from the divisor's -- the cases where
+                        # truncation went the wrong way. `%` is Spark's Remainder
+                        # (dividend's sign), which is what makes that test work.
+                        #
+                        # `div` returns LongType and rejects fractional input, so
+                        # integral only: a float `//` would need `floor(a / b)`,
+                        # which can land on the far side of an integer when `a / b`
+                        # rounds up. Divide-by-zero raises, as it does in Python.
+                        if both_integral:
+                            quotient = call_function("div", left_col, right_col)
+                            remainder = left_col.__mod__(right_col)
+                            needs_floor = (remainder != lit(0)) & (
+                                (remainder < lit(0)) != (right_col < lit(0))
                             )
-                            return sb * pmod(sb * left_col, _abs(right_col))
+                            return when(needs_floor, quotient - lit(1)).otherwise(quotient)
+                        if both_numeric:
+                            raise UnsupportedOperationException(
+                                "`//` is only lowered for integral operands: on "
+                                "floats `floor(a / b)` can differ from Python's "
+                                "floor division by one, so the UDF falls back to "
+                                "interpreted Python"
+                            )
+                    case ast.Pow():
+                        if both_integral:
+                            return self._lower_int_pow(left_col, right)
+                        if both_numeric:
+                            raise UnsupportedOperationException(
+                                "`**` is only lowered for integral operands: "
+                                "repeated multiplication rounds once per step on "
+                                "doubles where Python calls libm `pow`, so the UDF "
+                                "falls back to interpreted Python"
+                            )
+                    case ast.BitAnd() | ast.BitOr() | ast.BitXor():
+                        # Int-only in Python, and these map straight across. They
+                        # have to go through `Column.bitwiseAND` and friends --
+                        # `&` / `|` on a Column build logical And/Or, not bitwise.
+                        if both_integral:
+                            # Narrow both sides back to a long first, the way the shifts
+                            # do. An operand can arrive as a promoted decimal now -- `(x +
+                            # 1) & 7` on a bigint column widens the add to decimal(20, 0)
+                            # -- and `bitwiseAND` on mixed decimal/integral fails *analysis*
+                            # with BINARY_OP_DIFF_TYPES rather than dropping the option, so
+                            # it breaks the query instead of falling back. Python's bitwise
+                            # operators are int-only anyway, so a decimal operand here is
+                            # only ever an artifact of promotion below us.
+                            left_bits = left_col.cast("long")
+                            right_bits = right_col.cast("long")
+                            if isinstance(op, ast.BitAnd):
+                                return left_bits.bitwiseAND(right_bits)
+                            if isinstance(op, ast.BitOr):
+                                return left_bits.bitwiseOR(right_bits)
+                            return left_bits.bitwiseXOR(right_bits)
+                        if both_numeric:
+                            raise UnsupportedOperationException(
+                                f"`{type(op).__name__}` is only lowered for integral "
+                                "operands (Python raises TypeError on floats), so "
+                                "the UDF falls back to interpreted Python"
+                            )
+                    case ast.LShift() | ast.RShift():
+                        if both_integral:
+                            return self._lower_shift(
+                                left_col, right_col, left_shift=isinstance(op, ast.LShift)
+                            )
+                        if both_numeric:
+                            raise UnsupportedOperationException(
+                                f"`{type(op).__name__}` is only lowered for integral "
+                                "operands (Python raises TypeError on floats), so "
+                                "the UDF falls back to interpreted Python"
+                            )
                     case _:
                         raise UnsupportedOperationException(
                             f"binary operator {type(op).__name__} is not "
@@ -952,6 +1847,8 @@ class CatalystTranspiler(AbstractTranspiler):
                 )
             case ast.Return(value=value):
                 return self._convert_chunk(params, value)
+            case ast.Call():
+                return self._lower_builtin_call(params, body)
             case ast.Constant(value=value):
                 # Avoid circular import issue.
                 return lit(value)
@@ -1007,6 +1904,7 @@ class CatalystTranspiler(AbstractTranspiler):
         params: List[str],
         returnType: "DataTypeOrString",
         param_categories: Optional[dict] = None,
+        func: Optional[Callable] = None,
     ) -> Optional[Column]:
         # Short circuit on nothing to transpile.
         if src == "" or ast_info is None:
@@ -1014,6 +1912,13 @@ class CatalystTranspiler(AbstractTranspiler):
         # Per-variant input-type assumption ({public_param_index -> category}),
         # read by ``_category`` to choose str vs numeric operators.
         self._param_categories = param_categories or {}
+        # Which builtin names this UDF has NOT rebound, so `abs(x)` and friends
+        # can only lower when they still mean the builtin.
+        self._allowed_builtins = _resolvable_builtins(func, params)
+        # Parameters a lowering needs narrowed beyond this variant's own
+        # assumption (`/` needs int32, a string repeat needs an integral count);
+        # reset per variant and read back by the caller after a successful run.
+        self._narrowed = {}
         # Category inference depends on the per-variant assumptions above. Cache
         # each AST node only for this lowering so recursive conversion stays linear.
         self._category_cache = {}
@@ -1082,6 +1987,21 @@ class CatalystTranspiler(AbstractTranspiler):
                     "convert (or fail), so the transpiler falls back to "
                     "interpreted Python"
                 )
+            # Within-numeric conversions are allowed above, but not when the body
+            # provably returns a Python float and the return type is integral: the
+            # interpreted path yields NULL there (makeFromJava takes only
+            # Byte/Short/Int/Long for LongType) while the lowered cast would
+            # truncate the double to a *number*. That is a silent divergence, and
+            # it is the common shape for `/` -- `udf(lambda x: x / 2, LongType())`.
+            if self._result_is_python_float(params, function_body[0]) and not isinstance(
+                returnType, (FloatType, DoubleType)
+            ):
+                raise UnsupportedOperationException(
+                    f"the body returns a Python float but the declared return type "
+                    f"is {returnType.simpleString()}; interpreted, the UDF yields "
+                    "NULL there, so lowering it to a truncating cast would silently "
+                    "diverge -- declare a float/double return type to transpile this"
+                )
         converted = self._convert_chunk(params, function_body[0])
         if self._null_guard_emitted:
             warnings.warn(
@@ -1122,14 +2042,17 @@ def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
     ]
 
 
-def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
-    """Map a parameter's type annotation to a category, or ``None`` when absent
-    or unrecognised (the caller then tries all numeric and string variants).
+def _annotation_category(annotation: Optional[ast.AST], refined: bool = False) -> Optional[str]:
+    """Map a parameter's type annotation to a category
+    (``"numeric"``/``"string"``/``"bool"``/``"binary"``), or ``None`` when it's
+    absent or unrecognised (the caller then tries both numeric and string).
 
-    Returns one of ``"integer"``, ``"float"``, ``"string"``, ``"bool"``, or
-    ``"binary"`` (matching the constant handling in ``_category``). ``int``
-    maps to ``"integer"`` and ``float`` maps to ``"float"`` so the JVM can
-    select the variant whose NaN semantics match the bound column type."""
+    With ``refined``, ``int`` and ``float`` map to ``"integral"`` and
+    ``"fractional"`` instead of collapsing to ``"numeric"`` -- used for bodies
+    whose lowering depends on the kind of number (see
+    ``_body_needs_numeric_refinement``). Annotating those parameters therefore
+    pins a single variant instead of emitting one per kind.
+    """
     name: Optional[str] = None
     if isinstance(annotation, ast.Name):
         name = annotation.id
@@ -1138,9 +2061,9 @@ def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
     if name == "str":
         return "string"
     if name == "int":
-        return "integer"
+        return "integral" if refined else "numeric"
     if name == "float":
-        return "float"
+        return "fractional" if refined else "numeric"
     if name == "bool":
         return "bool"
     if name == "bytes":
@@ -1148,36 +2071,76 @@ def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
     return None
 
 
+def _body_needs_numeric_refinement(function_ast: ast.FunctionDef) -> bool:
+    """True when the body uses an operator whose exact lowering depends on the
+    *kind* of number, so the numeric variant has to split into integral and
+    fractional ones.
+
+    Every other body keeps the single ``"numeric"`` variant it always emitted,
+    which is what makes the split free for existing UDFs -- no extra plan options
+    and no change in which columns match.
+    """
+    refined_ops = (
+        ast.Div,
+        ast.FloorDiv,
+        ast.Pow,
+        ast.BitAnd,
+        ast.BitOr,
+        ast.BitXor,
+        ast.LShift,
+        ast.RShift,
+        ast.Invert,
+    )
+    for node in ast.walk(function_ast):
+        if isinstance(node, (ast.BinOp, ast.AugAssign)) and isinstance(node.op, refined_ops):
+            return True
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, refined_ops):
+            return True
+        # `min`/`max`/`round` are integral-only; `abs` works on either kind and so
+        # needs no split.
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in ("min", "max", "round")
+        ):
+            return True
+    return False
+
+
 def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[str]) -> List[dict]:
     """Per-variant maps ``{public_param_index -> category}``.
 
-    A typed param (``def f(a: str, b: int)``) is pinned to its category
-    (``"integer"``/``"float"``/``"string"``/``"bool"``/``"binary"``); an
-    untyped param is tried as ``"integer"``, ``"float"``, and ``"string"``
-    separately so the JVM can select the variant that matches the bound column
-    type and apply the right NaN semantics. To cap plan growth, when more than
-    three params are untyped we collapse the untyped ones to one variant per
-    base category (encourage typing inputs to keep the matrix small) while
+    A typed param (``def f(a: str, b: int)``) is pinned to its category; an
+    untyped param is tried as every category its operators could need. To cap plan
+    growth we collapse the untyped ones to a single uniform variant per category
+    once too many are untyped (type your inputs to keep the matrix small), while
     keeping every typed param pinned.
+
+    Bodies needing the integral/fractional split try three categories per untyped
+    param instead of two, so the collapse kicks in one param sooner to keep 3**n
+    in check.
     """
+    refined = _body_needs_numeric_refinement(function_ast)
+    kinds = ["integral", "fractional", "string"] if refined else ["numeric", "string"]
+    max_untyped = 2 if refined else 3
     n = len(public_params)
     all_args = _positional_args(function_ast)
     public_args = all_args[len(all_args) - n :]
     candidates: List[List[str]] = []
     untyped = 0
     for arg in public_args:
-        cat = _annotation_category(arg.annotation)
+        cat = _annotation_category(arg.annotation, refined=refined)
         if cat is None:
-            candidates.append(["integer", "float", "string"])
+            candidates.append(list(kinds))
             untyped += 1
         else:
             candidates.append([cat])
-    if untyped > 3:
-        # Cap the 3**untyped blow-up; collapse untyped params to one variant
-        # per base fill while keeping typed params pinned.
+    if untyped > max_untyped:
+        # Cap the len(kinds)**untyped blow-up, but keep each typed param pinned to
+        # its category (a single-element ``candidates`` entry); only the untyped
+        # params collapse to one uniform variant per category.
         return [
-            {i: c[0] if len(c) == 1 else fill for i, c in enumerate(candidates)}
-            for fill in ("integer", "float", "string")
+            {i: c[0] if len(c) == 1 else fill for i, c in enumerate(candidates)} for fill in kinds
         ]
     return [{i: choice[i] for i in range(n)} for choice in itertools.product(*candidates)] or [{}]
 
@@ -1412,9 +2375,11 @@ def _transpile_func(
     method or callable instance) -- needed so the caller can resolve named-argument
     invocations to positional order at call time, since the ``_udf_param_N``
     substitution in :class:`UserDefinedPythonFunction` is positional.
-    list of per-option input-type categories (``"numeric"`` / ``"string"`` per
-    public param) -- the JVM picks the option whose categories match the bound
-    column types, or falls back to the Python UDF when none match.
+    list of per-option input-type categories (one per public param, e.g.
+    ``"numeric"`` / ``"integral"`` / ``"string"`` -- see
+    ``ResolveTranspiledPythonUDFOptions`` for the full vocabulary) -- the JVM
+    picks the option whose categories match the bound column types, or falls back
+    to the Python UDF when none match.
     list of the public parameter names Python forbids calling by keyword
     (positional-only) -- the caller must NOT resolve a kwarg matching one of these
     to a position, since Python itself rejects that call.
@@ -1571,12 +2536,30 @@ def _transpile_func(
             for combo in combos:
                 try:
                     transpiled_column = transpiler._transpile_from_ast(
-                        src, ast_info, function_ast, public_params, returnType, combo
+                        src,
+                        ast_info,
+                        function_ast,
+                        public_params,
+                        returnType,
+                        combo,
+                        func=func,
                     )
                     if transpiled_column is not None:
                         transpiled.append(transpiled_column)
+                        # A lowering may need a narrower column type than its own
+                        # variant assumed (`/` only matches on int32 widths, a
+                        # string repeat needs an integral count), so let it tighten
+                        # what it reports. Tightening only drops the option and
+                        # falls back; it can't pick a wrong one.
+                        narrowed: Dict[int, str] = getattr(transpiler, "_narrowed", {})
                         input_categories.append(
-                            [combo.get(i, "numeric") for i in range(len(public_params))]
+                            [
+                                narrowed[i]
+                                if i in narrowed
+                                and combo.get(i, "numeric") in _NARROWABLE_CATEGORIES
+                                else combo.get(i, "numeric")
+                                for i in range(len(public_params))
+                            ]
                         )
                 except Exception as e:
                     errors.append(str(e))
