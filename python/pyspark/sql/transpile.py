@@ -64,9 +64,8 @@ the body can see two different values for one parameter:
 * anywhere under a ``groupBy`` or ``agg``, because a result expression there
   has to be built from the grouping expressions rather than read a column, so
   the whole aggregate is left alone -- ``agg(sum(f(a + 1)))`` included;
-* in a command (``DELETE FROM``), a ``MERGE`` instruction, or a join condition
-  or anything else with more than one input, where there is no single side to
-  compute on;
+* in a command (``DELETE FROM``), or in a join condition or anything else with
+  more than one input, where there is no single side to compute on;
 * as an argument to another lowered UDF -- ``f(g(x))`` computes ``x`` once for
   ``g``, but ``g``'s result once per parameter read in ``f``.
 

@@ -287,20 +287,14 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
 
 
 /**
- * A reference to the UDF's `index`th argument, standing in for a `_udf_param_N` placeholder in a
- * transpiled option (SPARK-58626).
+ * Stands in for a `_udf_param_N` placeholder in a transpiled option: a reference to the call's
+ * `index`th argument (SPARK-58626).
  *
- * A reference rather than a copy, so the argument stays where it already is, in the call's
- * [[TranspiledPythonUDF.arguments]]. That is what leaves `ConvertToCatalyst` free to decide, per
- * call, whether to compute the argument once in a Project below the operator and point every
- * reference at that column.
- *
- * It often decides not to, and then [[TranspiledUDFParameter.substitute]] puts a copy of the
- * argument at each use site -- an evaluation per use, which for a nondeterministic argument means a
- * draw per use. That happens for a single read, for a cheap argument, in a conditional branch,
- * inside a lambda, under an [[Aggregate]] or a [[Command]] or anything with more than one child,
- * and for an argument no Project can hold. `ConvertToCatalyst` spells out each one; `transpile.py`
- * states what is left as a contract for a UDF author. Nothing here guarantees a single evaluation.
+ * A reference and not a copy, so the argument stays put in [[TranspiledPythonUDF.arguments]] and
+ * `ConvertToCatalyst` gets to decide per call whether to compute it once in a Project below the
+ * operator. Often it can't, and [[substitute]] drops a copy at each use site instead, so don't read
+ * a single evaluation into this class. `ConvertToCatalyst` lists the cases; `transpile.py` writes
+ * up what's left as a contract for whoever's writing the UDF.
  */
 case class TranspiledUDFParameter(
     index: Int,
@@ -310,9 +304,9 @@ case class TranspiledUDFParameter(
 
   final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPILED_UDF_PARAMETER)
 
-  // Unresolved until `ResolveTranspiledPythonUDFOptions` reads the type off the bound argument. The
-  // whole TranspiledPythonUDF stays unresolved until then, which is what makes the analyzer come
-  // back and coerce the option body once the types are in.
+  // Unresolved until ResolveTranspiledPythonUDFOptions reads the type off the bound argument. That
+  // keeps the whole TranspiledPythonUDF unresolved, which is what brings the analyzer back to
+  // coerce the option body once the types are in.
   override lazy val resolved: Boolean = paramType.isDefined
 
   override def dataType: DataType =
@@ -325,9 +319,9 @@ case class TranspiledUDFParameter(
 object TranspiledUDFParameter {
 
   /**
-   * How many times an option reads each argument index, one entry per distinct index in tree
-   * order. The count is what says whether pre-evaluating that argument buys anything: a parameter
-   * the body reads once is evaluated once wherever it sits.
+   * How many times an option reads each argument index, one entry per index in tree order. A
+   * parameter read once is evaluated once wherever it sits, so the count is what decides whether a
+   * column buys anything.
    */
   def referenceCounts(option: Expression): Seq[(Int, Int)] =
     if (!option.containsPattern(TRANSPILED_UDF_PARAMETER)) {
@@ -338,20 +332,18 @@ object TranspiledUDFParameter {
     }
 
   /**
-   * Points every reference in `option` at the expression `replacement` gives for its index.
+   * Points every reference in `option` at whatever `replacement` gives for its index.
    *
-   * Bottom-up, which is load-bearing rather than a preference: a substituted argument may itself
-   * hold an *enclosing* call's reference, and a top-down walk would descend into what it just
-   * spliced in, find that reference, splice again, and recurse until the stack gives out.
+   * Bottom-up, and that matters: a spliced-in argument can hold an *enclosing* call's reference,
+   * and top-down would walk back into what it spliced, find it, splice again, and run out of stack.
    */
   def substitute(option: Expression, replacement: Int => Expression): Expression =
     option.transformUpWithPruning(_.containsPattern(TRANSPILED_UDF_PARAMETER)) {
       case p: TranspiledUDFParameter =>
         val substituted = replacement(p.index)
-        // A reference's type is read off its argument once, during analysis, and never re-read, so
-        // a later rule that retyped the argument would leave the reference stale -- and the option
-        // body was coerced against the stale type. Nothing observed does that; this is here to
-        // notice if something starts to.
+        // We read a reference's type off its argument once, in analysis, and never look again. If
+        // some later rule retyped the argument this would be stale and the body coerced against the
+        // old type. Nothing does that today; shout if that changes.
         if (Utils.isTesting && p.paramType.isDefined && substituted.resolved) {
           assert(p.dataType.sameType(substituted.dataType),
             s"Parameter ${p.index} was typed ${p.dataType} but its argument is " +
@@ -364,9 +356,9 @@ object TranspiledUDFParameter {
   def resolveTypes(option: Expression, arguments: Seq[Expression]): Expression =
     option.transformUpWithPruning(_.containsPattern(TRANSPILED_UDF_PARAMETER)) {
       case p: TranspiledUDFParameter if p.paramType.isEmpty =>
-        // Only a hand-built option can be out of range -- the builder bounds-checks what it emits
-        // -- but leaving it untyped strands the whole node unresolved, and CheckAnalysis reports
-        // that as an internal error with the option tree dumped. Name the actual problem instead.
+        // Only a hand-built option gets here out of range; the builder bounds-checks what it emits.
+        // Left untyped the node never resolves and CheckAnalysis blames an internal error, which
+        // tells nobody anything.
         if (p.index >= arguments.length) {
           throw QueryCompilationErrors.invalidUDFParameterPlaceholderIndex(
             p.index, arguments.length)
@@ -402,13 +394,11 @@ case class TranspiledPythonUDF(
   final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPILED_PYTHON_UDF)
 
   /**
-   * The call's bound argument expressions, which a [[TranspiledUDFParameter]] in an option refers
-   * to by position.
+   * The call's bound arguments, which a [[TranspiledUDFParameter]] refers to by position.
    *
-   * NOT `pythonUDFExpr.children`: `UserDefinedPythonFunction.fromUDFExpr` rebuilds an aggregate
-   * UDF's node with `pythonUDFExpr` wrapped in an [[AggregateExpression]], whose children are the
-   * aggregate function and its filter rather than the call's arguments. Reading them off the
-   * wrapper would type parameter 0 from the UDAF's return type and then substitute the whole
+   * Not `pythonUDFExpr.children`, which is the trap: `fromUDFExpr` wraps an aggregate UDF in an
+   * [[AggregateExpression]], whose children are the aggregate function and its filter. Read them
+   * off the wrapper and you type parameter 0 from the UDAF's return type, then substitute the whole
    * aggregate function in for it.
    */
   def arguments: Seq[Expression] = pythonUDFExpr match {

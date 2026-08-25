@@ -51,10 +51,9 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
           // Bottom-up so a nested TranspiledPythonUDF (a transpiled UDF feeding another) is pruned
           // -- and thus resolved -- before its parent's input types are inspected.
           op.transformExpressionsUpWithPruning(_.containsPattern(TRANSPILED_PYTHON_UDF)) {
-            // The second half of the guard is what stops this matching on every later iteration of
-            // the batch: once the categories are cleared and the options are resolved there is
-            // nothing left to do. Re-matching would still converge, since the copy below is equal
-            // to what it replaces, but it would re-walk every option each time round.
+            // The second half of the guard stops this firing every later iteration: categories
+            // cleared and options resolved means there's nothing to do. It would still converge
+            // without it, but it would re-walk every option each time round.
             case t: TranspiledPythonUDF if t.arguments.forall(_.resolved) &&
                 (t.optionInputCategories.nonEmpty || !t.transpiledOptions.forall(_.resolved)) =>
               val args = t.arguments
@@ -67,9 +66,9 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
                 }
                 t.copy(transpiledOptions = kept, optionInputCategories = Nil)
               }
-              // Give each `_udf_param_N` reference the type of the argument it stands for. Until
-              // this runs the options are unresolved, so the analyzer comes back afterwards and
-              // coerces their bodies like any other expression.
+              // Type each `_udf_param_N` reference from the argument it stands for. The options are
+              // unresolved until this runs, so the analyzer comes back after and coerces their
+              // bodies like anything else.
               pruned.copy(transpiledOptions =
                 pruned.transpiledOptions.map(TranspiledUDFParameter.resolveTypes(_, args)))
           }

@@ -147,15 +147,14 @@ case class UserDefinedPythonFunction(
         optionInputTypesForUse.length == transpiledExprsForUse.length &&
         optionInputTypesForUse.forall(_.length == e.length)) {
       val udfChildren = udfExpr.children.toArray
-      // Turn the `_udf_param_N` placeholders the transpiler emits into references to the bound
-      // arguments -- references, not copies, so the argument stays in `udfExpr`'s children and
-      // ConvertToCatalyst can compute it once in a Project below the operator (SPARK-58626). A
-      // reference has no type yet, since this runs before the arguments are bound;
-      // ResolveTranspiledPythonUDFOptions fills that in, which is also what gets the option body
-      // coerced.
+      // Turn the transpiler's `_udf_param_N` placeholders into references to the bound arguments.
+      // References, not copies, so the argument stays in `udfExpr`'s children and ConvertToCatalyst
+      // can compute it once in a Project below the operator (SPARK-58626). We run before the
+      // arguments are bound so the reference has no type yet; ResolveTranspiledPythonUDFOptions
+      // fills that in, which is also what gets the option body coerced.
       //
-      // Apply this ONLY to the transpiled options, never to `udfExpr` itself: a user column
-      // literally named `_udf_param_N` passed as an argument must not be rewritten.
+      // Options ONLY, never `udfExpr` itself. Somebody's column really can be called
+      // `_udf_param_0`, and if they pass it in we must not rewrite it.
       def resolveUDFParams(expression: Expression, children: Array[Expression]): Expression = {
         expression match {
           case UnresolvedAttribute(nameParts)

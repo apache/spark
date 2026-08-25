@@ -30,13 +30,11 @@ import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, LongType
  * Unit tests for the ConvertToCatalyst optimizer rule, which rewrites
  * TranspiledPythonUDF nodes to their Catalyst equivalents.
  *
- * No JVM/Python bridge is required: the nodes are built by hand.
+ * Nodes are built by hand, so no JVM/Python bridge is needed.
  *
- * Two entry points, and which one a test uses matters. `applyExpr` rewrites a bare expression with
- * argument pre-evaluation off, so it covers only the fallback of leaving each argument at its use
- * site. `convert` below goes through `apply`, which is the only caller that turns pre-evaluation on
- * and builds the Project -- so any test about a column has to use it, and it also runs the plan
- * checks the optimizer would have run for us.
+ * Which entry point a test uses matters. `applyExpr` takes a bare expression with pre-evaluation
+ * off, so it only covers the fallback of leaving arguments at their use sites. `convert` goes
+ * through `apply`, the only caller that turns pre-evaluation on, so column tests need it.
  */
 class ConvertToCatalystSuite extends PlanTest {
 
@@ -72,24 +70,24 @@ class ConvertToCatalystSuite extends PlanTest {
     }
 
   /**
-   * Runs the rule and checks the invariants the optimizer's own plan validation would, which does
-   * not run when a rule object is applied directly. Both matter here: adding a column below an
-   * operator is exactly how a rewrite strands a reference or widens a schema.
+   * Runs the rule, plus the plan checks the optimizer would have run for us -- applying a rule
+   * object directly skips them, and stranding a reference or widening a schema is exactly how this
+   * rewrite would go wrong.
    */
   private def convert(plan: LogicalPlan): LogicalPlan = {
     val converted = ConvertToCatalyst(plan)
     LogicalPlanIntegrity.validateNoDanglingReferences(converted).foreach { failure =>
       fail(s"Dangling reference after conversion: $failure\n$converted")
     }
-    // Only when the input plan is resolved: comparing schemas asks for every output attribute's
-    // dataType, and a hand-built plan holding an unbound lambda has none to give.
+    // Resolved plans only: comparing schemas asks every output attribute for its dataType, and a
+    // hand-built plan with an unbound lambda hasn't got one.
     if (plan.resolved) {
       LogicalPlanIntegrity.validateSchemaOutput(plan, converted).foreach { failure =>
         fail(s"Schema changed by conversion: $failure\n$converted")
       }
     }
-    // A reference left behind is Unevaluable and would throw at execution, so no test should have
-    // to remember to check for it.
+    // A leftover reference is Unevaluable and throws at execution. Check it here so no test has to
+    // remember to.
     assert(!converted.exists(_.expressions.exists(_.exists {
       case _: TranspiledPythonUDF | _: TranspiledUDFParameter => true
       case _ => false
@@ -231,9 +229,8 @@ class ConvertToCatalystSuite extends PlanTest {
 
   test("computes one column per distinct argument, read by every reference") {
     transpileOn {
-      // `lambda a, b: a * a + b` over `f(a + 1, a + 1)`: three references to two parameters, both
-      // bound to the same deterministic argument. That is one column, read three times -- keyed on
-      // the argument rather than the parameter, so equal arguments do not each get their own.
+      // `lambda a, b: a * a + b` over `f(a + 1, a + 1)`: three refs, two parameters, one argument.
+      // Keyed on the argument, so that's one column read three times.
       val arg = Add(attrA, Literal(1L))
       val option = Add(Multiply(pref(0), pref(0)), pref(1))
       val pyUDF = PythonUDF("udf", null, LongType, Seq(arg, arg),
@@ -243,8 +240,8 @@ class ConvertToCatalystSuite extends PlanTest {
       val columns = paramColumns(converted)
       assert(columns.map(a => (a.name, a.child)) == Seq(("_udf_param_0", arg)),
         s"Expected one column for the shared argument: $converted")
-      // By exprId, not by name: an alias whose id does not match what the body reads is exactly the
-      // dangling-attribute bug this rewrite could have, and names would not show it.
+      // By exprId, not name -- an alias whose id doesn't match what the body reads is the dangling
+      // attribute bug, and names wouldn't show it.
       val reads = converted.expressions.head.collect {
         case r: AttributeReference if r.name.startsWith("_udf_param_") => r.exprId
       }
@@ -319,10 +316,8 @@ class ConvertToCatalystSuite extends PlanTest {
 
   test("leaves an argument an aggregate function wraps at each use site") {
     transpileOn {
-      // Only a custom transpiler can emit an option body that is itself an aggregate (the built-in
-      // one emits scalar bodies). Driven through `applyExpr`, so this covers the fallback path only
-      // -- there is no operator that could host such a body in a Project anyway. The sibling test
-      // above is the one that pins an aggregate *argument* being declined a column.
+      // Only a custom transpiler emits an option body that is itself an aggregate. Through
+      // `applyExpr`, so this is the fallback path only -- nothing could host such a body anyway.
       val arg = Add(attrA, Literal(1L))
       val option = Count(Seq(Multiply(pref(0), pref(0)))).toAggregateExpression()
       val tpudf = makeTPUDF(makePyUDF(arg), option)
@@ -340,9 +335,9 @@ class ConvertToCatalystSuite extends PlanTest {
       // A lambda body runs per element where a Project below the operator runs per row, so sharing
       // in there would move a nondeterministic draw to the wrong granularity -- and make the
       // argument eager, raising under ANSI on a row whose array is empty and whose body never ran.
-      // Driven through `apply` so pre-evaluation is actually ON for the operator -- via `applyExpr`
-      // it defaults to off and the guard under test would be unobservable. The argument reads no
-      // lambda variable, so every placement check passes and only the lambda guard declines it.
+      // Through `apply` so pre-evaluation is actually on; via `applyExpr` it defaults to off and
+      // this guard would be unobservable. The argument reads no lambda variable, so every other
+      // check passes and only the lambda guard declines it.
       val arg = Divide(attrA, attrA)
       val option = Add(pref(0), pref(0))
       val lambdaVar = NamedLambdaVariable("x", LongType, nullable = false)
@@ -359,8 +354,8 @@ class ConvertToCatalystSuite extends PlanTest {
 
   test("still pre-evaluates a call sitting beside an unrelated lambda") {
     transpileOn {
-      // Pre-evaluation turns off on the way into a lambda, not for a whole expression that holds
-      // one somewhere. A call outside the lambda is unaffected, so it still gets its column.
+      // Pre-evaluation turns off going into a lambda, not for any expression that holds one, so a
+      // call outside it still gets a column.
       val arg = Add(attrA, Literal(1L))
       val call = makeTPUDF(makePyUDF(arg), Multiply(pref(0), pref(0)))
       val lambdaVar = NamedLambdaVariable("x", LongType, nullable = false)
@@ -374,9 +369,8 @@ class ConvertToCatalystSuite extends PlanTest {
   }
 
   test("leaves an argument carrying an outer reference at each use site with decorrelation off") {
-    // A column holding an OuterReference lands inside the subquery. Decorrelation carries it back
-    // out; its `decorrelateInnerQuery.enabled=false` fallback rewrites Filters only and strands it,
-    // so under that config the argument stays at its use sites.
+    // A column holding an OuterReference lands inside the subquery. Decorrelation carries it out;
+    // the fallback rewrites Filters only and would strand it, so with that off we decline.
     val arg = Add(OuterReference(attrA), Literal(1L))
     val tpudf = makeTPUDF(makePyUDF(arg), Multiply(pref(0), pref(0)))
     val plan = Project(Seq(Alias(tpudf, "v")()), LocalRelation(attrA))
@@ -397,9 +391,7 @@ class ConvertToCatalystSuite extends PlanTest {
 
   test("leaves an argument that is itself an aggregate at each use site") {
     transpileOn {
-      // `udf(sum(a))`: a Project cannot hold an aggregate, so there is nowhere to pre-evaluate it.
-      // PlanHelper.specialExpressionsInUnsupportedOperator is what tells us, the same check
-      // RewriteWithExpression uses.
+      // `udf(sum(a))`: a Project can't hold an aggregate, so there's nowhere to put it.
       val arg = Sum(attrA).toAggregateExpression()
       val tpudf = makeTPUDF(makePyUDF(arg), Multiply(pref(0), pref(0)))
       val converted = convert(Project(Seq(Alias(tpudf, "v")()), LocalRelation(attrA)))
@@ -411,10 +403,8 @@ class ConvertToCatalystSuite extends PlanTest {
 
   test("leaves a Command's arguments at each use site") {
     transpileOn {
-      // No pre-evaluated column under a Command: it has no output of its own, so there is nothing
-      // to project the extra column away with, and the Project would land between DeleteFromTable
-      // and its relation, hiding the relation DataSourceV2Strategy matches on -- an internal error
-      // rather than a DELETE. The references still have to come off.
+      // No column under a Command: the Project would land between DeleteFromTable and its
+      // relation, hiding what DataSourceV2Strategy matches on. The references still come off.
       val arg = Add(attrA, Literal(1L))
       val relation = LocalRelation(attrA)
       val option = Multiply(pref(0), pref(0))
@@ -447,9 +437,8 @@ class ConvertToCatalystSuite extends PlanTest {
 
   test("projects the pre-evaluated column away again below a Filter") {
     transpileOn {
-      // A Filter takes its output from its child, so the widened child would change the plan's
-      // schema. Only the restoring Project keeps it, and a Project-hosted call never exercises
-      // that branch because its output length does not change.
+      // A Filter takes its output from its child, so without the restoring Project the schema
+      // would change. A Project-hosted call never reaches that branch, hence a Filter here.
       val arg = Add(attrA, Literal(1L))
       val relation = LocalRelation(attrA)
       val tpudf = makeTPUDF(makePyUDF(arg), Multiply(pref(0), pref(0)))
@@ -462,11 +451,9 @@ class ConvertToCatalystSuite extends PlanTest {
 
   test("leaves an argument still holding an enclosing call's reference at each use site") {
     transpileOn {
-      // The inverse nesting of the test below: here the OUTER option lowers to another transpiled
-      // call whose argument is the outer call's own parameter reference. Only a custom transpiler
-      // emits it. The inner call must decline a column: a reference is Unevaluable until the outer
-      // call substitutes it, and it can only do that while the reference is still in the option
-      // body -- aliased into a Project it would be stranded there and throw at execution.
+      // Inverse nesting of the test below: the outer option lowers to another transpiled call whose
+      // argument is the outer call's own parameter ref. Custom transpilers only. The inner call has
+      // to decline -- aliased into a Project that ref is stranded where nobody can substitute it.
       val arg = Add(attrA, Literal(1L))
       val innerCall = makeTPUDF(makePyUDF(pref(0)), Multiply(pref(0), pref(0)))
       val outerCall = makeTPUDF(makePyUDF(arg), innerCall)
@@ -479,10 +466,9 @@ class ConvertToCatalystSuite extends PlanTest {
 
   test("converts a nested transpiled UDF used as an argument") {
     transpileOn {
-      // `f(g(a + 1))`, where `f`'s option is nothing but `_udf_param_0` and `g`'s repeats a
-      // parameter of its own. The arguments are converted before being pre-evaluated, so `g`'s
-      // argument gets the column and `f`'s -- which by then is `g`'s converted body, reading that
-      // column -- cannot get one, since a Project cannot read an alias it is itself defining.
+      // `f(g(a + 1))`, `f`'s option just `_udf_param_0` and `g`'s repeating its own parameter. We
+      // convert arguments before pre-evaluating, so `g`'s argument gets the column and `f`'s -- by
+      // then `g`'s body reading it -- can't, since a Project can't read an alias it's defining.
       val arg = Add(attrA, Literal(1L))
       val innerTPUDF = makeTPUDF(makePyUDF(arg), Multiply(pref(0), pref(0)))
       val outerTPUDF = makeTPUDF(makePyUDF(innerTPUDF), pref(0))
@@ -490,7 +476,7 @@ class ConvertToCatalystSuite extends PlanTest {
       val columns = paramColumns(converted)
       assert(columns.map(_.child) == Seq(arg),
         s"Expected only the inner argument pre-evaluated: $converted")
-      // Every column the plan reads has to be one the Project below actually defines.
+      // Everything read has to be something the Project below actually defines.
       val defined = columns.map(_.toAttribute.exprId).toSet
       val read = converted.expressions.flatMap(_.collect {
         case r: AttributeReference if r.name.startsWith("_udf_param_") => r.exprId
