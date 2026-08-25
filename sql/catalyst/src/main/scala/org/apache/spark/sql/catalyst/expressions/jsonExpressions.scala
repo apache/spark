@@ -825,7 +825,12 @@ case class JsonValue(
   override def prettyName: String = "json_value"
 
   override def sql: String = {
-    val returningSQL = if (returning == StringType) "" else s" RETURNING ${returning.sql}"
+    // Reference identity, not value equality: an explicit `RETURNING STRING COLLATE UTF8_BINARY`
+    // is a distinct StringType instance that compares `==` to the default companion, so `==` would
+    // silently drop it. Only the omitted companion default (by reference) should render nothing.
+    // Matches `JsonQuery.sql` / `JsonArray.sql`, keeping a nested `JSON_VALUE` faithful when a JSON
+    // constructor renders it.
+    val returningSQL = if (returning.eq(StringType)) "" else s" RETURNING ${returning.sql}"
     def behaviorSQL(b: JsonValueBehavior, default: Option[Expression]): String = b match {
       case JsonValueBehavior.Null => "NULL"
       case JsonValueBehavior.Error => "ERROR"
@@ -1158,7 +1163,12 @@ case class JsonQuery(
   override def prettyName: String = "json_query"
 
   override def sql: String = {
-    val returningSQL = if (returning == StringType) "" else s" RETURNING ${returning.sql}"
+    // Use reference identity, not value equality, so an explicit `RETURNING STRING COLLATE
+    // UTF8_BINARY` (a distinct StringType instance that compares `==` to the default companion) is
+    // still rendered rather than silently dropped -- only the omitted companion default (by
+    // reference) renders nothing. This matches `JsonArray.sql`, and keeps a nested `JSON_QUERY`
+    // faithful when a JSON constructor splices it (see `JsonArray.sql`).
+    val returningSQL = if (returning.eq(StringType)) "" else s" RETURNING ${returning.sql}"
     val wrapperSQL = wrapper match {
       case JsonQueryWrapper.Without => ""
       case JsonQueryWrapper.Unconditional => " WITH UNCONDITIONAL ARRAY WRAPPER"
@@ -1224,12 +1234,17 @@ object JsonConstructorNullBehavior {
 /**
  * Marker for expressions whose result is JSON text and therefore carry an implicit SQL/JSON
  * `FORMAT JSON`: when such an expression appears as an argument of a JSON constructor (e.g.
- * `JSON_ARRAY`), its value is spliced in verbatim rather than quoted as a JSON string, so
- * `JSON_ARRAY(JSON_ARRAY(1))` yields `[[1]]`, not `[["[1]"]]`. Crucially, the constructor freezes
- * this decision from the *lexical* argument at parse time (see `AstBuilder.visitJsonArray`) rather
- * than re-deriving it from the child expression during evaluation, so a later optimizer rewrite
- * (e.g. `CollapseProject` inlining a `JSON_ARRAY` alias into an argument position) cannot change
- * whether a value is spliced or quoted. `JSON_OBJECT` should extend this as it is added.
+ * `JSON_ARRAY`), its value is spliced in verbatim rather than quoted as a JSON string:
+ *
+ * {{{
+ *   JSON_ARRAY(JSON_ARRAY(1))   -- '[[1]]'    (spliced; not the quoted string '["[1]"]')
+ * }}}
+ *
+ * Crucially, the constructor freezes this decision from the *lexical* argument at parse time (see
+ * `AstBuilder.visitJsonArray`) rather than re-deriving it from the child expression during
+ * evaluation, so a later optimizer rewrite (e.g. `CollapseProject` inlining a `JSON_ARRAY` alias
+ * into an argument position) cannot change whether a value is spliced or quoted. `JSON_OBJECT`
+ * should extend this as it is added.
  *
  * Most implementers always emit JSON text, so `emitsImplicitJsonText` defaults to true. An
  * implementer with a mode that instead emits a plain (non-JSON) string overrides it so that mode

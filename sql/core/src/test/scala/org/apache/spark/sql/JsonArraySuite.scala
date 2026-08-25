@@ -364,6 +364,23 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
         """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' OMIT QUOTES) FORMAT JSON)""")
   }
 
+  test("SQL preserves an explicit collated RETURNING on a spliced nested JSON_QUERY") {
+    // A nested JSON_QUERY with an explicit `RETURNING STRING COLLATE UTF8_BINARY` renders via
+    // `JsonQuery.sql`. That clause is a distinct StringType instance that compares `==` to the
+    // default companion, so a value-equality check would drop it; reference identity keeps it, so
+    // the emitted SQL round-trips faithfully instead of losing the user-written collation.
+    val query = JsonQuery(
+      Literal("""{"a":{"x":1}}"""), "$.a", StringType("UTF8_BINARY"), JsonQueryWrapper.Without,
+      JsonQueryQuotes.Keep, JsonQueryBehavior.Null, JsonQueryBehavior.Null)
+    val spliced = JsonArray(
+      Seq(query), Seq(true), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
+    assert(
+      spliced.sql ==
+        """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' RETURNING STRING COLLATE UTF8_BINARY))""")
+    // Reparsing and evaluating the emitted SQL reproduces the raw splice.
+    checkAnswer(sql(s"SELECT ${spliced.sql}"), Row("""[{"x":1}]"""))
+  }
+
   test("SQL renders an explicit collated RETURNING and omits only the default") {
     val collated = JsonArray(
       Seq(Literal(1)), Seq(false), Seq(false),
