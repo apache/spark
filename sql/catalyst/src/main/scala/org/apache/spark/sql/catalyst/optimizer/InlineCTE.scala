@@ -90,19 +90,16 @@ case class InlineCTE(
 
   private def validateNoOuterReferencesAcrossCTEBoundary(cteDef: CTERelationDef): Unit = {
     // Only an outer reference that actually escapes the CTE definition is invalid. An outer
-    // reference that resolves to an operator inside the definition body (e.g. a correlated
-    // subquery whose correlated column lives in the body) is self-contained and safe to
-    // materialize. So collect every attribute bound anywhere in the definition (including in
-    // nested subquery plans) and reject only references that resolve to none of them.
-    val boundExprIds = cteDef.child
-      .collectWithSubqueries { case n: LogicalPlan => n }
-      .flatMap(_.output.filter(_.resolved).map(_.exprId))
-      .toSet
-
-    // Walk the whole definition (main tree plus nested subquery plans). Locate either a direct
-    // `OuterReference` or a correlated subquery whose outer-scope attributes escape the def --
-    // i.e. resolve to none of `boundExprIds`.
+    // reference that points to an attribute produced by an operator inside the definition
+    // body (e.g. a correlated subquery whose correlated column lives in the body) is
+    // self-contained and safe to materialize. So walk the whole definition (main tree plus
+    // nested subquery plans) once, collect every attribute bound anywhere in the definition,
+    // and reject only references that resolve to none of them.
     val allNodes = cteDef.child.collectWithSubqueries { case n: LogicalPlan => n }
+    val boundExprIds = allNodes.flatMap(_.output.filter(_.resolved).map(_.exprId)).toSet
+
+    // Locate either a direct `OuterReference` or a correlated subquery whose outer-scope
+    // attributes escape the def -- i.e. resolve to none of `boundExprIds`.
     val escapingOuterRef = allNodes.iterator
       .flatMap(_.expressions.iterator.flatMap(_.collect {
         case o: OuterReference if !boundExprIds.contains(o.exprId) => o
