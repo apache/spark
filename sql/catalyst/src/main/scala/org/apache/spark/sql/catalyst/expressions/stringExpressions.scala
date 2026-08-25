@@ -2703,35 +2703,37 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
   since = "2.3.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
-  with ImplicitCastInputTypes with BinaryLike[Expression] {
-
-  // Type the literal branches after R1: Substring returns plain STRING for a CHAR(n)/VARCHAR(n)
-  // input, so deriving the literals from str.dataType would leave the If with branches of
-  // different types. CheckAnalysis does not see inside a RuntimeReplaceable's replacement, so
-  // that mismatch would surface later as COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.
-  private lazy val resultType: DataType = StringHelper.transformingStringResultType(str.dataType)
-
-  override lazy val replacement: Expression = If(
-    IsNull(str),
-    Literal(null, resultType),
-    If(
-      LessThanOrEqual(len, Literal(0)),
-      Literal(UTF8String.EMPTY_UTF8, resultType),
-      new Substring(str, UnaryMinus(len, failOnError = false))
-    )
-  )
+object Right extends DelegateFunction {
+  override val name: String = "right"
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(
-      StringTypeWithCollation(supportsTrimCollation = true),
-      IntegerType
-    )
-  override def left: Expression = str
-  override def right: Expression = len
-  override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): Expression = {
-    copy(str = newLeft, len = newRight)
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), IntegerType)
+
+  // At build time `str` is the not-yet-coerced argument (wrapped in an `ImplicitCastInput` marker
+  // that delegates `dataType` to its child), so `str.dataType` is the *input* type, which is not
+  // necessarily a string yet -- e.g. `right(12345, 2)` has an `IntegerType` child the implicit cast
+  // will turn into a string. Use it for the null/empty branch literals only when it is already a
+  // string-family type, so a CHAR(N)/VARCHAR(N) result (under
+  // `spark.sql.preserveCharVarcharTypeInfo`) or a non-default collation is preserved through the
+  // `If` branch unification; otherwise fall back to plain `StringType`, the type the implicit cast
+  // produces. Typing a UTF8String literal with a non-string type would be invalid.
+  override def lower(args: Seq[Expression]): Expression = {
+    val str = args(0)
+    val len = args(1)
+    val resultType = StringHelper.transformingStringResultType(str.dataType)
+    // Keep both arguments single-use while the analyzer extracts window expressions. The length
+    // is bound inside the non-null branch so right's null short-circuit is preserved.
+    With(str) { case Seq(strRef) =>
+      If(
+        IsNull(strRef),
+        Literal(null, resultType),
+        With(len) { case Seq(lenRef) =>
+          If(
+            LessThanOrEqual(lenRef, Literal(0)),
+            Literal(UTF8String.EMPTY_UTF8, resultType),
+            new Substring(strRef, UnaryMinus(lenRef, failOnError = false)))
+        })
+    }
   }
 }
 

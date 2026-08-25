@@ -250,6 +250,20 @@ class RewriteWithExpressionSuite extends PlanTest {
     )
   }
 
+  test("nested WITH in a conditional branch can reference an outer definition") {
+    val Seq(a, b) = testRelation.output
+    val expr = With(a) { case Seq(outerRef) =>
+      If(
+        IsNull(outerRef),
+        Literal(null, a.dataType),
+        With(b) { case Seq(innerRef) => outerRef + innerRef })
+    }
+    val expected = If(IsNull(a), Literal(null, a.dataType), a + b)
+    comparePlans(
+      Optimizer.execute(testRelation.select(expr.as("col"))),
+      testRelation.select(expected.as("col")))
+  }
+
   test("WITH expression in grouping exprs") {
     val a = testRelation.output.head
     val expr1 = With(a + 1) { case Seq(ref) =>

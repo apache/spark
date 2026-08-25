@@ -207,10 +207,10 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     optimized match {
       case Project(projectList, Project(innerProjectList, _: LocalRelation)) =>
         val sharedAlias = innerProjectList.collectFirst {
-          case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+          case alias @ Alias(MultiGetJsonObject(_, _), "_shared_json_paths") => alias
         }.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
-        val shared = sharedAlias.child.asInstanceOf[MultiGetJsonObject]
-        assert(shared.fallbackPaths == Seq("$.b", "$['a']"))
+        val shared = sharedAlias.child
+        assert(MultiGetJsonObject.pathsOf(shared) == Seq("$.b", "$['a']"))
 
         val sharedAttr = sharedAlias.toAttribute
         val extractedFields = projectList.flatMap(_.collect {
@@ -257,10 +257,10 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     optimized match {
       case Project(projectList, Project(innerProjectList, _: LocalRelation)) =>
         val sharedAlias = innerProjectList.collectFirst {
-          case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+          case alias @ Alias(MultiGetJsonObject(_, _), "_shared_json_paths") => alias
         }.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
-        val shared = sharedAlias.child.asInstanceOf[MultiGetJsonObject]
-        assert(shared.fallbackPaths == Seq("$.a.b", "$['a']['c.d']", "$.e", "$.f.b"))
+        val shared = sharedAlias.child
+        assert(MultiGetJsonObject.pathsOf(shared) == Seq("$.a.b", "$['a']['c.d']", "$.e", "$.f.b"))
 
         val sharedAttr = sharedAlias.toAttribute
         val extractedFields = projectList.flatMap(_.collect {
@@ -284,10 +284,10 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     optimized match {
       case Project(projectList, Project(innerProjectList, _: LocalRelation)) =>
         val sharedAlias = innerProjectList.collectFirst {
-          case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+          case alias @ Alias(MultiGetJsonObject(_, _), "_shared_json_paths") => alias
         }.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
-        val shared = sharedAlias.child.asInstanceOf[MultiGetJsonObject]
-        assert(shared.fallbackPaths == Seq("$[0].a", "$.items[1].b", "$[2]"))
+        val shared = sharedAlias.child
+        assert(MultiGetJsonObject.pathsOf(shared) == Seq("$[0].a", "$.items[1].b", "$[2]"))
 
         val sharedAttr = sharedAlias.toAttribute
         val extractedFields = projectList.flatMap(_.collect {
@@ -312,10 +312,10 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
       case Project(Seq(Alias(coalesce: Coalesce, "a")),
           Project(innerProjectList, _: LocalRelation)) =>
         val sharedAlias = innerProjectList.collectFirst {
-          case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+          case alias @ Alias(MultiGetJsonObject(_, _), "_shared_json_paths") => alias
         }.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
-        val shared = sharedAlias.child.asInstanceOf[MultiGetJsonObject]
-        assert(shared.fallbackPaths == Seq("$.a", "$[0].a"))
+        val shared = sharedAlias.child
+        assert(MultiGetJsonObject.pathsOf(shared) == Seq("$.a", "$[0].a"))
 
         val sharedAttr = sharedAlias.toAttribute
         assert(coalesce.children.zipWithIndex.forall { case (child, ordinal) =>
@@ -344,10 +344,10 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
       case Project(Seq(Alias(coalesce: Coalesce, "value")),
           Project(innerProjectList, _: LocalRelation)) =>
         val sharedAlias = innerProjectList.collectFirst {
-          case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+          case alias @ Alias(MultiGetJsonObject(_, _), "_shared_json_paths") => alias
         }.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
-        val shared = sharedAlias.child.asInstanceOf[MultiGetJsonObject]
-        assert(shared.fallbackPaths == Seq("$.a", "$[0].a"))
+        val shared = sharedAlias.child
+        assert(MultiGetJsonObject.pathsOf(shared) == Seq("$.a", "$[0].a"))
 
         val sharedAttr = sharedAlias.toAttribute
         coalesce.children.zipWithIndex.foreach {
@@ -385,12 +385,12 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     optimized match {
       case Project(projectList, Project(innerProjectList, _: LocalRelation)) =>
         val sharedAliases = innerProjectList.collect {
-          case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+          case alias @ Alias(MultiGetJsonObject(_, _), "_shared_json_paths") => alias
         }
         assert(sharedAliases.length == 1)
         val sharedAlias = sharedAliases.head
-        val shared = sharedAlias.child.asInstanceOf[MultiGetJsonObject]
-        assert(shared.fallbackPaths == Seq("$[0].x", "$.a.x", "$[0].y", "$.a.y"))
+        val shared = sharedAlias.child
+        assert(MultiGetJsonObject.pathsOf(shared) == Seq("$[0].x", "$.a.x", "$[0].y", "$.a.y"))
 
         val sharedAttr = sharedAlias.toAttribute
         Seq("x", "y").foreach { name =>
@@ -424,10 +424,10 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
 
     val shared = optimized.collect {
       case Project(projectList, _) => projectList.collectFirst {
-        case Alias(shared: MultiGetJsonObject, "_shared_json_paths") => shared
+        case alias @ Alias(MultiGetJsonObject(_, _), "_shared_json_paths") => alias.child
       }
     }.flatten.headOption.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
-    assert(shared.fallbackPaths == Seq("$.a", "$[0].a"))
+    assert(MultiGetJsonObject.pathsOf(shared) == Seq("$.a", "$[0].a"))
 
     optimized match {
       case Project(Seq(Alias(Cast(coalesce: Coalesce, IntegerType, _, _), "a")), _) =>
@@ -457,7 +457,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     queries.foreach { query =>
       val optimized = Optimizer.execute(query.analyze)
       assert(!optimized.exists { plan =>
-        plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+        plan.expressions.exists(_.exists(MultiGetJsonObject.isInstance(_)))
       })
       comparePlans(optimized, query.analyze)
     }
@@ -478,11 +478,11 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
 
     val shared = optimized.collect {
       case Project(projectList, _) => projectList.collectFirst {
-        case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+        case alias @ Alias(MultiGetJsonObject(_, _), "_shared_json_paths") => alias
       }
     }.flatten.headOption.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
-      .child.asInstanceOf[MultiGetJsonObject]
-    assert(shared.fallbackPaths == Seq("$.a", "$.c.d", "$.items[0].id", "$.e"))
+      .child
+    assert(MultiGetJsonObject.pathsOf(shared) == Seq("$.a", "$.c.d", "$.items[0].id", "$.e"))
 
     val remainingPaths = optimized.expressions.flatMap(_.collect {
       case GetJsonObject(_, Literal(path: UTF8String, StringType)) => path.toString
@@ -500,11 +500,11 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
 
     val shared = optimized.collect {
       case Project(projectList, _) => projectList.collectFirst {
-        case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+        case alias @ Alias(MultiGetJsonObject(_, _), "_shared_json_paths") => alias
       }
     }.flatten.headOption.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
-      .child.asInstanceOf[MultiGetJsonObject]
-    assert(shared.fallbackPaths == Seq("$.a.b", "$.a.c", "$.d"))
+      .child
+    assert(MultiGetJsonObject.pathsOf(shared) == Seq("$.a.b", "$.a.c", "$.d"))
     assert(optimized.expressions.exists(_.exists {
       case GetJsonObject(_, Literal(path: UTF8String, StringType)) => path.toString == "$.a"
       case _ => false
@@ -521,11 +521,11 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
 
     val shared = optimized.collect {
       case Project(projectList, _) => projectList.collectFirst {
-        case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+        case alias @ Alias(MultiGetJsonObject(_, _), "_shared_json_paths") => alias
       }
     }.flatten.headOption.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
-      .child.asInstanceOf[MultiGetJsonObject]
-    assert(shared.fallbackPaths == Seq("$[0].a", "$[0].b", "$[1]"))
+      .child
+    assert(MultiGetJsonObject.pathsOf(shared) == Seq("$[0].a", "$[0].b", "$[1]"))
     assert(optimized.expressions.exists(_.exists {
       case GetJsonObject(_, Literal(path: UTF8String, StringType)) => path.toString == "$[0]"
       case _ => false
@@ -549,7 +549,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     def assertSharedPaths(optimized: LogicalPlan): Unit = {
       val sharedPaths = optimized.collect {
         case Project(projectList, _) => projectList.collect {
-          case Alias(shared: MultiGetJsonObject, "_shared_json_paths") => shared.fallbackPaths
+          case Alias(MultiGetJsonObject(_, paths), "_shared_json_paths") => paths
         }
       }.flatten
       assert(sharedPaths == expectedSharedPaths)
@@ -569,13 +569,13 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
 
     val shared = optimized.collect {
       case Project(projectList, _) => projectList.collectFirst {
-        case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+        case alias @ Alias(MultiGetJsonObject(_, _), "_shared_json_paths") => alias
       }
     }.flatten.headOption.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
-      .child.asInstanceOf[MultiGetJsonObject]
-    assert(shared.fallbackPaths.length == pathCount)
-    assert(shared.fallbackPaths.head == "$.field_0")
-    assert(shared.fallbackPaths.last == s"$$.field_${pathCount - 1}")
+      .child
+    assert(MultiGetJsonObject.pathsOf(shared).length == pathCount)
+    assert(MultiGetJsonObject.pathsOf(shared).head == "$.field_0")
+    assert(MultiGetJsonObject.pathsOf(shared).last == s"$$.field_${pathCount - 1}")
   }
 
   test("SPARK-47670: shared get_json_object paths survive project collapsing") {
@@ -586,7 +586,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     val optimized = OptimizerWithCollapseProject.execute(query.analyze)
 
     assert(optimized.exists { plan =>
-      plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+      plan.expressions.exists(_.exists(MultiGetJsonObject.isInstance(_)))
     })
     assert(optimized.collect { case _: Project => true }.length == 2)
   }
@@ -599,7 +599,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
         GetJsonObject($"json", Literal("$.a"))).as("a"),
       GetJsonObject($"json", Literal("$.b")).as("b"))
     assert(!Optimizer.execute(guardedQuery.analyze).exists { plan =>
-      plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+      plan.expressions.exists(_.exists(MultiGetJsonObject.isInstance(_)))
     })
 
     val lowerProject = testRelation2.select(
@@ -607,7 +607,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
       GetJsonObject($"json", Literal("$.b")).as("b"))
     val prunedQuery = lowerProject.select(lowerProject.output.head)
     assert(!OptimizerWithColumnPruning.execute(prunedQuery.analyze).exists { plan =>
-      plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+      plan.expressions.exists(_.exists(MultiGetJsonObject.isInstance(_)))
     })
   }
 
@@ -632,7 +632,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
       Pmod(Cast(GetJsonObject($"json", Literal("$.a")), IntegerType), Literal(0)).as("a"),
       GetJsonObject($"json", Literal("$.b")).as("b"))
     assert(!Optimizer.execute(query.analyze).exists { plan =>
-      plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+      plan.expressions.exists(_.exists(MultiGetJsonObject.isInstance(_)))
     })
   }
 
