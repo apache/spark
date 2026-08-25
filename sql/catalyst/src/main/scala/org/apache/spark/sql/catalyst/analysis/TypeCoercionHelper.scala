@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   ImplicitCastInputTypes,
   In,
   InSubquery,
+  JsonTuple,
   Least,
   ListQuery,
   Literal,
@@ -60,7 +61,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeWithCollation}
+import org.apache.spark.sql.internal.types.{
+  AbstractArrayType,
+  AbstractStringType,
+  StringTypeWithCollation
+}
 import org.apache.spark.sql.types.{
   AbstractDataType,
   AnyDataType,
@@ -80,6 +85,7 @@ import org.apache.spark.sql.types.{
   IntegralType,
   MapType,
   NullType,
+  StringHelper,
   StringType,
   StringTypeExpression,
   StructType,
@@ -89,7 +95,8 @@ import org.apache.spark.sql.types.{
   TimestampNTZType,
   TimestampType,
   TimestampTypeExpression,
-  TimeType
+  TimeType,
+  TypeCollection
 }
 
 abstract class TypeCoercionHelper {
@@ -132,6 +139,69 @@ abstract class TypeCoercionHelper {
    * If the expression has an incompatible type that cannot be implicitly cast, return None.
    */
   def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression]
+
+  /**
+   * Where a plain string is expected, promote CHAR(n)/VARCHAR(n) to unbounded STRING the same way
+   * SHORT promotes to INT, and return the promoted type.
+   *
+   * CharType and VarcharType extend StringType, so an expectation such as
+   * `StringTypeWithCollation` accepts them as-is and the implicit cast rules leave the length
+   * constraint in place. Expressions that then require all their string inputs to share a single
+   * type (`overlay`, `string_agg`, ...) cannot unify CHAR(n) with STRING, and RuntimeReplaceable
+   * ones (`right`) build literals from the constrained type that no longer match their other
+   * branches.
+   *
+   * The expectation must actually mention a string type (or an array of strings). Promoting at an
+   * `AnyDataType` site would strip the length from pass-through expressions such as `max`, `lag`,
+   * and `element_at`, which are required to preserve CHAR/VARCHAR.
+   */
+  protected def charVarcharToPlainString(
+      inType: DataType,
+      expectedType: AbstractDataType): Option[DataType] = {
+    if (!conf.charVarcharStandardSemantics) {
+      return None
+    }
+    inType match {
+      case st: StringType if !StringHelper.isPlainString(st) =>
+        val plain = StringHelper.plainStringType(st)
+        if (expectsStringType(expectedType) && expectedType.acceptsType(plain)) {
+          Some(plain)
+        } else {
+          None
+        }
+      case ArrayType(et, containsNull) =>
+        arrayElementExpectation(expectedType).flatMap { elemExpected =>
+          charVarcharToPlainString(et, elemExpected).map(ArrayType(_, containsNull))
+        }
+      case _ => None
+    }
+  }
+
+  private def expectsStringType(expectedType: AbstractDataType): Boolean = expectedType match {
+    case _: StringType => true
+    case _: AbstractStringType => true
+    case TypeCollection(types) => types.exists(expectsStringType)
+    case _ => false
+  }
+
+  private def arrayElementExpectation(expectedType: AbstractDataType): Option[AbstractDataType] =
+    expectedType match {
+      case AbstractArrayType(elem) => Some(elem)
+      case ArrayType(elem, _) => Some(elem)
+      case TypeCollection(types) => types.view.flatMap(arrayElementExpectation).headOption
+      case _ => None
+    }
+
+  /**
+   * Concat/Elt stringify non-binary inputs. CHAR/VARCHAR go through
+   * [[charVarcharToPlainString]] so a collated constrained type promotes to unbounded STRING
+   * with the same collation. Non-strings still target the default UTF8_BINARY StringType.
+   */
+  protected def implicitCastToString(e: Expression): Expression = {
+    charVarcharToPlainString(e.dataType, StringTypeWithCollation(supportsTrimCollation = true))
+      .map(dt => if (dt == e.dataType) e else Cast(e, dt))
+      .getOrElse(implicitCast(e, StringType).getOrElse(e))
+  }
 
   /**
    * Whether casting `from` as `to` is valid.
@@ -512,9 +582,7 @@ abstract class TypeCoercionHelper {
       case c @ Concat(children)
           if conf.concatBinaryAsString ||
           !children.map(_.dataType).forall(_ == BinaryType) =>
-        val newChildren = c.children.map { e =>
-          implicitCast(e, StringType).getOrElse(e)
-        }
+        val newChildren = c.children.map(implicitCastToString)
         c.copy(children = newChildren)
       case other => other
     }
@@ -562,9 +630,7 @@ abstract class TypeCoercionHelper {
         val newInputs =
           if (conf.eltOutputAsString ||
             !children.tail.map(_.dataType).forall(_ == BinaryType)) {
-            children.tail.map { e =>
-              implicitCast(e, StringType).getOrElse(e)
-            }
+            children.tail.map(implicitCastToString)
           } else {
             children.tail
           }
@@ -649,16 +715,35 @@ abstract class TypeCoercionHelper {
         }
         e.withNewChildren(children)
 
+      // JsonTuple validates its own input types and rejects non-string children with
+      // NON_STRING_TYPE, so it only takes the CHAR/VARCHAR promotion here. Do not fold this into
+      // the ExpectsInputTypes arm below: that would also apply the NullType rewrite and turn
+      // json_tuple(json, null) from an analysis error into a typed STRING null.
+      case j: JsonTuple =>
+        val expected = StringTypeWithCollation(supportsTrimCollation = true)
+        val children = j.children.map { child =>
+          charVarcharToPlainString(child.dataType, expected)
+            .map(dt => if (dt == child.dataType) child else Cast(child, dt))
+            .getOrElse(child)
+        }
+        j.withNewChildren(children)
+
       case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
         // Convert NullType into some specific target type for ExpectsInputTypes that don't do
-        // general implicit casting.
+        // general implicit casting. Also promote CHAR/VARCHAR to STRING here: these
+        // expressions skip ImplicitCastInputTypes, so without this the length constraint would
+        // remain on the child.
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
           case (in, expected) =>
-            if (in.dataType == NullType && !expected.acceptsType(NullType)) {
-              Literal.create(null, expected.defaultConcreteType)
-            } else {
-              in
-            }
+            charVarcharToPlainString(in.dataType, expected)
+              .map(dt => if (dt == in.dataType) in else Cast(in, dt))
+              .getOrElse {
+                if (in.dataType == NullType && !expected.acceptsType(NullType)) {
+                  Literal.create(null, expected.defaultConcreteType)
+                } else {
+                  in
+                }
+              }
         }
         e.withNewChildren(children)
 

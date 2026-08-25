@@ -38,7 +38,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from pyspark.errors import PySparkValueError
 from pyspark.sql.connect.local_server import _is_local_connect_server, _pid_alive
 
-
 # Environment variables that shape the JVM the launcher boots through
 # sbin/start-connect-server.sh -> spark-daemon.sh -> load-spark-env.sh / spark-submit.
 # SPARK_CONF_DIR selects the spark-env.sh and spark-defaults.conf that seed the server; the
@@ -303,7 +302,7 @@ class PoolMember:
         the same liveness and reachability probes as the reuse path (see ``local_server``), so
         the pool and reuse discovery agree on when a recorded server is still good."""
         from pyspark.version import __version__
-        from pyspark.sql.connect.local_server import _port_open
+        from pyspark.sql.connect.local_server import _pid_alive, _port_open
 
         if (
             self.spark_version != __version__

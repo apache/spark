@@ -16,6 +16,7 @@
 #
 import sys
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Iterable,
@@ -27,26 +28,25 @@ from typing import (
     cast,
     no_type_check,
     overload,
-    TYPE_CHECKING,
 )
 from warnings import warn
 
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.errors.exceptions.captured import unwrap_spark_exception
-from pyspark.util import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.pandas.types import _dedup_names
 from pyspark.sql.types import (
     ArrayType,
-    MapType,
-    TimestampType,
-    StructType,
-    _has_type,
     DataType,
-    _create_row,
+    MapType,
     StringType,
+    StructType,
+    TimestampType,
+    _create_row,
+    _has_type,
 )
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.util import _load_from_socket
 
 if TYPE_CHECKING:
     import numpy as np
@@ -54,8 +54,8 @@ if TYPE_CHECKING:
     import pyarrow as pa
     from py4j.java_gateway import JavaObject
 
-    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
     from pyspark.sql import DataFrame
+    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
 
 
 def create_arrow_array_from_pandas(
@@ -86,10 +86,11 @@ def create_arrow_array_from_pandas(
     -------
     pyarrow.Array
     """
-    import pyarrow as pa
     import pandas as pd
+    import pyarrow as pa
+
     from pyspark.loose_version import LooseVersion
-    from pyspark.sql.pandas.types import to_arrow_type, _create_converter_from_pandas
+    from pyspark.sql.pandas.types import _create_converter_from_pandas, to_arrow_type
 
     if isinstance(series.dtype, pd.CategoricalDtype):
         series = series.astype(series.dtype.categories.dtype)
@@ -240,6 +241,7 @@ def _convert_arrow_table_to_pandas(
         The converted pandas DataFrame
     """
     import pandas as pd
+
     from pyspark.sql.pandas.types import _create_converter_to_pandas
 
     # Build pandas options
@@ -533,7 +535,7 @@ class PandasConversionMixin:
                 jsocket_auth_server,
             ) = self._jdf.collectAsArrowToPython()
 
-        # Collect list of un-ordered batches where last element is a list of correct order indices
+        # Collect the batches already reordered by ArrowCollectSerializer.
         try:
             with _load_from_socket((port, auth_secret), ArrowCollectSerializer()) as batch_stream:
                 if split_batches:
@@ -545,35 +547,27 @@ class PandasConversionMixin:
                     # converted.
                     import pyarrow as pa
 
-                    results = []
-                    for batch_or_indices in batch_stream:
-                        if isinstance(batch_or_indices, pa.RecordBatch):
-                            batch_or_indices = pa.RecordBatch.from_arrays(
-                                [
-                                    # This call actually reallocates the array
-                                    pa.concat_arrays([array])
-                                    for array in batch_or_indices
-                                ],
-                                schema=batch_or_indices.schema,
-                            )
-                        results.append(batch_or_indices)
+                    batches = [
+                        pa.RecordBatch.from_arrays(
+                            # This call actually reallocates the array
+                            [pa.concat_arrays([array]) for array in batch],
+                            schema=batch.schema,
+                        )
+                        for batch in batch_stream
+                    ]
                 else:
-                    results = list(batch_stream)
+                    batches = list(batch_stream)
         finally:
             with unwrap_spark_exception():
                 # Join serving thread and raise any exceptions from collectAsArrowToPython
                 jsocket_auth_server.getResult()
 
-        # Separate RecordBatches from batch order indices in results
-        batches = results[:-1]
-        batch_order = results[-1]
-
         if len(batches) or empty_list_if_zero_records:
-            # Re-order the batch list using the correct order
-            return [batches[i] for i in batch_order]
+            return batches
         else:
-            from pyspark.sql.pandas.types import to_arrow_schema
             import pyarrow as pa
+
+            from pyspark.sql.pandas.types import to_arrow_schema
 
             schema = to_arrow_schema(
                 self.schema, timezone="UTC", prefers_large_types=prefers_large_var_types
@@ -744,12 +738,13 @@ class SparkConversionMixin:
         assert isinstance(self, SparkSession)
 
         if timezone is not None:
+            import pandas as pd
+            from pandas.core.dtypes.common import is_timedelta64_dtype
+
             from pyspark.sql.pandas.types import (
                 _check_series_convert_timestamps_tz_local,
                 _get_local_timezone,
             )
-            import pandas as pd
-            from pandas.core.dtypes.common import is_timedelta64_dtype
 
             copied = False
             if isinstance(schema, StructType):
@@ -949,22 +944,22 @@ class SparkConversionMixin:
         assert isinstance(self, SparkSession)
 
         from pyspark.sql.pandas.serializers import ArrowStreamSerializer
-        from pyspark.sql.types import TimestampType
         from pyspark.sql.pandas.types import (
-            from_arrow_type,
             _deduplicate_field_names,
+            from_arrow_type,
         )
         from pyspark.sql.pandas.utils import (
             require_minimum_pandas_version,
             require_minimum_pyarrow_version,
         )
+        from pyspark.sql.types import TimestampType
 
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
 
         import pandas as pd
-        from pandas.api.types import is_datetime64_dtype
         import pyarrow as pa
+        from pandas.api.types import is_datetime64_dtype
 
         # Create the Spark schema from list of names passed in with Arrow types
         if isinstance(schema, (list, tuple)):
@@ -1078,10 +1073,10 @@ class SparkConversionMixin:
 
         from pyspark.sql.pandas.serializers import ArrowStreamSerializer
         from pyspark.sql.pandas.types import (
-            from_arrow_type,
-            from_arrow_schema,
-            to_arrow_schema,
             _check_arrow_table_timestamps_localize,
+            from_arrow_schema,
+            from_arrow_type,
+            to_arrow_schema,
         )
         from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
@@ -1141,8 +1136,9 @@ class SparkConversionMixin:
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.sql.pandas.conversion
+    from pyspark.sql import SparkSession
 
     globs = pyspark.sql.pandas.conversion.__dict__.copy()
     spark = (

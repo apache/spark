@@ -15,13 +15,33 @@
 # limitations under the License.
 #
 
+import platform
+import unittest
+
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas import set_option, reset_option
+from pyspark.loose_version import LooseVersion
+from pyspark.pandas import reset_option, set_option
 from pyspark.sql import functions as F
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
+
+# np.reciprocal(int 0) and the fmax/fmin signed-zero tie are unspecified by C/IEEE, so NumPy's
+# own answer varies by CPU architecture and NumPy version. pandas-on-Spark returns one fixed
+# value everywhere, which matches NumPy only on the environment it was verified against, so the
+# tests comparing the two run only there.
+_numpy_matches_spark = (
+    platform.system() == "Linux"
+    and platform.machine() == "x86_64"
+    and LooseVersion(np.__version__) >= LooseVersion("2.3.0")
+)
+_skip_if_numpy_differs = unittest.skipIf(
+    not _numpy_matches_spark,
+    "NumPy's reciprocal(int 0) and fmax/fmin signed-zero tie vary by architecture and NumPy "
+    "version, while pandas-on-Spark returns one fixed value that matches NumPy only on "
+    "Linux x86_64 with NumPy >= 2.3.0",
+)
 
 
 class NumPyCompatTestsMixin:
@@ -43,6 +63,9 @@ class NumPyCompatTestsMixin:
         "log10",  # flaky
         "log1p",  # flaky
     ]
+    # The sweeps below draw random integers including 0, where reciprocal diverges.
+    if not _numpy_matches_spark:
+        blacklist = blacklist + ["reciprocal"]
 
     @property
     def pdf(self):
@@ -139,6 +162,7 @@ class NumPyCompatTestsMixin:
 
                 self.assert_eq(np_func(psdf.a), np_func(pdf.a), almost=True)
 
+    @_skip_if_numpy_differs
     def test_np_reciprocal_integer(self):
         # np.reciprocal on an integer column does integer division (truncated
         # toward zero): 1 -> 1, -1 -> -1, and every other magnitude -> 0. The
@@ -428,6 +452,7 @@ class NumPyCompatTestsMixin:
                 self.assert_eq(result, expected, almost=True)
                 self.assert_eq(np.signbit(result.to_pandas()), np.signbit(expected))
 
+    @_skip_if_numpy_differs
     def test_np_fmax_fmin(self):
         for pdf in (
             pd.DataFrame({"x1": [-2, -1, 0, 1, 2], "x2": [2, 1, 0, -1, -2]}),
@@ -450,6 +475,50 @@ class NumPyCompatTestsMixin:
                     [np.signbit(np_func(x1, x2)) for x1, x2 in zip(pdf.x1, pdf.x2)]
                 )
                 self.assert_eq(np.signbit(result.to_pandas()), expected_signbit)
+
+    def test_np_copysign(self):
+        for pdf in (
+            pd.DataFrame(
+                {
+                    "x1": [-64, -2, -1, 0, 1, 2, 64],
+                    "x2": [2, -3, -2, -3, 3, -1, 2],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "x1": [-np.inf, -64.0, -2.0, -0.0, 0.0, 2.0, 64.0, np.inf, np.nan, 1.0],
+                    "x2": [2.0, -3.0, -2.0, 0.0, -0.0, -1.0, np.inf, -np.inf, 2.0, np.nan],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "x1": pd.array([1, -2, 3, None, None], dtype="Int64"),
+                    "x2": pd.array([-2, 3, None, 2, None], dtype="Int64"),
+                }
+            ),
+        ):
+            psdf = ps.from_pandas(pdf)
+            result = np.copysign(psdf.x1, psdf.x2)
+            expected = np.copysign(pdf.x1, pdf.x2)
+            self.assert_eq(result, expected, almost=True)
+            # copysign only differs from |x| in the sign bit, so assert on signbit
+            # explicitly -- 0.0 == -0.0 numerically and would hide a wrong sign.
+            self.assert_eq(np.signbit(result.to_pandas()), np.signbit(expected))
+
+    def test_np_copysign_signed_zero(self):
+        # np.copysign takes the sign from y's IEEE-754 sign bit, not from y < 0:
+        # copysign(1.0, -0.0) == -1.0 and copysign(1.0, 0.0) == 1.0.
+        pdf = pd.DataFrame(
+            {
+                "x1": [1.0, 1.0, -0.0, -0.0, 3.0],
+                "x2": [0.0, -0.0, 0.0, -0.0, -0.0],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        result = np.copysign(psdf.x1, psdf.x2).to_pandas()
+        expected = np.copysign(pdf.x1, pdf.x2)
+        self.assert_eq(result, expected)
+        self.assert_eq(np.signbit(result), np.signbit(expected))
 
     def test_np_heaviside(self):
         for pdf in (
@@ -482,7 +551,7 @@ class NumPyCompatTestsMixin:
             self.assert_eq(np.signbit(psdf.a), np.signbit(pdf.a))
 
     def test_np_spark_compat_series(self):
-        from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
+        from pyspark.pandas.numpy_compat import binary_np_spark_mappings, unary_np_spark_mappings
 
         # Use randomly generated dataFrame
         pdf = pd.DataFrame(
@@ -532,7 +601,7 @@ class NumPyCompatTestsMixin:
             reset_option("compute.ops_on_diff_frames")
 
     def test_np_spark_compat_frame(self):
-        from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
+        from pyspark.pandas.numpy_compat import binary_np_spark_mappings, unary_np_spark_mappings
 
         # Use randomly generated dataFrame
         pdf = pd.DataFrame(
