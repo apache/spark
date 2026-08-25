@@ -37,7 +37,7 @@ def determine_modules_for_files(filenames):
     file to belong to the 'root' module. `.github` directory is counted only in GitHub Actions.
 
     >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/core/foo"]))
-    ['pyspark-core', 'pyspark-install', 'sql']
+    ['pyspark-core', 'pyspark-scheduled', 'sql']
     >>> [x.name for x in determine_modules_for_files(["file_not_matched_by_any_subproject"])]
     ['root']
     >>> [x.name for x in determine_modules_for_files(["python/README.md"])]
