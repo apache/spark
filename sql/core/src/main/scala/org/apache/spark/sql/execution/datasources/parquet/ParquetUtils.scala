@@ -344,7 +344,7 @@ object ParquetUtils extends Logging {
         agg match {
           case max: Max if V2ColumnUtils.extractV2Column(max.column).isDefined =>
             val colName = V2ColumnUtils.extractV2Column(max.column).get
-            index = dataSchema.fieldNames.toList.indexOf(colName)
+            index = dataSchema.getFieldIndex(colName).getOrElse(-1)
             schemaName = "max(" + colName + ")"
             val currentMax = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, true)
             if (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0) {
@@ -352,7 +352,7 @@ object ParquetUtils extends Logging {
             }
           case min: Min if V2ColumnUtils.extractV2Column(min.column).isDefined =>
             val colName = V2ColumnUtils.extractV2Column(min.column).get
-            index = dataSchema.fieldNames.toList.indexOf(colName)
+            index = dataSchema.getFieldIndex(colName).getOrElse(-1)
             schemaName = "min(" + colName + ")"
             val currentMin = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, false)
             if (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0) {
@@ -363,12 +363,12 @@ object ParquetUtils extends Logging {
             schemaName = "count(" + colName + ")"
             rowCount += block.getRowCount
             var isPartitionCol = false
-            if (partitionSchema.fields.map(_.name).toSet.contains(colName)) {
+            if (partitionSchema.getFieldIndex(colName).isDefined) {
               isPartitionCol = true
             }
             isCount = true
             if (!isPartitionCol) {
-              index = dataSchema.fieldNames.toList.indexOf(colName)
+              index = dataSchema.getFieldIndex(colName).getOrElse(-1)
               // Count(*) includes the null values, but Count(colName) doesn't.
               rowCount -= getNumNulls(filePath, blockMetaData, index)
             }

@@ -157,6 +157,14 @@ Spark prefers to re-use existing SQLSTATEs, preferably used by multiple vendors.
 For extension Spark claims the `K**` sub-class range.
 If a new class is needed it will also claim the `K0` class.
 
+Every error condition and its sub-conditions normally belong to a single error state: the
+condition declares the SQLSTATE and the sub-conditions inherit it. As a documented
+exception, a sub-condition may declare its own `sqlState` when regrouping would break
+released clients that match the condition name on the wire. The only such exception is
+`INVALID_HANDLE.SESSION_*`, pinned by a test in `SparkThrowableSuite`. Do not add
+overrides, even within the same error class; a future compatibility layer rewriting
+condition names per client version may remove the existing exception.
+
 Internal errors should use the `XX` class. You can subdivide internal errors by component.
 For example: The existing `XXKD0` is used for an internal analyzer error.
 

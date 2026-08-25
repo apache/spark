@@ -135,11 +135,19 @@ case class HllUnion(first: Expression, second: Expression, third: Expression)
         throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
     }
     val allowDifferentLgConfigK = value3.asInstanceOf[Boolean]
-    if (!allowDifferentLgConfigK && sketch1.getLgConfigK != sketch2.getLgConfigK) {
+    if (!allowDifferentLgConfigK && !sketch1.isEmpty && !sketch2.isEmpty &&
+        sketch1.getLgConfigK != sketch2.getLgConfigK) {
       throw QueryExecutionErrors.hllUnionDifferentLgK(
         sketch1.getLgConfigK, sketch2.getLgConfigK, function = prettyName)
     }
-    val union = new Union(Math.min(sketch1.getLgConfigK, sketch2.getLgConfigK))
+    // An empty sketch holds no coupons, so it carries no precision: it is exempt from the
+    // lgConfigK check and does not drag the result down to its own lgConfigK.
+    val lgConfigK = (sketch1.isEmpty, sketch2.isEmpty) match {
+      case (true, false) => sketch2.getLgConfigK
+      case (false, true) => sketch1.getLgConfigK
+      case _ => Math.min(sketch1.getLgConfigK, sketch2.getLgConfigK)
+    }
+    val union = new Union(lgConfigK)
     union.update(sketch1)
     union.update(sketch2)
     union.getResult(targetType).toUpdatableByteArray

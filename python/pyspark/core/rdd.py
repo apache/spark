@@ -15,22 +15,24 @@
 # limitations under the License.
 #
 
-import copy
-import sys
-import os
-import operator
-import shlex
-import warnings
-import heapq
 import bisect
+import copy
+import heapq
+import operator
+import os
 import random
-from subprocess import Popen, PIPE
-from threading import Thread
+import shlex
+import sys
+import warnings
 from collections import defaultdict
-from itertools import chain
 from functools import reduce
-from math import sqrt, log, isinf, isnan, pow, ceil
+from itertools import chain
+from math import ceil, isinf, isnan, log, pow, sqrt
+from subprocess import PIPE, Popen
+from threading import Thread
 from typing import (
+    IO,
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -38,73 +40,71 @@ from typing import (
     Hashable,
     Iterable,
     Iterator,
-    IO,
     List,
     NoReturn,
     Optional,
     Sequence,
     Tuple,
-    Union,
     TypeVar,
+    Union,
     cast,
     overload,
-    TYPE_CHECKING,
 )
 
-from pyspark.serializers import (
-    AutoBatchedSerializer,
-    BatchedSerializer,
-    NoOpSerializer,
-    CartesianDeserializer,
-    CloudPickleSerializer,
-    PairDeserializer,
-    CPickleSerializer,
-    Serializer,
-    pack_long,
-)
+from pyspark.errors import PySparkRuntimeError
 from pyspark.join import (
+    python_cogroup,
+    python_full_outer_join,
     python_join,
     python_left_outer_join,
     python_right_outer_join,
-    python_full_outer_join,
-    python_cogroup,
 )
-from pyspark.statcounter import StatCounter
-from pyspark.rddsampler import RDDSampler, RDDRangeSampler, RDDStratifiedSampler
-from pyspark.storagelevel import StorageLevel
-from pyspark.resource.requests import ExecutorResourceRequests, TaskResourceRequests
+from pyspark.rddsampler import RDDRangeSampler, RDDSampler, RDDStratifiedSampler
 from pyspark.resource.profile import ResourceProfile
+from pyspark.resource.requests import ExecutorResourceRequests, TaskResourceRequests
 from pyspark.resultiterable import ResultIterable
+from pyspark.serializers import (
+    AutoBatchedSerializer,
+    BatchedSerializer,
+    CartesianDeserializer,
+    CloudPickleSerializer,
+    CPickleSerializer,
+    NoOpSerializer,
+    PairDeserializer,
+    Serializer,
+    pack_long,
+)
 from pyspark.shuffle import (
     Aggregator,
-    ExternalMerger,
-    get_used_memory,
-    ExternalSorter,
     ExternalGroupBy,
+    ExternalMerger,
+    ExternalSorter,
+    get_used_memory,
 )
+from pyspark.statcounter import StatCounter
+from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.util import (
-    fail_on_stopiteration,
-    _parse_memory,
-    _load_from_socket,
-    _local_iterator_from_socket,
-)
-from pyspark.errors import PySparkRuntimeError
 
 # for backward compatibility references.
-from pyspark.util import PythonEvalType  # noqa: F401
+from pyspark.util import (
+    PythonEvalType,  # noqa: F401
+    _load_from_socket,
+    _local_iterator_from_socket,
+    _parse_memory,
+    fail_on_stopiteration,
+)
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
 
-    from pyspark._typing import S, SizedIterable, NumberOrArray
+    from pyspark._typing import NumberOrArray, S, SizedIterable
     from pyspark.core.context import SparkContext
-    from pyspark.sql.dataframe import DataFrame
-    from pyspark.sql.types import AtomicType, StructType
     from pyspark.sql._typing import (
         AtomicValue,
         RowLike,
     )
+    from pyspark.sql.dataframe import DataFrame
+    from pyspark.sql.types import AtomicType, StructType
 
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
@@ -5356,6 +5356,7 @@ class PipelinedRDD(RDD[U], Generic[T, U]):
 def _test() -> None:
     import doctest
     import tempfile
+
     from pyspark.core.context import SparkContext
 
     try:

@@ -39,6 +39,7 @@ line-length = 100
 
 [tool.ruff.lint]
 extend-select = [
+    "I",  # isort
     "G010",  # logging-warn
     # ambiguous unicode character
     "RUF001",  # string
@@ -162,6 +163,8 @@ internal_lint = [
 internal_test = [
     # Dependency for running tests
     "unittest-xml-reporting",
+    # Import graph support for smart test selection
+    "grimp",
     # Coverage tool
     "coverage",
     # 3rd party libraries that unittests use.

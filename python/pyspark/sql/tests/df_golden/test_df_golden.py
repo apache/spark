@@ -49,9 +49,8 @@ regenerate the golden files with the steps above.
 
 import os
 
-from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.sql.tests.df_golden.df_golden import run_golden_test
-
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 

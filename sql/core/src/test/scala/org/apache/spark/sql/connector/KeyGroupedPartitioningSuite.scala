@@ -45,7 +45,9 @@ import org.apache.spark.sql.functions.{col, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 
+@ExtendedSQLTest
 class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with ExplainSuiteHelper {
   private val functions = Seq(
     UnboundYearsFunction,

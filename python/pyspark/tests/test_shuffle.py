@@ -14,21 +14,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import random
 import unittest
 from tempfile import TemporaryDirectory
-import os
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark import shuffle, CPickleSerializer, SparkConf, SparkContext
+from pyspark import CPickleSerializer, SparkConf, SparkContext, shuffle
 from pyspark.shuffle import (
     Aggregator,
+    ExternalGroupBy,
     ExternalMerger,
     ExternalSorter,
-    SimpleAggregator,
     Merger,
-    ExternalGroupBy,
+    SimpleAggregator,
 )
 
 

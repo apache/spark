@@ -130,27 +130,20 @@ class ArrowPythonWithNamedArgumentRunner(
     pythonRunnerConf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
-    sessionUUID: Option[String])
+    sessionUUID: Option[String],
+    // Per-UDF element-wise nesting depth, parallel to `funcs` (see
+    // `PythonUDF.elementwiseNestingDepth`). Empty (the default) means depth 1 for every UDF, so the
+    // many non-element-wise construction sites need not pass it.
+    elementwiseNestingDepths: Seq[Int] = Nil)
   extends RowInputArrowPythonRunner(
     funcs, evalType, argMetas.map(_.map(_.offset)), schema, timeZoneId, largeVarTypes,
     pythonMetrics, jobArtifactUUID, sessionUUID) {
 
   override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
-  override protected def evalConf: Map[String, String] = {
-    // An element-wise UDF receives each argument as an `array<T>` column and flattens it, so like
-    // the Arrow batched UDF it needs the input schema to convert the incoming Arrow types. This
-    // covers the row-at-a-time lift (SQL_ARROW_ELEMENTWISE_UDF) as well as the vectorized lifts
-    // (scalar pandas / Arrow, and their iterator variants), which flatten the same way.
-    if (PythonEvalType.isElementwiseUDF(evalType) ||
-        evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
-      super.evalConf ++ Map(
-        "input_type" -> schema.json
-      )
-    } else {
-      super.evalConf
-    }
-  }
+  override protected def evalConf: Map[String, String] =
+    ArrowPythonRunner.elementwiseEvalConf(
+      super.evalConf, evalType, schema, elementwiseNestingDepths)
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas)
@@ -158,6 +151,29 @@ class ArrowPythonWithNamedArgumentRunner(
 }
 
 object ArrowPythonRunner {
+  /**
+   * Adds the `input_type` (and, for element-wise UDFs, the per-UDF `elementwise_nesting`) entries
+   * an Arrow runner sends to the worker via eval-conf. An element-wise UDF receives each argument
+   * as an `array<T>` column and flattens it, so like the Arrow batched UDF it needs the input
+   * schema to convert the incoming Arrow types; a lifted UDF from *nested* lambdas re-nests more
+   * than one level, so it also needs its per-UDF nesting depth. Shared by row and columnar runners.
+   */
+  def elementwiseEvalConf(
+      base: Map[String, String],
+      evalType: Int,
+      schema: StructType,
+      elementwiseNestingDepths: Seq[Int]): Map[String, String] = {
+    if (PythonEvalType.isElementwiseUDF(evalType)) {
+      base ++ Map(
+        "input_type" -> schema.json,
+        "elementwise_nesting" -> elementwiseNestingDepths.mkString(","))
+    } else if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
+      base ++ Map("input_type" -> schema.json)
+    } else {
+      base
+    }
+  }
+
   /** Return Map with conf settings to be used in ArrowPythonRunner */
   def getPythonRunnerConfMap(conf: SQLConf): Map[String, String] = {
     val confMap = collection.mutable.Map.empty[String, String]

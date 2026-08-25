@@ -15,20 +15,22 @@
 # limitations under the License.
 #
 import sys
-from typing import cast, overload, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING, Union
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple, Union, cast, overload
 
-from pyspark.util import is_remote_only
-from pyspark.sql.types import StructType
-from pyspark.sql import utils
-from pyspark.sql.utils import to_str
 from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.sql import utils
+from pyspark.sql.types import StructType
+from pyspark.sql.utils import to_str
+from pyspark.util import is_remote_only
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+
     from pyspark.core.rdd import RDD
-    from pyspark.sql._typing import OptionalPrimitiveType, ColumnOrName
-    from pyspark.sql.session import SparkSession
+    from pyspark.sql._typing import ColumnOrName, OptionalPrimitiveType
     from pyspark.sql.dataframe import DataFrame
+    from pyspark.sql.session import SparkSession
     from pyspark.sql.streaming import StreamingQuery
 
 __all__ = ["DataFrameReader", "DataFrameWriter", "DataFrameWriterV2"]
@@ -37,7 +39,10 @@ PathOrPaths = Union[str, List[str]]
 TupleOrListOfString = Union[List[str], Tuple[str, ...]]
 
 
-class OptionUtils:
+class OptionUtils(ABC):
+    @abstractmethod
+    def option(self, key: str, value: "OptionalPrimitiveType") -> Any: ...
+
     def _set_opts(
         self,
         schema: Optional[Union[StructType, str]] = None,
@@ -50,7 +55,7 @@ class OptionUtils:
             self.schema(schema)  # type: ignore[attr-defined]
         for k, v in options.items():
             if v is not None:
-                self.option(k, v)  # type: ignore[attr-defined]
+                self.option(k, v)
 
 
 class DataFrameReader(OptionUtils):
@@ -2527,7 +2532,7 @@ class DataFrameWriterV2:
 
         .. versionadded:: 3.1.0
         """
-        from pyspark.sql.classic.column import _to_seq, _to_java_column
+        from pyspark.sql.classic.column import _to_java_column, _to_seq
 
         col = _to_java_column(col)
         cols = _to_seq(self._spark._sc, [_to_java_column(c) for c in cols])
@@ -2614,10 +2619,12 @@ class DataFrameWriterV2:
 def _test() -> None:
     import doctest
     import os
+
     import py4j
+
+    import pyspark.sql.readwriter
     from pyspark.core.context import SparkContext
     from pyspark.sql import SparkSession
-    import pyspark.sql.readwriter
 
     os.chdir(os.environ["SPARK_HOME"])
 

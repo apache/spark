@@ -19,13 +19,69 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.{Aborted, Committed}
+import org.apache.spark.sql.connector.catalog.{
+  Aborted,
+  Committed,
+  TableContext,
+  TableWritePrivilege,
+  TimeTravel,
+  Txn,
+  TxnTableCatalog}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
+
+  private val targetLoadOption = "targetLoadOption"
+  private val targetLoadValue = "loadValue"
+  private val targetWriteOption = "targetWriteOption"
+  private val targetWriteValue = "writeValue"
+  private val targetOptionsClause =
+    s"WITH (`$targetLoadOption` = '$targetLoadValue', " +
+      s"`$targetWriteOption` = '$targetWriteValue')"
+
+  private def assertTargetLoadAndWriteOptions(
+      txn: Txn,
+      expectedPrivileges: java.util.Set[TableWritePrivilege],
+      minTargetLoads: Int = 1): Unit = {
+    val targetLoads = txn.catalog.loadTableCalls.filter {
+      case (context, _) => context.writePrivileges() == expectedPrivileges
+    }
+    assert(targetLoads.size >= minTargetLoads,
+      s"expected at least $minTargetLoads target loads with write options")
+    targetLoads.foreach { case (context, options) =>
+      assert(context.writePrivileges() === expectedPrivileges)
+      assert(options.get(targetLoadOption) === targetLoadValue)
+      assert(options.asCaseSensitiveMap().containsKey(targetLoadOption))
+      assert(options.get(targetWriteOption) === null)
+      assert(options.size() === 1)
+    }
+
+    assert(table.lastWriteInfo != null, "the V2 table did not receive LogicalWriteInfo")
+    assert(table.lastWriteInfo.options().get(targetLoadOption) === targetLoadValue)
+    assert(table.lastWriteInfo.options().asCaseSensitiveMap().containsKey(targetLoadOption))
+    assert(table.lastWriteInfo.options().get(targetWriteOption) === targetWriteValue)
+  }
+
+  test("SPARK-58389: transaction catalog honors time travel context") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }""")
+    val pinnedVersion = catalog.loadTable(ident).version()
+    catalog.pinTable(ident, "pinned")
+    append("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 2, "salary": 200, "dep": "software" }""")
+    assert(catalog.loadTable(ident).version() !== pinnedVersion)
+
+    val txnCatalog = new TxnTableCatalog(catalog)
+    val context = new TableContext(
+      new TimeTravel.AsOfVersion("pinned"), java.util.Set.of[TableWritePrivilege]())
+    val loaded = txnCatalog.loadTable(ident, context, CaseInsensitiveStringMap.empty())
+
+    assert(loaded.version() === pinnedVersion)
+  }
 
   test("writeTo append with transactional checks") {
     // create table with initial data
@@ -35,14 +91,17 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
         |""".stripMargin)
 
     // create a source on top of itself that will be fully resolved and analyzed
-    val sourceDF = spark.table(tableNameAsString)
+    val sourceDF = spark.read.option("customReadOption", "customValue").table(tableNameAsString)
       .where("pk == 1")
       .select(col("pk") + 10 as "pk", col("salary"), col("dep"))
     sourceDF.queryExecution.assertAnalyzed()
 
     // append data using the DataFrame API
     val (txn, txnTables) = executeTransaction {
-      sourceDF.writeTo(tableNameAsString).append()
+      sourceDF.writeTo(tableNameAsString)
+        .option(targetLoadOption, targetLoadValue)
+        .option(targetWriteOption, targetWriteValue)
+        .append()
     }
 
     // check txn was properly committed and closed
@@ -50,6 +109,22 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
     assert(txn.isClosed)
     assert(txnTables.size === 1)
     assert(table.version() === "2")
+    val sourceLoads = txn.catalog.loadTableCalls.filter {
+      case (context, _) => context.writePrivileges().isEmpty
+    }
+    assert(sourceLoads.nonEmpty, "transaction re-resolution did not reload the source")
+    sourceLoads.foreach { case (context, options) =>
+      assert(context.timeTravel().isEmpty)
+      assert(context.writePrivileges().isEmpty)
+      assert(options.isEmpty)
+    }
+    assertTargetLoadAndWriteOptions(txn, java.util.Set.of(TableWritePrivilege.INSERT))
+    txn.catalog.loadTableCalls.filter {
+      case (context, _) => !context.writePrivileges().isEmpty
+    }.foreach { case (_, options) =>
+      assert(options.get("customReadOption") === null)
+    }
+    assert(table.lastWriteInfo.options().get("customReadOption") === null)
 
     // check the source scan was tracked via the transaction catalog
     val targetTxnTable = txnTables(tableNameAsString)
@@ -77,7 +152,8 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
 
     // SQL INSERT INTO using VALUES
     val (txn, txnTables) = executeTransaction {
-      sql(s"INSERT INTO $tableNameAsString VALUES (3, 300, 'hr'), (4, 400, 'finance')")
+      sql(s"INSERT INTO $tableNameAsString $targetOptionsClause " +
+        "VALUES (3, 300, 'hr'), (4, 400, 'finance')")
     }
 
     // check txn was properly committed and closed
@@ -87,6 +163,7 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
 
     // VALUES literal - No catalog tables were scanned
     assert(txnTables.isEmpty)
+    assertTargetLoadAndWriteOptions(txn, java.util.Set.of(TableWritePrivilege.INSERT))
 
     // check data was inserted correctly
     checkAnswer(
@@ -109,12 +186,12 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
 
     val insertOverwrite = if (isDynamic) {
       // OverwritePartitionsDynamic
-      s"""INSERT OVERWRITE $tableNameAsString
+      s"""INSERT OVERWRITE $tableNameAsString $targetOptionsClause
          |SELECT pk + 10, salary, dep FROM $tableNameAsString WHERE dep = 'hr'
          |""".stripMargin
     } else {
       // OverwriteByExpression
-      s"""INSERT OVERWRITE $tableNameAsString
+      s"""INSERT OVERWRITE $tableNameAsString $targetOptionsClause
          |PARTITION (dep = 'hr')
          |SELECT pk + 10, salary FROM $tableNameAsString WHERE dep = 'hr'
          |""".stripMargin
@@ -137,6 +214,8 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
       case sources.EqualTo("dep", "hr") => true
       case _ => false
     })
+    assertTargetLoadAndWriteOptions(
+      txn, java.util.Set.of(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -159,7 +238,10 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
       toDF("pk", "salary", "dep")
 
     val (txn, txnTables) = executeTransaction {
-      sourceDF.writeTo(tableNameAsString).overwrite(col("dep") === "hr")
+      sourceDF.writeTo(tableNameAsString)
+        .option(targetLoadOption, targetLoadValue)
+        .option(targetWriteOption, targetWriteValue)
+        .overwrite(col("dep") === "hr")
     }
 
     assert(txn.currentState === Committed)
@@ -168,6 +250,8 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
 
     // literal DataFrame source - no catalog tables were scanned
     assert(txnTables.isEmpty)
+    assertTargetLoadAndWriteOptions(
+      txn, java.util.Set.of(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -190,7 +274,10 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
       toDF("pk", "salary", "dep")
 
     val (txn, txnTables) = executeTransaction {
-      sourceDF.writeTo(tableNameAsString).overwritePartitions()
+      sourceDF.writeTo(tableNameAsString)
+        .option(targetLoadOption, targetLoadValue)
+        .option(targetWriteOption, targetWriteValue)
+        .overwritePartitions()
     }
 
     assert(txn.currentState === Committed)
@@ -199,6 +286,8 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
 
     // literal DataFrame source - no catalog tables were scanned
     assert(txnTables.isEmpty)
+    assertTargetLoadAndWriteOptions(
+      txn, java.util.Set.of(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -412,7 +501,8 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
     sql(s"INSERT INTO $sourceNameAsString VALUES (3, 300, 'hr', true), (4, 400, 'software', false)")
 
     val (txn, txnTables) = executeTransaction {
-      sql(s"INSERT WITH SCHEMA EVOLUTION INTO $tableNameAsString SELECT * FROM $sourceNameAsString")
+      sql(s"INSERT WITH SCHEMA EVOLUTION INTO $tableNameAsString $targetOptionsClause " +
+        s"SELECT * FROM $sourceNameAsString")
     }
 
     assert(txn.currentState === Committed)
@@ -420,6 +510,8 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
 
     // the new column must be visible in the committed delegate's schema
     assert(table.schema.fieldNames.toSeq === Seq("pk", "salary", "dep", "active"))
+    assertTargetLoadAndWriteOptions(
+      txn, java.util.Set.of(TableWritePrivilege.INSERT), minTargetLoads = 2)
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),

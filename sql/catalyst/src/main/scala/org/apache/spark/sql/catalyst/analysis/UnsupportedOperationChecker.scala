@@ -657,6 +657,18 @@ object UnsupportedOperationChecker extends Logging {
     if (outputMode != InternalOutputModes.Update) {
       throwRealTimeError("OUTPUT_MODE_NOT_SUPPORTED", Map("outputMode" -> outputMode.toString))
     }
+
+    plan.foreachUp {
+      case u: Union =>
+        // Block stateful operators before union
+        u.foreachUp {
+          case statefulOp @ (_: Aggregate | _: TransformWithState |
+               _: TransformWithStateInPySpark | _: Deduplicate) if statefulOp.isStateful =>
+            throwRealTimeError("STATEFUL_OPERATORS_BEFORE_UNION_NOT_SUPPORTED", Map.empty)
+          case _ =>
+        }
+      case _ =>
+    }
   }
 
   private def throwRealTimeError(subClass: String, args: Map[String, String]): Unit = {

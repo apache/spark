@@ -408,23 +408,13 @@ class AFTSurvivalRegressionModel private[ml] (
     }
   }
 
-  private def lambda2Quantiles(lambda: Double): Vector = {
-    val quantiles = _quantiles.copy
-    BLAS.scal(lambda, quantiles)
-    quantiles
-  }
+  @Since("2.0.0")
+  def predictQuantiles(features: Vector): Vector =
+    AFTSurvivalRegressionModel.predictQuantiles(features, coefficients, intercept, _quantiles)
 
   @Since("2.0.0")
-  def predictQuantiles(features: Vector): Vector = {
-    // scale parameter for the Weibull distribution of lifetime
-    val lambda = predict(features)
-    lambda2Quantiles(lambda)
-  }
-
-  @Since("2.0.0")
-  def predict(features: Vector): Double = {
-    math.exp(BLAS.dot(coefficients, features) + intercept)
-  }
+  def predict(features: Vector): Double =
+    AFTSurvivalRegressionModel.predict(features, coefficients, intercept)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -432,19 +422,29 @@ class AFTSurvivalRegressionModel private[ml] (
 
     var predictionColNames = Seq.empty[String]
     var predictionColumns = Seq.empty[Column]
+    val localCoefficients = coefficients
+    val localIntercept = intercept
 
     if ($(predictionCol).nonEmpty) {
-      val predCol = udf(predict _).apply(col($(featuresCol)))
+      val predCol = udf((features: Vector) =>
+        AFTSurvivalRegressionModel.predict(features, localCoefficients, localIntercept))
+        .apply(col($(featuresCol)))
       predictionColNames :+= $(predictionCol)
       predictionColumns :+= predCol
         .as($(predictionCol), outputSchema($(predictionCol)).metadata)
     }
 
     if (hasQuantilesCol) {
+      val localQuantiles = _quantiles
       val quanCol = if ($(predictionCol).nonEmpty) {
-        udf(lambda2Quantiles _).apply(predictionColumns.head)
+        udf((lambda: Double) =>
+          AFTSurvivalRegressionModel.lambda2Quantiles(lambda, localQuantiles))
+          .apply(predictionColumns.head)
       } else {
-        udf(predictQuantiles _).apply(col($(featuresCol)))
+        udf((features: Vector) =>
+          AFTSurvivalRegressionModel.predictQuantiles(
+            features, localCoefficients, localIntercept, localQuantiles)
+        ).apply(col($(featuresCol)))
       }
       predictionColNames :+= $(quantilesCol)
       predictionColumns :+= quanCol
@@ -500,6 +500,23 @@ class AFTSurvivalRegressionModel private[ml] (
 @Since("1.6.0")
 object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel] {
   private[ml] case class Data(coefficients: Vector, intercept: Double, scale: Double)
+
+  private def lambda2Quantiles(lambda: Double, quantiles: Vector): Vector = {
+    val scaledQuantiles = quantiles.copy
+    BLAS.scal(lambda, scaledQuantiles)
+    scaledQuantiles
+  }
+
+  private def predict(features: Vector, coefficients: Vector, intercept: Double): Double =
+    math.exp(BLAS.dot(coefficients, features) + intercept)
+
+  private def predictQuantiles(
+      features: Vector,
+      coefficients: Vector,
+      intercept: Double,
+      quantiles: Vector): Vector = {
+    lambda2Quantiles(predict(features, coefficients, intercept), quantiles)
+  }
 
   private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
     import ReadWriteUtils._

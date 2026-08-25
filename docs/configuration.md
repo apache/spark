@@ -1606,6 +1606,21 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.ui.holdEnabled</code></td>
+  <td>true</td>
+  <td>
+    Allows the whole application to be held and resumed from the web UI. Holding gracefully
+    decommissions all executors and stops requesting new ones. Cached blocks are not preserved
+    and are recomputed after resuming. This takes effect only when
+    <code>spark.decommission.enabled</code> is true, the shuffle data is kept outside the
+    executors (through either <code>spark.shuffle.service.enabled</code> or a
+    <code>ShuffleDataIO</code> with reliable storage), and the cluster manager can hold
+    executors: Standalone, YARN, and Kubernetes with
+    <code>spark.kubernetes.allocation.pods.allocator=direct</code>.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
   <td><code>spark.ui.threadDumpsEnabled</code></td>
   <td>true</td>
   <td>

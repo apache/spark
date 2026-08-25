@@ -78,9 +78,34 @@ sealed abstract class Node extends Serializable {
    */
   private[ml] def maxSplitFeatureIndex(): Int
 
-  /** Returns a deep copy of the subtree rooted at this node. */
-  private[tree] def deepCopy(): Node
+  private[ml] def computeStats: NodeStats = {
+    var numDescendants = 0
+    var subtreeDepth = 0
+    var numLeaves = 0
+
+    def visit(node: Node, depth: Int): Unit = {
+      if (depth > 0) {
+        numDescendants += 1
+      }
+      subtreeDepth = math.max(subtreeDepth, depth)
+      node match {
+        case _: LeafNode =>
+          numLeaves += 1
+        case internal: InternalNode =>
+          visit(internal.leftChild, depth + 1)
+          visit(internal.rightChild, depth + 1)
+      }
+    }
+
+    visit(this, 0)
+    NodeStats(subtreeDepth, numDescendants, numLeaves)
+  }
 }
+
+private[ml] case class NodeStats(
+    subtreeDepth: Int,
+    numDescendants: Int,
+    numLeaves: Int)
 
 private[ml] object Node {
 
@@ -110,6 +135,25 @@ private[ml] object Node {
   val dummyNode: Node = {
     new LeafNode(0.0, 0.0, ImpurityCalculator.getCalculator("gini", Array.empty, 0))
   }
+
+  /** Return a copy of the tree with left-to-right DFS indices assigned to leaves. */
+  private[ml] def withLeafIndices(rootNode: Node): Node = {
+    withLeafIndices(rootNode, 0)._1
+  }
+
+  private def withLeafIndices(node: Node, nextLeafIndex: Int): (Node, Int) = {
+    node match {
+      case n: LeafNode =>
+        (new LeafNode(n.prediction, n.impurity, n.impurityStats, nextLeafIndex),
+          nextLeafIndex + 1)
+      case n: InternalNode =>
+        val (leftChild, nextIndex) = withLeafIndices(n.leftChild, nextLeafIndex)
+        val (rightChild, endIndex) = withLeafIndices(n.rightChild, nextIndex)
+        val newNode = new InternalNode(n.prediction, n.impurity, n.gain, leftChild, rightChild,
+          n.split, n.impurityStats)
+        (newNode, endIndex)
+    }
+  }
 }
 
 /**
@@ -120,7 +164,8 @@ private[ml] object Node {
 class LeafNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
-    override private[ml] val impurityStats: ImpurityCalculator) extends Node {
+    override private[ml] val impurityStats: ImpurityCalculator,
+    private[tree] val leafIndex: Int = -1) extends Node {
 
   override def toString: String =
     s"LeafNode(prediction = $prediction, impurity = $impurity)"
@@ -146,10 +191,6 @@ class LeafNode private[ml] (
   }
 
   override private[ml] def maxSplitFeatureIndex(): Int = -1
-
-  override private[tree] def deepCopy(): Node = {
-    new LeafNode(prediction, impurity, impurityStats)
-  }
 }
 
 /**
@@ -237,11 +278,6 @@ class InternalNode private[ml] (
   override private[ml] def maxSplitFeatureIndex(): Int = {
     math.max(split.featureIndex,
       math.max(leftChild.maxSplitFeatureIndex(), rightChild.maxSplitFeatureIndex()))
-  }
-
-  override private[tree] def deepCopy(): Node = {
-    new InternalNode(prediction, impurity, gain, leftChild.deepCopy(), rightChild.deepCopy(),
-      split, impurityStats)
   }
 }
 
@@ -394,53 +430,12 @@ private[tree] object LearningNode {
   def rightChildIndex(nodeIndex: Int): Int = (nodeIndex << 1) + 1
 
   /**
-   * Get the parent index of the given node, or 0 if it is the root.
-   */
-  def parentIndex(nodeIndex: Int): Int = nodeIndex >> 1
-
-  /**
    * Return the level of a tree which the given node is in.
    */
   def indexToLevel(nodeIndex: Int): Int = if (nodeIndex == 0) {
     throw new IllegalArgumentException(s"0 is not a valid node index.")
   } else {
     java.lang.Integer.numberOfTrailingZeros(java.lang.Integer.highestOneBit(nodeIndex))
-  }
-
-  /**
-   * Returns true if this is a left child.
-   * Note: Returns false for the root.
-   */
-  def isLeftChild(nodeIndex: Int): Boolean = nodeIndex > 1 && nodeIndex % 2 == 0
-
-  /**
-   * Return the maximum number of nodes which can be in the given level of the tree.
-   * @param level  Level of tree (0 = root).
-   */
-  def maxNodesInLevel(level: Int): Int = 1 << level
-
-  /**
-   * Return the index of the first node in the given level.
-   * @param level  Level of tree (0 = root).
-   */
-  def startIndexInLevel(level: Int): Int = 1 << level
-
-  /**
-   * Traces down from a root node to get the node with the given node index.
-   * This assumes the node exists.
-   */
-  def getNode(nodeIndex: Int, rootNode: LearningNode): LearningNode = {
-    var tmpNode: LearningNode = rootNode
-    var levelsToGo = indexToLevel(nodeIndex)
-    while (levelsToGo > 0) {
-      if ((nodeIndex & (1 << levelsToGo - 1)) == 0) {
-        tmpNode = tmpNode.leftChild.get
-      } else {
-        tmpNode = tmpNode.rightChild.get
-      }
-      levelsToGo -= 1
-    }
-    tmpNode
   }
 
 }

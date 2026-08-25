@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.TimestampNanosVal
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 
 class TimestampNanosRowSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -154,6 +154,96 @@ class TimestampNanosRowSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(arr.numElements() == 2)
     assert(arr.getTimestampNTZNanos(0) === ntzValue)
     assert(arr.getTimestampNTZNanos(1) === ntzValue)
+  }
+
+  // Struct fields are stored in the UnsafeRow variable-length region. Exercises
+  // GenerateUnsafeProjection.writeStructToBuffer/writeExpressionsToBuffer (codegen) and the
+  // interpreted equivalent, then reads the nanos fields back through UnsafeRow.getStruct.
+  testBothCodegenAndInterpreted("UnsafeRow nested struct with nanos timestamp fields") {
+    val innerStruct = StructType(Seq(
+      StructField("inner_ntz", TimestampNTZNanosType(9), nullable = true),
+      StructField("inner_ltz", TimestampLTZNanosType(7), nullable = true)))
+    val fieldTypes = Array[DataType](innerStruct)
+    val converter = UnsafeProjection.create(fieldTypes)
+
+    val innerRow = new GenericInternalRow(Array[Any](ntzValue, ltzValue))
+    val input = new GenericInternalRow(Array[Any](innerRow))
+
+    val unsafeRow = converter.apply(input)
+    val nestedStruct = unsafeRow.getStruct(0, 2)
+    assert(nestedStruct.getTimestampNTZNanos(0) === ntzValue)
+    assert(nestedStruct.getTimestampLTZNanos(1) === ltzValue)
+
+    // Null nanos fields inside a non-null struct must be marked null after serialization.
+    val innerRowNulls = new GenericInternalRow(Array[Any](null, null))
+    val inputNulls = new GenericInternalRow(Array[Any](innerRowNulls))
+    val unsafeRowNulls = converter.apply(inputNulls)
+    val nestedStructNulls = unsafeRowNulls.getStruct(0, 2)
+    assert(nestedStructNulls.isNullAt(0))
+    assert(nestedStructNulls.isNullAt(1))
+  }
+
+  // A nanos field alongside a variable-length StringType field checks that the nanos composite
+  // (epochMicros Long + nanosWithinMicro Short) is written at the correct offset when other
+  // variable-length fields share the nested struct.
+  testBothCodegenAndInterpreted("UnsafeRow nested struct with nanos and non-nanos fields") {
+    val innerStruct = StructType(Seq(
+      StructField("ntz", TimestampNTZNanosType(8), nullable = true),
+      StructField("name", StringType, nullable = true)))
+    val fieldTypes = Array[DataType](innerStruct)
+    val converter = UnsafeProjection.create(fieldTypes)
+
+    val innerRow =
+      new GenericInternalRow(Array[Any](ntzValue, UTF8String.fromString("test_string")))
+    val input = new GenericInternalRow(Array[Any](innerRow))
+    val unsafeRow = converter.apply(input)
+
+    val nested = unsafeRow.getStruct(0, 2)
+    assert(nested.getTimestampNTZNanos(0) === ntzValue)
+    assert(nested.getUTF8String(1) === UTF8String.fromString("test_string"))
+  }
+
+  // Map values are serialized as an UnsafeArrayData via GenerateUnsafeProjection.writeMapToBuffer
+  // delegating to writeArrayToBuffer. Reads back through UnsafeRow.getMap().valueArray().
+  testBothCodegenAndInterpreted("UnsafeRow with map of nanos timestamp values") {
+    val mapType = MapType(StringType, TimestampNTZNanosType(9), valueContainsNull = true)
+    val fieldTypes = Array[DataType](mapType)
+    val converter = UnsafeProjection.create(fieldTypes)
+
+    val keys = new GenericArrayData(Array[Any](
+      UTF8String.fromString("a"), UTF8String.fromString("b"), UTF8String.fromString("c")))
+    val values = new GenericArrayData(Array[Any](ntzValue, null, ntzValue))
+    val mapData = new ArrayBasedMapData(keys, values)
+    val input = new GenericInternalRow(Array[Any](mapData))
+
+    val unsafeRow = converter.apply(input)
+    val unsafeMap = unsafeRow.getMap(0)
+    assert(unsafeMap.numElements() == 3)
+    val valueArray = unsafeMap.valueArray()
+    assert(valueArray.getTimestampNTZNanos(0) === ntzValue)
+    assert(valueArray.isNullAt(1))
+    assert(valueArray.getTimestampNTZNanos(2) === ntzValue)
+  }
+
+  // valueContainsNull = false exercises the codegen branch in writeArrayToBuffer that elides
+  // the per-element isNullAt check for map values.
+  testBothCodegenAndInterpreted("UnsafeRow with non-nullable map of nanos values") {
+    val mapType = MapType(StringType, TimestampLTZNanosType(7), valueContainsNull = false)
+    val fieldTypes = Array[DataType](mapType)
+    val converter = UnsafeProjection.create(fieldTypes)
+
+    val keys = new GenericArrayData(Array[Any](
+      UTF8String.fromString("x"), UTF8String.fromString("y")))
+    val values = new GenericArrayData(Array[Any](ltzValue, ltzValue))
+    val mapData = new ArrayBasedMapData(keys, values)
+    val input = new GenericInternalRow(Array[Any](mapData))
+
+    val unsafeRow = converter.apply(input)
+    val unsafeMap = unsafeRow.getMap(0)
+    assert(unsafeMap.numElements() == 2)
+    val valueArray = unsafeMap.valueArray()
+    assert(valueArray.getTimestampLTZNanos(0) === ltzValue)
+    assert(valueArray.getTimestampLTZNanos(1) === ltzValue)
   }
 
   testBothCodegenAndInterpreted("codegen projection reads nanos timestamp column") {

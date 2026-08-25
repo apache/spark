@@ -45,6 +45,8 @@ class AutoCdcScd2SinglePipelineSuite
     with SharedSparkSession
     with AutoCdcGraphExecutionTestMixin {
 
+  import testImplicits._
+
   /** The SCD2 target's `_cdc_metadata` struct value for a given recordStartAt. */
   private def scd2Meta(recordStartAt: Long): Row = Row(recordStartAt)
 
@@ -62,8 +64,6 @@ class AutoCdcScd2SinglePipelineSuite
   }
 
   test("SCD2: an upsert lands an open current record in an empty target table") {
-    val session = spark
-    import session.implicits._
     createScd2Target(s"$catalog.$namespace.target")
 
     val stream = MemoryStream[(Int, String, Long)]
@@ -91,8 +91,6 @@ class AutoCdcScd2SinglePipelineSuite
   }
 
   test("SCD2: an update to a key closes the prior record and opens a new one") {
-    val session = spark
-    import session.implicits._
     createScd2Target(s"$catalog.$namespace.target")
 
     val stream = MemoryStream[(Int, String, Long)]
@@ -123,8 +121,6 @@ class AutoCdcScd2SinglePipelineSuite
   }
 
   test("SCD2: a delete closes the current record with no open record remaining") {
-    val session = spark
-    import session.implicits._
     // Target omits `is_delete`: the source carries it as a control column driving the delete
     // condition, and it is excluded from the target projection.
     createScd2Target(s"$catalog.$namespace.target")
@@ -158,8 +154,6 @@ class AutoCdcScd2SinglePipelineSuite
   }
 
   test("SCD2: the auxiliary table is materialized for the target") {
-    val session = spark
-    import session.implicits._
     createScd2Target(s"$catalog.$namespace.target")
 
     val stream = MemoryStream[(Int, String, Long)]

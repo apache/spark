@@ -25,6 +25,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.operators.stateful._
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateExec
 
 object RealTimeModeAllowlist extends Logging {
   private val allowedSinks = Set(
@@ -75,7 +76,9 @@ object RealTimeModeAllowlist extends Logging {
     "org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreRestoreExec",
     "org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreSaveExec",
     "org.apache.spark.sql.execution.streaming.operators.stateful.StreamingDeduplicateExec",
-    classOf[EventTimeWatermarkExec].getName
+    classOf[EventTimeWatermarkExec].getName,
+    classOf[TransformWithStateExec].getName,
+    classOf[UpdateEventTimeColumnExec].getName
   )
 
   private def classNamesString(classNames: Seq[String]): MessageWithContext = {

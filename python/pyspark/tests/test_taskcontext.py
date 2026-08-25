@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 import os
-from decimal import Decimal
 import random
 import socketserver
 import stat
@@ -23,8 +22,9 @@ import sys
 import tempfile
 import time
 import unittest
+from decimal import Decimal
 
-from pyspark import SparkConf, SparkContext, TaskContext, BarrierTaskContext
+from pyspark import BarrierTaskContext, SparkConf, SparkContext, TaskContext
 from pyspark.testing.sqlutils import SPARK_HOME
 from pyspark.testing.utils import PySparkTestCase, eventually
 

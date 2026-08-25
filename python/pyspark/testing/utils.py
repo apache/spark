@@ -15,33 +15,33 @@
 # limitations under the License.
 #
 
-import os
-import struct
-import sys
-import unittest
 import difflib
 import faulthandler
 import functools
-from decimal import Decimal
-from time import time, sleep
+import os
 import signal
+import struct
+import sys
+import unittest
+from decimal import Decimal
+from itertools import zip_longest
+from time import sleep, time
 from typing import (
     Any,
-    Optional,
-    Union,
+    Callable,
     Dict,
     List,
-    Callable,
+    Optional,
+    Union,
 )
-from itertools import zip_longest
 
 from pyspark import SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException, PySparkTypeError
 from pyspark.errors.exceptions.base import QueryContextType
-from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import Row
-from pyspark.sql.types import StructType, StructField, VariantVal
+from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import col, when
+from pyspark.sql.types import StructField, StructType, VariantVal
 
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
@@ -84,6 +84,9 @@ graphviz_requirement_message = "" if have_graphviz else "No module named 'graphv
 
 have_flameprof = have_package("flameprof")
 flameprof_requirement_message = "" if have_flameprof else "No module named 'flameprof'"
+
+have_grimp = have_package("grimp")
+grimp_requirement_message = "" if have_grimp else "No module named 'grimp'"
 
 have_jinja2 = have_package("jinja2")
 jinja2_requirement_message = "" if have_jinja2 else "No module named 'jinja2'"
@@ -294,8 +297,57 @@ class QuietTest:
 class PySparkBaseTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        if have_grimp and (path := os.environ.get("PYSPARK_CHANGED_FILES")):
+            # PYSPARK_CHANGED_FILES should only be used when ONLY pyspark files are changed.
+            # If other files (JVM for example) are changed, do NOT set this.
+            cls.skip_if_changed_files_irrelevant(path)
+
         if os.environ.get("PYSPARK_TEST_TIMEOUT"):
             faulthandler.register(signal.SIGTERM, file=sys.__stderr__, all_threads=True)
+
+    @classmethod
+    def skip_if_changed_files_irrelevant(cls, path: str) -> None:
+        module = cls.__module__
+        if module == "__main__":
+            mod = sys.modules["__main__"]
+            if mod.__spec__ and mod.__spec__.name:
+                module = mod.__spec__.name
+            else:
+                return
+
+        if not cls._is_module_relevant_to_changed_files(module, path):
+            raise unittest.SkipTest("Skipping test because changed files are irrelevant")
+
+    @staticmethod
+    @functools.cache
+    def _is_module_relevant_to_changed_files(module: str, path: str) -> bool:
+        import grimp
+
+        with open(path, "r") as f:
+            changed_files = f.read().strip().splitlines()
+
+        if not all(f.startswith("python/pyspark/") and f.endswith(".py") for f in changed_files):
+            # We have a wrong list of files, just run the test.
+            return True
+
+        changed_modules = [
+            f.removeprefix("python/").rsplit(".", 1)[0].replace(os.path.sep, ".")
+            for f in changed_files
+        ]
+
+        graph = grimp.build_graph("pyspark")
+
+        for changed_module in changed_modules:
+            if changed_module == module:
+                return True
+            try:
+                if graph.chain_exists(module, changed_module):
+                    return True
+            except Exception:
+                # Any exception, we just be conservative and run the test.
+                return True
+
+        return False
 
     @classmethod
     def tearDownClass(cls):
@@ -686,6 +738,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import pandas
+
     import pyspark.pandas
 
 
@@ -1230,8 +1283,9 @@ def assertDataFrameEqual(
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.testing.utils
+    from pyspark.sql import SparkSession
 
     globs = pyspark.testing.utils.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("testing.utils tests").getOrCreate()

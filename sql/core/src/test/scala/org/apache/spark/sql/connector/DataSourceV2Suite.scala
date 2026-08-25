@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   LessThan => CatalystLessThan, Literal => CatalystLiteral, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter => LogicalFilter, Project}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
-import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -42,6 +42,7 @@ import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.Scan.ColumnarSupportMode
 import org.apache.spark.sql.connector.read.colstats.ColumnStatistics
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{
@@ -502,6 +503,17 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         )
       }
     }
+  }
+
+  test("SPARK-58352: WRITING_JOB_FAILED when batch write commit and abort both fail") {
+    val cls = classOf[CommitAndAbortFailingDataSource]
+    checkError(
+      exception = intercept[SparkException] {
+        spark.range(1).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+          .write.format(cls.getName).mode("append").save()
+      },
+      condition = "WRITING_JOB_FAILED",
+      parameters = Map.empty[String, String])
   }
 
   test("simple counter in writer with onDataWriterCommit") {
@@ -2505,6 +2517,56 @@ object SpecificReaderFactory extends PartitionReaderFactory {
 }
 
 class SchemaReadAttemptException(m: String) extends RuntimeException(m)
+
+/**
+ * A writable data source whose batch write both fails to commit and then fails to abort. This
+ * drives the exact branch in `WriteToDataSourceV2Exec` that raises `WRITING_JOB_FAILED`: the
+ * write's `commit` throws, and the follow-up `abort` also throws, so the original failure is
+ * wrapped rather than re-thrown. The per-task `DataWriter` succeeds so the failure is driver-side
+ * and deterministic (no dependence on task scheduling).
+ */
+class CommitAndAbortFailingDataSource extends TestingV2Source {
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable
+    with SupportsWrite {
+
+    override def capabilities(): java.util.Set[TableCapability] =
+      java.util.EnumSet.of(TableCapability.BATCH_READ, TableCapability.BATCH_WRITE,
+        TableCapability.TRUNCATE)
+
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+      new SimpleScanBuilder {
+        override def planInputPartitions(): Array[InputPartition] = Array.empty
+      }
+
+    override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = new WriteBuilder {
+      override def build(): Write = new Write {
+        override def toBatch: BatchWrite = new BatchWrite {
+          override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory =
+            CommitAndAbortFailingDataSource.WriterFactory
+
+          override def commit(messages: Array[WriterCommitMessage]): Unit =
+            throw new RuntimeException("commit failed")
+
+          override def abort(messages: Array[WriterCommitMessage]): Unit =
+            throw new RuntimeException("abort failed")
+        }
+      }
+    }
+  }
+}
+
+object CommitAndAbortFailingDataSource {
+  object WriterFactory extends DataWriterFactory {
+    override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] =
+      new DataWriter[InternalRow] {
+        override def write(record: InternalRow): Unit = {}
+        override def commit(): WriterCommitMessage = null
+        override def abort(): Unit = {}
+        override def close(): Unit = {}
+      }
+  }
+}
 
 class SimpleWriteOnlyDataSource extends SimpleWritableDataSource {
 

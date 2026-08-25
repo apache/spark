@@ -33,7 +33,8 @@ import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.{col, length, lit, not, printf, raise_error, trim,
+  unwrap_udt, when, wrap_udt}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.BernoulliCellSampler
 
@@ -350,16 +351,10 @@ object MLUtils extends Logging {
       return dataset.toDF()
     }
 
-    logWarning("Vector column conversion has serialization overhead. " +
-      "Please migrate your datasets and workflows to use the spark.ml package.")
-
-    // TODO: This implementation has performance issues due to unnecessary serialization.
-    // TODO: It is better (but trickier) if we can cast the old vector type to new type directly.
-    val convertToML = udf { v: Vector => v.asML }
     val exprs = schema.fields.map { field =>
       val c = field.name
       if (colSet.contains(c)) {
-        convertToML(col(c)).as(c, field.metadata)
+        wrap_udt(unwrap_udt(col(c)), new MLVectorUDT).as(c, field.metadata)
       } else {
         col(c)
       }
@@ -403,16 +398,10 @@ object MLUtils extends Logging {
       return dataset.toDF()
     }
 
-    logWarning("Vector column conversion has serialization overhead. " +
-      "Please migrate your datasets and workflows to use the spark.ml package.")
-
-    // TODO: This implementation has performance issues due to unnecessary serialization.
-    // TODO: It is better (but trickier) if we can cast the new vector type to old type directly.
-    val convertFromML = udf { Vectors.fromML _ }
     val exprs = schema.fields.map { field =>
       val c = field.name
       if (colSet.contains(c)) {
-        convertFromML(col(c)).as(c, field.metadata)
+        wrap_udt(unwrap_udt(col(c)), new VectorUDT).as(c, field.metadata)
       } else {
         col(c)
       }
@@ -456,14 +445,10 @@ object MLUtils extends Logging {
       return dataset.toDF()
     }
 
-    logWarning("Matrix column conversion has serialization overhead. " +
-      "Please migrate your datasets and workflows to use the spark.ml package.")
-
-    val convertToML = udf { v: Matrix => v.asML }
     val exprs = schema.fields.map { field =>
       val c = field.name
       if (colSet.contains(c)) {
-        convertToML(col(c)).as(c, field.metadata)
+        wrap_udt(unwrap_udt(col(c)), new MLMatrixUDT).as(c, field.metadata)
       } else {
         col(c)
       }
@@ -507,14 +492,10 @@ object MLUtils extends Logging {
       return dataset.toDF()
     }
 
-    logWarning("Matrix column conversion has serialization overhead. " +
-      "Please migrate your datasets and workflows to use the spark.ml package.")
-
-    val convertFromML = udf { Matrices.fromML _ }
     val exprs = schema.fields.map { field =>
       val c = field.name
       if (colSet.contains(c)) {
-        convertFromML(col(c)).as(c, field.metadata)
+        wrap_udt(unwrap_udt(col(c)), new MatrixUDT).as(c, field.metadata)
       } else {
         col(c)
       }

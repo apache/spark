@@ -19,13 +19,13 @@ import tempfile
 
 import numpy as np
 
+from pyspark.ml.classification import LogisticRegression, RandomForestClassifier
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.ml.linalg import Vectors
-from pyspark.ml.classification import LogisticRegression, RandomForestClassifier
 from pyspark.ml.tuning import (
-    ParamGridBuilder,
     CrossValidator,
     CrossValidatorModel,
+    ParamGridBuilder,
     TrainValidationSplit,
     TrainValidationSplitModel,
 )

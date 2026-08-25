@@ -15,25 +15,26 @@
 # limitations under the License.
 #
 
-from contextlib import redirect_stdout
 import datetime
-from enum import Enum
-from inspect import getmembers, isfunction, isclass
 import io
-from itertools import chain
 import math
 import re
 import unittest
+from contextlib import redirect_stdout
+from enum import Enum
+from inspect import getmembers, isclass, isfunction
+from itertools import chain
 
 from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeException
 from pyspark.errors.exceptions.base import IllegalArgumentException
-from pyspark.sql import Row, Window, functions as F, types
+from pyspark.sql import Row, Window, types
+from pyspark.sql import functions as F
 from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
 from pyspark.sql.functions.builtin import nullifzero, randstr, uniform, zeroifnull
-from pyspark.sql.types import StructType, StructField, StringType
+from pyspark.sql.types import StringType, StructField, StructType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
-from pyspark.testing.utils import have_numpy, assertDataFrameEqual
+from pyspark.testing.utils import assertDataFrameEqual, have_numpy
 
 
 class FunctionsTestsMixin:
@@ -65,7 +66,6 @@ class FunctionsTestsMixin:
             "not",  # equivalent to python ~expression
             "any",  # equivalent to python ~some
             "len",  # equivalent to python ~length
-            "udaf",  # used for creating UDAF's which are not supported in PySpark
             "partitioning$",  # partitioning expressions for DSv2
         ]
 
@@ -939,6 +939,18 @@ class FunctionsTestsMixin:
                 df.select(getattr(F, name)(F.col("name"))),
             )
 
+    def test_bitmap_scalar_functions(self):
+        df = self.spark.createDataFrame([("F00F", "70")], ["left", "right"])
+        left = F.to_binary("left", F.lit("hex"))
+        right = F.to_binary("right", F.lit("hex"))
+        actual = df.select(
+            F.substring(F.hex(F.bitmap_and(left, right)), 0, 4),
+            F.substring(F.hex(F.bitmap_or(left, right)), 0, 4),
+            F.substring(F.hex(F.bitmap_andnot(left, right)), 0, 4),
+            F.substring(F.hex(F.bitmap_xor(left, right)), 0, 4),
+        )
+        assertDataFrameEqual([Row("7000", "F00F", "800F", "800F")], actual)
+
     def test_collation(self):
         df = self.spark.createDataFrame([("a",), ("b",)], ["name"])
         actual = df.select(F.collation(F.collate("name", "UNICODE"))).distinct()
@@ -974,7 +986,7 @@ class FunctionsTestsMixin:
         assertDataFrameEqual([Row(b=-1)], actual_with_threshold)
 
     def test_vector_functions(self):
-        from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+        from pyspark.sql.types import ArrayType, FloatType, StructField, StructType
 
         schema = StructType(
             [
@@ -4235,6 +4247,54 @@ class FunctionsTestsMixin:
         result = df2.groupBy("dept").agg(F.max_by("emp", "salary", 2)).orderBy("dept").collect()
         self.assertEqual(result[0][1], ["Alice", "Carol"])  # Eng
         self.assertEqual(result[1][1], ["Frank", "Dave"])  # Sales
+
+    def test_xxh3_64(self):
+        """Test xxh3_64 hash function"""
+        # Test with string input
+        df = self.spark.createDataFrame([("Spark",), ("",), (None,)], ["data"])
+        result = df.select(F.xxh3_64("data")).collect()
+
+        # Verify against known values from Scala tests
+        self.assertEqual(result[0][0], 80997306238743657)  # "Spark"
+        self.assertEqual(result[1][0], 0x2D06800538D394C2)  # empty string
+        self.assertIsNone(result[2][0])  # null
+
+        # Test with binary input
+        df_binary = self.spark.createDataFrame([(bytearray([1, 2, 3, 4, 5, 6]),)], ["data"])
+        result_binary = df_binary.select(F.xxh3_64("data")).collect()
+        # Value from DataFrameFunctionsSuite.scala
+        self.assertEqual(result_binary[0][0], -4044731995552965649)
+
+    def test_xxh3_128(self):
+        """Test xxh3_128 hash function"""
+        # Test with string input
+        df = self.spark.createDataFrame([("Spark",), ("",), (None,)], ["data"])
+        result = df.select(F.xxh3_128("data")).collect()
+
+        # Verify against known values from Scala tests
+        self.assertEqual(result[0][0], "7d57dd84c60c86ca1f4e82ab91a12b5e")  # "Spark"
+        self.assertEqual(result[1][0], "99aa06d3014798d86001c324468d497f")  # empty string
+        self.assertIsNone(result[2][0])  # null
+
+        # Test with binary input
+        df_binary = self.spark.createDataFrame([(bytearray([1, 2, 3, 4, 5, 6]),)], ["data"])
+        result_binary = df_binary.select(F.xxh3_128("data")).collect()
+        # Value from DataFrameFunctionsSuite.scala
+        self.assertEqual(result_binary[0][0], "866737830f560dbf3e1f439d2d785f44")
+
+    def test_xxh3_with_cast(self):
+        """Test xxh3 functions with explicit cast to binary"""
+        df = self.spark.createDataFrame([("ABC",)], ["a"])
+
+        # Test xxh3_64 with cast
+        result_64 = df.select(F.xxh3_64(F.col("a").cast("binary"))).collect()
+        # Value from DataFrameFunctionsSuite.scala
+        self.assertEqual(result_64[0][0], 2615927343983396622)
+
+        # Test xxh3_128 with cast
+        result_128 = df.select(F.xxh3_128(F.col("a").cast("binary"))).collect()
+        # Value from DataFrameFunctionsSuite.scala
+        self.assertEqual(result_128[0][0], "9e947f00ecd6acb2244da40f405c870e")
 
 
 class FunctionsTests(FunctionsTestsMixin, ReusedSQLTestCase):

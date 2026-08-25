@@ -20,7 +20,7 @@ package org.apache.spark.sql.classic
 import java.util
 
 import scala.collection.mutable
-import scala.jdk.CollectionConverters.MapHasAsScala
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql
@@ -29,12 +29,14 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, UnresolvedF
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege._
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Interface used to write a [[org.apache.spark.sql.classic.Dataset]] to external storage using
@@ -197,7 +199,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   private[sql] def appendCommand(): LogicalPlan = {
     AppendData.byName(
-      UnresolvedRelation(tableName).requireWritePrivileges(Set(INSERT)),
+      createUnresolvedWriteTarget(Set(INSERT)),
       logicalPlan, options.toMap, withSchemaEvolution = _withSchemaEvolution)
   }
 
@@ -209,7 +211,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   private[sql] def overwriteCommand(condition: Column): LogicalPlan = {
     OverwriteByExpression.byName(
-      UnresolvedRelation(tableName).requireWritePrivileges(Set(INSERT, DELETE)),
+      createUnresolvedWriteTarget(Set(INSERT, DELETE)),
       logicalPlan, expression(condition), options.toMap, _withSchemaEvolution)
   }
 
@@ -221,8 +223,14 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   private[sql] def overwritePartitionsCommand(): LogicalPlan = {
     OverwritePartitionsDynamic.byName(
-      UnresolvedRelation(tableName).requireWritePrivileges(Set(INSERT, DELETE)),
+      createUnresolvedWriteTarget(Set(INSERT, DELETE)),
       logicalPlan, options.toMap, _withSchemaEvolution)
+  }
+
+  private def createUnresolvedWriteTarget(
+      privileges: Set[TableWritePrivilege]): UnresolvedRelation = {
+    val tableOptions = new CaseInsensitiveStringMap(options.toMap.asJava)
+    UnresolvedRelation(tableName, tableOptions).requireWritePrivileges(privileges)
   }
 
   /**

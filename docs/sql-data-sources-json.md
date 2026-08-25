@@ -250,6 +250,18 @@ Data source options of JSON can be set via:
     <td>read/write</td>
   </tr>
   <tr>
+    <td><code>pretty</code></td>
+    <td><code>false</code></td>
+    <td>If true, writes the generated JSON with the default pretty printer, indenting nested structures over multiple lines instead of emitting each record on a single line.</td>
+    <td>write</td>
+  </tr>
+  <tr>
+    <td><code>writeNonAsciiCharacterAsCodePoint</code></td>
+    <td><code>false</code></td>
+    <td>If true, writes non-ASCII characters as \uXXXX escape sequences instead of emitting them literally.</td>
+    <td>write</td>
+  </tr>
+  <tr>
     <td><code>lineSep</code></td>
     <td><code>\r</code>, <code>\r\n</code>, <code>\n</code> (for reading), <code>\n</code> (for writing)</td>
     <td>Defines the line separator that should be used for parsing. JSON built-in functions ignore this option.</td>

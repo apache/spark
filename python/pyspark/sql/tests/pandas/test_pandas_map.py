@@ -14,17 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import logging
 import os
 import shutil
 import tempfile
 import time
 import unittest
-import logging
 
+from pyspark.errors import PythonException
 from pyspark.loose_version import LooseVersion
 from pyspark.sql import Row
 from pyspark.sql.functions import col, encode, lit
-from pyspark.errors import PythonException
 from pyspark.sql.session import SparkSession
 from pyspark.sql.types import StructType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -459,8 +459,18 @@ class MapInPandasTestsMixin:
     def test_map_in_pandas_with_barrier_mode(self):
         df = self.spark.range(10)
 
+        def func0(iterator):
+            from pyspark import BarrierTaskContext
+
+            BarrierTaskContext.get()
+            for batch in iterator:
+                yield batch
+
+        with self.assertRaisesRegex(PythonException, "\\[NOT_IN_BARRIER_STAGE\\]"):
+            df.mapInPandas(func0, "id long", False).collect()
+
         def func1(iterator):
-            from pyspark import TaskContext, BarrierTaskContext
+            from pyspark import BarrierTaskContext, TaskContext
 
             tc = TaskContext.get()
             assert tc is not None
@@ -471,7 +481,7 @@ class MapInPandasTestsMixin:
         df.mapInPandas(func1, "id long", False).collect()
 
         def func2(iterator):
-            from pyspark import TaskContext, BarrierTaskContext
+            from pyspark import BarrierTaskContext, TaskContext
 
             tc = TaskContext.get()
             assert tc is not None

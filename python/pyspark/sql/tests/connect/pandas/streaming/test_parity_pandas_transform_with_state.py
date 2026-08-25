@@ -16,10 +16,10 @@
 #
 import unittest
 
+from pyspark import SparkConf
 from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state import (
     TransformWithStateInPandasTestsMixin,
 )
-from pyspark import SparkConf
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
