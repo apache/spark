@@ -32,7 +32,7 @@ import scala.concurrent.Future
 import io.netty.util.internal.OutOfDirectMemoryError
 import org.apache.logging.log4j.Level
 import org.mockito.ArgumentMatchers.{any, eq => meq}
-import org.mockito.Mockito.{doThrow, mock, times, verify, when}
+import org.mockito.Mockito.{doAnswer, doThrow, mock, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.roaringbitmap.RoaringBitmap
@@ -59,7 +59,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     mapOutputTracker = mock(classOf[MapOutputTracker])
     when(mapOutputTracker.getMapSizesForMergeResult(any(), any(), any()))
       .thenReturn(Seq.empty.iterator)
-    when(mapOutputTracker.getStaleMapIndexes(any())).thenReturn(mutable.Set.empty[Int])
+    when(mapOutputTracker.intersectsStaleMapIndexes(any(), any[RoaringBitmap])).thenReturn(false)
   }
 
   private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
@@ -2086,7 +2086,10 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     val localDirs = Array("test-merged-dir-1", "test-merged-dir-2")
     initHostLocalDirManager(blockManager, Map(SHUFFLE_MERGER_IDENTIFIER -> localDirs))
 
-    when(mapOutputTracker.getStaleMapIndexes(0)).thenReturn(mutable.Set(1))
+    // Stale mapIndex is 1; a chunk falls back iff its bitmap contains mapIndex 1.
+    doAnswer { invocation =>
+      invocation.getArgument(1, classOf[RoaringBitmap]).contains(1)
+    }.when(mapOutputTracker).intersectsStaleMapIndexes(any(), any[RoaringBitmap])
     doReturn(createMockManagedBuffer(100)).when(blockManager)
       .getLocalBlockData(ShuffleBlockId(0, 0, 2))
     doReturn(createMockManagedBuffer(100)).when(blockManager)

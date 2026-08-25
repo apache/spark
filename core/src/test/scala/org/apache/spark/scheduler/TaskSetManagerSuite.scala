@@ -45,7 +45,7 @@ import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{AccumulatorV2, Clock, ManualClock, SystemClock}
+import org.apache.spark.util.{AccumulatorV2, CallSite, Clock, ManualClock, SystemClock}
 import org.apache.spark.util.ArrayImplicits._
 
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
@@ -2922,22 +2922,29 @@ class TaskSetManagerSuite
   }
 
   test("SPARK-57491: late speculative ShuffleMapTask marks stale only when fallback enabled") {
-    // (fallbackEnabled, detectAllStagesEnabled, expectStale)
+    // (fallbackEnabled, detectAllStagesEnabled, expectStale, runtimeIndeterminateAfterConstruction)
+    // fallbackEnabled/detectAllStagesEnabled as Option: None leaves the config unset so the real
+    // default is exercised; runtimeIndeterminateAfterConstruction sets isChecksumMismatched after
+    // the TaskSetManager is constructed, to verify indeterminacy is re-evaluated (not cached).
     Seq(
-      // Both switches enabled: the late attempt is marked stale regardless of stage determinism
-      // (the test does not register an indeterminate ShuffleMapStage, so detectAllStages is
-      // required here).
-      (true, true, true),
-      // Fallback disabled (default): the late attempt is reported (logged) but no map index is
-      // marked stale, so reducers keep reading the merged block.
-      (false, false, false)
-    ).foreach { case (fallbackEnabled, detectAllStagesEnabled, expectStale) =>
+      // Both switches enabled: the late attempt is marked stale regardless of stage determinism.
+      (Some(true), Some(true), true, false),
+      // Fallback disabled: the late attempt is reported (logged) but no map index is marked.
+      (Some(false), Some(false), false, false),
+      // Real defaults (no explicit config): fallback defaults to false, so no stale marking.
+      (None, None, false, false),
+      // Fallback enabled, detect-all disabled, runtime indeterminacy set AFTER construction:
+      // validates that indeterminacy is re-evaluated when the late duplicate arrives, not cached at
+      // TaskSetManager construction (the indeterminate-only path). A cached-at-construction Boolean
+      // would read false here and skip stale marking.
+      (Some(true), Some(false), true, true)
+    ).foreach { case (fallbackEnabled, detectAllStagesEnabled, expectStale, runtimeIndet) =>
       val staleMapIndexes =
-        runLateSpeculativeShuffleMapAttempt(fallbackEnabled, detectAllStagesEnabled)
+        runLateSpeculativeShuffleMapAttempt(fallbackEnabled, detectAllStagesEnabled, runtimeIndet)
       if (expectStale) {
         assert(staleMapIndexes.contains(0),
           s"Expected staleMapIndexes to contain mapIndex 0 " +
-            s"(fallback=$fallbackEnabled), got $staleMapIndexes")
+            s"(fallback=$fallbackEnabled, runtimeIndet=$runtimeIndet), got $staleMapIndexes")
       } else {
         assert(staleMapIndexes.isEmpty,
           s"Expected no stale map indexes (fallback=$fallbackEnabled), got $staleMapIndexes")
@@ -2952,32 +2959,60 @@ class TaskSetManagerSuite
    * the stale pushed map indexes recorded by the MapOutputTracker, which are non-empty only
    * when reducer fallback marking is enabled.
    *
-   * Each invocation gets its own SparkContext via [[withSpark]] so the caller can loop without
-   * leaking contexts.
+   * Each invocation gets its own SparkContext via [[LocalSparkContext.withSpark]] so the caller
+   * can loop without leaking contexts.
    */
   private def runLateSpeculativeShuffleMapAttempt(
-      fallbackEnabled: Boolean,
-      detectAllStagesEnabled: Boolean): Set[Int] = LocalSparkContext.withSpark(
+      fallbackEnabled: Option[Boolean],
+      detectAllStagesEnabled: Option[Boolean],
+      runtimeIndeterminateAfterConstruction: Boolean = false): Set[Int] =
+    LocalSparkContext.withSpark(
     new SparkContext("local", "test")) { sc =>
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"), ("exec3", "host3"))
     sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
     sc.conf.set(config.SPECULATION_ENABLED, true)
-    sc.conf.set(config.STALE_PUSH_FALLBACK_ENABLED, fallbackEnabled)
-    sc.conf.set(config.STALE_PUSH_DETECT_ALL_STAGES_ENABLED, detectAllStagesEnabled)
+    // None leaves the config unset so the real default is exercised.
+    fallbackEnabled.foreach(v => sc.conf.set(config.STALE_PUSH_FALLBACK_ENABLED, v))
+    detectAllStagesEnabled.foreach(v => sc.conf.set(config.STALE_PUSH_DETECT_ALL_STAGES_ENABLED, v))
 
     val taskSet = FakeTask.createShuffleMapTaskSet(2, 0, 0,
       Seq(TaskLocation("host1", "exec1")),
       Seq(TaskLocation("host2", "exec2")))
     val clock = new ManualClock()
-    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
-    val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
-      task.metrics.internalAccums
-    }
 
     // Register shuffle in MapOutputTrackerMaster so detectStalePushIfShuffleTask can find it
     val mapOutputTrackerMaster = sched.mapOutputTracker
     val shuffleId = taskSet.shuffleId.get
     mapOutputTrackerMaster.registerShuffle(shuffleId, 2, 2)
+
+    // Register a ShuffleMapStage so TaskSetManager resolves the stage reference and can
+    // re-evaluate runtime indeterminacy when the late duplicate arrives. The stage is statically
+    // determinate; runtime indeterminacy is toggled below via isChecksumMismatched.
+    val mapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency[Int, Int, Int](mapRdd, new HashPartitioner(2))
+    val stage = new ShuffleMapStage(
+      id = taskSet.stageId,
+      rdd = mapRdd,
+      numTasks = 2,
+      parents = Nil,
+      firstJobId = 0,
+      callSite = CallSite("", ""),
+      shuffleDep = shuffleDep,
+      mapOutputTrackerMaster = mapOutputTrackerMaster,
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    sched.dagScheduler.stageIdToStage(taskSet.stageId) = stage
+
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    // Simulate DAGScheduler detecting a checksum mismatch during the stage, AFTER the
+    // TaskSetManager was constructed. Indeterminacy must be re-evaluated (not cached at
+    // construction) when the late duplicate arrives, so the indeterminate-only mode marks stale.
+    if (runtimeIndeterminateAfterConstruction) {
+      stage.isChecksumMismatched = true
+    }
+    val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
+      task.metrics.internalAccums
+    }
+
 
     // Offer resources for 2 tasks to start
     val task0 = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)._1.get

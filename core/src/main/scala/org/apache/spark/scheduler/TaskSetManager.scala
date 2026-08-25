@@ -83,15 +83,15 @@ private[spark] class TaskSetManager(
   // shuffleId is only available when isShuffleMapTasks=true
   private val shuffleId = taskSet.shuffleId
   // Scopes stale-push reducer fallback to indeterminate stages (deterministic stages reproduce
-  // identical output across attempts, so a stale push there is benign). Defaults to false when the
-  // stage isn't registered (e.g. tests). Uses taskSet.stageId (constructor param) because the
-  // `stageId` field below is not initialized yet at this source position.
-  private val isIndeterminateShuffleMapStage: Boolean = isShuffleMapTasks &&
-    sched.dagScheduler.stageIdToStage.get(taskSet.stageId)
-      .collect {
-        case sms: ShuffleMapStage => sms.isStaticallyIndeterminate || sms.isRuntimeIndeterminate
-      }
-      .getOrElse(false)
+  // the same data set across attempts, so a stale push there is benign). Defaults to None when
+  // the stage isn't registered (e.g. tests). Uses taskSet.stageId (constructor param) because the
+  // `stageId` field below is not initialized yet at this source position. The reference is held
+  // (rather than caching a Boolean) so runtime indeterminacy (checksum mismatch, set by
+  // DAGScheduler during the stage) is re-evaluated when a late duplicate result arrives.
+  private val shuffleMapStage: Option[ShuffleMapStage] =
+    if (isShuffleMapTasks) sched.dagScheduler.stageIdToStage.get(taskSet.stageId)
+      .collect { case sms: ShuffleMapStage => sms }
+    else None
   private val stalePushFallbackEnabled = conf.get(config.STALE_PUSH_FALLBACK_ENABLED)
   private val stalePushDetectAllStagesEnabled =
     conf.get(config.STALE_PUSH_DETECT_ALL_STAGES_ENABLED)
@@ -981,13 +981,18 @@ private[spark] class TaskSetManager(
     val mapStatus = result.value().asInstanceOf[MapStatus]
     val sid = shuffleId.get
     val partitionId = tasks(index).partitionId
+    // Re-evaluate indeterminacy now rather than at construction: DAGScheduler may set
+    // isChecksumMismatched (runtime indeterminacy) during the stage, after this TaskSetManager
+    // was constructed. Reading the live ShuffleMapStage reference catches that transition.
+    val isIndeterminate = shuffleMapStage.exists(sms =>
+      sms.isStaticallyIndeterminate || sms.isRuntimeIndeterminate)
     logInfo(s"[StalePush] Late/killed attempt tid=$tid for partition=$partitionId " +
       s"(index=$index), attemptMapId=${mapStatus.mapId}, " +
-      s"indeterminate=$isIndeterminateShuffleMapStage.")
+      s"indeterminate=$isIndeterminate.")
     // Report every duplicate map attempt; gate reducer fallback by the fallback switch first,
     // then by stage scope (indeterminate stages only, unless detectAllStages is enabled).
     if (stalePushFallbackEnabled &&
-        (stalePushDetectAllStagesEnabled || isIndeterminateShuffleMapStage)) {
+        (stalePushDetectAllStagesEnabled || isIndeterminate)) {
       // Mark its mapIndex (== partitionId, NOT MapStatus.mapId) as stale so reducers can detect
       // the stale data in merged block chunks via chunkBitmaps and fallback if needed.
       sched.mapOutputTracker.markStalePushedPartition(sid, partitionId)

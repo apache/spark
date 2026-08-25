@@ -298,9 +298,10 @@ private class PushBasedFetchHelper(
    *         chunk only), false otherwise
    */
   private[spark] def isStaleChunk(blockId: ShuffleBlockChunkId): Boolean = {
-    val staleMapIndexes = mapOutputTracker.getStaleMapIndexes(blockId.shuffleId)
-    staleMapIndexes.nonEmpty && chunksMetaMap.get(blockId).exists { bitmap =>
-      staleMapIndexes.exists(bitmap.contains)
+    // Delegate the stale/chunk intersection to the tracker so it inspects the published stale
+    // snapshot without returning a defensive copy per chunk on the reducer fetch path.
+    chunksMetaMap.get(blockId).exists { bitmap =>
+      mapOutputTracker.intersectsStaleMapIndexes(blockId.shuffleId, bitmap)
     }
   }
 

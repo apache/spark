@@ -2982,7 +2982,7 @@ package object config {
         "spark.shuffle.push.stale.detectAllStages.enabled is also true.")
       .version("4.4.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   private[spark] val STALE_PUSH_DETECT_ALL_STAGES_ENABLED =
     ConfigBuilder("spark.shuffle.push.stale.detectAllStages.enabled")
