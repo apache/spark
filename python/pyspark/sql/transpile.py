@@ -64,10 +64,18 @@ the body can see two different values for one parameter:
 * anywhere under a ``groupBy`` or ``agg``, because a result expression there
   has to be built from the grouping expressions rather than read a column, so
   the whole aggregate is left alone -- ``agg(sum(f(a + 1)))`` included;
-* in a command (``DELETE FROM``), or in a join condition or anything else with
-  more than one input, where there is no single side to compute on;
+* in a command (``DELETE FROM``), or under an operator with more than one input
+  such as a join, where there is no single side to compute on. A lateral join is
+  the exception that proves the rule -- it has one input, so its condition does
+  get a column when the argument reads only the left side;
 * as an argument to another lowered UDF -- ``f(g(x))`` computes ``x`` once for
   ``g``, but ``g``'s result once per parameter read in ``f``.
+
+Where an argument is left inline it also goes back to being lazy, and that is
+visible: ``when(cond, f(a / b))`` for a body that reads its parameter once
+returns rows under ANSI where the interpreted UDF raises, because interpreted
+Python computes its inputs whatever the branch does. So how many times a body
+happens to mention a parameter decides whether an ANSI error surfaces at all.
 
 An argument no projection can hold is left alone too: one that is itself an
 aggregate (``f(sum(a))``), and one reading an outer query's column when
@@ -83,13 +91,12 @@ own condition rejected::
     df.select(clamp(rand()))                          # one draw per row
     df.select(transform(arr, lambda e: clamp(rand())))  # one draw per element
 
-Elsewhere the count is best effort, and always in the safe direction of extra
-work rather than a second value. An argument the body reads only once is left
-where it is, since one read is one evaluation anyway. An argument judged cheap
-to recompute gets no column either, and "cheap" is a low bar: a column or a
-literal, but also a Python UDF call, and anything a later filter pushdown can
-duplicate -- which is most arithmetic, string and JSON work. So a repeated
-``a + 1`` in a ``where`` may well be computed twice.
+Elsewhere the count is best effort. An argument the body reads only once is left
+where it is, since one read is one evaluation anyway, and one cheap enough to
+recompute gets no column either -- a bare column, a literal, or a Python UDF
+call over those. Arithmetic does not count as cheap, so a repeated ``a + 1``
+does get a column; a later filter pushdown may still substitute it back and
+compute it twice, which costs arithmetic and changes no answers.
 
 The one guarantee to rely on: wherever a column is placed, every read of that
 parameter sees one value.

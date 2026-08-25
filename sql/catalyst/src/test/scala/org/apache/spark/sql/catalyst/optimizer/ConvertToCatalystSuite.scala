@@ -76,8 +76,13 @@ class ConvertToCatalystSuite extends PlanTest {
    */
   private def convert(plan: LogicalPlan): LogicalPlan = {
     val converted = ConvertToCatalyst(plan)
-    LogicalPlanIntegrity.validateNoDanglingReferences(converted).foreach { failure =>
-      fail(s"Dangling reference after conversion: $failure\n$converted")
+    // Every operator, not `LogicalPlanIntegrity.validateNoDanglingReferences`, whose `collectFirst`
+    // stops at the root -- and the root is never the Project this rule inserts.
+    converted.foreach {
+      case n if n.resolved && n.children.nonEmpty =>
+        assert(n.missingInput.isEmpty,
+          s"${n.missingInput.mkString(", ")} dangling in ${n.nodeName}:\n$converted")
+      case _ =>
     }
     // Resolved plans only: comparing schemas asks every output attribute for its dataType, and a
     // hand-built plan with an unbound lambda hasn't got one.
@@ -238,7 +243,7 @@ class ConvertToCatalystSuite extends PlanTest {
       val tpudf = TranspiledPythonUDF("udf", pyUDF, List(option))
       val converted = convert(Project(Seq(Alias(tpudf, "v")()), LocalRelation(attrA)))
       val columns = paramColumns(converted)
-      assert(columns.map(a => (a.name, a.child)) == Seq(("_udf_param_0", arg)),
+      assert(columns.map(_.child) == Seq(arg),
         s"Expected one column for the shared argument: $converted")
       // By exprId, not name -- an alias whose id doesn't match what the body reads is the dangling
       // attribute bug, and names wouldn't show it.
@@ -332,9 +337,6 @@ class ConvertToCatalystSuite extends PlanTest {
 
   test("leaves an argument inside a lambda at each use site") {
     transpileOn {
-      // A lambda body runs per element where a Project below the operator runs per row, so sharing
-      // in there would move a nondeterministic draw to the wrong granularity -- and make the
-      // argument eager, raising under ANSI on a row whose array is empty and whose body never ran.
       // Through `apply` so pre-evaluation is actually on; via `applyExpr` it defaults to off and
       // this guard would be unobservable. The argument reads no lambda variable, so every other
       // check passes and only the lambda guard declines it.
@@ -446,6 +448,23 @@ class ConvertToCatalystSuite extends PlanTest {
       assert(paramColumns(converted).map(_.child) == Seq(arg), s"Expected a column: $converted")
       assert(converted.output == relation.output,
         s"Expected the column projected away again: ${converted.output}")
+    }
+  }
+
+  test("adds no column for an argument the body never reads") {
+    transpileOn {
+      // `f(g(a + 1), a)` where f's body only ever reads parameter 1. Converting g would register a
+      // column for `a + 1` that nothing reads -- harmless enough until you remember `transpile.py`
+      // promises an unused argument is not computed at all, and that under ANSI the column runs and
+      // can raise. So we only convert the arguments the body actually asks for.
+      val unread = Add(attrA, Literal(1L))
+      val inner = makeTPUDF(makePyUDF(unread), Multiply(pref(0), pref(0)))
+      val pyUDF = PythonUDF("udf", null, LongType, Seq(inner, attrA),
+        PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+      val outer = TranspiledPythonUDF("udf", pyUDF, List(Add(pref(1), pref(1))))
+      val converted = convert(Project(Seq(Alias(outer, "v")()), LocalRelation(attrA)))
+      assert(paramColumns(converted).forall(_.child != unread),
+        s"Pre-evaluated an argument the body never reads: $converted")
     }
   }
 

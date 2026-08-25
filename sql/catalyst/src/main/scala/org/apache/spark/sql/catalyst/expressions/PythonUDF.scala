@@ -319,16 +319,15 @@ case class TranspiledUDFParameter(
 object TranspiledUDFParameter {
 
   /**
-   * How many times an option reads each argument index, one entry per index in tree order. A
-   * parameter read once is evaluated once wherever it sits, so the count is what decides whether a
-   * column buys anything.
+   * Every argument index an option reads, in tree order, one entry per read. Callers want both the
+   * set and the counts: a parameter read once is evaluated once wherever it sits, so how often it
+   * shows up is what decides whether a column buys anything.
    */
-  def referenceCounts(option: Expression): Seq[(Int, Int)] =
+  def referencedIndexes(option: Expression): Seq[Int] =
     if (!option.containsPattern(TRANSPILED_UDF_PARAMETER)) {
       Nil
     } else {
-      val indexes = option.collect { case p: TranspiledUDFParameter => p.index }
-      indexes.distinct.map(index => index -> indexes.count(_ == index))
+      option.collect { case p: TranspiledUDFParameter => p.index }
     }
 
   /**
@@ -341,9 +340,12 @@ object TranspiledUDFParameter {
     option.transformUpWithPruning(_.containsPattern(TRANSPILED_UDF_PARAMETER)) {
       case p: TranspiledUDFParameter =>
         val substituted = replacement(p.index)
-        // We read a reference's type off its argument once, in analysis, and never look again. If
-        // some later rule retyped the argument this would be stale and the body coerced against the
-        // old type. Nothing does that today; shout if that changes.
+        // We read a reference's type off its argument once, in analysis, and never look again, so a
+        // later rule retyping the argument would leave this stale with the body already coerced
+        // against the old type. Nothing does that today; shout if that changes. Nullability is NOT
+        // checked -- `sameType` ignores it, and `UpdateAttributeNullability` runs in a later batch
+        // and legitimately does change it. Harmless, since ConvertToCatalyst substitutes the real
+        // argument and the final plan takes its nullability from that.
         if (Utils.isTesting && p.paramType.isDefined && substituted.resolved) {
           assert(p.dataType.sameType(substituted.dataType),
             s"Parameter ${p.index} was typed ${p.dataType} but its argument is " +

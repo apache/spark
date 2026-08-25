@@ -25,13 +25,17 @@ we fall back to the regular non-transpiled code path.
 
 These classes re-run the shared UDF mixins under that configuration to confirm
 turning the feature on does not change UDF results. Two divergences are known
-and deliberate, both pinned by ``test_udf_transpile_unit.py`` rather than here:
-an argument the transpiled body never uses is not evaluated at all, so under
-ANSI an erroring one yields rows where interpreted Python raises; and an
-argument the body reads more than once is evaluated once per row rather than
-once per use, which makes it eager -- matching the interpreted UDF's own input
-projection, not a lazy Catalyst ``when``. See ``transpile.py`` for the
-evaluation-count contract and the positions where it does not hold.
+and deliberate, both in the same direction -- the transpiled body evaluates less
+than interpreted Python, so an ANSI error becomes rows -- and both pinned by
+``test_udf_transpile_unit.py`` rather than here:
+
+* an argument the body never uses is not evaluated at all;
+* an argument the body reads once is left at its use site, so inside a branch
+  that does not run it is not evaluated either.
+
+Where the body reads an argument more than once it is evaluated once per row
+instead, which is eager, and that matches interpreted Python rather than
+diverging from it. See ``transpile.py`` for the evaluation-count contract.
 
 Transpilation is currently only supported in regular (non-Connect) Spark, so
 these classes are guarded with ``is_remote_only()`` and are intentionally not

@@ -95,11 +95,12 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
   test("pre-evaluates an argument two references read") {
     transpileOn {
       // `id % 3` rather than a bare column, or it's cheap and gets left inline. Count definitions,
-      // not reads: one `AS _udf_param_0` read twice is the shape we want.
+      // not reads: one `AS _udf_param_` read twice is the shape we want. The name carries the
+      // column's ExprId, so match the prefix rather than a number.
       val square = udfWith(Multiply(param(0), param(0)), arity = 1)
       val df = spark.range(0, 6).select(square(col("id") % 3).as("sq"))
       val plan = df.queryExecution.optimizedPlan.toString
-      assert("AS _udf_param_0".r.findAllIn(plan).length == 1,
+      assert("AS _udf_param_".r.findAllIn(plan).length == 1,
         s"Expected exactly one pre-evaluated argument column:\n$plan")
       checkAnswer(df, Seq(Row(0L), Row(1L), Row(4L), Row(0L), Row(1L), Row(4L)))
     }
