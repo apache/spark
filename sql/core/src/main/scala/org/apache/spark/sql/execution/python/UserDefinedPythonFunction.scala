@@ -147,20 +147,15 @@ case class UserDefinedPythonFunction(
         optionInputTypesForUse.length == transpiledExprsForUse.length &&
         optionInputTypesForUse.forall(_.length == e.length)) {
       val udfChildren = udfExpr.children.toArray
-      // Resolve the `_udf_param_N` placeholders the transpiler emits into the bound
-      // UDF arguments. Apply this ONLY to the transpiled options -- never to
-      // `udfExpr` itself, whose children are the user's argument expressions. A user
-      // column literally named `_udf_param_N` passed as an argument must not be
-      // rewritten, so we leave `udfExpr` untouched.
-      // Each copy is marked with the parameter it came from, because filling the placeholder in is
-      // what erases that and ConvertToCatalyst needs to know which copies are one parameter to give
-      // it a single evaluation per row (SPARK-58626).
+      // Turn the `_udf_param_N` placeholders the transpiler emits into references to the bound
+      // arguments -- references, not copies, so the argument stays in `udfExpr`'s children and
+      // ConvertToCatalyst can compute it once in a Project below the operator (SPARK-58626). A
+      // reference has no type yet, since this runs before the arguments are bound;
+      // ResolveTranspiledPythonUDFOptions fills that in, which is also what gets the option body
+      // coerced.
       //
-      // Substituting here, early, is what forces the marker: it would take no bookkeeping to drop
-      // each argument into one shared column instead, but that cannot happen until the arguments
-      // are resolved, and an option body has to be resolved and coerced by the end of analysis
-      // because it is a child of TranspiledPythonUDF. Coercion is the reason this runs at
-      // call-construction time and pays for it with a marker. See TranspiledUDFParameter.
+      // Apply this ONLY to the transpiled options, never to `udfExpr` itself: a user column
+      // literally named `_udf_param_N` passed as an argument must not be rewritten.
       def resolveUDFParams(expression: Expression, children: Array[Expression]): Expression = {
         expression match {
           case UnresolvedAttribute(nameParts)
@@ -170,7 +165,7 @@ case class UserDefinedPythonFunction(
               throw QueryCompilationErrors.invalidUDFParameterPlaceholder(nameParts.head)
             }
             if (index >= 0 && index < children.length) {
-              TranspiledUDFParameter(children(index), index)
+              TranspiledUDFParameter(index)
             } else {
               throw QueryCompilationErrors.invalidUDFParameterPlaceholderIndex(
                 index, children.length)

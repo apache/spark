@@ -42,10 +42,60 @@ by another lambda, or sharing a line with a second lambda, nothing in the
 source read back says which lambda is the UDF, so it falls back to interpreted
 Python rather than risk the wrong body.
 
+A lowered UDF computes each argument it uses once per row (SPARK-58626): the
+argument becomes a column on the operator's input, and however many times the
+body reads that parameter it reads that one column. Two parameters bound to the
+same deterministic argument share the column too, so ``f(a + 1, a + 1)``
+computes ``a + 1`` once.
 
-A lowered UDF may compute its deterministic input parameters more than once, although
-this normally minimized in the optimizer. Non-determinstic inputs are only drawn once*
-(*re-evaluations on failure not withstanding).
+The column is computed for every row reaching the operator, which makes an
+argument eager even where the call sits in a branch that may not run: under ANSI
+``when(cond, f(a / b))`` raises on a row with ``b = 0`` and ``cond`` false. That
+matches the interpreted Python UDF this replaces, which evaluates its inputs in
+a projection feeding the Python worker, below the conditional -- it does not
+match a bare Catalyst ``when``, which is lazy. Python's semantics win here.
+
+Four positions cannot take that column, and there a repeated argument is
+computed once per use -- so a nondeterministic one is drawn more than once and
+the body can see two different values for one parameter:
+
+* inside a higher-order function's lambda (``transform`` and friends), because
+  a column is computed per row where the body runs per element;
+* anywhere under a ``groupBy`` or ``agg``, because a result expression there
+  has to be built from the grouping expressions rather than read a column, so
+  the whole aggregate is left alone -- ``agg(sum(f(a + 1)))`` included;
+* in a command (``DELETE FROM``), a ``MERGE`` instruction, or a join condition
+  or anything else with more than one input, where there is no single side to
+  compute on;
+* as an argument to another lowered UDF -- ``f(g(x))`` computes ``x`` once for
+  ``g``, but ``g``'s result once per parameter read in ``f``.
+
+An argument no projection can hold is left alone too: one that is itself an
+aggregate (``f(sum(a))``), and one reading an outer query's column when
+correlated-subquery decorrelation is disabled.
+
+Bound to a name on its own line, per the rule above, or none of this applies
+because the body is never lowered in the first place. ``clamp`` reads its
+parameter twice, so a single draw is what keeps it from returning a value its
+own condition rejected::
+
+    body = lambda x: x if x > 0.5 else 0.0
+    clamp = udf(body, "double")
+    df.select(clamp(rand()))                          # one draw per row
+    df.select(transform(arr, lambda e: clamp(rand())))  # one draw per element
+
+Elsewhere the count is best effort, and always in the safe direction of extra
+work rather than a second value. An argument the body reads only once is left
+where it is, since one read is one evaluation anyway. An argument judged cheap
+to recompute gets no column either, and "cheap" is a low bar: a column or a
+literal, but also a Python UDF call, and anything a later filter pushdown can
+duplicate -- which is most arithmetic, string and JSON work. So a repeated
+``a + 1`` in a ``where`` may well be computed twice.
+
+The one guarantee to rely on: wherever a column is placed, every read of that
+parameter sees one value.
+
+An argument the body never uses is not computed at all.
 """
 
 import ast

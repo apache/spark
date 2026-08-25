@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.TranspiledPythonUDF
+import org.apache.spark.sql.catalyst.expressions.{TranspiledPythonUDF, TranspiledUDFParameter}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPILED_PYTHON_UDF
@@ -51,13 +51,27 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
           // Bottom-up so a nested TranspiledPythonUDF (a transpiled UDF feeding another) is pruned
           // -- and thus resolved -- before its parent's input types are inspected.
           op.transformExpressionsUpWithPruning(_.containsPattern(TRANSPILED_PYTHON_UDF)) {
-            case t: TranspiledPythonUDF
-                if t.optionInputCategories.nonEmpty && t.pythonUDFExpr.childrenResolved =>
-              val argTypes = t.pythonUDFExpr.children.map(_.dataType)
-              val kept = t.transpiledOptions.zip(t.optionInputCategories).collect {
-                case (option, categories) if optionMatchesTypes(categories, argTypes) => option
+            // The second half of the guard is what stops this matching on every later iteration of
+            // the batch: once the categories are cleared and the options are resolved there is
+            // nothing left to do. Re-matching would still converge, since the copy below is equal
+            // to what it replaces, but it would re-walk every option each time round.
+            case t: TranspiledPythonUDF if t.arguments.forall(_.resolved) &&
+                (t.optionInputCategories.nonEmpty || !t.transpiledOptions.forall(_.resolved)) =>
+              val args = t.arguments
+              val pruned = if (t.optionInputCategories.isEmpty) {
+                t
+              } else {
+                val argTypes = args.map(_.dataType)
+                val kept = t.transpiledOptions.zip(t.optionInputCategories).collect {
+                  case (option, categories) if optionMatchesTypes(categories, argTypes) => option
+                }
+                t.copy(transpiledOptions = kept, optionInputCategories = Nil)
               }
-              t.copy(transpiledOptions = kept, optionInputCategories = Nil)
+              // Give each `_udf_param_N` reference the type of the argument it stands for. Until
+              // this runs the options are unresolved, so the analyzer comes back afterwards and
+              // coerces their bodies like any other expression.
+              pruned.copy(transpiledOptions =
+                pruned.transpiledOptions.map(TranspiledUDFParameter.resolveTypes(_, args)))
           }
       }
     }

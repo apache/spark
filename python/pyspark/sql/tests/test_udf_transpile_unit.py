@@ -1440,9 +1440,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
     def _optimized_plan(df):
         return df._jdf.queryExecution().optimizedPlan().toString()
 
-    # Internal plan-string details: the alias a shared argument gets (RewriteWithExpression names
-    # them ``_common_expr_N``), and the token a plan shows for a draw it still evaluates.
-    _SHARED_ARG_ALIAS = "_common_expr"
+    # Internal plan-string details: the alias a pre-evaluated argument gets (ConvertToCatalyst
+    # names them ``_udf_param_N``), and the token a plan shows for a draw it still evaluates.
+    _SHARED_ARG_ALIAS = "_udf_param_"
     _DRAW = "rand("
 
     def _shares_an_argument(self, df):
@@ -1518,16 +1518,15 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual([0.0] * 20, vals, "Both uses must read the same draw")
 
     def test_udf_transpile_position_can_rule_out_sharing(self):
-        # SPARK-58626: pins the two positions where an argument is NOT shared, both because
-        # RewriteWithExpression's Project would be evaluated on rows the use site is not.
+        # SPARK-58626: a lambda is the position where an argument is NOT pre-evaluated. A column is
+        # computed per row where a lambda body runs per element, so sharing there would draw once
+        # per row and turn the argument eager -- the empty array below must NOT raise even though
+        # the argument divides by zero.
         #
-        # A conditional branch is the one that shows: the body sees two draws for one parameter, so
-        # `x if x > 0.5 else 0.0` can return a value its own condition rejected. Documented in
-        # transpile.py. If this starts passing one evaluation, that note should go.
-        #
-        # A lambda is the one ConvertToCatalyst handles itself, by declining to share: an argument
-        # shared per row would be drawn once for every element, and would be eager -- so the empty
-        # array below must NOT raise even though the argument divides by zero.
+        # A conditional branch, by contrast, DOES get one evaluation, even though a bare Catalyst
+        # `when` is lazy. Measured: the interpreted Python UDF this replaces evaluates its inputs
+        # in a projection below the conditional and raises there too, so eager is the Python-parity
+        # answer as well as the cheaper one. See transpile.py.
         from pyspark.sql.functions import array, col, lit, rand, transform, when
 
         clamp = lambda x: x if x > 0.5 else 0.0  # noqa: E731
@@ -1542,10 +1541,14 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
             nested = rows.select(when(col("x") > 0, c(rand())).otherwise(lit(-1.0)).alias("v"))
             vals = [r[0] for r in nested.collect()]
+            # `x` is `id + 1`, so the otherwise branch never fires and every value came from the
+            # body -- which means a value in (0.0, 0.5] could only be the body seeing two draws.
             self.assertTrue(
-                any(0.0 < v <= 0.5 for v in vals),
-                "expected the KNOWN two-draw gap inside a conditional branch",
+                all(v == 0.0 or v > 0.5 for v in vals),
+                f"a conditional branch must share one draw too: {vals}",
             )
+            self.assertEqual(1, self._draw_count(nested))
+            self.assertTrue(self._shares_an_argument(nested))
 
             s = UserDefinedFunction(used_twice, DoubleType())
             self.assertTrue(s.transpiled)
@@ -1598,9 +1601,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
     def test_udf_transpile_evaluates_inputs_once_in_a_group_by(self):
         # SPARK-58626: an Aggregate is the awkward one -- a use no aggregate function wraps has to
-        # *be* a grouping expression, so it cannot read a shared column. RewriteWithExpression
-        # handles that by splitting the Aggregate; this runs all three shapes for their values.
-        from pyspark.sql.functions import col, sum as sum_
+        # *be* a grouping expression, so it cannot read a pre-evaluated column. We decline to add
+        # one at all there, which costs an evaluation per use; this runs all three shapes to pin
+        # that the answers are unchanged either way.
+        from pyspark.sql.functions import col
+        from pyspark.sql.functions import sum as sum_
 
         square_fn = lambda x: x * x  # noqa: E731
         with self.sql_conf(_TRANSPILE_ON):
@@ -1621,9 +1626,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
     def test_udf_transpile_evaluates_inputs_once_in_a_subquery(self):
         # SPARK-58626: end to end because decorrelation is what makes this interesting. In the last
-        # shape the shared argument reads a column of the OUTER query, so the definition
-        # RewriteWithExpression pre-evaluates lands inside the subquery holding an OuterReference,
-        # and decorrelation has to carry it back out.
+        # shape the shared argument reads a column of the OUTER query, so the pre-evaluated column
+        # lands inside the subquery holding an OuterReference, and decorrelation has to carry it
+        # back out. With decorrelation off we decline the column instead -- see ConvertToCatalyst.
         square_fn = lambda x: x * x  # noqa: E731
         with self.sql_conf(_TRANSPILE_ON):
             square = UserDefinedFunction(square_fn, LongType())

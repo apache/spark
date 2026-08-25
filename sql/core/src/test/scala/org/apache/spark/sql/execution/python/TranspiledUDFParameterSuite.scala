@@ -30,15 +30,13 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
 
 /**
- * Tests how `UserDefinedPythonFunction.builder` marks the `_udf_param_N` placeholders it fills in
- * (SPARK-58626). The builder owns this because it is the last place that still sees the
- * placeholders: filling them in is what erases which copy came from which parameter, and the
- * indexes it stamps on are what tell `ConvertToCatalyst` which copies share one evaluation.
+ * Tests how `UserDefinedPythonFunction.builder` turns the `_udf_param_N` placeholders into
+ * references to the UDF's arguments (SPARK-58626). The builder owns this because it is the last
+ * place that still sees the placeholders.
  *
- * Plus the one shape the Python suite checks only the values of: a call used as an [[Aggregate]]'s
- * grouping key, where the same call also appears in the result expressions and the two have to end
- * up reading one column. Asserted on the plan, since a deterministic argument gives the same answer
- * either way.
+ * Plus the two operator shapes that decide whether an argument is pre-evaluated at all, asserted
+ * on the plan rather than the values, since a deterministic argument gives the same answer either
+ * way: a Project, which does get a column, and an Aggregate, which does not.
  */
 class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
 
@@ -62,8 +60,8 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
       List(Column(option)).asJava,
       List(List.fill(arity)("numeric").asJava).asJava)
 
-  /** The indexes of the markers in the single option the builder produced, in tree order. */
-  private def markerIndexes(option: Expression, args: Expression*): Seq[Int] =
+  /** The argument indexes the single option the builder produced refers to, in tree order. */
+  private def parameterIndexes(option: Expression, args: Expression*): Seq[Int] =
     udfWith(option).builder(args) match {
       case t: TranspiledPythonUDF =>
         t.transpiledOptions.head.collect { case p: TranspiledUDFParameter => p.index }
@@ -74,40 +72,53 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
     SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key -> "true",
     SQLConf.ANSI_ENABLED.key -> "true")(f)
 
-  test("marks every copy of every parameter with the parameter it came from") {
-    // `lambda a, b: a * a + b`: `a` twice and `b` once, all marked -- the Python eval operator this
-    // replaces computes a column per argument whether the body reads it once or twice. Binding both
-    // parameters to the same argument leaves three identical copies, so the indexes are then the
-    // only thing saying which two belong to the repeated parameter.
+  test("refers to every parameter the body reads, once per read") {
+    // `lambda a, b: a * a + b`: two references to `a` and one to `b`. Binding both parameters to
+    // the same argument changes nothing here -- the option refers to parameters, not to arguments,
+    // so which argument each stands for is settled later.
     val option = Add(Multiply(param(0), param(0)), param(1))
     Seq(argB, argA).foreach { second =>
-      assert(markerIndexes(option, argA, second) == Seq(0, 0, 1),
-        s"Expected a, a, b marked when b is bound to $second")
+      assert(parameterIndexes(option, argA, second) == Seq(0, 0, 1),
+        s"Expected a, a, b referenced when b is bound to $second")
     }
   }
 
   test("drops a parameter the body never uses") {
     // `lambda a, b: a + a`: b never reaches the option, so nothing evaluates it.
     val option = Add(param(0), param(0))
-    assert(markerIndexes(option, argA, argB) == Seq(0, 0))
+    assert(parameterIndexes(option, argA, argB) == Seq(0, 0))
   }
 
-  test("shares an argument that appears in both a grouping and a result expression") {
+  test("pre-evaluates an argument two references read") {
     transpileOn {
-      // `groupBy(f(x)).count()` puts one call in both the grouping and the result expressions, and
-      // ConvertToCatalyst rewrites one top-level expression at a time, so each gets its own `With`
-      // with its own ids. PhysicalAggregation pairs them by semanticEquals, which only lines up
-      // because `With.canonicalized` renumbers ids -- otherwise the Aggregate fails to bind.
-      // `id % 3` rather than a bare column so the argument is not cheap enough to be inlined.
+      // `id % 3` rather than a bare column so the argument is not cheap enough for CollapseProject
+      // to fold the pre-evaluating Project back into its parent. Count the column *definitions*:
+      // one `AS _udf_param_0` read twice by the body is the shape we want.
       val square = udfWith(Multiply(param(0), param(0)), arity = 1)
-      val df = spark.range(0, 6).groupBy(square(col("id") % 3).as("sq")).count()
+      val df = spark.range(0, 6).select(square(col("id") % 3).as("sq"))
       val plan = df.queryExecution.optimizedPlan.toString
-      // Count the column *definitions*, not the reads: two `AS _common_expr` would mean the
-      // grouping key and the result expression each pre-evaluated the argument separately, which is
-      // the regression this guards. One definition read twice is the shape we want.
-      assert("AS _common_expr".r.findAllIn(plan).length == 1,
-        s"Expected exactly one shared argument column:\n$plan")
-      checkAnswer(df, Seq(Row(0L, 2L), Row(1L, 2L), Row(4L, 2L)))
+      assert("AS _udf_param_0".r.findAllIn(plan).length == 1,
+        s"Expected exactly one pre-evaluated argument column:\n$plan")
+      checkAnswer(df, Seq(Row(0L), Row(1L), Row(4L), Row(0L), Row(1L), Row(4L)))
+    }
+  }
+
+  test("leaves an Aggregate's arguments at their use sites") {
+    transpileOn {
+      // An Aggregate gets no pre-evaluated column: a result expression no aggregate function wraps
+      // has to be built from the grouping expressions, and reading a column instead is not.
+      //
+      // The grouping key has to be the bare argument, NOT the call. With the call as the key, the
+      // grouping and the result expressions would both read one column -- the dedup is shared
+      // across the whole operator -- and bind fine, so that shape proves nothing. Here `id % 3` is
+      // the key and only the result would read a column, which is what fails MISSING_AGGREGATION.
+      // And `id % 3` rather than a bare column, so the argument is not left inline merely for being
+      // cheap, which would make the assertion pass for the wrong reason.
+      val square = udfWith(Multiply(param(0), param(0)), arity = 1)
+      val df = spark.range(0, 6).groupBy(col("id") % 3).agg(square(col("id") % 3).as("sq"))
+      val plan = df.queryExecution.optimizedPlan.toString
+      assert(!plan.contains("_udf_param_"), s"Expected no column under an Aggregate:\n$plan")
+      checkAnswer(df, Seq(Row(0L, 0L), Row(1L, 1L), Row(2L, 4L)))
     }
   }
 }
