@@ -703,7 +703,7 @@ class CodegenContext extends Logging {
     case st: StringType if st.supportsBinaryOrdering => s"$c1.binaryCompare($c2)"
     case st: StringType => s"$c1.semanticCompare($c2, ${st.collationId})"
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
-    case BinaryType => s"org.apache.spark.unsafe.types.ByteArray.compareBinary($c1, $c2)"
+    case BinaryType => s"java.util.Arrays.compareUnsigned($c1, $c2)"
     case CalendarIntervalType => s"$c1.compareTo($c2)"
     // TimestampNanosVal exposes only `compareTo`; the AtomicType fallback below emits
     // `$c1.compare($c2)`, which would not resolve as a Java method call.

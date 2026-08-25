@@ -74,6 +74,15 @@ public final class ByteArray {
     return (IS_LITTLE_ENDIAN ? java.lang.Long.reverseBytes(p) : p) & ~mask;
   }
 
+  /**
+   * Lexicographically compares two on-heap byte arrays, treating each byte as unsigned.
+   * <p>
+   * For on-heap {@code byte[]} inputs, prefer {@link java.util.Arrays#compareUnsigned(byte[],
+   * byte[])}, which is a JDK intrinsic that the JIT compiles to vectorized (SIMD) code on JDK 9+
+   * and matches this method's ordering. This overload remains only as a benchmark baseline for the
+   * hand-rolled word-at-a-time comparison; the off-heap overload below is still used for comparing
+   * memory addressed by a base object and offset.
+   */
   public static int compareBinary(byte[] leftBase, byte[] rightBase) {
     return compareBinary(leftBase, Platform.BYTE_ARRAY_OFFSET, leftBase.length,
         rightBase, Platform.BYTE_ARRAY_OFFSET, rightBase.length);
