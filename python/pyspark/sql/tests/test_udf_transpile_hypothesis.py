@@ -29,6 +29,34 @@ Python's ``if x:`` semantics and SQL's ``CASE WHEN``). Failures here should
 be treated as real correctness gaps in the transpiler, not as test bugs to
 silence.
 
+Testing the bounds, not just the interior
+-----------------------------------------
+For the numeric surface (SPARK-55210) the interesting question isn't whether
+``x + 1`` works -- it's where the transpilable region *stops*, because that
+edge is drawn by hand in :mod:`pyspark.sql.transpile` and nothing else checks
+it. So the numeric tests here come in four flavours, and a lowering needs all
+four before we can claim it's bounded correctly:
+
+1. **Inside the region**, across every column width the category admits, not
+   just ``LongType``. The widening casts in ``**`` and the shifts exist for
+   tinyint columns specifically, so a suite that only ever binds bigints never
+   executes the reason they're there.
+2. **Across the whole value space** of the category, which for doubles means
+   NaN and both infinities -- previously excluded outright because ``nan !=
+   nan`` made the differential fail on its own terms. ``_values_equal`` fixes
+   that properly instead: two NaNs agreeing *is* the property.
+3. **Just outside the region**: the shapes that must fall back. A fallback is
+   a contract too, and asserting it needs two halves -- that nothing was
+   lowered, and that interpreted Python still produces what CPython does. A
+   fallback to a broken interpreter would otherwise pass.
+4. **The divergences we chose to keep**, pinned as divergences. Overflow is the
+   tier-2 row in ``transpile.py``'s catalog: a real difference, deliberately
+   accepted. Pinning it means a future change can't quietly alter it, and
+   reading these tests tells you what the UDF contract actually promises. NaN
+   comparison used to be pinned here too and no longer is -- ``_nan_guard``
+   closed it, so ``test_nan_comparison_matches_python`` now asserts the
+   opposite of what it originally did.
+
 The suite is gated on two things, both required:
 
 * the ``RUN_HYPOTHESIS`` env var must be set to a truthy value
@@ -59,6 +87,7 @@ transpiled-vs-interpreted differential), so CI caps this at 50 via
 ``@example`` edge seeds always run on top of the generated ones regardless.
 """
 
+import math
 import os
 import unittest
 import warnings
@@ -67,7 +96,13 @@ from typing import Optional
 from pyspark.sql import Row
 from pyspark.sql.types import (
     BooleanType,
+    ByteType,
+    DoubleType,
+    FloatType,
+    IntegerType,
     LongType,
+    ShortType,
+    StringType,
     StructField,
     StructType,
 )
@@ -95,6 +130,95 @@ def _env_opts_in(value: Optional[str]) -> bool:
     gating decision.
     """
     return value is not None and value.strip().lower() in ("1", "true", "yes")
+
+
+def _representable(value, return_type) -> bool:
+    """Whether the interpreted path can hand ``value`` back under ``return_type``.
+
+    ``EvaluatePython.makeFromJava`` is type-exact rather than coercing: LongType
+    takes only a Python int, and only one inside the 64-bit range; DoubleType
+    takes only a float. Anything else becomes NULL instead of raising. So a
+    CPython oracle whose result lands outside the declared return type is not a
+    transpiler disagreement -- the interpreted path is doing what it documents --
+    and comparing against it would report a mismatch that isn't one.
+
+    Every test here bounds its strategies to stay inside the return type; this is
+    the backstop that keeps a hand-written ``@example`` seed from quietly
+    inverting a fallback assertion.
+    """
+    if isinstance(return_type, LongType):
+        return (
+            isinstance(value, int)
+            and not isinstance(value, bool)
+            and -(2**63) <= value <= 2**63 - 1
+        )
+    if isinstance(return_type, DoubleType):
+        return isinstance(value, float)
+    return True
+
+
+# Substrings that mean the UDF never reached its own body: the Python worker
+# failed to deserialize it. Cloudpickle stores a module-level function by
+# reference, and the worker resolves that reference against `python/lib/pyspark.zip`
+# (PythonUtils.sparkPythonPath puts the zip ahead of PYTHONPATH), so a zip left
+# over from an earlier build raises AttributeError for any UDF body added since.
+_WORKER_LOAD_FAILURE_MARKERS = (
+    "Can't get attribute",
+    "read_command",
+    "cloudpickle.loads",
+)
+
+
+def _assert_udf_actually_ran(test_case, error, func_name):
+    """Fail loudly when the interpreted side died before running the UDF.
+
+    ``_run`` treats "interpreted raised" as licence to accept whatever the
+    transpiled side produced, which is right when the *Python body* raises -- the
+    lowering is allowed to answer where CPython errors. It is badly wrong when the
+    worker never got as far as the body, because then every differential in the
+    suite passes by default and the transpiler is effectively untested.
+
+    The realistic cause is a stale ``python/lib/pyspark.zip``: it is a gitignored
+    build artifact, it sits ahead of ``PYTHONPATH`` for the worker, and
+    ``build/sbt package`` only refreshes it when the build runs. Editing this file
+    and re-running without rebuilding gets you an AttributeError for every UDF
+    body added in the meantime. Refresh just the changed modules with::
+
+        cd python && zip -q lib/pyspark.zip pyspark/sql/tests/<file>.py
+    """
+    message = str(error)
+    if any(marker in message for marker in _WORKER_LOAD_FAILURE_MARKERS):
+        test_case.fail(
+            f"{func_name!r}: the Python worker could not deserialize the UDF, so the "
+            f"interpreted side never ran and this differential would have passed "
+            f"vacuously. Most likely `python/lib/pyspark.zip` is stale -- refresh it "
+            f"(see _assert_udf_actually_ran). Original error:\n{message[:2000]}"
+        )
+
+
+def _values_equal(left, right) -> bool:
+    """Differential equality, with NaN equal to itself.
+
+    ``assertEqual(nan, nan)`` fails, because ``nan != nan`` -- which is why the
+    double strategies here used to exclude NaN entirely and, with it, a chunk of
+    the value space the lowerings have to get right. But both sides producing NaN
+    is precisely the agreement we're looking for, so treat that as equal. NaN
+    against a number still fails, which is the case that would mean a bug.
+
+    ``-0.0 == 0.0`` is left alone: that one is a genuine (documented) difference
+    between ``_python_mod`` and Python's ``%``, and it's in the
+    semantically-equal tier because every consumer sees them as equal. The test
+    that pins the sign uses ``copysign`` instead.
+    """
+    if isinstance(left, list) and isinstance(right, list):
+        # Multi-row differentials (``_run(..., all_rows=True)``) compare whole
+        # columns, and a NaN anywhere in one would defeat a plain ``==`` on the
+        # lists just as it would on a scalar.
+        return len(left) == len(right) and all(_values_equal(a, b) for a, b in zip(left, right))
+    if isinstance(left, float) and isinstance(right, float):
+        if math.isnan(left) and math.isnan(right):
+            return True
+    return left == right
 
 
 _hypothesis_enabled = _env_opts_in(os.environ.get(_HYPOTHESIS_ENV))
@@ -131,9 +255,10 @@ if _have_hypothesis:
 
     # Narrower range for arithmetic tests (+4, -2, *3, +7, x+y).  Python's
     # arithmetic never overflows, but Spark's ANSI mode raises on LongType
-    # overflow.  Worse, the Python UDF runner silently wraps out-of-range
-    # return values even with ANSI=True, so "both raised" never fires for
-    # overflow values and the test sees a spurious mismatch instead.
+    # overflow.  Worse, the interpreted path returns NULL for an out-of-range
+    # value (makeFromJava takes only Byte/Short/Int/Long for LongType), so "both
+    # raised" never fires for overflow values and the test sees a spurious
+    # mismatch instead.
     # 2**61 is safe for all operations: (2**61)*3 ~= 6.9e18 < 9.2e18 = Long.MAX.
     _LONG_ARITH_BOUND = 2**61
     _long_arith_strategy = st.one_of(
@@ -148,6 +273,94 @@ if _have_hypothesis:
     # plumbing and boundary handling tend to hide, so we always seed them.
     _INT32_MAX = 2**31 - 1
     _INT32_MIN = -(2**31)
+
+    # ---- Strategies for the SPARK-55210 numeric operators ----------------
+    #
+    # Each is bounded so both paths succeed or both raise -- see the note on
+    # _LONG_ARITH_BOUND above for why an overflow is not a usable case.
+
+    # `x ** 2` must stay under Long.MAX: (2**31)**2 = 2**62 < 2**63.
+    _POW2_BOUND = 2**31
+    _pow2_strategy = st.one_of(
+        st.none(), st.integers(min_value=-_POW2_BOUND, max_value=_POW2_BOUND)
+    )
+    # `x ** 3` likewise: (2**20)**3 = 2**60.
+    _POW3_BOUND = 2**20
+    _pow3_strategy = st.one_of(
+        st.none(), st.integers(min_value=-_POW3_BOUND, max_value=_POW3_BOUND)
+    )
+    # int32 columns are what `/` on two integers lowers for: every int32 value is
+    # exactly representable as a double, so the double division is correctly
+    # rounded and matches Python's exact int division.
+    _int32_strategy = st.one_of(st.none(), st.integers(min_value=_INT32_MIN, max_value=_INT32_MAX))
+    # Finite doubles only: NaN would make the differential assertEqual fail on
+    # its own terms (nan != nan) rather than because a lowering diverged, and an
+    # infinity can produce a NaN through `inf / inf`.
+    _double_strategy = st.one_of(
+        st.none(), st.floats(allow_nan=False, allow_infinity=False, width=64)
+    )
+    # Shift counts. Negative values exercise the guard on both sides (Python
+    # raises ValueError and so do we).
+    #
+    # `>>` takes the full range: it never overflows, and past the operand's width
+    # both sides agree on the sign-filled result. That range is the point -- a
+    # count at or past the width is where Java's masking makes an unwidened Spark
+    # shift silently disagree.
+    _rshift_count_strategy = st.one_of(st.none(), st.integers(min_value=-4, max_value=70))
+    _RSHIFT_EDGES = (
+        (None, None),
+        (0, 0),
+        (1, 0),
+        (1, 30),
+        (-1, 30),
+        (1, -1),
+        (-1, -4),
+        (0, -1),
+        # At and past the width, for both signs.
+        (1, 63),
+        (1, 64),
+        (48, 64),
+        (-48, 64),
+        (-1, 64),
+        (1, 70),
+    )
+    # `<<` has to stay inside Long here: an overflowing shift raises on the
+    # transpiled side while the interpreted one returns NULL, so "both raised"
+    # never fires and the dual-run reports a spurious mismatch. The
+    # raise is pinned in the unit suite instead
+    # (test_udf_transpile_shift_counts_at_and_past_the_width). A zero operand is
+    # safe at any count in both languages.
+    _lshift_count_strategy = st.one_of(st.none(), st.integers(min_value=-4, max_value=30))
+    _LSHIFT_EDGES = (
+        (None, None),
+        (0, 0),
+        (1, 0),
+        (1, 30),
+        (-1, 30),
+        (1, -1),
+        (-1, -4),
+        (0, -1),
+        (0, 64),
+        (0, 70),
+    )
+    _POW_EDGES = (None, 0, 1, -1, 2, -2, 7, -7)
+    # Divisor edges: zero raises on both sides, and the sign combinations are
+    # where `//`'s floor-vs-truncate correction earns its keep.
+    _DIV_PAIR_EDGES = (
+        (None, None),
+        (None, 1),
+        (1, None),
+        (7, 0),
+        (7, 2),
+        (-7, 2),
+        (7, -2),
+        (-7, -2),
+        (8, 2),
+        (-8, 2),
+        (_INT32_MAX, 1),
+        (_INT32_MIN, 1),
+        (_INT32_MIN, -1),
+    )
 
     # ---- Edge-case seeds (scalacheck-style) -----------------------------
     #
@@ -223,6 +436,293 @@ if _have_hypothesis:
             return method
 
         return wrapper
+
+    # ---- Bounds strategies: column widths -------------------------------
+    #
+    # Every integral width the "integral" category admits, with the largest
+    # magnitude each one holds. The suite above binds LongType almost
+    # exclusively, which quietly skips the narrow-column reasoning the
+    # lowerings are built around: `**` and the shifts cast their operand to
+    # long *because* Multiply keeps its operands' type (so squaring a tinyint
+    # would raise overflow from |x| >= 12) and because Java masks a shift
+    # count to the operand's width (so `x >> 8` on a tinyint would be a
+    # no-op). Neither line of code is executed by a bigint column.
+    # Each width's full inclusive range -- asymmetric, because two's complement is:
+    # writing 2**7 - 1 for both ends would never generate -128, and the negative
+    # extreme is the more interesting one (`abs(Byte.MinValue)` and
+    # `Byte.MinValue // -1` are the overflow cases Python doesn't have).
+    _INTEGRAL_WIDTHS = (
+        (ByteType(), -(2**7), 2**7 - 1),
+        (ShortType(), -(2**15), 2**15 - 1),
+        (IntegerType(), -(2**31), 2**31 - 1),
+        (LongType(), -(2**63), 2**63 - 1),
+    )
+    # `/` lowers only for the widths whose every value is exactly representable
+    # as a double, which is what makes Spark's cast-to-double division match
+    # Python's exact integer division. LongType is deliberately absent, and named
+    # rather than sliced so adding a width above can't silently reclassify it.
+    _INT32_WIDTHS = tuple(w for w in _INTEGRAL_WIDTHS if w[0] != LongType())
+
+    @st.composite
+    def _integral_column(draw, cap=None, widths=_INTEGRAL_WIDTHS, headroom=0):
+        """A ``(dtype, value)`` pair whose value fits the drawn integral width.
+
+        ``cap`` bounds the magnitude further, for bodies whose arithmetic must
+        not overflow the column type -- see the note on ``_LONG_ARITH_BOUND``
+        for why an overflowing example is unusable rather than merely awkward.
+        It applies via ``min``/``max``, so it only ever bites on the wider
+        types: a tinyint is already far below any cap worth writing.
+
+
+        ``headroom`` shrinks both ends by an absolute amount, for a body that
+        adds or subtracts a constant. It is needed for the same reason and is
+        equally width-relative: ``x + 4`` on an *int* column is IntegerType
+        arithmetic (the literal is an int, so nothing widens), and so raises at
+        2147483647 where Python answers 2147483651. A byte or short column
+        widens to IntegerType and cannot overflow, which is exactly why a single
+        flat ``cap`` is the wrong tool here.
+        """
+        dtype, low, high = draw(st.sampled_from(widths))
+        if cap is not None:
+            low, high = max(low, -cap), min(high, cap)
+        low, high = low + headroom, high - headroom
+        return dtype, draw(st.one_of(st.none(), st.integers(low, high)))
+
+    @st.composite
+    def _integral_sum_pair(draw, widths=_INTEGRAL_WIDTHS):
+        """Two values of one width whose sum or difference stays inside it.
+
+        Two same-width columns coerce to that width, so ``x + y`` on two
+        tinyints is ByteType arithmetic and raises past 127 where Python just
+        keeps counting -- and an overflowing example is unusable rather than
+        merely awkward (the transpiled side raises while the interpreted side
+        returns NULL, so ``_run``'s "both raised" equivalence never fires).
+        Halving each operand's range makes every sum and difference safe.
+        """
+        dtype, low, high = draw(st.sampled_from(widths))
+        values = st.one_of(st.none(), st.integers(low // 2, high // 2))
+        return dtype, draw(values), draw(values)
+
+    @st.composite
+    def _integral_mul_pair(draw, widths=_INTEGRAL_WIDTHS):
+        """Two values of one width whose *product* stays inside it.
+
+        Bounding a product needs a square root, not the halving
+        ``_integral_sum_pair`` does: no single linear shrink works across widths
+        at once, since keeping a LongType product in range needs a divisor of
+        ~3.04e9, which would collapse the Byte/Short/Int ranges to nothing and
+        delete exactly the narrow-column coverage these strategies exist to add.
+        """
+        dtype, low, high = draw(st.sampled_from(widths))
+        bound = math.isqrt(high)
+        values = st.one_of(st.none(), st.integers(-bound, bound))
+        return dtype, draw(values), draw(values)
+
+    @st.composite
+    def _integral_pair_for_div(draw, cap=None, widths=_INT32_WIDTHS):
+        """Two values of one int32-capable width, for the ``/`` lowerings.
+
+        The full width range is safe for a bare ``x / y``, because ``Divide``
+        promotes to double and so cannot overflow the column type. ``cap`` is for
+        bodies that do integer arithmetic *around* the division (``(x + 1) / (y -
+        1)``), where ANSI keeps the intermediates in IntegerType and would raise
+        at the boundary while Python carries on.
+        """
+        dtype, low, high = draw(st.sampled_from(widths))
+        if cap is not None:
+            low, high = max(low, -cap), min(high, cap)
+        values = st.one_of(st.none(), st.integers(low, high))
+        return dtype, draw(values), draw(values)
+
+    # Width boundaries are the seeds worth pinning: they're where the widening
+    # casts either work or raise ARITHMETIC_OVERFLOW, with nothing in between.
+    # Seeded with `key="cols"` so the whole tuple binds to one argument -- these
+    # are not (x, y) pairs and `_seed_pair_examples` would mis-unpack them.
+    _WIDTH_EDGES = (
+        (ByteType(), None),
+        (ByteType(), 127),
+        (ByteType(), -128),
+        (ByteType(), 1),
+        (ShortType(), 32767),
+        (ShortType(), -32768),
+        (IntegerType(), _INT32_MAX),
+        (IntegerType(), _INT32_MIN),
+        (LongType(), 0),
+    )
+    # Each width's most negative value, which is where two's complement has no
+    # positive counterpart and so where negation and `abs` used to raise.
+    _WIDTH_MINIMA = (-128, -32768, _INT32_MIN, -(2**63))
+    # Pulled 4 clear of both ends, for `x + 4`. Seeds are injected verbatim and are
+    # not checked against the strategy's bounds, so a table sharing the extremes
+    # would re-introduce the very overflow ``headroom`` exists to keep out.
+    _WIDTH_EDGES_PLUS_FOUR_SAFE = tuple(
+        (dtype, value)
+        for dtype, value in _WIDTH_EDGES
+        if value is None or (value not in _WIDTH_MINIMA and value not in (127, 32767, _INT32_MAX))
+    ) + ((ByteType(), 123), (ShortType(), 32763), (IntegerType(), _INT32_MAX - 4))
+    # Sum-safe: each operand within half its width, so no seed overflows.
+    _WIDTH_SUM_PAIR_EDGES = (
+        (ByteType(), None, None),
+        (ByteType(), 63, 63),
+        (ByteType(), -64, 63),
+        (ByteType(), 7, -2),
+        (ShortType(), 16383, -16383),
+        (IntegerType(), 7, 2),
+        (IntegerType(), -7, 2),
+        (LongType(), 7, -2),
+    )
+    # Product-safe: |x*y| within the width. 11*11 = 121 < 127, and the sign
+    # combinations are what `//`'s floor correction and `abs` care about.
+    _WIDTH_MUL_PAIR_EDGES = (
+        (ByteType(), None, None),
+        (ByteType(), 11, 11),
+        (ByteType(), -11, 11),
+        (ByteType(), 7, -2),
+        (ByteType(), 0, 0),
+        (ShortType(), 181, -181),
+        (IntegerType(), 46340, 1),
+        (LongType(), 7, -2),
+    )
+
+    # ---- Bounds strategies: mixed magnitudes within one column -----------
+    #
+    # Catalyst chooses an expression's type once per column, not per row, so
+    # "some values widen and some don't" is never something a single row can
+    # show. What a batch *can* show is whether the lowering computes each row
+    # independently: a tiny value sharing a batch with a near-boundary one must
+    # come back exactly as it would have alone. Magnitudes are sampled across
+    # the whole int32 range rather than uniformly, because uniform draws almost
+    # never produce a small number next to a large one.
+    #
+    # Every cell is bounded so a pairwise sum stays inside IntegerType
+    # (2**30 - 1 twice is 2**31 - 2, one under Integer.MaxValue). An overflowing
+    # row is not a usable differential -- it raises on the transpiled side and
+    # nulls on the interpreted one -- so the overflow case gets its own pin
+    # instead, test_mixed_magnitude_overflow_fails_the_whole_query.
+    _SUM_SAFE_CELL = 2**30 - 1
+    _MAGNITUDE_SAMPLES = (
+        0,
+        1,
+        -1,
+        7,
+        -7,
+        1000,
+        -1000,
+        10**6,
+        -(10**6),
+        _SUM_SAFE_CELL,
+        -_SUM_SAFE_CELL,
+    )
+    _magnitude_cell = st.one_of(
+        st.none(),
+        st.sampled_from(_MAGNITUDE_SAMPLES),
+        st.integers(-_SUM_SAFE_CELL, _SUM_SAFE_CELL),
+    )
+    _mixed_magnitude_rows = st.lists(
+        st.tuples(_magnitude_cell, _magnitude_cell), min_size=1, max_size=8
+    )
+    # Rows deliberately spanning the extremes, always tried.
+    _MIXED_ROW_EDGES = (
+        [(1, 2), (_SUM_SAFE_CELL, _SUM_SAFE_CELL), (3, 4)],
+        [(_SUM_SAFE_CELL, -_SUM_SAFE_CELL), (0, 0), (None, 5), (7, None)],
+        [(None, None), (1, 1)],
+        [(_SUM_SAFE_CELL, 1), (-_SUM_SAFE_CELL, -1), (0, 0)],
+        [(10**6, 10**6), (1, -1)],
+    )
+
+    # ---- Bounds strategies: the whole double space -----------------------
+    #
+    # NaN and both infinities included. They were excluded before because the
+    # differential compared with `assertEqual`; `_values_equal` handles NaN, so
+    # the exclusion is no longer buying anything except a coverage hole. These
+    # are the values where `_python_mod`'s sign correction and Spark's NaN
+    # ordering are most likely to disagree with CPython.
+    _any_double_strategy = st.one_of(st.none(), st.floats(width=64))
+    _DOUBLE_EDGES = (
+        None,
+        0.0,
+        -0.0,
+        1.0,
+        -1.0,
+        2.675,  # the round() case: bround gives 2.68, Python gives 2.67
+        0.1,
+        float("inf"),
+        float("-inf"),
+        float("nan"),
+        1e308,
+        5e-324,  # the smallest positive subnormal
+    )
+    _DOUBLE_PAIR_EDGES = (
+        (None, None),
+        (None, 1.0),
+        (1.0, None),
+        (0.0, 0.0),
+        (1.0, 0.0),  # ZeroDivisionError / DIVIDE_BY_ZERO on both sides
+        (-0.0, 0.0),
+        (4.0, -2.0),  # `%` gives 0.0 here and -0.0 in Python
+        (7.5, -1e17),  # the dividend the older pmod-based `%` lost
+        (-7.0, 2.0),
+        (7.0, -2.0),
+        (float("nan"), 1.0),
+        (1.0, float("nan")),
+        (float("inf"), float("inf")),
+        (float("inf"), 5.0),
+        (5.0, float("inf")),
+        (-5.0, float("inf")),  # Python's `-5.0 % inf` is inf, not -5.0
+        (1e308, 1e-308),
+    )
+    # A FloatType column has no faithful lowering at all (Python has no
+    # single-precision float), so these feed the fallback assertion rather than
+    # a differential.
+    _float32_strategy = st.one_of(
+        st.none(), st.floats(allow_nan=False, allow_infinity=False, width=32)
+    )
+    # Shift counts wide enough to matter on a narrow column: 8 clears a tinyint,
+    # 16 a smallint and 32 an int, and each is a point where Java's masking would
+    # turn the shift into a no-op and hand back the operand unchanged if the
+    # lowering hadn't widened it to a long first.
+    #
+    # `<<` gets its own, narrower pair of bounds for the same reason
+    # `_lshift_count_strategy` caps at 30: an overflowing `<<` raises on the
+    # transpiled side while the interpreted side returns NULL, so "both raised"
+    # never fires and the differential reports a spurious mismatch. Counts to 40
+    # are only safe because the test that uses them binds Byte/Short operands
+    # (32767 << 40 is 3.6e16, comfortably inside Long); it must not be pointed at
+    # an int or bigint column.
+    _NARROW_LSHIFT_WIDTHS = tuple(w for w in _INTEGRAL_WIDTHS if w[0] in (ByteType(), ShortType()))
+    _narrow_shift_count_strategy = st.one_of(st.none(), st.integers(-2, 40))
+    # ``((dtype, value), count)`` -- the operand is itself the pair
+    # ``_integral_column`` produces, so these bind through
+    # ``_seed_pair_examples(..., keys=("cols", "count"))``.
+    _NARROW_LSHIFT_EDGES = (
+        ((ByteType(), None), None),
+        ((ByteType(), 1), 0),
+        ((ByteType(), 1), 7),
+        ((ByteType(), 1), 8),  # clears a tinyint; masked to a no-op if unwidened
+        ((ByteType(), 127), 8),
+        ((ByteType(), -128), 8),
+        ((ByteType(), 1), 40),
+        ((ByteType(), 0), 40),
+        ((ByteType(), 1), -1),  # negative count: both sides raise
+        ((ShortType(), 1), 16),
+        ((ShortType(), 32767), 8),
+        ((ShortType(), -1), 31),
+    )
+    _NARROW_RSHIFT_EDGES = (
+        ((ByteType(), None), None),
+        ((ByteType(), 1), 8),
+        ((ByteType(), -1), 8),
+        ((ByteType(), -128), 8),
+        ((ByteType(), 127), 7),
+        ((ShortType(), 1), 16),
+        ((ShortType(), -32768), 16),
+        ((IntegerType(), 1), 32),
+        ((IntegerType(), -1), 32),
+        ((IntegerType(), _INT32_MIN), 32),
+        ((LongType(), -1), 64),
+        ((LongType(), 1), 70),
+        ((ByteType(), 1), -1),
+    )
 
 
 # ---- The UDF templates we exercise --------------------------------------
@@ -343,6 +843,186 @@ def neq_pair(x, y):
     return x != y
 
 
+# ---- SPARK-55210 numeric operators --------------------------------------
+#
+# One template per lowering. These are the real exactness check: each runs the
+# same body through CPython and through the transpiled plan and compares, so a
+# one-ULP or off-by-one difference in a lowering shows up as a failure.
+
+
+def floor_div_pair(x, y):
+    # Python floors toward negative infinity where Spark's `div` truncates
+    # toward zero, so the four sign combinations are the interesting ones. A
+    # zero divisor raises on both sides.
+    return x // y
+
+
+def floor_div_three(x):
+    return x // 3
+
+
+def square(x):
+    # `**` expands to repeated multiplication -- exact on integers, which is why
+    # it is only lowered there.
+    return x**2
+
+
+def cube(x):
+    return x**3
+
+
+def true_div_pair(x, y):
+    # `/` on two int32 columns: exact on both sides, and a zero divisor raises
+    # on both (ZeroDivisionError / DIVIDE_BY_ZERO).
+    return x / y
+
+
+def true_div_two_float(x):
+    # A float operand makes `/` exact for any integral width, because Python
+    # converts to double before dividing exactly as the lowering does.
+    return x / 2.0
+
+
+def true_div_float_pair(x, y):
+    return x / y
+
+
+def bit_mix(x, y):
+    # Covers `&`, `|`, and `^` in one body. Bitwise operators cannot overflow,
+    # so the full 64-bit range is safe here.
+    return (x & y) ^ (x | y)
+
+
+def invert_value(x):
+    # `~x` is `-x - 1` in both languages.
+    return ~x
+
+
+def left_shift(x, y):
+    # The guards are part of the contract: a negative count raises (Python
+    # raises ValueError) and an overflowing shift raises rather than wrapping.
+    return x << y
+
+
+def right_shift(x, y):
+    return x >> y
+
+
+def abs_value(x):
+    return abs(x)
+
+
+def min_pair(x, y):
+    # `least` skips NULLs where Python's `min` raises TypeError, so the lowering
+    # guards -- meaning both sides raise for a NULL input.
+    return min(x, y)
+
+
+def max_pair(x, y):
+    return max(x, y)
+
+
+def round_to_tens(x):
+    # HALF_EVEN in both languages: round(15, -1) is 20, round(25, -1) is 20.
+    return round(x, -1)
+
+
+# ---- SPARK-55210 bounds: bodies for the widths, the double space, and the
+# ---- shapes that must fall back ------------------------------------------
+
+
+def add_pair(x, y):
+    # Unguarded `x + y`, unlike `add_two` above, so two same-width narrow
+    # columns really do run their arithmetic at that width.
+    return x + y
+
+
+def mul_pair(x, y):
+    return x * y
+
+
+def mod_pair(x, y):
+    # `_python_mod` on whatever kind of number the column holds. On doubles this
+    # is the sign-correction branch's real test: Python's `%` takes the sign of
+    # the divisor and Spark's Remainder takes the dividend's.
+    return x % y
+
+
+def double_mix(x):
+    # A chain of fractional arithmetic. Nothing here needs the integral/
+    # fractional split, so it should lower for any numeric column -- and stay
+    # exact on doubles, where Python and Spark both compute in IEEE binary64.
+    return (x + 4.5) * 2.0 - 1.5
+
+
+def pow_one(x):
+    # The degenerate expansion: `x ** 1` is zero multiplications, so the
+    # lowering has to return the (widened) base and not a stray `lit(1)`.
+    return x**1
+
+
+def pow_eight(x):
+    # Exactly at _MAX_POW_EXPANSION. One more and the transpiler refuses.
+    return x**8
+
+
+def pow_nine(x):
+    # One past the cap, so refused outright rather than pruned per column type.
+    return x**9
+
+
+def pow_negative(x):
+    # A negative exponent returns a float in Python (`2 ** -1` is 0.5) and has no
+    # exact integral lowering; `0 ** -1` raises ZeroDivisionError.
+    return x**-1
+
+
+def compound_integral(x, y):
+    # Several lowerings in one body, which is what `_record_narrowing`'s
+    # "narrowest requirement wins" rule is for: the shift and `//` both
+    # constrain their operands, and `abs` wraps the result of one of them.
+    return abs(x // 3) + (y >> 2) * 2
+
+
+def int32_div_expr(x, y):
+    # `/` over compound integral operands rather than bare parameters, so
+    # `_int32_exact` has to walk into the arithmetic to prove both sides stay
+    # inside IntegerType. A `y` of 1 divides by zero, which raises on both sides.
+    return (x + 1) / (y - 1)
+
+
+def bit_and_pair(x, y):
+    return x & y
+
+
+def round_two_places(x):
+    # The canonical bround-vs-round divergence on doubles: bround(2.675, 2) is
+    # 2.68 where Python's round(2.675, 2) is 2.67. Must fall back.
+    return round(x, 2)
+
+
+def round_no_scale(x):
+    # The one-argument form, which Python treats as round(x, 0) but which
+    # returns an int rather than preserving the operand's type.
+    return round(x)
+
+
+def lt_pair(x, y):
+    # Ordering on doubles, where Spark puts NaN above everything and Python makes
+    # every NaN comparison False. `_nan_guard` is what reconciles them.
+    return x < y
+
+
+def ge_pair(x, y):
+    return x >= y
+
+
+def concat_pair(a, b):
+    # `'a' + None` raises TypeError in Python where Catalyst's concat would
+    # propagate NULL, so the lowering guards and both sides raise.
+    return a + b
+
+
 # A lambda captured at module scope so ``inspect.getsource`` can read
 # its definition. Exercises the ``ast.Lambda`` branch in
 # ``_get_function_from_ast``.
@@ -367,7 +1047,7 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         "ANSI mode",
     )
 
-    def _run(self, func, return_type, df, *udf_arg_columns, kwargs=None):
+    def _run(self, func, return_type, df, *udf_arg_columns, kwargs=None, all_rows=False):
         """Run ``func`` as a UDF with transpilation on and off, return both rows.
 
         ``udf_arg_columns`` and ``kwargs`` mirror what a caller would
@@ -381,6 +1061,13 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         transpilation-related warning may fire. Without these checks both
         runs could silently fall back to interpreted Python and the
         differential assertion would succeed for the wrong reason.
+
+        ``all_rows`` returns the whole column from each side instead of just the
+        first row. Nearly every test here binds a one-row DataFrame, which cannot
+        see anything that goes wrong *across* rows -- a lowering that hoisted a
+        per-row branch to a per-batch one, say, or arithmetic whose behaviour
+        depends on the other values in the batch. Use it whenever the point of
+        the test is that rows are computed independently of one another.
         """
         func_name = getattr(func, "__name__", repr(func))
         kwargs = kwargs or {}
@@ -403,9 +1090,10 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
                     "meaningless without it",
                 )
                 try:
-                    transpiled_value = df.select(
-                        transpiled_udf(*udf_arg_columns, **kwargs)
-                    ).collect()[0][0]
+                    collected = df.select(transpiled_udf(*udf_arg_columns, **kwargs)).collect()
+                    transpiled_value = (
+                        [row[0] for row in collected] if all_rows else collected[0][0]
+                    )
                 except Exception as e:
                     transpiled_value = _SENTINEL_RAISED
                     transpiled_error = e
@@ -433,9 +1121,8 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         ):
             interpreted_udf = UserDefinedFunction(func, return_type)
             try:
-                interpreted_value = df.select(
-                    interpreted_udf(*udf_arg_columns, **kwargs)
-                ).collect()[0][0]
+                collected = df.select(interpreted_udf(*udf_arg_columns, **kwargs)).collect()
+                interpreted_value = [row[0] for row in collected] if all_rows else collected[0][0]
             except Exception as e:
                 interpreted_value = _SENTINEL_RAISED
                 interpreted_error = e
@@ -449,6 +1136,7 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
                 f"{func_name!r}: transpiled raised {transpiled_error!r} but interpreted did not",
             )
         elif interpreted_error is not None:
+            _assert_udf_actually_ran(self, interpreted_error, func_name)
             interpreted_value = transpiled_value
 
         return transpiled_value, interpreted_value
@@ -465,6 +1153,166 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             ]
         )
         return self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
+
+    def _two_arg_df(self, x, y, dtype):
+        """Two nullable columns of the same type -- ``/`` and the shifts need
+        widths other than LongType (int32 for exact division, and a double
+        column for the fractional lowering)."""
+        return self._typed_two_arg_df(x, y, dtype, dtype)
+
+    def _multi_row_two_arg_df(self, pairs, dtype):
+        """One DataFrame with many rows, for the mixed-magnitude tests.
+
+        Catalyst picks an expression's type once for the whole column, so a batch
+        holding both tiny and near-boundary values is the only place you can see
+        whether the lowering really treats rows independently of one another.
+        """
+        schema = StructType(
+            [
+                StructField("a", dtype, nullable=True),
+                StructField("b", dtype, nullable=True),
+            ]
+        )
+        return self.spark.createDataFrame([Row(a=x, b=y) for x, y in pairs], schema=schema)
+
+    def _typed_two_arg_df(self, x, y, xtype, ytype):
+        """Two nullable columns of independently chosen types.
+
+        The shifts need this: the operand's width is the whole point of a narrow
+        column test, but the *count* has to be able to hold values past that
+        width (a shift of 32 on a tinyint column), and a tinyint count cannot.
+        """
+        schema = StructType(
+            [
+                StructField("a", xtype, nullable=True),
+                StructField("b", ytype, nullable=True),
+            ]
+        )
+        return self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
+
+    def assertSameValue(self, transpiled, interpreted, msg):
+        """``assertEqual`` for the differential, with NaN equal to itself."""
+        self.assertTrue(
+            _values_equal(transpiled, interpreted),
+            f"{msg}: transpiled={transpiled!r} interpreted={interpreted!r}",
+        )
+
+    @staticmethod
+    def _eval_python_count(plan):
+        return plan._jdf.queryExecution().executedPlan().toString().count("EvalPython")
+
+    def _assert_falls_back_to_cpython(
+        self, func, return_type, df, columns, args, label, route=None
+    ):
+        """Assert both halves of a fallback contract.
+
+        A shape outside the transpilable region has to do two things, and
+        checking only the first is the easy mistake: nothing may be lowered,
+        *and* the interpreted result has to be what CPython actually computes.
+        Without the second half a fallback into a broken interpreter would pass,
+        and the whole reason we fall back is that interpreted Python is the
+        reference.
+
+        The "nothing was lowered" half reads the executed plan rather than
+        ``udf.transpiled``, because there are two routes out of the region and
+        only one of them is visible at construction time: an option can be
+        refused by the transpiler (``transpiled`` is empty), or emitted and then
+        pruned during analysis when its declared categories don't match the
+        bound columns -- which is how bigint and FloatType columns drop out.
+
+        ``args`` are the same values the columns hold, passed to ``func``
+        directly so CPython is the oracle.
+
+        ``route`` pins *which* of the two it was, and is worth setting whenever
+        the answer is the point of the test. Without it, a transpiler that has
+        stopped working altogether -- refusing every numeric body -- satisfies
+        every assertion here, because one EvalPython node is one EvalPython node
+        however it got there. ``"pruned"`` in particular is what asserts that the
+        transpiler still emits an option and ``ResolveTranspiledPythonUDFOptions``
+        is the thing rejecting it, which is the whole content of a column-type
+        exclusion like FloatType's.
+        """
+        self.assertEqual(
+            len(columns),
+            len(args),
+            f"{label}: {len(columns)} columns against {len(args)} oracle args -- these "
+            "must stay in lockstep, or `func(*args)` raises a TypeError that this "
+            "helper would read as 'CPython raises here too' and pass",
+        )
+        conf = {
+            "spark.sql.experimental.optimizer.transpilePyUDFs": True,
+            "spark.sql.ansi.enabled": True,
+        }
+        with self.sql_conf(conf):
+            udf = UserDefinedFunction(func, return_type)
+            if route == "refused":
+                self.assertEqual(
+                    [],
+                    udf.transpiled,
+                    f"{label}: the transpiler itself must refuse this body",
+                )
+            elif route == "pruned":
+                self.assertNotEqual(
+                    [],
+                    udf.transpiled,
+                    f"{label}: the transpiler should still emit an option here -- the "
+                    "fallback is supposed to come from option pruning against the "
+                    "bound column types, so an empty list means this test is no "
+                    "longer covering what it claims to",
+                )
+            plan = df.select(udf(*columns))
+            self.assertEqual(
+                1,
+                self._eval_python_count(plan),
+                f"{label}: must stay interpreted, but the plan has no EvalPython node "
+                "-- a lowering exists where we documented that none is exact",
+            )
+            # Narrow, not bare `Exception`: these are the errors a numeric body can
+            # legitimately raise on the inputs we generate. Anything else (a
+            # NameError, an arity TypeError from a drifted `args`) is a broken test,
+            # and swallowing it here would make the fallback look verified while the
+            # value half never ran.
+            try:
+                expected = func(*args)
+                cpython_raised = False
+            except (TypeError, ValueError, ZeroDivisionError, OverflowError):
+                expected, cpython_raised = None, True
+            try:
+                actual = plan.collect()[0][0]
+                udf_raised = False
+            except Exception as e:
+                # A worker that never loaded the UDF would otherwise look like
+                # "CPython raises here too" for every body that legitimately raises.
+                _assert_udf_actually_ran(self, e, label)
+                # `repr` on a PythonException is just the class name, so carry the
+                # message too -- otherwise a failure here says only "it raised".
+                actual, udf_raised = f"{type(e).__name__}: {e}", True
+            if cpython_raised:
+                self.assertTrue(
+                    udf_raised,
+                    f"{label}: CPython raises on {args!r} but the fallback returned {actual!r}",
+                )
+            elif not _representable(expected, return_type):
+                # The interpreted path nulls a result the return type can't hold
+                # rather than raising. Assert that rather than skipping, so the case
+                # is still pinned.
+                self.assertIsNone(
+                    actual,
+                    f"{label}: CPython gives {expected!r} on {args!r}, which "
+                    f"{return_type.simpleString()} cannot represent, so the "
+                    f"interpreted UDF should yield NULL -- got {actual!r}",
+                )
+            else:
+                self.assertFalse(
+                    udf_raised,
+                    f"{label}: CPython returns {expected!r} on {args!r} but the "
+                    f"fallback raised {actual!r}",
+                )
+                self.assertTrue(
+                    _values_equal(actual, expected),
+                    f"{label}: fallback returned {actual!r} on {args!r} where CPython "
+                    f"gives {expected!r}",
+                )
 
     if _have_hypothesis:
 
@@ -663,6 +1511,894 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             df = self._single_arg_df(value, LongType())
             transpiled, interpreted = self._run(lambda_plus_four, LongType(), df, "a")
             self.assertEqual(transpiled, interpreted, f"lambda_plus_four mismatch on {value!r}")
+
+        # ---- SPARK-55210 numeric operators ---------------------------------
+
+        @_hyp_settings
+        @given(x=_long_arith_strategy, y=_long_arith_strategy)
+        @_seed_pair_examples(_DIV_PAIR_EDGES)
+        def test_floor_div_pair_matches_python(self, x, y):
+            # The floor-vs-truncate correction: Python's `-7 // 2` is -4 where
+            # Spark's `div` gives -3, so a missing correction fails here.
+            df = self._two_long_arg_df(x, y)
+            transpiled, interpreted = self._run(floor_div_pair, LongType(), df, "a", "b")
+            self.assertEqual(transpiled, interpreted, f"floor_div_pair mismatch on {x!r}, {y!r}")
+
+        @_hyp_settings
+        @given(value=_long_arith_strategy)
+        @_seed_examples((*_LONG_ARITH_EDGES, 3, -3, 10, -10, 2, -2))
+        def test_floor_div_three_matches_python(self, value):
+            df = self._single_arg_df(value, LongType())
+            transpiled, interpreted = self._run(floor_div_three, LongType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"floor_div_three mismatch on {value!r}")
+
+        @_hyp_settings
+        @given(value=_pow2_strategy)
+        @_seed_examples(_POW_EDGES)
+        def test_square_matches_python(self, value):
+            df = self._single_arg_df(value, LongType())
+            transpiled, interpreted = self._run(square, LongType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"square mismatch on {value!r}")
+
+        @_hyp_settings
+        @given(value=_pow3_strategy)
+        @_seed_examples(_POW_EDGES)
+        def test_cube_matches_python(self, value):
+            # Three-term expansion, and the sign of an odd power.
+            df = self._single_arg_df(value, LongType())
+            transpiled, interpreted = self._run(cube, LongType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"cube mismatch on {value!r}")
+
+        @_hyp_settings
+        @given(value=_int32_strategy)
+        @_seed_examples((*_POW_EDGES, 50000, -50000, _INT32_MAX, _INT32_MIN))
+        def test_square_int_column_matches_python(self, value):
+            # `Multiply` keeps its operands' type, so without widening the base
+            # this would raise ARITHMETIC_OVERFLOW from |x| >= 46341 on an int
+            # column -- well inside the range Python handles.
+            df = self._single_arg_df(value, IntegerType())
+            transpiled, interpreted = self._run(square, LongType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"square(int) mismatch on {value!r}")
+
+        @_hyp_settings
+        @given(x=_int32_strategy, y=_int32_strategy)
+        @_seed_pair_examples(_DIV_PAIR_EDGES)
+        def test_true_div_pair_matches_python(self, x, y):
+            # int32 columns: the only integral width where Spark's
+            # cast-to-double division still matches Python's exact division.
+            df = self._two_arg_df(x, y, IntegerType())
+            transpiled, interpreted = self._run(true_div_pair, DoubleType(), df, "a", "b")
+            self.assertEqual(transpiled, interpreted, f"true_div_pair mismatch on {x!r}, {y!r}")
+
+        @_hyp_settings
+        @given(value=_long_strategy)
+        @_seed_examples(_LONG_EDGES)
+        def test_true_div_two_float_matches_python(self, value):
+            # A float divisor makes this exact even for a bigint column.
+            df = self._single_arg_df(value, LongType())
+            transpiled, interpreted = self._run(true_div_two_float, DoubleType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"true_div_two_float mismatch on {value!r}")
+
+        @_hyp_settings
+        @given(x=_any_double_strategy, y=_any_double_strategy)
+        @_seed_pair_examples(_DOUBLE_PAIR_EDGES)
+        def test_true_div_float_pair_matches_python(self, x, y):
+            # Over the whole double space now, NaN and infinities included: `/` on
+            # doubles is where `inf / inf` and `0.0 / 0.0` live, and the latter
+            # raises on both sides (ZeroDivisionError / DIVIDE_BY_ZERO).
+            df = self._two_arg_df(x, y, DoubleType())
+            transpiled, interpreted = self._run(true_div_float_pair, DoubleType(), df, "a", "b")
+            self.assertSameValue(
+                transpiled, interpreted, f"true_div_float_pair mismatch on {x!r}, {y!r}"
+            )
+
+        @_hyp_settings
+        @given(x=_long_strategy, y=_long_strategy)
+        @_seed_pair_examples(_LONG_PAIR_EDGES)
+        def test_bit_mix_matches_python(self, x, y):
+            # `&`, `|` and `^` over the full 64-bit range -- bitwise operators
+            # cannot overflow, so nothing needs bounding here.
+            df = self._two_long_arg_df(x, y)
+            transpiled, interpreted = self._run(bit_mix, LongType(), df, "a", "b")
+            self.assertEqual(transpiled, interpreted, f"bit_mix mismatch on {x!r}, {y!r}")
+
+        @_hyp_settings
+        @given(value=_long_strategy)
+        @_seed_examples(_LONG_EDGES)
+        def test_invert_value_matches_python(self, value):
+            df = self._single_arg_df(value, LongType())
+            transpiled, interpreted = self._run(invert_value, LongType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"invert_value mismatch on {value!r}")
+
+        @_hyp_settings
+        @given(x=_int32_strategy, y=_lshift_count_strategy)
+        @_seed_pair_examples(_LSHIFT_EDGES)
+        def test_left_shift_matches_python(self, x, y):
+            # Includes negative counts, where both sides must raise.
+            df = self._two_long_arg_df(x, y)
+            transpiled, interpreted = self._run(left_shift, LongType(), df, "a", "b")
+            self.assertEqual(transpiled, interpreted, f"left_shift mismatch on {x!r}, {y!r}")
+
+        @_hyp_settings
+        @given(x=_long_strategy, y=_rshift_count_strategy)
+        @_seed_pair_examples(_RSHIFT_EDGES)
+        def test_right_shift_matches_python(self, x, y):
+            # `>>` only shrinks the magnitude, so the full range is safe; the
+            # interesting parts are that both languages shift arithmetically and
+            # that a count at or past the width shifts every bit out rather than
+            # being masked into a no-op.
+            df = self._two_long_arg_df(x, y)
+            transpiled, interpreted = self._run(right_shift, LongType(), df, "a", "b")
+            self.assertEqual(transpiled, interpreted, f"right_shift mismatch on {x!r}, {y!r}")
+
+        @_hyp_settings
+        @given(x=_int32_strategy, y=_rshift_count_strategy)
+        @_seed_pair_examples(_RSHIFT_EDGES)
+        def test_right_shift_int_column_matches_python(self, x, y):
+            # The same body over an *int* column, where an unwidened Spark shift
+            # would mask a count of 32 into a no-op and return x instead of 0.
+            df = self._two_arg_df(x, y, IntegerType())
+            transpiled, interpreted = self._run(right_shift, LongType(), df, "a", "b")
+            self.assertEqual(transpiled, interpreted, f"right_shift(int) mismatch on {x!r}, {y!r}")
+
+        @_hyp_settings
+        @given(value=_long_arith_strategy)
+        @_seed_examples(_LONG_ARITH_EDGES)
+        def test_abs_value_matches_python(self, value):
+            df = self._single_arg_df(value, LongType())
+            transpiled, interpreted = self._run(abs_value, LongType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"abs_value mismatch on {value!r}")
+
+        @_hyp_settings
+        @given(x=_long_strategy, y=_long_strategy)
+        @_seed_pair_examples(_LONG_PAIR_EDGES)
+        def test_min_pair_matches_python(self, x, y):
+            # A NULL operand raises on both sides: Python's `min` raises
+            # TypeError and the lowering guards because `least` would skip it.
+            df = self._two_long_arg_df(x, y)
+            transpiled, interpreted = self._run(min_pair, LongType(), df, "a", "b")
+            self.assertEqual(transpiled, interpreted, f"min_pair mismatch on {x!r}, {y!r}")
+
+        @_hyp_settings
+        @given(x=_long_strategy, y=_long_strategy)
+        @_seed_pair_examples(_LONG_PAIR_EDGES)
+        def test_max_pair_matches_python(self, x, y):
+            df = self._two_long_arg_df(x, y)
+            transpiled, interpreted = self._run(max_pair, LongType(), df, "a", "b")
+            self.assertEqual(transpiled, interpreted, f"max_pair mismatch on {x!r}, {y!r}")
+
+        @_hyp_settings
+        @given(value=_long_arith_strategy)
+        @_seed_examples((*_LONG_ARITH_EDGES, 15, 25, -15, -25, 5, -5))
+        def test_round_to_tens_matches_python(self, value):
+            # HALF_EVEN parity: the 25 seeds are where HALF_UP would diverge
+            # from Python (15 rounds to 20 either way).
+            df = self._single_arg_df(value, LongType())
+            transpiled, interpreted = self._run(round_to_tens, LongType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"round_to_tens mismatch on {value!r}")
+
+        # ---- Bounds 1: every integral width, not just LongType --------------
+
+        @_hyp_settings
+        @given(cols=_integral_column(cap=_LONG_ARITH_BOUND, headroom=4))
+        @_seed_examples(_WIDTH_EDGES_PLUS_FOUR_SAFE, key="cols")
+        def test_plus_four_across_integral_widths(self, cols):
+            # `x + 4` at every width, staying 4 clear of each end. A byte or short
+            # column widens to IntegerType for the addition and could take the full
+            # range, but an *int* column does not -- the literal is already an int,
+            # so nothing widens and 2147483647 + 4 raises where Python answers
+            # 2147483651. That boundary is the tier-2 overflow divergence, pinned by
+            # test_overflow_raises_where_python_promotes; here we test the interior.
+            dtype, value = cols
+            df = self._single_arg_df(value, dtype)
+            transpiled, interpreted = self._run(plus_four_unsafe, LongType(), df, "a")
+            self.assertSameValue(
+                transpiled, interpreted, f"plus_four on {dtype.simpleString()} {value!r}"
+            )
+
+        @_hyp_settings
+        @given(cols=_integral_sum_pair())
+        @_seed_examples(_WIDTH_SUM_PAIR_EDGES, key="cols")
+        def test_add_pair_across_integral_widths(self, cols):
+            # Two columns of the same narrow width, so the addition really happens
+            # at that width rather than being promoted by a literal.
+            dtype, x, y = cols
+            df = self._two_arg_df(x, y, dtype)
+            transpiled, interpreted = self._run(add_pair, LongType(), df, "a", "b")
+            self.assertSameValue(
+                transpiled, interpreted, f"add_pair on {dtype.simpleString()} {x!r}, {y!r}"
+            )
+
+        @_hyp_settings
+        @given(cols=_integral_mul_pair())
+        @_seed_examples(_WIDTH_MUL_PAIR_EDGES, key="cols")
+        def test_mul_pair_across_integral_widths(self, cols):
+            dtype, x, y = cols
+            df = self._two_arg_df(x, y, dtype)
+            transpiled, interpreted = self._run(mul_pair, LongType(), df, "a", "b")
+            self.assertSameValue(
+                transpiled, interpreted, f"mul_pair on {dtype.simpleString()} {x!r}, {y!r}"
+            )
+
+        @_hyp_settings
+        @given(cols=_integral_mul_pair())
+        @_seed_examples(_WIDTH_MUL_PAIR_EDGES, key="cols")
+        def test_mod_pair_across_integral_widths(self, cols):
+            # `_python_mod`'s sign correction at every width. A zero divisor raises
+            # on both sides; `%` cannot overflow, so the mul-safe bounds are ample.
+            dtype, x, y = cols
+            df = self._two_arg_df(x, y, dtype)
+            transpiled, interpreted = self._run(mod_pair, LongType(), df, "a", "b")
+            self.assertSameValue(
+                transpiled, interpreted, f"mod_pair on {dtype.simpleString()} {x!r}, {y!r}"
+            )
+
+        @_hyp_settings
+        @given(cols=_integral_sum_pair())
+        @_seed_examples(_WIDTH_SUM_PAIR_EDGES, key="cols")
+        def test_floor_div_across_integral_widths(self, cols):
+            # Halved ranges keep `MinValue // -1` out, which is the one `//` case
+            # that overflows (Python answers 2**63 where the column type can't).
+            dtype, x, y = cols
+            df = self._two_arg_df(x, y, dtype)
+            transpiled, interpreted = self._run(floor_div_pair, LongType(), df, "a", "b")
+            self.assertSameValue(
+                transpiled, interpreted, f"floor_div on {dtype.simpleString()} {x!r}, {y!r}"
+            )
+
+        @_hyp_settings
+        @given(cols=_integral_column(cap=2**31))
+        @_seed_examples(_WIDTH_EDGES, key="cols")
+        def test_square_across_integral_widths(self, cols):
+            # This is the test the widening cast in `_lower_int_pow` exists for.
+            # `Multiply` keeps its operands' type, so without `cast("long")` this
+            # would raise ARITHMETIC_OVERFLOW from |x| >= 12 on a tinyint and
+            # |x| >= 46341 on an int -- ranges Python handles without blinking.
+            dtype, value = cols
+            df = self._single_arg_df(value, dtype)
+            transpiled, interpreted = self._run(square, LongType(), df, "a")
+            self.assertSameValue(
+                transpiled, interpreted, f"square on {dtype.simpleString()} {value!r}"
+            )
+
+        @_hyp_settings
+        @given(cols=_integral_column())
+        @_seed_examples(_WIDTH_EDGES, key="cols")
+        def test_pow_one_across_integral_widths(self, cols):
+            # The degenerate expansion: zero multiplications, so the lowering has
+            # to hand back the widened base. Folding to `lit(1)` here would be the
+            # obvious off-by-one, and the full width range catches it.
+            dtype, value = cols
+            df = self._single_arg_df(value, dtype)
+            transpiled, interpreted = self._run(pow_one, LongType(), df, "a")
+            self.assertSameValue(
+                transpiled, interpreted, f"pow_one on {dtype.simpleString()} {value!r}"
+            )
+
+        @_hyp_settings
+        @given(cols=_integral_column(cap=9))
+        @_seed_examples(
+            ((ByteType(), 9), (ByteType(), -9), (LongType(), 2), (ShortType(), 0)),
+            key="cols",
+        )
+        def test_pow_at_the_expansion_cap(self, cols):
+            # Exactly _MAX_POW_EXPANSION, so seven multiplications. |x| <= 9 keeps
+            # 9**8 = 4.3e7 inside Long; one higher exponent and the transpiler
+            # refuses outright (see test_pow_above_the_cap_falls_back).
+            dtype, value = cols
+            df = self._single_arg_df(value, dtype)
+            transpiled, interpreted = self._run(pow_eight, LongType(), df, "a")
+            self.assertSameValue(
+                transpiled, interpreted, f"pow_eight on {dtype.simpleString()} {value!r}"
+            )
+
+        @_hyp_settings
+        @given(cols=_integral_column(cap=_LONG_ARITH_BOUND))
+        @_seed_examples(_WIDTH_EDGES, key="cols")
+        def test_abs_across_integral_widths(self, cols):
+            # Every width's *full* range for byte, short and int, minimum included.
+            # That used to need the minimum excluded, because two's complement has
+            # no positive counterpart for a width's minimum and `Abs` keeps its
+            # operand's type, so `abs(-32768)` on a smallint raised. Promotion
+            # removed the need for the exclusion rather than the test working around
+            # it -- `forNegation` widens by one step, and 32768 fits an int.
+            #
+            # The `cap` stays, and only bites on bigint, for a reason promotion
+            # cannot fix: `abs(Long.MinValue)` is 9223372036854775808, one past
+            # Long.MaxValue, so a UDF declared `-> LongType` cannot return it however
+            # wide we compute. That is the return-type limit, not an intermediate
+            # one, and it is pinned by
+            # test_abs_at_the_bigint_minimum_exceeds_the_return_type.
+            dtype, value = cols
+            df = self._single_arg_df(value, dtype)
+            transpiled, interpreted = self._run(abs_value, LongType(), df, "a")
+            self.assertSameValue(
+                transpiled, interpreted, f"abs on {dtype.simpleString()} {value!r}"
+            )
+
+        @_hyp_settings
+        @given(cols=_integral_column(cap=_LONG_ARITH_BOUND // 10))
+        @_seed_examples(_WIDTH_EDGES, key="cols")
+        def test_round_no_scale_across_integral_widths(self, cols):
+            # `round(x)` is `round(x, 0)`, which is the identity on an integer --
+            # but it goes through `bround` all the same, and on a narrow column
+            # that means the scale-0 path has to preserve the value exactly.
+            dtype, value = cols
+            df = self._single_arg_df(value, dtype)
+            transpiled, interpreted = self._run(round_no_scale, LongType(), df, "a")
+            self.assertSameValue(
+                transpiled, interpreted, f"round(x) on {dtype.simpleString()} {value!r}"
+            )
+
+        @_hyp_settings
+        @given(cols=_integral_column(cap=_INT32_MAX))
+        @_seed_examples(_WIDTH_EDGES, key="cols")
+        def test_bit_invert_across_integral_widths(self, cols):
+            dtype, value = cols
+            df = self._single_arg_df(value, dtype)
+            transpiled, interpreted = self._run(invert_value, LongType(), df, "a")
+            self.assertSameValue(transpiled, interpreted, f"~x on {dtype.simpleString()} {value!r}")
+
+        @_hyp_settings
+        @given(cols=_integral_pair_for_div())
+        @_seed_examples(
+            (
+                (ByteType(), 7, 2),
+                (ByteType(), -7, 2),
+                (ByteType(), 1, 0),
+                (ShortType(), 3, 7),
+                (IntegerType(), _INT32_MAX, 1),
+                (IntegerType(), _INT32_MIN, -1),
+            ),
+            key="cols",
+        )
+        def test_true_div_across_int32_widths(self, cols):
+            # `/` lowers for Byte/Short/Integer but never LongType -- every int32
+            # value is exactly representable as a double, so Spark's cast-then-
+            # divide is correctly rounded and matches Python's exact division.
+            # The bigint half of this boundary is
+            # test_bigint_true_div_falls_back.
+            dtype, x, y = cols
+            df = self._two_arg_df(x, y, dtype)
+            transpiled, interpreted = self._run(true_div_pair, DoubleType(), df, "a", "b")
+            self.assertSameValue(
+                transpiled, interpreted, f"x / y on {dtype.simpleString()} {x!r}, {y!r}"
+            )
+
+        @_hyp_settings
+        @given(
+            cols=_integral_column(widths=_NARROW_LSHIFT_WIDTHS),
+            count=_narrow_shift_count_strategy,
+        )
+        @_seed_pair_examples(_NARROW_LSHIFT_EDGES, keys=("cols", "count"))
+        def test_left_shift_narrow_column(self, cols, count):
+            # Byte/Short operands only, so a count of 40 still fits in a Long and
+            # the differential stays usable -- see _NARROW_LSHIFT_WIDTHS. Counts
+            # past the operand's own width are the point: Java would mask `x << 8`
+            # on a tinyint down to a no-op, and Python shifts by the full count.
+            dtype, value = cols
+            df = self._typed_two_arg_df(value, count, dtype, IntegerType())
+            transpiled, interpreted = self._run(left_shift, LongType(), df, "a", "b")
+            self.assertSameValue(
+                transpiled,
+                interpreted,
+                f"x << n on {dtype.simpleString()} {value!r}, {count!r}",
+            )
+
+        @_hyp_settings
+        @given(cols=_integral_column(), count=_rshift_count_strategy)
+        @_seed_pair_examples(_NARROW_RSHIFT_EDGES, keys=("cols", "count"))
+        def test_right_shift_narrow_column(self, cols, count):
+            # `>>` only shrinks the magnitude, so every width is safe here, over the
+            # full count range. A count at or past the width must shift every bit
+            # out (0, or -1 for a negative operand) rather than being masked into a
+            # no-op -- which on a tinyint means a count of 8, not 64.
+            dtype, value = cols
+            df = self._typed_two_arg_df(value, count, dtype, IntegerType())
+            transpiled, interpreted = self._run(right_shift, LongType(), df, "a", "b")
+            self.assertSameValue(
+                transpiled,
+                interpreted,
+                f"x >> n on {dtype.simpleString()} {value!r}, {count!r}",
+            )
+
+        @_hyp_settings
+        @given(cols=_integral_sum_pair())
+        @_seed_examples(_WIDTH_SUM_PAIR_EDGES, key="cols")
+        def test_compound_integral_expression(self, cols):
+            # `abs(x // 3) + (y >> 2) * 2` -- several lowerings in one body, which
+            # is what `_record_narrowing`'s "narrowest requirement wins" rule
+            # exists for. If any one of them narrowed its parameter wrongly the
+            # option would be kept for a column type it can't reproduce, and this
+            # is where that shows up as a value mismatch rather than a crash.
+            dtype, x, y = cols
+            df = self._two_arg_df(x, y, dtype)
+            transpiled, interpreted = self._run(compound_integral, LongType(), df, "a", "b")
+            self.assertSameValue(
+                transpiled, interpreted, f"compound on {dtype.simpleString()} {x!r}, {y!r}"
+            )
+
+        @_hyp_settings
+        @given(cols=_integral_pair_for_div(cap=2**30))
+        @_seed_examples(
+            (
+                (IntegerType(), 7, 3),
+                (IntegerType(), -7, 3),
+                (IntegerType(), 5, 1),
+                (ByteType(), 11, 2),
+                (ShortType(), 0, 5),
+            ),
+            key="cols",
+        )
+        def test_int32_div_expression(self, cols):
+            # `/` over compound operands rather than bare parameters, so
+            # `_int32_exact` has to walk into the arithmetic to prove both sides
+            # stay inside IntegerType. `y == 1` divides by zero on both sides.
+            dtype, x, y = cols
+            df = self._two_arg_df(x, y, dtype)
+            transpiled, interpreted = self._run(int32_div_expr, DoubleType(), df, "a", "b")
+            self.assertSameValue(
+                transpiled, interpreted, f"(x+1)/(y-1) on {dtype.simpleString()} {x!r}, {y!r}"
+            )
+
+        # ---- Bounds 1b: mixed magnitudes inside one column -------------------
+
+        @_hyp_settings
+        @given(rows=_mixed_magnitude_rows)
+        @_seed_examples(_MIXED_ROW_EDGES, key="rows")
+        def test_mixed_magnitude_rows_compute_independently(self, rows):
+            # The batch-independence property. Every other differential in this
+            # file binds a single row, which cannot distinguish "computed this row
+            # correctly" from "computed something correct for the batch". Here one
+            # column holds values from 0 up to Integer.MaxValue/2, and each row has
+            # to come back exactly as it would have alone.
+            #
+            # `add_two` rather than `add_pair` because it guards NULL itself: an
+            # unguarded body raises in CPython on a NULL row, `_run` then masks the
+            # comparison, and a masked row proves nothing. Guarded, every row in
+            # the batch carries a real expected value.
+            df = self._multi_row_two_arg_df(rows, IntegerType())
+            transpiled, interpreted = self._run(add_two, LongType(), df, "a", "b", all_rows=True)
+            self.assertSameValue(
+                transpiled, interpreted, f"add_two over {len(rows)} mixed-magnitude rows {rows!r}"
+            )
+
+        @_hyp_settings
+        @given(rows=_mixed_magnitude_rows)
+        @_seed_examples(_MIXED_ROW_EDGES, key="rows")
+        def test_mixed_magnitude_rows_across_widths(self, rows):
+            # The same property where the column type is narrower than the values
+            # being added, so the arithmetic runs at a width the operands do not
+            # fill. `x + y` on two tinyints is ByteType arithmetic; scaling the
+            # generated values down keeps every row in range while preserving the
+            # spread of magnitudes relative to the width.
+            for dtype, limit in ((ByteType(), 63), (ShortType(), 16383)):
+                scaled = [
+                    (
+                        None if x is None else max(-limit, min(limit, x % (limit + 1))),
+                        None if y is None else max(-limit, min(limit, y % (limit + 1))),
+                    )
+                    for x, y in rows
+                ]
+                with self.subTest(dtype=dtype.simpleString()):
+                    df = self._multi_row_two_arg_df(scaled, dtype)
+                    transpiled, interpreted = self._run(
+                        add_two, LongType(), df, "a", "b", all_rows=True
+                    )
+                    self.assertSameValue(
+                        transpiled,
+                        interpreted,
+                        f"add_two on {dtype.simpleString()} over {scaled!r}",
+                    )
+
+        # ---- Bounds 2: the whole double space, NaN and infinities included ---
+
+        @_hyp_settings
+        @given(value=_any_double_strategy)
+        @_seed_examples(_DOUBLE_EDGES)
+        def test_double_mix_matches_python(self, value):
+            # `(x + 4.5) * 2.0 - 1.5`. Doubles are the one numeric kind where
+            # Spark and CPython genuinely share a representation, so this should be
+            # bit-exact across the entire space -- including the subnormals and
+            # both infinities, where a lowering that reordered the arithmetic
+            # would not be.
+            df = self._single_arg_df(value, DoubleType())
+            transpiled, interpreted = self._run(double_mix, DoubleType(), df, "a")
+            self.assertSameValue(transpiled, interpreted, f"double_mix on {value!r}")
+
+        @_hyp_settings
+        @given(x=_any_double_strategy, y=_any_double_strategy)
+        @_seed_pair_examples(_DOUBLE_PAIR_EDGES)
+        def test_double_mod_matches_python(self, x, y):
+            # The strongest test of `_python_mod`. Python's `%` takes the sign of
+            # the divisor where Spark's Remainder takes the dividend's, and the
+            # correction has to hold for NaN (every comparison in it is False), for
+            # an infinite divisor (`-5.0 % inf` is `inf`, not `-5.0`), and for a
+            # dividend so much smaller than the divisor that adding them back
+            # rounds (`7.5 % -1e17`, which the older pmod-based form got wrong).
+            df = self._two_arg_df(x, y, DoubleType())
+            transpiled, interpreted = self._run(mod_pair, DoubleType(), df, "a", "b")
+            self.assertSameValue(transpiled, interpreted, f"x % y on {x!r}, {y!r}")
+
+        @_hyp_settings
+        @given(x=_any_double_strategy, y=_any_double_strategy)
+        @_seed_pair_examples(_DOUBLE_PAIR_EDGES)
+        def test_double_add_pair_matches_python(self, x, y):
+            df = self._two_arg_df(x, y, DoubleType())
+            transpiled, interpreted = self._run(add_pair, DoubleType(), df, "a", "b")
+            self.assertSameValue(transpiled, interpreted, f"x + y on doubles {x!r}, {y!r}")
+
+        @_hyp_settings
+        @given(x=_any_double_strategy, y=_any_double_strategy)
+        @_seed_pair_examples(_DOUBLE_PAIR_EDGES)
+        def test_double_mul_pair_matches_python(self, x, y):
+            # Double arithmetic can't overflow into an error the way integral
+            # arithmetic does -- it saturates to infinity, in both languages -- so
+            # unlike every integral test above this one needs no bounding at all.
+            df = self._two_arg_df(x, y, DoubleType())
+            transpiled, interpreted = self._run(mul_pair, DoubleType(), df, "a", "b")
+            self.assertSameValue(transpiled, interpreted, f"x * y on doubles {x!r}, {y!r}")
+
+        @_hyp_settings
+        @given(value=_any_double_strategy)
+        @_seed_examples(_DOUBLE_EDGES)
+        def test_abs_double_matches_python(self, value):
+            # `abs` is exact for either kind of number. On doubles the interesting
+            # inputs are the signed zeroes and NaN, where "exact" needs saying:
+            # `abs(-0.0)` is `0.0` and `abs(nan)` is NaN in both languages.
+            df = self._single_arg_df(value, DoubleType())
+            transpiled, interpreted = self._run(abs_value, DoubleType(), df, "a")
+            self.assertSameValue(transpiled, interpreted, f"abs on {value!r}")
+
+        # ---- Bounds 3: just outside the region -- these must fall back -------
+
+        @_hyp_settings
+        @given(x=_long_strategy, y=_long_strategy)
+        @_seed_pair_examples(
+            (*_LONG_PAIR_EDGES, (2**53 + 1, 1), (2**62, 3), (_LONG_BOUND, _LONG_BOUND))
+        )
+        def test_bigint_true_div_falls_back(self, x, y):
+            # The far side of the int32 boundary. Python divides the exact integers
+            # and rounds once; Spark casts each operand to double first, so past
+            # 2^53 the operands themselves have already been rounded. Only the
+            # int32 option is emitted, and it does not match a bigint column -- so
+            # this falls back by *pruning*, which is what `route="pruned"` pins.
+            df = self._two_long_arg_df(x, y)
+            self._assert_falls_back_to_cpython(
+                true_div_pair,
+                DoubleType(),
+                df,
+                ("a", "b"),
+                (x, y),
+                f"x / y on two bigints {x!r}, {y!r}",
+                route="pruned",
+            )
+
+        @_hyp_settings
+        @given(x=_any_double_strategy, y=_any_double_strategy)
+        @_seed_pair_examples(_DOUBLE_PAIR_EDGES)
+        def test_integral_only_operators_fall_back_on_doubles(self, x, y):
+            # The operators with no exact double lowering. Each is refused for a
+            # different reason and they are worth keeping distinct:
+            #   `**`   repeated multiplication rounds per step; CPython calls pow
+            #   `//`   floor(a/b) can land the far side of an integer
+            #   `&`    Python raises TypeError on floats outright
+            #   round  bround rounds the shortest decimal repr, not the exact value
+            #   min    Python returns its first argument for a NaN operand
+            # The value half matters as much as the fallback: `round(2.675, 2)`
+            # must come back 2.67, and `min(nan, 1.0)` must come back NaN.
+            one = self._single_arg_df(x, DoubleType())
+            two = self._two_arg_df(x, y, DoubleType())
+            for func, df, columns, args in (
+                (cube, one, ("a",), (x,)),
+                (round_two_places, one, ("a",), (x,)),
+                (floor_div_pair, two, ("a", "b"), (x, y)),
+                (bit_and_pair, two, ("a", "b"), (x, y)),
+                (min_pair, two, ("a", "b"), (x, y)),
+            ):
+                with self.subTest(func=func.__name__):
+                    self._assert_falls_back_to_cpython(
+                        func,
+                        DoubleType(),
+                        df,
+                        columns,
+                        args,
+                        f"{func.__name__} on doubles {args!r}",
+                    )
+
+        @_hyp_settings
+        @given(x=_float32_strategy, y=_float32_strategy)
+        @_seed_pair_examples(
+            (
+                (None, None),
+                (1.5, 2.5),
+                (0.0, 0.0),
+                (-9.726323523430302e29, -260872823898112.0),  # float32 -> inf
+                (1.0967034258749122e-15, 3.0),
+            )
+        )
+        def test_float_column_falls_back(self, x, y):
+            # A FloatType column has no faithful lowering at all: Python has no
+            # single-precision float, so the value arrives widened to a double and
+            # every step runs in double, while an expression that stays in
+            # FloatType rounds to 24 bits per step -- and saturates to infinity
+            # while Python still has 250 orders of magnitude of room. Sampled
+            # random float pairs disagreed on 398 of 398 rows for `(x + y) * y`.
+            #
+            # Options *are* emitted (the transpiler works off categories, not
+            # column types), so the fallback comes from
+            # ResolveTranspiledPythonUDFOptions declining FloatType -- hence
+            # `route="pruned"`. Reverting that exclusion turns this test red.
+            df = self._two_arg_df(x, y, FloatType())
+            for func in (add_pair, mul_pair, mod_pair):
+                with self.subTest(func=func.__name__):
+                    self._assert_falls_back_to_cpython(
+                        func,
+                        DoubleType(),
+                        df,
+                        ("a", "b"),
+                        (x, y),
+                        f"{func.__name__} on FloatType columns {x!r}, {y!r}",
+                        route="pruned",
+                    )
+
+        @_hyp_settings
+        @given(cols=_integral_column(cap=1000))
+        @_seed_examples(((LongType(), 2), (LongType(), 0), (ByteType(), 3)), key="cols")
+        def test_pow_above_the_cap_falls_back(self, cols):
+            # One past _MAX_POW_EXPANSION. Refused by the transpiler itself rather
+            # than pruned, because the exponent is in the body and not the column
+            # type -- so no option is emitted for any column at all.
+            dtype, value = cols
+            df = self._single_arg_df(value, dtype)
+            self._assert_falls_back_to_cpython(
+                pow_nine,
+                DoubleType(),
+                df,
+                ("a",),
+                (value,),
+                f"x ** 9 on {dtype.simpleString()} {value!r}",
+                route="refused",
+            )
+
+        @_hyp_settings
+        @given(value=_long_arith_strategy)
+        @_seed_examples((None, 0, 1, -1, 2, 7))
+        def test_pow_negative_exponent_falls_back(self, value):
+            # `x ** -1` is 0.5-shaped: a float result with no exact integral
+            # lowering, and `0 ** -1` raises ZeroDivisionError.
+            df = self._single_arg_df(value, LongType())
+            self._assert_falls_back_to_cpython(
+                pow_negative,
+                DoubleType(),
+                df,
+                ("a",),
+                (value,),
+                f"x ** -1 on {value!r}",
+                route="refused",
+            )
+
+        # ---- Bounds 4: the kept divergences, and the closed ones --------------
+        #
+        # Mostly not differentials: they assert that transpiled and CPython differ
+        # in the specific way transpile.py's catalog says they do. A test that
+        # asserted agreement on a tier-2 row would be asserting a fiction; the
+        # value is that changing one deliberately is loud, and changing one by
+        # accident is louder.
+        #
+        # Two here now run the other way, because the divergence they described was
+        # closed rather than kept: `test_nan_comparison_matches_python` and
+        # `test_string_concat_with_null_raises_like_python`. They are worth keeping
+        # as explicit cases rather than deleting, since each states the CPython
+        # facts directly -- a differential alone would still pass if Spark's own
+        # semantics shifted, because both sides would move together.
+        #
+        # They take no `@given`, so the `RUN_HYPOTHESIS` gate isn't buying them
+        # anything -- but it isn't costing much either: `build_and_test.yml` flips
+        # that gate on precisely when a PR touches the transpiler or this file,
+        # which is when a divergence pin has something to say. They live here
+        # rather than in the unit suite to keep the four bounds flavours readable
+        # as one story; if the gate ever stops tracking transpiler changes, move
+        # them to `test_udf_transpile_unit.py`, which runs unconditionally.
+
+        def test_mod_zero_sign_is_semantically_equal(self):
+            # Tier 1 (semantically equal). `_python_mod` gives a zero result the
+            # dividend's sign where Python gives it the divisor's, so `4.0 % -2.0`
+            # is 0.0 here and -0.0 in CPython. They compare equal, so nothing
+            # downstream can tell -- which is exactly the claim, and `copysign` is
+            # the only way to see it. If a future change makes the lowering match
+            # Python's sign this test should be deleted, not "fixed".
+            self.assertEqual(0.0, -0.0, "the premise: the two compare equal")
+            self.assertEqual(-1.0, math.copysign(1, 4.0 % -2.0), "CPython signs it negative")
+            df = self._two_arg_df(4.0, -2.0, DoubleType())
+            transpiled, _ = self._run(mod_pair, DoubleType(), df, "a", "b")
+            self.assertEqual(0.0, transpiled)
+            self.assertEqual(
+                1.0,
+                math.copysign(1, transpiled),
+                "the lowering is documented as signing a zero remainder positively "
+                "(it follows the dividend); if that changed, update the tier-1 row "
+                "in transpile.py's divergence catalog",
+            )
+
+        def test_abs_at_the_width_minimum_matches_python(self):
+            # This started life as a tier-2 pin: two's complement has no positive
+            # counterpart for a width's minimum, `Abs` keeps its operand's type, and
+            # so `abs(x)` raised ARITHMETIC_OVERFLOW on a smallint holding -32768
+            # where Python simply answers 32768. Operand promotion closed it --
+            # `forNegation` widens by one step, and each of these minima fits the
+            # declared LongType return once widened.
+            #
+            # Kept, inverted, because it is the cheapest demonstration that promotion
+            # is per-width rather than a blanket cast: byte, short and int each need a
+            # *different* target to make this work.
+            for dtype, minimum in (
+                (ByteType(), -128),
+                (ShortType(), -32768),
+                (IntegerType(), _INT32_MIN),
+            ):
+                with self.subTest(dtype=dtype.simpleString()):
+                    df = self._single_arg_df(minimum, dtype)
+                    transpiled, interpreted = self._run(abs_value, LongType(), df, "a")
+                    self.assertSameValue(
+                        transpiled, interpreted, f"abs at the {dtype.simpleString()} minimum"
+                    )
+                    self.assertEqual(
+                        -minimum,
+                        transpiled,
+                        f"abs({minimum}) on a {dtype.simpleString()} column must be "
+                        f"{-minimum}, as it is in Python",
+                    )
+
+        def test_abs_at_the_bigint_minimum_exceeds_the_return_type(self):
+            # The one width promotion cannot rescue, and it is worth being explicit
+            # about why: `forNegation(LongType)` is decimal(19, 0), so the `abs` itself
+            # succeeds -- it is the cast back to the UDF's declared LongType that
+            # fails, because 9223372036854775808 is one past Long.MaxValue. No
+            # intermediate width fixes that; only declaring a wider return type would.
+            #
+            # Interpreted Python returns NULL here rather than raising (makeFromJava
+            # takes only Byte/Short/Int/Long for LongType, and a wider Python int
+            # matches none of them), so this is also a place the two paths genuinely
+            # differ -- see the tier-2 row in transpile.py.
+            minimum = -(2**63)
+            self.assertFalse(
+                _representable(abs(minimum), LongType()),
+                "premise: abs(Long.MinValue) does not fit LongType",
+            )
+            df = self._single_arg_df(minimum, LongType())
+            with self.sql_conf(
+                {
+                    "spark.sql.experimental.optimizer.transpilePyUDFs": True,
+                    "spark.sql.ansi.enabled": True,
+                }
+            ):
+                udf = UserDefinedFunction(abs_value, LongType())
+                self.assertTrue(udf.transpiled)
+                with self.assertRaises(Exception) as ctx:
+                    df.select(udf("a")).collect()
+            self.assertIn("overflow", str(ctx.exception).lower())
+
+        def test_overflow_only_raises_when_the_return_type_cannot_hold_it(self):
+            # This was the sharpest edge in the numeric surface, and promotion blunted
+            # it into something defensible.
+            #
+            # It used to be that any intermediate too wide for the *input* type raised,
+            # regardless of whether the answer would have fit the declared return type.
+            # `x + 4` on an int column at Integer.MaxValue raised even though 2147483651
+            # sits comfortably in a bigint, purely because the literal was an int so
+            # nothing widened. Promotion computes the width from the input types
+            # instead, so those cases now compute.
+            #
+            # What remains is a much narrower and more honest failure: the answer really
+            # does not fit what the UDF declared it returns. `x * 3` on a bigint at
+            # Long.MaxValue/2 is 13835058055282163709, past Long.MaxValue, so a UDF
+            # declared `-> LongType` cannot produce it however wide we compute. Note the
+            # error moved with the cause -- it is CAST_OVERFLOW at the final cast now,
+            # not ARITHMETIC_OVERFLOW at the multiply, because the multiply itself
+            # succeeds in decimal(29, 0).
+            #
+            # Interpreted Python does not raise here; it returns NULL, because
+            # `EvaluatePython.makeFromJava` accepts only Byte/Short/Int/Long for
+            # LongType and a wider Python int matches none of them. We deliberately do
+            # not copy that -- see the tier-2 row in transpile.py. Raising tells the
+            # caller their return type is too narrow; a NULL just loses the row.
+            computes = (
+                (plus_four_unsafe, IntegerType(), _INT32_MAX),
+                (times_three, IntegerType(), _INT32_MAX),
+            )
+            for func, dtype, value in computes:
+                with self.subTest(func=func.__name__, dtype=dtype.simpleString(), expect="ok"):
+                    df = self._single_arg_df(value, dtype)
+                    transpiled, interpreted = self._run(func, LongType(), df, "a")
+                    self.assertSameValue(
+                        transpiled, interpreted, f"{func.__name__} on {dtype.simpleString()}"
+                    )
+                    self.assertEqual(func(value), transpiled, "and it matches CPython")
+
+            # Past the declared return type, though, it still raises.
+            value = _LONG_BOUND // 2
+            self.assertFalse(
+                _representable(times_three(value), LongType()),
+                "premise: CPython's answer does not fit LongType",
+            )
+            df = self._single_arg_df(value, LongType())
+            with self.sql_conf(
+                {
+                    "spark.sql.experimental.optimizer.transpilePyUDFs": True,
+                    "spark.sql.ansi.enabled": True,
+                }
+            ):
+                udf = UserDefinedFunction(times_three, LongType())
+                self.assertTrue(udf.transpiled)
+                with self.assertRaises(Exception) as ctx:
+                    df.select(udf("a")).collect()
+            self.assertIn("overflow", str(ctx.exception).lower())
+
+        def test_nan_comparison_matches_python(self):
+            # This one used to be a tier-2 pin, asserting that transpiled
+            # `NaN == NaN` came back True where CPython says False. `_nan_guard`
+            # closed it, so the test is now the opposite claim: the lowering agrees.
+            #
+            # Kept as an explicit case rather than folded into the differentials
+            # above, because it states the four Python facts directly. If Spark's
+            # own NaN semantics ever change, the differentials would still pass
+            # (both sides move together) while this would not.
+            nan = float("nan")
+            self.assertFalse(nan == nan, "CPython: NaN is not equal to itself")
+            self.assertTrue(nan != nan, "CPython: ... so `!=` is True")
+            self.assertFalse(nan > 1.0, "CPython: every NaN ordering is False")
+            self.assertFalse(nan <= nan, "CPython: including against itself")
+            for func, args, expected in (
+                (eq_pair, (nan, nan), False),
+                (neq_pair, (nan, nan), True),
+                (eq_pair, (nan, 1.0), False),
+                (lt_pair, (nan, 1.0), False),
+                (ge_pair, (nan, 1.0), False),
+                (ge_pair, (nan, nan), False),
+            ):
+                with self.subTest(func=func.__name__, args=args):
+                    df = self._two_arg_df(args[0], args[1], DoubleType())
+                    with self.sql_conf(
+                        {
+                            "spark.sql.experimental.optimizer.transpilePyUDFs": True,
+                            "spark.sql.ansi.enabled": True,
+                        }
+                    ):
+                        udf = UserDefinedFunction(func, BooleanType())
+                        self.assertTrue(udf.transpiled)
+                        self.assertEqual(
+                            expected,
+                            df.select(udf("a", "b")).collect()[0][0],
+                            f"transpiled {func.__name__}{args} must match CPython",
+                        )
+                    self.assertEqual(expected, func(*args), "CPython, for comparison")
+
+        def test_string_concat_with_null_raises_like_python(self):
+            # The other fix adopted from PR 58185. Catalyst's `concat` propagates
+            # NULL, so `'a' + None` would come back NULL where Python raises
+            # TypeError -- a wrong *string*, not merely a missing one. Both sides
+            # must raise. The non-NULL case still concatenates, so this is a guard
+            # rather than a refusal.
+            for a, b in ((None, "y"), ("x", None), (None, None)):
+                with self.subTest(a=a, b=b):
+                    df = self._typed_two_arg_df(a, b, StringType(), StringType())
+                    with self.sql_conf(
+                        {
+                            "spark.sql.experimental.optimizer.transpilePyUDFs": True,
+                            "spark.sql.ansi.enabled": True,
+                        }
+                    ):
+                        udf = UserDefinedFunction(concat_pair, StringType())
+                        self.assertTrue(udf.transpiled)
+                        with self.assertRaises(Exception):
+                            df.select(udf("a", "b")).collect()
+                    with self.assertRaises(TypeError):
+                        concat_pair(a, b)
+            ok = self._typed_two_arg_df("x", "y", StringType(), StringType())
+            transpiled, interpreted = self._run(concat_pair, StringType(), ok, "a", "b")
+            self.assertSameValue(transpiled, interpreted, "concat on two non-NULL strings")
+            self.assertEqual("xy", transpiled)
 
 
 class UDFTranspileHypothesisGatingTests(unittest.TestCase):

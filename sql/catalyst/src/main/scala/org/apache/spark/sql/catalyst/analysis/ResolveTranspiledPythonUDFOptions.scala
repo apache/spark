@@ -21,9 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{TranspiledPythonUDF, Transpile
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPILED_PYTHON_UDF
-import org.apache.spark.sql.types.{
-  BinaryType, BooleanType, DataType, DecimalType, FractionalType,
-  IntegralType, NumericType, StringType}
+import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DataType, DoubleType, IntegerType, LongType, ShortType, StringType}
 
 /**
  * Prunes the per-input-type options carried by a [[TranspiledPythonUDF]] down to those whose
@@ -42,6 +40,13 @@ import org.apache.spark.sql.types.{
  * make a numeric `Add` "valid" over a string column and silently diverge from Python's
  * `TypeError`. When no option matches, the list is emptied and `ConvertToCatalyst` falls back to
  * the original Python UDF.
+ *
+ * "integral", "integral32" and "fractional" narrow "numeric" rather than sitting beside it, and
+ * that overlap is deliberate. Some Python operators only have an exact lowering once the operand's
+ * *kind* of number is known -- `x ** 3` as `x*x*x` is exact on a bigint but rounds twice on a
+ * double, and `a // b` needs `div`, which rejects fractional input -- so the transpiler tags those
+ * options with the narrower category and leaves everything else on plain "numeric". A body using
+ * no such operator produces the same options, and the same plan size, as before they existed.
  */
 object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -78,22 +83,45 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
     }
   }
 
-  // True when each declared category matches the corresponding argument type.
-  // Empty categories means "no restriction" and the option is kept.
+  // True when each declared category matches the corresponding argument type:
+  // "numeric" -> Byte/Short/Integer/Long/DoubleType, "string" -> StringType,
+  // "bool" -> BooleanType, "binary" -> BinaryType. "string" matches only StringType
+  // (not BinaryType): a
+  // bytes/BinaryType column is tagged "binary" instead, so the string lowerings
+  // (e.g. `repeat`) never see it. Empty categories means "no restriction", so the
+  // option is kept.
   //
-  // Category -> Spark type mapping:
-  //   "integer" -> IntegralType (byte/short/int/long; NaN impossible)
-  //   "float"   -> FractionalType minus DecimalType (float/double; NaN possible)
-  //   "numeric" -> any NumericType minus DecimalType (legacy catch-all)
-  //   "string"  -> StringType with UTF8_BINARY collation only
-  //   "bool"    -> BooleanType
-  //   "binary"  -> BinaryType
+  // The narrow numeric categories (see the class doc):
+  // - "integral" -> Byte/Short/Integer/LongType, for `//`, the bitwise operators, the
+  //   shifts, `**`, `round` and `min`/`max`, none of which have an exact double lowering.
+  // - "integral32" -> Byte/Short/IntegerType, for true division: int32 values are all
+  //   exactly representable as doubles, so the double division is correctly rounded and
+  //   matches Python's int/int division. LongType doesn't (past 2^53 the cast to double
+  //   rounds first), so bigint columns get no option and fall back.
+  // - "fractional" -> DoubleType, which lets `a / b` lower for a double operand
+  //   since Python also converts to double before dividing. Python's `float` is an
+  //   IEEE binary64, so DoubleType is its counterpart; FloatType has none, which is
+  //   the third exclusion below.
   //
-  // Two deliberate exclusions keep the transpiled semantics faithful to Python:
-  // - DecimalType is NOT matched by any numeric category: Python receives
-  //   decimal.Decimal objects, which raise TypeError when mixed with float
+  // Three deliberate exclusions keep the transpiled semantics faithful to Python:
+  // - DecimalType is NOT "numeric" (nor "fractional", which it extends): Python
+  //   receives decimal.Decimal objects, which raise TypeError when mixed with float
   //   literals and carry different precision semantics than Spark's decimal
   //   arithmetic, so decimal columns fall back to interpreted Python.
+  // - FloatType is NOT "numeric" (nor "fractional"): Python has no single-precision
+  //   float, so a FloatType value arrives in the UDF widened to a Python float (a
+  //   double) and every operation on it is evaluated in double precision. Where an
+  //   expression stays in FloatType -- which under ANSI coercion means both operands
+  //   are floats, since an int or double literal promotes the whole expression to
+  //   DoubleType -- Spark rounds to 24 bits per step where Python rounds to 53. So
+  //   `x + y`, `x * y` and `x % y` on two float columns diverge; sampling random
+  //   float pairs, `(x + y) * y` disagreed on 398 of 398 rows. It is not only a
+  //   trailing-digit difference: float32 overflows to Infinity for operands Python
+  //   handles comfortably (-9.726323523430302E29 * -260872823898112.0 is Infinity in
+  //   FloatType and 2.5373334837038975E44 in double). Declaring a FloatType return
+  //   type would hide the rounding for a single operation but not for a chain of
+  //   them, and not the overflow at all -- and the return type isn't visible from
+  //   here anyway. Float columns therefore fall back to interpreted Python.
   // - "string" requires the default UTF8_BINARY collation: under a non-binary
   //   collation (e.g. UTF8_LCASE) Spark's `=`/`<`/`concat` follow collation
   //   rules while Python compares codepoints, so `'abc' == 'ABC'` would return
@@ -105,10 +133,15 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
       false
     } else {
       categories.zip(argTypes).forall {
-        case ("integer", dt) => dt.isInstanceOf[IntegralType]
-        case ("float", dt) =>
-          dt.isInstanceOf[FractionalType] && !dt.isInstanceOf[DecimalType]
-        case ("numeric", dt) => dt.isInstanceOf[NumericType] && !dt.isInstanceOf[DecimalType]
+        // Allow-lists rather than "NumericType minus the exclusions": the numeric
+        // categories admit exactly the column types with a faithful Python
+        // counterpart, and spelling that out means a numeric type added to Spark
+        // later falls back until someone deliberately admits it, instead of being
+        // silently swept in by an `isInstanceOf` and diverging.
+        case ("numeric", ByteType | ShortType | IntegerType | LongType | DoubleType) => true
+        case ("integral", ByteType | ShortType | IntegerType | LongType) => true
+        case ("integral32", ByteType | ShortType | IntegerType) => true
+        case ("fractional", DoubleType) => true
         case ("string", st: StringType) => st.isUTF8BinaryCollation
         case ("bool", dt) => dt.isInstanceOf[BooleanType]
         case ("binary", dt) => dt.isInstanceOf[BinaryType]
