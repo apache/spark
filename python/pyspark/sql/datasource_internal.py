@@ -19,7 +19,7 @@
 import json
 import copy
 from itertools import chain
-from typing import Iterator, List, Optional, Sequence, Tuple, Type, Dict, cast
+from typing import Iterator, List, Optional, Sequence, Tuple, Type, Dict
 
 from pyspark.sql.datasource import (
     DataSource,
@@ -36,7 +36,7 @@ from pyspark.sql.streaming.datasource import (
     ReadMaxFiles,
 )
 from pyspark.sql.types import StructType
-from pyspark.errors import PySparkNotImplementedError
+from pyspark.errors import PySparkNotImplementedError, PySparkRuntimeError
 from pyspark.errors.exceptions.base import PySparkException
 
 
@@ -52,10 +52,19 @@ def _streamReader(datasource: DataSource, schema: StructType) -> "DataSourceStre
         return _SimpleStreamReaderWrapper(datasource.simpleStreamReader(schema=schema))
 
 
-class SimpleInputPartition(InputPartition):
+class SimpleInputPartition:
+    """Start and end offsets for simple stream reader replay.
+
+    This is not an :class:`InputPartition`. The wrapper stores it in
+    ``InputPartition.value`` so ``read`` can keep the ABC signature.
+    """
+
     def __init__(self, start: dict, end: dict):
         self.start = start
         self.end = end
+
+    def __repr__(self) -> str:
+        return f"SimpleInputPartition(start={self.start!r}, end={self.end!r})"
 
 
 class PrefetchedCacheEntry:
@@ -141,7 +150,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
     def partitions(self, start: dict, end: dict) -> Sequence["InputPartition"]:
         if len(self.cache) > 0:
             assert self.cache[-1].end == end
-        return [SimpleInputPartition(start, end)]
+        return [InputPartition(SimpleInputPartition(start, end))]
 
     def getCache(self, start: dict, end: dict) -> Optional[Iterator[Tuple]]:
         start_idx = -1
@@ -163,9 +172,16 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         return it
 
     def read(self, partition: InputPartition) -> Iterator[Tuple]:
-        # partitions() only yields SimpleInputPartition. Cast keeps the ABC override valid.
-        simple_partition = cast(SimpleInputPartition, partition)
-        return self.simple_reader.readBetweenOffsets(simple_partition.start, simple_partition.end)
+        value = partition.value
+        if not isinstance(value, SimpleInputPartition):
+            raise PySparkRuntimeError(
+                errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                messageParameters={
+                    "expected": "InputPartition.value to be of type 'SimpleInputPartition'",
+                    "actual": f"'{type(value).__name__}'",
+                },
+            )
+        return self.simple_reader.readBetweenOffsets(value.start, value.end)
 
 
 class ReadLimitRegistry:
