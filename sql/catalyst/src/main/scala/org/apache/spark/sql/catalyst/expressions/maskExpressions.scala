@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, DataType, StringHelper, StringType}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 // scalastyle:off line.size.limit
@@ -291,7 +291,7 @@ case class Mask(
    * the dataType of an unresolved expression (i.e., when `resolved` == false).
    */
   override def dataType: DataType =
-    StringHelper.transformingStringResultType(input.dataType)
+    input.dataType
 
   /**
    * Returns a Seq of the children of this node. Children should not change. Immutability required

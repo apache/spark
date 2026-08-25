@@ -22,11 +22,11 @@ from zoneinfo import ZoneInfo
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.sql.conversion import (
+    ArrowArrayConversion,
     ArrowArrayToPandasConversion,
+    ArrowBatchTransformer,
     ArrowTableToRowsConversion,
     LocalDataToArrowConversion,
-    ArrowArrayConversion,
-    ArrowBatchTransformer,
     PandasToArrowConversion,
 )
 from pyspark.sql.types import (
@@ -351,8 +351,9 @@ class PandasToArrowConversionTests(unittest.TestCase):
 
     def test_convert_decimal(self):
         """Test int to decimal coercion."""
-        import pandas as pd
         from decimal import Decimal
+
+        import pandas as pd
 
         # DataFrame with integers, schema expects decimal
         df = pd.DataFrame({"a": [1, 2, 3]})

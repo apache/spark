@@ -19,20 +19,20 @@
 
 import sys
 from typing import (
-    overload,
+    TYPE_CHECKING,
     Any,
     Callable,
-    TYPE_CHECKING,
     Union,
+    overload,
 )
 
-from pyspark.sql.tvf_argument import TableValuedFunctionArgument
-from pyspark.sql.utils import dispatch_col_method
-from pyspark.sql.types import DataType
 from pyspark.errors import PySparkValueError
+from pyspark.sql.tvf_argument import TableValuedFunctionArgument
+from pyspark.sql.types import DataType
+from pyspark.sql.utils import dispatch_col_method
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import LiteralType, DecimalLiteral, DateTimeLiteral
+    from pyspark.sql._typing import DateTimeLiteral, DecimalLiteral, LiteralType
     from pyspark.sql.window import WindowSpec
 
 __all__ = ["Column"]
@@ -1615,8 +1615,9 @@ class Column(TableValuedFunctionArgument):
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.sql.column
+    from pyspark.sql import SparkSession
 
     globs = pyspark.sql.column.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("sql.column tests").getOrCreate()
