@@ -320,6 +320,12 @@ class SeriesStatMixin:
         self.assert_eq(pser.rank(method="max"), psser.rank(method="max").sort_index())
         self.assert_eq(pser.rank(method="first"), psser.rank(method="first").sort_index())
         self.assert_eq(pser.rank(method="dense"), psser.rank(method="dense").sort_index())
+        # TODO(SPARK-59011): method='first' + ascending=False gives wrong ranks for tied values.
+        # pandas: [3.0, 2.0, 1.0, 4.0], pyspark: [4.0, 2.0, 1.0, 3.0]
+        # self.assert_eq(
+        #     pser.rank(method="first", ascending=False),
+        #     psser.rank(method="first", ascending=False).sort_index(),
+        # )
 
         non_numeric_pser = pd.Series(["a", "c", "b", "d"], name="x", index=[10, 11, 12, 13])
         non_numeric_psser = ps.from_pandas(non_numeric_pser)

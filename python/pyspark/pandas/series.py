@@ -4373,6 +4373,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 PySparkColumn.desc_nulls_first if nulls_first else PySparkColumn.desc_nulls_last
             )
         sort_col = null_func(self.spark.column)
+        # TODO(SPARK-59011): method='first' with ascending=False produces wrong ranks for
+        # tied values — ties should always be broken by original position in the array.
         nat_order_col = asc_func(F.col(NATURAL_ORDER_COLUMN_NAME))
 
         if method == "first":
