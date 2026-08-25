@@ -243,12 +243,60 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
                 with self.assertRaisesRegex(OSError, "interrupted replace"):
                     directory.write_json(state_path, {"token": "new-secret"})
             self.assertEqual(directory.read_json(state_path), {"token": "old-secret"})
+            self.assertFalse(
+                [
+                    name
+                    for name in os.listdir(directory.path)
+                    if name.startswith(directory._STATE_TEMP_PREFIX)
+                ]
+            )
 
         stale_temp = os.path.join(self._directory.path, ".pool-state-orphan")
         with open(stale_temp, "w") as temp_file:
             temp_file.write("partial")
         with self._directory:
             self.assertFalse(os.path.exists(stale_temp))
+
+    def test_failed_state_write_does_not_close_a_reused_descriptor(self) -> None:
+        real_fdopen = os.fdopen
+        victim_fd = None
+        test_case = self
+
+        class FailingStateFile:
+            def __init__(self, fd: int):
+                self.fd = fd
+                self.file = real_fdopen(fd, "w")
+
+            def __enter__(self):
+                return self
+
+            def write(self, data: str) -> None:
+                raise OSError("interrupted write")
+
+            def __exit__(self, exc_type, exc_value, traceback) -> None:
+                nonlocal victim_fd
+                self.file.close()
+                # Reuse the just-released descriptor before write_json handles the failure. Once
+                # fdopen succeeds, it owns the original descriptor, so cleanup must not close the
+                # new file that happens to receive the same number.
+                victim_fd = os.open(os.devnull, os.O_RDONLY)
+                test_case.assertEqual(victim_fd, self.fd)
+
+        try:
+            with self._directory as directory:
+                with mock.patch.object(
+                    local_server_pool.os,
+                    "fdopen",
+                    side_effect=lambda fd, mode: FailingStateFile(fd),
+                ):
+                    with self.assertRaisesRegex(OSError, "interrupted write"):
+                        directory.write_json(directory.server_path("f00d"), {"a": 1})
+            assert victim_fd is not None
+            os.fstat(victim_fd)
+        finally:
+            if victim_fd is not None:
+                with contextlib.suppress(OSError):
+                    os.close(victim_fd)
 
     def test_pool_directory_does_not_hide_listing_failures(self) -> None:
         state_path = self._write_state(
@@ -716,6 +764,37 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             with self._directory:
                 self.assertIsNone(self._pool.claim("fp"))
 
+    def test_claim_skips_directory_with_state_filename(self) -> None:
+        os.makedirs(self._directory.path)
+        os.makedirs(self._directory.server_path("dead"))
+        with _listening_socket() as port:
+            server_process = self._live_process()
+            self._write_state(
+                self._directory.server_path("cafe"), self._server_data(port, server_process.pid)
+            )
+            with self._directory:
+                member = self._pool.claim("fp")
+
+        self.assertIsNotNone(member)
+        self.assertEqual(os.path.basename(member.claim_path), f"claimed-{os.getpid()}-cafe.json")
+
+    def test_claim_skips_member_with_mismatched_process_identity(self) -> None:
+        with _listening_socket() as port:
+            server_process = self._live_process()
+            self._write_state(
+                self._directory.server_path("fade"),
+                self._server_data(
+                    port,
+                    server_process.pid,
+                    process_start_id="a-different-process-generation",
+                ),
+            )
+            with self._directory:
+                self.assertIsNone(self._pool.claim("fp"))
+
+        self.assertEqual(set(self._states("fade")), {"server"})
+        self.assertIsNone(server_process.poll())
+
     def test_claim_skips_malformed_and_incompatible_members(self) -> None:
         with _listening_socket() as port:
             server_process = self._live_process()
@@ -760,7 +839,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
 
     def test_reap_retired_escalates_to_sigkill(self) -> None:
         with self.subTest("a fresh retirement is left to shut down gracefully"):
-            fresh = self._live_process()
+            fresh = self._stubborn_process()
             self._write_state(
                 self._directory.retired_path("f2e5"),
                 self._retired_data(fresh.pid, time.time()),
@@ -829,19 +908,61 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
 
     def test_reap_keeps_retired_state_without_a_process_identity(self) -> None:
         server = self._stubborn_process()
+        original = {
+            "pid": server.pid,
+            "retired": time.time() - ServerPool._RETIRE_GIVE_UP_AFTER_SECONDS - 1,
+        }
         path = self._write_state(
             self._directory.retired_path("bad7"),
-            {
-                "pid": server.pid,
-                "retired": time.time() - ServerPool._RETIRE_GIVE_UP_AFTER_SECONDS - 1,
-            },
+            original,
         )
 
-        with self._directory:
+        with self._directory as directory:
             self.assertFalse(self._pool.reap("bad7"))
+            self.assertFalse(self._pool.reap("bad7"))
+            retained = directory.read_json(path)
 
-        self.assertTrue(os.path.exists(path))
+        self.assertEqual(retained, original)
         self.assertIsNone(server.poll())
+
+    def test_reap_keeps_a_daemon_pid_without_a_process_identity(self) -> None:
+        server = self._stubborn_process()
+        uid = "daed"
+        original = {"retired": time.time() - ServerPool._RETIRE_GIVE_UP_AFTER_SECONDS - 1}
+        path = self._write_state(
+            self._directory.retired_path(uid),
+            original,
+        )
+        self._write_daemon_pid(uid, server.pid)
+
+        with self._directory as directory:
+            self.assertFalse(self._pool.reap(uid))
+            retained = directory.read_json(path)
+
+        self.assertEqual(retained, original)
+        self.assertIsNone(server.poll())
+
+    def test_reap_prefers_the_record_pid_and_its_process_identity(self) -> None:
+        recorded_server = self._stubborn_process()
+        daemon_server = self._stubborn_process()
+        uid = "d00d"
+        path = self._write_state(
+            self._directory.retired_path(uid),
+            self._server_data(12345, recorded_server.pid),
+        )
+        self._write_daemon_pid(uid, daemon_server.pid)
+
+        with self._directory as directory:
+            self.assertFalse(self._pool.reap(uid))
+            repaired = directory.read_json(path)
+
+        assert repaired is not None
+        self.assertEqual(repaired["pid"], recorded_server.pid)
+        self.assertEqual(
+            repaired["process_start_id"], ServerPool._process_start_id(recorded_server.pid)
+        )
+        self.assertIsNone(recorded_server.poll())
+        self.assertIsNone(daemon_server.poll())
 
     def test_reap_does_not_signal_a_reused_server_pid(self) -> None:
         other_server = self._stubborn_process()
@@ -885,6 +1006,26 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertIsInstance(repaired["retired"], float)
         self.assertIsNone(server.poll())
 
+    def test_reap_retries_a_sigterm_missed_during_retirement(self) -> None:
+        server = self._live_process()
+        process_start_id = ServerPool._process_start_id(server.pid)
+        assert process_start_id is not None
+        state_path = self._write_state(
+            self._directory.server_path("fade"),
+            self._server_data(12345, server.pid),
+        )
+
+        with mock.patch.object(local_server_pool, "_is_local_connect_server", return_value=None):
+            with self._directory:
+                self._pool._retire(state_path, server.pid, process_start_id)
+
+        self.assertIsNone(server.poll())
+        with self._directory:
+            self.assertFalse(self._pool.reap("fade"))
+        self.assertTrue(_wait_proc_dead(server), "the reaper did not retry graceful shutdown")
+        with self._directory:
+            self.assertTrue(self._pool.reap("fade"))
+
     def test_release_retires_the_claimed_member(self) -> None:
         server = self._live_process()
         with _non_listening_socket() as port:
@@ -910,19 +1051,36 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         # Releasing again is a no-op.
         local_server_pool.release_pooled_local_connect_server()
 
+    def test_release_does_not_signal_a_mismatched_process_identity(self) -> None:
+        server = self._live_process()
+        server_data = self._server_data(
+            12345,
+            server.pid,
+            process_start_id="a-different-process-generation",
+        )
+        claim_path = self._write_state(
+            self._directory.claimed_path(os.getpid(), "a1a4"), server_data
+        )
+        member = PoolMember(server_data)
+        member.claim_path = claim_path
+
+        self._pool.release(member)
+
+        self.assertEqual(set(self._states("a1a4")), {"retired"})
+        self.assertIsNone(server.poll())
+
     def test_forked_child_does_not_release_its_parents_claim(self) -> None:
         server = self._live_process()
         with _non_listening_socket() as port:
             server_data = self._server_data(port, server.pid)
-            parent_pid = os.getpid()
+            parent_pid = os.getpid() + 1
             claim_path = self._write_state(
                 self._directory.claimed_path(parent_pid, "a1a3"), server_data
             )
             member = PoolMember(server_data)
             member.claim_path = claim_path
 
-            with mock.patch.object(local_server_pool.os, "getpid", return_value=parent_pid + 1):
-                self._pool.release(member)
+            self._pool.release(member)
 
         self.assertEqual(set(self._states("a1a3")), {"claimed"})
         self.assertIsNone(server.poll())

@@ -36,7 +36,13 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from pyspark.errors import PySparkValueError
-from pyspark.sql.connect.local_server import _is_local_connect_server, _pid_alive
+from pyspark.sql.connect.local_server import (
+    Discovery,
+    _is_local_connect_server,
+    _pid_alive,
+    _port_open,
+    runtime_dir,
+)
 
 # Environment variables that shape the JVM the launcher boots through
 # sbin/start-connect-server.sh -> spark-daemon.sh -> load-spark-env.sh / spark-submit.
@@ -156,12 +162,17 @@ class RetiredState(_PoolStateRecord):
         return value if isinstance(value, str) and value else None
 
     @classmethod
+    def retired_from_data(cls, data: Optional[Dict[str, Any]]) -> Optional[float]:
+        """Recover a valid retirement timestamp from a malformed state record."""
+        return cls._timestamp(data.get("retired")) if data is not None else None
+
+    @classmethod
     def from_data(cls, data: Optional[Dict[str, Any]]) -> Optional["RetiredState"]:
         if data is None:
             return None
         pid = cls.pid_from_data(data)
         process_start_id = cls.process_start_id_from_data(data)
-        retired = cls._timestamp(data.get("retired"))
+        retired = cls.retired_from_data(data)
         if pid is None or process_start_id is None or retired is None:
             return None
         return cls(pid, process_start_id, retired)
@@ -217,11 +228,6 @@ class PoolMember(_PoolStateRecord):
         except (KeyError, TypeError, ValueError, OverflowError):
             return None
 
-    @classmethod
-    def pid_from_data(cls, data: Optional[Dict[str, Any]]) -> Optional[int]:
-        """Recover a valid server pid even when another member field is malformed."""
-        return cls._positive_pid(data.get("pid")) if data is not None else None
-
     @property
     def url(self) -> str:
         return f"sc://{self.host}:{self.port}"
@@ -230,7 +236,6 @@ class PoolMember(_PoolStateRecord):
         """Whether this member has a matching Spark version, live process, and open port. Uses
         the same liveness and reachability probes as the reuse path (see ``local_server``), so
         the pool and reuse discovery agree on when a recorded server is still good."""
-        from pyspark.sql.connect.local_server import _pid_alive, _port_open
         from pyspark.version import __version__
 
         if (
@@ -269,8 +274,6 @@ class PoolDirectory:
         if path is None:
             path = os.environ.get("SPARK_LOCAL_CONNECT_POOL_DIR")
         if path is None:
-            from pyspark.sql.connect.local_server import runtime_dir
-
             path = os.path.join(runtime_dir(), "pool")
         self.path = os.path.abspath(path)
         self._lock_fd: Optional[int] = None
@@ -437,24 +440,33 @@ class PoolDirectory:
         try:
             with open(path, "r") as f:
                 data = json.load(f)
-        except (FileNotFoundError, ValueError):
+        except (FileNotFoundError, IsADirectoryError, NotADirectoryError, ValueError):
             return None
         return data if isinstance(data, dict) else None
 
     def write_json(self, path: str, data: Dict[str, Any]) -> None:
+        """Atomically replace ``path`` with private JSON state.
+
+        ``path`` must be on the same filesystem as this directory. The replacement is atomic
+        against process failure; durability across power loss is not promised.
+        """
         self._assert_locked()
         # Write through a temporary file so a process dying during a state transition leaves
         # either the old record or the complete new one. Server entries hold an auth token, so
         # the temporary and final files both remain private.
         fd, temp_path = tempfile.mkstemp(prefix=self._STATE_TEMP_PREFIX, dir=self.path)
         try:
-            with os.fdopen(fd, "w") as f:
+            try:
+                state_file = os.fdopen(fd, "w")
+            except BaseException:
+                # fdopen only takes ownership after it returns successfully.
+                os.close(fd)
+                raise
+            with state_file as f:
                 os.fchmod(fd, 0o600)
                 f.write(json.dumps(data))
             os.replace(temp_path, path)
         except BaseException:
-            with contextlib.suppress(OSError):
-                os.close(fd)
             with contextlib.suppress(FileNotFoundError):
                 os.remove(temp_path)
             raise
@@ -568,8 +580,8 @@ class ServerPool:
         Ties break by the stable ``sorted()`` over the sorted directory listing, so the order is
         well defined but only approximately FIFO, not guaranteed.
 
-        ``is_usable`` runs under the held lock and does blocking network I/O -- up to a 0.5s
-        connect for each candidate that is live but not accepting connections. The candidate
+        ``is_usable`` runs under the held lock and does blocking process inspection and network
+        I/O -- potentially one ``ps`` and up to a 0.5s connect for each candidate. The candidate
         count is bounded by ``spark.local.connect.pool.size``, which is user-tunable, so a large
         pool widens the window the lock is held; the reaping rules keep stale members from
         accumulating without bound."""
@@ -600,18 +612,14 @@ class ServerPool:
         """A retiring member: drop it once its server is gone, hard-kill the server if it
         hangs in shutdown, and stop tracking a record whose process generation was reused."""
         data = self._directory.read_json(path)
-        retired_state = RetiredState.from_data(data)
         record_pid = RetiredState.pid_from_data(data)
         record_process_start_id = RetiredState.process_start_id_from_data(data)
-        server_pid = (
-            retired_state.pid
-            if retired_state is not None
-            else self._recover_server_pid(uid, record_pid)
-        )
-        process_start_id = (
-            retired_state.process_start_id if retired_state is not None else record_process_start_id
-        )
-        retired = retired_state.retired if retired_state is not None else None
+        retired = RetiredState.retired_from_data(data)
+        server_pid = self._recover_server_pid(uid, record_pid)
+        # A generation id is meaningful only with the pid from the same record. The daemon pid
+        # file has no companion generation id, so never pair a recovered daemon pid with
+        # unrelated record data.
+        process_start_id = record_process_start_id if record_pid is not None else None
         now = time.time()
         if server_pid is None:
             # Without a recoverable process handle, retain the state for a later read instead of
@@ -621,6 +629,9 @@ class ServerPool:
             self._remove_retired(uid, path)
             return
         if process_start_id is None:
+            # A pid without its persisted generation cannot safely be adopted: the pid may have
+            # been recycled to an unrelated local Connect server. Retain the handle until it dies
+            # rather than synthesizing authority to signal its current owner.
             return
         current_start_id = self._process_start_id(server_pid)
         if current_start_id is None:
@@ -651,6 +662,10 @@ class ServerPool:
                 self._remove_retired(uid, path)
             elif is_server is True:
                 self._signal(server_pid, signal.SIGKILL)
+        else:
+            # Retrying SIGTERM is idempotent and recovers a transient inspection failure during
+            # _retire before the shutdown deadline escalates to SIGKILL.
+            self._signal_server(server_pid, process_start_id, signal.SIGTERM)
 
     def _remove_retired(self, uid: str, path: str) -> None:
         self._directory.remove(path)
@@ -671,27 +686,26 @@ class ServerPool:
         )
 
     def _recover_server_pid(self, uid: str, record_pid: Optional[int]) -> Optional[int]:
-        """Prefer the daemon pid file, then a pid recovered from a malformed state record.
+        """Use a record pid when present, otherwise fall back to the daemon pid file.
 
         Full member validation intentionally rejects corrupt records, including out-of-range
-        timestamps. Reaping still needs the independently valid pid so retirement does not
-        discard the only handle to a live JVM.
+        timestamps. Its independently valid pid remains paired with the record's generation id;
+        a daemon pid has no generation id and is used only to retain state while it remains live.
         """
-        daemon_pid = self._recorded_daemon_pid(uid)
-        if daemon_pid is not None:
-            return daemon_pid
-        return record_pid
+        return record_pid if record_pid is not None else self._recorded_daemon_pid(uid)
 
     def _recorded_daemon_pid(self, uid: str) -> Optional[int]:
         """The positive server pid recorded by spark-daemon.sh, if readable."""
-        from pyspark.sql.connect.local_server import Discovery
-
         discovery = Discovery(os.path.join(self._directory.member_dir(uid), "connect-local.json"))
         return _PoolStateRecord._positive_pid(discovery.daemon_pid())
 
     def release(self, member: PoolMember) -> None:
         """Retire this process's claimed member; the shutdown completes in the background,
-        ready for a later lifecycle pass to finish."""
+        ready for a later lifecycle pass to finish.
+
+        This method acquires the pool-directory lock and must not be called while the same pool
+        directory is already locked, including through a different ``PoolDirectory`` instance.
+        """
         assert member.claim_path is not None
         kind, uid = self._directory.parse_entry(os.path.basename(member.claim_path))
         assert kind == "claimed" and uid is not None
