@@ -1368,6 +1368,23 @@ def resolve_jira_issues(title, merge_branches, comment, title_components=()):
 
 
 def update_jira_for_pr(pr_num, title, merge_branches, title_components):
+    skip_jira_title_tags = ("MINOR", "TRIVIAL", "FOLLOWUP")
+    tags = set(title_components)
+    try:
+        parsed = Title.parse(title)
+        tags.update(parsed.leading)
+        tags.update(parsed.components)
+    except ValueError:
+        pass
+    skipped = [tag for tag in skip_jira_title_tags if tag in tags]
+    if skipped:
+        print()
+        print_error(
+            "Skipping JIRA operations for PR #%s because title has %s."
+            % (pr_num, ", ".join("[%s]" % tag for tag in skipped))
+        )
+        return
+
     # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
     print()
     continue_maybe("Would you like to update an associated JIRA?")
@@ -1797,7 +1814,6 @@ def main():
     # Normalized PR-title component tags, used later to reconcile JIRA components. Empty for
     # Revert/Reapply PRs, whose titles are kept verbatim and not parsed for components.
     title_components: List[str] = []
-    is_minor = False
 
     # Revert and Reapply PRs keep their title verbatim.
     if not (is_revert_pr or is_reapply_pr):
@@ -1806,7 +1822,6 @@ def main():
             parsed = Title.parse(title)
         except ValueError as e:
             fail("Malformed PR title: %s" % e)
-        is_minor = "MINOR" in parsed.leading
 
         # Normalize component tags via the registry and track primary.
         components = []
@@ -1957,8 +1972,7 @@ def main():
                 post_merge_comment(pr_num, picked_commits)
             # Backport mode may be the first chance to resolve a JIRA after an interrupted
             # original merge. If it was already resolved, add any newly inferred fix versions.
-            if not is_minor:
-                update_jira_for_pr(pr_num, title, picked_refs, title_components)
+            update_jira_for_pr(pr_num, title, picked_refs, title_components)
         sys.exit(0)
 
     if not bool(pr["mergeable"]):
@@ -2076,9 +2090,8 @@ def main():
             # Record every branch that successfully received the change on the PR.
             post_merge_comment(pr_num, merged_commits)
         # This is deliberately in the finally block: once the target branch has been pushed,
-        # cancelling a later cherry-pick must not bypass the mandatory JIRA update.
-        if not is_minor:
-            update_jira_for_pr(pr_num, title, merged_refs, title_components)
+        # cancelling a later cherry-pick must not bypass the JIRA update decision.
+        update_jira_for_pr(pr_num, title, merged_refs, title_components)
 
 
 if __name__ == "__main__":
