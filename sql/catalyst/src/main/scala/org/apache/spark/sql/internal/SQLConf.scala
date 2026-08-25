@@ -6929,6 +6929,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ORACLE_NUMBER_DEFAULT_SCALE =
+    buildConf("spark.sql.oracle.numberDefaultScale")
+      .doc("Default scale for Oracle bare NUMBER columns with no precision/scale " +
+        "or FLOAT columns (JDBC scale -127). Oracle reports these as precision 0 " +
+        "or scale -127 via JDBC metadata. Spark maps them to DecimalType(38, scale).")
+      .version("4.1.0")
+      .intConf
+      .checkValue(s => s >= 0 && s <= 38, "oracle numberDefaultScale must be between 0 and 38")
+      .createWithDefault(10)
+
   val LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.db2.numericMapping.enabled")
       .internal()
@@ -9120,6 +9130,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyOracleTimestampMappingEnabled: Boolean =
     getConf(LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED)
+
+  def oracleNumberDefaultScale: Int = getConf(ORACLE_NUMBER_DEFAULT_SCALE)
 
   def legacyDB2numericMappingEnabled: Boolean =
     getConf(LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED)
