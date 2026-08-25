@@ -74,26 +74,26 @@ def _spawn_live_process() -> "subprocess.Popen":
     )
 
 
-def _spawn_stubborn_sleeper() -> "subprocess.Popen":
-    """A sleeper that ignores SIGTERM, standing in for a server hanging in shutdown. It
-    prints one line once its handler is installed so tests do not signal it too early."""
+def _spawn_stubborn_process() -> "subprocess.Popen":
+    """A pipe-blocked child that ignores SIGTERM, standing in for a hung server. It reports
+    when its handler is installed so tests do not signal it too early."""
     proc = subprocess.Popen(
         [
             sys.executable,
             "-c",
-            "import signal, time\n"
+            "import signal, sys\n"
             "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
             "print('ready', flush=True)\n"
-            "time.sleep(300)",
+            "sys.stdin.buffer.read()",
             _SERVER_CLASS,
         ],
-        stdin=subprocess.DEVNULL,
+        stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         text=True,
     )
     assert proc.stdout is not None
-    proc.stdout.readline()
+    assert proc.stdout.readline() == "ready\n"
     return proc
 
 
@@ -155,15 +155,15 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self._procs.append(proc)
         return proc
 
-    def _stubborn_sleeper(self) -> "subprocess.Popen":
-        proc = _spawn_stubborn_sleeper()
+    def _stubborn_process(self) -> "subprocess.Popen":
+        proc = _spawn_stubborn_process()
         self._procs.append(proc)
         return proc
 
     def _server_data(self, port: int, pid: int, fingerprint: str = "fp", **overrides) -> dict:
         process_start_id = None
         if isinstance(pid, int) and not isinstance(pid, bool):
-            process_start_id = local_server_pool._process_start_id(pid)
+            process_start_id = ServerPool._process_start_id(pid)
         data = {
             "host": "localhost",
             "port": port,
@@ -178,7 +178,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         return data
 
     def _retired_data(self, pid: int, retired: object) -> dict:
-        process_start_id = local_server_pool._process_start_id(pid)
+        process_start_id = ServerPool._process_start_id(pid)
         assert process_start_id is not None
         return {
             "pid": pid,
@@ -770,10 +770,12 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             self.assertEqual(set(self._states("f2e5")), {"retired"})
             self.assertIsNone(fresh.poll())
         with self.subTest("a hung shutdown is hard-killed"):
-            stubborn = self._stubborn_sleeper()
+            stubborn = self._stubborn_process()
             self._write_state(
                 self._directory.retired_path("a0a0"),
-                self._retired_data(stubborn.pid, time.time() - 31),
+                self._retired_data(
+                    stubborn.pid, time.time() - ServerPool._RETIRE_KILL_AFTER_SECONDS - 1
+                ),
             )
             with self._directory:
                 self._pool.reap("a0a0")
@@ -781,17 +783,19 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             with self._directory:
                 self.assertTrue(self._pool.reap("a0a0"))
         with self.subTest("a late first reaper hard-kills before giving up"):
-            abandoned = self._stubborn_sleeper()
+            abandoned = self._stubborn_process()
             self._write_state(
                 self._directory.retired_path("ab4d"),
-                self._retired_data(abandoned.pid, time.time() - 601),
+                self._retired_data(
+                    abandoned.pid, time.time() - ServerPool._RETIRE_GIVE_UP_AFTER_SECONDS - 1
+                ),
             )
             with self._directory:
                 self.assertTrue(self._pool.reap("ab4d"))
             self.assertTrue(_wait_proc_dead(abandoned), "the abandoned server was not killed")
 
     def test_reap_repairs_malformed_retired_state(self) -> None:
-        server = self._stubborn_sleeper()
+        server = self._stubborn_process()
         path = self._write_state(
             self._directory.retired_path("bad4"),
             self._retired_data(server.pid, "not-a-time"),
@@ -807,10 +811,12 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertIsNone(server.poll())
 
     def test_reap_keeps_retired_state_when_process_inspection_fails(self) -> None:
-        server = self._stubborn_sleeper()
+        server = self._stubborn_process()
         path = self._write_state(
             self._directory.retired_path("bad9"),
-            self._retired_data(server.pid, time.time() - 601),
+            self._retired_data(
+                server.pid, time.time() - ServerPool._RETIRE_GIVE_UP_AFTER_SECONDS - 1
+            ),
         )
 
         with mock.patch.object(local_server_pool, "_is_local_connect_server", return_value=None):
@@ -822,10 +828,13 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertIsNone(server.poll())
 
     def test_reap_keeps_retired_state_without_a_process_identity(self) -> None:
-        server = self._stubborn_sleeper()
+        server = self._stubborn_process()
         path = self._write_state(
             self._directory.retired_path("bad7"),
-            {"pid": server.pid, "retired": time.time() - 601},
+            {
+                "pid": server.pid,
+                "retired": time.time() - ServerPool._RETIRE_GIVE_UP_AFTER_SECONDS - 1,
+            },
         )
 
         with self._directory:
@@ -835,8 +844,10 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertIsNone(server.poll())
 
     def test_reap_does_not_signal_a_reused_server_pid(self) -> None:
-        other_server = self._stubborn_sleeper()
-        stale = self._retired_data(other_server.pid, time.time() - 31)
+        other_server = self._stubborn_process()
+        stale = self._retired_data(
+            other_server.pid, time.time() - ServerPool._RETIRE_KILL_AFTER_SECONDS - 1
+        )
         stale["process_start_id"] = "a-different-process-generation"
         self._write_state(self._directory.retired_path("bad8"), stale)
 
@@ -846,7 +857,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertIsNone(other_server.poll())
 
     def test_retire_survives_interrupted_state_rewrite(self) -> None:
-        server = self._stubborn_sleeper()
+        server = self._stubborn_process()
         with _non_listening_socket() as port:
             server_path = self._write_state(
                 self._directory.server_path("c0de"), self._server_data(port, server.pid)
@@ -858,7 +869,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
                     side_effect=OSError("interrupted rewrite"),
                 ):
                     with self.assertRaisesRegex(OSError, "interrupted rewrite"):
-                        process_start_id = local_server_pool._process_start_id(server.pid)
+                        process_start_id = ServerPool._process_start_id(server.pid)
                         assert process_start_id is not None
                         self._pool._retire(server_path, server.pid, process_start_id)
 
@@ -917,7 +928,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertIsNone(server.poll())
 
     def test_release_retries_failures_and_tolerates_prior_retirement(self) -> None:
-        server = self._stubborn_sleeper()
+        server = self._stubborn_process()
         with _non_listening_socket() as port:
             server_data = self._server_data(port, server.pid)
             claim_path = self._write_state(
