@@ -17,13 +17,13 @@
 
 import tempfile
 
-from pyspark.sql import Row
 import pyspark.sql.functions as sf
 from pyspark.ml.fpm import (
     FPGrowth,
     FPGrowthModel,
     PrefixSpan,
 )
+from pyspark.sql import Row
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 

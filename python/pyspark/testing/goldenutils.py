@@ -15,10 +15,10 @@
 # limitations under the License.
 #
 
-from typing import Any, Callable, List, Optional, Union
 import inspect
 import os
 import time
+from typing import Any, Callable, List, Optional, Union
 
 try:
     import numpy as np

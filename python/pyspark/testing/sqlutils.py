@@ -22,13 +22,13 @@ import shutil
 import tempfile
 from contextlib import contextmanager
 
+from pyspark.find_spark_home import _find_spark_home
 from pyspark.sql import SparkSession
 from pyspark.sql.types import Row
 from pyspark.testing.utils import (
-    ReusedPySparkTestCase,
     PySparkErrorTestUtils,
+    ReusedPySparkTestCase,
 )
-from pyspark.find_spark_home import _find_spark_home
 
 SPARK_HOME = _find_spark_home()
 
@@ -69,8 +69,8 @@ def get_sbt_runtime_classpath(project_relative_path, project_name_map):
     Returns:
         Comma-separated string of JAR paths, or None if SBT command fails
     """
-    import subprocess
     import re
+    import subprocess
 
     sbt_project = project_name_map.get(project_relative_path)
     if not sbt_project:

@@ -15,36 +15,36 @@
 # limitations under the License.
 #
 
-import os
-import platform
-import shutil
-import warnings
 import gc
+import heapq
 import itertools
 import operator
+import os
+import platform
 import random
+import shutil
 import sys
-import heapq
+import warnings
 from typing import (
+    IO,
+    TYPE_CHECKING,
     Any,
     Callable,
     Generic,
     Hashable,
-    IO,
     Iterable,
     Iterator,
     Optional,
-    TYPE_CHECKING,
     TypeVar,
     Union,
 )
 
 from pyspark.serializers import (
+    AutoBatchedSerializer,
     BatchedSerializer,
+    CompressedSerializer,
     CPickleSerializer,
     FlattenedValuesSerializer,
-    CompressedSerializer,
-    AutoBatchedSerializer,
     Serializer,
 )
 from pyspark.util import fail_on_stopiteration

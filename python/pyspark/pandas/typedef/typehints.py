@@ -24,12 +24,12 @@ import decimal
 import typing
 from collections.abc import Iterable
 from inspect import isclass
-from typing import Any, Callable, Generic, List, Optional, Tuple, Union, Type, get_type_hints
+from typing import Any, Callable, Generic, List, Optional, Tuple, Type, Union, get_type_hints
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import CategoricalDtype, pandas_dtype
 from pandas.api.extensions import ExtensionDtype
+from pandas.api.types import CategoricalDtype, pandas_dtype
 
 from pyspark.loose_version import LooseVersion
 
@@ -63,12 +63,13 @@ except ImportError:
     extension_dtypes = ()
 
 import pyarrow as pa
+
 import pyspark.sql.types as types
-from pyspark.sql.pandas.types import to_arrow_type, from_arrow_type
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import Dtype, T
+from pyspark.sql.pandas.types import from_arrow_type, to_arrow_type
 
 if typing.TYPE_CHECKING:
     from pyspark.pandas.internal import InternalField
@@ -626,8 +627,8 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     # We should re-import to make sure the class 'SeriesType' is not treated as a class
     # within this module locally. See Series.__class_getitem__ which imports this class
     # canonically.
-    from pyspark.pandas.internal import InternalField, SPARK_INDEX_NAME_FORMAT
-    from pyspark.pandas.typedef import SeriesType, NameTypeHolder, IndexNameTypeHolder
+    from pyspark.pandas.internal import SPARK_INDEX_NAME_FORMAT, InternalField
+    from pyspark.pandas.typedef import IndexNameTypeHolder, NameTypeHolder, SeriesType
     from pyspark.pandas.utils import name_like_string
 
     tpe = get_type_hints(f).get("return", None)
@@ -798,7 +799,7 @@ def create_tuple_for_frame_type(params: Any) -> object:
 
 
 def _to_type_holders(params: Any) -> Tuple:
-    from pyspark.pandas.typedef import NameTypeHolder, IndexNameTypeHolder
+    from pyspark.pandas.typedef import IndexNameTypeHolder, NameTypeHolder
 
     is_with_index = (
         isinstance(params, tuple)
@@ -941,6 +942,7 @@ def _new_type_holders(
 def _test() -> None:
     import doctest
     import sys
+
     import pyspark.pandas.typedef.typehints
 
     globs = pyspark.pandas.typedef.typehints.__dict__.copy()

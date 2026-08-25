@@ -23,7 +23,6 @@ import urllib.request
 from shutil import rmtree
 from typing import TYPE_CHECKING
 
-
 if TYPE_CHECKING:
     from http.client import HTTPResponse
 
