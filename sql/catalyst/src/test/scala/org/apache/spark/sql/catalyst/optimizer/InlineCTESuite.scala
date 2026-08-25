@@ -110,7 +110,7 @@ class InlineCTESuite extends PlanTest {
   }
 
   test("SPARK-58006: forceSkipInline CTE with an internal outer reference is materialized") {
-    // Corresponds to: WITH t AS (SELECT a FROM r WHERE EXISTS (SELECT 1 FROM s WHERE s.k = t.a))
+    // Corresponds to: WITH t AS (SELECT a FROM r WHERE EXISTS (SELECT 1 FROM s WHERE s.k = r.a))
     //                 SELECT a FROM t
     // The outer reference to `a` resolves inside the CTE def body, so it must be tolerated.
     val relation = TestRelation(Seq($"a".int))
@@ -131,9 +131,9 @@ class InlineCTESuite extends PlanTest {
 
   test("SPARK-58006: forceSkipInline CTE with an internal outer-scope subquery is materialized") {
     // Corresponds to: WITH t AS (
-    //   SELECT (SELECT v FROM s2 WHERE s2.v < (SELECT c FROM s1 WHERE s1.k = t.a)) AS s
+    //   SELECT (SELECT v FROM s2 WHERE s2.v < (SELECT c FROM s1 WHERE s1.k = r.a)) AS s
     //   FROM r) SELECT s FROM t
-    // The innermost reference to `t.a` is two scopes out but resolves inside the def.
+    // The innermost reference to `r.a` is two scopes out but resolves inside the def.
     val relation = TestRelation(Seq($"a".int))
     val s1 = TestRelation(Seq($"k".int, $"c".int))
     val s2 = TestRelation(Seq($"v".int))
