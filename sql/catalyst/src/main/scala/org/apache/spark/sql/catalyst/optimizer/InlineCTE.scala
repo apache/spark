@@ -100,13 +100,22 @@ case class InlineCTE(
       .flatMap(_.output.filter(_.resolved).map(_.exprId))
       .toSet
 
-    // Locate either a direct `OuterReference` or a correlated subquery whose outer-scope
-    // attributes escape the def -- i.e. resolve to none of `boundExprIds`.
+    // Check the direct `OuterReference` first: if one escapes the def boundary, report it
+    // and stop; the outer-scope scan below only runs when no direct reference escapes.
     val escapingOuterRef = allNodes.iterator
       .flatMap(_.expressions.iterator.flatMap(_.collect {
         case o: OuterReference if !boundExprIds.contains(o.exprId) => o
       }))
       .nextOption()
+    escapingOuterRef.foreach { o =>
+      throw SparkException.internalError(
+        "A force-materialized CTE cannot carry an outer reference across its boundary, but " +
+          s"found outer reference '${o.name}' in the CTE definition " +
+          s"(cteId=${cteDef.id}).")
+    }
+
+    // Then check for a correlated subquery whose outer-scope attributes escape the def,
+    // i.e. resolve to none of `boundExprIds`.
     val escapingOuterScopeRef = allNodes.iterator
       .flatMap(_.expressions.iterator.flatMap(
         _.collect { case s: SubqueryExpression => s.outerScopeAttrs }
@@ -114,20 +123,12 @@ case class InlineCTE(
             case r: OuterScopeReference if !boundExprIds.contains(r.exprId) => r
           })))
       .nextOption()
-
-    (escapingOuterRef, escapingOuterScopeRef) match {
-      case (Some(o), _) =>
-        throw SparkException.internalError(
-          "A force-materialized CTE cannot carry an outer reference across its boundary, but " +
-            s"found outer reference '${o.name}' in the CTE definition " +
-            s"(cteId=${cteDef.id}).")
-      case (None, Some(r)) =>
-        throw SparkException.internalError(
-          "A force-materialized CTE cannot carry an outer reference across its boundary, but " +
-            "found a subquery with outer-scope reference " +
-            s"'${r.name}' in the CTE definition " +
-            s"(cteId=${cteDef.id}).")
-      case (None, None) =>
+    escapingOuterScopeRef.foreach { r =>
+      throw SparkException.internalError(
+        "A force-materialized CTE cannot carry an outer reference across its boundary, but " +
+          "found a subquery with outer-scope reference " +
+          s"'${r.name}' in the CTE definition " +
+          s"(cteId=${cteDef.id}).")
     }
   }
 
