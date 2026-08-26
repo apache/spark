@@ -706,11 +706,10 @@ object SparkEnv extends Logging {
         isLocal,
         conf,
         listenerBus,
-        if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
-          externalShuffleClient
-        } else {
-          None
-        }, blockManagerInfo,
+        // Already None unless the shuffle service is enabled, which is what the old conditional
+        // here re-checked.
+        externalShuffleClient,
+        blockManagerInfo,
         mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
         isDriver))
     } else {

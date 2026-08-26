@@ -17,6 +17,8 @@
 
 package org.apache.spark.storage
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time._
 
@@ -25,8 +27,11 @@ import org.apache.spark.internal.config
 
 class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext with Eventually {
 
+  // The interval is not tight on purpose: several of these `eventually` bodies do a cluster-wide
+  // RPC fan-out (getMatchingBlockIds with askStorageEndpoints), and polling those every few millis
+  // for up to 20s loads the very dispatcher the assertions are measuring.
   implicit override val patienceConfig: PatienceConfig =
-    PatienceConfig(timeout = scaled(Span(20, Seconds)), interval = scaled(Span(5, Millis)))
+    PatienceConfig(timeout = scaled(Span(20, Seconds)), interval = scaled(Span(200, Millis)))
 
   private val blockTTL = 5000L
   // Long enough that nothing is reaped mid-test, for the tests that only check tracking.
@@ -55,7 +60,10 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext with
     assert(endpoint.rddAccessTime.isEmpty)
     assert(tracker.shuffleAccessTime.isEmpty)
     assert(tracker.ttlCleaner.isDefined)
-    sc.parallelize(1.to(100)).groupBy(_ % 10).count()
+    // Held in scope so the ContextCleaner cannot collect the ShuffleDependency first: its path does
+    // not bump the epoch, so the epoch assertion below would never come true.
+    val shuffled = sc.parallelize(1.to(100)).groupBy(_ % 10)
+    shuffled.count()
     val shuffleId = tracker.shuffleStatuses.keys.head
     val epochBefore = tracker.getEpoch
     eventually { assert(tracker.shuffleAccessTime.containsKey(shuffleId)) }
@@ -71,6 +79,38 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext with
         "the reap must bump the epoch, or executors keep fetching the files it deleted")
       assert(tracker.shuffleAccessTime.isEmpty)
     }
+    // Last use of `shuffled`, keeping it reachable throughout: the JVM collects by liveness, not
+    // by scope.
+    assert(shuffled.getNumPartitions > 0)
+  }
+
+  test("the shuffle reap deletes files before it drops the driver's map output") {
+    // removeShuffle reads the live MapStatuses and push-merger locations to find what the external
+    // shuffle service must delete, so emptying the ShuffleStatus first silently reclaims no ESS
+    // disk. Observe the ordering directly rather than standing up a shuffle service.
+    startCluster(Some(blockTTL), Some(blockTTL))
+    // -2 = never invoked, -1 = invoked with the ShuffleStatus already gone.
+    val outputsWhenRemoved = new AtomicInteger(-2)
+    val wiredRemover = tracker.shuffleFileRemover.getOrElse(
+      fail("SparkContext should have wired the shuffle file remover"))
+    tracker.shuffleFileRemover = Some { shuffleId =>
+      outputsWhenRemoved.compareAndSet(-2,
+        tracker.shuffleStatuses.get(shuffleId).map(_.numAvailableMapOutputs).getOrElse(-1))
+      wiredRemover(shuffleId)
+    }
+    // Held in scope so the ContextCleaner cannot collect the ShuffleDependency mid-test; the TTL
+    // cleaner must be the only thing doing the reaping here.
+    val shuffled = sc.parallelize(1.to(100)).groupBy(_ % 10)
+    shuffled.count()
+    eventually {
+      assert(outputsWhenRemoved.get() !== -2, "the TTL should have reaped the shuffle by now")
+    }
+    assert(outputsWhenRemoved.get() > 0,
+      "the shuffle's map output must still be registered when its files are deleted, or the " +
+        "external shuffle service is never told which blocks to remove")
+    // Last use of `shuffled`, keeping it reachable throughout: the JVM collects by liveness, not
+    // by scope.
+    assert(shuffled.getNumPartitions > 0)
   }
 
   test("re-reading a cached RDD in a new job refreshes its access time") {
@@ -128,6 +168,13 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext with
       "a locally-checkpointed RDD must survive the TTL: its blocks are the only copy")
     assert(endpoint.rddReapable(checkpointed.id) === false,
       "the TTL cleaner must refuse to reap a locally-checkpointed RDD")
+    // Positive control: `rddReapable`'s unwired default is `_ => false`, so the assertion above
+    // passes just as well when SparkContext never wired the veto at all. Pin down that the wired
+    // veto discriminates rather than refusing everything.
+    val plainCached = sc.parallelize(1.to(10)).cache()
+    assert(plainCached.count() === 10)
+    assert(endpoint.rddReapable(plainCached.id),
+      "the veto must be specific to locally-checkpointed RDDs, not a blanket refusal")
   }
 
   test("reaping an RDD removes every partition and leaves the RDD usable") {

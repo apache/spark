@@ -673,12 +673,15 @@ class SparkContext(config: SparkConf) extends Logging {
     // (ShuffleDriverComponents, the ContextCleaner and this SparkContext) exist.
     _env.mapOutputTracker match {
       case mapOutputTrackerMaster: MapOutputTrackerMaster =>
-        mapOutputTrackerMaster.shuffleFileRemover = { shuffleId =>
-          // Mirrors the tail of ContextCleaner.doCleanupShuffle: delete the files, then notify the
-          // listeners so shuffle-tracking dynamic allocation can release an executor that only held
-          // this shuffle.
-          _shuffleDriverComponents.removeShuffle(
-            shuffleId, _conf.get(CLEANER_REFERENCE_TRACKING_BLOCKING_SHUFFLE))
+        // Read once, not per reap, like the other TTL configs.
+        val blockingShuffleRemoval = _conf.get(CLEANER_REFERENCE_TRACKING_BLOCKING_SHUFFLE)
+        // Together these mirror the tail of ContextCleaner.doCleanupShuffle: delete the files, and
+        // (after the tracker has unregistered the shuffle) notify the listeners so shuffle-tracking
+        // dynamic allocation can release an executor that only held this shuffle.
+        mapOutputTrackerMaster.shuffleFileRemover = Some { shuffleId =>
+          _shuffleDriverComponents.removeShuffle(shuffleId, blockingShuffleRemoval)
+        }
+        mapOutputTrackerMaster.shuffleCleanedNotifier = Some { shuffleId =>
           _cleaner.foreach(_.notifyShuffleCleaned(shuffleId))
         }
       case _ =>
@@ -691,9 +694,15 @@ class SparkContext(config: SparkConf) extends Logging {
       // the RDD from persistentRdds, and RDD.persist only re-registers on the way out of
       // StorageLevel.NONE, so a reaped RDD stops appearing in getPersistentRDDs.
       endpoint.rddReaper = { rddId =>
-        _cleaner match {
-          case Some(contextCleaner) => contextCleaner.doCleanupRDD(rddId, blocking = false)
-          case None => unpersistRDD(rddId, blocking = false)
+        // Re-check the veto here, not just in rddReapable: an RDD can be locally checkpointed
+        // between the cleaner's check and this call, and the reap removes the id from
+        // locallyCheckpointedRddIds on its way through unpersistRDD -- so reaping one would both
+        // destroy the only copy of its data and erase the protection against doing it again.
+        if (!locallyCheckpointedRddIds.contains(rddId)) {
+          _cleaner match {
+            case Some(contextCleaner) => contextCleaner.doCleanupRDD(rddId, blocking = false)
+            case None => unpersistRDD(rddId, blocking = false)
+          }
         }
       }
     }

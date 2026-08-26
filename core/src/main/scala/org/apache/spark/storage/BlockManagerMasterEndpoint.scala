@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.{BlockTtlCleaner, MapOutputTrackerMaster, SparkConf, SparkContext, SparkEnv}
+import org.apache.spark.{BlockTTLCleaner, MapOutputTrackerMaster, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys._
@@ -96,11 +96,6 @@ class BlockManagerMasterEndpoint(
   // rddId without scanning the whole map.
   private val sealedBlocksByRdd = new mutable.HashMap[Int, mutable.HashSet[RDDBlockId]]
 
-  // Last access time per RDD, for the RDD TTL. Overwriting a "close" timestamp is fine, but the TTL
-  // cleaner thread iterates and removes from this while the dispatcher puts to it, so it has to be
-  // a concurrent map.
-  private[spark] val rddAccessTime = new ConcurrentHashMap[Int, Long]
-
   // Mapping from task id to the set of rdd blocks which are generated from the task.
   private val tidToRddBlockIds = new mutable.HashMap[Long, mutable.HashSet[RDDBlockId]]
   // Record the RDD blocks which are not visible yet, a block will be removed from this collection
@@ -120,6 +115,11 @@ class BlockManagerMasterEndpoint(
   private implicit val askExecutionContext: ExecutionContextExecutorService =
     ExecutionContext.fromExecutorService(askThreadPool)
 
+  // Last access time per RDD, for the RDD TTL. Overwriting a "close" timestamp is fine, but the TTL
+  // cleaner thread iterates and removes from this while the dispatcher puts to it, so it has to be
+  // a concurrent map.
+  private[spark] val rddAccessTime = new ConcurrentHashMap[Int, Long]
+
   // Read once: updateBlockAtime is on the hot path of block location lookups.
   private val rddTtl: Option[Long] = conf.get(config.CLEANER_TTL_RDD)
 
@@ -136,8 +136,8 @@ class BlockManagerMasterEndpoint(
   // Started in onStart rather than here, once the endpoint is live and SparkContext has had its
   // chance to wire the two hooks above. Both are read through a lambda for that reason: the vars
   // are assigned after this cleaner is built.
-  private[spark] val ttlCleaner: Option[BlockTtlCleaner] = rddTtl.map { ttl =>
-    new BlockTtlCleaner(
+  private[spark] val ttlCleaner: Option[BlockTTLCleaner] = rddTtl.map { ttl =>
+    new BlockTTLCleaner(
       name = "RDD",
       ttlMillis = ttl,
       accessTimes = rddAccessTime,
@@ -239,8 +239,8 @@ class BlockManagerMasterEndpoint(
     case RemoveRdd(rddId) =>
       context.reply(removeRdd(rddId))
 
-    case RemoveShuffle(shuffleId) =>
-      context.reply(removeShuffle(shuffleId))
+    case RemoveShuffleFromMaster(shuffleId, mapOutputLocations, shuffleMergerLocations) =>
+      context.reply(removeShuffle(shuffleId, mapOutputLocations, shuffleMergerLocations))
 
     case RemoveBroadcast(broadcastId, removeFromDriver) =>
       context.reply(removeBroadcast(broadcastId, removeFromDriver))
@@ -485,29 +485,32 @@ class BlockManagerMasterEndpoint(
     Future.sequence(removeRddFromExecutorsFutures ++ removeRddBlockViaExtShuffleServiceFutures)
   }
 
-  private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
-    // Find all shuffle blocks on executors that are no longer running
+  // `mapOutputLocations` and `shuffleMergerLocations` are snapshotted by the caller rather than
+  // read from the MapOutputTracker here, because reading either takes the shuffle's ShuffleStatus
+  // lock and this is the single dispatcher thread. See BlockManagerMaster.removeShuffle.
+  private def removeShuffle(
+      shuffleId: Int,
+      mapOutputLocations: Seq[(BlockManagerId, Long)],
+      shuffleMergerLocations: Seq[BlockManagerId]): Future[Seq[Boolean]] = {
+    // Find all shuffle blocks on executors that are no longer running. No gate on
+    // externalShuffleServiceRemoveShuffleEnabled here: the caller applies that gate when deciding
+    // whether to gather the snapshot, so re-deriving it would just be a second copy of the
+    // condition that could disagree with the first and silently skip the removal.
     val blocksToDeleteByShuffleService =
       new mutable.HashMap[BlockManagerId, mutable.HashSet[BlockId]]
-    if (externalShuffleServiceRemoveShuffleEnabled) {
-      mapOutputTracker.shuffleStatuses.get(shuffleId).foreach { shuffleStatus =>
-        shuffleStatus.withMapStatuses { mapStatuses =>
-          mapStatuses.filter(_ != null).foreach { mapStatus =>
-            // Check if the executor has been deallocated
-            if (!blockManagerIdByExecutor.contains(mapStatus.location.executorId)) {
-              // Only a BlockingShuffleManager serves block-manager blocks; a pipelined shuffle is
-              // served out-of-band and is not in the MapOutputTracker this loop iterates, so this
-              // resolves only regular shuffles (None only before the manager is initialized).
-              val blocksToDel = SparkEnv.get.shuffleBlockResolver
-                .map(_.getBlocksForShuffle(shuffleId, mapStatus.mapId))
-                .getOrElse(Seq.empty)
-              if (blocksToDel.nonEmpty) {
-                val blocks = blocksToDeleteByShuffleService.getOrElseUpdate(mapStatus.location,
-                  new mutable.HashSet[BlockId])
-                blocks ++= blocksToDel
-              }
-            }
-          }
+    mapOutputLocations.foreach { case (location, mapId) =>
+      // Check if the executor has been deallocated
+      if (!blockManagerIdByExecutor.contains(location.executorId)) {
+        // Only a BlockingShuffleManager serves block-manager blocks; a pipelined shuffle is
+        // served out-of-band and is not in the MapOutputTracker the snapshot came from, so this
+        // resolves only regular shuffles (None only before the manager is initialized).
+        val blocksToDel = SparkEnv.get.shuffleBlockResolver
+          .map(_.getBlocksForShuffle(shuffleId, mapId))
+          .getOrElse(Seq.empty)
+        if (blocksToDel.nonEmpty) {
+          val blocks = blocksToDeleteByShuffleService.getOrElseUpdate(location,
+            new mutable.HashSet[BlockId])
+          blocks ++= blocksToDel
         }
       }
     }
@@ -529,13 +532,8 @@ class BlockManagerMasterEndpoint(
 
     val removeShuffleMergeFromShuffleServicesFutures =
       externalBlockStoreClient.map { shuffleClient =>
-        val mergerLocations =
-          if (Utils.isPushBasedShuffleEnabled(conf, isDriver)) {
-            mapOutputTracker.getShufflePushMergerLocations(shuffleId)
-          } else {
-            Seq.empty[BlockManagerId]
-          }
-        mergerLocations.map { bmId =>
+        // Likewise gated by the caller, which only gathers these under push-based shuffle.
+        shuffleMergerLocations.map { bmId =>
           Future[Boolean] {
             shuffleClient.removeShuffleMerge(bmId.host, bmId.port, shuffleId,
               RemoteBlockPushResolver.DELETE_ALL_MERGED_SHUFFLE)
@@ -1193,8 +1191,10 @@ class BlockManagerMasterEndpoint(
   override def onStart(): Unit = ttlCleaner.foreach(_.start())
 
   override def onStop(): Unit = {
-    askThreadPool.shutdownNow()
+    // Cleaner first: a reap in flight routes its removal through askThreadPool, so shutting that
+    // down before joining the cleaner would fail the reap with a RejectedExecutionException.
     ttlCleaner.foreach(_.stop())
+    askThreadPool.shutdownNow()
   }
 }
 
