@@ -17,7 +17,7 @@
 package org.apache.spark.ml.feature
 
 import java.io.{DataInputStream, DataOutputStream}
-import java.util.{HashMap => JHashMap, WeakHashMap => JWeakHashMap}
+import java.util.{HashMap => JHashMap}
 
 import org.apache.hadoop.fs.Path
 
@@ -294,22 +294,27 @@ class CountVectorizerModel(
   @Since("2.0.0")
   def setBinary(value: Boolean): this.type = set(binary, value)
 
-  /** [[vocabulary]] broadcast once for [[transform()]] */
-  private var broadcastVocabulary: Option[Broadcast[Array[String]]] = None
+  /** Dictionary created from [[vocabulary]] and its indices, broadcast once for [[transform()]] */
+  private var broadcastDict: Option[Broadcast[JHashMap[String, Integer]]] = None
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
-    if (broadcastVocabulary.isEmpty) {
-      broadcastVocabulary = Some(
-        dataset.sparkSession.sparkContext.broadcast(vocabulary.clone()))
+    if (broadcastDict.isEmpty) {
+      val dict = new JHashMap[String, Integer](math.ceil(vocabulary.length / 0.75).toInt)
+      var index = 0
+      while (index < vocabulary.length) {
+        dict.put(vocabulary(index), index)
+        index += 1
+      }
+      broadcastDict = Some(dataset.sparkSession.sparkContext.broadcast(dict))
     }
-    val vocabularyBr = broadcastVocabulary.get
+    val dictBr = broadcastDict.get
     val localMinTF = $(minTF)
     val localBinary = $(binary)
     val vectorizer = udf { document: Seq[String] =>
-      val localVocabulary = vocabularyBr.value
-      val dict = CountVectorizerModel.getVocabularyDict(localVocabulary)
+      val dict = dictBr.value
+      val dictSize = dict.size()
       val termCounts = new OpenHashMap[Int, Int]
       var tokenCount = 0L
       document.foreach { term =>
@@ -326,7 +331,7 @@ class CountVectorizerModel(
         termCounts.filter(_._2 >= effectiveMinTF).map(p => (p._1, p._2.toDouble)).toSeq
       }
 
-      Vectors.sparse(localVocabulary.length, effectiveCounts)
+      Vectors.sparse(dictSize, effectiveCounts)
     }
     dataset.withColumn($(outputCol), vectorizer(col($(inputCol))),
       outputSchema($(outputCol)).metadata)
@@ -360,24 +365,6 @@ class CountVectorizerModel(
 
 @Since("1.6.0")
 object CountVectorizerModel extends MLReadable[CountVectorizerModel] {
-  private val vocabularyDictCache =
-    new JWeakHashMap[Array[String], JHashMap[String, Integer]]()
-
-  private[feature] def getVocabularyDict(
-      vocabulary: Array[String]): JHashMap[String, Integer] = vocabularyDictCache.synchronized {
-    var dict = vocabularyDictCache.get(vocabulary)
-    if (dict == null) {
-      dict = new JHashMap[String, Integer](math.ceil(vocabulary.length / 0.75).toInt)
-      var index = 0
-      while (index < vocabulary.length) {
-        dict.put(vocabulary(index), index)
-        index += 1
-      }
-      vocabularyDictCache.put(vocabulary, dict)
-    }
-    dict
-  }
-
   private[ml] case class Data(vocabulary: Seq[String])
 
   private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
