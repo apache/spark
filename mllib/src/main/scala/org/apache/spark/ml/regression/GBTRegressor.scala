@@ -278,7 +278,7 @@ class GBTRegressionModel private[ml](
       val predictUDF = udf { features: Vector => bcastModel.value.predict(features) }
       predictionColNames :+= $(predictionCol)
       predictionColumns :+= predictUDF(col($(featuresCol)))
-        .as($(featuresCol), outputSchema($(featuresCol)).metadata)
+        .as($(predictionCol), outputSchema($(predictionCol)).metadata)
     }
 
     if ($(leafCol).nonEmpty) {
