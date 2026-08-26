@@ -16,9 +16,12 @@
  */
 package org.apache.spark.sql.connect.service
 
+import java.util.concurrent.{ConcurrentLinkedQueue, CyclicBarrier, TimeUnit}
+
 import scala.concurrent.Promise
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
+import scala.util.Try
 
 import io.grpc.stub.StreamObserver
 
@@ -264,6 +267,52 @@ class SparkConnectConfigHandlerSuite extends SharedSparkSession {
       spark.sessionState.conf.setConfString(key, "x")
       sendConfigRequest(sessionHolder, _.getUnsetBuilder.addKeys(key))
       assert(spark.conf.getOption(key).isEmpty)
+    }
+  }
+
+  test("SPARK-58752: a silent rejection does not carry the rejected value") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val nul = 0.toChar
+    val secret = s"abc${nul}def"
+    val key = envKey("WITH_NUL")
+    withEnvKeys(key) {
+      val response = sendSet(sessionHolder, key, secret, silent = true)
+      assert(response.getWarningsCount === 1)
+      val warning = response.getWarnings(0)
+      // The Scala client logs this warning and the Python client raises it, so it outlives the
+      // response. A rejected value must not travel in it, just as it does not reach the message of
+      // the rejection itself.
+      assert(warning.contains(key))
+      assert(!warning.contains("abc"))
+      assert(!warning.contains("def"))
+      assert(!warning.contains(nul.toString))
+      assert(spark.conf.getOption(key).isEmpty)
+    }
+  }
+
+  test("SPARK-58752: concurrent writes cannot jointly exceed a limit") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    withLimit(Connect.CONNECT_PYTHON_WORKER_ENV_MAX_VARIABLES, 1) {
+      withEnvKeys(envKey("FIRST"), envKey("SECOND")) {
+        // Both writers read the environment, validate, and write. Unless the check and the write it
+        // validated are one unit, both observe an empty environment, both accept, and the session
+        // is left holding two variables against a limit of one.
+        val barrier = new CyclicBarrier(2)
+        val outcomes = new ConcurrentLinkedQueue[Try[Unit]]()
+        val threads = Seq("FIRST", "SECOND").map { name =>
+          new Thread(() => {
+            barrier.await(10, TimeUnit.SECONDS)
+            outcomes.add(Try(sendSet(sessionHolder, envKey(name), "1")).map(_ => ()))
+          })
+        }
+        threads.foreach(_.start())
+        threads.foreach(_.join(TimeUnit.SECONDS.toMillis(30)))
+        assert(outcomes.size === 2)
+        val accepted = outcomes.asScala.count(_.isSuccess)
+        assert(accepted === 1, s"expected exactly one write to be accepted, got $accepted")
+        val stored = PythonWorkerEnvironment.read(spark.sessionState.conf)
+        assert(stored.size === 1, s"the limit was exceeded: $stored")
+      }
     }
   }
 

@@ -3700,6 +3700,45 @@ Command types in proto.</td>
 </tr>
 </table>
 
+#### Session Configuration
+
+Session configurations are set by a Spark Connect client for its own session, for example with
+`spark.conf.set` or SQL `SET`. They apply only to that session, and a client may change them at any
+point while the session is alive.
+
+<table class="spark-config">
+<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
+<tr>
+  <td><code>spark.pythonWorkerEnv.[EnvironmentVariableName]</code></td>
+  <td>
+    (none)
+  </td>
+  <td>
+    Add the environment variable specified by <code>EnvironmentVariableName</code> to the Python
+    worker processes that run the session's Python functions, making it visible to
+    <code>os.environ</code> inside a Python UDF. A client may specify several of these to set
+    several environment variables.
+    <br /><br />
+    This differs from <code>spark.executorEnv.[EnvironmentVariableName]</code>, which is scoped to
+    the whole application and fixed before it starts: these are session configurations, so each
+    session carries its own environment and can change it while running.
+    <br /><br />
+    A variable name must match <code>[A-Za-z_][A-Za-z0-9_]*</code>, and a value must not contain a
+    NUL character, which a process environment cannot carry. The number of variables and the total
+    size of the environment are also bounded. Setting a configuration through the Spark Connect
+    configuration API, which is what <code>spark.conf.set</code> uses, fails immediately if the
+    result would be invalid and stores nothing. Setting one through SQL <code>SET</code> does not
+    go through that API, so it is stored and instead fails the queries that would install it in a
+    worker.
+    <br /><br />
+    An environment variable that Spark sets for a Python worker itself takes precedence over one
+    set here. Values are not redacted from the worker environment, so a session that puts a secret
+    here is responsible for keeping the Python code it runs from disclosing it.
+  </td>
+  <td>4.4.0</td>
+</tr>
+</table>
+
 ### Security
 
 Please refer to the [Security](security.html) page for available options on how to secure different

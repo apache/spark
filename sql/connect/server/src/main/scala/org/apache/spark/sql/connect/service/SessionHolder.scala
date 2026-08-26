@@ -670,8 +670,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
  *   the relation the cached plan was built from.
  * @param pythonWorkerEnv
  *   the Python worker environment the plan was built with, as the request that built it observed
- *   it. Part of the key because the environment is baked into every Python function the plan
- *   contains, so a plan built with one environment must not be reused by a request carrying
+ *   it. It is part of the key because the environment is baked into every Python function the
+ *   plan contains, so a plan built with one environment must not be reused by a request carrying
  *   another.
  */
 private[service] case class PlanCacheKey(

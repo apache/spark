@@ -54,7 +54,7 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
     // Make sure we're using the current running session.
     val builder = r.getOperation.getOpTypeCase match {
       case proto.ConfigRequest.Operation.OpTypeCase.SET =>
-        handleSet(r.getOperation.getSet, s.conf)
+        handleSet(r.getOperation.getSet, s.conf, s.sessionState.conf)
       case proto.ConfigRequest.Operation.OpTypeCase.GET =>
         handleGet(r.getOperation.getGet, s.conf, redactionPattern)
       case proto.ConfigRequest.Operation.OpTypeCase.GET_WITH_DEFAULT =>
@@ -79,7 +79,8 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
 
   private def handleSet(
       operation: proto.ConfigRequest.Set,
-      conf: RuntimeConfig): proto.ConfigResponse.Builder = {
+      conf: RuntimeConfig,
+      sqlConf: SQLConf): proto.ConfigResponse.Builder = {
     val silent = operation.hasSilent && operation.getSilent
     val builder = proto.ConfigResponse.newBuilder()
     operation.getPairsList.asScala.iterator.foreach { pair =>
@@ -88,13 +89,24 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
         // Reject a write that would leave the session's Python worker environment invalid, before
         // it is stored. Inside the try so that a `silent` request reports it as a warning, the way
         // it reports any other rejected write.
-        PythonWorkerEnvironment.validateConfigChange(conf, key, value)
-        conf.set(key, value.orNull)
+        //
+        // Check and write under the monitor that guards the session configurations, so that a
+        // concurrent write cannot land in between and leave the environment in a state neither
+        // writer validated. Every writer takes this monitor -- `setConfString` and `getAllConfs`
+        // both do -- and `SQLConf` itself holds it across the compound write in `setConf(props)`.
+        sqlConf.settings.synchronized {
+          PythonWorkerEnvironment.validateConfigChange(conf, key, value)
+          conf.set(key, value.orNull)
+        }
         getWarning(key).foreach(builder.addWarnings)
       } catch {
         case e: Throwable =>
           if (silent) {
-            builder.addWarnings(s"Failed to set $key to $value due to ${e.getMessage}")
+            // The rejected value is deliberately left out. A configuration value can be a secret,
+            // and this warning outlives the response: the Scala client logs it and the Python
+            // client raises it as a warning. Reads through this handler are redacted for the same
+            // reason, and the environment validation keeps values out of its messages.
+            builder.addWarnings(s"Failed to set $key due to ${e.getMessage}")
           } else {
             throw e
           }
