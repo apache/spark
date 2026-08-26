@@ -1017,6 +1017,21 @@ def ge_pair(x, y):
     return x >= y
 
 
+def repeat_fractional(s):
+    # `"ab" * 2.5` is a TypeError in Python, not the "abab" a truncating cast would give.
+    return s * 2.5
+
+
+def repeat_integral(s):
+    return s * 3
+
+
+def negate_value(x):
+    # `-x` at a width's minimum: two's complement has no positive counterpart, so this raised
+    # before operand promotion while `abs(x)` on the same column answered.
+    return -x
+
+
 def concat_pair(a, b):
     # `'a' + None` raises TypeError in Python where Catalyst's concat would
     # propagate NULL, so the lowering guards and both sides raise.
@@ -2373,6 +2388,55 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
                             f"transpiled {func.__name__}{args} must match CPython",
                         )
                     self.assertEqual(expected, func(*args), "CPython, for comparison")
+
+        def test_fractional_string_repeat_raises_rather_than_truncating(self):
+            # `repeat` takes an int count, so a lowering that cast 2.5 down would return
+            # "abab" -- a plausible-looking wrong answer, which is the worst kind. Python
+            # raises TypeError instead, so this must fall back AND the fallback must raise.
+            #
+            # The existing coverage (test_udf_transpile_repeat_count_must_be_integral, and
+            # the `repeat_float` row of test_udf_transpile_numeric_falls_back) asserts only
+            # that it stays interpreted. That is the cheaper half: it would still pass if the
+            # interpreted path started returning "abab" too. Pin the raise, and pin that an
+            # integral count is unaffected, so this reads as a guard and not a blanket
+            # refusal of `*` on strings.
+            df = self._single_arg_df("ab", StringType())
+            self._assert_falls_back_to_cpython(
+                repeat_fractional,
+                StringType(),
+                df,
+                ("a",),
+                ("ab",),
+                "s * 2.5",
+            )
+            with self.assertRaises(TypeError, msg="premise: CPython refuses a float count"):
+                repeat_fractional("ab")
+            # An integral count still lowers, and still concatenates.
+            transpiled, interpreted = self._run(repeat_integral, StringType(), df, "a")
+            self.assertSameValue(transpiled, interpreted, "s * 3")
+            self.assertEqual("ababab", transpiled)
+
+        def test_negate_at_the_width_minimum_matches_python(self):
+            # The sister of test_abs_at_the_width_minimum_matches_python. `forNegation`'s
+            # scaladoc always claimed to cover unary minus, and the module docstring listed
+            # `-` among the operators that no longer overflow an intermediate, but nothing
+            # called it for negation until PythonPromotingNegate -- so `-x` raised on an int
+            # column holding Integer.MinValue while `abs(x)` on the same column answered.
+            #
+            # bigint is absent for the same reason it is absent from the abs pin: -(-2**63)
+            # is 2**63, which no LongType return can hold however wide we compute.
+            for dtype, minimum in (
+                (ByteType(), -128),
+                (ShortType(), -32768),
+                (IntegerType(), _INT32_MIN),
+            ):
+                with self.subTest(dtype=dtype.simpleString()):
+                    df = self._single_arg_df(minimum, dtype)
+                    transpiled, interpreted = self._run(negate_value, LongType(), df, "a")
+                    self.assertSameValue(
+                        transpiled, interpreted, f"-x at the {dtype.simpleString()} minimum"
+                    )
+                    self.assertEqual(-minimum, transpiled, f"-({minimum}) must be {-minimum}")
 
         def test_string_concat_with_null_raises_like_python(self):
             # The other fix adopted from PR 58185. Catalyst's `concat` propagates
