@@ -4207,7 +4207,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     }
   }
 
-  test("SPARK-56877: v2 bucketed table with subset join keys joining v1 table") {
+  test("SPARK-58988: v2 bucketed table with subset join keys joining v1 table") {
     // The v2 table is partitioned by an extra identity key `dt` plus `bucket(16, c1)`, while the
     // join is only on `c1`. allowKeysSubsetOfPartitionKeys lets the operation key `c1` be a subset
     // of the partition keys `[dt, bucket(16, c1)]`, so EnsureRequirements projects the keyed side
@@ -4232,8 +4232,13 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
       withSQLConf(
           SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
-          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
         val df = sql("SELECT * FROM testcat.ns.iceberg_t2 t0 JOIN t1 ON t0.c1 = t1.c1")
+        val plan = df.queryExecution.executedPlan
+        // Only the v1 side is re-shuffled; the v2 side is regrouped onto the join key instead.
+        assert(collectShuffles(plan).length == 1)
+        assert(collectGroupPartitions(plan).length == 1)
         checkAnswer(df, Seq(
           Row(1L, "aa", "2021", 1L, "aa"),
           Row(2L, "cc", "2020", 2L, "cc")))
