@@ -30,6 +30,7 @@ from pyspark.errors import (
     IllegalArgumentException,
     PySparkTypeError,
     PySparkValueError,
+    QueryContextType,
 )
 from pyspark.sql import DataFrame, Row, functions
 from pyspark.sql.functions import (
@@ -424,6 +425,40 @@ class DataFrameTestsMixin:
         # Type check
         self.assertRaises(TypeError, self.df.withColumns, ["key"])
         self.assertRaises(Exception, self.df.withColumns)
+
+    def test_with_columns_with_dependencies(self):
+        df = self.spark.range(3).withColumns(
+            {
+                "a": col("id") + 1,
+                "b": col("a") + 1,
+                "c": col("a") + col("b"),
+                "d": col("a") + col("b") + col("c"),
+            }
+        )
+
+        assertDataFrameEqual(
+            df,
+            [
+                Row(id=0, a=1, b=2, c=3, d=6),
+                Row(id=1, a=2, b=3, c=5, d=10),
+                Row(id=2, a=3, b=4, c=7, d=14),
+            ],
+        )
+
+        with self.assertRaises(AnalysisException) as pe:
+            self.spark.range(1).withColumns(
+                {
+                    "a": col("b") - 1,
+                    "b": col("id") + 1,
+                }
+            ).collect()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            messageParameters={"objectName": "`b`", "proposal": "`id`"},
+            query_context_type=QueryContextType.DataFrame,
+            fragment="col",
+        )
 
     def test_generic_hints(self):
         df1 = self.spark.range(10e10).toDF("id")

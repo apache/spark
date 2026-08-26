@@ -1427,6 +1427,12 @@ class ArrowTestsMixin:
         ):
             df.toArrow()
 
+        # An empty result must reject duplicated struct field names just like a non-empty one.
+        with self.assertRaisesRegex(
+            UnsupportedOperationException, "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT"
+        ):
+            df.limit(0).toArrow()
+
     def test_createDataFrame_pandas_duplicate_field_names(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):

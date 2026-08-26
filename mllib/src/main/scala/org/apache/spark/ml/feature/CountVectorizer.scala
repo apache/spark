@@ -17,6 +17,7 @@
 package org.apache.spark.ml.feature
 
 import java.io.{DataInputStream, DataOutputStream}
+import java.util.{HashMap => JHashMap}
 
 import org.apache.hadoop.fs.Path
 
@@ -33,7 +34,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SizeEstimator
-import org.apache.spark.util.collection.{OpenHashMap, Utils}
+import org.apache.spark.util.collection.OpenHashMap
 
 /**
  * Params for [[CountVectorizer]] and [[CountVectorizerModel]].
@@ -294,25 +295,32 @@ class CountVectorizerModel(
   def setBinary(value: Boolean): this.type = set(binary, value)
 
   /** Dictionary created from [[vocabulary]] and its indices, broadcast once for [[transform()]] */
-  private var broadcastDict: Option[Broadcast[Map[String, Int]]] = None
+  private var broadcastDict: Option[Broadcast[JHashMap[String, Integer]]] = None
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
     if (broadcastDict.isEmpty) {
-      val dict = Utils.toMapWithIndex(vocabulary)
+      val dict = new JHashMap[String, Integer](math.ceil(vocabulary.length / 0.75).toInt)
+      var index = 0
+      while (index < vocabulary.length) {
+        dict.put(vocabulary(index), index)
+        index += 1
+      }
       broadcastDict = Some(dataset.sparkSession.sparkContext.broadcast(dict))
     }
     val dictBr = broadcastDict.get
     val localMinTF = $(minTF)
     val localBinary = $(binary)
     val vectorizer = udf { document: Seq[String] =>
+      val dict = dictBr.value
+      val dictSize = dict.size()
       val termCounts = new OpenHashMap[Int, Int]
       var tokenCount = 0L
       document.foreach { term =>
-        dictBr.value.get(term) match {
-          case Some(index) => termCounts.changeValue(index, 1, _ + 1)
-          case None => // ignore terms not in the vocabulary
+        val index = dict.get(term)
+        if (index != null) {
+          termCounts.changeValue(index.intValue(), 1, _ + 1)
         }
         tokenCount += 1
       }
@@ -323,7 +331,7 @@ class CountVectorizerModel(
         termCounts.filter(_._2 >= effectiveMinTF).map(p => (p._1, p._2.toDouble)).toSeq
       }
 
-      Vectors.sparse(dictBr.value.size, effectiveCounts)
+      Vectors.sparse(dictSize, effectiveCounts)
     }
     dataset.withColumn($(outputCol), vectorizer(col($(inputCol))),
       outputSchema($(outputCol)).metadata)

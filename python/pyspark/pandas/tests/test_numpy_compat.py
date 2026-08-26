@@ -17,6 +17,7 @@
 
 import platform
 import unittest
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -179,6 +180,31 @@ class NumPyCompatTestsMixin:
                 psdf = ps.from_pandas(pdf)
 
                 self.assert_eq(np.reciprocal(psdf.a), np.reciprocal(pdf.a), almost=True)
+
+    @_skip_if_numpy_differs
+    def test_np_reciprocal_non_default_dtypes(self):
+        # The non-floating reciprocal branch also serves narrower integers,
+        # booleans, and decimals. numpy divides integers (and booleans, as
+        # int8) toward zero, so 0 overflows to the width-specific minimum
+        # (0 for int8/int16, int32 min for int32), while decimals take a true
+        # floating reciprocal. Lock in parity with pandas for each.
+        for dtype in ("int8", "int16", "int32"):
+            with self.subTest(dtype=dtype):
+                pdf = pd.DataFrame({"a": np.array([-2, -1, 0, 1, 2], dtype=dtype)})
+                psdf = ps.from_pandas(pdf)
+
+                self.assert_eq(np.reciprocal(psdf.a), np.reciprocal(pdf.a), almost=True)
+
+        # Boolean: numpy promotes to int8 (True -> 1, False -> 0).
+        pdf = pd.DataFrame({"a": [True, False, True]})
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(np.reciprocal(psdf.a), np.reciprocal(pdf.a), almost=True)
+
+        # Decimal: numpy takes a floating reciprocal. 0 is excluded because
+        # numpy raises DivisionByZero on Decimal('0').
+        pdf = pd.DataFrame({"a": [Decimal("2.5"), Decimal("-4"), Decimal("0.5")]})
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(np.reciprocal(psdf.a), np.reciprocal(pdf.a), almost=True)
 
     def test_np_bitwise_shift_functions(self):
         pdf = pd.DataFrame(
