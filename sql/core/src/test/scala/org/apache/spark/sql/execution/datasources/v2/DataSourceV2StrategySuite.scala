@@ -1121,20 +1121,30 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       dataType = BooleanType,
       children = Nil,
       udfName = Some("advisory_udf"))
-    val relation = DataSourceV2Relation.create(
-      new InMemoryCatalystFilterTable(schema, advisoryUDF),
-      None,
-      None,
-      CaseInsensitiveStringMap.empty)
-    val id = relation.output.head
+    val externalAdvisoryUDF = ExternalUserDefinedFunction(
+      name = Some("external_advisory_udf"),
+      payload = Array.emptyByteArray,
+      dataType = BooleanType,
+      children = Nil,
+      udfDeterministic = true,
+      udfNullable = false)
 
-    val pushedPlan = V2ScanRelationPushDown(Filter(EqualTo(id, Literal(1L)), relation))
-    val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
-    assert(scan.advisoryFilters.isEmpty)
-    assert(!pushedPlan.exists {
-      case Filter(condition, _) => condition.exists(_.isInstanceOf[UserDefinedExpression])
-      case _ => false
-    }, s"user-defined advisory filters must be discarded:\n$pushedPlan")
+    Seq(advisoryUDF, externalAdvisoryUDF).foreach { udf =>
+      val relation = DataSourceV2Relation.create(
+        new InMemoryCatalystFilterTable(schema, udf),
+        None,
+        None,
+        CaseInsensitiveStringMap.empty)
+      val id = relation.output.head
+
+      val pushedPlan = V2ScanRelationPushDown(Filter(EqualTo(id, Literal(1L)), relation))
+      val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+      assert(scan.advisoryFilters.isEmpty)
+      assert(!pushedPlan.exists {
+        case Filter(condition, _) => condition.exists(_ eq udf)
+        case _ => false
+      }, s"user-defined advisory filter $udf must be discarded:\n$pushedPlan")
+    }
   }
 
   test("advisory filters are not evaluated for V1 scans") {
