@@ -1038,8 +1038,10 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
     plan.transformDownWithSubqueriesAndPruning(
       _.containsPattern(TRANSPILED_PYTHON_UDF), ruleId) {
       // Nothing to do unless this operator itself holds a call; the pruning above only skips
-      // subtrees, so every Filter and Sort on the way down lands here too.
-      case p if !p.expressions.exists(_.containsPattern(TRANSPILED_PYTHON_UDF)) => p
+      // subtrees, so every Filter and Sort on the way down lands here too. The node and not the
+      // tree-pattern bit: a SubqueryExpression reports its inner plan's bits, and a call in
+      // there is converted by this transform's own descent into the subquery, not by us.
+      case p if !p.expressions.exists(_.exists(_.isInstanceOf[TranspiledPythonUDF])) => p
 
       case p => convertOperator(p)
     }
@@ -1072,10 +1074,10 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
    *    reshapes correlated subqueries, which broke `splitSubquery` on a HAVING and flipped
    *    COUNT-bug handling, for a column in one uncommon shape.
    *
-   * MergeRows is on neither list. Its instructions are first-match-wins, so a column runs
-   * `WHEN ... AND udf(a / b) > 0` for every row of the join -- but so does the interpreted UDF,
-   * which computes its inputs below MergeRows and raises on an unmatched row under ANSI today.
-   * Declining there is what would diverge.
+   * MergeRows is on neither list, on purpose. Its instructions are first-match-wins, so a column
+   * runs `WHEN ... AND udf(a / b) > 0` for every row of the join -- but so does the interpreted
+   * UDF, which computes its inputs below MergeRows and raises on an unmatched row under ANSI today.
+   * Turning it down there is what would diverge.
    */
   private def convertOperator(p: LogicalPlan): LogicalPlan =
     // A column widens the operator's child, and we only learn whether this operator's output is a
@@ -1183,7 +1185,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
         applyExpr(e, parentIsUdf = false, preEvaluate, inLambda = false)
       case e => e
     }
-    // A call that declined can orphan a column registered for an argument of its own. Drop those:
+    // A call turned down can orphan a column registered for an argument of its own. Drop those:
     // an unread column still computes, and under ANSI can raise on a row nothing looked at.
     val read = AttributeSet(converted.expressions.flatMap(_.references))
     val columns = extraColumns.filter(a => read.contains(a.toAttribute)).toSeq
@@ -1239,16 +1241,19 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
    */
   private def cheapToRepeat(arg: Expression): Boolean = arg match {
     // An enclosing call's reference computes nothing of its own. What it stands for may well be
-    // dear, but that is the enclosing call's argument, and these copies are the reads it counts.
+    // expensive, but that is the enclosing call's argument, and these copies are reads of it.
     case _: TranspiledUDFParameter => true
     case _ => arg.deterministic && CollapseProject.isCheap(arg)
   }
 
   /**
    * Converts the transpiled calls in one expression, leaving every argument at its use sites -- and
-   * so keeping the Python UDF for a call that owes one of them a single evaluation. What a custom
-   * transpiler's own ConvertToX gets: whether a Project fits below the operator is the operator's
-   * business, and only `apply` above, walking the plan, is in a position to know.
+   * so keeping the Python UDF for a call that owes one of them a single evaluation.
+   *
+   * This is what a custom transpiler's own ConvertToX gets, and it comes with no column placement
+   * at all: whether a Project fits below the operator is the operator's business, and only `apply`
+   * above, walking the plan, can know. A custom rule that wants an argument computed once has to
+   * place the column itself.
    */
   def applyExpr(expression: Expression, parentIsUdf: Boolean = false): Expression =
     applyExpr(expression, parentIsUdf, None, inLambda = false)
@@ -1265,7 +1270,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
       case other if !other.containsPattern(TRANSPILED_PYTHON_UDF) => other
 
       case s: TranspiledPythonUDF =>
-        // Every branch that declines to transpile leaves the Python UDF in place and keeps walking
+        // Every branch that turns the call down leaves the Python UDF in place and keeps walking
         // its arguments, which may hold transpilable calls of their own.
         def keepPython: Expression = s.pythonUDFExpr.mapChildren(recurse(_, parentIsUdf = true))
         // We _shouldn't_ have these nodes if ANSI is not enabled or transpilation is disabled
@@ -1319,8 +1324,11 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
               // a column for its nested call that nothing ever reads, and under ANSI that column
               // computes -- and can raise on -- an argument `transpile.py` promises is never
               // computed at all.
-              val read = TranspiledUDFParameter.referencedIndexes(catalystExpr).toSet
-              read.find(index => index < 0 || index >= s.arguments.length).foreach { index =>
+              val reads = TranspiledUDFParameter.referencedIndexes(catalystExpr)
+              val read = reads.toSet
+              // Over `reads`, not `read`: a Set names whichever bad index it yields first, so the
+              // error moved around between JVMs.
+              reads.find(index => index < 0 || index >= s.arguments.length).foreach { index =>
                 // Only a hand-built option can be out of range: the builder bounds-checks what it
                 // emits, and a pre-typed reference slips past the analyzer's check too.
                 throw QueryCompilationErrors.invalidUDFParameterPlaceholderIndex(
@@ -1353,7 +1361,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
         // preserve the UDF batch pipeline (e.g. an outer UDF that could not be
         // transpiled wrapping one that could).
         //
-        // A conditional branch is deliberately not treated like a lambda: the column stands, which
+        // A conditional branch is not treated like a lambda, on purpose: the column stands, which
         // makes the argument eager, and the interpreted UDF is eager there too. See `transpile.py`.
         expression.mapChildren(applyExpr(_, parentIsUdf = isScalarPythonUDF(expression),
           preEvaluate, inLambda || expression.isInstanceOf[LambdaFunction]))

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.python
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkArithmeticException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{Column, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -142,6 +143,30 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
       val df = spark.range(0, 6).groupBy(col("id") % 2).agg(sum(col("id") + inner.scalar()))
       assert(df.queryExecution.optimizedPlan.collect { case a: Aggregate => a }.nonEmpty)
       assert(df.collect().length == 2)
+    }
+  }
+
+  test("a call straddling both sides of a non-inner join fails the way Python does") {
+    transpileOn {
+      // No column can go under a join, so a call owed an evaluation keeps the Python UDF -- and
+      // for a condition reading both sides, ExtractPythonUDFFromJoinCondition rejects a Python UDF
+      // on anything but an inner join. So this query fails, where a body reading its parameter once
+      // lowers and runs. That is the same error the query gets with transpilation off, but it is a
+      // change from this branch's own earlier behaviour, where the argument was copied to each read
+      // and the condition stayed pure Catalyst. Pinned so the trade is visible, not a surprise.
+      val square = udfWith(Multiply(param(0), param(0)), arity = 2)
+      val left = spark.range(0, 3).select(col("id").as("a"))
+      val right = spark.range(0, 3).select(col("id").as("c"))
+      val straddles = square(col("a") + 1, col("c")) > 0
+      val e = intercept[AnalysisException](left.join(right, straddles, "left_outer").collect())
+      assert(e.getCondition.startsWith("UNSUPPORTED_FEATURE"), s"Unexpected: ${e.getCondition}")
+
+      // Read once, the same call lowers and the join runs.
+      val once = udfWith(Add(param(0), param(1)), arity = 2)
+      val lowered = left.join(right, once(col("a") + 1, col("c")) > 0, "left_outer")
+      assert(!lowered.queryExecution.optimizedPlan.exists(_.isInstanceOf[BaseEvalPython]),
+        s"Expected no Python:\n${lowered.queryExecution.optimizedPlan}")
+      assert(lowered.collect().length == 9)
     }
   }
 

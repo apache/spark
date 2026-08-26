@@ -1666,9 +1666,10 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
     def test_udf_transpile_evaluates_inputs_once_in_a_group_by(self):
         # SPARK-58626: an Aggregate is the awkward one -- a use no aggregate function wraps has to
-        # *be* a grouping expression, so it cannot read a pre-evaluated column. The rule splits the
-        # aggregate first so both halves can hold one; this runs all three shapes to pin that the
-        # answers are the same however the argument is placed.
+        # *be* a grouping expression, so it cannot read a pre-evaluated column, and a call owed one
+        # keeps the interpreted UDF (see test_udf_transpile_declines_under_an_aggregate). The
+        # arguments here are deterministic and read once, so all three shapes lower; this pins that
+        # the answers are the same either way.
         from pyspark.sql.functions import col
         from pyspark.sql.functions import sum as sum_
 

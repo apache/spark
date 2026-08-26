@@ -50,11 +50,12 @@ same deterministic argument share the column, so ``f(a + 1, a + 1)`` computes
 
 A call inside a higher-order function's lambda is never lowered: Spark already
 applies a Python UDF over the whole array there, and that path is left to it.
-Otherwise a few positions have nowhere to put the column -- a join condition, a
-command such as ``DELETE FROM`` -- and there a body reading the parameter more
-than once stays an interpreted Python UDF, which computes its inputs once, rather
-than being lowered into an argument evaluated per read. One evaluation per parameter per row either
-way; ``f(rand(), rand())`` is two parameters and so still two draws::
+Otherwise a few positions have nowhere to put the column -- under a ``groupBy``,
+in a join condition, in a command such as ``DELETE FROM`` -- and there a body
+reading the parameter more than once stays an interpreted Python UDF, which
+computes its inputs once, rather than being lowered into an argument evaluated
+per read. One evaluation per parameter per row either way; ``f(rand(), rand())``
+is two parameters and so still two draws::
 
     body = lambda x: x if x > 0.5 else 0.0
     clamp = udf(body, "double")
@@ -68,10 +69,6 @@ a projection feeding the worker, below the conditional -- unlike a bare Catalyst
 ``when``, which is lazy. Whether such an error surfaces is not a guarantee in
 either direction: an argument left inline, or inlined again by a later rule, is
 lazy once more.
-
-A ``groupBy`` does take a column, because the aggregate is split first: grouping
-and aggregate expressions below, results above, and each half can hold one -- so
-``agg(sum(f(rand())))`` draws once per input row.
 
 Two arguments no projection can hold count as those positions too: one that is
 itself an aggregate (``f(sum(a))``), and one reading an outer query's column when

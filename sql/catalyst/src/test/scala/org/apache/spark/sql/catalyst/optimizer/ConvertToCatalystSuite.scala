@@ -334,7 +334,7 @@ class ConvertToCatalystSuite extends PlanTest {
       // Only a custom transpiler emits an option body that is itself an aggregate. Through
       // `applyExpr`, so this is the fallback path only -- nothing could host such a body anyway.
       //
-      // A bare column, since anything dearer is owed one evaluation and would decline to Python
+      // A bare column, since anything more is owed one evaluation and would keep the Python UDF
       // here rather than substitute.
       val arg = attrA
       val option = Count(Seq(Multiply(pref(0), pref(0)))).toAggregateExpression()
@@ -498,7 +498,7 @@ class ConvertToCatalystSuite extends PlanTest {
 
   test("leaves an argument carrying an outer reference at each use site with decorrelation off") {
     // A column holding an OuterReference lands inside the subquery. Decorrelation carries it out;
-    // the fallback rewrites Filters only and would strand it, so with that off we decline.
+    // the fallback rewrites Filters only and would strand it, so with that off we turn it down.
     val arg = Add(OuterReference(attrA), Literal(1L))
     val tpudf = makeTPUDF(makePyUDF(arg), Multiply(pref(0), pref(0)))
     val plan = Project(Seq(Alias(tpudf, "v")()), LocalRelation(attrA))
@@ -522,8 +522,8 @@ class ConvertToCatalystSuite extends PlanTest {
   test("keeps the Python UDF for an argument that is itself an aggregate") {
     transpileOn {
       // `udf(sum(a))` read twice: no Project can hold an aggregate, and running it at each use site
-      // is not the answer either. Under a real Aggregate the split hands us the aggregate's output
-      // attribute, which is cheap; this is the hand-built shape a custom transpiler can produce.
+      // is not the answer either, so the call keeps the Python UDF. Under a real Aggregate the
+      // operator itself is on the deny list, so the same call never gets this far.
       val arg = Sum(attrA).toAggregateExpression()
       val tpudf = makeTPUDF(makePyUDF(arg), Multiply(pref(0), pref(0)))
       val converted = convert(Project(Seq(Alias(tpudf, "v")()), LocalRelation(attrA)))
@@ -539,7 +539,7 @@ class ConvertToCatalystSuite extends PlanTest {
     transpileOn {
       // No column under a Command: the Project would land between DeleteFromTable and its relation,
       // hiding what DataSourceV2Strategy matches on. A bare column costs nothing to read twice, so
-      // the call still lowers; anything dearer keeps the Python UDF.
+      // the call still lowers; anything more keeps the Python UDF.
       val arg = attrA
       val relation = LocalRelation(attrA)
       val option = Multiply(pref(0), pref(0))
@@ -548,9 +548,9 @@ class ConvertToCatalystSuite extends PlanTest {
       assert(converted == DeleteFromTable(relation, GreaterThan(Multiply(arg, arg), Literal(0L))),
         s"Expected the argument left at both use sites: $converted")
 
-      val dear = makeTPUDF(makePyUDF(Add(attrA, Literal(1L))), option)
+      val costly = makeTPUDF(makePyUDF(Add(attrA, Literal(1L))), option)
       val fellBack =
-        ConvertToCatalyst(DeleteFromTable(relation, GreaterThan(dear, Literal(0L))))
+        ConvertToCatalyst(DeleteFromTable(relation, GreaterThan(costly, Literal(0L))))
       assert(fellBack.expressions.exists(_.exists(_.isInstanceOf[PythonUDF])),
         s"Expected the Python UDF kept for `a + 1`: $fellBack")
     }
@@ -611,12 +611,12 @@ class ConvertToCatalystSuite extends PlanTest {
     transpileOn {
       // Inverse nesting of the test below: the outer option lowers to another transpiled call whose
       // argument is the outer call's own parameter ref. Custom transpilers only. The inner call has
-      // to decline -- aliased into a Project that ref is stranded where nobody can substitute it.
+      // to give up -- aliased into a Project that ref is stranded where nobody can substitute it.
       val arg = Add(attrA, Literal(1L))
       val innerCall = makeTPUDF(makePyUDF(pref(0)), Multiply(pref(0), pref(0)))
       val outerCall = makeTPUDF(makePyUDF(arg), innerCall)
       val converted = convert(Project(Seq(Alias(outerCall, "v")()), LocalRelation(attrA)))
-      // One column, for the outer call's own argument; the inner call declined and inlined.
+      // One column, for the outer call's own argument; the inner call gave up and inlined.
       assert(paramColumns(converted).map(_.child) == Seq(arg),
         s"Expected only the outer argument pre-evaluated: $converted")
     }
