@@ -350,6 +350,49 @@ def additional_fix_versions(inferred_versions, existing_versions):
     return [version for version in inferred_versions if version not in existing]
 
 
+def fix_version_additions(inferred_versions, existing_versions):
+    """Return (additions, all_inferred_present).
+
+    An empty ``additions`` list is ambiguous on its own: either the issue already carries
+    every inferred version, or nothing was inferred. Only the first means there is nothing
+    to do; the second still needs the committer prompted.
+
+    >>> fix_version_additions(["4.3.0"], ["5.0.0"])
+    (['4.3.0'], False)
+    >>> fix_version_additions(["5.0.0"], ["5.0.0"])
+    ([], True)
+    >>> fix_version_additions([], ["5.0.0"])
+    ([], False)
+    """
+    additions = additional_fix_versions(inferred_versions, existing_versions)
+    return additions, bool(inferred_versions) and not additions
+
+
+def fix_versions_from_input(raw_input, default_fix_versions):
+    """Resolve the Fix Version prompt's raw input into a list of version names.
+
+    Blank falls back to the inferred default. With no default to fall back on, blank means
+    skip: the empty list, not [""], which no known version can match.
+
+    >>> fix_versions_from_input("4.2.2", "")
+    ['4.2.2']
+    >>> fix_versions_from_input("", "5.0.0")
+    ['5.0.0']
+    >>> fix_versions_from_input("5.0.0, 4.3.0", "")
+    ['5.0.0', '4.3.0']
+    >>> fix_versions_from_input("", "")
+    []
+    >>> fix_versions_from_input("   ", "")
+    []
+    """
+    if raw_input == "":
+        raw_input = default_fix_versions
+    stripped = raw_input.replace(" ", "")
+    if stripped == "":
+        return []
+    return stripped.split(",")
+
+
 def red(text):
     return "\033[91m%s\033[0m" % text
 
@@ -1252,19 +1295,28 @@ def resolve_jira_issue(
     if is_resolved:
         # A later backport run must preserve the versions recorded by the original merge and
         # only add versions inferred from the newly discovered branches.
-        default_fix_list = additional_fix_versions(default_fix_list, existing_fix_version_names)
-        if not default_fix_list:
+        default_fix_list, all_inferred_present = fix_version_additions(
+            default_fix_list, existing_fix_version_names
+        )
+        if all_inferred_present:
             print(
                 "JIRA issue %s already contains all inferred fix versions; no update needed."
                 % issue.key
             )
             return
-        print(
-            "JIRA issue %s has fix version(s) %s; inferred addition(s): %s"
-            % (issue.key, existing_fix_version_names, default_fix_list)
-        )
-        if get_input("Add these fix version(s)? (y/N): ", ["y", "n", ""]) != "y":
-            return
+        if default_fix_list:
+            print(
+                "JIRA issue %s has fix version(s) %s; inferred addition(s): %s"
+                % (issue.key, existing_fix_version_names, default_fix_list)
+            )
+            if get_input("Add these fix version(s)? (y/N): ", ["y", "n", ""]) != "y":
+                return
+        else:
+            # Nothing inferred, so there is nothing to confirm; fall through to the prompt.
+            print(
+                "JIRA issue %s has fix version(s) %s; no additional fix version could be "
+                "inferred." % (issue.key, existing_fix_version_names)
+            )
     default_fix_versions = ",".join(default_fix_list)
 
     available_versions = set(list(map(lambda v: v.name, versions)))
@@ -1273,10 +1325,12 @@ def resolve_jira_issue(
             prompt = "Enter comma-separated fix version(s) [%s]: "
             if is_resolved:
                 prompt = "Enter comma-separated additional fix version(s) [%s]: "
-            fix_versions = bold_input(prompt % default_fix_versions)
-            if fix_versions == "":
-                fix_versions = default_fix_versions
-            fix_versions = fix_versions.replace(" ", "").split(",")
+            fix_versions = fix_versions_from_input(
+                bold_input(prompt % default_fix_versions), default_fix_versions
+            )
+            if not fix_versions:
+                print("No fix version entered; update %s manually." % issue.key)
+                return
             if set(fix_versions).issubset(available_versions):
                 break
             else:
