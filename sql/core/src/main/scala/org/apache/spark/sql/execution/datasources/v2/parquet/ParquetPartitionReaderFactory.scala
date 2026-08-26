@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
-import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, DataSourceUtils, PartitionedFile, RecordReaderIterator}
+import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, DataSourceUtils, PartitionedFile, RecordReaderIterator, VariantMetadata}
 import org.apache.spark.sql.execution.datasources.parquet._
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
@@ -55,6 +55,7 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  * @param readDataSchema Required schema of Parquet files.
  * @param partitionSchema Schema of partitions.
  * @param filters Filters to be pushed down in the batch scan.
+ * @param variantPredicateFilters Filters on pushed-down Variant extraction fields.
  * @param aggregation Aggregation to be pushed down in the batch scan.
  * @param options The options of Parquet datasource that are set for the read.
  */
@@ -65,6 +66,7 @@ case class ParquetPartitionReaderFactory(
     readDataSchema: StructType,
     partitionSchema: StructType,
     filters: Array[Filter],
+    variantPredicateFilters: Array[Filter],
     aggregation: Option[Aggregation],
     options: ParquetOptions) extends FilePartitionReaderFactory with Logging {
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
@@ -85,6 +87,15 @@ case class ParquetPartitionReaderFactory(
   private val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
   private val datetimeRebaseModeInRead = options.datetimeRebaseModeInRead
   private val int96RebaseModeInRead = options.int96RebaseModeInRead
+  private val variantExtractionSchema =
+    if (sqlConf.getConf(SQLConf.VARIANT_SHREDDED_PREDICATE_PUSHDOWN_ENABLED) &&
+        readDataSchema.existsRecursively(VariantMetadata.isVariantStruct)) {
+      Some(readDataSchema)
+    } else {
+      None
+    }
+  private val filtersForParquet =
+    filters ++ variantExtractionSchema.map(_ => variantPredicateFilters).getOrElse(Array.empty)
 
   private val parquetReaderCallback = new ParquetReaderCallback()
 
@@ -245,8 +256,9 @@ case class ParquetPartitionReaderFactory(
           pushDownStringPredicate,
           pushDownInFilterThreshold,
           isCaseSensitive,
-          datetimeRebaseSpec)
-        filters
+          datetimeRebaseSpec,
+          variantExtractionSchema = variantExtractionSchema)
+        filtersForParquet
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
           // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
           // is used here.
