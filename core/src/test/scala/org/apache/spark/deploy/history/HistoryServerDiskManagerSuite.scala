@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.history
 
 import java.io.File
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import org.mockito.AdditionalAnswers
 import org.mockito.ArgumentMatchers.{anyBoolean, anyLong, eq => meq}
@@ -250,6 +251,47 @@ abstract class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAn
     assert(!store.view(classOf[ApplicationStoreInfo]).iterator().hasNext)
     assert(manager2.committed() === 0)
     assert(manager2.free() === MAX_USAGE)
+  }
+
+  test("SPARK-58985: release with delete is atomic with openStore") {
+    val manager = mockManager()
+    val leaseA = manager.lease(2)
+    doReturn(2L).when(manager).sizeOf(meq(leaseA.tmpPath))
+    val dst = leaseA.commit("app1", None)
+    doReturn(2L).when(manager).sizeOf(meq(dst))
+    manager.release("app1", None)
+    assert(manager.committed() === 2)
+
+    // Block release() between dropping the active map entry and deleting the store, so
+    // openStore() runs concurrently. Both paths must not deduct the store size twice.
+    val releaseInSizeOf = new CountDownLatch(1)
+    val openStoreDone = new CountDownLatch(1)
+    doAnswer(_ => {
+      releaseInSizeOf.countDown()
+      openStoreDone.await(2, TimeUnit.SECONDS)
+      2L
+    }).when(manager).sizeOf(meq(dst))
+
+    val releaseThread = new Thread(() => {
+      manager.release("app1", None, delete = true)
+    })
+    var opened: Option[File] = None
+    try {
+      releaseThread.start()
+      releaseInSizeOf.await(2, TimeUnit.SECONDS)
+      opened = manager.openStore("app1", None)
+    } finally {
+      openStoreDone.countDown()
+      releaseThread.join(TimeUnit.SECONDS.toMillis(10))
+    }
+
+    // If openStore() handed out a path, the subsequent release in FsHistoryProvider must not
+    // deduct the size again.
+    opened.foreach { _ =>
+      manager.release("app1", None, delete = true)
+    }
+    assert(manager.committed() === 0)
+    assert(!dst.exists())
   }
 
   test("SPARK-38095: appStorePath should use backend extensions") {
