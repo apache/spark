@@ -94,6 +94,19 @@ abstract class DataSourceV2RelationBase(
       // to estimate stats before pushdown (e.g. for join-type selection in earlyScanPushDownRules).
       DataSourceV2Relation.transformV2Stats(
         t.estimateCatalogStatistics(), conf.defaultSizeInBytes, output)
+    case t if t.capabilities().contains(TableCapability.BATCH_READ) =>
+      // Fallback for connectors that implement SupportsReportStatistics on their Scan but have
+      // not yet implemented SupportsReportCatalogStatistics. Building the scan here is wasteful
+      // and returns pre-pushdown (full-table) stats, but preserves the pre-existing production
+      // behavior during the migration period.
+      val scan = t.asReadable.newScanBuilder(options).build()
+      scan match {
+        case s: SupportsReportStatistics =>
+          DataSourceV2Relation.transformV2Stats(
+            s.estimateStatistics(), conf.defaultSizeInBytes, output)
+        case _ =>
+          Statistics(sizeInBytes = conf.defaultSizeInBytes)
+      }
     case _ =>
       if (Utils.isTesting) {
         // when testing, throw an exception if this computeStats method is called because stats

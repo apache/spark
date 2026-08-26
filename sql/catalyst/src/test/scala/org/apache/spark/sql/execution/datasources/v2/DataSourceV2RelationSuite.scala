@@ -29,9 +29,9 @@ import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUti
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
 import org.apache.spark.sql.catalyst.util.INTERNAL_METADATA_KEYS
-import org.apache.spark.sql.connector.catalog.{Column, SupportsReportCatalogStatistics, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{Column, SupportsRead, SupportsReportCatalogStatistics, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
-import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.colstats.ColumnStatistics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructField, StructType}
@@ -517,6 +517,34 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("DataSourceV2Relation.computeStats uses scan stats as fallback for BATCH_READ tables") {
+    val table = new FakeBatchReadTableWithSchema() {
+      override def buildScan(): Scan = new Scan with SupportsReportStatistics {
+        override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+        override def estimateStatistics(): V2Statistics = new V2Statistics {
+          override def sizeInBytes(): OptionalLong = OptionalLong.of(9999L)
+          override def numRows(): OptionalLong = OptionalLong.of(100L)
+        }
+      }
+    }
+    withSQLConf(SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "54321") {
+      val stats = baseRel(table).computeStats()
+      assert(stats.sizeInBytes === BigInt(9999))
+    }
+  }
+
+  test("DataSourceV2Relation.computeStats falls back to default when BATCH_READ scan lacks stats") {
+    val table = new FakeBatchReadTableWithSchema() {
+      override def buildScan(): Scan = new Scan {
+        override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+      }
+    }
+    withSQLConf(SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "54321") {
+      val stats = baseRel(table).computeStats()
+      assert(stats.sizeInBytes === BigInt(54321))
+    }
+  }
+
   test("create strips leaked internal metadata but preserves column IDs") {
     // A column carrying both a column ID (surfaced on purpose) and every internal metadata key
     // (listed in INTERNAL_METADATA_KEYS), simulating a v2 source that leaks internal metadata.
@@ -582,4 +610,20 @@ private class FakeTableWithSchema(
   override def name(): String = "fake"
   override def schema(): StructType = tableSchema
   override def capabilities(): java.util.Set[TableCapability] = java.util.Set.of()
+}
+
+private class FakeBatchReadTableWithSchema(
+    tableSchema: StructType = StructType(Seq(StructField("id", IntegerType))))
+    extends FakeTableWithSchema(tableSchema) with SupportsRead {
+
+  def buildScan(): Scan = new Scan {
+    override def readSchema(): StructType = tableSchema
+  }
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = new ScanBuilder {
+    override def build(): Scan = buildScan()
+  }
+
+  override def capabilities(): java.util.Set[TableCapability] =
+    java.util.Set.of(TableCapability.BATCH_READ)
 }
