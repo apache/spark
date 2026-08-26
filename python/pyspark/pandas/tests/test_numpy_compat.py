@@ -425,6 +425,11 @@ class NumPyCompatTestsMixin:
         )
         self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2).astype("float64"))
 
+        # The most negative long divided by -1, whose quotient a long cannot hold. NumPy wraps
+        # around, while Spark's integer division raises.
+        pdf = pd.DataFrame({"x1": [-(2**63), -(2**63)], "x2": [-1, 2]})
+        self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2).astype("float64"))
+
     def test_np_logaddexp(self):
         for pdf in (
             pd.DataFrame(

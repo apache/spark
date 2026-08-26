@@ -212,7 +212,11 @@ def _floor_divide_integral(c1: Column, c2: Column) -> Column:
     # correction as the floating helper. Integer arithmetic cannot round, so nothing more.
     truncated = F.call_function("div", c1_long, c2_long)
     remainder = F.try_mod(c1_long, c2_long)
-    return (
+    return F.when(
+        # The one quotient a long cannot hold, where NumPy wraps around and `div` would raise.
+        (c1_long == F.lit(-(2**63))) & (c2_long == F.lit(-1)),
+        F.lit(float(-(2**63))),
+    ).otherwise(
         F.when((remainder != 0) & ((remainder < 0) != (c2_long < 0)), truncated - F.lit(1))
         .otherwise(truncated)
         .cast("double")
