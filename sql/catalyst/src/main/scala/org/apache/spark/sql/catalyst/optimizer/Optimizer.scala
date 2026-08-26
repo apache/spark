@@ -1050,8 +1050,8 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
 
   /**
    * Whether any call in this Aggregate wants a column, so that splitting buys something. Without it
-   * every Aggregate holding a call is rebuilt through PhysicalAggregation for nothing, and the extra
-   * Project is left for CollapseProject to undo -- and every plan shape the split can disturb is
+   * every Aggregate holding a call is rebuilt through PhysicalAggregation for nothing, the extra
+   * Project is left for CollapseProject to undo, and every plan shape the split can disturb is
    * disturbed for queries that gain no column at all.
    */
   private def owesAColumn(agg: Aggregate): Boolean = agg.expressions.exists(_.exists {
@@ -1322,9 +1322,9 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
           keepPython
         } else if (!callIsIntact(s)) {
           // PullOutNondeterministic moves a nondeterministic call into a projection below and
-          // leaves an attribute here, so `arguments` is empty while the option still refers to them.
-          // Keep the attribute: the call is computed once below us, which is the promise, just not
-          // in Catalyst. `orderBy(u(rand()))` and `repartition(2, u(rand()))` land here.
+          // leaves an attribute here, so `arguments` is empty while the option still refers to
+          // them. Keep the attribute: the call is computed once below us, which is the promise,
+          // just not in Catalyst. `orderBy(u(rand()))` and `repartition(2, u(rand()))` land here.
           keepPython
         } else if (inLambda ||
             s.transpiledOptions.headOption.exists(_.containsPattern(LAMBDA_FUNCTION))) {

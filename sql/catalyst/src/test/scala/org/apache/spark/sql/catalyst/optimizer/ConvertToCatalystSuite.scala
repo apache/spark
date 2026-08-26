@@ -465,8 +465,8 @@ class ConvertToCatalystSuite extends PlanTest {
   test("keeps the Python UDF when an analyzer rule has taken the arguments away") {
     transpileOn {
       // PullOutNondeterministic replaces a nondeterministic call with an attribute for the
-      // projection it moved the call to, leaving no arguments for the option's references. Shaped by
-      // hand here; `orderBy(u(rand()))` is the query that produces it.
+      // projection it moved the call to, leaving no arguments for the option's references. Shaped
+      // by hand here; `orderBy(u(rand()))` is the query that produces it.
       val stripped = TranspiledPythonUDF(
         "udf", AttributeReference("_nondeterministic", LongType)(), List(Add(pref(0), pref(0))))
       val result = ConvertToCatalyst.applyExpr(stripped, parentIsUdf = false)
