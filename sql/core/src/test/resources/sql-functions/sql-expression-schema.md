@@ -565,7 +565,6 @@
 | org.apache.spark.sql.catalyst.expressions.st.ST_Srid | st_srid | SELECT st_srid(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040')) | struct<st_srid(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040')):int> |
 | org.apache.spark.sql.catalyst.expressions.variant.IsValidVariant | is_valid_variant | SELECT is_valid_variant(parse_json('null')) | struct<is_valid_variant(parse_json(null)):boolean> |
 | org.apache.spark.sql.catalyst.expressions.variant.IsVariantNull | is_variant_null | SELECT is_variant_null(parse_json('null')) | struct<is_variant_null(parse_json(null)):boolean> |
-| org.apache.spark.sql.catalyst.expressions.variant.VariantArrayLength | variant_array_length | SELECT variant_array_length(parse_json('[1, 2, 3]')) | struct<variant_array_length(parse_json([1, 2, 3])):int> |
 | org.apache.spark.sql.catalyst.expressions.variant.ParseJsonExpressionBuilder | parse_json | SELECT parse_json('{"a":1,"b":0.8}') | struct<parse_json({"a":1,"b":0.8}):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.SchemaOfVariant | schema_of_variant | SELECT schema_of_variant(parse_json('null')) | struct<schema_of_variant(parse_json(null)):string> |
 | org.apache.spark.sql.catalyst.expressions.variant.SchemaOfVariantAgg | schema_of_variant_agg | SELECT schema_of_variant_agg(parse_json(j)) FROM VALUES ('1'), ('2'), ('3') AS tab(j) | struct<schema_of_variant_agg(parse_json(j)):string> |
@@ -576,6 +575,7 @@
 | org.apache.spark.sql.catalyst.expressions.variant.TryVariantInsertExpressionBuilder | try_variant_insert | SELECT try_variant_insert(parse_json('{"a": 1}'), '$.b', 2) | struct<try_variant_insert(parse_json({"a": 1}), $.b, 2):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.TryVariantSetExpressionBuilder | try_variant_set | SELECT try_variant_set(parse_json('{"a": 1}'), '$.a', 2) | struct<try_variant_set(parse_json({"a": 1}), $.a, 2, true):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantArrayAppendExpressionBuilder | variant_array_append | SELECT variant_array_append(parse_json('[1, 2, 3]'), '$', 4) | struct<variant_array_append(parse_json([1, 2, 3]), $, 4):variant> |
+| org.apache.spark.sql.catalyst.expressions.variant.VariantArrayLength | variant_array_length | SELECT variant_array_length(parse_json('[1, 2, 3]')) | struct<variant_array_length(parse_json([1, 2, 3])):int> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantDelete | variant_delete | SELECT variant_delete(parse_json('{"a": 1, "b": 2, "c": 3, "items": [1, 2, 3]}'), NULL, '$.a', '$.c') | struct<variant_delete(parse_json({"a": 1, "b": 2, "c": 3, "items": [1, 2, 3]}), NULL, $.a, $.c):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantFromArrays | variant_from_arrays | SELECT variant_from_arrays(array('a', 'b'), array(1, 2)) | struct<variant_from_arrays(array(a, b), array(1, 2)):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantFromEntries | variant_from_entries | SELECT variant_from_entries(array(struct('a', 1), struct('b', 2))) | struct<variant_from_entries(array(struct(a, 1), struct(b, 2))):variant> |
