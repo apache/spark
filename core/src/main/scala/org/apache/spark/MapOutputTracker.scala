@@ -818,8 +818,10 @@ private[spark] class MapOutputTrackerMaster(
   // run it after `unregisterShuffle` rather than before; best-effort, so it does not gate a reap.
   @volatile private[spark] var shuffleCleanedNotifier: Option[Int => Unit] = None
 
-  // Read once: updateShuffleAtime is on the hot path of serving map output requests.
-  private val shuffleTtl: Option[Long] = conf.get(CLEANER_TTL_SHUFFLE)
+  // Read once: updateShuffleAtime is on the hot path of serving map output requests. The config is
+  // in seconds; the cleaner works in millis, like the access times it compares against.
+  private val shuffleTtl: Option[Long] =
+    conf.get(CLEANER_TTL_SHUFFLE).map(TimeUnit.SECONDS.toMillis)
 
   /** Records that a shuffle was used, for the shuffle TTL. A no-op when that TTL is unset. */
   private def updateShuffleAtime(shuffleId: Int): Unit = {
@@ -902,6 +904,7 @@ private[spark] class MapOutputTrackerMaster(
   private[spark] val ttlCleaner: Option[BlockTTLCleaner] = shuffleTtl.map { ttl =>
     new BlockTTLCleaner(
       name = "shuffle",
+      idKey = SHUFFLE_ID,
       ttlMillis = ttl,
       accessTimes = shuffleAccessTime,
       shouldReap = shuffleId =>

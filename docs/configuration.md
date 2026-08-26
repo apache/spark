@@ -2285,15 +2285,17 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.cleaner.ttl.rdd</code></td>
   <td>(none)</td>
   <td>
-    If set, RDD cache blocks that have not been accessed for this duration are removed. By default
-    cached blocks are only removed once the RDD is garbage collected on the driver, which does not
-    happen for a DataFrame or RDD held at global scope. Broadcast blocks are not covered; shuffle
-    blocks use <code>spark.cleaner.ttl.shuffle</code>. An access is only recorded when the driver
-    resolves the block's locations, so set this comfortably longer than both the longest gap between
-    uses and the longest stage runtime, or the RDD will be removed and recomputed. Removal frees the
-    blocks but does not reset the RDD's storage level, so a later action re-caches it; the RDD does
-    stop appearing in <code>SparkContext.getPersistentRDDs</code>. Locally checkpointed RDDs are
-    never removed. Must be set before the SparkContext is created.
+    If set, RDD cache blocks that have not been accessed for this duration are removed. Interpreted
+    as seconds when no unit is given, and must be at least 10 minutes. By default cached blocks are
+    only removed once the RDD is garbage collected on the driver, which does not happen for a
+    DataFrame or RDD held at global scope. Broadcast blocks are not covered; shuffle blocks use
+    <code>spark.cleaner.ttl.shuffle</code>. An access is only recorded when the driver resolves the
+    block's locations, so set this comfortably longer than both the longest gap between uses and the
+    longest stage runtime, or the RDD will be removed and recomputed. Removal frees the blocks but
+    does not reset the RDD's storage level, so a later action re-caches it; the RDD does stop
+    appearing in <code>SparkContext.getPersistentRDDs</code>. Locally checkpointed RDDs are never
+    removed, since local checkpointing truncates lineage and leaves their cache blocks as the only
+    copy of the data. Must be set before the SparkContext is created.
   </td>
   <td>4.4.0</td>
 </tr>
@@ -2302,13 +2304,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     If set, shuffles that have not been accessed for this duration have their map output removed from
-    the driver and their shuffle files deleted on the executors. By default shuffle data is only
-    removed once the shuffle dependency is garbage collected on the driver. An access is only recorded
-    when a map task registers output or the driver serves map output locations, and executors cache
-    those locations, so set this comfortably longer than both the longest gap between uses and the
-    longest stage runtime. Removing a shuffle that a running job still needs fails that job: its
-    readers get a fetch failure, and the map stage cannot re-register its output, so the stage is
-    aborted rather than recomputed. Must be set before the SparkContext is created.
+    the driver and their shuffle files deleted on the executors. Interpreted as seconds when no unit
+    is given, and must be at least 10 minutes. By default shuffle data is only removed once the
+    shuffle dependency is garbage collected on the driver. An access is only recorded when a map task
+    registers output or the driver serves map output locations, and executors cache those locations,
+    so it is on you to set this longer than any shuffle's useful life: longer than both the longest
+    gap between uses and the longest stage runtime. Removing a shuffle that a running job still needs
+    fails that job -- its readers get a fetch failure, and the map stage cannot re-register its
+    output, so the stage is aborted rather than recomputed -- and no amount of retrying recovers it.
+    Must be set before the SparkContext is created.
   </td>
   <td>4.4.0</td>
 </tr>

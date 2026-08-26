@@ -324,10 +324,11 @@ class SparkContext(config: SparkConf) extends Logging {
     map.asScala
   }
 
-  // Ids of locally checkpointed RDDs, which the RDD TTL cleaner must never reap: a local checkpoint
-  // truncates lineage, so the cache blocks are the only copy of the data. Tracked separately
-  // because the cleaner runs on its own thread and RDD.checkpointData is not volatile.
-  private[spark] val locallyCheckpointedRddIds = ConcurrentHashMap.newKeySet[Int]()
+  // The RDD TTL cleaner must never reap a locally checkpointed RDD: local checkpointing truncates
+  // lineage, so its cache blocks are the only copy of the data. Asked of the RDD itself rather than
+  // tracked alongside; a reaped id is gone from persistentRdds, which is the same answer.
+  private[spark] def isLocallyCheckpointedRdd(rddId: Int): Boolean =
+    persistentRdds.get(rddId).exists(_.isLocallyCheckpointed)
 
   def statusTracker: SparkStatusTracker = _statusTracker
 
@@ -687,7 +688,7 @@ class SparkContext(config: SparkConf) extends Logging {
       case _ =>
     }
     _env.blockManagerMasterEndpoint.foreach { endpoint =>
-      endpoint.rddReapable = rddId => !locallyCheckpointedRddIds.contains(rddId)
+      endpoint.rddReapable = rddId => !isLocallyCheckpointedRdd(rddId)
       // Reap through the same entry point the GC-driven cleanup uses; unpersistRDD is the fallback
       // when reference tracking is off. Both free the blocks without resetting the RDD's storage
       // level (the cleaner only has an id), so a later action re-caches it -- but both also drop
@@ -695,10 +696,9 @@ class SparkContext(config: SparkConf) extends Logging {
       // StorageLevel.NONE, so a reaped RDD stops appearing in getPersistentRDDs.
       endpoint.rddReaper = { rddId =>
         // Re-check the veto here, not just in rddReapable: an RDD can be locally checkpointed
-        // between the cleaner's check and this call, and the reap removes the id from
-        // locallyCheckpointedRddIds on its way through unpersistRDD -- so reaping one would both
-        // destroy the only copy of its data and erase the protection against doing it again.
-        if (!locallyCheckpointedRddIds.contains(rddId)) {
+        // between the cleaner's check and this call, and reaping one destroys the only copy of its
+        // data. This narrows that window to the read below.
+        if (!isLocallyCheckpointedRdd(rddId)) {
           _cleaner match {
             case Some(contextCleaner) => contextCleaner.doCleanupRDD(rddId, blocking = false)
             case None => unpersistRDD(rddId, blocking = false)
@@ -2452,7 +2452,6 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def unpersistRDD(rddId: Int, blocking: Boolean): Unit = {
     env.blockManager.master.removeRdd(rddId, blocking)
     persistentRdds.remove(rddId)
-    locallyCheckpointedRddIds.remove(rddId)
     listenerBus.post(SparkListenerUnpersistRDD(rddId))
   }
 

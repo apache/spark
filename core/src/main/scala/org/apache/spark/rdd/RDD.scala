@@ -1817,9 +1817,6 @@ abstract class RDD[T: ClassTag](
         case _ =>
       }
       checkpointData = Some(new LocalRDDCheckpointData(this))
-      // So the RDD TTL cleaner refuses to reap this RDD: the cache blocks are now the only copy of
-      // the data. Recorded rather than read off `checkpointData`, which is not volatile.
-      sc.locallyCheckpointedRddIds.add(id)
       // Mark for checksum + seal only when the checkpoint's storage level is serialized: a
       // deserialized level keeps in-memory objects with no bytes to checksum, so there is
       // nothing to verify and marking would only add cost. (A deserialized default is expected,
@@ -1846,10 +1843,11 @@ abstract class RDD[T: ClassTag](
     checkpointData.exists(_.isCheckpointed)
 
   /**
-   * Return whether this RDD is marked for local checkpointing.
-   * Exposed for testing.
+   * Return whether this RDD is marked for local checkpointing. Also consulted by the RDD TTL
+   * cleaner, which must never reap a locally checkpointed RDD: local checkpointing truncates
+   * lineage, so its cache blocks are the only copy of the data.
    */
-  private[rdd] def isLocallyCheckpointed: Boolean = {
+  private[spark] def isLocallyCheckpointed: Boolean = {
     checkpointData match {
       case Some(_: LocalRDDCheckpointData[T]) => true
       case _ => false
@@ -1976,7 +1974,9 @@ abstract class RDD[T: ClassTag](
 
   private[spark] def elementClassTag: ClassTag[T] = classTag[T]
 
-  private[spark] var checkpointData: Option[RDDCheckpointData[T]] = None
+  // @volatile so the RDD TTL cleaner, which reads it via isLocallyCheckpointed from its own thread,
+  // sees a local checkpoint that was marked on the driver thread.
+  @volatile private[spark] var checkpointData: Option[RDDCheckpointData[T]] = None
 
   // Whether to checkpoint all ancestor RDDs that are marked for checkpointing. By default,
   // we stop as soon as we find the first such RDD, an optimization that allows us to write

@@ -120,8 +120,10 @@ class BlockManagerMasterEndpoint(
   // a concurrent map.
   private[spark] val rddAccessTime = new ConcurrentHashMap[Int, Long]
 
-  // Read once: updateBlockAtime is on the hot path of block location lookups.
-  private val rddTtl: Option[Long] = conf.get(config.CLEANER_TTL_RDD)
+  // Read once: updateBlockAtime is on the hot path of block location lookups. The config is in
+  // seconds; the cleaner works in millis, like the access times it compares against.
+  private val rddTtl: Option[Long] =
+    conf.get(config.CLEANER_TTL_RDD).map(TimeUnit.SECONDS.toMillis)
 
   // Veto consulted before the TTL cleaner reaps an RDD. Wired by SparkContext to refuse
   // locally-checkpointed RDDs, whose cache blocks are the only copy of their data. Defaults to
@@ -139,6 +141,7 @@ class BlockManagerMasterEndpoint(
   private[spark] val ttlCleaner: Option[BlockTTLCleaner] = rddTtl.map { ttl =>
     new BlockTTLCleaner(
       name = "RDD",
+      idKey = RDD_ID,
       ttlMillis = ttl,
       accessTimes = rddAccessTime,
       shouldReap = rddId => rddReapable(rddId),
