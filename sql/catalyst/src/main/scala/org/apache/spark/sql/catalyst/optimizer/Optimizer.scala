@@ -1241,8 +1241,9 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
 
   /**
    * The parameters this call owes one evaluation: read more than once, with an argument that isn't
-   * cheap to repeat. Where no column can hold one we don't transpile at all (SPARK-58626). Per
-   * parameter: `f(rand(), rand())` owes two draws, `f(rand())` owes one however often it is read.
+   * cheap to repeat. Where no column can hold one we don't transpile at all, bar a join condition
+   * (see `apply`). Per parameter: `f(rand(), rand())` owes two draws, `f(rand())` owes one however
+   * often it is read.
    */
   private def mustPreEvaluate(args: Seq[Expression], option: Expression): Set[Int] = {
     // A read inside a lambda counts as many, since the body runs per element. Only a custom
