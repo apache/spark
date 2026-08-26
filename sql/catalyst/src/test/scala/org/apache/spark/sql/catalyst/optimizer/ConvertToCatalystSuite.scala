@@ -87,8 +87,8 @@ class ConvertToCatalystSuite extends PlanTest {
     // rewrite that mints two aliases with one id.
     //
     // Resolved plans only: the full check asks every output attribute for its dataType, and a
-    // hand-built plan with an unbound lambda hasn't got one. Those keep the dangling-reference walk,
-    // per operator rather than `validateNoDanglingReferences`, whose `collectFirst` stops at the
+    // hand-built plan with an unbound lambda hasn't got one. Those keep the dangling-reference
+    // walk, per operator rather than `validateNoDanglingReferences`, whose `collectFirst` stops at
     // root -- and the root is never the Project this rule inserts.
     if (plan.resolved) {
       LogicalPlanIntegrity.validateOptimizedPlan(plan, converted, lightweight = false)
@@ -388,7 +388,7 @@ class ConvertToCatalystSuite extends PlanTest {
   test("gives one call in two of an operator's slots a single column") {
     transpileOn {
       // The same node, twice in one Sort. An operator can do this on its own -- Window copies its
-      // spec into every WindowSpecDefinition, MergeRows has five slots -- and each slot is converted
+      // spec into every WindowSpecDefinition, MergeRows has five slots -- and each slot converts
       // separately, so an id minted per visit gave this call two columns and two draws.
       val call = makeTPUDF(makePyUDF(draw()), Add(pref(0), pref(0)))
       val converted = convert(Sort(

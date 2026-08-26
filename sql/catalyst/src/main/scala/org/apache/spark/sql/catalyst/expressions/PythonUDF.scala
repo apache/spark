@@ -369,9 +369,9 @@ object TranspiledUDFParameter {
     }
 
   /**
-   * Fills in each reference's type from the bound arguments, once those are resolved. Skips a nested
-   * call's options for the same reason [[referencedIndexes]] does: typing those from our arguments
-   * would type them from the wrong call's.
+   * Fills in each reference's type from the bound arguments, once those are resolved. Skips a
+   * nested call's options for the same reason [[referencedIndexes]] does: typing those from our
+   * arguments would type them from the wrong call's.
    */
   def resolveTypes(option: Expression, arguments: Seq[Expression]): Expression = option match {
     case _ if !option.containsPattern(TRANSPILED_UDF_PARAMETER) => option

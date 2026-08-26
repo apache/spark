@@ -1079,9 +1079,9 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
    */
   private def convertOperator(p: LogicalPlan): LogicalPlan =
     // A column widens the operator's child, and we only learn whether this operator's output is a
-    // widening of its child's after building it. When it isn't, convert again without columns rather
-    // than fail the query: `preEvaluate` says yes to every single-child operator that isn't a Command
-    // or an Aggregate, which is a longer list than anyone has thought about -- Window, Generate,
+    // widening of its child's after building it. When it isn't, convert again without columns
+    // rather than fail the query: `preEvaluate` says yes to every single-child operator that is not
+    // a Command or an Aggregate, a longer list than anyone has thought about -- Window, Generate,
     // Expand, CollectMetrics, ScriptTransformation, whatever an extension adds.
     convertOperator(p, withColumns = true).getOrElse(convertOperator(p, withColumns = false).get)
 
@@ -1194,8 +1194,8 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
       val widened = converted.withNewChildren(Seq(Project(child.output ++ columns, child)))
       // A Filter passes its child's output straight up, so it carries our columns now. Project them
       // back off to keep the schema. The checks are the two RewriteWithExpression asserts, as a
-      // condition: we only ever append, so an operator whose output shrinks or loses an attribute is
-      // one we should not have offered a column to.
+      // condition: we only ever append, so an operator whose output shrinks or loses an attribute
+      // is one we should not have offered a column to.
       if (p.output.length > widened.output.length || !p.outputSet.subsetOf(widened.outputSet)) {
         None
       } else if (p.output.length < widened.output.length) {
@@ -1214,8 +1214,8 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
 
   /**
    * Notes the columns to add to the operator's child, and points the option's refs at them. None
-   * means we can't compute an evaluation the body is owed here, and the caller keeps the Python UDF.
-   * The call comes along so that two visits to one node share its columns.
+   * means we can't compute an evaluation the body is owed here, and the caller keeps the Python
+   * UDF. The call comes along so that two visits to one node share its columns.
    */
   private type PreEvaluate =
     (TranspiledPythonUDF, Seq[Expression], Expression) => Option[Expression]
