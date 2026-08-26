@@ -1696,6 +1696,27 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         query.queryExecution.executedPlan)
   }
 
+  test("advisory filters are not evaluated with a non-deterministic residual") {
+    val query = spark.read
+      .format(classOf[CatalystFilterDataSourceV2].getName)
+      .option(CatalystFilterScanBuilder.ADVISORY_DERIVATION,
+        CatalystFilterScanBuilder.NEGATE_I_TO_J)
+      .load()
+      .filter($"i" > 2 && rand(0) > 0.5)
+
+    val advisoryFilter = "j < -2"
+    assert(getScanRelation(query).advisoryFilters.exists(containsFilter(_, advisoryFilter)),
+      "advisory filter should be recorded on the scan relation")
+    val execFilters = query.queryExecution.executedPlan.collect {
+      case filter: FilterExec => filter.condition
+    }
+    assert(execFilters.exists(_.exists(!_.deterministic)),
+      s"expected a non-deterministic residual FilterExec:\n${query.queryExecution.executedPlan}")
+    assert(!execFilters.exists(containsFilter(_, advisoryFilter)),
+      s"advisory filter $advisoryFilter should be dropped from FilterExec:\n" +
+        query.queryExecution.executedPlan)
+  }
+
   test("compound advisory filters are not evaluated by FilterExec") {
     // i > 2 AND i < 8 implies j < -2 AND j > -8.
     val query = spark.read
