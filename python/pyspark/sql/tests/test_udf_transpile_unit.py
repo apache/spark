@@ -1536,33 +1536,21 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             vals = [v for r in hof.collect() for v in r["v"]]
             self.assertTrue(vals and all(v == 0.0 or v > 0.5 for v in vals), vals)
 
-    def test_udf_transpile_splits_an_aggregate_for_a_column(self):
-        # SPARK-58626: an Aggregate can't host the column on its own -- a result expression no
-        # aggregate function wraps has to be built from the grouping expressions, and a column is
-        # not one -- so ConvertToCatalyst splits it: grouping and aggregate expressions below,
-        # result expressions in a Project above, both able to hold a column. Same trick
-        # RewriteWithExpression uses. Without the split a nondeterministic argument read twice has
-        # nowhere to go and the call falls back to interpreted Python.
+    def test_udf_transpile_declines_under_an_aggregate(self):
+        # SPARK-58626: an Aggregate can't host the column -- a result expression no aggregate
+        # function wraps has to be built from the grouping expressions -- so a body reading a
+        # nondeterministic argument twice keeps the interpreted UDF, which draws once. `clamp`
+        # returns its input or 0.0, so a value in (0.0, 0.5] would be two draws.
         from pyspark.sql.functions import col, rand
 
         clamp = lambda x: x if x > 0.5 else 0.0  # noqa: E731
         with self.sql_conf(_TRANSPILE_ON):
             c = self._transpiled_udf(clamp, DoubleType())
-            rows = self.spark.range(500)
-
-            agg = rows.groupBy(col("id").alias("g")).agg(c(rand()).alias("v"))
-            self.assertEqual(0, self._eval_python_count(agg), self._optimized_plan(agg))
-            self.assertTrue(self._shares_an_argument(agg), self._optimized_plan(agg))
+            agg = self.spark.range(500).groupBy(col("id").alias("g")).agg(c(rand()).alias("v"))
+            self.assertGreater(self._eval_python_count(agg), 0, self._optimized_plan(agg))
             vals = [r["v"] for r in agg.collect()]
             self.assertTrue(all(v == 0.0 or v > 0.5 for v in vals), vals)
             self.assertTrue(any(v == 0.0 for v in vals) and any(v > 0.5 for v in vals), vals)
-
-            # A deterministic argument equal to the grouping key reads the key's column, so it needs
-            # no column of its own.
-            fixed = (col("id") % 2).cast("double")
-            det = rows.groupBy(fixed.alias("g")).agg(c(fixed).alias("v"))
-            self.assertEqual(0, self._eval_python_count(det), self._optimized_plan(det))
-            self.assertEqual(2, len(det.collect()))
 
     def test_udf_transpile_gives_each_call_its_own_draw(self):
         # SPARK-58626: one draw per parameter, not one per operator. Two calls each passing their
@@ -1753,49 +1741,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             with self.assertRaises(Exception) as ctx:
                 df.select(u_i(col("x"), col("x") / lit(0))).collect()
             self.assertIn("DIVIDE_BY_ZERO", str(ctx.exception))
-
-    def test_udf_transpile_shared_input_is_eager(self):
-        # SPARK-58626: sharing one evaluation of an argument makes it eager, so an argument that
-        # raises under ANSI raises even on rows whose use of it sat in a branch they did not take --
-        # which is what the interpreted UDF does too.
-        #
-        # Read only once, the optimizer puts the argument back inside the branch and it is lazy
-        # again. That is the best-effort part of the contract (see transpile.py), pinned here so a
-        # change to it is deliberate.
-        from pyspark.sql.functions import col
-
-        used_twice = lambda a, b: (a + a) if b > 0 else 0.0  # noqa: E731
-        used_once = lambda a, b: a if b > 0 else 0.0  # noqa: E731
-        rows = [(1.0, 2.0), (1.0, 0.0)]
-
-        def divide_by_zero_error(func, conf):
-            """The error message from the b = 0 row, or None if the query succeeded."""
-            with self.sql_conf(conf):
-                u = UserDefinedFunction(func, DoubleType())
-                df = self.spark.createDataFrame(rows, "a double, b double")
-                try:
-                    df.select(u(col("a") / col("b"), col("b"))).collect()
-                    return None
-                except Exception as e:
-                    return str(e)
-
-        for conf, label in ((_TRANSPILE_ON, "transpiled"), (_TRANSPILE_OFF_ANSI_ON, "interpreted")):
-            # Without this the transpiled arm passes vacuously: the interpreted path raises too, so
-            # a transpiler bail-out on this lambda would keep the test green.
-            with self.sql_conf(conf):
-                self.assertEqual(
-                    conf is _TRANSPILE_ON,
-                    bool(UserDefinedFunction(used_twice, DoubleType()).transpiled),
-                    label,
-                )
-            error = divide_by_zero_error(used_twice, conf)
-            self.assertIsNotNone(error, label)
-            self.assertIn("DIVIDE_BY_ZERO", error, label)
-
-        self.assertIsNone(divide_by_zero_error(used_once, _TRANSPILE_ON))
-        interpreted_error = divide_by_zero_error(used_once, _TRANSPILE_OFF_ANSI_ON)
-        self.assertIsNotNone(interpreted_error)
-        self.assertIn("DIVIDE_BY_ZERO", interpreted_error)
 
     def test_udf_transpile_lowers_operators(self):
         # Operators lower to Catalyst and match Python: modulo sign-parity,

@@ -391,39 +391,23 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("splits an Aggregate so an argument inside an aggregate function gets a column") {
+  test("keeps the Python UDF under an Aggregate, where no column can go") {
     transpileOn {
-      // `agg(sum(f(rand())))`: the call is inside the aggregate function, so the split leaves it
-      // there and the column goes on the Aggregate's child. One draw an input row, then summed.
-      val call = makeTPUDF(makePyUDF(draw()), Add(pref(0), pref(0)))
-      val agg = Aggregate(
-        Seq(attrA),
+      // An Aggregate holds no Project of its own -- a result expression no aggregate function wraps
+      // has to be built from the grouping expressions -- so a call owed an evaluation goes back to
+      // Python. Both shapes: inside an aggregate function and beside one.
+      val call = makeTPUDF(makePyUDF(Add(attrA, Literal(1L))), Add(pref(0), pref(0)))
+      val insideSum = Aggregate(Seq(attrA),
         Seq(Alias(attrA, "a")(), Alias(Sum(call).toAggregateExpression(), "s")()),
         LocalRelation(attrA))
-      val converted = convert(agg)
-      assert(paramColumns(converted).length == 1, s"Expected one column: $converted")
-      assert(converted.collectFirst { case a: Aggregate => a }.isDefined,
-        s"Expected the Aggregate kept: $converted")
-      assert(!converted.exists(_.expressions.exists(_.exists(_.isInstanceOf[PythonUDF]))),
-        s"Expected no fallback to Python: $converted")
-    }
-  }
-
-  test("leaves an Aggregate whole when splitting would tear a call apart") {
-    transpileOn {
-      // A transpiled UDAF holds an AggregateExpression *inside* the call, which
-      // PhysicalAggregation would rewrite into a reference to the aggregate's output -- leaving the
-      // call's arguments out of step with its option, and the Python aggregate run for nothing.
-      val pyAgg = makePyUDAF().toAggregateExpression()
-      val catalystAgg = Count(Seq(attrA)).toAggregateExpression()
-      val call = TranspiledPythonUDF("agg", pyAgg, List(catalystAgg))
-      val converted = convert(
-        Aggregate(Nil, Seq(Alias(call, "c")()), LocalRelation(attrA)))
-      assert(paramColumns(converted).isEmpty, s"Expected no column: $converted")
-      assert(converted.expressions.head.find(_ == catalystAgg).isDefined,
-        s"Expected the Catalyst aggregate in place: $converted")
-      assert(!converted.exists(_.expressions.exists(_.exists(_.isInstanceOf[PythonUDAF]))),
-        s"Expected the Python aggregate gone, not computed beside it: $converted")
+      val beside = Aggregate(Seq(attrA),
+        Seq(Alias(attrA, "a")(), Alias(call, "v")()), LocalRelation(attrA))
+      Seq(insideSum, beside).foreach { agg =>
+        val converted = convert(agg)
+        assert(paramColumns(converted).isEmpty, s"Expected no column: $converted")
+        assert(converted.expressions.exists(_.exists(_.isInstanceOf[PythonUDF])),
+          s"Expected the Python UDF kept: $converted")
+      }
     }
   }
 

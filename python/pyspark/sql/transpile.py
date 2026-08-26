@@ -60,14 +60,14 @@ way; ``f(rand(), rand())`` is two parameters and so still two draws::
     clamp = udf(body, "double")
     df.select(clamp(rand()))  # never a value the body's own condition rejects
 
-The column is computed for every row reaching the operator, which makes an
-argument eager even where the call sits in a branch that may not run: under ANSI
-``when(cond, f(a / b))`` raises on a row with ``b = 0`` and ``cond`` false. That
-matches the interpreted Python UDF this replaces, which evaluates its inputs in
-a projection feeding the Python worker, below the conditional -- it does not
-match a bare Catalyst ``when``, which is lazy. Python's semantics win here. An
-argument left inline goes back to being lazy, so how many times a body mentions
-a parameter can decide whether an ANSI error surfaces at all.
+Where the column stands it is computed for every row reaching the operator, which
+makes the argument eager even where the call sits in a branch that may not run:
+under ANSI ``when(cond, f(a / b))`` can raise on a row with ``b = 0`` and ``cond``
+false. That is what the interpreted Python UDF does too, evaluating its inputs in
+a projection feeding the worker, below the conditional -- unlike a bare Catalyst
+``when``, which is lazy. Whether such an error surfaces is not a guarantee in
+either direction: an argument left inline, or inlined again by a later rule, is
+lazy once more.
 
 A ``groupBy`` does take a column, because the aggregate is split first: grouping
 and aggregate expressions below, results above, and each half can hold one -- so

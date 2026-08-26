@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.PythonUDF.{correctEvalType, isScalarPythonUDF}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression.hasCorrelatedSubquery
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.planning.{PhysicalAggregation, PhysicalOperation}
+import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -1041,24 +1041,9 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
       // subtrees, so every Filter and Sort on the way down lands here too.
       case p if !p.expressions.exists(_.containsPattern(TRANSPILED_PYTHON_UDF)) => p
 
-      case agg: Aggregate
-          if holdsACall(agg) && owesAColumn(agg) && !splitTearsACall(agg) => splitAggregate(agg)
-
       case p => convertOperator(p)
     }
   }
-
-  /**
-   * Whether any call in this Aggregate wants a column, so that splitting buys something. Without it
-   * every Aggregate holding a call is rebuilt through PhysicalAggregation for nothing, the extra
-   * Project is left for CollapseProject to undo, and every plan shape the split can disturb is
-   * disturbed for queries that gain no column at all.
-   */
-  private def owesAColumn(agg: Aggregate): Boolean = agg.expressions.exists(_.exists {
-    case s: TranspiledPythonUDF if callIsIntact(s) =>
-      s.transpiledOptions.headOption.exists(mustPreEvaluate(s.arguments, _).nonEmpty)
-    case _ => false
-  })
 
   /**
    * Whether the call still has its arguments. An analyzer rule may replace the Python UDF with an
@@ -1073,76 +1058,30 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
   }
 
   /**
-   * Whether the operator's own expressions hold a call. Not the tree-pattern bit: a
-   * SubqueryExpression carries its inner plan's bits, and an Aggregate whose only call sits in a
-   * subquery would split on every pass without ever clearing them.
-   */
-  private def holdsACall(p: LogicalPlan): Boolean =
-    p.expressions.exists(_.exists(_.isInstanceOf[TranspiledPythonUDF]))
-
-  /**
-   * An Aggregate can't host a column: a result expression no aggregate function wraps has to be
-   * built from the grouping expressions, so `groupBy(a + 1).agg(udf(a + 1))` would fail
-   * MISSING_AGGREGATION. Split it the way RewriteWithExpression does -- results into a Project
-   * above -- and each half can host one.
-   */
-  private def splitAggregate(agg: Aggregate): LogicalPlan = agg match {
-    case PhysicalAggregation(namedGrouping, aggregateExpressions, resultExpressions, child) =>
-      // The aliases keep the aggregates' ExprIds, which the result expressions already reference.
-      // Renaming both sides keeps a plan string readable.
-      val aggExprs = aggregateExpressions.map(ae => Alias(ae, "_aggregateexpression")(ae.resultId))
-      val aggExprIds = aggExprs.map(_.exprId).toSet
-      val resExprs = resultExpressions.map(_.transform {
-        case a: AttributeReference if aggExprIds.contains(a.exprId) =>
-          a.withName("_aggregateexpression")
-      }.asInstanceOf[NamedExpression])
-      // Only the output list takes PhysicalAggregation's aliases. RewriteWithExpression groups by
-      // them, but it runs after FinishAnalysis; from here PullOutGroupingExpressions would pull an
-      // aliased grouping expression into an attribute of its own and drop the ExprId above it.
-      val converted = convertOperator(
-        Aggregate(agg.groupingExpressions, namedGrouping ++ aggExprs, child, agg.hint),
-        aggregateIsSplit = true)
-      convertOperator(Project(resExprs, converted))
-    // PhysicalAggregation matches every Aggregate, so this only keeps the match total.
-    case other => convertOperator(other)
-  }
-
-  /**
-   * True when splitting would tear a call apart, so the Aggregate is left whole.
-   * PhysicalAggregation rewrites every AggregateExpression into a reference to the aggregate's
-   * output, including one
-   * *inside* a call -- how a transpiled UDAF is shaped -- leaving its arguments no longer matching
-   * the parameter indexes its option reads.
-   */
-  private def splitTearsACall(agg: Aggregate): Boolean =
-    agg.expressions.exists(_.exists {
-      case t: TranspiledPythonUDF => t.exists(_.isInstanceOf[AggregateExpression])
-      case _ => false
-    })
-
-  /**
    * Converts the calls in one operator, putting an argument the body reads more than once in a
    * column on the operator's child so we compute it once a row instead of once a read
-   * (SPARK-58626). Two operators can't hold that Project:
+   * (SPARK-58626). Three operators can't hold that Project, and a call under one of them that owes
+   * an evaluation keeps the interpreted Python UDF instead:
    *
    *  - More than one child: we'd have to pick a side.
    *  - A Command: the Project hides the relation DataSourceV2Strategy looks for, and
    *    `DELETE FROM t WHERE udf(a + 1) > 0` becomes an internal error.
-   *
-   * An Aggregate can once [[splitAggregate]] has split it -- that is `aggregateIsSplit` -- since
-   * the halves hold only grouping and aggregate expressions.
+   *  - An Aggregate: a result expression no aggregate function wraps has to be built from the
+   *    grouping expressions, and a column is not one, so `groupBy(a + 1).agg(udf(a + 1))` would
+   *    fail MISSING_AGGREGATION. Splitting the Aggregate to make room was tried and reverted: it
+   *    reshapes correlated subqueries, which broke `splitSubquery` on a HAVING and flipped
+   *    COUNT-bug handling, for a column in one uncommon shape.
    *
    * MergeRows is on neither list. Its instructions are first-match-wins, so a column runs
    * `WHEN ... AND udf(a / b) > 0` for every row of the join -- but so does the interpreted UDF,
    * which computes its inputs below MergeRows and raises on an unmatched row under ANSI today.
    * Declining there is what would diverge.
    */
-  private def convertOperator(p: LogicalPlan, aggregateIsSplit: Boolean = false): LogicalPlan = {
+  private def convertOperator(p: LogicalPlan): LogicalPlan = {
     val extraColumns = mutable.ArrayBuffer.empty[Alias]
     val columnByKey = mutable.HashMap.empty[ShareKey, Alias]
     val preEvaluate: Option[PreEvaluate] =
-      if (p.children.length == 1 && !p.isInstanceOf[Command] &&
-          (aggregateIsSplit || !p.isInstanceOf[Aggregate])) {
+      if (p.children.length == 1 && !p.isInstanceOf[Command] && !p.isInstanceOf[Aggregate]) {
         val child = p.children.head
         Some((args, option) => {
           // What shares a column with what. One key per distinct deterministic argument in the
@@ -1151,11 +1090,17 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
           // an equal one: `f(rand(), rand())` owes the body two draws, and so do two calls that
           // each pass their own `rand()`. Hence the call id -- keying on the index alone would
           // have `f(rand())` and `g(rand())` in one operator collide on one column.
+          //
+          // Nullability rides along because `canonicalized` drops it: an AttributeReference
+          // canonicalizes to `AttributeReference("none", dataType)(exprId)`, so `a#5` nullable and
+          // `a#5` not would otherwise share one column, and a body coerced against the nullable
+          // one would read a column declared without nulls -- enough for NullPropagation to fold
+          // an `IsNull` to false and drop a branch.
           // (scala.util qualified because `expressions._` has its own Left and Right.)
           val callId = NamedExpression.newExprId.id
           def shareKey(index: Int): ShareKey =
             if (args(index).deterministic) {
-              scala.util.Left(args(index).canonicalized)
+              scala.util.Left((args(index).canonicalized, args(index).nullable))
             } else {
               scala.util.Right((callId, index))
             }
@@ -1248,10 +1193,10 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
   }
 
   /**
-   * What decides whether two parameters share a column: an equal argument, or nothing -- a
-   * nondeterministic argument keys on the call it belongs to and its position in it.
+   * What decides whether two parameters share a column: an equal argument of equal nullability, or
+   * nothing -- a nondeterministic argument keys on the call it belongs to and its position in it.
    */
-  private type ShareKey = Either[Expression, (Long, Int)]
+  private type ShareKey = Either[(Expression, Boolean), (Long, Int)]
 
   /**
    * Notes the columns to add to the operator's child, and points the option's refs at them. None
