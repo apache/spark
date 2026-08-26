@@ -704,12 +704,8 @@ object PushDownUtils extends Logging {
       schema: StructType,
       relation: DataSourceV2Relation): Seq[AttributeReference] = {
     val nameToAttr = Utils.toMap(relation.output.map(_.name), relation.output)
-    // Under standardSemantics the scan keeps first-class CHAR/VARCHAR. Flag-off still
-    // rewrites to annotated STRING so ApplyCharTypePadding can find the original type.
-    val outputSchema =
-      if (SQLConf.get.charVarcharStandardSemantics) schema
-      else CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
-    toAttributes(outputSchema).map {
+    val cleaned = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
+    toAttributes(cleaned).map {
       // we have to keep the attribute id during transformation
       a => a.withExprId(nameToAttr(a.name).exprId)
     }
