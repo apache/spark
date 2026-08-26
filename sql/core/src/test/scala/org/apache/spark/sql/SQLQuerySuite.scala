@@ -5315,6 +5315,20 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
         checkToRDD = false)
     }
   }
+
+  test("SPARK-59019: BETWEEN succeeds when RewriteWithExpression is in excludedRules") {
+    // RewriteWithExpression is non-excludable, so adding it to excludedRules has no effect.
+    // Before the fix, this threw INTERNAL_ERROR because With nodes reached codegen.
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+      "org.apache.spark.sql.catalyst.optimizer.RewriteWithExpression") {
+      checkAnswer(
+        sql("SELECT x BETWEEN 1 AND 2 AS in_range FROM (VALUES (1)) AS t(x)"),
+        Row(true))
+      checkAnswer(
+        sql("SELECT x BETWEEN 1 AND 2 AS in_range FROM (VALUES (3)) AS t(x)"),
+        Row(false))
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

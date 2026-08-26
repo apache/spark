@@ -321,6 +321,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // execution, so it must never be excludable.
       ConvertToCatalyst.ruleName,
       FinishAnalysis.ruleName,
+      // With is Unevaluable and must be rewritten before physical planning.
+      RewriteWithExpression.ruleName,
       RewriteDistinctAggregates.ruleName,
       ReplaceDeduplicateWithAggregate.ruleName,
       ReplaceIntersectWithSemiJoin.ruleName,
