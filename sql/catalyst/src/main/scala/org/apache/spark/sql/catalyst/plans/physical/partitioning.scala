@@ -446,18 +446,25 @@ case class CoalescedNullAwareHashPartitioning(
  *    because data sources produce them that way and `GroupPartitionsExec` sorts while grouping.
  *    Sorted order is not a hard requirement, but it is a useful property: when both sides of a
  *    storage-partitioned join report sorted keys, `EnsureRequirements` can often match them
- *    without inserting an additional `GroupPartitionsExec`. After a narrowing projection through
- *    `PartitioningPreservingUnaryExecNode`, the projected keys may no longer be sorted; this is
- *    acceptable because `EnsureRequirements` can always reconcile both sides via
- *    `GroupPartitionsExec` with `expectedPartitionKeys`.
+ *    without inserting an additional `GroupPartitionsExec`. The keys may no longer be sorted after
+ *    a narrowing projection through `PartitioningPreservingUnaryExecNode` or after `UnionExec`
+ *    concatenates its children's keys; `EnsureRequirements` reconciles both sides either via
+ *    `GroupPartitionsExec` with `expectedPartitionKeys`, or -- when the chosen shuffle spec is a
+ *    `KeyedShuffleSpec` and the other child's spec is not compatible with it -- by shuffling that
+ *    other child onto these keys in the order given here.
  *
  * 2. '''In KeyedShuffleSpec''': When used within `KeyedShuffleSpec`, the `partitionKeys` may not
- *    be in sorted order. `EnsureRequirements` handles this by building a common ordered set of
- *    keys and pushing them down to `GroupPartitionsExec` on both sides.
+ *    be in sorted order, and consumers must not assume otherwise.
  *
  * == Partition Keys ==
  * - `partitionKeys`: The partition keys, one per partition. May contain duplicates initially
  *   (ungrouped state), but becomes unique after `GroupPartitionsExec` applies grouping.
+ *
+ * `partitionKeys` is a physical layout indexed by partition id, not a set: partition `i` holds key
+ * `partitionKeys(i)`. A consumer must therefore treat the given order as authoritative rather than
+ * re-derive one. In particular `ShuffleExchangeExec` builds its `KeyGroupedPartitioner` from this
+ * order, so that a side shuffled onto a `KeyedPartitioning` lands in the same partitions as the
+ * side that declared it.
  *
  * == Grouping State ==
  * A KeyedPartitioning can be in two states:
@@ -1377,6 +1384,13 @@ case class KeyedShuffleSpec(
   override def canCreatePartitioning: Boolean =
     SQLConf.get.v2BucketingShuffleEnabled &&
       !SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
+      // Shuffling another child onto these partition keys assigns each key a single partition, so
+      // an ungrouped partitioning cannot be reproduced: its duplicate keys live in more than one
+      // partition. This is the local gate. Such a spec is not reachable today for a non-local
+      // reason -- `EnsureRequirements` wraps a child whose `KeyedPartitioning` does not satisfy the
+      // distribution in a `GroupPartitionsExec` before it builds any spec -- so do not read this
+      // clause as redundant.
+      partitioning.isGrouped &&
       partitioning.expressions.forall { e =>
         e.isInstanceOf[AttributeReference] || e.isInstanceOf[TransformExpression]
       }

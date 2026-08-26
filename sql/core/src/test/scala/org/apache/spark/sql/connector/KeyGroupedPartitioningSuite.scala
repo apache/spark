@@ -4246,6 +4246,95 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     }
   }
 
+  test("SPARK-59022: keyed shuffle follows the declared partition key order") {
+    val cols = Array(
+      Column.create("id", LongType),
+      Column.create("dt", StringType))
+    val partitions = Array[Transform](identity("dt"), identity("id"))
+
+    createTable("nt", cols, partitions)
+    // The scan reports its keys sorted on the full key: [('2020', 2), ('2021', 1)]. Narrowing them
+    // to `[id]` gives [2, 1], which is not sorted -- projecting a sorted sequence onto a subset of
+    // key positions does not preserve sortedness.
+    sql("INSERT INTO testcat.ns.nt VALUES (2, '2020'), (1, '2021')")
+
+    withTable("t1") {
+      sql("CREATE TABLE t1 (id BIGINT, data STRING) USING parquet")
+      sql("INSERT INTO t1 VALUES (1, 'a'), (2, 'b')")
+
+      withSQLConf(
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "false",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        // `length(dt) > 2` is not pushed down, so `dt` reaches the scan while the projection above
+        // it drops the column, narrowing the KeyedPartitioning to `[identity(id)]`.
+        val df = sql(
+          """
+            |SELECT nt.id, t1.data
+            |FROM (SELECT id FROM testcat.ns.nt WHERE length(dt) > 2) nt
+            |JOIN t1 ON nt.id = t1.id
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+        // Only the v1 side is shuffled, onto the narrowed KeyedPartitioning of the v2 side, and
+        // nothing re-groups the v2 side -- so the shuffle is the only thing that can align them.
+        assert(collectShuffles(plan).length == 1)
+        assert(collectGroupPartitions(plan).isEmpty)
+        checkAnswer(df, Seq(Row(1L, "a"), Row(2L, "b")))
+      }
+    }
+  }
+
+  test("SPARK-59022: keyed shuffle follows the declared partition key order over a union") {
+    val cols = Array(
+      Column.create("id", LongType),
+      Column.create("data", StringType))
+    val partitions = Array[Transform](identity("id"))
+
+    createTable("nt1", cols, partitions)
+    createTable("nt2", cols, partitions)
+    // `UnionExec` concatenates its children's partition keys in child order, so the merged keys are
+    // [3, 4] ++ [1, 2]. They are unique, hence grouped, and no projection is involved, hence not
+    // narrowed -- but they are not sorted.
+    sql("INSERT INTO testcat.ns.nt1 VALUES (3, 'c'), (4, 'd')")
+    sql("INSERT INTO testcat.ns.nt2 VALUES (1, 'a'), (2, 'b')")
+
+    withTable("t1") {
+      sql("CREATE TABLE t1 (id BIGINT, x STRING) USING parquet")
+      sql("INSERT INTO t1 VALUES (1, 'x'), (2, 'x'), (3, 'x'), (4, 'x')")
+
+      withSQLConf(
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = sql(
+          """
+            |SELECT u.id, u.data, t1.x
+            |FROM (SELECT * FROM testcat.ns.nt1 UNION ALL SELECT * FROM testcat.ns.nt2) u
+            |JOIN t1 ON u.id = t1.id
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+        // Only the v1 side is shuffled, onto the union's KeyedPartitioning, and nothing re-groups
+        // the union -- so the shuffle is the only thing that can align them.
+        assert(collectShuffles(plan).length == 1)
+        assert(collectGroupPartitions(plan).isEmpty)
+        checkAnswer(df, Seq(
+          Row(1L, "a", "x"), Row(2L, "b", "x"), Row(3L, "c", "x"), Row(4L, "d", "x")))
+      }
+
+      // The plan-shape assertions above need AQE off, but the wrong results were live in the
+      // default configuration, so pin the answer with AQE on as well.
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+        checkAnswer(
+          sql(
+            """
+              |SELECT u.id, u.data, t1.x
+              |FROM (SELECT * FROM testcat.ns.nt1 UNION ALL SELECT * FROM testcat.ns.nt2) u
+              |JOIN t1 ON u.id = t1.id
+              |""".stripMargin),
+          Seq(Row(1L, "a", "x"), Row(2L, "b", "x"), Row(3L, "c", "x"), Row(4L, "d", "x")))
+      }
+    }
+  }
+
   test("SPARK-57881: storage-partitioned join leverages union output KeyedPartitioning to " +
       "avoid shuffle") {
     val cols = Array(
