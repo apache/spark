@@ -96,7 +96,9 @@ case class InlineCTE(
     // nested subquery plans) once, collect every attribute bound anywhere in the definition,
     // and reject only references that resolve to none of them.
     val allNodes = cteDef.child.collectWithSubqueries { case n: LogicalPlan => n }
-    val boundExprIds = allNodes.flatMap(_.output.filter(_.resolved).map(_.exprId)).toSet
+    val boundExprIds = allNodes.iterator
+      .flatMap(_.output.filter(_.resolved).map(_.exprId))
+      .toSet
 
     // Locate either a direct `OuterReference` or a correlated subquery whose outer-scope
     // attributes escape the def -- i.e. resolve to none of `boundExprIds`.
@@ -104,16 +106,14 @@ case class InlineCTE(
       .flatMap(_.expressions.iterator.flatMap(_.collect {
         case o: OuterReference if !boundExprIds.contains(o.exprId) => o
       }))
-      .toSeq
-      .headOption
+      .nextOption()
     val escapingOuterScopeRef = allNodes.iterator
       .flatMap(_.expressions.iterator.flatMap(
         _.collect { case s: SubqueryExpression => s.outerScopeAttrs }
           .flatMap(_.collect {
             case r: OuterScopeReference if !boundExprIds.contains(r.exprId) => r
           })))
-      .toSeq
-      .headOption
+      .nextOption()
 
     (escapingOuterRef, escapingOuterScopeRef) match {
       case (Some(o), _) =>
