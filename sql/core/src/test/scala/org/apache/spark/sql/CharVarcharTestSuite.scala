@@ -2177,20 +2177,24 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
   }
 
   test("SPARK-59001: text datasource accepts CHAR/VARCHAR as a string family type") {
-    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-      withTempPath { dir =>
-        val path = dir.getCanonicalPath
-        sql("SELECT CAST('ab' AS CHAR(4)) AS value").write.mode("overwrite").text(path)
-        val df = spark.read.schema("value CHAR(4)").text(path)
-        assert(df.schema.head.dataType === CharType(4))
-        checkAnswer(df.selectExpr("concat('<', value, '>')"), Row("<ab  >"))
-      }
-      withTempPath { dir =>
-        val path = dir.getCanonicalPath
-        sql("SELECT CAST('cd' AS VARCHAR(5)) AS value").write.mode("overwrite").text(path)
-        val df = spark.read.schema("value VARCHAR(5)").text(path)
-        assert(df.schema.head.dataType === VarcharType(5))
-        checkAnswer(df, Row("cd"))
+    Seq("text", "").foreach { useV1SourceList =>
+      withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceList) {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          sql("SELECT CAST('ab' AS CHAR(4)) AS value").write.mode("overwrite").text(path)
+          val df = spark.read.schema("value CHAR(4)").text(path)
+          assert(df.schema.head.dataType === CharType(4))
+          checkAnswer(df.selectExpr("concat('<', value, '>')"), Row("<ab  >"))
+        }
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          sql("SELECT CAST('cd' AS VARCHAR(5)) AS value").write.mode("overwrite").text(path)
+          val df = spark.read.schema("value VARCHAR(5)").text(path)
+          assert(df.schema.head.dataType === VarcharType(5))
+          checkAnswer(df, Row("cd"))
+        }
       }
     }
   }
