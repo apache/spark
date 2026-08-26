@@ -270,7 +270,7 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
 
     val transformed = newTree.transform(newData)
     checkNominalOnDF(transformed, "prediction", newTree.numClasses)
-    checkNominalOnDF(transformed, "predictedLeafId", newTree.numLeave)
+    checkNominalOnDF(transformed, "predictedLeafId", newTree.numLeaves)
     checkVectorSizeOnDF(transformed, "rawPrediction", newTree.numClasses)
     checkVectorSizeOnDF(transformed, "probability", newTree.numClasses)
 
@@ -427,6 +427,8 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
       TreeTests.checkEqual(model, model2)
       assert(model.numFeatures === model2.numFeatures)
       assert(model.numClasses === model2.numClasses)
+      val features = Vectors.dense(0.0, 0.0)
+      assert(model.predictLeaf(features) === model2.predictLeaf(features))
     }
 
     val dt = new DecisionTreeClassifier()

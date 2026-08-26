@@ -98,7 +98,7 @@ Kubernetes admin to ensure that Spark authentication is secure.
   <td><code>spark.authenticate.secret</code></td>
   <td>None</td>
   <td>
-    The secret key used authentication. See above for when this configuration should be set.
+    The secret key used for authentication. See above for when this configuration should be set.
   </td>
   <td>1.0.0</td>
 </tr>

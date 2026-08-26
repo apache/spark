@@ -38,7 +38,6 @@ from pyspark.sql.udf import UserDefinedFunction
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.util import is_remote_only
 
-
 # Both flags must be on for the transpiler to attempt a rewrite (at UDF
 # construction time and again in the optimizer); ANSI is required because
 # transpilation targets ANSI semantics.
@@ -491,6 +490,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # ``(a < b) and (b < c)``. The transpiler refuses chained Compare
         # nodes (``len(ops) != 1``) and must fall back to interpreted Python.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def chained(x):
@@ -555,6 +555,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # must refuse, fall back to interpreted Python, and still produce
         # the correct result.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def or_zero(x):
@@ -611,6 +612,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # non-boolean columns or silently produces wrong answers.  The
         # transpiler must refuse and fall back to interpreted Python.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def truthy_int(x):
@@ -667,6 +669,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # query would fail analysis instead of falling back. The transpiler must
         # refuse and run the UDF as interpreted Python.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def mixed_ternary(x):
@@ -733,6 +736,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # child of the TranspiledPythonUDF -- breaking a working UDF. The
         # category gate must refuse so it runs as interpreted Python.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def eq_true(x):
@@ -755,6 +759,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # Spark's string-number coercion silently returned True where Python's
         # cross-type == is False. (Reported by Codex review on PR #34.)
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def nested_ternary_eq(x):
@@ -831,6 +836,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # boolean-producing operand is now "bool" (not the numeric catch-all),
         # so this refuses and runs as interpreted Python.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def bool_plus_one(x):
@@ -852,6 +858,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # numeric one previously slipped past the guard and failed analysis
         # (CASE WHEN [BOOLEAN, INT]) instead of falling back.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def mixed(x):
@@ -870,24 +877,19 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             [result] = df.select(pudf("a")).collect()
             self.assertEqual(result[0], 1)
 
-    def test_udf_transpile_falls_back_for_plain_self_param(self):
-        # A plain function whose first parameter is literally named `self`
-        # must not be confused with a bound __call__ method: stripping it
-        # previously emitted `_udf_param_-1` and threw an AnalysisException
-        # at call construction.
-        import warnings as _warnings
-
+    def test_udf_transpile_plain_self_param_is_an_ordinary_param(self):
+        # A plain function whose first parameter is literally named `self` is not a
+        # bound receiver -- the call site supplies it. Stripping it emitted
+        # `_udf_param_-1` and threw at call construction, so it used to be refused
+        # outright; the receiver is decided by dispatch now, so this lowers.
         def weird(self, other):
             return self + other
 
-        with self.sql_conf(_TRANSPILE_ON):
-            with _warnings.catch_warnings(record=True):
-                _warnings.simplefilter("always")
-                pudf = UserDefinedFunction(weird, LongType())
-            self.assertEqual([], pudf.transpiled, "plain 'self' param must not transpile")
-            df = self.spark.createDataFrame([Row(a=2, b=3)])
-            [result] = df.select(pudf("a", "b")).collect()
-            self.assertEqual(result[0], 5)
+        self.assertEqual(
+            self._vals(weird, LongType(), "a long, b long", [(2, 3)]),
+            [5],
+            "both parameters are supplied at the call site, so both get placeholders",
+        )
 
     def test_udf_transpile_falls_back_for_wraps_decorated_function(self):
         # inspect.getsource follows __wrapped__, so a functools.wraps-decorated
@@ -895,6 +897,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # interpreted path ran the wrapper -- a silent wrong result.
         import functools
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def base(x):
@@ -919,6 +922,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # `null AND false` is false. A literal None operand must force a
         # fallback rather than silently diverge.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def none_and(x):
@@ -942,6 +946,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # fall back at construction instead. Interpreted execution still works
         # (the pickled-UDF converter nulls the type-mismatched results).
         import warnings as _warnings
+
         from pyspark.sql.types import ArrayType, TimestampType
 
         plus_one = lambda x: x + 1  # noqa: E731
@@ -971,6 +976,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # `def f(s: str): return s` declared LongType() would return 123 for
         # '123' (or raise CAST_INVALID_INPUT) where interpreted returns NULL.
         import warnings as _warnings
+
         from pyspark.sql.types import DecimalType
 
         def bytes_to_long(x: bytes):
@@ -1078,6 +1084,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # absorbed by a transpiled constant (zero-param case) nor raise a
         # misleading "internal error" AnalysisException (too-few-args case).
         import warnings as _warnings
+
         from pyspark.errors import PythonException
         from pyspark.sql.types import StructField, StructType
 
@@ -1139,6 +1146,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # `x is y`, `x is True`) must NOT transpile -- Python's `is` is an
         # object-identity test with no SQL equivalent outside of None.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         long_schema = StructType([StructField("a", LongType(), nullable=True)])
@@ -1254,6 +1262,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # Spark's `~0L` is -1 (truthy). The transpiler must refuse and fall
         # back to interpreted Python.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def not_x(x):
@@ -1290,6 +1299,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # (truthiness semantics) while Spark's `&`/`|` are bitwise. The
         # transpiler must refuse and fall back.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def x_and_y(x, y):
@@ -1362,17 +1372,55 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
     # contains "UDF" (so the "UDF" substring is unreliable).
     # ------------------------------------------------------------------
 
-    def _vals(self, func, return_type, schema, rows):
-        with self.sql_conf(_TRANSPILE_ON):
+    @staticmethod
+    def _udf_and_warnings(func, return_type):
+        """Build a UDF, returning it with the text of any warnings it emitted.
+
+        ``udf.py`` reports WHY a UDF fell back only as a warning, so every test that
+        cares about a fallback needs them captured. The caller must already be inside
+        ``sql_conf(_TRANSPILE_ON)`` -- this does not set the conf.
+        """
+        import warnings
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
             u = UserDefinedFunction(func, return_type)
-            self.assertTrue(u.transpiled, str(func))
+        return u, " ".join(str(w.message) for w in caught)
+
+    def _fallback_reason(self, func, return_type=LongType()):
+        """Assert ``func`` produced no options, and hand back the reason it reported."""
+        u, reasons = self._udf_and_warnings(func, return_type)
+        self.assertEqual([], u.transpiled, f"{func} must fall back")
+        self.assertTrue(reasons, f"{func} fell back without saying why")
+        return u, reasons
+
+    def _transpiled_udf(self, func, return_type):
+        """A UDF asserted to have produced options; naming the fallback reason if not.
+
+        Without the captured warning an empty ``transpiled`` asserts as bare "[] is
+        not true", and from CI the text is only in a credentialed log artifact. The
+        caller must already be inside ``sql_conf(_TRANSPILE_ON)``.
+        """
+        u, reasons = self._udf_and_warnings(func, return_type)
+        self.assertTrue(u.transpiled, f"{func} produced no transpiled options: {reasons}")
+        return u
+
+    def _vals(self, func, return_type, schema, rows, require_lowered=True):
+        with self.sql_conf(_TRANSPILE_ON):
+            u = self._transpiled_udf(func, return_type)
             df = self.spark.createDataFrame(rows, schema)
-            return [r[0] for r in df.select(u(*df.columns)).collect()]
+            projected = df.select(u(*df.columns))
+            # ``u.transpiled`` only says options were PRODUCED; the JVM may still
+            # discard them and run interpreted Python, returning the right value and
+            # hiding a wrong lowering. Pass ``require_lowered=False`` only where the
+            # JVM is EXPECTED to discard them.
+            if require_lowered:
+                self.assertEqual(0, self._eval_python_count(projected), str(func))
+            return [r[0] for r in projected.collect()]
 
     def _raises(self, func, schema, rows, needle="numeric"):
         with self.sql_conf(_TRANSPILE_ON):
-            u = UserDefinedFunction(func, LongType())
-            self.assertTrue(u.transpiled, str(func))
+            u = self._transpiled_udf(func, LongType())
             df = self.spark.createDataFrame(rows, schema)
             with self.assertRaises(Exception) as ctx:
                 df.select(u(*df.columns)).collect()
@@ -1441,9 +1489,10 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             with self.subTest(case=i):
                 self.assertEqual(self._vals(func, rt, schema, rows), expected, f"case {i}: {rows}")
 
-    def test_udf_transpile_callable_object_self_offset(self):
-        # A callable instance carries `self`; the extractor offsets it so a/b
-        # map to _udf_param_0/_udf_param_1 (non-commutative body proves order).
+    def test_udf_transpile_callable_object_drops_its_receiver(self):
+        # A callable instance's `self` is dropped before anything indexes the param
+        # list, so a/b are _udf_param_0/_udf_param_1 with no offsetting anywhere
+        # downstream (the non-commutative body proves the order).
         class SubAB:
             def __call__(self, a, b):
                 return a - b
@@ -1529,7 +1578,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         base = lambda v, w: v + w  # noqa: E731
         percent_fmt = lambda x: "n=%d" % x  # noqa: E731
         with self.sql_conf(_TRANSPILE_ON):
-            # inline / wrapped / partial lambdas -> source can't be extracted
+            # An inline or wrapped lambda is a call ARGUMENT, so the source is
+            # read fine but parses as ``Call`` rather than a definition we can
+            # unwrap; ``functools.partial`` has no reachable source at all.
             self.assertEqual([], UserDefinedFunction(lambda v: v + 1, LongType()).transpiled)
             self.assertEqual(
                 [], UserDefinedFunction(wrapper(lambda v: v + 1), LongType()).transpiled
@@ -1553,6 +1604,307 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 [num.select(wd("a")).first()[0], num.select(wd("a", "a")).first()[0]], [5, 55]
             )
 
+    def test_udf_transpile_falls_back_when_a_sibling_lambda_shares_the_line(self):
+        # ``inspect.getsource`` works in whole lines, so every lambda on a line hands
+        # back the same source and nothing in it says which one we hold. Taking
+        # whichever came first was right by position rather than by identity:
+        # ``minus_one`` lowered ``x + 1``, and the lambda in the decorator lowered
+        # the decorated ``def``'s body -- both silently wrong. Refusing costs
+        # ``plus_one``, which the first-match rule happened to get right; being right
+        # for 1-of-N by position is not something a caller can rely on (SPARK-58650).
+        #
+        # ``fmt: off`` keeps the two on one line; asserted below, since the formatter
+        # would otherwise split them and quietly make this test vacuous.
+        # fmt: off
+        plus_one = lambda x: x + 1; minus_one = lambda x: x - 1  # noqa: E702,E731
+        # fmt: on
+        self.assertEqual(
+            plus_one.__code__.co_firstlineno,
+            minus_one.__code__.co_firstlineno,
+            "fixture must keep both lambdas on ONE line or it proves nothing",
+        )
+
+        captured = []
+
+        def capture(g):
+            captured.append(g)
+            return lambda fn: fn
+
+        @capture(lambda x: x + 1)
+        def unrelated(a):
+            return a * 12345
+
+        (decorator_lambda,) = captured
+
+        # A class body is the same hazard: master read the whole line and lowered
+        # ``helper``, computing 5*100 for a UDF that really returns 5*2.
+        class TwoOnALine:
+            helper, __call__ = lambda self, x: x * 100, lambda self, x: x * 2
+
+        self.assertEqual(10, TwoOnALine()(5))
+
+        num = self.spark.createDataFrame([(5,)], "a long")
+        sibling = "put each lambda on its own line"
+        not_a_statement = "does not define it as a statement of its own"
+        with self.sql_conf(_TRANSPILE_ON):
+            for label, func, expected, needle in [
+                # Lowered the WRONG body before -- the bug.
+                ("second lambda on the line", minus_one, 4, sibling),
+                ("lambda inside a decorator", decorator_lambda, 6, not_a_statement),
+                ("__call__ sharing a class-body line", TwoOnALine(), 10, not_a_statement),
+                # Lowered correctly before; refused now as acknowledged collateral.
+                ("first lambda on the line", plus_one, 6, sibling),
+            ]:
+                with self.subTest(case=label):
+                    u, reasons = self._fallback_reason(func)
+                    # Assert the REASON, so relaxing the guard fails here loudly
+                    # rather than passing for a new and unrelated cause.
+                    self.assertIn(needle, reasons)
+                    self.assertEqual(expected, num.select(u("a")).first()[0])
+
+        # The ``def`` itself is NOT collateral: we know we are holding it, so a
+        # lambda in its decorator cannot be the body and does not block lowering.
+        self.assertEqual(self._vals(unrelated, LongType(), "a long", [(5,)]), [61725])
+
+    def test_udf_transpile_refuses_a_lambda_whose_source_now_reads_as_a_def(self):
+        # ``inspect.getsource`` reads the file as it is NOW, so an edit after import
+        # can hand back source holding no lambda at all. Refusing only when a SIBLING
+        # lambda is in view failed open here, lowering an unrelated ``def`` as the
+        # body: 5 * 12345 for a lambda Python evaluates to 6.
+        import importlib.util
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "drifted_lambda.py")
+            with open(path, "w") as handle:
+                handle.write("f = lambda x: x + 1\n")
+            spec = importlib.util.spec_from_file_location("drifted_lambda", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            with open(path, "w") as handle:
+                handle.write("def unrelated(a):\n    return a * 12345\n")
+
+            with self.sql_conf(_TRANSPILE_ON):
+                u, reasons = self._fallback_reason(module.f)
+                # Pin the REASON, or a source read that merely failed would pass too.
+                self.assertIn("which lambda to lower cannot be determined", reasons)
+                num = self.spark.createDataFrame([(5,)], "a long")
+                self.assertEqual(6, num.select(u("a")).first()[0])
+
+    def test_udf_transpile_ambiguity_check_sees_only_rival_lambdas(self):
+        # Two ways the check used to misfire or not fire at all.
+        from pyspark.sql.transpile import _held_code
+
+        # A lambda nested in the held lambda's own body is not a rival -- it can
+        # never be the UDF, and the user cannot split it onto another line. It fell
+        # back with the sibling message, advice that could not be acted on.
+        nested = lambda x: (lambda y: y + 1)(x)  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            _, reasons = self._fallback_reason(nested)
+            self.assertIn("Call", reasons, "must fall back for the body, not for ambiguity")
+            self.assertNotIn("put each lambda on its own line", reasons)
+
+        # The mirror: a lambda RETURNED by a one-line lambda. Here the outer one is
+        # what the source read locates and the inner one is what we hold, so treating
+        # nested lambdas as never-rivals let this through -- and it proceeded with the
+        # outer signature, reporting `n` as the UDF's parameter for a UDF whose only
+        # parameter is `x`. Matching the located lambda's parameters against the held
+        # code object's is what separates this from the case above.
+        # fmt: off
+        make_adder = lambda n: lambda x: x + n  # noqa: E731
+        # fmt: on
+        add_three = make_adder(3)
+        self.assertEqual(8, add_three(5))
+        with self.sql_conf(_TRANSPILE_ON):
+            u, reasons = self._fallback_reason(add_three)
+            self.assertIn("takes different parameters", reasons)
+            self.assertEqual([], u._transpiled_param_names or [])
+            self.assertEqual(
+                8, self.spark.createDataFrame([(5,)], "a long").select(u("a")).first()[0]
+            )
+
+        # ``staticmethod``/``classmethod`` hide ``__code__`` behind the descriptor, so
+        # reading it off them left the guard inactive -- skipping the check for a shape
+        # it exists to catch. Now that these lower at all, the skip would be a wrong
+        # answer: ``helper`` shares the line and takes the same parameter, so it is a
+        # true rival and would be lowered instead (5 * 9, not 5 * 2).
+        class Wrapped:
+            # fmt: off
+            helper = lambda x: x * 9; __call__ = staticmethod(lambda x: x * 2)  # noqa: E702,E731
+            # fmt: on
+
+        self.assertEqual(
+            Wrapped.helper.__code__.co_firstlineno,
+            Wrapped.__call__.__code__.co_firstlineno,
+            "fixture must keep both lambdas on ONE line or it proves nothing",
+        )
+        self.assertEqual(
+            "<lambda>",
+            getattr(_held_code(Wrapped()), "co_name", None),
+            "the held code must be found inside the descriptor",
+        )
+        self.assertEqual(10, Wrapped()(5))
+        with self.sql_conf(_TRANSPILE_ON):
+            u, reasons = self._fallback_reason(Wrapped())
+            self.assertIn("put each lambda on its own line", reasons)
+            num = self.spark.createDataFrame([(5,)], "a long")
+            self.assertEqual(10, num.select(u("a")).first()[0])
+
+    def test_udf_transpile_lowers_an_annotated_lambda_binding(self):
+        # An annotated binding is the same shape as a plain one, and the form a typed
+        # codebase writes. Only ``ast.Assign`` was unwrapped, so this was refused as
+        # "not a statement of its own" -- while the module docstring told users to
+        # bind the lambda to a name and give it a line, which is exactly this.
+        from typing import Callable
+
+        annotated: Callable[[int], int] = lambda x: x + 1  # noqa: E731
+        self.assertEqual(self._vals(annotated, LongType(), "a long", [(5,)]), [6])
+
+    def test_udf_transpile_recovers_shapes_with_an_unheld_lambda_in_view(self):
+        # The ambiguity check applies only when the callable we hold IS a lambda. The
+        # lambdas below belong to a ``def`` we are not lowering, so refusing on their
+        # account would cost lowering for nothing.
+        from typing import Annotated
+
+        def annotated(x: Annotated[int, lambda v: v > 0]) -> int:
+            return x + 1
+
+        def returns_annotated(x) -> Annotated[int, lambda v: v > 0]:
+            return x + 2
+
+        for label, func, expected in [
+            ("lambda in a parameter annotation", annotated, 6),
+            ("lambda in the return annotation", returns_annotated, 7),
+        ]:
+            with self.subTest(case=label):
+                self.assertEqual(self._vals(func, LongType(), "a long", [(5,)]), [expected])
+
+    def test_udf_transpile_resolves_call_on_the_type_not_the_instance(self):
+        # Python's call protocol looks ``__call__`` up on the TYPE, so an instance
+        # attribute of that name is never what runs. ``getattr(obj, "__call__")``
+        # finds it anyway, so the transpiler used to lower the shadowing body and
+        # return 5*99 where Python returns 5*4 -- silently wrong. The type's
+        # ``__call__`` must win, and it must still lower.
+        class Shadowed:
+            def __call__(self, x):
+                return x * 4
+
+        shadowed = Shadowed()
+        # Alone on its line: a leading statement on the same line would make the
+        # shadowing body unreachable for an unrelated reason and prove nothing.
+        shadowed.__call__ = lambda x: x * 99
+
+        self.assertEqual(20, shadowed(5), "the type's __call__ is what Python runs")
+        self.assertEqual(self._vals(shadowed, LongType(), "a long", [(5,)]), [20])
+
+    def test_udf_transpile_refuses_a_class_object(self):
+        # Calling a CLASS whose metaclass is ``type`` runs ``__init__`` and yields an
+        # instance, so its own ``__call__`` is never the body -- but that is the body
+        # the old ``getattr(func, "__call__")`` found. Pinned for the
+        # dynamically-created case too, where ``getsource`` cannot fall back to a
+        # ``ClassDef``. (A class with a custom metaclass IS callable through
+        # ``Meta.__call__``, and is resolved through it rather than refused.)
+        class Lexical:
+            def __init__(self, x):
+                self.v = x * 7
+
+            def __call__(self, x):
+                return x * 1000
+
+        def impl(self, x):
+            return x * 1000
+
+        Dynamic = type("Dynamic", (), {"__call__": impl})
+
+        with self.sql_conf(_TRANSPILE_ON):
+            for label, cls in [("lexical class", Lexical), ("type() class", Dynamic)]:
+                with self.subTest(case=label):
+                    self.assertEqual([], UserDefinedFunction(cls, LongType()).transpiled)
+
+    def test_udf_transpile_strips_a_bound_receiver_by_dispatch_not_by_name(self):
+        # The receiver used to be dropped only when literally named ``self``, so a
+        # bound ``__call__(this, x)`` or ``@classmethod f(cls, x)`` kept it in the
+        # public parameter list. That declares one parameter too many and shifts
+        # every ``_udf_param_N``: a two-column call returned column b's value where
+        # Python raises TypeError.
+        class Recv:
+            def __call__(this, x):
+                return x + 1
+
+        class Meth:
+            def act(this, x):
+                return x + 2
+
+        class Cls:
+            @classmethod
+            def act(kls, x):
+                return x + 3
+
+        # A ``__call__`` that is a classmethod, or one that is ALREADY a bound method,
+        # also has its receiver spoken for -- the class and the method's own
+        # ``__self__`` respectively. Both used to keep it in the public list, which
+        # shifts every placeholder. Each expectation below is what Python returns.
+        class ClsCall:
+            @classmethod
+            def __call__(kls, x):
+                return x + 4
+
+        class Helper:
+            def impl(self, x):
+                return x + 5
+
+        class BoundCall:
+            __call__ = Helper().impl
+
+        # And the two compose: a ``staticmethod`` prepends nothing, but the method it
+        # wraps is already bound, so one parameter is still spoken for. Counting only
+        # what the descriptor prepends declared a parameter too many here.
+        class StaticBound:
+            __call__ = staticmethod(Helper().impl)
+
+        for label, func, expected in [
+            ("__call__ receiver not named self", Recv(), 6),
+            ("bound method receiver not named self", Meth().act, 7),
+            ("classmethod receiver not named self", Cls.act, 8),
+            ("classmethod as __call__", ClsCall(), 9),
+            ("already-bound method as __call__", BoundCall(), 10),
+            ("staticmethod over a bound method", StaticBound(), 10),
+        ]:
+            with self.subTest(case=label):
+                self.assertEqual(func(5), expected, "fixture must match Python's own answer")
+                self.assertEqual(self._vals(func, LongType(), "a long", [(5,)]), [expected])
+
+        # Both at once is a callable Python itself rejects: the classmethod prepends
+        # the class ON TOP of the method's own receiver, leaving no parameter for the
+        # call site. Counting one receiver returned a value where Python raises.
+        class ClassBound:
+            __call__ = classmethod(Helper().impl)
+
+        with self.assertRaises(TypeError):
+            ClassBound()(5)
+        with self.sql_conf(_TRANSPILE_ON):
+            _, reasons = self._fallback_reason(ClassBound())
+            self.assertIn("leaves no parameter for the call site", reasons)
+
+        # The mirror: a ``staticmethod`` ``__call__`` prepends nothing, so its leading
+        # ``self`` IS supplied at the call site and both parameters are public.
+        # Resolving ``__call__`` on the type (rather than via getattr on the instance,
+        # which fires the descriptor) hands back the raw ``staticmethod``, which
+        # carries a ``__wrapped__`` of its own -- so for a while on this branch the
+        # wraps guard refused every one of them for a decorator that is not there.
+        class Static:
+            @staticmethod
+            def __call__(self, x):
+                return self + x
+
+        self.assertEqual(14, Static()(5, 9), "staticmethod __call__ binds no receiver")
+        self.assertEqual(
+            self._vals(Static(), LongType(), "a long, b long", [(5, 9)]),
+            [14],
+            "both parameters come from the call site",
+        )
+
     def test_udf_transpile_known_value_divergences(self):
         # Transpile but DIVERGE from Python (documented in transpile.py; pinned so
         # a future fix is noticed): unguarded arithmetic on NULL yields NULL
@@ -1566,12 +1918,14 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         self.assertEqual(
             self._vals(nan_gt, BooleanType(), "a double", [(float("nan"),), (1.0,)]), [True, True]
         )
-        # `x == "5"` used to be pinned as a coercion divergence (int == "5" ->
-        # True). The eq category gate now drops the numeric variant, so on a
-        # long column the string option is pruned and the UDF falls back to
-        # interpreted Python -- matching Python's cross-type == (always False).
+        # `x == "5"` used to be pinned as a coercion divergence (int == "5" -> True).
+        # The eq category gate now drops the numeric variant, so on a long column the
+        # string option is pruned, nothing is left to lower (hence require_lowered
+        # =False), and the UDF falls back to interpreted Python -- matching Python's
+        # cross-type == (always False).
         self.assertEqual(
-            self._vals(eq_strlit, BooleanType(), "a long", [(5,), (3,)]), [False, False]
+            self._vals(eq_strlit, BooleanType(), "a long", [(5,), (3,)], require_lowered=False),
+            [False, False],
         )
 
     def test_udf_transpile_overflow_and_modulo_zero_raise(self):

@@ -22,11 +22,11 @@ from zoneinfo import ZoneInfo
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.sql.conversion import (
+    ArrowArrayConversion,
     ArrowArrayToPandasConversion,
+    ArrowBatchTransformer,
     ArrowTableToRowsConversion,
     LocalDataToArrowConversion,
-    ArrowArrayConversion,
-    ArrowBatchTransformer,
     PandasToArrowConversion,
 )
 from pyspark.sql.types import (
@@ -351,8 +351,9 @@ class PandasToArrowConversionTests(unittest.TestCase):
 
     def test_convert_decimal(self):
         """Test int to decimal coercion."""
-        import pandas as pd
         from decimal import Decimal
+
+        import pandas as pd
 
         # DataFrame with integers, schema expects decimal
         df = pd.DataFrame({"a": [1, 2, 3]})
@@ -486,12 +487,19 @@ class ConversionTests(unittest.TestCase):
             (IntegerType(), (1,), (None,)),
             ((IntegerType(), {"nullable": False}), (1,)),
             (StringType(), ("a",)),
+            # bool coerced to string matches the JVM (EvaluatePython.makeFromJava).
+            (StringType(), (True, "true"), (False, "false")),
             (BinaryType(), (b"a",)),
             (GeographyType("ANY"), (None,)),
             (GeometryType("ANY"), (None,)),
             (ArrayType(IntegerType()), ([1, None],)),
             (ArrayType(IntegerType(), containsNull=False), ([1, 2],)),
             (ArrayType(BinaryType()), ([b"a", b"b"],)),
+            # array<string> with already-str, coerced (int/bool) and null elements.
+            (
+                ArrayType(StringType()),
+                (["ok", 42, True, False, None], ["ok", "42", "true", "false", None]),
+            ),
             (MapType(StringType(), IntegerType()), ({"a": 1, "b": None},)),
             (
                 MapType(StringType(), IntegerType(), valueContainsNull=False),

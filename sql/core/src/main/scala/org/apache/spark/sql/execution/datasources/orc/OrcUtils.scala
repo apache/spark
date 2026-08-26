@@ -176,8 +176,8 @@ object OrcUtils extends Logging {
       MapType(catalystKeyType, catalystValueType)
     }
 
-    // The Spark query engine has not completely supported CHAR/VARCHAR type yet, and here we
-    // replace the orc CHAR/VARCHAR with STRING type.
+    // Annotate metadata for the legacy path; under charVarcharFirstClassTypes the constrained
+    // types are kept so ORC catalyst attributes / native char/varchar round-trip as first-class.
     CharVarcharUtils.replaceCharVarcharWithStringInSchema(toStructType(schema))
   }
 
@@ -469,9 +469,17 @@ object OrcUtils extends Logging {
           val typeDesc = new TypeDescription(ops.orcCategory)
           typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, dt.typeName)
           Some(typeDesc)
-        case _: StringType =>
+        // Write CHAR/VARCHAR as ORC STRING plus spark.sql.catalyst.type, not native
+        // ORC CHAR/VARCHAR. Native ORC maxLength would truncate/pad independently of
+        // Spark store assignment. Hive-written native CHAR still round-trips on read
+        // via toCatalystSchema. Unbounded STRING (including collated) stamps
+        // StringType.typeName ("string"), matching Avro: this PR does not round-trip
+        // collation on file-only reads.
+        case s: StringType =>
           val typeDesc = new TypeDescription(TypeDescription.Category.STRING)
-          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, StringType.typeName)
+          typeDesc.setAttribute(
+            CATALYST_TYPE_ATTRIBUTE_NAME,
+            CharVarcharUtils.charVarcharTypeName(s).getOrElse(StringType.typeName))
           Some(typeDesc)
         case _ => None
       }

@@ -17,8 +17,8 @@
 
 """PySpark Functions"""
 
-from pyspark.sql.functions.builtin import *  # noqa: F403
 from pyspark.sql.functions import partitioning  # noqa: F401
+from pyspark.sql.functions.builtin import *  # noqa: F403
 
 __all__ = [  # noqa: F405
     # Normal functions
@@ -344,6 +344,7 @@ __all__ = [  # noqa: F405
     "shuffle",
     "slice",
     "sort_array",
+    "trim_array",
     # Struct Functions
     "named_struct",
     "struct",
@@ -525,9 +526,13 @@ __all__ = [  # noqa: F405
     "aes_decrypt",
     "aes_encrypt",
     "assert_true",
+    "bitmap_and",
+    "bitmap_andnot",
     "bitmap_bit_position",
     "bitmap_bucket_number",
     "bitmap_count",
+    "bitmap_or",
+    "bitmap_xor",
     "current_catalog",
     "current_database",
     "current_path",
@@ -623,4 +628,5 @@ __all__ = [  # noqa: F405
     "udtf",
     "arrow_udtf",
     "unwrap_udt",
+    "wrap_udt",
 ]

@@ -395,6 +395,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     override protected def outstandingTasksForOtherWork(rpId: Int, excludeStageIds: Set[Int]): Int =
       outstandingTasksForOtherWorkForTest(rpId, excludeStageIds)
 
+    // Seam for the hold state (SPARK-58828) read by the barrier retry-budget freeze. Default
+    // false so existing tests are unaffected.
+    @volatile var executorsHeldForTest: Boolean = false
+    override protected def executorsHeld: Boolean = executorsHeldForTest
+
     /**
      * Schedules shuffle merge finalize.
      */
@@ -6865,6 +6870,27 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       assertDataStructuresEmpty()
     } finally {
       scheduler.asInstanceOf[MyDAGScheduler].maxConcurrentTasksForTest = 1000
+    }
+  }
+
+  test("SPARK-58828: a barrier job does not consume its retry budget while held") {
+    // 4 barrier tasks on a local[2] backend fail the slot check; while held that must not
+    // count against spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures.
+    val barrierRdd = new MyRDD(sc, 4, Nil).barrier().mapPartitions(iter => iter)
+    val myScheduler = scheduler.asInstanceOf[MyDAGScheduler]
+    myScheduler.executorsHeldForTest = true
+    try {
+      val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+      val failListener = new JobListener {
+        override def taskSucceeded(index: Int, result: Any): Unit = {}
+        override def jobFailed(exception: Exception): Unit = failure.set(exception)
+      }
+      submit(barrierRdd, Array(0, 1, 2, 3), listener = failListener)
+      assert(failure.get() === null, "a barrier job submitted while held must wait, not fail")
+      assert(scheduler.barrierJobIdToNumTasksCheckFailures.isEmpty,
+        "the retry budget must not be consumed while held")
+    } finally {
+      myScheduler.executorsHeldForTest = false
     }
   }
 

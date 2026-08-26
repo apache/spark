@@ -18,11 +18,12 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.aggregate.Partial
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Partial, PartialMerge}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.ExtendedSQLTest
 
 /**
  * Tests for runtime adaptive partial aggregation
@@ -43,6 +44,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  *      when) it should -- high-cardinality input bypasses, low-cardinality input keeps aggregating,
  *      the feature switch and eligibility rules are honored, and both check points work.
  */
+@ExtendedSQLTest
 class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   with AdaptiveSparkPlanHelper {
 
@@ -64,6 +66,16 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   private val fixedPlanConfs = Seq(
     SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false",
     SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "false")
+
+  // Whether `agg` is a partial or partial-merge phase. This matches every `HashAggregateExec`
+  // whose modes are all `Partial`/`PartialMerge`, including the DISTINCT intermediate phase
+  // (`PartialMerge ++ Partial`, the non-distinct aggregates in `PartialMerge` and the distinct
+  // ones in `Partial`) that the feature now bypasses. It is a superset of the phases the feature
+  // actually applies to: a pure `PartialMerge` de-duplication phase (excluded by its required
+  // distribution) and an ineligible group-by-only `Final` (vacuously all-`Partial`) also match,
+  // but neither registers a `numBypassingRows` metric, so they add 0 to the bypass count below.
+  private def isPartialPhase(agg: HashAggregateExec): Boolean =
+    agg.aggregateExpressions.forall(a => a.mode == Partial || a.mode == PartialMerge)
 
   /**
    * Runs `build` with adaptive partial aggregation disabled (the reference) and then across the
@@ -119,12 +131,12 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           s"twoLevelMap=$twoLevelMap forceSpill=$forceSpill"
         withClue(msg) {
           // Collect once so the metrics are populated, then check whether the bypass fired for
-          // this cell. The metric lives on the `Partial`-mode `HashAggregateExec`, so that is the
-          // operator the assertion reads.
+          // this cell. The metric lives on the partial `HashAggregateExec` phases, so those are the
+          // operators the assertion reads.
           val df = build(inputPartitions)
           df.collect()
           val skipped = collect(df.queryExecution.executedPlan) {
-            case agg: HashAggregateExec if agg.aggregateExpressions.forall(_.mode == Partial) =>
+            case agg: HashAggregateExec if isPartialPhase(agg) =>
               agg.metrics.get("numBypassingRows").map(_.value).getOrElse(0L)
           }.sum
           if (expectBypass) {
@@ -181,7 +193,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     val df = build()
     df.collect()
     val partialAggs = collect(df.queryExecution.executedPlan) {
-      case agg: HashAggregateExec if agg.aggregateExpressions.forall(_.mode == Partial) => agg
+      case agg: HashAggregateExec if isPartialPhase(agg) => agg
     }
     // A partial aggregate is always present for the grouped queries these tests use.
     assert(partialAggs.nonEmpty, "expected a partial HashAggregateExec in the plan")
@@ -198,19 +210,32 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
 
   private def numBypassingRows(build: () => DataFrame): Long = runAndReadCounters(build).skipped
 
-  // Returns the bypassed-row count per Partial-mode `HashAggregateExec`, keyed by the number of
+  // Returns the bypassed-row count per partial `HashAggregateExec` phase, keyed by the number of
   // grouping keys, and verifies the run matches the feature-off reference. A `count(DISTINCT ...)`
-  // group-by has two such Partial phases -- the de-duplication partial (grouping on key + distinct
-  // columns) and the distinct partial (grouping on the keys only) -- so their bypasses can be told
-  // apart by the grouping key count.
+  // group-by has two such phases -- the de-duplication partial (grouping on key + distinct
+  // columns) and the distinct partial (grouping on the keys only, whose non-distinct aggregates run
+  // in `PartialMerge`) -- so their bypasses can be told apart by the grouping key count.
   private def bypassRowsByGroupingKeyCount(build: () => DataFrame): Map[Int, Long] = {
     val df = build()
     df.collect()
     val byKeyCount = collect(df.queryExecution.executedPlan) {
-      case agg: HashAggregateExec if agg.aggregateExpressions.forall(_.mode == Partial) =>
+      case agg: HashAggregateExec if isPartialPhase(agg) =>
         agg.groupingExpressions.length ->
           agg.metrics.get("numBypassingRows").map(_.value).getOrElse(0L)
     }.groupBy(_._1).map { case (n, pairs) => n -> pairs.map(_._2).sum }
+    // The pure `PartialMerge` de-duplication phase (grouping on key + distinct columns) is the one
+    // phase the `exists(_.mode == Partial)` guard exists to exclude, and only when it carries
+    // non-distinct aggregates: with none at all its `aggregateExpressions` is empty, so the guard's
+    // `isEmpty` disjunct admits it and only its required distribution keeps it out, and
+    // `dedupPhases` below (which requires a non-empty `aggregateExpressions`) does not collect it.
+    // It shares the 2-key bucket above with the leading `Partial` phase, so pin its ineligibility
+    // directly.
+    val dedupPhases = collect(df.queryExecution.executedPlan) {
+      case agg: HashAggregateExec if agg.aggregateExpressions.nonEmpty &&
+        agg.aggregateExpressions.forall(_.mode == PartialMerge) => agg
+    }
+    assert(dedupPhases.forall(!_.metrics.contains("numBypassingRows")),
+      "the pure-PartialMerge de-duplication phase must stay ineligible")
     checkAgainstReference(df, build)
     byKeyCount
   }
@@ -455,7 +480,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
       val df = query()
       df.collect()
       val skipped = collect(df.queryExecution.executedPlan) {
-        case agg: HashAggregateExec if agg.aggregateExpressions.forall(_.mode == Partial) =>
+        case agg: HashAggregateExec if isPartialPhase(agg) =>
           agg.metrics.get("numBypassingRows").map(_.value).getOrElse(0L)
       }.sum
       assert(skipped > 0,
@@ -477,10 +502,93 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("distinct with plain and filtered non-distinct aggregates") {
+    // One query carries all three shapes through the DISTINCT intermediate phase
+    // (`PartialMerge ++ Partial`): the distinct aggregate (`count(DISTINCT v)`), a plain
+    // non-distinct aggregate (`sum(v)`), and a filtered non-distinct aggregate
+    // (`avg(v) FILTER (...)`, whose `FILTER` is applied in the leading `Partial` phase only).
+    // Fully distinct keys and values make neither partial phase reduce anything, so both bypass in
+    // the same execution: asserting the 2-key phase (de-duplication, all `Partial`) and the 1-key
+    // phase (distinct partial, `PartialMerge ++ Partial`) together proves the two bypasses coexist,
+    // the plain and filtered non-distinct buffers pass through correctly, and the results still
+    // match the feature-off reference.
+    withTempView("t") {
+      spark.range(0, 400, 1, 1)
+        .select($"id".cast("string") as "k", $"id" as "v")
+        .createOrReplaceTempView("t")
+      forEachCodegenAndMap() { clue =>
+        val df = () => spark.sql(
+          """SELECT k,
+            |       count(DISTINCT v) AS cd,
+            |       sum(v) AS s,
+            |       avg(v) FILTER (WHERE v > 25) AS a_gt25
+            |FROM t GROUP BY k""".stripMargin)
+        withClue(clue) {
+          val byKeyCount = bypassRowsByGroupingKeyCount(df)
+          assert(byKeyCount.get(2).exists(_ > 0),
+            s"expected the de-duplication partial (grouping on k, v) to bypass, got $byKeyCount")
+          assert(byKeyCount.get(1).exists(_ > 0),
+            s"expected the distinct partial (PartialMerge++Partial, grouping on k) to bypass, " +
+              s"got $byKeyCount")
+        }
+      }
+    }
+  }
+
+  test("distinct with an order-sensitive non-distinct aggregate across partitions") {
+    // A single-partition `range` fuses the whole four-phase DISTINCT plan into one stage, so the
+    // split-topology path (the frozen map draining one row per queued row, the queue flush, and
+    // the `shouldStop()` re-entry) never runs for a `PartialMerge` member, including an
+    // order-sensitive one. Deriving both grouping columns and varying the partition count forces
+    // the exchanges; carrying `first`/`last` makes the pass-through's merge-into-an-empty-buffer
+    // step observable. The forced-spill cells are omitted because the sort-based fallback reorders
+    // `first`/`last` in the feature-off reference arm too.
+    forEachCodegenAndMap() { clue =>
+      Seq(1, 2).foreach { parts =>
+        val df = () => spark.range(0, 400, 1, parts)
+          .select(($"id" % 100).cast("string") as "k", ($"id" % 7) as "v", $"id" as "w")
+          .groupBy($"k")
+          .agg(countDistinct($"v") as "cd", sum($"w") as "s",
+            first($"w") as "f", last($"w") as "l")
+        withClue(s"$clue parts=$parts") {
+          val byKeyCount = bypassRowsByGroupingKeyCount(df)
+          assert(byKeyCount.get(2).exists(_ > 0),
+            s"expected the de-duplication partial (grouping on k, v) to bypass, got $byKeyCount")
+          assert(byKeyCount.get(1).exists(_ > 0),
+            s"expected the distinct partial (PartialMerge++Partial, grouping on k) to bypass, " +
+              s"got $byKeyCount")
+        }
+      }
+    }
+  }
+
+  test("an imperative aggregate stays correct in the distinct intermediate phase") {
+    // `approx_count_distinct` uses `HyperLogLogPlusPlus`, an `ImperativeAggregate` whose buffer is
+    // written by `initialize`/`merge` rather than a projection, so the distinct intermediate phase
+    // runs on `TungstenAggregationIterator` (supportCodegen = false). Asserting both phases bypass
+    // -- the de-duplication partial (grouping on `k` + `v`) and the distinct partial (grouping on
+    // `k`, whose `PartialMerge` member is imperative) -- proves the imperative buffer is reset then
+    // merged with the incoming buffer on pass-through, and the results still match the reference.
+    forEachCodegenAndMap() { clue =>
+      val df = () => spark.range(0, 400, 1, 1)
+        .select(($"id" % 50).cast("string") as "k", ($"id" % 20) as "v", $"id" as "x")
+        .groupBy($"k")
+        .agg(approx_count_distinct($"x") as "acd", countDistinct($"v") as "cd")
+      withClue(clue) {
+        val byKeyCount = bypassRowsByGroupingKeyCount(df)
+        assert(byKeyCount.get(2).exists(_ > 0),
+          s"expected the de-duplication partial (grouping on k, v) to bypass, got $byKeyCount")
+        assert(byKeyCount.get(1).exists(_ > 0),
+          s"expected the distinct partial (imperative PartialMerge, grouping on k) to bypass, " +
+            s"got $byKeyCount")
+      }
+    }
+  }
+
   test("distinct aggregation bypasses on high-cardinality input") {
-    // The `PartialMerge` phase of the multi-phase distinct plan always aggregates (it is not
-    // `Partial` mode and requires a distribution), so the rows reaching the distinct `Partial`
-    // phase are de-duplicated and pass-through carries exactly one distinct value each.
+    // The `PartialMerge` phase of the multi-phase distinct plan always aggregates (it requires a
+    // distribution, so it is never eligible), so the rows reaching the distinct `Partial` phase
+    // are de-duplicated and pass-through carries exactly one distinct value each.
     forEachCodegenAndMap() { clue =>
       val df = () => spark.range(0, 1000, 1, 1)
         .select(($"id" % 100).cast("string") as "k", $"id" as "v")

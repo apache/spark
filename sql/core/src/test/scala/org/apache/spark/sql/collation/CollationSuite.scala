@@ -41,7 +41,9 @@ import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, Metadata, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.tags.ExtendedSQLTest
 
+@ExtendedSQLTest
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
 

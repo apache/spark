@@ -19,23 +19,23 @@ import tempfile
 
 import numpy as np
 
-from pyspark.ml.linalg import Vectors, SparseVector
 from pyspark.ml.clustering import (
-    KMeans,
-    KMeansModel,
-    KMeansSummary,
+    LDA,
     BisectingKMeans,
     BisectingKMeansModel,
     BisectingKMeansSummary,
+    DistributedLDAModel,
     GaussianMixture,
     GaussianMixtureModel,
     GaussianMixtureSummary,
-    LDA,
+    KMeans,
+    KMeansModel,
+    KMeansSummary,
     LDAModel,
     LocalLDAModel,
-    DistributedLDAModel,
     PowerIterationClustering,
 )
+from pyspark.ml.linalg import SparseVector, Vectors
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 

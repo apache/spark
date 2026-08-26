@@ -17,20 +17,27 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.functions.{
+  bitmap_and,
   bitmap_and_agg,
+  bitmap_andnot,
   bitmap_bit_position,
   bitmap_bucket_number,
   bitmap_construct_agg,
   bitmap_count,
+  bitmap_or,
   bitmap_or_agg,
+  bitmap_xor,
   bitmap_xor_agg,
   col,
   expr,
   hex,
   lit,
   substring,
+  sum,
   to_binary}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class BitmapExpressionsQuerySuite extends SharedSparkSession {
@@ -307,6 +314,167 @@ class BitmapExpressionsQuerySuite extends SharedSparkSession {
            | """.stripMargin)
       // The intersection should be 1 (only bit 3 is common)
       checkAnswer(intersectionResult, Seq(Row(1)))
+    }
+  }
+
+  test("scalar bitmap binary operations") {
+    def checkResults(): Unit = {
+      val df = Seq(("F00F", "70")).toDF("left", "right")
+      checkAnswer(
+        df.selectExpr(
+          "substring(hex(bitmap_and(to_binary(left, 'hex'), to_binary(right, 'hex'))), 0, 4)",
+          "substring(hex(bitmap_or(to_binary(left, 'hex'), to_binary(right, 'hex'))), 0, 4)",
+          "substring(hex(bitmap_andnot(to_binary(left, 'hex'), to_binary(right, 'hex'))), 0, 4)",
+          "substring(hex(bitmap_xor(to_binary(left, 'hex'), to_binary(right, 'hex'))), 0, 4)"),
+        Seq(Row("7000", "F00F", "800F", "800F")))
+
+      val leftBitmap = to_binary(col("left"), lit("hex"))
+      val rightBitmap = to_binary(col("right"), lit("hex"))
+      checkAnswer(
+        df.select(
+          substring(hex(bitmap_and(leftBitmap, rightBitmap)), 0, 4),
+          substring(hex(bitmap_or(leftBitmap, rightBitmap)), 0, 4),
+          substring(hex(bitmap_andnot(leftBitmap, rightBitmap)), 0, 4),
+          substring(hex(bitmap_xor(leftBitmap, rightBitmap)), 0, 4)),
+        Seq(Row("7000", "F00F", "800F", "800F")))
+
+      val shortBitmap = Seq(("", "FF")).toDF("left", "right")
+      checkAnswer(
+        shortBitmap.selectExpr(
+          "length(bitmap_and(to_binary(left, 'hex'), to_binary(right, 'hex')))",
+          "length(bitmap_or(to_binary(left, 'hex'), to_binary(right, 'hex')))",
+          "length(bitmap_andnot(to_binary(left, 'hex'), to_binary(right, 'hex')))",
+          "length(bitmap_xor(to_binary(left, 'hex'), to_binary(right, 'hex')))"),
+        Seq(Row(4096, 4096, 4096, 4096)))
+
+      checkAnswer(
+        spark.sql("""
+          |SELECT bitmap_count(bitmap_and(X'', X'FF')),
+          |  bitmap_count(bitmap_or(X'', X'FF')),
+          |  bitmap_count(bitmap_andnot(X'', X'FF')),
+          |  bitmap_count(bitmap_xor(X'', X'FF'))
+          |""".stripMargin),
+        Seq(Row(0, 8, 0, 8)))
+
+      val boundaryBitmap =
+        Seq((Array.fill[Byte](4096)(0), Array.fill[Byte](4096)(0))).toDF("left", "right")
+      checkAnswer(
+        boundaryBitmap.selectExpr(
+          "length(bitmap_and(left, right))",
+          "length(bitmap_or(left, right))",
+          "length(bitmap_andnot(left, right))",
+          "length(bitmap_xor(left, right))"),
+        Seq(Row(4096, 4096, 4096, 4096)))
+
+      checkAnswer(
+        spark.sql("SELECT bitmap_count(bitmap_or(bitmap_and(X 'F0', X '70'), X '0F'))"),
+        Seq(Row(7)))
+    }
+
+    Seq("CODEGEN_ONLY" -> "true", "NO_CODEGEN" -> "false").foreach {
+      case (codegenMode, wholeStageEnabled) =>
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStageEnabled,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+          checkResults()
+        }
+    }
+  }
+
+  test("scalar bitmap binary operations with aggregate bitmaps") {
+    val constructed = Seq((1, 2), (2, 3), (3, 4)).toDF("left", "right")
+    val leftBitmap = bitmap_construct_agg(bitmap_bit_position(col("left")))
+    val rightBitmap = bitmap_construct_agg(bitmap_bit_position(col("right")))
+    checkAnswer(
+      constructed.agg(bitmap_count(bitmap_and(leftBitmap, rightBitmap))),
+      Seq(Row(2)))
+
+    val precomputed = Seq("F0", "70").toDF("bitmap")
+    val orBitmap = bitmap_or_agg(to_binary(col("bitmap"), lit("hex")))
+    val andBitmap = bitmap_and_agg(to_binary(col("bitmap"), lit("hex")))
+    checkAnswer(
+      precomputed.agg(
+        bitmap_count(bitmap_and(orBitmap, andBitmap)),
+        bitmap_count(bitmap_or(orBitmap, andBitmap)),
+        bitmap_count(bitmap_andnot(orBitmap, andBitmap)),
+        bitmap_count(bitmap_xor(orBitmap, andBitmap))),
+      Seq(Row(3, 4, 1, 1)))
+  }
+
+  test("scalar bitmap binary operations in grouped query") {
+    val df = Seq((1, "F0", "70"), (1, "10", "20"), (2, "FF", "0F"))
+      .toDF("group_id", "left", "right")
+    checkAnswer(
+      df.selectExpr(
+        "group_id",
+        "bitmap_count(bitmap_and(to_binary(left, 'hex'), to_binary(right, 'hex'))) AS count")
+        .groupBy("group_id")
+        .agg(sum("count"))
+        .orderBy("group_id"),
+      Seq(Row(1, 3), Row(2, 4)))
+  }
+
+  test("scalar bitmap binary operations with nulls") {
+    val df = Seq[(String, String)](("F0", null), (null, "70"), (null, null)).toDF("left", "right")
+    checkAnswer(
+      df.selectExpr(
+        "bitmap_and(to_binary(left, 'hex'), to_binary(right, 'hex'))",
+        "bitmap_or(to_binary(left, 'hex'), to_binary(right, 'hex'))",
+        "bitmap_andnot(to_binary(left, 'hex'), to_binary(right, 'hex'))",
+        "bitmap_xor(to_binary(left, 'hex'), to_binary(right, 'hex'))"),
+      Seq(
+        Row(null, null, null, null),
+        Row(null, null, null, null),
+        Row(null, null, null, null)))
+  }
+
+  test("scalar bitmap binary operations reject oversized inputs") {
+    val oversizedInputs = Seq(
+      "left" -> Seq((Array.fill[Byte](4097)(0), Array[Byte](0))).toDF("left", "right"),
+      "right" -> Seq((Array[Byte](0), Array.fill[Byte](4097)(0))).toDF("left", "right"))
+
+    Seq("CODEGEN_ONLY" -> "true", "NO_CODEGEN" -> "false").foreach {
+      case (codegenMode, wholeStageEnabled) =>
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStageEnabled,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+          oversizedInputs.foreach { case (inputSide, oversized) =>
+            Seq("bitmap_and", "bitmap_or", "bitmap_andnot", "bitmap_xor").foreach { functionName =>
+              withClue(s"$functionName with oversized $inputSide input in $codegenMode: ") {
+                checkError(
+                  exception = intercept[SparkRuntimeException] {
+                    oversized.selectExpr(s"$functionName(left, right)").collect()
+                  },
+                  condition = "BITMAP_INPUT_TOO_LARGE",
+                  parameters = Map("inputNumBytes" -> "4097", "maxNumBytes" -> "4096"))
+              }
+            }
+          }
+        }
+    }
+  }
+
+  test("scalar bitmap binary operations called with non-binary types") {
+    val invalidInputs = Seq(
+      ("first", "left", Seq((12, Array[Byte](0))).toDF("left", "right")),
+      ("second", "right", Seq((Array[Byte](0), 13)).toDF("left", "right")))
+
+    invalidInputs.foreach { case (paramIndex, inputColumn, df) =>
+      Seq("bitmap_and", "bitmap_or", "bitmap_andnot", "bitmap_xor").foreach { functionName =>
+        val sqlExpr = s"$functionName(left, right)"
+        checkError(
+          exception = intercept[AnalysisException] {
+            df.selectExpr(sqlExpr)
+          },
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          parameters = Map(
+            "sqlExpr" -> s""""$sqlExpr"""",
+            "paramIndex" -> paramIndex,
+            "requiredType" -> "\"BINARY\"",
+            "inputSql" -> s""""$inputColumn"""",
+            "inputType" -> "\"INT\""),
+          context = ExpectedContext(fragment = sqlExpr, start = 0, stop = sqlExpr.length - 1))
+      }
     }
   }
 

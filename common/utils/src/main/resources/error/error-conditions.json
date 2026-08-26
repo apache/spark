@@ -489,6 +489,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "BITMAP_INPUT_TOO_LARGE" : {
+    "message" : [
+      "The input bitmap has <inputNumBytes> bytes, which exceeds the maximum supported size of <maxNumBytes> bytes."
+    ],
+    "sqlState" : "22001"
+  },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
       "The method <methodName> can not be called on streaming Dataset/DataFrame."
@@ -993,6 +999,13 @@
     },
     "sqlState" : "XX000"
   },
+  "CHECKPOINT_DIRECTORY_NOT_SET" : {
+    "message" : [
+      "Cannot checkpoint because no checkpoint directory is configured.",
+      "Set one with `SparkContext.setCheckpointDir` or the \"spark.checkpoint.dir\" configuration."
+    ],
+    "sqlState" : "55019"
+  },
   "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED" : {
     "message" : [
       "Checksum verification failed, the file may be corrupted. File: <fileName>",
@@ -1007,6 +1020,13 @@
       "If this problem persists, you may consider using `rdd.checkpoint()` instead, which is slower than local checkpointing but more fault-tolerant."
     ],
     "sqlState" : "56000"
+  },
+  "CHECKPOINT_RDD_PARTITION_COUNT_MISMATCH" : {
+    "message" : [
+      "The checkpoint of RDD <originalRDDId> has <newRDDLength> partition(s), but the RDD itself has <originalRDDLength>. The checkpoint RDD is <newRDDId>.",
+      "This usually means the checkpoint directory is not on storage that both the driver and the executors can read and write, or that some checkpoint files did not survive until the checkpoint was read back."
+    ],
+    "sqlState" : "58030"
   },
   "CHECK_CONSTRAINT_VIOLATION" : {
     "message" : [
@@ -1963,6 +1983,16 @@
           "<functionName> has an invalid or unsupported JSON path <path>."
         ]
       },
+      "INVALID_JSON_QUERY_RETURNING_TYPE" : {
+        "message" : [
+          "<functionName> cannot return a value of type <returningType>. The RETURNING type must be a string type."
+        ]
+      },
+      "INVALID_JSON_QUERY_WRAPPER_AND_QUOTES" : {
+        "message" : [
+          "<functionName> cannot combine an OMIT QUOTES clause with a WITH ARRAY WRAPPER clause. OMIT QUOTES applies only to an unwrapped result."
+        ]
+      },
       "INVALID_JSON_SCALAR_RETURNING_TYPE" : {
         "message" : [
           "<functionName> cannot return a value of type <returningType>. The RETURNING type must be a scalar (string, numeric, boolean, or datetime) type."
@@ -2661,6 +2691,12 @@
       "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
     ],
     "sqlState" : "42822"
+  },
+  "FAILED_CREATE_CHECKPOINT_DIRECTORY" : {
+    "message" : [
+      "Failed to create the checkpoint directory <path> as FileSystem.mkdirs returned false."
+    ],
+    "sqlState" : "58030"
   },
   "FAILED_EXECUTE_UDF" : {
     "message" : [
@@ -3758,6 +3794,12 @@
     },
     "sqlState" : "42K03"
   },
+  "INVALID_CHECKPOINT_DIRECTORY" : {
+    "message" : [
+      "Cannot read the checkpoint directory <path>: expected the partition file <expectedFileName> but found <fileName>. The partition files must be numbered contiguously from part-00000."
+    ],
+    "sqlState" : "58030"
+  },
   "INVALID_CLONE_SESSION_REQUEST" : {
     "message" : [
       "Invalid session clone request."
@@ -4836,6 +4878,11 @@
           "expects one of the units 'HOUR', 'MINUTE', 'SECOND', 'MILLISECOND', 'MICROSECOND', but got '<invalidValue>'."
         ]
       },
+      "TRIM_ARRAY_LENGTH" : {
+        "message" : [
+          "Expects a value between 0 and the array cardinality (<numElements>), but got <length>."
+        ]
+      },
       "ZERO_INDEX" : {
         "message" : [
           "expects %1$, %2$ and so on, but got %0$."
@@ -5616,6 +5663,24 @@
     ],
     "sqlState" : "2203G"
   },
+  "JSON_QUERY_ON_ERROR" : {
+    "message" : [
+      "<functionName> could not extract a value at path <path>."
+    ],
+    "subClass" : {
+      "EMPTY" : {
+        "message" : [
+          "The path matched no value. This error was requested by the ERROR ON EMPTY clause."
+        ]
+      },
+      "ERROR" : {
+        "message" : [
+          "The input is not valid JSON. This error was requested by the ERROR ON ERROR clause."
+        ]
+      }
+    },
+    "sqlState" : "2203G"
+  },
   "JSON_VALUE_ON_ERROR" : {
     "message" : [
       "<functionName> could not extract a scalar value at path <path>."
@@ -5700,6 +5765,12 @@
       "LOAD DATA input path does not exist: <path>."
     ],
     "sqlState" : "42K03"
+  },
+  "LOCAL_BLOCK_DATA_NOT_FOUND" : {
+    "message" : [
+      "Block <blockId> had block metadata but its data was missing from both the memory and disk stores. The block has been removed, so a later read must fetch it from another replica or recompute it."
+    ],
+    "sqlState" : "58030"
   },
   "LOCAL_MUST_WITH_SCHEMA_FILE" : {
     "message" : [
@@ -6985,6 +7056,12 @@
     ],
     "sqlState" : "42K05"
   },
+  "SHUFFLE_BLOCK_MIGRATION_NOT_SUPPORTED" : {
+    "message" : [
+      "Shuffle block <blockId> cannot be migrated to the receiving executor: its shuffle block resolver <resolverClass> must implement MigratableResolver. See the cause for details."
+    ],
+    "sqlState" : "0A000"
+  },
   "SKETCH_INVALID_LG_NOM_ENTRIES" : {
     "message" : [
       "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
@@ -7841,6 +7918,14 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT" : {
+    "message" : [
+      "Streaming shuffle <shuffleId> writer <writerId> timed out after <timeoutMs> ms waiting for reader <readerId> to connect.",
+      "This can occur when the reader task is delayed because cluster resources are unavailable or when network connectivity prevents the reader from reaching the writer.",
+      "Check cluster resources and network connectivity. If the reader needs more time to start, increase 'spark.shuffle.streaming.writerConnectionTimeout', or set it to -1 to wait indefinitely."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STREAMING_STATEFUL_OPERATOR_MISSING_STATE_DIRECTORY" : {
     "message" : [
       "Cannot restart streaming query with stateful operators because the state directory is empty or missing.",
@@ -8199,6 +8284,12 @@
       "Unable to infer schema for <format>. It must be specified manually."
     ],
     "sqlState" : "42KD9"
+  },
+  "UNABLE_TO_REGISTER_WITH_EXTERNAL_SHUFFLE_SERVICE" : {
+    "message" : [
+      "Unable to register with the external shuffle service: <message>"
+    ],
+    "sqlState" : "58030"
   },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
@@ -11555,56 +11646,9 @@
       "countByValueApprox() does not support arrays"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3016" : {
-    "message" : [
-      "Checkpoint directory has not been set in the SparkContext"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3017" : {
-    "message" : [
-      "Invalid checkpoint file: <path>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3018" : {
-    "message" : [
-      "Failed to create checkpoint path <checkpointDirPath>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3019" : {
-    "message" : [
-      "Checkpoint RDD has a different number of partitions from original RDD. Original",
-      "RDD [ID: <originalRDDId>, num of partitions: <originalRDDLength>];",
-      "Checkpoint RDD [ID: <newRDDId>, num of partitions: <newRDDLength>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3020" : {
-    "message" : [
-      "Checkpoint dir must be specified."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3028" : {
     "message" : [
       "<errorMsg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3033" : {
-    "message" : [
-      "Unable to register with external shuffle server due to : <message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3035" : {
-    "message" : [
-      "Unexpected shuffle block <blockId> with unsupported shuffle resolver <shuffleBlockResolver>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3036" : {
-    "message" : [
-      "Failure while trying to store block <blockId> on <blockManagerId>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3037" : {
-    "message" : [
-      "Block <blockId> was not found even though it's read-locked"
     ]
   },
   "_LEGACY_ERROR_TEMP_3052" : {

@@ -30,6 +30,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.ml._
 import org.apache.spark.sql.catalyst.expressions.st._
 import org.apache.spark.sql.catalyst.expressions.variant._
 import org.apache.spark.sql.catalyst.expressions.xml._
@@ -813,6 +814,7 @@ object FunctionRegistry {
     expression[MapConcat]("map_concat"),
     expression[Size]("size"),
     expression[Slice]("slice"),
+    expression[TrimArray]("trim_array"),
     expression[Size]("cardinality", true, Some("2.4.0")),
     expression[ArraysZip]("arrays_zip"),
     expression[SortArray]("sort_array"),
@@ -973,6 +975,10 @@ object FunctionRegistry {
     expression[BitmapBitPosition]("bitmap_bit_position"),
     expression[BitmapConstructAgg]("bitmap_construct_agg"),
     expression[BitmapCount]("bitmap_count"),
+    expression[BitmapAnd]("bitmap_and"),
+    expression[BitmapOr]("bitmap_or"),
+    expression[BitmapAndNot]("bitmap_andnot"),
+    expression[BitmapXor]("bitmap_xor"),
     expression[BitmapOrAgg]("bitmap_or_agg"),
     expression[BitmapAndAgg]("bitmap_and_agg"),
     expression[BitmapXorAgg]("bitmap_xor_agg"),
@@ -1118,6 +1124,7 @@ object FunctionRegistry {
   registerInternalExpression[Days]("days")
   registerInternalExpression[Hours]("hours")
   registerInternalExpression[UnwrapUDT]("unwrap_udt")
+  registerInternalExpression[WrapUDT]("wrap_udt")
   registerInternalExpression[MonotonicallyIncreasingID]("distributed_id", setAlias = true)
   registerInternalExpression[DistributedSequenceID]("distributed_sequence_id")
   registerInternalExpression[PandasProduct]("pandas_product")
@@ -1131,6 +1138,7 @@ object FunctionRegistry {
   registerInternalExpression[NullIndex]("null_index")
   registerInternalExpression[CastTimestampNTZToLong]("timestamp_ntz_to_long")
   registerInternalExpression[ArrayBinarySearch]("array_binary_search")
+  registerInternalExpression[VectorPosExplode]("vector_posexplode")
 
   private def makeExprInfoForVirtualOperator(name: String, usage: String): ExpressionInfo = {
     new ExpressionInfo(

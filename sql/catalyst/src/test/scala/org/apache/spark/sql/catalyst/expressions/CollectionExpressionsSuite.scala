@@ -946,6 +946,45 @@ class CollectionExpressionsSuite
     checkEvaluation(Slice(a3, Literal(2), Literal(3)), Seq(2, null, 4))
   }
 
+  test("TrimArray") {
+    val a0 = Literal.create(Seq(1, 2, 3, 4, 5), ArrayType(IntegerType))
+    val a1 = Literal.create(Seq[String]("a", "b", "c"), ArrayType(StringType))
+    val a2 = Literal.create(Seq[String]("a", null, "b"), ArrayType(StringType, containsNull = true))
+    val a3 = Literal.create(Seq.empty[Int], ArrayType(IntegerType))
+
+    // n between 0 and cardinality removes the last n elements.
+    checkEvaluation(TrimArray(a0, Literal(0)), Seq(1, 2, 3, 4, 5))
+    checkEvaluation(TrimArray(a0, Literal(2)), Seq(1, 2, 3))
+    checkEvaluation(TrimArray(a0, Literal(5)), Seq.empty[Int])
+    checkEvaluation(TrimArray(a1, Literal(1)), Seq("a", "b"))
+    checkEvaluation(TrimArray(a2, Literal(1)), Seq("a", null))
+    checkEvaluation(TrimArray(a3, Literal(0)), Seq.empty[Int])
+
+    // NULL array or NULL n yields NULL.
+    checkEvaluation(TrimArray(Literal.create(null, ArrayType(IntegerType)), Literal(1)), null)
+    checkEvaluation(TrimArray(a0, Literal.create(null, IntegerType)), null)
+
+    // n < 0 and n > cardinality are rejected.
+    checkErrorInExpression[SparkRuntimeException](
+      expression = TrimArray(a0, Literal(-1)),
+      condition = "INVALID_PARAMETER_VALUE.TRIM_ARRAY_LENGTH",
+      parameters = Map(
+        "parameter" -> toSQLId("n"),
+        "functionName" -> toSQLId("trim_array"),
+        "numElements" -> "5",
+        "length" -> (-1).toString
+      ))
+    checkErrorInExpression[SparkRuntimeException](
+      expression = TrimArray(a0, Literal(6)),
+      condition = "INVALID_PARAMETER_VALUE.TRIM_ARRAY_LENGTH",
+      parameters = Map(
+        "parameter" -> toSQLId("n"),
+        "functionName" -> toSQLId("trim_array"),
+        "numElements" -> "5",
+        "length" -> 6.toString
+      ))
+  }
+
   test("ArrayJoin") {
     def testArrays(
         arrays: Seq[Expression],

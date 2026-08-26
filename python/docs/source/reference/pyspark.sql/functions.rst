@@ -413,6 +413,7 @@ Array Functions
     shuffle
     slice
     sort_array
+    trim_array
 
 
 Struct Functions
@@ -664,9 +665,13 @@ Misc Functions
     aes_decrypt
     aes_encrypt
     assert_true
+    bitmap_and
+    bitmap_andnot
     bitmap_bit_position
     bitmap_bucket_number
     bitmap_count
+    bitmap_or
+    bitmap_xor
     current_catalog
     current_database
     current_path
@@ -774,6 +779,7 @@ UDF, UDTF and UDT
     udf
     udtf
     unwrap_udt
+    wrap_udt
 
 
 Table-Valued Functions

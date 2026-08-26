@@ -107,6 +107,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Executors which are being decommissioned. Maps from executorId to ExecutorDecommissionInfo.
   protected val executorsPendingDecommission = new HashMap[String, ExecutorDecommissionInfo]
 
+  // Whether the executors are held (see `SparkContext.holdExecutors()`). While true, newly
+  // registered executors are decommissioned immediately, so that executors the cluster manager
+  // granted before the hold cannot outlive it.
+  @volatile private var executorsHeld = false
+
+  // Whether an executor total was ever explicitly requested (through requestExecutors or
+  // requestTotalExecutors), as opposed to the bookkeeping seed that `adjustExecutors` writes
+  // when killing an executor that was started by default.
+  @GuardedBy("CoarseGrainedSchedulerBackend.this")
+  private var explicitExecutorRequest = false
+
   // Unknown Executors which are being decommissioned. This could be caused by unregistered executor
   // This executor should be decommissioned after registration.
   // Maps from executorId to (ExecutorDecommissionInfo, adjustTargetNumExecutors,
@@ -321,6 +332,22 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               decommissionExecutors(Array((executorId, v._1)), v._2, v._3)
               unknownExecutorsPendingDecommission.invalidate(executorId)
             })
+          if (executorsHeld) {
+            // The executors are held; drain this late-registered executor immediately. Note
+            // that ExecutorMonitor cannot be told here: it builds its state asynchronously
+            // from the SparkListenerExecutorAdded event posted above, so this executor is not
+            // tracked there yet and its decommissioning is under-reported in the metrics.
+            // The monitor's own executor-removal handling covers the eventual exit.
+            decommissionExecutors(
+              Array((executorId, ExecutorDecommissionInfo("Executors are held"))),
+              adjustTargetNumExecutors = false,
+              triggeredByExecutor = false)
+            // The cluster manager granted this executor against a stale requirement (e.g. a
+            // restarted AM using its own initial target, or a lost response to an earlier
+            // request), so re-assert the zero requirement, or it would keep granting
+            // replacements that churn through this drain.
+            reassertHeldRequirement()
+          }
           context.reply(true)
         }
 
@@ -696,7 +723,19 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * */
   protected[scheduler] def reset(): Unit = {
     val executors: Set[String] = synchronized {
-      requestedTotalExecutorsPerResourceProfile.clear()
+      if (executorsHeld) {
+        // Keep the requested totals so that resume can restore them, and re-assert the zero
+        // requirement so the restarted cluster manager AM does not allocate executors
+        // against its own initial target while the executors are held. Do not await the
+        // response: this may run inside the cluster manager's RPC handler.
+        publishTotals()
+      } else {
+        requestedTotalExecutorsPerResourceProfile.clear()
+        // Clear the explicit-request record with the totals it describes, so that a later
+        // resume does not republish an empty map, which YARN would treat as cancelling
+        // every target.
+        explicitExecutorRequest = false
+      }
       executorDataMap.keys.toSet
     }
 
@@ -752,6 +791,110 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   override def getExecutorIds(): Seq[String] = synchronized {
     executorDataMap.keySet.toSeq
+  }
+
+  /**
+   * Whether this backend can hold its executors gracefully: publish an all-zero executor
+   * requirement to the cluster manager, and let the executors that are already running finish
+   * their tasks and exit on their own instead of being terminated.
+   *
+   * False by default so that a backend has to opt in: the base `doRequestTotalExecutors` does
+   * not acknowledge the published requirement at all, and a cluster manager that terminates
+   * running executors once the requirement drops to zero cannot drain them gracefully.
+   */
+  private[spark] def supportsExecutorHold: Boolean = false
+
+  /** See `SparkContext.holdExecutors()`. */
+  private[spark] def setExecutorsHeld(held: Boolean): Unit = {
+    executorsHeld = held
+  }
+
+  /** Whether an executor total was ever explicitly requested. Visible for testing only. */
+  private[spark] def hasExplicitExecutorRequests: Boolean = synchronized {
+    explicitExecutorRequest
+  }
+
+  /** The number of executors that are neither being removed nor decommissioned. */
+  private[spark] def activeExecutorCount: Int = synchronized {
+    executorDataMap.keys.count(isExecutorActive)
+  }
+
+  /**
+   * Whether the tracked totals are only killExecutors' bookkeeping seed: present, but never
+   * explicitly requested. Read atomically, so that a concurrent `reset()` cannot split the
+   * decision.
+   */
+  private[spark] def hasKillSeededTotalsOnly: Boolean = synchronized {
+    !explicitExecutorRequest && requestedTotalExecutorsPerResourceProfile.nonEmpty
+  }
+
+  /**
+   * Republish the explicitly requested totals and await the acknowledgment, or None when
+   * there are none: never explicitly requested, or cleared by a concurrent `reset()`. The
+   * check and the publish are atomic, and an empty map is never published, since some
+   * cluster managers treat it as cancelling every target.
+   */
+  private[spark] def republishExplicitTotals(): Option[Boolean] = {
+    val response = synchronized {
+      if (explicitExecutorRequest && requestedTotalExecutorsPerResourceProfile.nonEmpty) {
+        Some(publishTotals())
+      } else {
+        None
+      }
+    }
+    response.map(defaultAskTimeout.awaitResult(_))
+  }
+
+  /**
+   * Publish the given totals once, without recording them, and await the acknowledgment.
+   * Used to restore a requirement the application never explicitly requested (in particular
+   * Standalone's unbounded default on resume): recording it would flip `adjustExecutors`'
+   * empty-map seeding and mark the totals explicit, changing how `killExecutors` and a later
+   * hold behave for the rest of the application's life.
+   */
+  private[spark] def publishTotalsWithoutRecording(
+      totals: Map[ResourceProfile, Int]): Boolean = {
+    val response = synchronized {
+      doRequestTotalExecutors(totals)
+    }
+    defaultAskTimeout.awaitResult(response)
+  }
+
+  /**
+   * Re-assert the zero executor requirement of a held application without awaiting the
+   * response and without touching the requested totals. The held flag is re-checked under
+   * the lock: a concurrent `resumeExecutors()` lifts the flag before restoring the
+   * requirement, so a stale re-assertion cannot overwrite a restored one.
+   */
+  private[spark] def reassertHeldRequirement(): Unit = synchronized {
+    if (executorsHeld) {
+      publishTotals()
+    }
+  }
+
+  /**
+   * Publish the current executor totals (all-zero while the executors are held) and await
+   * the acknowledgment.
+   */
+  private[spark] def republishRequestedTotals(): Boolean = {
+    defaultAskTimeout.awaitResult(publishTotals())
+  }
+
+  /**
+   * Publish the executor totals to the cluster manager: the requested totals normally, or
+   * all-zero totals while the executors are held, so that requirements recorded during a
+   * hold are retained but nothing is allocated until resume.
+   *
+   * @return a future whose evaluation indicates whether the request is acknowledged.
+   */
+  private def publishTotals(): Future[Boolean] = synchronized {
+    val totals = if (executorsHeld) {
+      requestedTotalExecutorsPerResourceProfile.map { case (rp, _) => (rp, 0) }.toMap +
+        (scheduler.sc.resourceProfileManager.defaultResourceProfile -> 0)
+    } else {
+      requestedTotalExecutorsPerResourceProfile.toMap
+    }
+    doRequestTotalExecutors(totals)
   }
 
   def getExecutorsWithRegistrationTs(): Map[String, Long] = synchronized {
@@ -830,6 +973,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       log"executor(s) from the cluster manager")
 
     val response = synchronized {
+      explicitExecutorRequest = true
       val defaultProf = scheduler.sc.resourceProfileManager.defaultResourceProfile
       val numExisting = requestedTotalExecutorsPerResourceProfile.getOrElse(defaultProf, 0)
       // Saturate instead of overflowing when the current requirement is already huge (e.g.
@@ -839,7 +983,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       requestedTotalExecutorsPerResourceProfile(defaultProf) = newTotal
       // Account for executors pending to be added or removed
       updateExecRequestTime(defaultProf.id, newTotal - numExisting)
-      doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
+      publishTotals()
     }
 
     defaultAskTimeout.awaitResult(response)
@@ -877,6 +1021,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       (scheduler.sc.resourceProfileManager.resourceProfileFromId(rpid), num)
     }
     val response = synchronized {
+      explicitExecutorRequest = true
       val oldResourceProfileToNumExecutors = requestedTotalExecutorsPerResourceProfile.map {
         case (rp, num) =>
           (rp.id, num)
@@ -886,7 +1031,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       this.numLocalityAwareTasksPerResourceProfileId = numLocalityAwareTasksPerResourceProfileId
       this.rpHostToLocalTaskCount = hostToLocalTaskCount
       updateExecRequestTimes(oldResourceProfileToNumExecutors, resourceProfileIdToNumExecutors)
-      doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
+      publishTotals()
     }
     defaultAskTimeout.awaitResult(response)
   }
@@ -959,7 +1104,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
         }
       }
-      doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
+      publishTotals()
     } else {
       Future.successful(true)
     }

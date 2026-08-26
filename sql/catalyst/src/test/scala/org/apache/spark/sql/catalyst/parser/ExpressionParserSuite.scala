@@ -346,6 +346,51 @@ class ExpressionParserSuite extends AnalysisTest {
       "json_exists(a, '$.b' ERROR ON ERROR)", JsonExists($"a", "$.b", JsonExistsBehavior.Error))
   }
 
+  test("JSON_QUERY expressions") {
+    import org.apache.spark.sql.catalyst.expressions.{JsonQueryBehavior, JsonQueryQuotes,
+      JsonQueryWrapper}
+    // Bare form: default STRING RETURNING, WITHOUT wrapper, KEEP quotes, NULL ON EMPTY / ON ERROR.
+    assertEqual(
+      "json_query(a, '$.b')",
+      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Without, JsonQueryQuotes.Keep,
+        JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+    // WITH ARRAY WRAPPER defaults to UNCONDITIONAL; the ARRAY word is optional.
+    assertEqual(
+      "json_query(a, '$.b' WITH ARRAY WRAPPER)",
+      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Unconditional, JsonQueryQuotes.Keep,
+        JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+    assertEqual(
+      "json_query(a, '$.b' WITH CONDITIONAL WRAPPER)",
+      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Conditional, JsonQueryQuotes.Keep,
+        JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+    // WITHOUT ARRAY WRAPPER with OMIT QUOTES.
+    assertEqual(
+      "json_query(a, '$.b' WITHOUT ARRAY WRAPPER OMIT QUOTES)",
+      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Without, JsonQueryQuotes.Omit,
+        JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+    // EMPTY ARRAY ON EMPTY / EMPTY OBJECT ON ERROR, plus RETURNING STRING.
+    assertEqual(
+      "json_query(a, '$.b' RETURNING STRING EMPTY ARRAY ON EMPTY EMPTY OBJECT ON ERROR)",
+      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Without, JsonQueryQuotes.Keep,
+        JsonQueryBehavior.EmptyArray, JsonQueryBehavior.EmptyObject))
+    // The ARRAY word is optional in every wrapper spelling, and WITH alone means UNCONDITIONAL.
+    Seq("WITH WRAPPER", "WITH UNCONDITIONAL WRAPPER").foreach { spelling =>
+      assertEqual(
+        s"json_query(a, '$$.b' $spelling)",
+        JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Unconditional, JsonQueryQuotes.Keep,
+          JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+    }
+    assertEqual(
+      "json_query(a, '$.b' WITHOUT WRAPPER)",
+      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Without, JsonQueryQuotes.Keep,
+        JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+    // Explicit NULL ON EMPTY / NULL ON ERROR (same as the omitted default) and KEEP QUOTES.
+    assertEqual(
+      "json_query(a, '$.b' KEEP QUOTES NULL ON EMPTY NULL ON ERROR)",
+      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Without, JsonQueryQuotes.Keep,
+        JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+  }
+
   test("cast expressions") {
     // Note that DataType parsing is tested elsewhere.
     assertEqual("cast(a as int)", $"a".cast(IntegerType))

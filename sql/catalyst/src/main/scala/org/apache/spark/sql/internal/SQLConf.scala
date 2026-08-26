@@ -5542,6 +5542,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYTHON_UDF_MAP_IN_BATCH_LEGACY_ACCEPT_ANY_ITERABLE_ENABLED =
+    buildConf("spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled")
+      .internal()
+      .doc("When true, mapInPandas and mapInArrow UDFs may return any iterable (e.g. a list) " +
+        "rather than a strict iterator, matching the behavior before 4.3.0. When false, the " +
+        "returned value must be an iterator, matching the declared Iterator[...] signatures.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val PYTHON_PLANNER_EXEC_MEMORY =
     buildConf("spark.sql.planner.pythonExecution.memory")
       .doc("Specifies the memory allocation for executing Python code in Spark driver, in MiB. " +
@@ -6949,6 +6960,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val PYTHON_LIMIT_PUSHDOWN_ENABLED = buildConf("spark.sql.python.limitPushdown.enabled")
+    .internal()
+    .doc("When true, enable limit pushdown to Python datasource. Pushing a limit runs a Python " +
+      "worker during planning; for a limit-only scan this replaces the worker that plans a " +
+      "plain read, while for a scan that also pushes down filters it runs in addition to " +
+      "filter pushdown. Spark always applies the limit again after the scan, so a pushed limit " +
+      "only lets the data source read less data.")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(false)
+
   val CSV_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.csv.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to CSV datasource.")
     .version("3.0.0")
@@ -7099,6 +7122,33 @@ object SQLConf {
       .internal()
       .doc("Infer shredding schema when writing Variant columns in Parquet tables.")
       .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val VARIANT_SHREDDED_PREDICATE_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.variant.shreddedPredicatePushdown.enabled")
+      .internal()
+      .doc("When true, comparison predicates on shredded Variant fields produced by " +
+        "PushVariantIntoScan (e.g. variant_get(v, '$.a', 'bigint') > 999) are pushed to Parquet " +
+        "as a predicate on the physical shredded typed_value leaf column, guarded so that a row " +
+        "group is skipped only when the leaf min/max cannot match AND every value for the path " +
+        "is provably in the typed leaf (either every untyped residual value column along the " +
+        "path is entirely null, or the leaf column itself has no nulls). This enables row-group " +
+        "skipping for shredded Variant columns while never dropping rows that fall back to an " +
+        "untyped residual. The benefit depends on the data layout, like any Parquet min/max " +
+        "skipping: it helps most when the data is sorted on the filtered field (so each row " +
+        "group covers a narrow value range) and a file holds many row groups; unsorted data or " +
+        "a single row group per file gains little. Has no effect unless the Parquet column is " +
+        "shredded and spark.sql.variant.pushVariantIntoScan is also true. It also does not fire " +
+        "for a strict cast to a non-string type when " +
+        "spark.sql.variant.pushVariantIntoScan.deferCastError is true (the extraction is wrapped " +
+        "in UnwrapVariantCastError and is not translated to a pushable filter); try_variant_get " +
+        "and string targets are unaffected. Results are unaffected either way; this only " +
+        "controls whether row groups can be skipped.")
+      .version("4.4.0")
+      // Physical scan optimization only: it changes which Parquet row groups are read, not the
+      // resolved plan of a view/UDF/procedure body, so it does not participate in binding.
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
@@ -9490,6 +9540,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyPandasConversionUDF: Boolean = getConf(PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED)
 
+  def legacyMapInBatchAcceptAnyIterable: Boolean =
+    getConf(PYTHON_UDF_MAP_IN_BATCH_LEGACY_ACCEPT_ANY_ITERABLE_ENABLED)
+
   def pythonPlannerExecMemory: Option[Long] = getConf(PYTHON_PLANNER_EXEC_MEMORY)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
@@ -9627,6 +9680,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def useListFilesFileSystemList: String = getConf(SQLConf.USE_LISTFILES_FILESYSTEM_LIST)
 
   def pythonFilterPushDown: Boolean = getConf(PYTHON_FILTER_PUSHDOWN_ENABLED)
+
+  def pythonLimitPushDown: Boolean = getConf(PYTHON_LIMIT_PUSHDOWN_ENABLED)
 
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
 

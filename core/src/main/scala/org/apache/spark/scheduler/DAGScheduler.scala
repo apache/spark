@@ -436,6 +436,13 @@ private[spark] class DAGScheduler(
   }
 
   /**
+   * Whether the executors are held (see `SparkContext.holdExecutors()`). While held, the
+   * barrier slot check reads zero capacity, so its retry budget must not be consumed: the job
+   * should wait for the resume. Extracted as a seam so tests can control the hold state.
+   */
+  protected def executorsHeld: Boolean = sc.executorsHeld
+
+  /**
    * Time in seconds to wait between a max concurrent tasks check failure and the next check.
    */
   private val timeIntervalNumTasksCheck = sc.conf
@@ -2170,8 +2177,15 @@ private[spark] class DAGScheduler(
     } catch {
       case e: BarrierJobSlotsNumberCheckFailed =>
         // If jobId doesn't exist in the map, Scala coverts its value null to 0: Int automatically.
-        val numCheckFailures = barrierJobIdToNumTasksCheckFailures.compute(jobId,
-          (_: Int, value: Int) => value + 1)
+        // Do not consume the retry budget while the executors are held: the slot check sees
+        // zero slots for the whole hold, and the job should wait for the resume like any
+        // other job instead of failing when the retries run out.
+        val numCheckFailures = if (executorsHeld) {
+          barrierJobIdToNumTasksCheckFailures.getOrDefault(jobId, 0)
+        } else {
+          barrierJobIdToNumTasksCheckFailures.compute(jobId,
+            (_: Int, value: Int) => value + 1)
+        }
 
         logWarning(log"Barrier stage in job ${MDC(JOB_ID, jobId)} " +
           log"requires ${MDC(NUM_SLOTS, e.requiredConcurrentTasks)} slots, " +

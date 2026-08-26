@@ -23,14 +23,14 @@ import unittest
 import urllib.request
 
 from pyspark.install import (
-    get_preferred_mirrors,
-    install_spark,
-    _extract_tar,
     DEFAULT_HADOOP,
     DEFAULT_HIVE,
     UNSUPPORTED_COMBINATIONS,
-    checked_versions,
+    _extract_tar,
     checked_package_name,
+    checked_versions,
+    get_preferred_mirrors,
+    install_spark,
 )
 
 

@@ -19,25 +19,25 @@
 A collections of builtin functions
 """
 
-import inspect
 import decimal
-import sys
 import functools
+import inspect
+import sys
 import warnings
 from typing import (
+    TYPE_CHECKING,
     Any,
-    cast,
     Callable,
-    Mapping,
-    Sequence,
     Iterable,
-    overload,
+    Mapping,
     Optional,
+    Sequence,
     Tuple,
     Type,
-    TYPE_CHECKING,
     Union,
     ValuesView,
+    cast,
+    overload,
 )
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
@@ -47,44 +47,61 @@ from pyspark.sql.types import (
     ArrayType,
     ByteType,
     DataType,
-    StringType,
-    StructType,
     MapType,
     NumericType,
+    StringType,
+    StructType,
     _from_numpy_type,
 )
-
-# Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
-from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
-from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
-from pyspark.sql.udtf import OrderingColumn, PartitioningColumn, SelectedColumn  # noqa: F401
-from pyspark.sql.udtf import SkipRestOfInputTableException  # noqa: F401
-from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf, _create_pyarrow_udtf
-
-# Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
-from pyspark.sql.pandas.functions import (  # noqa: F401
-    arrow_udf,
-    pandas_udf,
-    ArrowUDFType,
-    PandasUDFType,
+from pyspark.sql.types import (
+    UserDefinedType as _UserDefinedType,
 )
 
+if TYPE_CHECKING:
+    from pyspark.sql.types import UserDefinedType
+
+# Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
+# Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
+from pyspark.sql.pandas.functions import (  # noqa: F401
+    ArrowUDFType,
+    PandasUDFType,
+    arrow_udf,
+    pandas_udf,
+)
+from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
+from pyspark.sql.udtf import (  # noqa: F401
+    AnalyzeArgument,
+    AnalyzeResult,
+    OrderingColumn,
+    PartitioningColumn,
+    SelectedColumn,
+    SkipRestOfInputTableException,
+    UserDefinedTableFunction,
+    _create_py_udtf,
+    _create_pyarrow_udtf,
+)
+from pyspark.sql.utils import (
+    enum_to_value as _enum_to_value,
+)
+from pyspark.sql.utils import (
+    get_active_spark_context as _get_active_spark_context,
+)
 from pyspark.sql.utils import (
     to_str as _to_str,
+)
+from pyspark.sql.utils import (
     try_remote_functions as _try_remote_functions,
-    get_active_spark_context as _get_active_spark_context,
-    enum_to_value as _enum_to_value,
 )
 
 if TYPE_CHECKING:
     from pyspark import SparkContext
-    from pyspark.sql.aggregator import Aggregator
-    from pyspark.sql.dataframe import DataFrame
     from pyspark.sql._typing import (
         ColumnOrName,
         DataTypeOrString,
         UserDefinedFunctionLike,
     )
+    from pyspark.sql.aggregator import Aggregator
+    from pyspark.sql.dataframe import DataFrame
 
 
 # Note to developers: all of PySpark functions here take string as column names whenever possible.
@@ -141,7 +158,7 @@ def _invoke_binary_math_function(name: str, col1: Any, col2: Any) -> Column:
     Invokes binary JVM math function identified by name
     and wraps the result with :class:`~pyspark.sql.Column`.
     """
-    from pyspark.sql.classic.column import _to_java_column, _create_column_from_literal
+    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
 
     # For legacy reasons, the arguments here can be implicitly converted into column
     cols = [
@@ -7130,6 +7147,7 @@ def broadcast(df: "DataFrame") -> "DataFrame":
     +-----+---+
     """
     from py4j.java_gateway import JVMView
+
     from pyspark.sql.dataframe import DataFrame
 
     sc = _get_active_spark_context()
@@ -7412,7 +7430,7 @@ def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     |                             2|
     +------------------------------+
     """
-    from pyspark.sql.classic.column import _to_seq, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
 
     sc = _get_active_spark_context()
     return _invoke_function(
@@ -15777,7 +15795,7 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     |abcd|123|           abcd-123-xyz|
     +----+---+-----------------------+
     """
-    from pyspark.sql.classic.column import _to_seq, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
 
     sc = _get_active_spark_context()
     return _invoke_function("concat_ws", _enum_to_value(sep), _to_seq(sc, cols, _to_java_column))
@@ -16147,7 +16165,7 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
     |  5|hello|                   5 hello|
     +---+-----+--------------------------+
     """
-    from pyspark.sql.classic.column import _to_seq, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
 
     sc = _get_active_spark_context()
     return _invoke_function(
@@ -18825,7 +18843,7 @@ def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     |        aa123cc|
     +---------------+
     """
-    from pyspark.sql.classic.column import _to_seq, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
 
     sc = _get_active_spark_context()
     return _invoke_function("printf", _to_java_column(format), _to_seq(sc, cols, _to_java_column))
@@ -19502,7 +19520,7 @@ def elt(*inputs: "ColumnOrName") -> Column:
     >>> df.select(elt(df.a, df.b, df.c).alias('r')).collect()
     [Row(r='scala')]
     """
-    from pyspark.sql.classic.column import _to_seq, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
 
     sc = _get_active_spark_context()
     return _invoke_function("elt", _to_seq(sc, inputs, _to_java_column))
@@ -20452,6 +20470,62 @@ def slice(
     length = lit(length) if isinstance(length, int) else length
 
     return _invoke_function_over_columns("slice", x, start, length)
+
+
+@_try_remote_functions
+def trim_array(x: "ColumnOrName", n: Union["ColumnOrName", int]) -> Column:
+    """
+    Array function: Returns the given array column with the last ``n`` elements removed.
+    Raises an error if ``n`` is negative or greater than the number of elements in the array.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    x : :class:`~pyspark.sql.Column` or str
+        Input array column or column name to be trimmed.
+        A column that evaluates to an array.
+    n : :class:`~pyspark.sql.Column`, str, or int
+        The number of elements to remove from the end of the array. Must be between 0 and
+        the number of elements in the array (inclusive).
+        A column that evaluates to an integer.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new Column object of Array type, where each value is the corresponding input array
+        with its last ``n`` elements removed.
+        Returns a column that evaluates to an array.
+
+    Examples
+    --------
+    Example 1: Basic usage of the trim_array function.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3, 4, 5],), ([4, 5],)], ['x'])
+    >>> df.select(sf.trim_array(df.x, 2)).show()
+    +----------------+
+    |trim_array(x, 2)|
+    +----------------+
+    |       [1, 2, 3]|
+    |              []|
+    +----------------+
+
+    Example 2: trim_array function with a column input for n.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3, 4, 5], 1), ([4, 5], 0)], ['x', 'n'])
+    >>> df.select(sf.trim_array(df.x, df.n)).show()
+    +----------------+
+    |trim_array(x, n)|
+    +----------------+
+    |    [1, 2, 3, 4]|
+    |          [4, 5]|
+    +----------------+
+    """
+    n = _enum_to_value(n)
+    n = lit(n) if isinstance(n, int) else n
+    return _invoke_function_over_columns("trim_array", x, n)
 
 
 @_try_remote_functions
@@ -22598,7 +22672,7 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     >>> df.select(df.key, json_tuple(df.jstring, 'f1', 'f2')).collect()
     [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
     """
-    from pyspark.sql.classic.column import _to_seq, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
 
     if len(fields) == 0:
         raise PySparkValueError(
@@ -25963,6 +26037,7 @@ def _create_lambda(f: Callable) -> Callable:
             - (Column, Column, Column) -> Column: ...
     """
     from py4j.java_gateway import JVMView
+
     from pyspark.sql.classic.column import _to_seq
 
     parameters = _get_lambda_parameters(f)
@@ -26002,7 +26077,8 @@ def _invoke_higher_order_function(
     :return: a Column
     """
     from py4j.java_gateway import JVMView
-    from pyspark.sql.classic.column import _to_seq, _to_java_column
+
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
 
     sc = _get_active_spark_context()
     jfuns = [_create_lambda(f) for f in funs]
@@ -29050,7 +29126,7 @@ def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
     |         cc|
     +-----------+
     """
-    from pyspark.sql.classic.column import _to_seq, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
 
     sc = _get_active_spark_context()
     return _invoke_function("call_udf", udfName, _to_seq(sc, cols, _to_java_column))
@@ -29121,7 +29197,7 @@ def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
     |                               102.0|
     +------------------------------------+
     """
-    from pyspark.sql.classic.column import _to_seq, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
 
     sc = _get_active_spark_context()
     return _invoke_function("call_function", funcName, _to_seq(sc, cols, _to_java_column))
@@ -29142,6 +29218,10 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         The underlying representation.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.wrap_udt`
 
     Examples
     --------
@@ -29186,6 +29266,107 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
     from pyspark.sql.classic.column import _to_java_column
 
     return _invoke_function("unwrap_udt", _to_java_column(col))
+
+
+@_try_remote_functions
+def wrap_udt(col: "ColumnOrName", udt: "Union[UserDefinedType, Column]") -> Column:
+    """
+    Wrap a column as a user-defined type.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column to wrap. The column data type must match the UDT's underlying SQL type.
+    udt : :class:`~pyspark.sql.types.UserDefinedType` or :class:`~pyspark.sql.Column`
+        The target user-defined type, or a constant string column containing its JSON
+        representation.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A column of the target user-defined type.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.unwrap_udt`
+
+    Examples
+    --------
+    Example 1: Wrapping a vector struct as VectorUDT
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql import Row
+    >>> from pyspark.sql.types import StructField, StructType
+    >>> from pyspark.ml.linalg import VectorUDT
+    >>> vector_schema = StructType([StructField("vec", VectorUDT.sqlType(), True)])
+    >>> df = spark.createDataFrame(
+    ...     [(Row(type=1, size=None, indices=None, values=[1.0, 2.0, 3.0]),)],
+    ...     vector_schema)
+    >>> df.select("*", sf.wrap_udt("vec", VectorUDT())).show()
+    +--------------------+...+
+    |                 vec|wrap_udt(vec...|
+    +--------------------+...+
+    |{1, NULL, NULL, [...|...[1.0,2.0,3.0]|
+    +--------------------+...+
+    >>> row = df.select(sf.wrap_udt("vec", VectorUDT())).first()
+    >>> type(row[0])
+    <class 'pyspark.ml.linalg.DenseVector'>
+
+    Example 2: Wrapping a matrix struct as MatrixUDT
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql import Row
+    >>> from pyspark.sql.types import StructField, StructType
+    >>> from pyspark.mllib.linalg import MatrixUDT
+    >>> matrix_schema = StructType([StructField("mat", MatrixUDT.sqlType(), True)])
+    >>> df = spark.createDataFrame(
+    ...     [(
+    ...         Row(
+    ...             type=1,
+    ...             numRows=2,
+    ...             numCols=2,
+    ...             colPtrs=None,
+    ...             rowIndices=None,
+    ...             values=[1.0, 2.0, 3.0, 4.0],
+    ...             isTransposed=False),
+    ...     )],
+    ...     matrix_schema)
+    >>> df.select("*", sf.wrap_udt("mat", MatrixUDT())).printSchema()
+    root
+     |-- mat: struct (nullable = true)
+     |    |-- type: byte (nullable = false)
+     |    |-- numRows: integer (nullable = false)
+     |    |-- numCols: integer (nullable = false)
+     |    |-- colPtrs: array (nullable = true)
+     |    |    |-- element: integer (containsNull = false)
+     |    |-- rowIndices: array (nullable = true)
+     |    |    |-- element: integer (containsNull = false)
+     |    |-- values: array (nullable = true)
+     |    |    |-- element: double (containsNull = false)
+     |    |-- isTransposed: boolean (nullable = false)
+     |-- wrap_udt(mat...: matrix... (nullable = true)
+    >>> row = df.select(sf.wrap_udt("mat", MatrixUDT())).first()
+    >>> type(row[0])
+    <class 'pyspark.mllib.linalg.DenseMatrix'>
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    if isinstance(udt, _UserDefinedType):
+        udt_col = lit(udt.json())
+    elif isinstance(udt, Column):
+        udt_col = udt
+    else:
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "UserDefinedType or Column",
+                "arg_name": "udt",
+                "arg_type": type(udt).__name__,
+            },
+        )
+    return _invoke_function("wrap_udt", _to_java_column(col), _to_java_column(udt_col))
 
 
 # ---------------------- Datasketch functions ------------------------------
@@ -32988,6 +33169,194 @@ def bitmap_count(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def bitmap_and(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise AND of two input bitmaps.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The left input bitmap.
+    right : :class:`~pyspark.sql.Column` or column name
+        The right input bitmap.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_andnot`
+    :meth:`pyspark.sql.functions.bitmap_or`
+    :meth:`pyspark.sql.functions.bitmap_xor`
+
+    Notes
+    -----
+    Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
+    input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
+    4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("F0", "70")], ["left", "right"])
+    >>> df.select(sf.bitmap_and(
+    ...     sf.to_binary("left", sf.lit("hex")),
+    ...     sf.to_binary("right", sf.lit("hex"))).alias("bitmap")).show()
+    +--------------------+
+    |              bitmap|
+    +--------------------+
+    |[70 00 00 00 00 0...|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("bitmap_and", left, right)
+
+
+@_try_remote_functions
+def bitmap_or(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise OR of two input bitmaps.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The left input bitmap.
+    right : :class:`~pyspark.sql.Column` or column name
+        The right input bitmap.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_and`
+    :meth:`pyspark.sql.functions.bitmap_andnot`
+    :meth:`pyspark.sql.functions.bitmap_xor`
+
+    Notes
+    -----
+    Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
+    input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
+    4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("10", "20")], ["left", "right"])
+    >>> df.select(sf.bitmap_or(
+    ...     sf.to_binary("left", sf.lit("hex")),
+    ...     sf.to_binary("right", sf.lit("hex"))).alias("bitmap")).show()
+    +--------------------+
+    |              bitmap|
+    +--------------------+
+    |[30 00 00 00 00 0...|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("bitmap_or", left, right)
+
+
+@_try_remote_functions
+def bitmap_andnot(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise AND NOT of two input bitmaps.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The left input bitmap.
+    right : :class:`~pyspark.sql.Column` or column name
+        The right input bitmap.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_and`
+    :meth:`pyspark.sql.functions.bitmap_or`
+    :meth:`pyspark.sql.functions.bitmap_xor`
+
+    Notes
+    -----
+    Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
+    input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
+    4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("F0", "70")], ["left", "right"])
+    >>> df.select(sf.bitmap_andnot(
+    ...     sf.to_binary("left", sf.lit("hex")),
+    ...     sf.to_binary("right", sf.lit("hex"))).alias("bitmap")).show()
+    +--------------------+
+    |              bitmap|
+    +--------------------+
+    |[80 00 00 00 00 0...|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("bitmap_andnot", left, right)
+
+
+@_try_remote_functions
+def bitmap_xor(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise XOR of two input bitmaps.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The left input bitmap.
+    right : :class:`~pyspark.sql.Column` or column name
+        The right input bitmap.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_and`
+    :meth:`pyspark.sql.functions.bitmap_andnot`
+    :meth:`pyspark.sql.functions.bitmap_or`
+
+    Notes
+    -----
+    Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
+    input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
+    4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("F0", "70")], ["left", "right"])
+    >>> df.select(sf.bitmap_xor(
+    ...     sf.to_binary("left", sf.lit("hex")),
+    ...     sf.to_binary("right", sf.lit("hex"))).alias("bitmap")).show()
+    +--------------------+
+    |              bitmap|
+    +--------------------+
+    |[80 00 00 00 00 0...|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("bitmap_xor", left, right)
+
+
+@_try_remote_functions
 def bitmap_or_agg(col: "ColumnOrName") -> Column:
     """
     Returns a bitmap that is the bitwise OR of all of the bitmaps from the input column.
@@ -33895,8 +34264,9 @@ def vector_sum(col: "ColumnOrName") -> Column:
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.sql.functions.builtin
+    from pyspark.sql import SparkSession
     from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.functions.builtin.__dict__.copy()

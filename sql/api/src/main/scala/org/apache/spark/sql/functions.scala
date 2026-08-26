@@ -7339,6 +7339,91 @@ object functions {
   def bitmap_count(col: Column): Column = Column.fn("bitmap_count", col)
 
   /**
+   * Returns a bitmap that is the bitwise AND of two input bitmaps. The result is always a
+   * 4096-byte Spark Binary bitmap. If either input is NULL, the result is NULL. Missing bytes in
+   * shorter inputs are treated as zero, and inputs longer than 4096 bytes raise
+   * `BITMAP_INPUT_TOO_LARGE`. Both inputs must use the same bit-position mapping. If they were
+   * constructed by grouping `bitmap_bit_position` values by `bitmap_bucket_number`, they must
+   * represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+   * function operates on two bitmaps from the same row; use `bitmap_*_agg` to combine bitmaps
+   * across rows. The representation is not a RoaringBitmap serialization.
+   *
+   * @param left
+   *   A column that evaluates to a binary bitmap.
+   * @param right
+   *   A column that evaluates to a binary bitmap.
+   * @group misc_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a binary bitmap.
+   */
+  def bitmap_and(left: Column, right: Column): Column = Column.fn("bitmap_and", left, right)
+
+  /**
+   * Returns a bitmap that is the bitwise OR of two input bitmaps. The result is always a
+   * 4096-byte Spark Binary bitmap. If either input is NULL, the result is NULL. Missing bytes in
+   * shorter inputs are treated as zero, and inputs longer than 4096 bytes raise
+   * `BITMAP_INPUT_TOO_LARGE`. Both inputs must use the same bit-position mapping. If they were
+   * constructed by grouping `bitmap_bit_position` values by `bitmap_bucket_number`, they must
+   * represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+   * function operates on two bitmaps from the same row; use `bitmap_*_agg` to combine bitmaps
+   * across rows. The representation is not a RoaringBitmap serialization.
+   *
+   * @param left
+   *   A column that evaluates to a binary bitmap.
+   * @param right
+   *   A column that evaluates to a binary bitmap.
+   * @group misc_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a binary bitmap.
+   */
+  def bitmap_or(left: Column, right: Column): Column = Column.fn("bitmap_or", left, right)
+
+  /**
+   * Returns a bitmap that is the bitwise AND NOT of two input bitmaps. The result is always a
+   * 4096-byte Spark Binary bitmap. If either input is NULL, the result is NULL. Missing bytes in
+   * shorter inputs are treated as zero, and inputs longer than 4096 bytes raise
+   * `BITMAP_INPUT_TOO_LARGE`. Both inputs must use the same bit-position mapping. If they were
+   * constructed by grouping `bitmap_bit_position` values by `bitmap_bucket_number`, they must
+   * represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+   * function operates on two bitmaps from the same row; use `bitmap_*_agg` to combine bitmaps
+   * across rows. The representation is not a RoaringBitmap serialization.
+   *
+   * @param left
+   *   A column that evaluates to a binary bitmap.
+   * @param right
+   *   A column that evaluates to a binary bitmap.
+   * @group misc_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a binary bitmap.
+   */
+  def bitmap_andnot(left: Column, right: Column): Column =
+    Column.fn("bitmap_andnot", left, right)
+
+  /**
+   * Returns a bitmap that is the bitwise XOR of two input bitmaps. The result is always a
+   * 4096-byte Spark Binary bitmap. If either input is NULL, the result is NULL. Missing bytes in
+   * shorter inputs are treated as zero, and inputs longer than 4096 bytes raise
+   * `BITMAP_INPUT_TOO_LARGE`. Both inputs must use the same bit-position mapping. If they were
+   * constructed by grouping `bitmap_bit_position` values by `bitmap_bucket_number`, they must
+   * represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+   * function operates on two bitmaps from the same row; use `bitmap_*_agg` to combine bitmaps
+   * across rows. The representation is not a RoaringBitmap serialization.
+   *
+   * @param left
+   *   A column that evaluates to a binary bitmap.
+   * @param right
+   *   A column that evaluates to a binary bitmap.
+   * @group misc_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a binary bitmap.
+   */
+  def bitmap_xor(left: Column, right: Column): Column = Column.fn("bitmap_xor", left, right)
+
+  /**
    * Returns a bitmap that is the bitwise OR of all of the bitmaps from the input column. The
    * input column should be bitmaps created from bitmap_construct_agg().
    *
@@ -13235,6 +13320,40 @@ object functions {
     Column.fn("slice", x, start, length)
 
   /**
+   * Returns the given array `x` with the last `n` elements removed. Raises an error if `n` is
+   * negative or greater than the number of elements in the array.
+   *
+   * @param x
+   *   the array column to be trimmed. A column that evaluates to an array.
+   * @param n
+   *   the number of elements to remove from the end of the array. Must be between 0 and the
+   *   number of elements in the array (inclusive).
+   *
+   * @group array_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
+   */
+  def trim_array(x: Column, n: Int): Column = trim_array(x, lit(n))
+
+  /**
+   * Returns the given array `x` with the last `n` elements removed. Raises an error if `n` is
+   * negative or greater than the number of elements in the array.
+   *
+   * @param x
+   *   the array column to be trimmed. A column that evaluates to an array.
+   * @param n
+   *   the number of elements to remove from the end of the array. Must be between 0 and the
+   *   number of elements in the array (inclusive).
+   *
+   * @group array_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
+   */
+  def trim_array(x: Column, n: Column): Column = Column.fn("trim_array", x, n)
+
+  /**
    * Concatenates the elements of `column` using the `delimiter`. Null values are replaced with
    * `nullReplacement`.
    * @param column
@@ -17736,6 +17855,32 @@ object functions {
    * @since 3.4.0
    */
   def unwrap_udt(column: Column): Column = Column.internalFn("unwrap_udt", column)
+
+  /**
+   * Wrap a column as a user-defined type.
+   * @param column
+   *   the column to wrap. The column data type must match the UDT's underlying SQL type.
+   * @param udt
+   *   the target user-defined type.
+   * @group udf_funcs
+   * @since 4.4.0
+   */
+  def wrap_udt(column: Column, udt: UserDefinedType[_]): Column = {
+    wrap_udt(column, lit(udt.json))
+  }
+
+  /**
+   * Wrap a column as a user-defined type.
+   * @param column
+   *   the column to wrap. The column data type must match the UDT's underlying SQL type.
+   * @param udt
+   *   the target user-defined type as a constant JSON string column.
+   * @group udf_funcs
+   * @since 4.4.0
+   */
+  def wrap_udt(column: Column, udt: Column): Column = {
+    Column.internalFn("wrap_udt", column, udt)
+  }
 
   // ---------------------- Vector Functions ----------------------
 

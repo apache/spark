@@ -195,6 +195,14 @@ private[spark] class KubernetesClusterSchedulerBackend(
     Future.successful(true)
   }
 
+  // The Deployment/StatefulSet allocators (and unknown custom ones) scale their controller
+  // down on a zero requirement, which deletes running executor pods after the termination
+  // grace period instead of letting them finish their tasks, so holding is supported only
+  // with the direct allocator.
+  private[spark] override def supportsExecutorHold: Boolean = {
+    conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR) == "direct"
+  }
+
   override def sufficientResourcesRegistered(): Boolean = {
     totalRegisteredExecutors.get() >= minRegisteredExecutors
   }

@@ -53,17 +53,17 @@ which contains two batches of two objects:
 >>> sc.stop()
 """
 
-import sys
-import os
-from itertools import chain, product
-import marshal
-import struct
-import types
-import collections
-import zlib
-import itertools
-import pickle
 import codecs
+import collections
+import itertools
+import marshal
+import os
+import pickle
+import struct
+import sys
+import types
+import zlib
+from itertools import chain, product
 
 pickle_protocol = pickle.HIGHEST_PROTOCOL
 
@@ -476,34 +476,6 @@ class MarshalSerializer(FramedSerializer):
 
     def loads(self, obj):
         return marshal.loads(obj)
-
-
-class AutoSerializer(FramedSerializer):
-    """
-    Choose marshal or pickle as serialization protocol automatically
-    """
-
-    def __init__(self):
-        FramedSerializer.__init__(self)
-        self._type = None
-
-    def dumps(self, obj):
-        if self._type is not None:
-            return b"P" + pickle.dumps(obj, -1)
-        try:
-            return b"M" + marshal.dumps(obj)
-        except Exception:
-            self._type = b"P"
-            return b"P" + pickle.dumps(obj, -1)
-
-    def loads(self, obj):
-        _type = obj[0]
-        if _type == b"M":
-            return marshal.loads(obj[1:])
-        elif _type == b"P":
-            return pickle.loads(obj[1:])
-        else:
-            raise ValueError("invalid serialization type: %s" % _type)
 
 
 class CompressedSerializer(FramedSerializer):

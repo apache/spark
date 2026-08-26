@@ -16,61 +16,59 @@
 #
 
 import sys
-from typing import Any, Dict, Generic, List, Optional, TypeVar, TYPE_CHECKING
 from abc import ABCMeta
 from functools import cached_property
+from typing import TYPE_CHECKING, Any, Dict, Generic, List, Optional, TypeVar
 
 from pyspark import keyword_only, since
-from pyspark.ml import Predictor, PredictionModel
-from pyspark.ml.base import _PredictorParams
+from pyspark.ml.base import PredictionModel, Predictor, Transformer, _PredictorParams
+from pyspark.ml.common import inherit_doc
+from pyspark.ml.linalg import Matrix, Vector
 from pyspark.ml.param.shared import (
+    HasAggregationDepth,
+    HasElasticNetParam,
     HasFeaturesCol,
+    HasFitIntercept,
     HasLabelCol,
+    HasLoss,
+    HasMaxBlockSizeInMB,
+    HasMaxIter,
     HasPredictionCol,
+    HasRegParam,
+    HasSeed,
+    HasSolver,
+    HasStandardization,
+    HasStepSize,
+    HasTol,
+    HasVarianceCol,
     HasWeightCol,
     Param,
     Params,
     TypeConverters,
-    HasMaxIter,
-    HasTol,
-    HasFitIntercept,
-    HasAggregationDepth,
-    HasMaxBlockSizeInMB,
-    HasRegParam,
-    HasSolver,
-    HasStepSize,
-    HasSeed,
-    HasElasticNetParam,
-    HasStandardization,
-    HasLoss,
-    HasVarianceCol,
 )
-from pyspark.ml.util import try_remote_attribute_relation
 from pyspark.ml.tree import (
     _DecisionTreeModel,
     _DecisionTreeParams,
-    _TreeEnsembleModel,
-    _RandomForestParams,
     _GBTParams,
+    _RandomForestParams,
+    _TreeEnsembleModel,
     _TreeRegressorParams,
 )
-from pyspark.ml.base import Transformer
-from pyspark.ml.linalg import Vector, Matrix
 from pyspark.ml.util import (
-    JavaMLWritable,
-    JavaMLReadable,
-    HasTrainingSummary,
     GeneralJavaMLWritable,
+    HasTrainingSummary,
+    JavaMLReadable,
+    JavaMLWritable,
+    try_remote_attribute_relation,
 )
 from pyspark.ml.wrapper import (
     JavaEstimator,
     JavaModel,
-    JavaPredictor,
     JavaPredictionModel,
+    JavaPredictor,
     JavaTransformer,
     JavaWrapper,
 )
-from pyspark.ml.common import inherit_doc
 from pyspark.sql import DataFrame
 from pyspark.sql.utils import is_remote
 
@@ -3314,6 +3312,7 @@ class FMRegressionModel(
 
 if __name__ == "__main__":
     import doctest
+
     import pyspark.ml.regression
     from pyspark.sql import SparkSession
 
