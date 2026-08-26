@@ -46,7 +46,8 @@ trait SupportsPushDownCatalystFilters extends ScanBuilder {
    * Spark asks for these after [[pushFilters]], so a source can infer them from the user filters,
    * if necessary. For now this is only supported when there are filters being pushed down.
    *
-   * Advisory filters must be deterministic and must not contain subqueries.
+   * Advisory filters must be deterministic and must not contain subqueries or user-defined
+   * expressions.
    *
    * Column references must be represented by `AttributeReference`. A nested column is represented
    * by a dotted name, with path parts containing dots quoted using Spark SQL identifier syntax.

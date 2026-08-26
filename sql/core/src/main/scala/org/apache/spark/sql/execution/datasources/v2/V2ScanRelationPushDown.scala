@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, COLUMN_NAMES, GROUP_BY_EXPRS, JOIN_CONDITION, JOIN_TYPE, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, ExpressionSet, ExprId, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, ExpressionSet, ExprId, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.{CollapseGroupedSumOfCount, CollapseProject}
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
@@ -983,8 +983,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val normalizedProjects = DataSourceStrategy
         .normalizeExprs(project, sHolder.output)
         .asInstanceOf[Seq[NamedExpression]]
-      val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp ++
-        sHolder.advisoryFilterExpressions
+      // Keep advisory filters closest to the scan. A non-deterministic residual filter prevents
+      // PhysicalOperation from collecting filters across it; putting advisory filters below that
+      // barrier ensures DataSourceV2Strategy still sees and removes them with the scan.
+      val allFilters = sHolder.advisoryFilterExpressions ++
+        filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
       val normalizedFilters = DataSourceStrategy.normalizeExprs(allFilters, sHolder.output)
       val (scan, output) = PushDownUtils.pruneColumns(
         sHolder.builder, sHolder.relation, normalizedProjects, normalizedFilters)
@@ -1277,7 +1280,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     sHolder.builder match {
       case r: SupportsPushDownCatalystFilters =>
         val advisoryFilters = r.advisoryFilters.filter { filter =>
-          filter.deterministic && !SubqueryExpression.hasSubquery(filter)
+          filter.deterministic &&
+            !SubqueryExpression.hasSubquery(filter) &&
+            !filter.exists(_.isInstanceOf[UserDefinedExpression])
         }
         rebindFilters(advisoryFilters, sHolder.output).flatMap(splitConjunctivePredicates)
       case _ =>

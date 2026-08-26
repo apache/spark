@@ -1114,6 +1114,29 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }, s"expected rebound quoted advisory filter in:\n$pushedPlan")
   }
 
+  test("advisory filters exclude user-defined expressions") {
+    val schema = StructType(Seq(StructField("id", LongType, nullable = false)))
+    val advisoryUDF = ScalaUDF(
+      function = (() => true),
+      dataType = BooleanType,
+      children = Nil,
+      udfName = Some("advisory_udf"))
+    val relation = DataSourceV2Relation.create(
+      new InMemoryCatalystFilterTable(schema, advisoryUDF),
+      None,
+      None,
+      CaseInsensitiveStringMap.empty)
+    val id = relation.output.head
+
+    val pushedPlan = V2ScanRelationPushDown(Filter(EqualTo(id, Literal(1L)), relation))
+    val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+    assert(scan.advisoryFilters.isEmpty)
+    assert(!pushedPlan.exists {
+      case Filter(condition, _) => condition.exists(_.isInstanceOf[UserDefinedExpression])
+      case _ => false
+    }, s"user-defined advisory filters must be discarded:\n$pushedPlan")
+  }
+
   test("advisory filters are not evaluated for V1 scans") {
     checkAdvisoryNotEvaluatedForScan { tableSchema =>
       new V1Scan {
