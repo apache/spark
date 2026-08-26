@@ -22,6 +22,7 @@ Run with:
 """
 # $example on$
 from pyspark.ml.fpm import FPGrowth
+
 # $example off$
 from pyspark.sql import SparkSession
 

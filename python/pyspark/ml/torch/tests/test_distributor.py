@@ -18,20 +18,20 @@
 import contextlib
 import os
 import shutil
-from io import StringIO
 import stat
 import subprocess
 import sys
-import time
 import tempfile
 import threading
-from typing import Callable, Dict, Any
+import time
 import unittest
+from io import StringIO
+from typing import Any, Callable, Dict
 from unittest.mock import patch
 
 from pyspark import SparkConf, SparkContext
 from pyspark.ml.torch.distributor import TorchDistributor, _get_gpus_owned
-from pyspark.ml.torch.torch_run_process_wrapper import clean_and_terminate, check_parent_alive
+from pyspark.ml.torch.torch_run_process_wrapper import check_parent_alive, clean_and_terminate
 from pyspark.sql import SparkSession
 from pyspark.testing.sqlutils import SPARK_HOME
 from pyspark.testing.utils import have_torch, torch_requirement_message
@@ -52,7 +52,7 @@ def patch_stdout() -> StringIO:
 def create_training_function(mnist_dir_path: str) -> Callable:
     import torch.nn as nn
     import torch.nn.functional as F
-    from torchvision import transforms, datasets
+    from torchvision import datasets, transforms
 
     batch_size = 100
     num_epochs = 1
@@ -87,8 +87,8 @@ def create_training_function(mnist_dir_path: str) -> Callable:
 
     def train_fn(learning_rate: float) -> Any:
         import torch
-        import torch.optim as optim
         import torch.distributed as dist
+        import torch.optim as optim
         from torch.nn.parallel import DistributedDataParallel as DDP
         from torch.utils.data.distributed import DistributedSampler
 

@@ -16,19 +16,20 @@
 #
 
 
-from pyspark.sql import Row, functions as sf
-from pyspark.sql.types import (
-    StringType,
-    IntegerType,
-    DoubleType,
-    StructType,
-    StructField,
-    BooleanType,
-)
 from pyspark.errors import (
     AnalysisException,
     PySparkTypeError,
     PySparkValueError,
+)
+from pyspark.sql import Row
+from pyspark.sql import functions as sf
+from pyspark.sql.types import (
+    BooleanType,
+    DoubleType,
+    IntegerType,
+    StringType,
+    StructField,
+    StructType,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 

@@ -17,34 +17,35 @@
 
 import decimal
 import numbers
-from typing import Any, Union, Callable, cast
+from typing import Any, Callable, Union, cast
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import (
-    is_bool_dtype,
-    is_integer_dtype,
-    is_float_dtype,
-    is_numeric_dtype,
     CategoricalDtype,
+    is_bool_dtype,
+    is_float_dtype,
+    is_integer_dtype,
     is_list_like,
+    is_numeric_dtype,
 )
 
+from pyspark.errors import PySparkValueError
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
-from pyspark.pandas.base import column_op, IndexOpsMixin, numpy_column_op
+from pyspark.pandas.base import IndexOpsMixin, column_op, numpy_column_op
 from pyspark.pandas.config import get_option
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
-    is_valid_operand_for_numeric_arithmetic,
-    transform_boolean_operand_to_numeric,
     _as_bool_type,
     _as_categorical_type,
     _as_other_type,
     _as_string_type,
-    _sanitize_list_like,
-    _is_valid_for_logical_operator,
     _is_boolean_type,
+    _is_valid_for_logical_operator,
+    _sanitize_list_like,
     _should_return_all_false,
+    is_valid_operand_for_numeric_arithmetic,
+    transform_boolean_operand_to_numeric,
 )
 from pyspark.pandas.typedef.typehints import (
     as_spark_type,
@@ -52,14 +53,14 @@ from pyspark.pandas.typedef.typehints import (
     pandas_on_spark_type,
 )
 from pyspark.pandas.utils import is_ansi_mode_enabled
-from pyspark.sql import functions as F, Column as PySparkColumn
+from pyspark.sql import Column as PySparkColumn
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
     BooleanType,
     DataType,
     DecimalType,
     StringType,
 )
-from pyspark.errors import PySparkValueError
 
 # For Supporting Spark Connect
 from pyspark.sql.utils import pyspark_column_op

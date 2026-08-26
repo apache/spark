@@ -42,13 +42,13 @@ Regenerate with SPARK_GENERATE_GOLDEN_FILES=1.
 import datetime
 import unittest
 
-from pyspark.testing.utils import (
-    have_pyarrow,
-    have_pandas,
-    pyarrow_requirement_message,
-    pandas_requirement_message,
-)
 from pyspark.testing.goldenutils import GoldenFileTestMixin
+from pyspark.testing.utils import (
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 
 if have_pandas:
     import pandas as pd

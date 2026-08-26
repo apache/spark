@@ -20,6 +20,7 @@ package org.apache.spark.deploy.security
 import java.time.Instant
 import java.util
 import java.util.Optional
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.concurrent.duration._
@@ -31,11 +32,6 @@ import org.apache.spark.internal.config._
 import org.apache.spark.security._
 
 class UserCredentialManagerSuite extends SparkFunSuite {
-
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    CredentialProviderLoader.resetForTesting()
-  }
 
   private def createSparkConf(): SparkConf = {
     new SparkConf(loadDefaults = false)
@@ -497,6 +493,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     val conf = createSparkConf()
     val ctx = createUserContext()
     val callbackRef = new AtomicReference[Array[Byte]]()
+    val loader = new CredentialProviderLoader()
 
     conf.set("spark.security.oidc.provider.fake",
       "org.apache.spark.security.FakeCredentialProvider")
@@ -504,12 +501,13 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     val manager = new UserCredentialManager(
       conf,
       createIngestor(ctx),
-      (_, bytes) => callbackRef.set(bytes))
+      (_, bytes) => callbackRef.set(bytes),
+      loader)
 
     manager.start()
 
     // Get the FakeCredentialProvider instance to verify close was called
-    val providerOpt = CredentialProviderLoader.providerFor("fake",
+    val providerOpt = loader.providerFor("fake",
       new util.HashMap[String, String]())
     assert(providerOpt.isPresent)
     val fakeProvider = providerOpt.get().asInstanceOf[FakeCredentialProvider]
@@ -519,6 +517,98 @@ class UserCredentialManagerSuite extends SparkFunSuite {
 
     assert(fakeProvider.getCloseCount === 1,
       "stop() should close initialized providers exactly once")
+  }
+
+  test("a later manager uses fresh credential providers after stop") {
+    val conf = createSparkConf()
+    val ctx = createUserContext()
+    conf.set("spark.security.oidc.provider.fake",
+      "org.apache.spark.security.FakeCredentialProvider")
+
+    val firstLoader = new CredentialProviderLoader()
+    val firstManager = new UserCredentialManager(
+      conf,
+      createIngestor(ctx),
+      (_, _) => (),
+      firstLoader)
+    firstManager.start()
+    val firstProvider = firstLoader.providerFor("fake",
+      new util.HashMap[String, String]()).get().asInstanceOf[FakeCredentialProvider]
+    firstManager.stop()
+    assert(firstProvider.getCloseCount === 1)
+
+    val secondLoader = new CredentialProviderLoader()
+    val secondManager = new UserCredentialManager(
+      conf,
+      createIngestor(ctx),
+      (_, _) => (),
+      secondLoader)
+    try {
+      secondManager.start()
+      val secondProvider = secondLoader.providerFor("fake",
+        new util.HashMap[String, String]()).get().asInstanceOf[FakeCredentialProvider]
+      assert(secondProvider ne firstProvider)
+      assert(secondProvider.getCloseCount === 0)
+    } finally {
+      secondManager.stop()
+    }
+  }
+
+  test("stop() waits for credential renewal before closing providers") {
+    val conf = createSparkConf()
+    val ctx = createUserContext(expiresInSeconds = 6)
+    val callbackCount = new AtomicInteger()
+    val renewalStarted = new CountDownLatch(1)
+    val renewalInterrupted = new CountDownLatch(1)
+    val releaseRenewal = new CountDownLatch(1)
+    val renewalCompleted = new CountDownLatch(1)
+    val loader = new CredentialProviderLoader()
+
+    conf.set("spark.security.oidc.provider.fake",
+      "org.apache.spark.security.FakeCredentialProvider")
+
+    val manager = new UserCredentialManager(
+      conf,
+      createIngestor(ctx),
+      (_, _) => {
+        if (callbackCount.incrementAndGet() > 1) {
+          renewalStarted.countDown()
+          var released = false
+          while (!released) {
+            try {
+              releaseRenewal.await()
+              released = true
+            } catch {
+              case _: InterruptedException => renewalInterrupted.countDown()
+            }
+          }
+          renewalCompleted.countDown()
+        }
+      },
+      loader)
+
+    manager.start()
+    val provider = loader.providerFor("fake",
+      new util.HashMap[String, String]()).get().asInstanceOf[FakeCredentialProvider]
+    assert(renewalStarted.await(10, TimeUnit.SECONDS))
+
+    val stopThread = new Thread(() => manager.stop())
+    stopThread.start()
+
+    try {
+      assert(renewalInterrupted.await(10, TimeUnit.SECONDS))
+      assert(stopThread.isAlive, "stop() should wait for credential renewal to finish")
+      assert(provider.getCloseCount === 0,
+        "stop() should not close providers while credential renewal is still running")
+    } finally {
+      releaseRenewal.countDown()
+      stopThread.join(10000)
+    }
+
+    assert(renewalCompleted.await(10, TimeUnit.SECONDS))
+    assert(!stopThread.isAlive, "stop() should finish after credential renewal exits")
+    assert(provider.getCloseCount === 1,
+      "stop() should close providers after credential renewal exits")
   }
 
   // ========== additionalSparkProperties application ==========

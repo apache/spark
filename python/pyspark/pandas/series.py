@@ -20,17 +20,18 @@ A wrapper class for Spark Column to behave like pandas Series.
 """
 
 import datetime
-import re
 import inspect
+import re
 import warnings
 from collections.abc import Mapping
 from functools import partial, reduce, wraps
 from typing import (
+    IO,
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
     Generic,
-    IO,
     Iterable,
     List,
     Literal,
@@ -43,29 +44,88 @@ from typing import (
     cast,
     no_type_check,
     overload,
-    TYPE_CHECKING,
 )
 
 import numpy as np
 import pandas as pd
-from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
-from pandas.io.formats.printing import pprint_thing  # type: ignore[import-not-found]
 from pandas.api.extensions import no_default
 from pandas.api.types import (
-    is_list_like,
-    is_hashable,
-    is_numeric_dtype,
     CategoricalDtype,
+    is_hashable,
+    is_list_like,
+    is_numeric_dtype,
 )
+from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
+from pandas.io.formats.printing import pprint_thing  # type: ignore[import-not-found]
 from pandas.tseries.frequencies import DateOffset  # type: ignore[attr-defined]
 
+from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.loose_version import LooseVersion
+from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T
+from pyspark.pandas.accessors import PandasOnSparkSeriesMethods
+from pyspark.pandas.base import IndexOpsMixin
+from pyspark.pandas.categorical import CategoricalAccessor
+from pyspark.pandas.config import get_option
+from pyspark.pandas.correlation import (
+    CORRELATION_CORR_OUTPUT_COLUMN,
+    CORRELATION_COUNT_OUTPUT_COLUMN,
+    CORRELATION_VALUE_1_COLUMN,
+    CORRELATION_VALUE_2_COLUMN,
+    compute,
+)
+from pyspark.pandas.datetimes import DatetimeMethods
+from pyspark.pandas.exceptions import SparkPandasIndexingError
+from pyspark.pandas.frame import DataFrame
+from pyspark.pandas.generic import Frame
+from pyspark.pandas.internal import (
+    DEFAULT_SERIES_NAME,
+    NATURAL_ORDER_COLUMN_NAME,
+    SPARK_DEFAULT_INDEX_NAME,
+    SPARK_DEFAULT_SERIES_NAME,
+    InternalField,
+    InternalFrame,
+)
+from pyspark.pandas.missing.series import MissingPandasLikeSeries
+from pyspark.pandas.plot import PandasOnSparkPlotAccessor
+from pyspark.pandas.spark.accessors import SparkSeriesMethods
+from pyspark.pandas.strings import StringMethods
+from pyspark.pandas.typedef import (
+    ScalarType,
+    SeriesType,
+    create_type_for_series_type,
+    infer_return_type,
+    spark_type_to_pandas_dtype,
+)
+from pyspark.pandas.typedef.typehints import as_spark_type
+from pyspark.pandas.utils import (
+    SPARK_CONF_ARROW_ENABLED,
+    ansi_mode_context,
+    combine_frames,
+    is_ansi_mode_enabled,
+    is_name_like_tuple,
+    is_name_like_value,
+    log_advice,
+    name_like_string,
+    same_anchor,
+    scol_for,
+    sql_conf,
+    validate_arguments_and_invoke_function,
+    validate_axis,
+    validate_bool_kwarg,
+    verify_temp_column_name,
+)
+from pyspark.sql import (
+    Column as PySparkColumn,
+)
+from pyspark.sql import (
+    DataFrame as SparkDataFrame,
+)
+from pyspark.sql import (
+    Window as PySparkWindow,
+)
 from pyspark.sql import (
     functions as F,
-    Column as PySparkColumn,
-    DataFrame as SparkDataFrame,
-    Window as PySparkWindow,
 )
 from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.types import (
@@ -76,75 +136,20 @@ from pyspark.sql.types import (
     FloatType,
     IntegerType,
     LongType,
+    NullType,
     NumericType,
     Row,
     StructType,
     TimestampType,
-    NullType,
 )
 from pyspark.sql.window import Window
-from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T
-from pyspark.pandas.accessors import PandasOnSparkSeriesMethods
-from pyspark.pandas.categorical import CategoricalAccessor
-from pyspark.pandas.config import get_option
-from pyspark.pandas.correlation import (
-    compute,
-    CORRELATION_VALUE_1_COLUMN,
-    CORRELATION_VALUE_2_COLUMN,
-    CORRELATION_CORR_OUTPUT_COLUMN,
-    CORRELATION_COUNT_OUTPUT_COLUMN,
-)
-from pyspark.pandas.base import IndexOpsMixin
-from pyspark.pandas.exceptions import SparkPandasIndexingError
-from pyspark.pandas.frame import DataFrame
-from pyspark.pandas.generic import Frame
-from pyspark.pandas.internal import (
-    InternalField,
-    InternalFrame,
-    DEFAULT_SERIES_NAME,
-    NATURAL_ORDER_COLUMN_NAME,
-    SPARK_DEFAULT_INDEX_NAME,
-    SPARK_DEFAULT_SERIES_NAME,
-)
-from pyspark.pandas.missing.series import MissingPandasLikeSeries
-from pyspark.pandas.plot import PandasOnSparkPlotAccessor
-from pyspark.pandas.utils import (
-    ansi_mode_context,
-    combine_frames,
-    is_ansi_mode_enabled,
-    is_name_like_tuple,
-    is_name_like_value,
-    name_like_string,
-    same_anchor,
-    scol_for,
-    sql_conf,
-    validate_arguments_and_invoke_function,
-    validate_axis,
-    validate_bool_kwarg,
-    verify_temp_column_name,
-    SPARK_CONF_ARROW_ENABLED,
-    log_advice,
-)
-from pyspark.pandas.datetimes import DatetimeMethods
-from pyspark.pandas.spark.accessors import SparkSeriesMethods
-from pyspark.pandas.strings import StringMethods
-from pyspark.pandas.typedef import (
-    infer_return_type,
-    spark_type_to_pandas_dtype,
-    ScalarType,
-    SeriesType,
-    create_type_for_series_type,
-)
-from pyspark.pandas.typedef.typehints import as_spark_type
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import ColumnOrName
-
     from pyspark.pandas.groupby import SeriesGroupBy
-    from pyspark.pandas.resample import SeriesResampler
     from pyspark.pandas.indexes import Index
+    from pyspark.pandas.resample import SeriesResampler
     from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
+    from pyspark.sql._typing import ColumnOrName
 
 # This regular expression pattern is compiled and defined here to avoid to compile the same
 # pattern every time it is used in _repr_ in Series.
@@ -7549,11 +7554,12 @@ def first_series(df: Union[DataFrame, pd.DataFrame]) -> Union[Series, pd.Series]
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.series
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 
