@@ -21,7 +21,8 @@ import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKey}
+import org.apache.spark.internal.LogKeys.{COMPONENT, TIMEOUT}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -37,6 +38,7 @@ import org.apache.spark.util.ThreadUtils
  */
 private[spark] class BlockTTLCleaner(
     name: String,
+    idKey: LogKey,
     ttlMillis: Long,
     accessTimes: ConcurrentHashMap[Int, Long],
     shouldReap: Int => Boolean,
@@ -63,63 +65,76 @@ private[spark] class BlockTTLCleaner(
     // has already interrupted it, and a daemon thread outliving this call is better than a
     // shutdown that hangs.
     if (!pool.awaitTermination(StopTimeoutSeconds, TimeUnit.SECONDS)) {
-      logWarning(s"The $name TTL cleaner did not stop within ${StopTimeoutSeconds}s; " +
-        "continuing shutdown with a reap still in flight")
+      logWarning(log"The ${MDC(COMPONENT, name)} TTL cleaner did not stop within " +
+        log"${MDC(TIMEOUT, StopTimeoutSeconds)}s; continuing shutdown with a reap still in flight")
     }
+  }
+
+  /**
+   * One pass over `accessTimes`: reap whatever has expired, and return how long to wait before the
+   * next pass. Separate from `run` so a test can drive a single sweep rather than wait out a TTL --
+   * the configured minimum is 10 minutes, so waiting is not an option for a test.
+   */
+  private[spark] def sweep(): Long = {
+    val now = System.currentTimeMillis()
+    // Oldest live atime, so we can sleep until the next possible expiry.
+    var oldestLive = now
+    val expired = List.newBuilder[(Int, Long)]
+    accessTimes.forEach { (id, atime) =>
+      if (atime >= now - ttlMillis) oldestLive = math.min(oldestLive, atime)
+      else expired += ((id, atime))
+    }
+    // Reap outside the iteration: a reap blocks on an RPC, and comparing the rest of the map
+    // against a `now` that went stale meanwhile would defer them a whole sweep.
+    expired.result().foreach { case (id, atime) =>
+      // remove(k, v) fails if the atime moved since we read it: the id is back in use.
+      if (shouldReap(id) && accessTimes.remove(id, atime)) {
+        var reaped = false
+        try {
+          reap(id)
+          reaped = true
+        } catch {
+          // Warn, not debug: reclaiming space is this loop's whole job.
+          case NonFatal(e) =>
+            logWarning(log"Error reaping ${MDC(idKey, id)} in the " +
+              log"${MDC(COMPONENT, name)} TTL cleaner", e)
+        } finally {
+          if (!reaped) {
+            // Start the id's clock again rather than leaving it untracked. A reap can fail
+            // part-way -- a blocking shuffle removal times out waiting on an executor, say --
+            // and dropping the atime here would mean nothing ever revisits the id, so whatever
+            // it still holds on disk would leak for the life of the driver. A fresh timestamp
+            // retries one TTL from now instead of every sweep, so a reap that always fails
+            // costs one warning per TTL. putIfAbsent, because the id may have come back into
+            // use while the reap ran, and that atime is the more recent truth.
+            accessTimes.putIfAbsent(id, System.currentTimeMillis())
+          }
+        }
+      }
+    }
+    // Wait until the oldest live entry can expire, but never spin: with a live entry always near
+    // expiry the floor is what stops this from rescanning the whole map continuously.
+    val floor = math.max(ttlMillis / 10, 100)
+    math.max(oldestLive + ttlMillis - System.currentTimeMillis(), floor)
   }
 
   override def run(): Unit = {
     try {
       while (!stopped && !Thread.currentThread().isInterrupted) {
-        val now = System.currentTimeMillis()
-        // Oldest live atime, so we can sleep until the next possible expiry.
-        var oldestLive = now
-        val expired = List.newBuilder[(Int, Long)]
-        accessTimes.forEach { (id, atime) =>
-          if (atime >= now - ttlMillis) oldestLive = math.min(oldestLive, atime)
-          else expired += ((id, atime))
-        }
-        // Reap outside the iteration: a reap blocks on an RPC, and comparing the rest of the map
-        // against a `now` that went stale meanwhile would defer them a whole sweep.
-        expired.result().foreach { case (id, atime) =>
-          // remove(k, v) fails if the atime moved since we read it: the id is back in use.
-          if (shouldReap(id) && accessTimes.remove(id, atime)) {
-            var reaped = false
-            try {
-              reap(id)
-              reaped = true
-            } catch {
-              // Warn, not debug: reclaiming space is this loop's whole job.
-              case NonFatal(e) => logWarning(s"Error reaping $id in the $name TTL cleaner", e)
-            } finally {
-              if (!reaped) {
-                // Start the id's clock again rather than leaving it untracked. A reap can fail
-                // part-way -- a blocking shuffle removal times out waiting on an executor, say --
-                // and dropping the atime here would mean nothing ever revisits the id, so whatever
-                // it still holds on disk would leak for the life of the driver. A fresh timestamp
-                // retries one TTL from now instead of every sweep, so a reap that always fails
-                // costs one warning per TTL. putIfAbsent, because the id may have come back into
-                // use while the reap ran, and that atime is the more recent truth.
-                accessTimes.putIfAbsent(id, System.currentTimeMillis())
-              }
-            }
-          }
-        }
-        // Sleep until the oldest live entry can expire, but never spin: with a live entry always
-        // near expiry the floor is what stops this from rescanning the whole map continuously.
-        // Skipped when stopped: a reap that swallowed the interrupt cleared the flag too, and
+        val sleepMillis = sweep()
+        // Re-check `stopped`: a reap that swallowed the interrupt cleared the flag too, and
         // sleeping out a whole TTL would keep the stopped SparkContext alive via the reap closure.
         if (!stopped) {
-          val floor = math.max(ttlMillis / 10, 100)
-          Thread.sleep(math.max(oldestLive + ttlMillis - System.currentTimeMillis(), floor))
+          Thread.sleep(sleepMillis)
         }
       }
     } catch {
       case _: InterruptedException => // Shutdown; fall through and exit.
       // Nothing restarts this thread, so say so rather than stopping reaping in silence.
-      case NonFatal(e) => logError(s"The $name TTL cleaner died; nothing more will be reaped", e)
+      case NonFatal(e) =>
+        logError(log"The ${MDC(COMPONENT, name)} TTL cleaner died; nothing more will be reaped", e)
     }
-    logInfo(s"$name TTL cleaner exiting.")
+    logInfo(log"${MDC(COMPONENT, name)} TTL cleaner exiting.")
   }
 }
 
