@@ -38,7 +38,8 @@ import org.apache.spark.sql.types.LongType
  * place that still sees the placeholders.
  *
  * Plus the operator shapes that decide whether an argument gets pre-evaluated: a Project and a
- * MergeRows host the column, an Aggregate is split so both halves can, and a lambda can't at all.
+ * MergeRows host the column, an Aggregate is split so both halves can, and a lambda is not
+ * lowered at all.
  * Asserted on the plan where a deterministic argument gives the same answer either way, and on a
  * raised error under MERGE, where an argument that mods by zero only blows up if the column is
  * really there.
@@ -160,10 +161,10 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("keeps the Python UDF for a nondeterministic argument inside a lambda") {
+  test("keeps the Python UDF inside a higher-order function's lambda") {
     transpileOn {
-      // The position no Project can serve: a column is per row where a lambda body runs per
-      // element. So we decline, and the Python eval node in the plan is what says we did.
+      // Lambdas are out of scope for lowering: Spark applies a Python UDF over the whole array
+      // there and this rule leaves that to it. The Python eval node is what says we did.
       val square = udfWith(Multiply(param(0), param(0)), arity = 1)
       val df = spark.range(0, 6).select(
         transform(array(col("id")), _ => square(draw)).as("sq"))

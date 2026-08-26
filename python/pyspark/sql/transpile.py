@@ -48,12 +48,13 @@ body reads that parameter it reads that one column. Two parameters bound to the
 same deterministic argument share the column, so ``f(a + 1, a + 1)`` computes
 ``a + 1`` once.
 
-Some positions have nowhere to put that column -- inside a higher-order
-function's lambda, in a command such as ``DELETE FROM``. There a body reading the
-parameter more than once stays an interpreted Python UDF, which computes its
-inputs once wherever it sits, rather than being lowered into an argument
-evaluated per read. One evaluation per parameter per row either way;
-``f(rand(), rand())`` is two parameters and so still two draws::
+A call inside a higher-order function's lambda is never lowered: Spark already
+applies a Python UDF over the whole array there, and that path is left to it.
+Otherwise one position has nowhere to put the column -- a command such as
+``DELETE FROM`` -- and there a body reading the parameter more than once stays an
+interpreted Python UDF, which computes its inputs once, rather than being lowered
+into an argument evaluated per read. One evaluation per parameter per row either
+way; ``f(rand(), rand())`` is two parameters and so still two draws::
 
     body = lambda x: x if x > 0.5 else 0.0
     clamp = udf(body, "double")
@@ -87,10 +88,13 @@ An argument read once gets no column, since one read is one evaluation anyway,
 and neither does one as cheap to repeat as to read -- a bare column or a literal.
 Anything more, arithmetic included, is either computed once or left to
 interpreted Python; a repeated ``a + 1`` gets a column where one fits and stops
-the UDF being lowered where one does not. The one hole in that: a later filter
-pushdown can substitute a deterministic column back and compute it twice, which
-costs work and changes no answers. An argument the body never reads is not
-computed at all.
+the UDF being lowered where one does not.
+
+That column is what we emit, not what necessarily runs: later optimizer rules may
+inline a deterministic one again where that is faster, as they may for any other
+expression. A draw is never inlined, because those rules check determinism.
+
+An argument the body never reads is not computed at all.
 """
 
 import ast

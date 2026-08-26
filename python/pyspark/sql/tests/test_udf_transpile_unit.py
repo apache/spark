@@ -1518,14 +1518,12 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertTrue(self._shares_an_argument(df), self._optimized_plan(df))
             self.assertEqual([0.0] * 20, [r[0] for r in df.collect()], "One draw, read twice")
 
-    def test_udf_transpile_declines_where_a_draw_cannot_be_shared(self):
-        # SPARK-58626: one draw per parameter per row is a promise, not best effort. A higher-order
-        # function's lambda has nowhere to put the column -- a column is computed per row where the
-        # body runs per element -- so a body reading a nondeterministic argument twice is left as
-        # interpreted Python, which computes its inputs once wherever it sits, rather than lowered
-        # into two draws.
+    def test_udf_transpile_declines_inside_a_higher_order_function(self):
+        # SPARK-58626: a call inside a lambda is not lowered at all -- Spark applies a Python UDF
+        # over the whole array there and we leave that to it -- so the draw stays a single draw per
+        # call rather than one per read.
         #
-        # `clamp` returns its input or 0.0, so a value in (0.0, 0.5] is proof of two draws: the
+        # `clamp` returns its input or 0.0, so a value in (0.0, 0.5] would be two draws: the
         # condition saw one and the branch another.
         from pyspark.sql.functions import array, col, lit, rand, transform
 
@@ -1582,10 +1580,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertTrue(all(d != 0.0 for d in diffs), "each call draws for itself")
 
     def test_udf_transpile_position_can_rule_out_sharing(self):
-        # SPARK-58626: a lambda is the position where an argument is NOT pre-evaluated. A column is
-        # computed per row where a lambda body runs per element, so sharing there would draw once
-        # per row and turn the argument eager -- the empty array below must NOT raise even though
-        # the argument divides by zero.
+        # SPARK-58626: inside a lambda nothing is lowered, so nothing is pre-evaluated either -- the
+        # empty array below must NOT raise even though the argument divides by zero.
         #
         # A conditional branch, by contrast, DOES get one evaluation, even though a bare Catalyst
         # `when` is lazy. Measured: the interpreted Python UDF this replaces evaluates its inputs

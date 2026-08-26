@@ -342,43 +342,40 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("leaves a cheap argument inside a lambda at each use site") {
+  test("keeps the Python UDF inside a higher-order function's lambda") {
     transpileOn {
-      // Through `apply` so pre-evaluation is actually on; via `applyExpr` it defaults to off and
-      // this guard would be unobservable. A bare column reads as cheaply twice as once, so the
-      // lambda costs it nothing and the call still lowers.
-      val arg = attrA
-      val option = Add(pref(0), pref(0))
-      val lambdaVar = NamedLambdaVariable("x", LongType, nullable = false)
-      val call = makeTPUDF(makePyUDF(arg), option)
-      val arr = AttributeReference("arr", ArrayType(LongType))()
-      val body = ArrayTransform(arr, LambdaFunction(Add(call, lambdaVar), Seq(lambdaVar)))
-      val converted = convert(
-        Project(Seq(Alias(body, "v")()), LocalRelation(attrA, arr)))
-      assert(paramColumns(converted).isEmpty, s"Expected no column inside a lambda: $converted")
-      assert(converted.expressions.head.collect { case e if e == arg => e }.length == 2,
-        s"Expected the argument left at both use sites: $converted")
-    }
-  }
-
-  test("keeps the Python UDF for an argument a lambda can't hold a column for") {
-    transpileOn {
-      // No column fits inside a lambda -- one is per row where the body runs per element -- so an
-      // argument read twice and worth more than a column read is left to Python. A draw, where two
-      // evaluations are two values for one parameter, and a divide, where they are only work.
-      Seq(draw(), Divide(attrA, attrA)).foreach { arg =>
-        val option = Add(pref(0), pref(0))
-        val call = makeTPUDF(makePyUDF(arg), option)
+      // Lambdas are out of scope for lowering, whatever the argument costs:
+      // ExtractPythonUDFFromLambda already applies a Python UDF over the whole array and this rule
+      // leaves that to it. Through `apply`, since `applyExpr` alone never sees the lambda.
+      Seq(attrA, Divide(attrA, attrA), draw()).foreach { arg =>
+        val call = makeTPUDF(makePyUDF(arg), Add(pref(0), pref(0)))
         val lambdaVar = NamedLambdaVariable("x", LongType, nullable = false)
         val arr = AttributeReference("arr", ArrayType(LongType))()
         val body = ArrayTransform(arr, LambdaFunction(Add(call, lambdaVar), Seq(lambdaVar)))
         val converted = convert(Project(Seq(Alias(body, "v")()), LocalRelation(attrA, arr)))
-        assert(paramColumns(converted).isEmpty, s"Expected no column inside a lambda: $converted")
+        assert(paramColumns(converted).isEmpty, s"Expected no column for $arg: $converted")
         assert(converted.expressions.head.collect { case u: PythonUDF => u }.length == 1,
           s"Expected the Python UDF kept for $arg: $converted")
         assert(converted.expressions.head.collect { case e if e == arg => e }.length == 1,
           s"Expected the one evaluation the Python UDF makes for $arg: $converted")
       }
+    }
+  }
+
+  test("keeps the Python UDF when the option body builds a lambda") {
+    transpileOn {
+      // The other half of the same rule, which only a custom transpiler can reach: an option that
+      // lowers to a higher-order function of its own. One place to reason about lambdas, not two.
+      val param = TranspiledUDFParameter(0, Some(ArrayType(LongType)))
+      val lambdaVar = NamedLambdaVariable("x", LongType, nullable = false)
+      val option = Cast(
+        Size(ArrayTransform(param, LambdaFunction(Add(lambdaVar, Literal(1L)), Seq(lambdaVar)))),
+        LongType)
+      val arr = AttributeReference("arr", ArrayType(LongType))()
+      val call = makeTPUDF(makePyUDF(arr), option)
+      val converted = convert(Project(Seq(Alias(call, "v")()), LocalRelation(arr)))
+      assert(converted.expressions.head.exists(_.isInstanceOf[PythonUDF]),
+        s"Expected the Python UDF kept: $converted")
     }
   }
 

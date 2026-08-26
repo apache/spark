@@ -1202,7 +1202,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
     val mayDecline = p.children.length <= 1
     val converted = p.mapExpressions {
       case e if e.containsPattern(TRANSPILED_PYTHON_UDF) =>
-        applyExpr(e, parentIsUdf = false, preEvaluate, mayDecline)
+        applyExpr(e, parentIsUdf = false, preEvaluate, mayDecline, inLambda = false)
       case e => e
     }
     // A call that declined can orphan a column registered for an argument of its own. Drop those:
@@ -1245,16 +1245,10 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
    * (see `apply`). Per parameter: `f(rand(), rand())` owes two draws, `f(rand())` owes one however
    * often it is read.
    */
-  private def mustPreEvaluate(args: Seq[Expression], option: Expression): Set[Int] = {
-    // A read inside a lambda counts as many, since the body runs per element. Only a custom
-    // transpiler emits one today, and a column outside the lambda serves it.
-    val perElement = option.collect { case l: LambdaFunction => l }
-      .flatMap(TranspiledUDFParameter.referencedIndexes).toSet
+  private def mustPreEvaluate(args: Seq[Expression], option: Expression): Set[Int] =
     TranspiledUDFParameter.referencedIndexes(option).groupBy(identity).collect {
-      case (index, reads)
-        if (reads.length > 1 || perElement.contains(index)) && !cheapToRepeat(args(index)) => index
+      case (index, reads) if reads.length > 1 && !cheapToRepeat(args(index)) => index
     }.toSet
-  }
 
   /**
    * Whether reading an argument twice is as good as reading a column that holds it once.
@@ -1277,17 +1271,16 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
    * business, and only `apply` above, walking the plan, is in a position to know.
    */
   def applyExpr(expression: Expression, parentIsUdf: Boolean = false): Expression =
-    applyExpr(expression, parentIsUdf, None, mayDecline = true)
+    applyExpr(expression, parentIsUdf, None, mayDecline = true, inLambda = false)
 
   private def applyExpr(
       expression: Expression,
       parentIsUdf: Boolean,
       preEvaluate: Option[PreEvaluate],
-      mayDecline: Boolean): Expression = {
-    // Keeps the enclosing pre-evaluation policy. The `case _` branch deliberately does NOT use this
-    // -- it narrows the policy on the way into a lambda -- so do not "simplify" that to `recurse`.
+      mayDecline: Boolean,
+      inLambda: Boolean): Expression = {
     def recurse(e: Expression, parentIsUdf: Boolean): Expression =
-      applyExpr(e, parentIsUdf, preEvaluate, mayDecline)
+      applyExpr(e, parentIsUdf, preEvaluate, mayDecline, inLambda)
     expression match {
       // Nothing to convert below here, so skip the subtree rather than walking it node by node.
       case other if !other.containsPattern(TRANSPILED_PYTHON_UDF) => other
@@ -1308,6 +1301,12 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
           logWarning(log"Skipping Python UDF transpilation: " +
             log"${MDC(LogKeys.CONFIG, SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key)} " +
             log"is disabled but we still got TranspiledPythonUDFs in our plan.")
+          keepPython
+        } else if (inLambda || s.transpiledOptions.exists(_.containsPattern(LAMBDA_FUNCTION))) {
+          // Lambdas are out of scope for lowering: a higher-order function's lambda already has a
+          // story for a Python UDF in ExtractPythonUDFFromLambda, which applies it over the whole
+          // array. Both shapes are left to it -- a call inside a lambda, and an option body that
+          // builds one.
           keepPython
         } else if (!parentIsUdf || !s.hasOnlyPythonUDFInputs) {
           // Walk the full list of transpiled options and pick the first one,
@@ -1373,18 +1372,10 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
         // preserve the UDF batch pipeline (e.g. an outer UDF that could not be
         // transpiled wrapping one that could).
         //
-        // Pre-evaluation stops at a lambda -- the Project runs per row where the body runs per
-        // element -- and deliberately does not stop at a conditional branch, where
-        // RewriteWithExpression inlines its `With` to stay lazy. `transpile.py` has the contract
-        // and the reasoning; short version, the interpreted UDF is eager in a conditional too, so
-        // matching it is the point.
-        //
-        // Falling back here is safe by construction: CheckAnalysis rejects a lambda holding a
-        // PythonUDF unless ExtractPythonUDFFromLambda can lift it out, and a TranspiledPythonUDF
-        // holds one -- so whatever reached us was vetted with the Python UDF in place.
-        val inner = if (expression.isInstanceOf[LambdaFunction]) None else preEvaluate
-        expression.mapChildren(
-          applyExpr(_, parentIsUdf = isScalarPythonUDF(expression), inner, mayDecline))
+        // A conditional branch is deliberately not treated like a lambda: the column stands, which
+        // makes the argument eager, and the interpreted UDF is eager there too. See `transpile.py`.
+        expression.mapChildren(applyExpr(_, parentIsUdf = isScalarPythonUDF(expression),
+          preEvaluate, mayDecline, inLambda || expression.isInstanceOf[LambdaFunction]))
     }
   }
 }
