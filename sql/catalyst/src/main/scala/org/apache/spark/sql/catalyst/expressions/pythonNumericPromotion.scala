@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
-import org.apache.spark.sql.types.{ByteType, DataType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType}
+import org.apache.spark.sql.types.{ByteType, DataType, DoubleType, FloatType, IntegerType, LongType, ShortType}
 
 /**
  * Widening rules that give transpiled Python UDF arithmetic Python's overflow behaviour.
@@ -74,9 +74,13 @@ object PythonNumericPromotion {
     case ShortType => Some(BigInt(1) << 15)
     case IntegerType => Some(BigInt(1) << 31)
     case LongType => Some(BigInt(1) << 63)
-    // We never produce a decimal ourselves (see narrowestFor), but a decimal column can still be
-    // handed to us, and knowing its magnitude lets `promote` decide honestly rather than guess.
-    case d: DecimalType if d.scale == 0 => Some(BigInt(10).pow(d.precision))
+    // Decimal is refused outright rather than half-supported. Ranking it by precision looked
+    // honest but was worse than declining: a decimal(18,0) pair promoted to bigint, silently
+    // losing the decimal type, while decimal(19,0) and any non-zero scale fell through to an
+    // unaligned replacement and INTERNAL_ERROR. Returning None sends every decimal to `plain`,
+    // which keeps its type. (A decimal column cannot reach a transpiled UDF anyway --
+    // ResolveTranspiledPythonUDFOptions excludes it from every numeric category -- so this only
+    // matters for a direct SQL call.)
     case _ => None
   }
 
@@ -84,20 +88,21 @@ object PythonNumericPromotion {
    * The narrowest integral type that holds every value up to `m` in magnitude, or None when
    * nothing does.
    *
-   * `LongType` is deliberately the ceiling, even though `DecimalType(38, 0)` would reach further
-   * and would cover a single bigint multiply exactly (2**126 is 38 digits). Decimal arithmetic
-   * cannot be built this way: `Multiply` on two `DecimalType(38, 0)` operands wants a result
-   * precision of 76, and it is the `DecimalPrecision` *coercion rule* that caps that to something
-   * legal. These expressions are `RuntimeReplaceable` and their replacement never goes through
-   * coercion -- it cannot, since building it needs the children's types, which rules out
-   * `InheritAnalysisRules` -- so a decimal replacement simply does not resolve, and `CheckAnalysis`
-   * turns that into an INTERNAL_ERROR rather than a fallback.
+   * `LongType` is the ceiling, and that is a limitation of how this is built rather than of
+   * Spark. `DecimalType(38, 0)` would reach further and would cover a single bigint multiply
+   * exactly, 2**126 being 38 digits. An earlier version of this comment claimed a decimal
+   * replacement could not resolve because `DecimalPrecision` coercion is what caps a product's
+   * precision at 38; that is wrong. `Multiply` caps it itself, in `resultDecimalType`, and
+   * `Multiply(cast(a, decimal(38,0)), cast(b, decimal(38,0)))` resolves standalone. What actually
+   * failed was `Add(decimal, int_literal)`, because the hand-rolled alignment in `widestOf` does
+   * not rank DecimalType -- a gap in this file, not in Catalyst.
    *
-   * Stopping at LongType keeps every promotion we emit a plain integral cast, which resolves on
-   * its own. What it gives up is the bigint end: `x * y` on two bigint columns still raises on
-   * overflow exactly as it did before. Reaching decimal would mean doing the widening in an
-   * analyzer rule that runs before coercion instead of inside the expression -- worth doing, but
-   * a different change.
+   * Ranking decimal here would then have to reproduce Spark's decimal type coercion by hand,
+   * which is the wrong trade. The right shape is to widen in an analyzer rule instead of inside
+   * the expression: `ResolveTranspiledPythonUDFOptions` already runs in the Resolution batch
+   * alongside `typeCoercionRules`, so a rewrite there is coerced on the next fixed-point
+   * iteration and needs none of `plain`, `widestOf`, or a lazily-computed replacement. Until
+   * then `x * y` on two bigints raises on overflow exactly as it did before promotion existed.
    */
   private def narrowestFor(m: BigInt): Option[DataType] = {
     if (m <= Byte.MaxValue) Some(ByteType)
@@ -146,16 +151,18 @@ object PythonNumericPromotion {
    * once rather than in each operator below.
    */
   /**
-   * The operator with its operands untouched apart from flattening -- what we report before the
-   * children resolve and we can decide a width. Flattening matters just as much here as in
-   * `widened`: this is the path that produced `python_promoting_multiply(a, a) * a` and the
-   * INTERNAL_ERROR, because a replacement may not contain another thing awaiting replacement.
+   * The operator over its operands as given -- what we report before the children resolve and a
+   * width can be chosen. The one thing it must do is align the operand types: a replacement never
+   * goes through type coercion (`InheritAnalysisRules` is what normally arranges that, and we
+   * cannot use it, since building ours needs the children's types), so an unaligned `Add(bigint,
+   * int)` does not resolve and CheckAnalysis reports INTERNAL_ERROR -- a broken query rather than
+   * a fallback. `x + 1` on a bigint column is enough to reach it, the literal being an int.
    */
   def plain(
       left: Expression,
       right: Expression,
       op: (Expression, Expression) => Expression): Expression = {
-    val (l, r) = (flatten(left), flatten(right))
+    val (l, r) = (left, right)
     // Align the operand types ourselves rather than emitting `Add(bigint, int)` and hoping. A
     // replacement has to be resolvable *as written*: `InheritAnalysisRules` is what normally
     // hands a replacement to type coercion, and we cannot use it (building ours needs the
@@ -195,7 +202,7 @@ object PythonNumericPromotion {
       right: Expression,
       target: (DataType, DataType) => Option[DataType],
       op: (Expression, Expression) => Expression): Expression = {
-    val (l, r) = (flatten(left), flatten(right))
+    val (l, r) = (left, right)
     target(l.dataType, r.dataType) match {
       case Some(t) => op(Cast(l, t), Cast(r, t))
       // No promotion to apply, but the operands may still disagree, and an unaligned replacement
@@ -204,21 +211,6 @@ object PythonNumericPromotion {
     }
   }
 
-  /**
-   * Replace a promoting operand with what it stands for, so a marker never ends up nested inside
-   * another marker's replacement.
-   *
-   * `x ** 3` expands to a chain of promoting multiplies, and leaving the inner one in place gives
-   * a replacement of `python_promoting_multiply(a, a) * a`, which Spark rejects outright with
-   * INTERNAL_ERROR ("the replacement is unresolved"): a replacement is expected to be a plain
-   * resolvable tree, not another thing waiting to be replaced. Flattening as we build keeps every
-   * replacement marker-free, and because each operand was itself built this way the recursion is
-   * one level deep in practice.
-   */
-  def flatten(e: Expression): Expression = e match {
-    case promoting: PythonPromotingArithmetic => promoting.replacement
-    case other => other
-  }
 }
 
 /**
@@ -296,12 +288,12 @@ case class PythonPromotingMultiply(left: Expression, right: Expression)
 case class PythonPromotingAbs(child: Expression)
   extends UnaryExpression with PythonPromotingArithmetic {
   override protected def promoted: Expression =
-    // Same one-argument shape as PythonNumericPromotion.widened, flattening included: `abs(x + 1)`
-    // hands us a promoting add, and nesting one marker inside another's replacement is rejected.
+    // Reuses the binary `widened` with the child in both slots, since the promotion target for a
+    // negation depends on that one type.
     PythonNumericPromotion.widened(
       child, child, (l, _) => PythonNumericPromotion.forNegation(l), (c, _) => Abs(c))
   override protected def unpromoted: Expression =
-    Abs(PythonNumericPromotion.flatten(child))
+    Abs(child)
   override def prettyName: String = "python_promoting_abs"
   override protected def withNewChildInternal(newChild: Expression): PythonPromotingAbs =
     copy(child = newChild)
