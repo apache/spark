@@ -170,7 +170,7 @@ class RelationResolution(
     }
 
     // Two-part session.v: local temp view `v`, or persistent relation `v` in schema `session`.
-    // Order follows [[SQLConf.prioritizeSystemCatalog]] (inverse of `PERSISTENT_CATALOG_FIRST`).
+    // Order follows [[SQLConf#prioritizeSystemCatalog]] (inverse of `PERSISTENT_CATALOG_FIRST`).
     if (identifier.length == 2 &&
         identifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
       val tempSession = () => resolveTemp(Seq(identifier.last))
@@ -189,7 +189,7 @@ class RelationResolution(
     }
 
     // 1-part name: try each step in [[relationResolutionSteps]] order (from
-    // [[CatalogManager.sqlResolutionPathEntries]]).
+    // [[CatalogManager#sqlResolutionPathEntries]]).
     relationResolutionSteps.iterator.map {
       case SessionScopeStep => resolveTemp(identifier)
       case PersistentCatalogStep(prefix) => resolvePersistent(prefix ++ identifier)

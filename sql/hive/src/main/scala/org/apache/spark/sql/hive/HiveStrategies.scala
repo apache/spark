@@ -248,10 +248,11 @@ case class RelationConversions(
     plan resolveOperators {
       // Write path
       case i @ HiveWriteTable(table) if i.query.resolved && DDLUtils.isHiveTable(table) =>
-        val relation = new DetermineTableStats(SparkSession.active)
-          .withTableStats(DDLUtils.readHiveTable(table))
+        val relation = DDLUtils.readHiveTable(table)
         if (shouldConvertForWrite(relation)) {
-          val converted = metastoreCatalog.convert(relation, isWrite = true)
+          val relationWithStats = new DetermineTableStats(SparkSession.active)
+            .withTableStats(relation)
+          val converted = metastoreCatalog.convert(relationWithStats, isWrite = true)
           // The provider relation is local to the write-specific pipeline and is consumed before
           // this rule returns, so generic analyzer traversal never sees it as the INSERT target.
           val preprocessed = PreprocessTableInsertion(i.copy(table = converted))

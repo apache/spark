@@ -5238,8 +5238,8 @@ class DataSourceV2SQLSuiteV1Filter
         withTable(tbl) {
           sql(s"CREATE TABLE $tbl (i INT)")
 
-          // The write target is resolved before its query. Its load must still carry write
-          // privileges rather than reusing or populating the per-query read caches.
+          // The query is resolved before the write target. Its load must still carry write
+          // privileges because write loads bypass the per-query read caches.
           assertPrivilegeError(sql(s"INSERT INTO $tbl SELECT * FROM $tbl"), "INSERT")
           assertPrivilegeError(
             sql(s"INSERT OVERWRITE $tbl SELECT * FROM $tbl"), "DELETE,INSERT")
