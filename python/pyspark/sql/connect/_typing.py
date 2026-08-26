@@ -17,7 +17,7 @@
 import datetime
 import decimal
 from types import FunctionType
-from typing import Any, Callable, Iterable, NewType, Optional, Protocol, Tuple, Union
+from typing import Any, Callable, Iterable, Iterator, NewType, Optional, Protocol, Tuple, Union
 
 import pyarrow
 from pandas.core.frame import DataFrame as PandasDataFrame
@@ -44,9 +44,9 @@ DataTypeOrString = Union[DataType, str]
 
 DataFrameLike = PandasDataFrame
 
-PandasMapIterFunction = Callable[[Iterable[DataFrameLike]], Iterable[DataFrameLike]]
+PandasMapIterFunction = Callable[[Iterator[DataFrameLike]], Iterator[DataFrameLike]]
 
-ArrowMapIterFunction = Callable[[Iterable[pyarrow.RecordBatch]], Iterable[pyarrow.RecordBatch]]
+ArrowMapIterFunction = Callable[[Iterator[pyarrow.RecordBatch]], Iterator[pyarrow.RecordBatch]]
 
 PandasGroupedMapFunction = Union[
     Callable[[DataFrameLike], DataFrameLike],
