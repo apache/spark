@@ -313,6 +313,27 @@ class NumPyCompatTestsMixin:
 
             self.assert_eq(np.fmod(psdf.x1, psdf.x2), np.fmod(pdf.x1, pdf.x2), almost=True)
 
+        # Integral operands above 2**53, where casting an operand to double would drop its low
+        # bits: fmod(9007199254740993, 2) is 1, not 0. Compared exactly, since almost=True would
+        # accept an off-by-one at these magnitudes.
+        pdf = pd.DataFrame(
+            {
+                "x1": [9007199254740993, 9007199254740995, -9007199254740993, 4611686018427387905],
+                "x2": [2, 4, 2, 1000000000],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(np.fmod(psdf.x1, psdf.x2), np.fmod(pdf.x1, pdf.x2).astype("float64"))
+
+        # almost=True treats -0.0 and 0.0 as equal, so check the sign of zero explicitly:
+        # an integral remainder is never negative zero, unlike a double one.
+        pdf = pd.DataFrame({"x1": [-64, -2, 0, 64], "x2": [2, 2, 3, 2]})
+        psdf = ps.from_pandas(pdf)
+
+        result = np.fmod(psdf.x1, psdf.x2)
+        expected = np.fmod(pdf.x1, pdf.x2)
+        self.assert_eq(np.signbit(result.to_pandas()), np.signbit(expected))
+
     def test_np_modf(self):
         # np.modf(x) returns a tuple (fractional part, integral part).
         for pdf in (
