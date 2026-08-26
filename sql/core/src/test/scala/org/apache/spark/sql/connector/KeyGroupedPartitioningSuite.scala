@@ -2572,6 +2572,59 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     }
   }
 
+  test("SPARK-59025: shuffle one side and join keys are less than partition keys " +
+      "when the keyed side reports a PartitioningCollection") {
+    val items_partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, items_partitions)
+
+    // 4 distinct (id, name) partition keys but only 3 distinct ids, so grouping by the join
+    // key must reduce the keyed side from 4 partitions to 3.
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 'ab', 30.0, cast('2020-01-02' as timestamp)), " +
+      "(3, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(4, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 89.0, cast('2020-01-03' as timestamp)), " +
+      "(3, 19.5, cast('2020-02-01' as timestamp)), " +
+      "(5, 26.0, cast('2023-01-01' as timestamp))")
+
+    withSQLConf(
+      SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+      SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      // Duplicating `id` under two aliases makes the projection report a
+      // `PartitioningCollection` of `KeyedPartitioning`s, so the keyed side's shuffle spec
+      // is a `ShuffleSpecCollection` wrapping a `KeyedShuffleSpec` with join key positions.
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint("i", "p")}
+           |id1, id2, name, i.price AS purchase_price, p.price AS sale_price
+           |FROM (SELECT id AS id1, id AS id2, name, price FROM testcat.ns.$items) i
+           |JOIN testcat.ns.$purchases p ON i.id1 = p.item_id
+           |ORDER BY id1, purchase_price, sale_price
+           |""".stripMargin)
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.size == 1, "only the non-keyed side should be shuffled")
+      val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(groupPartitions.size == 1 && groupPartitions.head.joinKeyPositions.isDefined,
+        "the keyed side should be grouped by the join keys")
+      assert(groupPartitions.head.outputPartitioning.numPartitions == 3,
+        "the keyed side should be grouped down to 3 partitions")
+      assert(shuffles.head.outputPartitioning.numPartitions == 3,
+        "the shuffled side should match the 3 grouped partitions")
+      checkAnswer(df, Seq(
+        Row(1, 1, "ab", 30.0, 42.0),
+        Row(1, 1, "ab", 30.0, 89.0),
+        Row(1, 1, "aa", 40.0, 42.0),
+        Row(1, 1, "aa", 40.0, 89.0),
+        Row(3, 3, "bb", 10.0, 19.5)))
+    }
+  }
+
   test("SPARK-45652: SPJ should handle empty partition after dynamic filtering") {
     withSQLConf(
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
