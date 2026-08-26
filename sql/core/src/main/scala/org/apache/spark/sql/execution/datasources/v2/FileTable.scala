@@ -181,5 +181,9 @@ abstract class FileTable(
 }
 
 object FileTable {
-  private val CAPABILITIES = util.EnumSet.of(BATCH_READ, BATCH_WRITE)
+  // File tables satisfy the determinism contract SCAN_MERGING requires: `newScanBuilder` returns a
+  // fresh builder over the table's `fileIndex` and `mergedOptions(options)`, keeping no state from
+  // earlier calls, so what a scan reads is decided only by the filters pushed and the columns
+  // pruned on its own builder.
+  private val CAPABILITIES = util.EnumSet.of(BATCH_READ, BATCH_WRITE, SCAN_MERGING)
 }
