@@ -50,10 +50,10 @@ same deterministic argument share the column, so ``f(a + 1, a + 1)`` computes
 
 A call inside a higher-order function's lambda is never lowered: Spark already
 applies a Python UDF over the whole array there, and that path is left to it.
-Otherwise one position has nowhere to put the column -- a command such as
-``DELETE FROM`` -- and there a body reading the parameter more than once stays an
-interpreted Python UDF, which computes its inputs once, rather than being lowered
-into an argument evaluated per read. One evaluation per parameter per row either
+Otherwise a few positions have nowhere to put the column -- a join condition, a
+command such as ``DELETE FROM`` -- and there a body reading the parameter more
+than once stays an interpreted Python UDF, which computes its inputs once, rather
+than being lowered into an argument evaluated per read. One evaluation per parameter per row either
 way; ``f(rand(), rand())`` is two parameters and so still two draws::
 
     body = lambda x: x if x > 0.5 else 0.0
@@ -76,13 +76,6 @@ and aggregate expressions below, results above, and each half can hold one -- so
 Two arguments no projection can hold count as those positions too: one that is
 itself an aggregate (``f(sum(a))``), and one reading an outer query's column when
 correlated-subquery decorrelation is disabled.
-
-A join condition is the exception in the other direction: it has no side to
-compute on, but handing the call back to Python there costs more than the repeat
-does -- a Python UDF in a non-inner join condition is rejected outright, and in an
-inner one it turns the join into a cross join. So a join keeps the repeat. Only a
-deterministic argument can be in a join condition at all, so this trades work,
-never an answer.
 
 An argument read once gets no column, since one read is one evaluation anyway,
 and neither does one as cheap to repeat as to read -- a bare column or a literal.

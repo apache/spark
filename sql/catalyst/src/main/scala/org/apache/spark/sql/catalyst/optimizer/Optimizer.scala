@@ -1041,10 +1041,35 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
       // subtrees, so every Filter and Sort on the way down lands here too.
       case p if !p.expressions.exists(_.containsPattern(TRANSPILED_PYTHON_UDF)) => p
 
-      case agg: Aggregate if holdsACall(agg) && !splitTearsACall(agg) => splitAggregate(agg)
+      case agg: Aggregate
+          if holdsACall(agg) && owesAColumn(agg) && !splitTearsACall(agg) => splitAggregate(agg)
 
       case p => convertOperator(p)
     }
+  }
+
+  /**
+   * Whether any call in this Aggregate wants a column, so that splitting buys something. Without it
+   * every Aggregate holding a call is rebuilt through PhysicalAggregation for nothing, and the extra
+   * Project is left for CollapseProject to undo -- and every plan shape the split can disturb is
+   * disturbed for queries that gain no column at all.
+   */
+  private def owesAColumn(agg: Aggregate): Boolean = agg.expressions.exists(_.exists {
+    case s: TranspiledPythonUDF if callIsIntact(s) =>
+      s.transpiledOptions.headOption.exists(mustPreEvaluate(s.arguments, _).nonEmpty)
+    case _ => false
+  })
+
+  /**
+   * Whether the call still has its arguments. An analyzer rule may replace the Python UDF with an
+   * attribute -- `PullOutNondeterministic` does, for a nondeterministic call in an operator that
+   * cannot hold one -- and then [[TranspiledPythonUDF.arguments]] is empty while the option still
+   * refers to them by position. There is nothing to substitute, so the attribute stands.
+   */
+  private def callIsIntact(s: TranspiledPythonUDF): Boolean = s.pythonUDFExpr match {
+    case _: PythonFuncExpression => true
+    case agg: AggregateExpression => agg.aggregateFunction.isInstanceOf[PythonFuncExpression]
+    case _ => false
   }
 
   /**
@@ -1195,14 +1220,9 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
     // that `applyExpr` sees every node on the way down and can thread `parentIsUdf`. Starting
     // at the node itself would report no enclosing UDF even when a PythonUDF wraps it, and the
     // batch pipeline the flag exists to protect would be split anyway.
-    // Falling back is the answer for an evaluation we owe and can't place -- except in a join
-    // condition, where ExtractPythonUDFFromJoinCondition throws for a non-inner join and cross
-    // joins an inner one. Repeating a deterministic argument costs work; that costs the query. A
-    // draw can't reach a join condition anyway, CheckAnalysis rejects one there.
-    val mayDecline = p.children.length <= 1
     val converted = p.mapExpressions {
       case e if e.containsPattern(TRANSPILED_PYTHON_UDF) =>
-        applyExpr(e, parentIsUdf = false, preEvaluate, mayDecline, inLambda = false)
+        applyExpr(e, parentIsUdf = false, preEvaluate, inLambda = false)
       case e => e
     }
     // A call that declined can orphan a column registered for an argument of its own. Drop those:
@@ -1241,9 +1261,8 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
 
   /**
    * The parameters this call owes one evaluation: read more than once, with an argument that isn't
-   * cheap to repeat. Where no column can hold one we don't transpile at all, bar a join condition
-   * (see `apply`). Per parameter: `f(rand(), rand())` owes two draws, `f(rand())` owes one however
-   * often it is read.
+   * cheap to repeat. Where no column can hold one we don't transpile at all. Per parameter:
+   * `f(rand(), rand())` owes two draws, `f(rand())` owes one however often it is read.
    */
   private def mustPreEvaluate(args: Seq[Expression], option: Expression): Set[Int] =
     TranspiledUDFParameter.referencedIndexes(option).groupBy(identity).collect {
@@ -1271,16 +1290,15 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
    * business, and only `apply` above, walking the plan, is in a position to know.
    */
   def applyExpr(expression: Expression, parentIsUdf: Boolean = false): Expression =
-    applyExpr(expression, parentIsUdf, None, mayDecline = true, inLambda = false)
+    applyExpr(expression, parentIsUdf, None, inLambda = false)
 
   private def applyExpr(
       expression: Expression,
       parentIsUdf: Boolean,
       preEvaluate: Option[PreEvaluate],
-      mayDecline: Boolean,
       inLambda: Boolean): Expression = {
     def recurse(e: Expression, parentIsUdf: Boolean): Expression =
-      applyExpr(e, parentIsUdf, preEvaluate, mayDecline, inLambda)
+      applyExpr(e, parentIsUdf, preEvaluate, inLambda)
     expression match {
       // Nothing to convert below here, so skip the subtree rather than walking it node by node.
       case other if !other.containsPattern(TRANSPILED_PYTHON_UDF) => other
@@ -1302,7 +1320,14 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
             log"${MDC(LogKeys.CONFIG, SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key)} " +
             log"is disabled but we still got TranspiledPythonUDFs in our plan.")
           keepPython
-        } else if (inLambda || s.transpiledOptions.exists(_.containsPattern(LAMBDA_FUNCTION))) {
+        } else if (!callIsIntact(s)) {
+          // PullOutNondeterministic moves a nondeterministic call into a projection below and
+          // leaves an attribute here, so `arguments` is empty while the option still refers to them.
+          // Keep the attribute: the call is computed once below us, which is the promise, just not
+          // in Catalyst. `orderBy(u(rand()))` and `repartition(2, u(rand()))` land here.
+          keepPython
+        } else if (inLambda ||
+            s.transpiledOptions.headOption.exists(_.containsPattern(LAMBDA_FUNCTION))) {
           // Lambdas are out of scope for lowering: a higher-order function's lambda already has a
           // story for a Python UDF in ExtractPythonUDFFromLambda, which applies it over the whole
           // array. Both shapes are left to it -- a call inside a lambda, and an option body that
@@ -1349,13 +1374,8 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
                 case Some(f) => f(args, option)
                 // No column can go here at all, so an evaluation the body is owed can only be kept
                 // by the Python UDF, which computes its inputs once in a projection of its own.
-                // Where handing it back is worse than repeating the work -- a join condition, see
-                // `apply` -- only a draw is worth declining for, and a draw can't be there.
                 case None =>
-                  val owed = mustPreEvaluate(args, option)
-                  val blocking =
-                    if (mayDecline) owed else owed.filter(!args(_).deterministic)
-                  Option.when(blocking.isEmpty)(
+                  Option.when(mustPreEvaluate(args, option).isEmpty)(
                     TranspiledUDFParameter.substitute(option, args))
               }
               // None from either arm means we can't keep that promise here, so don't transpile.
@@ -1375,7 +1395,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
         // A conditional branch is deliberately not treated like a lambda: the column stands, which
         // makes the argument eager, and the interpreted UDF is eager there too. See `transpile.py`.
         expression.mapChildren(applyExpr(_, parentIsUdf = isScalarPythonUDF(expression),
-          preEvaluate, mayDecline, inLambda || expression.isInstanceOf[LambdaFunction]))
+          preEvaluate, inLambda || expression.isInstanceOf[LambdaFunction]))
     }
   }
 }

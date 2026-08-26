@@ -443,21 +443,35 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("repeats a Join condition's argument rather than hand the call back") {
+  test("keeps the Python UDF in a Join condition, where no column can go") {
     transpileOn {
-      // The one place falling back is worse than the work: ExtractPythonUDFFromJoinCondition throws
-      // for a non-inner join and cross joins an inner one, so `a + 1` runs at both use sites. A
-      // draw cannot get here -- CheckAnalysis rejects a nondeterministic join condition.
+      // A join has no side to compute on, so an argument owed one evaluation goes back to Python --
+      // which is what a UDF predicate in a join condition gets without transpilation anyway.
+      // Repeating it instead would make it lazy again and swallow an ANSI error the interpreted UDF
+      // raises.
       val arg = Add(attrA, Literal(1L))
       val attrB = AttributeReference("b", LongType)()
       val call = makeTPUDF(makePyUDF(arg), Multiply(pref(0), pref(0)))
       val converted = convert(Join(LocalRelation(attrA), LocalRelation(attrB), Inner,
         Some(GreaterThan(call, Literal(0L))), JoinHint.NONE))
       assert(paramColumns(converted).isEmpty, s"Expected no column under a join: $converted")
-      assert(converted.expressions.head.find(_ == Multiply(arg, arg)).isDefined,
-        s"Expected the argument at both use sites: $converted")
-      assert(!converted.exists(_.expressions.exists(_.exists(_.isInstanceOf[PythonUDF]))),
-        s"Expected no Python fallback: $converted")
+      assert(converted.expressions.exists(_.exists(_.isInstanceOf[PythonUDF])),
+        s"Expected the Python UDF kept: $converted")
+      assert(converted.expressions.head.collect { case e if e == arg => e }.length == 1,
+        s"Expected the one evaluation the Python UDF makes: $converted")
+    }
+  }
+
+  test("keeps the Python UDF when an analyzer rule has taken the arguments away") {
+    transpileOn {
+      // PullOutNondeterministic replaces a nondeterministic call with an attribute for the
+      // projection it moved the call to, leaving no arguments for the option's references. Shaped by
+      // hand here; `orderBy(u(rand()))` is the query that produces it.
+      val stripped = TranspiledPythonUDF(
+        "udf", AttributeReference("_nondeterministic", LongType)(), List(Add(pref(0), pref(0))))
+      val result = ConvertToCatalyst.applyExpr(stripped, parentIsUdf = false)
+      assert(result == stripped.pythonUDFExpr,
+        s"Expected the attribute the analyzer left, got: $result")
     }
   }
 

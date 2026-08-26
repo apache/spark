@@ -1638,9 +1638,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertFalse(self._shares_an_argument(det), self._optimized_plan(det))
 
     def test_udf_transpile_udf_as_a_predicate(self):
-        # A predicate is transpiled like anything else: no Python worker in a `where` or a join
-        # condition, and the same answers. The fallback to the Python path is one `headOption` away
-        # in ConvertToCatalyst.applyExpr, so this is the net under it.
+        # A predicate is transpiled like anything else in a `where`: no Python worker, same answers.
+        # In a join condition it is not, since no column can go there -- see below.
         from pyspark.sql.functions import col
 
         used_twice = lambda a, b: (a + a) if b > 0 else 0.0  # noqa: E731
@@ -1655,9 +1654,27 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual(0, self._eval_python_count(filtered))
             self.assertEqual([(4.0, 2.0)], [(r[0], r[1]) for r in filtered.collect()])
 
+            # A join has no side to hold the column, so the call goes back to Python -- the same
+            # path the predicate takes with transpilation off.
             joined = df.join(other, predicate)
-            self.assertEqual(0, self._eval_python_count(joined))
+            self.assertGreater(self._eval_python_count(joined), 0, self._optimized_plan(joined))
             self.assertEqual([(4.0, 2.0, 2.0)], [tuple(r) for r in joined.collect()])
+
+    def test_udf_transpile_survives_an_argument_the_analyzer_moved(self):
+        # SPARK-58626: PullOutNondeterministic pulls a nondeterministic call into a projection below
+        # an operator that cannot hold one, leaving an attribute where the call was -- and so no
+        # arguments for the option's references to point at. The call keeps the Python path there
+        # rather than failing the query, which is also one evaluation: the projection computes it
+        # once. All three shapes raised INVALID_UDF_PARAMETER_PLACEHOLDER_INDEX before.
+        from pyspark.sql.functions import col, rand
+
+        add_self = lambda x: x + x  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            u = self._transpiled_udf(add_self, DoubleType())
+            rows = self.spark.range(0, 4).select(col("id").cast("double").alias("a"))
+            self.assertEqual(4, len(rows.orderBy(u(rand())).collect()))
+            self.assertEqual(4, len(rows.repartition(2, u(rand())).collect()))
+            self.assertEqual(4, len(rows.groupBy(u(rand())).count().collect()))
 
     def test_udf_transpile_evaluates_inputs_once_in_a_group_by(self):
         # SPARK-58626: an Aggregate is the awkward one -- a use no aggregate function wraps has to
