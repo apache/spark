@@ -26,8 +26,8 @@ import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.api.model.apiextensions.v1.{CustomResourceDefinition, CustomResourceDefinitionBuilder}
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
 import io.fabric8.kubernetes.client.dsl.PodResource
-import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
-import org.mockito.Mockito.{verify, when}
+import org.mockito.{ArgumentCaptor, ArgumentMatchers, Mock, MockitoAnnotations}
+import org.mockito.Mockito.{doThrow, never, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatestplus.mockito.MockitoSugar._
 
@@ -257,6 +257,173 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(ownerReferences.size() === 1)
     assert(ownerReferences.get(0).getName === POD_NAME)
     assert(ownerReferences.get(0).getUid === DRIVER_POD_UID)
+  }
+
+  // SPARK-38079: making the driver's own config map (and other credential-bearing resources,
+  // e.g. Kerberos keytab/delegation-token secrets) a pre-resource above means they briefly
+  // exist without an owner reference (see the comment on cleanupOrphanedPreResources in
+  // KubernetesClientApplication.scala). run() registers a shutdown hook to best-effort clean
+  // those up if this process is terminated abruptly in that window. Actually triggering a JVM
+  // shutdown hook from a test is impractical, so these tests instead call the (package-private)
+  // cleanup method directly, the same way the hook itself would.
+  private def newRecoveryClientMocks(): (KubernetesClient, RESOURCE_LIST, PodResource) = {
+    val recoveryClient = mock[KubernetesClient]
+    val recoveryResourceList = mock[RESOURCE_LIST]
+    val recoveryPodOperations = mock[PODS]
+    val recoveryPodsWithNamespace = mock[PODS_WITH_NAMESPACE]
+    val recoveryNamedPod = mock[PodResource]
+    doReturn(recoveryResourceList).when(recoveryClient).resourceList(ArgumentMatchers.any[Array[HasMetadata]](): _*)
+    when(recoveryClient.pods()).thenReturn(recoveryPodOperations)
+    when(recoveryPodOperations.inNamespace(kconf.namespace)).thenReturn(recoveryPodsWithNamespace)
+    when(recoveryPodsWithNamespace.withName(POD_NAME)).thenReturn(recoveryNamedPod)
+    (recoveryClient, recoveryResourceList, recoveryNamedPod)
+  }
+
+  test("SPARK-38079: shutdown-hook cleanup deletes orphaned pre-resources and the driver pod " +
+      "if this submission created it") {
+    val (recoveryClient, recoveryResourceList, recoveryNamedPod) = newRecoveryClientMocks()
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher,
+      recoveryClientFactoryOverride = Some(() => recoveryClient))
+
+    submissionClient.cleanupOrphanedPreResources(
+      PRE_RESOURCES, POD_NAME, preResourcesApplied = true, podCreatedByUs = true)
+
+    verify(recoveryResourceList).delete()
+    verify(recoveryNamedPod).delete()
+    // The recovery client is built fresh for this cleanup and must not leak.
+    verify(recoveryClient).close()
+  }
+
+  test("SPARK-38079: shutdown-hook cleanup does not delete the driver pod if this submission " +
+      "never created it") {
+    val (recoveryClient, recoveryResourceList, recoveryNamedPod) = newRecoveryClientMocks()
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher,
+      recoveryClientFactoryOverride = Some(() => recoveryClient))
+
+    // podCreatedByUs = false: e.g. the pod creation API call itself never succeeded (or a
+    // differently-submitted application happens to be using the same pod name), so this
+    // cleanup must not delete a pod it did not create.
+    submissionClient.cleanupOrphanedPreResources(
+      PRE_RESOURCES, POD_NAME, preResourcesApplied = true, podCreatedByUs = false)
+
+    verify(recoveryResourceList).delete()
+    verify(recoveryNamedPod, never()).delete()
+  }
+
+  test("SPARK-38079: shutdown-hook cleanup is a no-op if pre-resources were never applied") {
+    var recoveryClientFactoryInvoked = false
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher,
+      recoveryClientFactoryOverride = Some(() => {
+        recoveryClientFactoryInvoked = true
+        mock[KubernetesClient]
+      }))
+
+    // preResourcesApplied = false: the pre-resource serverSideApply() call itself never
+    // succeeded, so there is nothing to have been left orphaned -- and in particular, the
+    // existing catch block for that call (in run()) has already handled cleanup of whatever
+    // partial state that failed call may have left behind.
+    submissionClient.cleanupOrphanedPreResources(
+      PRE_RESOURCES, POD_NAME, preResourcesApplied = false, podCreatedByUs = false)
+
+    assert(!recoveryClientFactoryInvoked,
+      "the recovery client must not be built at all when there is nothing to clean up")
+  }
+
+  test("SPARK-38079: shutdown-hook cleanup swallows exceptions from the recovery client " +
+      "(best-effort only)") {
+    val (recoveryClient, recoveryResourceList, recoveryNamedPod) = newRecoveryClientMocks()
+    doThrow(new RuntimeException("simulated API server failure"))
+      .when(recoveryResourceList).delete()
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher,
+      recoveryClientFactoryOverride = Some(() => recoveryClient))
+
+    // Must not throw: this runs on the JVM shutdown-hook thread, where an uncaught exception
+    // would only be printed to stderr and otherwise has no one left to meaningfully handle it.
+    submissionClient.cleanupOrphanedPreResources(
+      PRE_RESOURCES, POD_NAME, preResourcesApplied = true, podCreatedByUs = true)
+
+    // The pod delete is independent of the (failed) pre-resource delete above, and must still
+    // be attempted.
+    verify(recoveryNamedPod).delete()
+  }
+
+  // SPARK-38079: the tests above all call cleanupOrphanedPreResources directly, since actually
+  // triggering a JVM shutdown hook from a test is impractical. That leaves the wiring in run()
+  // itself -- does it register a hook before applying pre-resources, and remove that exact hook
+  // once done with them -- uncovered by those tests alone. These two tests close that gap by
+  // injecting a fake ShutdownHookOps instead.
+  test("SPARK-38079: cleanup hook is registered before pre-resources are applied and " +
+      "removed once run() completes successfully") {
+    var registeredHook: Option[() => Unit] = None
+    var removedRef: Option[Any] = None
+    val fakeOps = ShutdownHookOps(
+      addHook = { hook =>
+        registeredHook = Some(hook)
+        "fake-hook-ref"
+      },
+      removeHook = { ref =>
+        removedRef = Some(ref)
+        true
+      })
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher,
+      shutdownHookOpsOverride = Some(fakeOps))
+
+    submissionClient.run()
+
+    assert(registeredHook.isDefined,
+      "a cleanup hook must be registered before pre-resources are applied")
+    assert(removedRef.contains("fake-hook-ref"),
+      "the exact same hook reference returned by addHook must be passed to removeHook")
+  }
+
+  test("SPARK-38079: cleanup hook is still removed if run() fails before completing") {
+    var removedRef: Option[Any] = None
+    val fakeOps = ShutdownHookOps(
+      addHook = { _ => "fake-hook-ref" },
+      removeHook = { ref =>
+        removedRef = Some(ref)
+        true
+      })
+    val podCreationFailure = new RuntimeException("simulated pod creation failure")
+    doThrow(podCreationFailure).when(namedPods).create()
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher,
+      shutdownHookOpsOverride = Some(fakeOps))
+
+    val thrown = intercept[RuntimeException] {
+      submissionClient.run()
+    }
+
+    assert(thrown eq podCreationFailure)
+    // The cleanup hook must be removed via the `finally` in run() even on this failure path,
+    // since the existing catch block (unchanged by SPARK-38079) already deletes the
+    // pre-resources itself -- the hook has nothing left to do from this point on, exactly as
+    // on the success path.
+    assert(removedRef.contains("fake-hook-ref"),
+      "the cleanup hook must be removed even when run() fails partway through")
   }
 
   test("SPARK-37331: The client should create Kubernetes resources with pre resources") {
