@@ -70,12 +70,15 @@ class AutoCdcCrossScdConvergenceSuite
     checkAnswer(scd1Data, scd2CurrentData)
   }
 
-  test("SCD1 current rows match SCD2 open rows for the same shuffled CDC stream") {
+  private val crossScdConvergenceTestName =
+    "SCD1 current rows match SCD2 open rows for the same shuffled CDC stream"
+
+  test(crossScdConvergenceTestName) {
     val numDistinctKeys = resolveNumDistinctKeys()
     val maxUniqueEventsPerKey = resolveMaxUniqueEventsPerKey()
     val numBatches = resolveNumBatches()
 
-    forEachConvergenceSeed { (seed, seedIndex) =>
+    forEachConvergenceSeed(crossScdConvergenceTestName) { (seed, seedIndex) =>
       val rand = new Random(seed)
       val sortedEventStream = generateRandomCdcEventStream(rand)
       val shuffledEventStream = rand.shuffle(sortedEventStream)
@@ -84,11 +87,12 @@ class AutoCdcCrossScdConvergenceSuite
         .values
         .count(events => !events.maxBy(_.sequence).isDelete)
 
-      // Seed alone is enough to regenerate the stream; avoid dumping thousands of events into
-      // every clue string (ScalaTest evaluates clues eagerly).
+      // Avoid dumping thousands of events into every clue string (ScalaTest evaluates clues
+      // eagerly).
       withClue(
-        s"\ncross-SCD convergence seedIndex=$seedIndex seed=$seed " +
-        s"(rerun with -D$baseSeedSystemProperty=$seed " +
+        s"\ncross-SCD convergence testName=$crossScdConvergenceTestName " +
+        s"seedIndex=$seedIndex iterationSeed=$seed " +
+        s"(rerun this test with -D$baseSeedSystemProperty=$configuredBaseSeed " +
         s"-D$numSeedsSystemProperty=1 to reproduce)\n" +
         s"keys=$numDistinctKeys maxEventsPerKey=$maxUniqueEventsPerKey " +
         s"numBatches=$numBatches expectedLiveKeys=$expectedLiveKeyCount " +

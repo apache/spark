@@ -41,21 +41,20 @@ class AutoCdcOutOfOrderConvergenceSuite
     )
   }
 
-  private def runConvergenceTest(scdType: ScdType): Unit = {
+  private def runConvergenceTest(scdType: ScdType, testName: String): Unit = {
     val numDistinctKeys = resolveNumDistinctKeys()
     val maxUniqueEventsPerKey = resolveMaxUniqueEventsPerKey()
     val numBatches = resolveNumBatches()
 
-    forEachConvergenceSeed { (seed, seedIndex) =>
+    forEachConvergenceSeed(testName) { (seed, seedIndex) =>
       val rand = new Random(seed)
       val sortedEventStream = generateRandomCdcEventStream(rand)
       val shuffledEventStream = rand.shuffle(sortedEventStream)
 
-      // Seed alone regenerates the stream; avoid dumping every event into an eagerly-built clue.
       withClue(
-        s"\nout-of-order convergence scdType=${scdType.label} " +
-        s"seedIndex=$seedIndex seed=$seed " +
-        s"(rerun with -D$baseSeedSystemProperty=$seed " +
+        s"\nout-of-order convergence scdType=${scdType.label} testName=$testName " +
+        s"seedIndex=$seedIndex iterationSeed=$seed " +
+        s"(rerun this test with -D$baseSeedSystemProperty=$configuredBaseSeed " +
         s"-D$numSeedsSystemProperty=1 to reproduce)\n" +
         s"keys=$numDistinctKeys maxEventsPerKey=$maxUniqueEventsPerKey " +
         s"numBatches=$numBatches events=${sortedEventStream.size}\n"
@@ -76,11 +75,16 @@ class AutoCdcOutOfOrderConvergenceSuite
     }
   }
 
-  test("SCD1 merge converges across micro-batch shuffling for randomly generated CDC events") {
-    runConvergenceTest(ScdType.Type1)
+  private val scd1OutOfOrderTestName =
+    "SCD1 merge converges across micro-batch shuffling for randomly generated CDC events"
+  private val scd2OutOfOrderTestName =
+    "SCD2 merge converges across micro-batch shuffling for randomly generated CDC events"
+
+  test(scd1OutOfOrderTestName) {
+    runConvergenceTest(ScdType.Type1, scd1OutOfOrderTestName)
   }
 
-  test("SCD2 merge converges across micro-batch shuffling for randomly generated CDC events") {
-    runConvergenceTest(ScdType.Type2)
+  test(scd2OutOfOrderTestName) {
+    runConvergenceTest(ScdType.Type2, scd2OutOfOrderTestName)
   }
 }

@@ -115,11 +115,10 @@ trait AutoCdcRandomCdcTestMixin {
     value
   }
 
-  private def resolveBaseSeed(): Long = {
+  protected def configuredBaseSeed: Long =
     Option(System.getProperty(baseSeedSystemProperty))
       .map(_.toLong)
       .getOrElse(defaultBaseSeed)
-  }
 
   private def resolveNumSeeds(): Int =
     positiveIntProp(numSeedsSystemProperty, defaultNumSeedsPerRun)
@@ -134,14 +133,15 @@ trait AutoCdcRandomCdcTestMixin {
     positiveIntProp(numBatchesSystemProperty, defaultNumBatches)
 
   /**
-   * Invoke `callback(seed, seedIndex)` once per configured seed. The first iteration uses the
-   * base seed directly; any remaining iteration seeds are deterministically derived from it.
+   * Invoke `callback(seed, seedIndex)` once per configured seed. The first iteration uses
+   * [[configuredBaseSeed]] mixed with [[testName]]; any remaining iteration seeds are
+   * deterministically derived from that per-test base.
    */
-  protected def forEachConvergenceSeed(callback: (Long, Int) => Unit): Unit = {
-    val baseSeed = resolveBaseSeed()
+  protected def forEachConvergenceSeed(testName: String)(callback: (Long, Int) => Unit): Unit = {
+    val effectiveBaseSeed = configuredBaseSeed ^ testName.hashCode.toLong
     val numSeeds = resolveNumSeeds()
-    val masterRand = new Random(baseSeed)
-    val seeds = baseSeed +: Seq.fill(numSeeds - 1)(masterRand.nextLong())
+    val masterRand = new Random(effectiveBaseSeed)
+    val seeds = effectiveBaseSeed +: Seq.fill(numSeeds - 1)(masterRand.nextLong())
     seeds.zipWithIndex.foreach { case (seed, seedIndex) =>
       callback(seed, seedIndex)
     }
