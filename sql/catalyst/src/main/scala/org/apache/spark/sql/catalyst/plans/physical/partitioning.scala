@@ -521,11 +521,13 @@ case class CoalescedNullAwareHashPartitioning(
  * @param isGrouped Whether partition keys are unique (no duplicates). Computed on first
  *                  creation, then preserved through copy operations to avoid recomputation.
  * @param isNarrowed Whether this partitioning was derived from a finer-grained one by dropping key
- *                   positions (e.g. via `PartitioningPreservingUnaryExecNode`). When true,
- *                   `GroupPartitionsExec` will merge partitions that shared distinct keys in the
- *                   original partitioning, carrying the same skew risk as
- *                   `allowKeysSubsetOfPartitionKeys`. Such a partitioning will not satisfy
- *                   `ClusteredDistribution` unless that config is enabled.
+ *                   positions (e.g. via `PartitioningPreservingUnaryExecNode`). When true and the
+ *                   keys are no longer unique, `GroupPartitionsExec` would merge partitions that
+ *                   held distinct keys in the original partitioning, carrying the same skew risk as
+ *                   `allowKeysSubsetOfPartitionKeys`. Such a partitioning can only satisfy
+ *                   `ClusteredDistribution` by being grouped, and `groupedSatisfies` refuses that
+ *                   unless the config is enabled, regardless of
+ *                   `requireAllClusterKeysForDistribution`.
  */
 case class KeyedPartitioning(
     expressions: Seq[Expression],
@@ -579,7 +581,17 @@ case class KeyedPartitioning(
   def groupedSatisfies(required: Distribution): Boolean = {
     required match {
       case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
-        if (requireAllClusterKeys) {
+        if (isNarrowed && !isGrouped &&
+            !SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys) {
+          // A narrowed, non-grouped partitioning carries the same skew risk as using a subset of
+          // partition keys for a join: GroupPartitionsExec will merge partitions that held
+          // distinct keys in the original finer-grained partitioning. Require the same config to
+          // opt in.
+          //
+          // Checked before the `requireAllClusterKeys` branch, because the risk is independent of
+          // which key sets count as matching (SPARK-58974).
+          false
+        } else if (requireAllClusterKeys) {
           // Checks whether this partitioning is partitioned on exactly same clustering keys of
           // `ClusteredDistribution`.
           c.areAllClusterKeysMatched(expressions)
@@ -592,12 +604,6 @@ case class KeyedPartitioning(
             // overlap with partition keys (KeyedPartitioning attributes)
             requiredClustering.exists(x => attributes.exists(_.semanticEquals(x))) &&
               expressions.forall(_.references.size == 1)
-          } else if (isNarrowed && !isGrouped) {
-            // A narrowed, non-grouped partitioning carries the same skew risk as using a subset of
-            // partition keys for a join: GroupPartitionsExec will merge partitions that held
-            // distinct keys in the original finer-grained partitioning. Require the same config to
-            // opt in.
-            false
           } else {
             attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
           }
