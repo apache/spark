@@ -18,7 +18,12 @@
 package org.apache.spark.sql.execution.python.streaming
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException, InterruptedIOException}
-import java.nio.channels.{Channels, ClosedByInterruptException, ServerSocketChannel}
+import java.nio.channels.{
+  Channels,
+  ClosedByInterruptException,
+  ClosedChannelException,
+  ServerSocketChannel
+}
 import java.time.Duration
 
 import scala.collection.mutable
@@ -138,7 +143,19 @@ class TransformWithStateInPySparkStateServer(
   } else new mutable.HashMap[String, Iterator[Long]]()
 
   def run(): Unit = {
-    val listeningSocket = stateServerSocket.accept()
+    val listeningSocket = try {
+      stateServerSocket.accept()
+    } catch {
+      case _: InterruptedException | _: InterruptedIOException | _: ClosedByInterruptException =>
+        logInfo(log"State server listener interrupted before the Python worker connected")
+        Thread.currentThread().interrupt()
+        statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
+        return
+      case _: ClosedChannelException =>
+        logInfo(log"State server socket closed before the Python worker connected")
+        statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
+        return
+    }
 
     // SPARK-51667: We have a pattern of sending messages continuously from one side
     // (Python -> JVM, and vice versa) before getting response from other side. Since most
