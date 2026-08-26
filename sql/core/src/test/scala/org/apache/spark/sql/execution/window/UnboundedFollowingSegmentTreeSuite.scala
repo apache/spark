@@ -476,6 +476,81 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
         |FROM t""".stripMargin)
   }
 
+  // ---- GROUPS shrinking frames ----
+
+  /** Two partitions with two rows per peer group. */
+  private def groupsTiedDF: DataFrame =
+    (0 until 60).map(i => (i, i % 2, i / 4, (i * 13) % 41)).toDF("id", "pk", "k", "v")
+
+  test("GROUPS BETWEEN n PRECEDING AND UNBOUNDED FOLLOWING") {
+    checkSqlEquivalence(groupsTiedDF,
+      """SELECT id, pk,
+        |  MIN(v) OVER w AS mn, MAX(v) OVER w AS mx, SUM(v) OVER w AS sm, AVG(v) OVER w AS av
+        |FROM t
+        |WINDOW w AS (PARTITION BY pk ORDER BY k
+        |  GROUPS BETWEEN 2 PRECEDING AND UNBOUNDED FOLLOWING)""".stripMargin)
+  }
+
+  test("GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING (row-reading lower bound)") {
+    // CURRENT ROW starts at the first row of the peer group.
+    checkSqlEquivalence(groupsTiedDF,
+      """SELECT id, pk,
+        |  MIN(v) OVER (PARTITION BY pk ORDER BY k
+        |    GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS mn,
+        |  COUNT(v) OVER (PARTITION BY pk ORDER BY k
+        |    GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS ct
+        |FROM t""".stripMargin)
+  }
+
+  test("GROUPS BETWEEN n FOLLOWING AND UNBOUNDED FOLLOWING (lower bound is positive)") {
+    // A positive lower offset can produce an empty frame near the partition end.
+    checkSqlEquivalence(groupsTiedDF,
+      """SELECT id, pk,
+        |  SUM(v) OVER (PARTITION BY pk ORDER BY k
+        |    GROUPS BETWEEN 3 FOLLOWING AND UNBOUNDED FOLLOWING) AS sm,
+        |  COUNT(v) OVER (PARTITION BY pk ORDER BY k
+        |    GROUPS BETWEEN 3 FOLLOWING AND UNBOUNDED FOLLOWING) AS ct
+        |FROM t""".stripMargin)
+  }
+
+  test("GROUPS shrinking frame with NULL order key and DESC") {
+    val rows = (0 until 42).map { i =>
+      val kOpt: Option[Int] = if (i % 7 == 0 || i % 7 == 3) None else Some(i % 7)
+      (i, i % 2, kOpt, (i * 11) % 37)
+    }
+    checkSqlEquivalence(rows.toDF("id", "pk", "k", "v"),
+      """SELECT id, pk,
+        |  MIN(v) OVER (PARTITION BY pk ORDER BY k ASC NULLS FIRST
+        |    GROUPS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) AS a,
+        |  MAX(v) OVER (PARTITION BY pk ORDER BY k DESC NULLS LAST
+        |    GROUPS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) AS b
+        |FROM t""".stripMargin)
+  }
+
+  test("GROUPS shrinking partition below minPartitionRows falls back to legacy frame") {
+    val df = groupsTiedDF
+    val query =
+      """SELECT id, pk,
+        |  MIN(v) OVER (PARTITION BY pk ORDER BY k
+        |    GROUPS BETWEEN 2 PRECEDING AND UNBOUNDED FOLLOWING) AS mn
+        |FROM t""".stripMargin
+    df.createOrReplaceTempView("t")
+    try {
+      val baseline = withSQLConf(disableSegTree.toSeq: _*) {
+        spark.sql(query).collect().sortBy(_.toString)
+      }
+      // Force every partition onto the fallback path.
+      withSQLConf(
+          SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
+          SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1024") {
+        val actual = spark.sql(query).collect().sortBy(_.toString)
+        assert(actual.toSeq === baseline.toSeq)
+      }
+    } finally {
+      spark.catalog.dropTempView("t")
+    }
+  }
+
   // ============================================================
   // Feature-flag off: legacy frame is used
   // ============================================================

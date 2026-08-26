@@ -2059,6 +2059,21 @@
           "Filter expression <filter> of type <type> is not a boolean."
         ]
       },
+      "GROUPS_FRAME_NEGATIVE_OFFSET" : {
+        "message" : [
+          "The offset of a groups frame must be non-negative."
+        ]
+      },
+      "GROUPS_FRAME_NULL_OFFSET" : {
+        "message" : [
+          "The <location> bound of a groups frame must not be null."
+        ]
+      },
+      "GROUPS_FRAME_WITHOUT_ORDER" : {
+        "message" : [
+          "A groups window frame cannot be used in an unordered window specification."
+        ]
+      },
       "HASH_FILE_TYPE" : {
         "message" : [
           "The function <functionName> does not support elements of the \"FILE\" type."
