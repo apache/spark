@@ -209,9 +209,12 @@ object SQLExecution extends Logging {
                   sc.listenerBus.post(startEvent)
                   throw e
                 case Right(f) =>
-                  val planDescriptionMode =
-                    ExplainMode.fromString(sparkSession.sessionState.conf.uiExplainMode)
-                  val planDesc = queryExecution.explainString(planDescriptionMode)
+                  val planDescriptionMode = {
+                    val mode = sparkSession.sessionState.conf.uiExplainMode
+                    if (mode == "NONE") None else Some(ExplainMode.fromString(mode))
+                  }
+                  val planDesc = planDescriptionMode.map(queryExecution.explainString).getOrElse(
+                    "No plan description because spark.sql.ui.explainMode=none")
                   val planInfo = try {
                     SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan)
                   } catch {
