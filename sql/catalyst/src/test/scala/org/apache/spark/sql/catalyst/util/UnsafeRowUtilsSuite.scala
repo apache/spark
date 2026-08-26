@@ -231,11 +231,23 @@ class UnsafeRowUtilsSuite extends SparkFunSuite with SQLConfHelper {
         InternalRow(array(utf8("hello"), null, utf8("world"))),
         InternalRow(array(utf8("hello"), null, utf8("other")))),
       KeyContractCase(
+        "nested array with ICU collation",
+        StructType(StructField("a", ArrayType(ArrayType(unicodeCI))) :: Nil),
+        InternalRow(array(array(utf8("HELLO")), array(utf8("WORLD")))),
+        InternalRow(array(array(utf8("hello")), array(utf8("world")))),
+        InternalRow(array(array(utf8("hello")), array(utf8("other"))))),
+      KeyContractCase(
         "nested struct with LCASE RTRIM collation",
         StructType(StructField("nested", nestedType) :: Nil),
         InternalRow(InternalRow(7, utf8("VALUE"))),
         InternalRow(InternalRow(7, utf8("value   "))),
         InternalRow(InternalRow(8, utf8("value")))),
+      KeyContractCase(
+        "array of structs with LCASE RTRIM collation",
+        StructType(StructField("a", ArrayType(nestedType)) :: Nil),
+        InternalRow(array(InternalRow(7, utf8("VALUE")))),
+        InternalRow(array(InternalRow(7, utf8("value   ")))),
+        InternalRow(array(InternalRow(8, utf8("value"))))),
       KeyContractCase(
         "binary RTRIM string with different lengths",
         StructType(StructField("s", binaryRtrim) :: Nil),

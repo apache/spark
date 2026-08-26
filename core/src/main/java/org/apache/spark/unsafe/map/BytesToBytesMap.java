@@ -577,7 +577,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * Looks up a key and saves the result in the provided `loc`.
    *
    * This is a thread-safe version of `lookup`, provided that each thread supplies its own
-   * {@link Location}. The map must not be modified concurrently.
+   * {@link Location}. This guarantee excludes probe statistics, which may be inaccurate under
+   * concurrent lookup. The map must not be modified concurrently.
    */
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc) {
     if (keyOperationsFactory == null) {
@@ -596,7 +597,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * Looks up a key with a precomputed hash and saves the result in the provided `loc`.
    *
    * The provided hash is ignored when this map has configured key operations. Each thread must
-   * supply its own {@link Location}, and the map must not be modified concurrently.
+   * supply its own {@link Location}. Probe statistics may be inaccurate under concurrent lookup,
+   * and the map must not be modified concurrently.
    */
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
     assert(longArray != null);
@@ -694,7 +696,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     private int pos;
     /** True if this location points to a position where a key is defined, false otherwise */
     private boolean isDefined;
-    /** The hash code computed by the most recent lookup. */
+    /** The hash code used by the most recent lookup. */
     private int keyHashcode;
     private Object baseObject;  // the base object for key and value
     private long keyOffset;
@@ -858,8 +860,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
     /**
      * Append a new value for the key. This method could be called multiple times for a given key.
-     * The return value indicates whether the put succeeded or whether it failed because additional
-     * memory could not be acquired.
+     * The return value indicates whether the put succeeded or whether it failed because the map
+     * reached its capacity or additional memory could not be acquired.
      * <p>
      * It is only valid to call this method immediately after looking up the same key.
      * </p>
@@ -885,8 +887,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
      * Unspecified behavior if the key is not defined.
      * </p>
      *
-     * @return true if the put() was successful and false if the put() failed because memory could
-     *         not be acquired.
+     * @return true if the put() was successful and false if the map reached its capacity or memory
+     *         could not be acquired.
      */
     public boolean append(Object kbase, long koff, int klen, Object vbase, long voff, int vlen) {
       assert (klen % 8 == 0);
@@ -1082,6 +1084,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   /**
    * Returns the average number of probes per key lookup.
+   *
+   * This statistic may be inaccurate if lookups are performed concurrently.
    */
   public double getAvgHashProbesPerKey() {
     return (1.0 * numProbes) / numKeyLookups;

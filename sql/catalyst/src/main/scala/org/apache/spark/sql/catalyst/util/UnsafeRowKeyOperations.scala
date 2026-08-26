@@ -21,7 +21,7 @@ import com.ibm.icu.text.RawCollationKey
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, UnsafeArrayData, UnsafeRow}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -223,14 +223,17 @@ object UnsafeRowKeyOperations {
       elementType: DataType,
       hashScratch: HashScratch) extends FieldOperations {
     private val elementOperations = createFieldOperations(elementType, hashScratch)
+    private val hashArray = new UnsafeArrayData
+    private val leftArray = new UnsafeArrayData
+    private val rightArray = new UnsafeArrayData
 
     override protected def hashNonNull(
         input: SpecializedGetters, ordinal: Int, seed: Int): Int = {
-      val array = input.getArray(ordinal)
+      pointToArray(input, ordinal, hashArray)
       var result = seed
       var index = 0
-      while (index < array.numElements()) {
-        result = elementOperations.hash(array, index, result)
+      while (index < hashArray.numElements()) {
+        result = elementOperations.hash(hashArray, index, result)
         index += 1
       }
       result
@@ -241,8 +244,8 @@ object UnsafeRowKeyOperations {
         leftOrdinal: Int,
         right: SpecializedGetters,
         rightOrdinal: Int): Boolean = {
-      val leftArray = left.getArray(leftOrdinal)
-      val rightArray = right.getArray(rightOrdinal)
+      pointToArray(left, leftOrdinal, leftArray)
+      pointToArray(right, rightOrdinal, rightArray)
       if (leftArray.numElements() != rightArray.numElements()) {
         return false
       }
@@ -261,10 +264,14 @@ object UnsafeRowKeyOperations {
       dataType: StructType,
       hashScratch: HashScratch) extends FieldOperations {
     private val operations = new RowOperations(dataType, hashScratch)
+    private val hashRow = new UnsafeRow(dataType.length)
+    private val leftRow = new UnsafeRow(dataType.length)
+    private val rightRow = new UnsafeRow(dataType.length)
 
     override protected def hashNonNull(
         input: SpecializedGetters, ordinal: Int, seed: Int): Int = {
-      operations.hash(input.getStruct(ordinal, dataType.length), seed)
+      pointToStruct(input, ordinal, hashRow)
+      operations.hash(hashRow, seed)
     }
 
     override protected def areEqualNonNull(
@@ -272,9 +279,9 @@ object UnsafeRowKeyOperations {
         leftOrdinal: Int,
         right: SpecializedGetters,
         rightOrdinal: Int): Boolean = {
-      operations.areEqual(
-        left.getStruct(leftOrdinal, dataType.length),
-        right.getStruct(rightOrdinal, dataType.length))
+      pointToStruct(left, leftOrdinal, leftRow)
+      pointToStruct(right, rightOrdinal, rightRow)
+      operations.areEqual(leftRow, rightRow)
     }
   }
 
@@ -324,5 +331,53 @@ object UnsafeRowKeyOperations {
       baseOffset: Long, offsetAndSize: Long, region: BinaryRegion): Unit = {
     region.offset = baseOffset + (offsetAndSize >> 32).toInt
     region.length = offsetAndSize.toInt
+  }
+
+  private def pointToArray(
+      input: SpecializedGetters,
+      ordinal: Int,
+      target: UnsafeArrayData): Unit = input match {
+    case row: UnsafeRow =>
+      pointToArray(row.getBaseObject, row.getBaseOffset, row.getLong(ordinal), target)
+    case array: UnsafeArrayData =>
+      pointToArray(array.getBaseObject, array.getBaseOffset, array.getLong(ordinal), target)
+    case other =>
+      throw SparkException.internalError(
+        s"Expected unsafe grouping-key storage, found ${other.getClass.getName}")
+  }
+
+  private def pointToArray(
+      base: AnyRef,
+      baseOffset: Long,
+      offsetAndSize: Long,
+      target: UnsafeArrayData): Unit = {
+    target.pointTo(
+      base,
+      baseOffset + (offsetAndSize >> 32).toInt,
+      offsetAndSize.toInt)
+  }
+
+  private def pointToStruct(
+      input: SpecializedGetters,
+      ordinal: Int,
+      target: UnsafeRow): Unit = input match {
+    case row: UnsafeRow =>
+      pointToStruct(row.getBaseObject, row.getBaseOffset, row.getLong(ordinal), target)
+    case array: UnsafeArrayData =>
+      pointToStruct(array.getBaseObject, array.getBaseOffset, array.getLong(ordinal), target)
+    case other =>
+      throw SparkException.internalError(
+        s"Expected unsafe grouping-key storage, found ${other.getClass.getName}")
+  }
+
+  private def pointToStruct(
+      base: AnyRef,
+      baseOffset: Long,
+      offsetAndSize: Long,
+      target: UnsafeRow): Unit = {
+    target.pointTo(
+      base,
+      baseOffset + (offsetAndSize >> 32).toInt,
+      offsetAndSize.toInt)
   }
 }
