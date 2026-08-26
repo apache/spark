@@ -1023,7 +1023,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
             errorClass="CONNECT_INVALID_PLAN.NO_HANDLER_FOR_EXTENSION",
         )
 
-    def test_execute_command_optional_skips_unsupported_api(self):
+    def test_execute_command_skip_if_unsupported_skips_unsupported_api(self):
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         self.addCleanup(client.close)
         command = proto.Command()
@@ -1037,16 +1037,16 @@ class SparkConnectClientTestCase(unittest.TestCase):
             mock.patch.object(client, "_set_command_in_plan"),
             mock.patch.object(client, "_execute_and_fetch", side_effect=_raise),
         ):
-            # optional=True downgrades the unsupported-API failure to a warning + no-op result.
+            # skip_if_unsupported=True downgrades the unsupported-API failure to a warning + no-op.
             with self.assertWarns(RuntimeWarning):
-                data, properties, _ = client.execute_command(command, optional=True)
+                data, properties, _ = client.execute_command(command, skip_if_unsupported=True)
             self.assertIsNone(data)
             self.assertEqual(properties, {})
-            # The default (optional=False) still surfaces the failure.
+            # The default (skip_if_unsupported=False) still surfaces the failure.
             with self.assertRaises(SparkConnectException):
                 client.execute_command(command)
 
-    def test_execute_command_optional_reraises_other_errors(self):
+    def test_execute_command_skip_if_unsupported_reraises_other_errors(self):
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         self.addCleanup(client.close)
         command = proto.Command()
@@ -1058,11 +1058,11 @@ class SparkConnectClientTestCase(unittest.TestCase):
             mock.patch.object(client, "_set_command_in_plan"),
             mock.patch.object(client, "_execute_and_fetch", side_effect=_raise),
         ):
-            # optional=True must not swallow failures that are not unsupported-API rejections.
+            # skip_if_unsupported must not swallow failures that are not unsupported-API rejections.
             with self.assertRaises(SparkConnectException):
-                client.execute_command(command, optional=True)
+                client.execute_command(command, skip_if_unsupported=True)
 
-    def test_execute_command_as_iterator_optional_skips_unsupported_api(self):
+    def test_execute_command_as_iterator_skip_if_unsupported_skips_unsupported_api(self):
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         self.addCleanup(client.close)
         command = proto.Command()
@@ -1075,7 +1075,9 @@ class SparkConnectClientTestCase(unittest.TestCase):
             mock.patch.object(client, "_execute_and_fetch_as_iterator", side_effect=_raise),
         ):
             with self.assertWarns(RuntimeWarning):
-                results = list(client.execute_command_as_iterator(command, optional=True))
+                results = list(
+                    client.execute_command_as_iterator(command, skip_if_unsupported=True)
+                )
             self.assertEqual(results, [])
             with self.assertRaises(SparkConnectException):
                 list(client.execute_command_as_iterator(command))

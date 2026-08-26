@@ -135,14 +135,14 @@ _OPERATION_ID_METADATA_KEY = "spark-connect-operation-id"
 # client requested. Spark Connect is only guaranteed to be backward compatible (an older client
 # talking to a newer server); a newer client may send a request that an older server does not
 # understand. When that happens the server rejects the request with one of these conditions
-# without performing any work. A request issued with ``optional=True`` downgrades such a failure
-# to a warning and behaves as a no-op instead of raising, giving graceful newer-client /
-# older-server handling. Keep this restricted to conditions that unambiguously mean "the server
+# without performing any work. A request issued with ``skip_if_unsupported=True`` downgrades such
+# a failure to a warning and behaves as a no-op instead of raising, giving graceful newer-client
+# / older-server handling. Keep this restricted to conditions that unambiguously mean "the server
 # does not implement this API"; do not add conditions that can also signal a genuine user error.
 _UNSUPPORTED_API_ERROR_CONDITIONS = frozenset({"CONNECT_INVALID_PLAN.NO_HANDLER_FOR_EXTENSION"})
 
 
-def _is_unsupported_api_error(error: BaseException) -> bool:
+def _is_unsupported_api_error(error: Exception) -> bool:
     """Return True if ``error`` is a Spark Connect server rejection of an unsupported API."""
     return (
         isinstance(error, SparkConnectException)
@@ -1456,19 +1456,19 @@ class SparkConnectClient(object):
         self,
         command: pb2.Command,
         observations: Optional[Dict[str, Observation]] = None,
-        optional: bool = False,
+        skip_if_unsupported: bool = False,
     ) -> Tuple[Optional[pd.DataFrame], Dict[str, Any], ExecutionInfo]:
         """
         Execute given command.
 
-        If ``optional`` is True, the command is sent on a best-effort basis: when the server
-        does not implement the API (for example, a newer client issued the request to an older
-        server), the failure is downgraded to a warning and this returns an empty no-op result
-        instead of raising. Only set ``optional`` for commands whose effect is safe to skip on
-        servers that do not support them; any other failure is always re-raised.
+        If ``skip_if_unsupported`` is True, the command is sent on a best-effort basis: when the
+        server does not implement the API (for example, a newer client issued the request to an
+        older server), the failure is downgraded to a warning and this returns an empty no-op
+        result instead of raising. Only set ``skip_if_unsupported`` for commands whose effect is
+        safe to skip on servers that do not support them; any other failure is always re-raised.
 
         .. versionchanged:: 4.4.0
-            Added the ``optional`` parameter.
+            Added the ``skip_if_unsupported`` parameter.
         """
         if logger.isEnabledFor(logging.DEBUG):
             # inside an if statement to not incur a performance cost converting proto to string
@@ -1481,7 +1481,7 @@ class SparkConnectClient(object):
                 req, observations or {}
             )
         except SparkConnectException as e:
-            if optional and _is_unsupported_api_error(e):
+            if skip_if_unsupported and _is_unsupported_api_error(e):
                 _warn_unsupported_api(e)
                 return (None, {}, ExecutionInfo(None, None, req.operation_id))
             raise
@@ -1496,17 +1496,18 @@ class SparkConnectClient(object):
         self,
         command: pb2.Command,
         observations: Optional[Dict[str, Observation]] = None,
-        optional: bool = False,
+        skip_if_unsupported: bool = False,
     ) -> Iterator[Dict[str, Any]]:
         """
         Execute given command. Similar to execute_command, but the value is returned using yield.
 
-        If ``optional`` is True, the command is sent on a best-effort basis: when the server does
-        not implement the API and rejects the request before producing any response, the failure
-        is downgraded to a warning and iteration ends without yielding. See ``execute_command``.
+        If ``skip_if_unsupported`` is True, the command is sent on a best-effort basis: when the
+        server does not implement the API and rejects the request before producing any response,
+        the failure is downgraded to a warning and iteration ends without yielding. See
+        ``execute_command``.
 
         .. versionchanged:: 4.4.0
-            Added the ``optional`` parameter.
+            Added the ``skip_if_unsupported`` parameter.
         """
         if logger.isEnabledFor(logging.DEBUG):
             # inside an if statement to not incur a performance cost converting proto to string
@@ -1532,7 +1533,7 @@ class SparkConnectClient(object):
         except SparkConnectException as e:
             # Only downgrade to a no-op when the server rejected the API before streaming any
             # response; if partial results were already delivered, degrading would be unsafe.
-            if optional and not yielded and _is_unsupported_api_error(e):
+            if skip_if_unsupported and not yielded and _is_unsupported_api_error(e):
                 _warn_unsupported_api(e)
                 return
             raise
