@@ -62,6 +62,16 @@ class CountVectorizerSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
+  test("CountVectorizerModel caches the vocabulary dictionary by array identity") {
+    val vocabulary = Array("a", "b", "c")
+    val dict = CountVectorizerModel.getVocabularyDict(vocabulary)
+    assert(dict.get("a").intValue() === 0)
+    assert(dict.get("b").intValue() === 1)
+    assert(dict.get("c").intValue() === 2)
+    assert(CountVectorizerModel.getVocabularyDict(vocabulary) eq dict)
+    assert(!(CountVectorizerModel.getVocabularyDict(vocabulary.clone()) eq dict))
+  }
+
   test("CountVectorizer common cases") {
     val df = Seq(
       (0, split("a b c d e"),
