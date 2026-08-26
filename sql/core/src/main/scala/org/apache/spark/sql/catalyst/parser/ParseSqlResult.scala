@@ -296,7 +296,7 @@ object ParseSqlResult {
    * Collect multipart table/view identifiers, function names, and parameter
    * markers for lineage in a single deep walk. Target references name the
    * table/view a DML or DDL statement writes to or alters; source references
-   * name tables read in FROM clauses and query bodies. A single-part name is
+   * name tables read in FROM clauses and query bodies. A single-part source name is
    * dropped only when a CTE alias in scope at that node shadows it. Function /
    * variable identifiers are not collected as tables. Deduplicates while
    * preserving first-seen order within each category.
@@ -314,7 +314,8 @@ object ParseSqlResult {
     }
 
     def addTable(parts: Seq[String], scope: CteScope, role: TableRefRole): Unit = {
-      if (parts.nonEmpty && !isCteName(parts, scope)) {
+      if (parts.nonEmpty &&
+          (role == TableRefRole.Target || !isCteName(parts, scope))) {
         role match {
           case TableRefRole.Target => targetTables += parts
           case TableRefRole.Source => sourceTables += parts

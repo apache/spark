@@ -127,6 +127,10 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(sourceTableRefs(
       "WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x) SELECT * FROM a") ===
       Set(Seq("b")))
+
+    val insert = "WITH t AS (SELECT * FROM src) INSERT INTO t SELECT * FROM t"
+    assert(targetTableRefs(insert) === Set(Seq("t")))
+    assert(sourceTableRefs(insert) === Set(Seq("src")))
   }
 
   test("positional markers inside BEGIN END are counted once") {

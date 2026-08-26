@@ -23,7 +23,7 @@ import java.util.Locale
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, ResolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, EliminateSubqueryAliases, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
@@ -43,6 +43,10 @@ import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 private object HiveWriteTable {
   def unapply(insert: InsertIntoStatement): Option[CatalogTable] = insert.table match {
     case ResolvedTable(_, _, V1Table(table: CatalogTable), _) => Some(table)
+    case view: ResolvedTempView =>
+      view.viewRelation.plan
+        .map(EliminateSubqueryAliases.apply)
+        .collect { case relation: HiveTableRelation => relation.tableMeta }
     case _ => None
   }
 }

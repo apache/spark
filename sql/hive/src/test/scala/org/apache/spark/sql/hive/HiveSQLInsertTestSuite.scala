@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import org.apache.hadoop.hive.conf.HiveConf
 
 import org.apache.spark.{SparkException, SparkThrowable}
-import org.apache.spark.sql.SQLInsertTestSuite
+import org.apache.spark.sql.{Row, SQLInsertTestSuite}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class HiveSQLInsertTestSuite extends SQLInsertTestSuite with TestHiveSingleton {
@@ -49,6 +49,27 @@ class HiveSQLInsertTestSuite extends SQLInsertTestSuite with TestHiveSingleton {
       v2Parameters: Map[String, String]): Unit = {
     checkError(exception = exception, sqlState = None, condition = v1ErrorClass,
       parameters = v1Parameters)
+  }
+
+  test("insert into a Hive-backed temporary view") {
+    Seq(false, true).foreach { convertOnInsert =>
+      withTable("t") {
+        withTempView("v") {
+          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+            createTable("t", Seq("i"), Seq("int"))
+            spark.table("t").createOrReplaceTempView("v")
+          }
+
+          withSQLConf(
+            HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertOnInsert.toString,
+            HiveUtils.CONVERT_INSERTING_UNPARTITIONED_TABLE.key -> convertOnInsert.toString) {
+            sql("INSERT INTO v VALUES (1)")
+          }
+
+          checkAnswer(spark.table("t"), Row(1))
+        }
+      }
+    }
   }
 
   test("SPARK-54853: SET hive.exec.max.dynamic.partitions takes effect in session conf") {

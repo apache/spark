@@ -322,7 +322,7 @@ private[sql] object InsertWriteRelation {
 /**
  * Replaces [[UnresolvedCatalogRelation]] with concrete relation logical plans.
  *
- * TODO: we should remove the special handling for hive tables after completely making hive as a
+ * TODO: remove the special handling for Hive tables once Hive is fully supported as a
  * data source.
  */
 class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {

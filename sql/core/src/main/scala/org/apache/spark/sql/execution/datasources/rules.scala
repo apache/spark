@@ -672,7 +672,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
       case insert: InsertIntoStatement =>
         InsertWriteRelation(SparkSession.active, insert) match {
           case Some(LogicalRelationWithTable(relation, _)) =>
-            // Get all input data source relations of the query.
+            // Get input data source relations from the query's child-plan tree.
             val srcRelations = insert.query.collect {
               case l: LogicalRelation => l.relation
             }
