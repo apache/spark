@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count, Sum}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, DeleteFromTable, Filter, Join, JoinHint, LocalRelation, LogicalPlan, LogicalPlanIntegrity, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, DeleteFromTable, Filter, Join, JoinHint, LocalRelation, LogicalPlan, LogicalPlanIntegrity, Project, Sort}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, LongType}
 
@@ -80,19 +80,25 @@ class ConvertToCatalystSuite extends PlanTest {
    */
   private def convert(plan: LogicalPlan): LogicalPlan = {
     val converted = ConvertToCatalyst(plan)
-    // Every operator, not `LogicalPlanIntegrity.validateNoDanglingReferences`, whose `collectFirst`
-    // stops at the root -- and the root is never the Project this rule inserts.
-    converted.foreach {
-      case n if n.resolved && n.children.nonEmpty =>
-        assert(n.missingInput.isEmpty,
-          s"${n.missingInput.mkString(", ")} dangling in ${n.nodeName}:\n$converted")
-      case _ =>
-    }
-    // Resolved plans only: comparing schemas asks every output attribute for its dataType, and a
-    // hand-built plan with an unbound lambda hasn't got one.
+    // What the real Optimizer checks around every rule when `spark.sql.planChangeValidation` is on
+    // (it defaults to `Utils.isTesting`) and what applying a rule object directly skips: dangling
+    // references, duplicate ExprIds, special expressions in the wrong operator, aggregate shape,
+    // nullability and schema. Duplicate ExprIds is the one worth naming -- it is what catches a
+    // rewrite that mints two aliases with one id.
+    //
+    // Resolved plans only: the full check asks every output attribute for its dataType, and a
+    // hand-built plan with an unbound lambda hasn't got one. Those keep the dangling-reference walk,
+    // per operator rather than `validateNoDanglingReferences`, whose `collectFirst` stops at the
+    // root -- and the root is never the Project this rule inserts.
     if (plan.resolved) {
-      LogicalPlanIntegrity.validateSchemaOutput(plan, converted).foreach { failure =>
-        fail(s"Schema changed by conversion: $failure\n$converted")
+      LogicalPlanIntegrity.validateOptimizedPlan(plan, converted, lightweight = false)
+        .foreach(failure => fail(s"$failure\n$converted"))
+    } else {
+      converted.foreach {
+        case n if n.resolved && n.children.nonEmpty =>
+          assert(n.missingInput.isEmpty,
+            s"${n.missingInput.mkString(", ")} dangling in ${n.nodeName}:\n$converted")
+        case _ =>
       }
     }
     // A leftover reference is Unevaluable and throws at execution. Check it here so no test has to
@@ -376,6 +382,21 @@ class ConvertToCatalystSuite extends PlanTest {
       val converted = convert(Project(Seq(Alias(call, "v")()), LocalRelation(arr)))
       assert(converted.expressions.head.exists(_.isInstanceOf[PythonUDF]),
         s"Expected the Python UDF kept: $converted")
+    }
+  }
+
+  test("gives one call in two of an operator's slots a single column") {
+    transpileOn {
+      // The same node, twice in one Sort. An operator can do this on its own -- Window copies its
+      // spec into every WindowSpecDefinition, MergeRows has five slots -- and each slot is converted
+      // separately, so an id minted per visit gave this call two columns and two draws.
+      val call = makeTPUDF(makePyUDF(draw()), Add(pref(0), pref(0)))
+      val converted = convert(Sort(
+        Seq(SortOrder(call, Ascending), SortOrder(Multiply(call, Literal(2L)), Descending)),
+        global = true,
+        Project(Seq(Alias(attrA, "a")()), LocalRelation(attrA))))
+      assert(paramColumns(converted).length == 1,
+        s"Expected one column for one call: $converted")
     }
   }
 

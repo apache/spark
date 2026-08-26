@@ -1077,13 +1077,26 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
    * which computes its inputs below MergeRows and raises on an unmatched row under ANSI today.
    * Declining there is what would diverge.
    */
-  private def convertOperator(p: LogicalPlan): LogicalPlan = {
+  private def convertOperator(p: LogicalPlan): LogicalPlan =
+    // A column widens the operator's child, and we only learn whether this operator's output is a
+    // widening of its child's after building it. When it isn't, convert again without columns rather
+    // than fail the query: `preEvaluate` says yes to every single-child operator that isn't a Command
+    // or an Aggregate, which is a longer list than anyone has thought about -- Window, Generate,
+    // Expand, CollectMetrics, ScriptTransformation, whatever an extension adds.
+    convertOperator(p, withColumns = true).getOrElse(convertOperator(p, withColumns = false).get)
+
+  private def convertOperator(p: LogicalPlan, withColumns: Boolean): Option[LogicalPlan] = {
     val extraColumns = mutable.ArrayBuffer.empty[Alias]
     val columnByKey = mutable.HashMap.empty[ShareKey, Alias]
+    // Per call *node*, by identity: an operator can hold one node in two expression slots -- Window
+    // copies its spec into every WindowSpecDefinition, MergeRows has five -- and each slot is
+    // visited on its own. Minting an id per visit gave one call two columns, so two draws.
+    val callIds = new java.util.IdentityHashMap[TranspiledPythonUDF, java.lang.Long]()
     val preEvaluate: Option[PreEvaluate] =
-      if (p.children.length == 1 && !p.isInstanceOf[Command] && !p.isInstanceOf[Aggregate]) {
+      if (withColumns && p.children.length == 1 && !p.isInstanceOf[Command] &&
+          !p.isInstanceOf[Aggregate]) {
         val child = p.children.head
-        Some((args, option) => {
+        Some((call, args, option) => {
           // What shares a column with what. One key per distinct deterministic argument in the
           // operator, so `f(a + 1, a + 1)` computes `a + 1` once and two calls sharing an
           // argument share a column. A nondeterministic argument shares with nothing, not even
@@ -1097,7 +1110,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
           // one would read a column declared without nulls -- enough for NullPropagation to fold
           // an `IsNull` to false and drop a branch.
           // (scala.util qualified because `expressions._` has its own Left and Right.)
-          val callId = NamedExpression.newExprId.id
+          val callId = callIds.computeIfAbsent(call, _ => NamedExpression.newExprId.id)
           def shareKey(index: Int): ShareKey =
             if (args(index).deterministic) {
               scala.util.Left((args(index).canonicalized, args(index).nullable))
@@ -1175,19 +1188,20 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
     val read = AttributeSet(converted.expressions.flatMap(_.references))
     val columns = extraColumns.filter(a => read.contains(a.toAttribute)).toSeq
     if (columns.isEmpty) {
-      converted
+      Some(converted)
     } else {
       val child = p.children.head
       val widened = converted.withNewChildren(Seq(Project(child.output ++ columns, child)))
-      // A Filter passes its child's output straight up, so it carries our columns now. Project
-      // them back off to keep the schema. Asserts lifted from RewriteWithExpression: we only
-      // ever append, so an operator breaking either is one we should have declined.
-      assert(p.output.length <= widened.output.length)
-      if (p.output.length < widened.output.length) {
-        assert(p.outputSet.subsetOf(widened.outputSet))
-        Project(p.output, widened)
+      // A Filter passes its child's output straight up, so it carries our columns now. Project them
+      // back off to keep the schema. The checks are the two RewriteWithExpression asserts, as a
+      // condition: we only ever append, so an operator whose output shrinks or loses an attribute is
+      // one we should not have offered a column to.
+      if (p.output.length > widened.output.length || !p.outputSet.subsetOf(widened.outputSet)) {
+        None
+      } else if (p.output.length < widened.output.length) {
+        Some(Project(p.output, widened))
       } else {
-        widened
+        Some(widened)
       }
     }
   }
@@ -1200,9 +1214,11 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
 
   /**
    * Notes the columns to add to the operator's child, and points the option's refs at them. None
-   * means we can't compute a draw the body is owed here, and the caller keeps the Python UDF.
+   * means we can't compute an evaluation the body is owed here, and the caller keeps the Python UDF.
+   * The call comes along so that two visits to one node share its columns.
    */
-  private type PreEvaluate = (Seq[Expression], Expression) => Option[Expression]
+  private type PreEvaluate =
+    (TranspiledPythonUDF, Seq[Expression], Expression) => Option[Expression]
 
   /**
    * The parameters this call owes one evaluation: read more than once, with an argument that isn't
@@ -1316,7 +1332,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
               }
               val option = recurse(catalystExpr, parentIsUdf = false)
               val substituted = preEvaluate match {
-                case Some(f) => f(args, option)
+                case Some(f) => f(s, args, option)
                 // No column can go here at all, so an evaluation the body is owed can only be kept
                 // by the Python UDF, which computes its inputs once in a projection of its own.
                 case None =>

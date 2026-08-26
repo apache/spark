@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkException.internalError
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -324,13 +326,23 @@ object TranspiledUDFParameter {
    * Every argument index an option reads, in tree order, one entry per read. Callers want both the
    * set and the counts: a parameter read once is evaluated once wherever it sits, so how often it
    * shows up is what decides whether a column buys anything.
+   *
+   * A nested call's own options are skipped: those indexes count against *its* arguments, and
+   * reading them as ours reports positions we may not have. Its arguments are ours, though -- they
+   * are expressions in our index space and may hold our references -- so the walk carries on
+   * through [[TranspiledPythonUDF.pythonUDFExpr]].
    */
-  def referencedIndexes(option: Expression): Seq[Int] =
-    if (!option.containsPattern(TRANSPILED_UDF_PARAMETER)) {
-      Nil
-    } else {
-      option.collect { case p: TranspiledUDFParameter => p.index }
+  def referencedIndexes(option: Expression): Seq[Int] = {
+    val indexes = mutable.ArrayBuffer.empty[Int]
+    def walk(e: Expression): Unit = e match {
+      case _ if !e.containsPattern(TRANSPILED_UDF_PARAMETER) => // nothing below here
+      case p: TranspiledUDFParameter => indexes += p.index
+      case nested: TranspiledPythonUDF => walk(nested.pythonUDFExpr)
+      case other => other.children.foreach(walk)
     }
+    walk(option)
+    indexes.toSeq
+  }
 
   /**
    * Points every reference in `option` at whatever `replacement` gives for its index.
@@ -356,20 +368,27 @@ object TranspiledUDFParameter {
         substituted
     }
 
-  /** Fills in each reference's type from the bound arguments, once those are resolved. */
-  def resolveTypes(option: Expression, arguments: Seq[Expression]): Expression =
-    option.transformUpWithPruning(_.containsPattern(TRANSPILED_UDF_PARAMETER)) {
-      case p: TranspiledUDFParameter if p.paramType.isEmpty =>
-        // Only a hand-built option gets here out of range; the builder bounds-checks what it emits.
-        // Left untyped the node never resolves and CheckAnalysis blames an internal error, which
-        // tells nobody anything.
-        if (p.index >= arguments.length) {
-          throw QueryCompilationErrors.invalidUDFParameterPlaceholderIndex(
-            p.index, arguments.length)
-        }
-        val arg = arguments(p.index)
-        p.copy(paramType = Some(arg.dataType), paramNullable = arg.nullable)
-    }
+  /**
+   * Fills in each reference's type from the bound arguments, once those are resolved. Skips a nested
+   * call's options for the same reason [[referencedIndexes]] does: typing those from our arguments
+   * would type them from the wrong call's.
+   */
+  def resolveTypes(option: Expression, arguments: Seq[Expression]): Expression = option match {
+    case _ if !option.containsPattern(TRANSPILED_UDF_PARAMETER) => option
+    case p: TranspiledUDFParameter if p.paramType.isEmpty =>
+      // Only a hand-built option gets here out of range; the builder bounds-checks what it emits.
+      // Left untyped the node never resolves and CheckAnalysis blames an internal error, which
+      // tells nobody anything.
+      if (p.index >= arguments.length) {
+        throw QueryCompilationErrors.invalidUDFParameterPlaceholderIndex(p.index, arguments.length)
+      }
+      val arg = arguments(p.index)
+      p.copy(paramType = Some(arg.dataType), paramNullable = arg.nullable)
+    case nested: TranspiledPythonUDF =>
+      nested.withNewChildren(
+        resolveTypes(nested.pythonUDFExpr, arguments) +: nested.transpiledOptions)
+    case other => other.mapChildren(resolveTypes(_, arguments))
+  }
 }
 
 
