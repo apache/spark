@@ -1243,43 +1243,71 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
-  // Allowlist for the inventory below: pass-through and container cases that may keep
-  // CHAR(n)/VARCHAR(n): aggregates/ordering that return an input unchanged, null-handling,
-  // element access, array/map/struct constructors, and collection rearrangements that keep
-  // element types. Coverage is limited to the seven fixed argumentShapes templates in the test;
-  // a leak only at another arity or nested shape would not fail here. For those shapes,
-  // anything not listed must reduce to plain STRING.
+  // Pass-through and container functions that may keep CHAR(n)/VARCHAR(n): aggregates
+  // and ordering that return an input unchanged, null-handling, element access,
+  // array/map/struct constructors, and collection rearrangements that keep element types.
+  // Legitimacy is still per shape: reverse(array(c)) may keep CHAR, reverse(c) must not.
   private val charVarcharPassThroughFunctions = Set(
     "any_value", "approx_top_k", "approx_top_k_accumulate", "array", "array_agg", "array_compact",
     "array_distinct", "array_max", "array_min", "array_repeat", "array_sort", "arrays_zip",
     "coalesce", "collect_list", "collect_set", "collect_union", "concat", "explode",
-    "explode_outer", "first", "first_value", "get", "greatest", "ifnull", "last", "last_value",
-    "least", "map", "max", "max_by", "measure", "min", "min_by", "mode", "named_struct", "nullif",
-    "nullifzero", "nvl", "reverse", "shuffle", "sort_array", "struct", "trim_array", "when")
+    "explode_outer", "first", "first_value", "flatten", "get", "greatest", "ifnull", "last",
+    "last_value", "least", "map", "map_concat", "map_entries", "map_keys", "map_values", "max",
+    "max_by", "measure", "min", "min_by", "mode", "named_struct", "nullif", "nullifzero", "nvl",
+    "nvl2", "reverse", "shuffle", "sort_array", "struct", "trim_array", "when")
+
+  // String-transforming shapes of otherwise pass-through functions. These must reduce to
+  // unconstrained STRING even though the same function keeps CHAR on collection inputs.
+  private val charVarcharTransformingCalls = Set(
+    "concat(c)", "concat(c, c)", "concat(c, c, c)", "concat(c, 'x')", "concat('x', c)",
+    "reverse(c)")
+
+  private val inventoryScalarShapes = Seq(
+    "%s(c)", "%s(c, c)", "%s(c, 'x')", "%s('x', c)", "%s(c, 1)", "%s(array(c))",
+    "%s(array(c), '-')")
+
+  private val inventoryNestedShapes = Seq(
+    "%s(c, c, c)", "%s(array(array(c)))", "%s(named_struct('x', c))",
+    "%s(map(c, 1))", "%s(map(1, c))")
+
+  private def assertNoInventoriedCharVarcharLeaks(argumentShapes: Seq[String]): Unit = {
+    val (passThroughLeaks, transformingLeaks) =
+      FunctionRegistry.functionSet.map(_.funcName).toSeq.sorted.flatMap { name =>
+        argumentShapes.map(_.format(name)).flatMap { call =>
+          // Most shapes do not typecheck for a given function; those are simply not evidence.
+          val keepsCharVarchar =
+            Try(sql(s"SELECT $call AS r FROM std_inventory").schema.head.dataType)
+              .toOption
+              .exists(CharVarcharUtils.hasCharVarchar)
+          Option.when(keepsCharVarchar &&
+            (!charVarcharPassThroughFunctions.contains(name) ||
+              charVarcharTransformingCalls.contains(call)))((name, call))
+        }
+      }.partition { case (_, call) => !charVarcharTransformingCalls.contains(call) }
+
+    assert(passThroughLeaks.isEmpty,
+      "these inventoried calls returned a CHAR/VARCHAR type; if they legitimately pass through " +
+        "their input type, add the function name to charVarcharPassThroughFunctions: " +
+        passThroughLeaks.map(_._2).mkString(", "))
+    assert(transformingLeaks.isEmpty,
+      "these transforming calls returned a CHAR/VARCHAR type; fix the expression to return " +
+        "plain STRING: " + transformingLeaks.map(_._2).mkString(", "))
+  }
 
   test("SPARK-58794: inventoried shapes do not leak CHAR/VARCHAR under standardSemantics") {
-    val argumentShapes = Seq(
-      "%s(c)", "%s(c, c)", "%s(c, 'x')", "%s('x', c)", "%s(c, 1)", "%s(array(c))",
-      "%s(array(c), '-')")
-
     withTable("std_inventory") {
       sql("CREATE TABLE std_inventory (c CHAR(5)) USING parquet")
       withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-        val leaks = FunctionRegistry.functionSet.map(_.funcName).toSeq.sorted
-          .filterNot(charVarcharPassThroughFunctions.contains)
-          .flatMap { name =>
-            argumentShapes.map(_.format(name)).filter { call =>
-              // Most shapes do not typecheck for a given function; those are simply not evidence.
-              Try(sql(s"SELECT $call AS r FROM std_inventory").schema.head.dataType)
-                .toOption
-                .exists(CharVarcharUtils.hasCharVarchar)
-            }
-          }
+        assertNoInventoriedCharVarcharLeaks(inventoryScalarShapes)
+      }
+    }
+  }
 
-        assert(leaks.isEmpty,
-          "these inventoried calls returned a CHAR/VARCHAR type; either fix the expression to " +
-            "return plain STRING or add it to charVarcharPassThroughFunctions: " +
-            leaks.mkString(", "))
+  test("SPARK-59016: nested inventoried shapes do not leak CHAR/VARCHAR") {
+    withTable("std_inventory") {
+      sql("CREATE TABLE std_inventory (c CHAR(5)) USING parquet")
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+        assertNoInventoriedCharVarcharLeaks(inventoryNestedShapes)
       }
     }
   }
