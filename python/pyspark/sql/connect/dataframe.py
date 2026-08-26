@@ -2332,7 +2332,7 @@ class DataFrame(ParentDataFrame):
             for f in schema.fields
         ]
 
-        def foreach_partition_func(itr: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:
+        def foreach_partition_func(itr: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
             def flatten() -> Iterator[Row]:
                 for table in itr:
                     columnar_data = [

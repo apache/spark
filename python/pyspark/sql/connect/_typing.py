@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from types import FunctionType
-from typing import Any, Callable, Iterable, Union, Optional, NewType, Protocol, Tuple
+from typing import Any, Callable, Iterable, Iterator, Union, Optional, NewType, Protocol, Tuple
 import datetime
 import decimal
 
@@ -44,9 +44,9 @@ DataTypeOrString = Union[DataType, str]
 
 DataFrameLike = PandasDataFrame
 
-PandasMapIterFunction = Callable[[Iterable[DataFrameLike]], Iterable[DataFrameLike]]
+PandasMapIterFunction = Callable[[Iterator[DataFrameLike]], Iterator[DataFrameLike]]
 
-ArrowMapIterFunction = Callable[[Iterable[pyarrow.RecordBatch]], Iterable[pyarrow.RecordBatch]]
+ArrowMapIterFunction = Callable[[Iterator[pyarrow.RecordBatch]], Iterator[pyarrow.RecordBatch]]
 
 PandasGroupedMapFunction = Union[
     Callable[[DataFrameLike], DataFrameLike],

@@ -5459,6 +5459,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYTHON_UDF_MAP_IN_BATCH_LEGACY_ACCEPT_ANY_ITERABLE_ENABLED =
+    buildConf("spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled")
+      .internal()
+      .doc("When true, mapInPandas and mapInArrow UDFs may return any iterable (e.g. a list) " +
+        "rather than a strict iterator, matching the behavior before 4.3.0. When false, the " +
+        "returned value must be an iterator, matching the declared Iterator[...] signatures.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val PYTHON_PLANNER_EXEC_MEMORY =
     buildConf("spark.sql.planner.pythonExecution.memory")
       .doc("Specifies the memory allocation for executing Python code in Spark driver, in MiB. " +
@@ -9332,6 +9343,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyPandasConversion: Boolean = getConf(PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED)
 
   def legacyPandasConversionUDF: Boolean = getConf(PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED)
+
+  def legacyMapInBatchAcceptAnyIterable: Boolean =
+    getConf(PYTHON_UDF_MAP_IN_BATCH_LEGACY_ACCEPT_ANY_ITERABLE_ENABLED)
 
   def pythonPlannerExecMemory: Option[Long] = getConf(PYTHON_PLANNER_EXEC_MEMORY)
 

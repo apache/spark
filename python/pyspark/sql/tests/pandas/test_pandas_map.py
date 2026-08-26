@@ -86,11 +86,39 @@ class MapInPandasTestsMixin:
         expected = df.collect()
         self.assertEqual(actual, expected)
 
-        # test returning list of DataFrames
-        df = self.spark.range(10, numPartitions=3)
-        actual = df.mapInPandas(lambda it: [pdf for pdf in it], "id long").collect()
-        expected = df.collect()
-        self.assertEqual(actual, expected)
+    def test_map_in_pandas_legacy_accept_any_iterable(self):
+        # With the legacy flag enabled, returning a non-Iterator iterable (e.g. list) is accepted.
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled": True}
+        ):
+            df = self.spark.range(10, numPartitions=3)
+            actual = df.mapInPandas(lambda it: [pdf for pdf in it], "id long").collect()
+            expected = df.collect()
+            self.assertEqual(actual, expected)
+
+    def test_map_in_pandas_legacy_accept_sequence_protocol(self):
+        # A sequence-protocol object (implements __getitem__ but not __iter__) is iterable via
+        # iter(...) even though it is not a collections.abc.Iterable, so the legacy flag must
+        # accept it too.
+        class SequenceOnly:
+            def __init__(self, items):
+                self._items = items
+
+            def __getitem__(self, index):
+                return self._items[index]
+
+        self.assertFalse(hasattr(SequenceOnly([]), "__iter__"))
+
+        def returns_sequence(iterator):
+            return SequenceOnly([pdf for pdf in iterator])
+
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled": True}
+        ):
+            df = self.spark.range(10, numPartitions=3)
+            actual = df.mapInPandas(returns_sequence, "id long").collect()
+            expected = df.collect()
+            self.assertEqual(actual, expected)
 
     def test_multiple_columns(self):
         data = [(1, "foo"), (2, None), (3, "bar"), (4, "bar")]
@@ -186,6 +214,10 @@ class MapInPandasTestsMixin:
         def bad_iter_elem(_):
             return iter([1])
 
+        def list_not_iter(iterator):
+            # Iterable but not an Iterator: violates the Iterator[pandas.DataFrame] contract.
+            return [pdf for pdf in iterator]
+
         with self.assertRaisesRegex(
             PythonException,
             "Return type of the user-defined function should be iterator of pandas.DataFrame, "
@@ -199,6 +231,13 @@ class MapInPandasTestsMixin:
             "but is iterator of int",
         ):
             (self.spark.range(10, numPartitions=3).mapInPandas(bad_iter_elem, "a int").count())
+
+        with self.assertRaisesRegex(
+            PythonException,
+            "Return type of the user-defined function should be iterator of pandas.DataFrame, "
+            "but is list",
+        ):
+            (self.spark.range(10, numPartitions=3).mapInPandas(list_not_iter, "a int").count())
 
     def test_dataframes_with_other_column_names(self):
         with self.quiet():
