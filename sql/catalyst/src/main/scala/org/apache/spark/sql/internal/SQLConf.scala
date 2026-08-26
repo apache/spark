@@ -2647,6 +2647,15 @@ object SQLConf {
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
 
+  val USE_SEQUENTIAL_CACHE_NAME = buildConf("spark.sql.useSequentialCacheName")
+    .internal()
+    .doc("When true and the cached table has no name, use a sequential number like " +
+      "'CachedRDD 1' as the cached name instead of the abbreviated plan tree string. " +
+      "Rendering the plan tree string can be expensive for large plans.")
+    .version("4.4.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val DROP_TABLE_VIEW_ENABLED =
     buildConf("spark.sql.dropTableOnView.enabled")
       .doc("When true, DROP TABLE command will work on VIEW as well.")

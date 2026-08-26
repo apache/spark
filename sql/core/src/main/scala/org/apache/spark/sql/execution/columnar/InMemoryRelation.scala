@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import java.util.concurrent.atomic.AtomicLong
+
 import com.esotericsoftware.kryo.{DefaultSerializer, Kryo, Serializer => KryoSerializer}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 
@@ -255,6 +257,11 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
   }
 }
 
+private[sql] object CachedRDDBuilder {
+  private val _nextCachedRDDId = new AtomicLong(0)
+  def nextCachedRDDId(): Long = _nextCachedRDDId.getAndIncrement
+}
+
 private[sql]
 case class CachedRDDBuilder(
     serializer: CachedBatchSerializer,
@@ -289,8 +296,13 @@ case class CachedRDDBuilder(
   // late updates from making a rebuilt cache appear complete.
   private var partitionStats = newPartitionStats()
 
-  val cachedName = tableName.map(n => s"In-memory table $n")
-    .getOrElse(Utils.abbreviate(cachedPlan.toString, 1024))
+  val cachedName: String = tableName.map(n => s"In-memory table $n").getOrElse {
+    if (cachedPlan.session.conf.get(SQLConf.USE_SEQUENTIAL_CACHE_NAME)) {
+      s"CachedRDD ${CachedRDDBuilder.nextCachedRDDId()}"
+    } else {
+      Utils.abbreviate(cachedPlan.toString, 1024)
+    }
+  }
 
   val supportsColumnarInput: Boolean = {
     cachedPlan.supportsColumnar &&

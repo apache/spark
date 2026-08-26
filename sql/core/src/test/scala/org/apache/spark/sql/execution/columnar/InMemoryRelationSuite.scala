@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions.expr
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSessionBase
 import org.apache.spark.storage.StorageLevel
 
@@ -49,6 +50,23 @@ class InMemoryRelationSuite extends SparkFunSuite
     // `doCanonicalize`, which re-maps `outputOrdering` through `output`, so a stale ordering
     // throws here rather than merely producing an unequal plan.
     assert(r1.sameResult(r2))
+  }
+
+  test("sequential cached name for anonymous cached tables") {
+    val d = spark.range(1)
+    withSQLConf(SQLConf.USE_SEQUENTIAL_CACHE_NAME.key -> "true") {
+      val r1 = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, None)
+      val r2 = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, None)
+      assert(r1.cacheBuilder.cachedName.matches("CachedRDD \\d+"))
+      assert(r2.cacheBuilder.cachedName.matches("CachedRDD \\d+"))
+      assert(r1.cacheBuilder.cachedName != r2.cacheBuilder.cachedName)
+      // Named tables keep the usual name.
+      val r3 = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, Some("t1"))
+      assert(r3.cacheBuilder.cachedName == "In-memory table t1")
+    }
+    // The default keeps the abbreviated plan tree string.
+    val r4 = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, None)
+    assert(!r4.cacheBuilder.cachedName.startsWith("CachedRDD "))
   }
 
   test("SPARK-47177: Cached SQL plan do not display final AQE plan in explain string") {
