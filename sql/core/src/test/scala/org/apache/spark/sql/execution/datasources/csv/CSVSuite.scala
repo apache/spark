@@ -3997,6 +3997,27 @@ abstract class CSVSuite
     }
   }
 
+  test("csv variant retains explicit schema with variantRespectInferSchema") {
+    // Explicit schemas with VariantType columns share a converter with singleVariantColumn,
+    // so retention applies there too. Check and assert the type using schema_of_variant.
+    withTempPath { path =>
+      Files.write(path.toPath, "1000,0001,'0001'\n".getBytes(StandardCharsets.UTF_8))
+      val schema = "c1 variant, c2 variant, c3 variant"
+      val exprs = Seq("schema_of_variant(c1)", "schema_of_variant(c2)", "schema_of_variant(c3)")
+
+      // With variantRespectInferSchema values should be treated as string
+      val retained = spark.read.schema(schema)
+        .options(Map("inferSchema" -> "false", "variantRespectInferSchema" -> "true"))
+        .csv(path.getCanonicalPath)
+      checkAnswer(retained.selectExpr(exprs: _*), Row("STRING", "STRING", "STRING"))
+
+      // Without variantRespectInferSchema values should be inferred. Integral values are
+      // inferred as BIGINT by default.
+      val inferred = spark.read.schema(schema).csv(path.getCanonicalPath)
+      checkAnswer(inferred.selectExpr(exprs: _*), Row("BIGINT", "BIGINT", "STRING"))
+    }
+  }
+
   test("write variant with csv is disallowed") {
     checkError(
       exception = intercept[AnalysisException] {
