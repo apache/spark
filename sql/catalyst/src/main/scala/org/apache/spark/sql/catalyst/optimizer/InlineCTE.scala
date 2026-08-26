@@ -91,10 +91,10 @@ case class InlineCTE(
   private def validateNoOuterReferencesAcrossCTEBoundary(cteDef: CTERelationDef): Unit = {
     // Only an outer reference that actually escapes the CTE definition is invalid. An outer
     // reference that points to an attribute produced by an operator inside the definition
-    // body (e.g. a correlated subquery whose correlated column lives in the body) is
-    // self-contained and safe to materialize. So walk the whole definition (main tree plus
-    // nested subquery plans) once, collect every attribute bound anywhere in the definition,
-    // and reject only references that resolve to none of them.
+    // body (e.g. a correlated subquery whose correlated column lives in the body) does not
+    // escape, so the definition is self-contained and safe to materialize. Walk the whole
+    // definition (main tree plus nested subquery plans) once, collect every attribute bound
+    // anywhere in the definition, and reject only references that resolve to none of them.
     val allNodes = cteDef.child.collectWithSubqueries { case n: LogicalPlan => n }
     val boundExprIds = allNodes.iterator
       .flatMap(_.output.filter(_.resolved).map(_.exprId))
