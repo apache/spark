@@ -118,7 +118,7 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
   test("reads the grouping key's column for an argument equal to it") {
     transpileOn {
       // An Aggregate is split before conversion, so an argument in a result expression is already
-      // the grouping key's attribute by the time we look at it -- cheap, and no column of its own.
+      // the grouping key's attribute when we look -- cheap, and no column of its own.
       //
       // The grouping key has to be the bare argument, not the call -- with the call as the key both
       // it and the result would read the same column and bind fine, proving nothing. And `id % 3`
@@ -134,10 +134,9 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
 
   test("splits an Aggregate so a nondeterministic argument gets a column") {
     transpileOn {
-      // An Aggregate holds no Project of its own, so the rule splits it -- result expressions into
-      // a Project above -- and the column goes there. Without the split there is nowhere to put
-      // `rand()`, copying it to both reads would draw twice for one parameter, and the call would
-      // fall back to Python.
+      // An Aggregate holds no Project of its own, so the rule splits it -- results into a Project
+      // above -- and the column goes there. Without the split `rand()` has nowhere to go and the
+      // call falls back to Python.
       val square = udfWith(Multiply(param(0), param(0)), arity = 1)
       val df = spark.range(0, 6).groupBy(col("id") % 3).agg(square(draw).as("sq"))
       val plan = df.queryExecution.optimizedPlan
@@ -150,11 +149,9 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
 
   test("leaves an Aggregate alone when its only call is inside a subquery") {
     transpileOn {
-      // The split fires on the operator's own expressions, not on the tree-pattern bit: a
-      // SubqueryExpression carries its inner plan's bits, so this Aggregate looks from the outside
-      // like it holds a call. Splitting it rebuilt it on every pass -- the split can't reach into
-      // the subquery to convert the call, so the bit was still set on what it built -- and the
-      // query died with a StackOverflowError.
+      // The split fires on the operator's own expressions, not the tree-pattern bit: a
+      // SubqueryExpression carries its inner plan's bits, so this Aggregate looked like it held a
+      // call, split on every pass without ever clearing them, and died with a StackOverflowError.
       val square = udfWith(Multiply(param(0), param(0)), arity = 1)
       val inner = spark.range(0, 3).select(square(col("id") % 3).as("m")).agg(max(col("m")))
       val df = spark.range(0, 6).groupBy(col("id") % 2).agg(sum(col("id") + inner.scalar()))
@@ -165,9 +162,8 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
 
   test("keeps the Python UDF for a nondeterministic argument inside a lambda") {
     transpileOn {
-      // The position no Project can serve: a column is computed per row where a lambda body runs
-      // per element. Copying `rand()` to both reads would draw twice for one parameter, so we
-      // decline, and the Python eval node in the plan is what says we did.
+      // The position no Project can serve: a column is per row where a lambda body runs per
+      // element. So we decline, and the Python eval node in the plan is what says we did.
       val square = udfWith(Multiply(param(0), param(0)), arity = 1)
       val df = spark.range(0, 6).select(
         transform(array(col("id")), _ => square(draw)).as("sq"))

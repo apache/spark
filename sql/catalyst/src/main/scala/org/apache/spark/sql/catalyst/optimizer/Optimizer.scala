@@ -1048,38 +1048,32 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
   }
 
   /**
-   * Whether this operator's own expressions hold a call. The tree-pattern bit is not enough: a
-   * SubqueryExpression carries its inner plan's bits, so an Aggregate whose only call sits in a
-   * scalar subquery looks from here like it has one. Splitting that Aggregate would rebuild it on
-   * every pass and never converge -- the split cannot reach into the subquery to convert the call,
-   * so the bit is still set when `transformDown` walks into what we just built.
+   * Whether the operator's own expressions hold a call. Not the tree-pattern bit: a
+   * SubqueryExpression carries its inner plan's bits, and an Aggregate whose only call sits in a
+   * subquery would split on every pass without ever clearing them.
    */
   private def holdsACall(p: LogicalPlan): Boolean =
     p.expressions.exists(_.exists(_.isInstanceOf[TranspiledPythonUDF]))
 
   /**
-   * An Aggregate on its own can't host the column a repeated argument wants: a result expression no
-   * aggregate function wraps has to be built from the grouping expressions, and a column is not
-   * one, so `groupBy(a + 1).agg(udf(a + 1))` would fail MISSING_AGGREGATION. Split it the way
-   * RewriteWithExpression does -- grouping and aggregate expressions stay below, the result
-   * expressions move to a Project above -- and each half can then host its own column: one for an
-   * argument inside `agg(sum(udf(...)))`, one for an argument beside it.
+   * An Aggregate can't host a column: a result expression no aggregate function wraps has to be
+   * built from the grouping expressions, so `groupBy(a + 1).agg(udf(a + 1))` would fail
+   * MISSING_AGGREGATION. Split it the way RewriteWithExpression does -- results into a Project
+   * above -- and each half can host one.
    */
   private def splitAggregate(agg: Aggregate): LogicalPlan = agg match {
     case PhysicalAggregation(namedGrouping, aggregateExpressions, resultExpressions, child) =>
-      // The aliases carry the aggregates' own ExprIds, which is what the result expressions already
-      // reference. Renaming both sides keeps the two readable together in a plan string.
+      // The aliases keep the aggregates' ExprIds, which the result expressions already reference.
+      // Renaming both sides keeps a plan string readable.
       val aggExprs = aggregateExpressions.map(ae => Alias(ae, "_aggregateexpression")(ae.resultId))
       val aggExprIds = aggExprs.map(_.exprId).toSet
       val resExprs = resultExpressions.map(_.transform {
         case a: AttributeReference if aggExprIds.contains(a.exprId) =>
           a.withName("_aggregateexpression")
       }.asInstanceOf[NamedExpression])
-      // The grouping list keeps the expressions as they were, and only the output list takes
-      // PhysicalAggregation's aliases of them. Grouping by an alias is what RewriteWithExpression
-      // does, but it runs after FinishAnalysis; from here PullOutGroupingExpressions still has to
-      // run, and it would pull that alias out into an attribute of its own, dropping the ExprId the
-      // result expressions read.
+      // Only the output list takes PhysicalAggregation's aliases. RewriteWithExpression groups by
+      // them, but it runs after FinishAnalysis; from here PullOutGroupingExpressions would pull an
+      // aliased grouping expression into an attribute of its own and drop the ExprId above it.
       val converted = convertOperator(
         Aggregate(agg.groupingExpressions, namedGrouping ++ aggExprs, child, agg.hint),
         aggregateIsSplit = true)
@@ -1089,11 +1083,11 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
   }
 
   /**
-   * True when splitting would tear a transpiled call apart, so we leave the Aggregate whole and
-   * its arguments at their use sites. PhysicalAggregation rewrites every AggregateExpression it
-   * finds into a reference to the aggregate's output -- including one *inside* a call, which is how
-   * a transpiled UDAF is shaped -- and the call's arguments would no longer line up with the
-   * parameter indexes its option reads.
+   * True when splitting would tear a call apart, so the Aggregate is left whole.
+   * PhysicalAggregation rewrites every AggregateExpression into a reference to the aggregate's
+   * output, including one
+   * *inside* a call -- how a transpiled UDAF is shaped -- leaving its arguments no longer matching
+   * the parameter indexes its option reads.
    */
   private def splitTearsACall(agg: Aggregate): Boolean =
     agg.expressions.exists(_.exists {
@@ -1110,13 +1104,13 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
    *  - A Command: the Project hides the relation DataSourceV2Strategy looks for, and
    *    `DELETE FROM t WHERE udf(a + 1) > 0` becomes an internal error.
    *
-   * An Aggregate can once [[splitAggregate]] has split it, which is what `aggregateIsSplit` says:
-   * the halves it produces hold only grouping and aggregate expressions, which may read a column.
+   * An Aggregate can once [[splitAggregate]] has split it -- that is `aggregateIsSplit` -- since
+   * the halves hold only grouping and aggregate expressions.
    *
-   * MergeRows is deliberately on neither list. Its instructions are first-match-wins, so a column
-   * runs `WHEN ... AND udf(a / b) > 0` for every row of the join -- but so does the interpreted
-   * UDF, which computes its inputs in a projection under MergeRows and raises on an unmatched row
-   * under ANSI today. Declining there is what would diverge.
+   * MergeRows is on neither list. Its instructions are first-match-wins, so a column runs
+   * `WHEN ... AND udf(a / b) > 0` for every row of the join -- but so does the interpreted UDF,
+   * which computes its inputs below MergeRows and raises on an unmatched row under ANSI today.
+   * Declining there is what would diverge.
    */
   private def convertOperator(p: LogicalPlan, aggregateIsSplit: Boolean = false): LogicalPlan = {
     val extraColumns = mutable.ArrayBuffer.empty[Alias]
@@ -1161,11 +1155,10 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
                   conf.decorrelateInnerQueryEnabledForExistsIn) ||
                 !arg.containsPattern(OUTER_REFERENCE)) &&
               !arg.containsPattern(TRANSPILED_UDF_PARAMETER)
-          // What we owe -- a parameter read more than once whose argument isn't cheap to repeat --
-          // plus what is merely worth sharing: two parameters holding equal arguments, each read
-          // once, which cost nothing to put behind one column. Not every repeat is worth one, since
-          // a pointless Project sticks around under anything CollapseProject can't merge through
-          // and stops SpecialLimits matching `Project(_, Sort(...))` for TakeOrderedAndProjectExec.
+          // What we owe, plus what is merely worth sharing: two parameters holding equal arguments,
+          // each read once. Not every repeat earns a column -- a pointless Project sticks around
+          // under anything CollapseProject can't merge through, and stops SpecialLimits matching
+          // `Project(_, Sort(...))` for TakeOrderedAndProjectExec.
           val owed = mustPreEvaluate(args, option)
           val shared = reads.distinct.filter { index =>
             (owed.contains(index) ||
@@ -1202,22 +1195,18 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
     // that `applyExpr` sees every node on the way down and can thread `parentIsUdf`. Starting
     // at the node itself would report no enclosing UDF even when a PythonUDF wraps it, and the
     // batch pipeline the flag exists to protect would be split anyway.
-    // Falling back is the answer for an argument we owe one evaluation and can't put in a column --
-    // except in a join condition, where it is the worse answer. ExtractPythonUDFFromJoinCondition
-    // throws outright for a non-inner join, and for an inner one moves the UDF into a Filter above,
-    // turning the join into a cross join when the condition was only the call. Repeating a
-    // deterministic argument costs work; that costs the query. A draw can't reach a join condition
-    // anyway -- CheckAnalysis rejects a nondeterministic one there -- so nothing correctness-shaped
-    // is being traded away.
+    // Falling back is the answer for an evaluation we owe and can't place -- except in a join
+    // condition, where ExtractPythonUDFFromJoinCondition throws for a non-inner join and cross
+    // joins an inner one. Repeating a deterministic argument costs work; that costs the query. A
+    // draw can't reach a join condition anyway, CheckAnalysis rejects one there.
     val mayDecline = p.children.length <= 1
     val converted = p.mapExpressions {
       case e if e.containsPattern(TRANSPILED_PYTHON_UDF) =>
         applyExpr(e, parentIsUdf = false, preEvaluate, mayDecline)
       case e => e
     }
-    // A call that declined can leave behind a column registered for an argument of its own that
-    // nothing reads any more. Drop those: an unread column still computes, and under ANSI it
-    // can raise on a row the body never looked at.
+    // A call that declined can orphan a column registered for an argument of its own. Drop those:
+    // an unread column still computes, and under ANSI can raise on a row nothing looked at.
     val read = AttributeSet(converted.expressions.flatMap(_.references))
     val columns = extraColumns.filter(a => read.contains(a.toAttribute)).toSeq
     if (columns.isEmpty) {
@@ -1251,18 +1240,13 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
   private type PreEvaluate = (Seq[Expression], Expression) => Option[Expression]
 
   /**
-   * The parameters this call owes a single evaluation: read more than once, with an argument that
-   * isn't cheap to repeat. Where we can't put one in a column we don't transpile at all
-   * (SPARK-58626).
-   *
-   * Per parameter, not per call: `f(rand(), rand())` owes two draws, and `f(rand())` owes one
-   * however often the body reads it.
+   * The parameters this call owes one evaluation: read more than once, with an argument that isn't
+   * cheap to repeat. Where no column can hold one we don't transpile at all (SPARK-58626). Per
+   * parameter: `f(rand(), rand())` owes two draws, `f(rand())` owes one however often it is read.
    */
   private def mustPreEvaluate(args: Seq[Expression], option: Expression): Set[Int] = {
-    // A read inside a lambda in the option body counts as many however few there are, since the
-    // body runs once per element. Only a custom transpiler emits one -- `transpile.py` lowers no
-    // higher-order function -- but a column outside the lambda serves it, so there is no reason to
-    // wait for one to exist.
+    // A read inside a lambda counts as many, since the body runs per element. Only a custom
+    // transpiler emits one today, and a column outside the lambda serves it.
     val perElement = option.collect { case l: LambdaFunction => l }
       .flatMap(TranspiledUDFParameter.referencedIndexes).toSet
     TranspiledUDFParameter.referencedIndexes(option).groupBy(identity).collect {
@@ -1274,11 +1258,9 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
   /**
    * Whether reading an argument twice is as good as reading a column that holds it once.
    *
-   * A nondeterministic argument never is, whatever `isCheap` says: copies of `rand()` are
-   * independent draws, so the body would see two values for one parameter -- an answer no
-   * evaluation order excuses, where recomputing a deterministic argument is only work. Work counts
-   * too, though: an argument `CollapseProject.isCheap` won't vouch for, a regex say, is owed a
-   * column rather than run once a read, and the interpreted UDF runs it once if we can't place one.
+   * A nondeterministic one never is, whatever `isCheap` says of it: two copies of `rand()` are two
+   * draws, so the body sees two values for one parameter. A deterministic one is only work, but
+   * work counts, so anything `isCheap` won't vouch for -- a regex, `a + 1` -- is owed one too.
    */
   private def cheapToRepeat(arg: Expression): Boolean = arg match {
     // An enclosing call's reference computes nothing of its own. What it stands for may well be
@@ -1396,10 +1378,9 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
         // and the reasoning; short version, the interpreted UDF is eager in a conditional too, so
         // matching it is the point.
         //
-        // Falling back here always lands on a plan analysis already approved: CheckAnalysis rejects
-        // a higher-order function whose lambda holds a PythonUDF unless ExtractPythonUDFFromLambda
-        // can lift it out, and a TranspiledPythonUDF holds one, so anything that reaches us was
-        // vetted with the Python UDF in place.
+        // Falling back here is safe by construction: CheckAnalysis rejects a lambda holding a
+        // PythonUDF unless ExtractPythonUDFFromLambda can lift it out, and a TranspiledPythonUDF
+        // holds one -- so whatever reached us was vetted with the Python UDF in place.
         val inner = if (expression.isInstanceOf[LambdaFunction]) None else preEvaluate
         expression.mapChildren(
           applyExpr(_, parentIsUdf = isScalarPythonUDF(expression), inner, mayDecline))

@@ -328,9 +328,8 @@ class ConvertToCatalystSuite extends PlanTest {
       // Only a custom transpiler emits an option body that is itself an aggregate. Through
       // `applyExpr`, so this is the fallback path only -- nothing could host such a body anyway.
       //
-      // A bare column for the argument, since that is what makes reading it twice as good as
-      // reading a column: anything dearer is owed one evaluation, and with no Project to be had
-      // this would decline to Python rather than substitute.
+      // A bare column, since anything dearer is owed one evaluation and would decline to Python
+      // here rather than substitute.
       val arg = attrA
       val option = Count(Seq(Multiply(pref(0), pref(0)))).toAggregateExpression()
       val tpudf = makeTPUDF(makePyUDF(arg), option)
@@ -364,10 +363,9 @@ class ConvertToCatalystSuite extends PlanTest {
 
   test("keeps the Python UDF for an argument a lambda can't hold a column for") {
     transpileOn {
-      // No column fits inside a lambda -- one is computed per row where the body runs per element
-      // -- so an argument read twice and worth more than a column read is left to Python, which
-      // evaluates its inputs once per element. A draw, where two evaluations are two values for one
-      // parameter, and a divide, where they are only work.
+      // No column fits inside a lambda -- one is per row where the body runs per element -- so an
+      // argument read twice and worth more than a column read is left to Python. A draw, where two
+      // evaluations are two values for one parameter, and a divide, where they are only work.
       Seq(draw(), Divide(attrA, attrA)).foreach { arg =>
         val option = Add(pref(0), pref(0))
         val call = makeTPUDF(makePyUDF(arg), option)
@@ -398,9 +396,8 @@ class ConvertToCatalystSuite extends PlanTest {
 
   test("splits an Aggregate so an argument inside an aggregate function gets a column") {
     transpileOn {
-      // `agg(sum(f(rand())))`: the call is inside the aggregate function, so the split leaves it in
-      // the Aggregate and the column goes on the Aggregate's own child. One draw per input row,
-      // then summed.
+      // `agg(sum(f(rand())))`: the call is inside the aggregate function, so the split leaves it
+      // there and the column goes on the Aggregate's child. One draw an input row, then summed.
       val call = makeTPUDF(makePyUDF(draw()), Add(pref(0), pref(0)))
       val agg = Aggregate(
         Seq(attrA),
@@ -417,10 +414,9 @@ class ConvertToCatalystSuite extends PlanTest {
 
   test("leaves an Aggregate whole when splitting would tear a call apart") {
     transpileOn {
-      // A transpiled UDAF holds an AggregateExpression *inside* the call. PhysicalAggregation would
-      // rewrite that into a reference to the aggregate's output, leaving the call's arguments no
-      // longer lining up with the parameter indexes its option reads -- and the Python aggregate
-      // computed beside the option for nothing. So the Aggregate is left whole.
+      // A transpiled UDAF holds an AggregateExpression *inside* the call, which
+      // PhysicalAggregation would rewrite into a reference to the aggregate's output -- leaving the
+      // call's arguments out of step with its option, and the Python aggregate run for nothing.
       val pyAgg = makePyUDAF().toAggregateExpression()
       val catalystAgg = Count(Seq(attrA)).toAggregateExpression()
       val call = TranspiledPythonUDF("agg", pyAgg, List(catalystAgg))
@@ -436,9 +432,8 @@ class ConvertToCatalystSuite extends PlanTest {
 
   test("puts one argument in a column though another can't go in one") {
     transpileOn {
-      // `f(sum(a), a + 1)` where the body reads the aggregate once and `a + 1` twice: a Project
-      // can't hold the aggregate, which is no reason to leave `a + 1` at both use sites too. Read
-      // once, the aggregate is owed nothing, so its position doesn't cost the call its column.
+      // `f(sum(a), a + 1)`, the aggregate read once and `a + 1` twice: no Project can hold the
+      // aggregate, which is no reason to leave `a + 1` at both use sites too.
       val aggArg = Sum(attrA).toAggregateExpression()
       val plainArg = Add(attrA, Literal(1L))
       val option = Add(pref(0), Multiply(pref(1), pref(1)))
@@ -453,11 +448,9 @@ class ConvertToCatalystSuite extends PlanTest {
 
   test("repeats a Join condition's argument rather than hand the call back") {
     transpileOn {
-      // The one place where falling back is worse than the work: ExtractPythonUDFFromJoinCondition
-      // throws for a non-inner join, and for an inner one moves the UDF above the join, which cross
-      // joins when the condition was only the call. So `a + 1` runs at both use sites instead. A
-      // draw cannot get here -- CheckAnalysis rejects a nondeterministic join condition -- so the
-      // one evaluation that would be a wrong answer is never the one being traded.
+      // The one place falling back is worse than the work: ExtractPythonUDFFromJoinCondition throws
+      // for a non-inner join and cross joins an inner one, so `a + 1` runs at both use sites. A
+      // draw cannot get here -- CheckAnalysis rejects a nondeterministic join condition.
       val arg = Add(attrA, Literal(1L))
       val attrB = AttributeReference("b", LongType)()
       val call = makeTPUDF(makePyUDF(arg), Multiply(pref(0), pref(0)))
@@ -512,10 +505,9 @@ class ConvertToCatalystSuite extends PlanTest {
 
   test("keeps the Python UDF for an argument that is itself an aggregate") {
     transpileOn {
-      // `udf(sum(a))` read twice: a Project can't hold an aggregate, so there is nowhere to put the
-      // column, and running the aggregate at each use site is not the answer either. (Under a real
-      // Aggregate the split hands us the aggregate's output attribute instead, which is cheap; this
-      // is the hand-built shape a custom transpiler can still produce.)
+      // `udf(sum(a))` read twice: no Project can hold an aggregate, and running it at each use site
+      // is not the answer either. Under a real Aggregate the split hands us the aggregate's output
+      // attribute, which is cheap; this is the hand-built shape a custom transpiler can produce.
       val arg = Sum(attrA).toAggregateExpression()
       val tpudf = makeTPUDF(makePyUDF(arg), Multiply(pref(0), pref(0)))
       val converted = convert(Project(Seq(Alias(tpudf, "v")()), LocalRelation(attrA)))
@@ -529,10 +521,9 @@ class ConvertToCatalystSuite extends PlanTest {
 
   test("leaves a Command's cheap arguments at each use site") {
     transpileOn {
-      // No column under a Command: the Project would land between DeleteFromTable and its
-      // relation, hiding what DataSourceV2Strategy matches on. A bare column costs nothing to read
-      // twice, so the references still come off and the call still lowers. An argument worth more
-      // than that would keep the Python UDF instead.
+      // No column under a Command: the Project would land between DeleteFromTable and its relation,
+      // hiding what DataSourceV2Strategy matches on. A bare column costs nothing to read twice, so
+      // the call still lowers; anything dearer keeps the Python UDF.
       val arg = attrA
       val relation = LocalRelation(attrA)
       val option = Multiply(pref(0), pref(0))
