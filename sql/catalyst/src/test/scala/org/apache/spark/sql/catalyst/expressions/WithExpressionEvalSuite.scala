@@ -167,7 +167,7 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
     assert(counters == 1, s"the definition was generated $counters times")
   }
 
-  test("SPARK-58902: nesting does not multiply a definition's body on the row-based path") {
+  test("SPARK-58902: nesting does not multiply a definition's body when it can go in a method") {
     // Each level of nested `With`s reads its definition twice, so a reference that pastes the body
     // doubles it per level. What already stopped that from running away is
     // `Expression.reduceCodeSize`, which hoists into a method whichever node's code first passes
@@ -180,7 +180,7 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
     // Whole-stage codegen is neither covered nor fixed: it generates the operators a `With` reaches
     // with `currentVars` set, so neither this method nor `reduceCodeSize` applies, and the body is
     // pasted per reference -- measured 2, 4, 8, ... 256 at depths 1 to 8. A bare `CodegenContext`
-    // has `INPUT_ROW` set and `currentVars` null, which is the row-based path and the only one
+    // has `INPUT_ROW` set and `currentVars` null, which is what a method needs and the only shape
     // below.
     val marker = 1234567
     def nested(depth: Int): Expression = {
