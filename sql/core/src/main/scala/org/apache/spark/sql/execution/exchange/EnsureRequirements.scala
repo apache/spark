@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.exchange
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -247,13 +248,16 @@ case class EnsureRequirements(
           child
         case ((child, dist), idx) =>
           if (bestSpecOpt.isDefined && bestSpecOpt.get.isCompatibleWith(specs(idx))) {
-            bestSpecOpt match {
+            // If the child's partitioning is a `PartitioningCollection`, its spec is a
+            // `ShuffleSpecCollection` whose `createPartitioning` delegates to the head spec,
+            // so unwrap to the head spec to stay aligned with the re-shuffled side below.
+            unwrapSpecCollection(bestSpecOpt.get) match {
               // If `areChildrenCompatible` is false, we can still perform SPJ
               // by shuffling the other side based on join keys (see the else case below).
               // Hence we need to ensure that after this call, the outputPartitioning of the
               // partitioned side's BatchScanExec is grouped by join keys to match,
               // and we do that by pushing down the join keys
-              case Some(KeyedShuffleSpec(_, _, Some(joinKeyPositions))) =>
+              case KeyedShuffleSpec(_, _, Some(joinKeyPositions)) =>
                 withJoinKeyPositions(child, joinKeyPositions)
               case _ => child
             }
@@ -753,6 +757,14 @@ case class EnsureRequirements(
         GroupPartitionsExec(plan, joinKeyPositions, Some(mergedPartitionKeys), reducers,
           distributePartitions)
     }
+  }
+
+  // Unwraps a `ShuffleSpecCollection` (possibly nested) to the spec that its
+  // `createPartitioning` delegates to, i.e. the head spec.
+  @tailrec
+  private def unwrapSpecCollection(spec: ShuffleSpec): ShuffleSpec = spec match {
+    case ShuffleSpecCollection(specs) => unwrapSpecCollection(specs.head)
+    case other => other
   }
 
   /**
