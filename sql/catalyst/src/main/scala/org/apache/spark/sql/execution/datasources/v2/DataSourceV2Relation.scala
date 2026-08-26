@@ -170,12 +170,11 @@ case class DataSourceV2Relation(
  *                      complete set is what lets `PlanMerger` soundly compare and re-enforce a
  *                      scan's filters when fusing two scans via a Spark-side scan merge
  *                      (`TableCapability.SCAN_MERGING`).
- * @param advisoryFilters Catalyst expressions for filters the data source inferred and reported
- *                        via `SupportsPushDownCatalystFilters.advisoryFilters`. They stay in the
- *                        logical Filter so the optimizer can use them, and are dropped when the
- *                        physical Filter is built, so Spark never evaluates them. They are not
- *                        kept when a join, aggregate, or variant extraction is pushed. Unlike
- *                        `pushedFilters` they say nothing about what the source enforces.
+ * @param advisoryFilters Catalyst expressions the data source guarantees for rows returned by this
+ *                        scan. Spark adds matching logical Filters for optimizer use and drops them
+ *                        when planning the physical Filter. They are not kept when a join,
+ *                        aggregate, or variant extraction is pushed, and do not duplicate
+ *                        `pushedFilters`.
  * @param mergeableScan whether this scan may be fused with an equivalent scan by a Spark-side scan
  *                      merge (see `TableCapability.SCAN_MERGING`).
  *                      Default false (not mergeable): only the plain column-pruning + filter

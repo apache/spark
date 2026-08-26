@@ -1793,6 +1793,44 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         df.queryExecution.executedPlan)
   }
 
+  test("advisory filters are ignored when the Catalyst pushFilters callback did not run") {
+    // The builder mixes SupportsPushDownV2Filters and SupportsPushDownCatalystFilters.
+    // PushDownUtils prefers the V2 path, so the Catalyst pushFilters callback never runs and its
+    // advisory filters must not be collected, even though the source reports a non-empty advisory.
+    val df = spark.read
+      .format(classOf[CatalystAndV2FilterDataSourceV2].getName)
+      .option(CatalystFilterScanBuilder.ADVISORY_DERIVATION,
+        CatalystFilterScanBuilder.CONSTANT_J_LT_100)
+      .load()
+      .filter($"i" > 2)
+    assert(getScanRelation(df).advisoryFilters.isEmpty,
+      s"advisory filters must be ignored when the Catalyst callback did not run:\n" +
+        df.queryExecution.optimizedPlan)
+  }
+
+  test("advisory filters are ignored when there is no eligible Catalyst filter") {
+    // A subquery-only filter leaves no eligible (non-subquery) Catalyst filter to push, so even a
+    // pure Catalyst source's advisory filters (j < 100) must not be collected. The subquery reads
+    // the same source so it is not constant-folded away before pushdown, and constraint propagation
+    // is disabled so no isnotnull predicate is inferred alongside the subquery.
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      withTempView("catalyst_advisory_src") {
+        val df = spark.read
+          .format(classOf[CatalystFilterDataSourceV2].getName)
+          .option(CatalystFilterScanBuilder.ADVISORY_DERIVATION,
+            CatalystFilterScanBuilder.CONSTANT_J_LT_100)
+          .load()
+        df.createOrReplaceTempView("catalyst_advisory_src")
+        val query = sql(
+          "SELECT * FROM catalyst_advisory_src " +
+            "WHERE i > (SELECT max(i) FROM catalyst_advisory_src)")
+        assert(getScanRelation(query).advisoryFilters.isEmpty,
+          s"advisory filters must be ignored for a subquery-only filter:\n" +
+            query.queryExecution.optimizedPlan)
+      }
+    }
+  }
+
   test("SPARK-58207: V2 filter pushdown skips non-deterministic filters") {
     val df = spark.read.format(classOf[AdvancedDataSourceV2WithV2Filter].getName).load()
     // i > 3 is deterministic and pushable; rand() > 0.5 is non-deterministic. rand() translates
@@ -2051,6 +2089,32 @@ class CatalystFilterJoinDataSourceV2 extends TestingV2Source {
   }
 }
 
+class CatalystAndV2FilterDataSourceV2 extends TestingV2Source {
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new CatalystAndV2FilterScanBuilder(options)
+    }
+  }
+}
+
+// Implements both the Catalyst and V2 filter traits. `PushDownUtils.pushFilters` prefers the V2
+// path, so the Catalyst `pushFilters` callback never runs and the advisory filters it would report
+// must be ignored.
+class CatalystAndV2FilterScanBuilder(options: CaseInsensitiveStringMap)
+  extends CatalystFilterScanBuilder(options) with SupportsPushDownV2Filters {
+
+  private var pushedV2Predicates = Array.empty[Predicate]
+
+  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+    pushedV2Predicates = predicates
+    // Return all as post-scan filters: the source does not guarantee them.
+    predicates
+  }
+
+  override def pushedPredicates(): Array[Predicate] = Array.empty
+}
+
 class CatalystFilterJoinScanBuilder(options: CaseInsensitiveStringMap)
   extends CatalystFilterScanBuilder(options) with SupportsPushDownJoin {
 
@@ -2166,9 +2230,17 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
 object CatalystFilterScanBuilder {
   val ADVISORY_DERIVATION: String = "advisoryDerivation"
   val NEGATE_I_TO_J: String = "negate-i-to-j"
+  val CONSTANT_J_LT_100: String = "constant-j-lt-100"
+
+  // Always reports the same advisory (j < 100), regardless of the pushed filters. Rows are
+  // (i, j) with j = -i in [0, 9], so it drops nothing. Used to prove that advisory collection is
+  // gated on the Catalyst pushFilters dispatch and eligibility, not on the reported advisory.
+  val constantJLt100: Seq[CatalystExpression] => Seq[CatalystExpression] = { _ =>
+    Seq(CatalystLessThan(AttributeReference("j", IntegerType)(), CatalystLiteral(100)))
+  }
 
   // Common derivation used by advisory-filter tests. Rows are (i, j) with j = -i, so a
-  // pushed predicate on i implies the negated predicate on j.
+  // pushed predicate on i implies the corresponding predicate on j after negating both sides.
   val negateIToJ: Seq[CatalystExpression] => Seq[CatalystExpression] = { filters =>
     val jAttr = AttributeReference("j", IntegerType)()
     filters.flatMap {
@@ -2194,7 +2266,7 @@ object CatalystFilterScanBuilder {
 
   private val derivations
       : Map[String, Seq[CatalystExpression] => Seq[CatalystExpression]] =
-    Map(NEGATE_I_TO_J -> negateIToJ)
+    Map(NEGATE_I_TO_J -> negateIToJ, CONSTANT_J_LT_100 -> constantJLt100)
 
   private[connector] def derivation(
       options: CaseInsensitiveStringMap): Seq[CatalystExpression] => Seq[CatalystExpression] = {

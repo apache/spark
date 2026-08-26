@@ -85,6 +85,12 @@ object PlanMerger {
  * - [[Filter]]: Requires identical filter conditions
  * - [[Join]]: Requires identical join type, hints, and conditions
  *
+ * A DSv2 scan's advisory filters guarantee predicates over its returned rows, so Spark does not
+ * need to evaluate them. Scan merging requires equal advisory sets and offers the common predicates
+ * to the fresh builder. `PlanMerger` merges the scans only when that builder consumes every common
+ * advisory predicate as a fully pushed filter, so [[DataSourceV2Strategy]] can safely remove the
+ * corresponding logical Filters during physical planning.
+ *
  * When `filterPropagationEnabled` is true, non-grouping [[Aggregate]]s over the same base plan
  * with different [[Filter]] conditions can also be merged. The filter conditions are exposed as
  * boolean [[Project]] attributes and consumed at the [[Aggregate]] as FILTER clauses.
@@ -251,10 +257,12 @@ class PlanMerger(
    * The relation to rebuild from is not carried here: the deferring leaf leaves it in the plan as
    * the placeholder [[TryMergeResult.mergedPlan]] (the sole bare [[DataSourceV2Relation]] in the
    * subtree), and `tryBuildFilterDSv2ScanChild` recovers it from there. Only what the tree does NOT
-   * hold is carried: the projected `unionAttrs` and the `strictFilters` to re-enforce.
+   * hold is carried: the projected `unionAttrs` and the filters to re-confirm.
    *
    * @param unionAttrs The union of both sides' projected columns the merged scan must produce.
    * @param strictFilters The strict pushed filters that must be re-enforced by the rebuilt scan.
+   * @param advisoryFilters The common advisory filters that the rebuilt scan must consume as fully
+   *        pushed filters.
    * @param requiredKeyGroupedPartitioning The key-grouped partitioning the merged scan must
    *        reproduce to keep both inputs not-worse (the inputs' combined report, in the merged
    *        relation's attribute space); empty means no requirement. Enforced unless
@@ -265,6 +273,7 @@ class PlanMerger(
   case class DSv2DeferredScan(
       unionAttrs: Seq[Attribute],
       strictFilters: Seq[Expression],
+      advisoryFilters: Seq[Expression],
       requiredKeyGroupedPartitioning: Seq[Expression],
       requiredOrdering: Seq[SortOrder])
 
@@ -700,7 +709,13 @@ class PlanMerger(
         // mapping, since a pushed filter may reference a column pruned out of np.output) before
         // comparing as sets.
         ExpressionSet(np.pushedFilters.map(mapAttributes(_, npRelationMapping))) ==
-          ExpressionSet(cp.pushedFilters)
+          ExpressionSet(cp.pushedFilters) &&
+        // Combining row sources is safe only when both scans guarantee the same advisory
+        // predicates. ExpressionSet deliberately ignores order and duplicates: duplicate
+        // guarantees are logically redundant, and keeping cp's first occurrence below gives a
+        // deterministic representation.
+        ExpressionSet(np.advisoryFilters.map(mapAttributes(_, npRelationMapping))) ==
+          ExpressionSet(cp.advisoryFilters)
 
     // The read-only gate above is settled. The report combine below can still decline (and so can
     // the degradation check once the scan is built); everything else below constructs the merge.
@@ -738,6 +753,10 @@ class PlanMerger(
     // accepts the degradation). Otherwise the single report the merged scan must reproduce/satisfy.
     val expectedKeyGroupedPartitioning = combinedKeyGroupedPartitioning.getOrElse(Nil)
     val expectedOrdering = combinedOrdering.getOrElse(Nil)
+    val expectedAdvisoryFilters = cp.advisoryFilters.foldLeft(Seq.empty[Expression]) {
+      case (distinct, filter) if distinct.exists(_.semanticEquals(filter)) => distinct
+      case (distinct, filter) => distinct :+ filter
+    }
 
     if (context.filterAboveScan) {
       // Defer the build to the enclosing Filter so the scan is built once with strict +
@@ -746,11 +765,17 @@ class PlanMerger(
       // np.output to cp's relation attributes is consistent with the eventual built scan.
       Some(TryMergeResult(cp.relation, npMapping,
         dsv2DeferredScan = Some(DSv2DeferredScan(unionAttrs, cp.pushedFilters,
-          expectedKeyGroupedPartitioning, expectedOrdering)), dsv2Merged = true))
+          expectedAdvisoryFilters, expectedKeyGroupedPartitioning, expectedOrdering)),
+        dsv2Merged = true))
     } else {
       // No enclosing Filter: build the merged scan here enforcing the (equal) strict filters over
       // the union of columns, with no best-effort filter (no post-scan Filter to prune on).
-      tryBuildMergedDSv2Scan(cp.relation, unionAttrs, cp.pushedFilters, bestEffortFilter = None)
+      tryBuildMergedDSv2Scan(
+        cp.relation,
+        unionAttrs,
+        cp.pushedFilters,
+        expectedAdvisoryFilters,
+        bestEffortFilter = None)
         .filterNot(mergeDegradesReporting(_, expectedKeyGroupedPartitioning, expectedOrdering))
         .map(TryMergeResult(_, npMapping, dsv2Merged = true))
     }
@@ -758,13 +783,14 @@ class PlanMerger(
 
   /**
    * Rebuilds the merged DSv2 scan via [[V2ScanRelationPushDown.rebuildScan]], projecting
-   * `unionAttrs` and filtering by `strictFilters` (plus the `bestEffortFilter`). This reuses
-   * the production pushdown end to end -- the same filter translation, column pruning,
+   * `unionAttrs` and filtering by `strictFilters`, `advisoryFilters`, and the `bestEffortFilter`.
+   * This reuses the production pushdown end to end -- the same filter translation, column pruning,
    * determinism/subquery handling and iterative PartitionPredicate second pass -- rather than
    * reimplementing a slice of it here.
    *
    * `strictFilters` must come back fully enforced (present in the rebuilt scan's `pushedFilters`);
-   * otherwise `None`, because nothing above the leaf re-checks it. The `bestEffortFilter` is
+   * otherwise `None`, because nothing above the leaf re-checks it. The fresh builder must also
+   * consume every common advisory predicate as a fully pushed filter. The `bestEffortFilter` is
    * offered to the source only when sound: it is dropped unless it is deterministic (a
    * non-deterministic predicate the source prunes on would drop rows the enclosing Filter cannot
    * recover) and references only the relation's own columns (propagated boolean filter attributes
@@ -778,54 +804,59 @@ class PlanMerger(
       relation: DataSourceV2Relation,
       unionAttrs: Seq[Attribute],
       strictFilters: Seq[Expression],
+      advisoryFilters: Seq[Expression],
       bestEffortFilter: Option[Expression]): Option[DataSourceV2ScanRelation] = {
     val relationOut = relation.outputSet
-    // Defensive: strict filters come from `pushedFilters`, which reference only relation columns,
-    // so this holds today. If a future caller offers a filter over non-relation attributes, decline
-    // the merge rather than build an unsound scan (there is no fallback above the leaf).
-    if (!strictFilters.forall(_.references.subsetOf(relationOut))) {
+    // Defensive: both filter groups reference the relation's full output today. If a future caller
+    // offers one over non-relation attributes, decline rather than build an unsound scan.
+    if (!(strictFilters ++ advisoryFilters).forall(_.references.subsetOf(relationOut))) {
       return None
     }
     // `unionAttrs` are the relation's own attributes (the caller builds the union in the relation's
-    // space), so they are the projection directly.
-    // strictFilters are enforced; the bestEffortFilter is offered too, but only when it is
+    // space), so they are the projection directly. Strict and advisory filters must both come back
+    // fully pushed by the rebuilt scan (checked below); advisory filters are safe to offer because
+    // both inputs guarantee them. The best-effort filter is offered too, but only when it is
     // expressible over the relation -- a condition referencing propagated boolean filter aliases
     // rather than relation columns is dropped. A non-deterministic predicate needs no handling
-    // here: SPARK-58207 keeps non-deterministic filters from being pushed to a V2 source, so an
-    // offered one is simply not pushed (and dropped when the scan is extracted).
-    val conds = strictFilters ++ bestEffortFilter.filter(_.references.subsetOf(relationOut))
+    // here: SPARK-58207 keeps non-deterministic filters from being pushed to a V2 source.
+    val conds = strictFilters ++ advisoryFilters ++
+      bestEffortFilter.filter(_.references.subsetOf(relationOut))
     V2ScanRelationPushDown.rebuildScan(relation, unionAttrs, conds).filter { scan =>
       // The rebuilt scan must itself be mergeable. rebuildScan re-runs the full pushdown, so any
       // non-reproducible pushdown it introduces would make the merged scan unsound. Today's
       // Project-over-Filter input only triggers the plain path (always mergeable), so this is
       // defensive: it re-validates the rebuild's output against the same gate applied to its
       // inputs, rather than trusting the rebuild if its input plan ever broadens.
+      val freshPushed = ExpressionSet(scan.pushedFilters)
       scan.mergeableScan &&
-        // Every intended-strict filter must be fully enforced by the rebuilt scan (nothing above
-        // re-checks it), and the scan must produce exactly the requested union of columns.
-        strictFilters.forall(ExpressionSet(scan.pushedFilters).contains) &&
+        // Every intended-strict and advisory filter must be fully enforced by the rebuilt scan.
+        // Nothing above the leaf re-checks the strict filters, while full pushdown is what allows
+        // the advisory guarantees to transfer from both input scans to the fresh merged scan.
+        (strictFilters ++ advisoryFilters).forall(freshPushed.contains) &&
         scan.outputSet == AttributeSet(unionAttrs)
     }.map { scan =>
+      val confirmedScan = if (advisoryFilters.nonEmpty) {
+        scan.copy(pushedFilters = strictFilters, advisoryFilters = advisoryFilters)
+      } else {
+        scan
+      }
       // rebuildScan returns the merged scan with reported partitioning/ordering unset
       // (V2ScanPartitioningAndOrdering is a separate early rule the rebuild does not run), so
       // re-derive them on this single node. Safe on one node: the partitioning pass is idempotent
       // and the ordering pass is applied once to a fresh node.
-      V2ScanPartitioningAndOrdering(scan).asInstanceOf[DataSourceV2ScanRelation]
+      V2ScanPartitioningAndOrdering(confirmedScan).asInstanceOf[DataSourceV2ScanRelation]
     }
   }
 
   /**
    * Threads the deferred DSv2 scan build through a [[Filter]] arm. If the merged child carries a
    * [[DSv2DeferredScan]], build the scan once here -- at the enclosing Filter, with the strict
-   * filters plus the Filter's `bestEffortFilter` -- and splice it in place of the placeholder
-   * relation. Tries strict + best-effort first, then strict-only (the best-effort filter is
-   * droppable); a build returns `None` only if the strict filters cannot be re-enforced at all (the
-   * leaf's strict-only build would have failed identically). Each built scan is also checked
-   * against the required report the leaf computed, and rejected if it would degrade that -- per
-   * attempt, so a source whose report depends on which filters were pushed can still satisfy it
-   * strict-only. Either way the caller must decline the merge. If there is no deferred scan (a
-   * non-DSv2 child, or a scan not under a Filter), there is nothing to build and the child is
-   * returned unchanged.
+   * and advisory filters plus the Filter's `bestEffortFilter` -- and splice it in place of the
+   * placeholder relation. Tries with the best-effort filter first, then without it; a build returns
+   * `None` if strict filters are not fully enforced or advisory filters are not independently
+   * confirmed. Each built scan is also checked against the required report the leaf computed and
+   * rejected if it would degrade that. Without a deferred scan there is nothing to build, and the
+   * child is returned unchanged.
    */
   private def tryBuildFilterDSv2ScanChild(
       child: LogicalPlan,
@@ -838,15 +869,16 @@ class PlanMerger(
       // turned every other relation into a DataSourceV2ScanRelation), so recover it by type here
       // rather than carrying it on DSv2DeferredScan.
       child.collectFirst { case r: DataSourceV2Relation => r }.flatMap { relation =>
-        // Check the report per attempt, and at the caller rather than inside the build: the strict
-        // filters and the report are independent reasons to reject a build, so a source whose
-        // report depends on what got pushed still gets its second chance from the strict-only
-        // attempt, and `tryBuildMergedDSv2Scan`'s `None` keeps its single meaning. The strict-only
-        // attempt is what the leaf builds when no Filter is above the scan, so checking only the
-        // first attempt would leave the deferred path weaker than the leaf path.
+        // Check the report per attempt, and at the caller rather than inside the build: filter
+        // confirmation and the report are independent reasons to reject a build, so a source whose
+        // report depends on the best-effort filter still gets a second attempt without it.
         def build(offeredBestEffortFilter: Option[Expression]) =
           tryBuildMergedDSv2Scan(
-            relation, d.unionAttrs, d.strictFilters, offeredBestEffortFilter)
+            relation,
+            d.unionAttrs,
+            d.strictFilters,
+            d.advisoryFilters,
+            offeredBestEffortFilter)
             .filterNot(
               mergeDegradesReporting(_, d.requiredKeyGroupedPartitioning, d.requiredOrdering))
 

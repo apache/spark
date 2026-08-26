@@ -127,9 +127,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         sHolder.pushedPredicates.mkString(", ")
       }
 
-      sHolder.advisoryFilterExpressions = getAdvisoryFilters(sHolder)
       // Keep advisory filters off the plan until the other source pushdowns have run. Their
-      // matchers require that no Spark-side filters remain, but advisory filters do not need to be
+      // interactions with Spark-side filters vary, but advisory filters do not need to be
       // evaluated and therefore must not block an otherwise independent pushdown.
       val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
 
@@ -141,6 +140,18 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       sHolder.pushedFilterExpressions = normalizedFiltersWithoutSubquery
         .filterNot(postScanFilterSet.contains)
         .filter(_.deterministic)
+      val fullyPushedFilterSet = ExpressionSet(sHolder.pushedFilterExpressions)
+      // Advisory filters are only meaningful when the Catalyst `pushFilters` callback actually ran
+      // with an eligible filter list. `PushDownUtils.pushFilters` prefers `SupportsPushDownFilters`
+      // and `SupportsPushDownV2Filters`, so a builder mixing those with the Catalyst trait never
+      // receives the callback; and a subquery-only filter leaves no eligible Catalyst predicate.
+      val catalystFiltersPushed = normalizedFiltersWithoutSubquery.nonEmpty &&
+        PushDownUtils.dispatchesToCatalystFilters(sHolder.builder)
+      sHolder.advisoryFilterExpressions = if (catalystFiltersPushed) {
+        getAdvisoryFilters(sHolder).filterNot(fullyPushedFilterSet.contains)
+      } else {
+        Nil
+      }
 
       logInfo(
         log"""

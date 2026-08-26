@@ -130,9 +130,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       filters: Seq[Expression],
       relation: DataSourceV2ScanRelation,
       otherNotEvaluatedFilters: Seq[Expression] = Nil): Seq[Expression] = {
-    val notEvaluatedFilterSet =
-      ExpressionSet(otherNotEvaluatedFilters ++ relation.advisoryFilters)
-    filters.filterNot(notEvaluatedFilterSet.contains)
+    // Fast path: with nothing to exclude, avoid canonicalizing every filter via ExpressionSet.
+    if (otherNotEvaluatedFilters.isEmpty && relation.advisoryFilters.isEmpty) {
+      filters
+    } else {
+      val notEvaluatedFilterSet =
+        ExpressionSet(otherNotEvaluatedFilters ++ relation.advisoryFilters)
+      filters.filterNot(notEvaluatedFilterSet.contains)
+    }
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {

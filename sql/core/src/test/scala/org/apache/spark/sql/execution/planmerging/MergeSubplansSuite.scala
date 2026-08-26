@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution.planmerging
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Ascending, Attribute, AttributeReference, CreateNamedStruct, ExprId, GetStructField, If, Literal, Or, ScalarSubquery, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Ascending, Attribute, AttributeReference, CreateNamedStruct, ExprId, Expression, GetStructField, GreaterThan, If, LessThan, Literal, Or, ScalarSubquery, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -32,6 +34,7 @@ import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownL
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning => V2KeyGroupedPartitioning, Partitioning => V2Partitioning, UnknownPartitioning => V2UnknownPartitioning}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -2081,6 +2084,58 @@ class MergeSubplansSuite extends PlanTest {
       checkAnalysis: Boolean = true): Unit =
     super.comparePlans(normalizeScans(plan1), normalizeScans(plan2), checkAnalysis)
 
+  test("SPARK-58892: repeatedly merge scans that fully push equal advisory filters") {
+    val table = new AdvisoryTestV2Table(AdvisoryFullyPushed)
+    val advisory = (a: Attribute) => GreaterThan(a, Literal(10))
+    val left = advisoryScanReading(table, Seq("a", "b"), Some(advisory))
+    val right = advisoryScanReading(table, Seq("a", "c"), Some(advisory))
+    val third = advisoryScanReading(table, Seq("a"), Some(advisory))
+    val query = testRelation.select(
+      ScalarSubquery(withAdvisoryFilter(left).groupBy()(sum(left.output.last).as("left_sum"))),
+      ScalarSubquery(withAdvisoryFilter(right).groupBy()(sum(right.output.last).as("right_sum"))),
+      ScalarSubquery(withAdvisoryFilter(third).groupBy()(sum(third.output.last).as("third_sum"))))
+
+    val optimized = Optimize.execute(query.analyze)
+    val scans = v2Scans(optimized)
+    assert(scans.length == 1,
+      s"all three equal advisory scans should merge after fresh full pushdown:\n$optimized")
+    val scan = scans.head
+    val expected = advisory(scan.relation.output.head)
+    assert(scan.pushedFilters.isEmpty,
+      "a fully pushed advisory offered during rebuilding must not become inherited strict state")
+    assert(scan.advisoryFilters.size == 1 && scan.advisoryFilters.head.semanticEquals(expected),
+      "the expected advisory metadata must remain available for physical strategy removal")
+    assert(table.buildCount.get() >= 2, "both scan-merge rounds should rebuild a fresh scan")
+    assert(table.advisoryReportCount.get() == 0)
+    assert(!hasPropagatedFilterAlias(optimized),
+      s"equal advisory filters should remain ordinary identical Filters:\n$optimized")
+  }
+
+  test("SPARK-58892: decline incompatible advisory filters") {
+    val advisory = (a: Attribute) => GreaterThan(a, Literal(10))
+    val differentAdvisory = (a: Attribute) => LessThan(a, Literal(100))
+    // One side carries an advisory the other does not.
+    assertAdvisoryMergeDeclined(
+      new AdvisoryTestV2Table(AdvisoryReReported), Some(advisory), None)
+    // Both sides carry advisories, but they differ.
+    assertAdvisoryMergeDeclined(
+      new AdvisoryTestV2Table(AdvisoryReReported), Some(advisory), Some(differentAdvisory))
+  }
+
+  test("SPARK-58892: decline equal advisory filters a fresh scan does not fully push") {
+    val advisory = (a: Attribute) => GreaterThan(a, Literal(10))
+    // The fresh scan re-reports the advisory but does not fully push it: not a valid confirmation.
+    val onlyReReported = new AdvisoryTestV2Table(AdvisoryReReported)
+    assertAdvisoryMergeDeclined(onlyReReported, Some(advisory), Some(advisory))
+    assert(onlyReReported.advisoryReportCount.get() > 0,
+      "re-reporting an advisory without fully pushing it must not confirm a fresh scan")
+    // The fresh scan neither re-reports nor pushes the advisory.
+    val unconfirmed = new AdvisoryTestV2Table(AdvisoryUnconfirmed)
+    assertAdvisoryMergeDeclined(unconfirmed, Some(advisory), Some(advisory))
+    assert(unconfirmed.buildCount.get() > 0,
+      "equal input guarantees should reach fresh-scan revalidation before declining")
+  }
+
   test("SPARK-40259: merge DSv2 scans that differ only in projected columns") {
     val sub1 = ScalarSubquery(v2ScanReading("a").groupBy()(sum($"a").as("sum_a")))
     val sub2 = ScalarSubquery(v2ScanReading("b").groupBy()(sum($"b").as("sum_b")))
@@ -3050,6 +3105,106 @@ class MergeSubplansSuite extends PlanTest {
       ScalarSubquery(plain.groupBy()(sum($"a").as("s1"))),
       ScalarSubquery(sampled.groupBy()(sum(sampled.output(1)).as("s2"))))
     comparePlans(Optimize.execute(q.analyze), q.analyze)
+  }
+
+  // Helpers for the advisory-filter revalidation tests above.
+
+  private def advisoryScanReading(
+      table: AdvisoryTestV2Table,
+      cols: Seq[String],
+      advisory: Option[Attribute => Expression]): DataSourceV2ScanRelation = {
+    val fullOutput = toAttributes(table.schema())
+    val relation =
+      DataSourceV2Relation(table, fullOutput, None, None, CaseInsensitiveStringMap.empty())
+    val output = cols.map(c => fullOutput.find(_.name == c).get)
+    DataSourceV2ScanRelation(
+      relation,
+      TestV2Scan(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable)))),
+      output,
+      advisoryFilters = advisory.toSeq.map(_(fullOutput.head)),
+      mergeableScan = true)
+  }
+
+  private def withAdvisoryFilter(scan: DataSourceV2ScanRelation): LogicalPlan =
+    scan.advisoryFilters.headOption.map(Filter(_, scan)).getOrElse(scan)
+
+  private def advisoryMergeQuery(
+      left: DataSourceV2ScanRelation,
+      right: DataSourceV2ScanRelation): LogicalPlan = {
+    testRelation.select(
+      ScalarSubquery(withAdvisoryFilter(left).groupBy()(sum(left.output.last).as("left_sum"))),
+      ScalarSubquery(withAdvisoryFilter(right).groupBy()(sum(right.output.last).as("right_sum"))))
+  }
+
+  private def hasPropagatedFilterAlias(plan: LogicalPlan): Boolean =
+    plan.exists(_.expressions.exists(_.exists {
+      case alias: Alias => alias.name.startsWith("propagatedFilter_")
+      case _ => false
+    }))
+
+  private def assertAdvisoryMergeDeclined(
+      table: AdvisoryTestV2Table,
+      leftAdvisory: Option[Attribute => Expression],
+      rightAdvisory: Option[Attribute => Expression]): Unit = {
+    val left = advisoryScanReading(table, Seq("a", "b"), leftAdvisory)
+    val right = advisoryScanReading(table, Seq("a", "c"), rightAdvisory)
+    val optimized = Optimize.execute(advisoryMergeQuery(left, right).analyze)
+    assert(v2Scans(optimized).length == 2, s"scan merging should be declined:\n$optimized")
+  }
+}
+
+private sealed trait AdvisoryConfirmation
+private case object AdvisoryReReported extends AdvisoryConfirmation
+private case object AdvisoryFullyPushed extends AdvisoryConfirmation
+private case object AdvisoryUnconfirmed extends AdvisoryConfirmation
+
+/** A mergeable table whose fresh builders exercise advisory-filter revalidation. */
+private class AdvisoryTestV2Table(confirmation: AdvisoryConfirmation)
+  extends Table with SupportsRead {
+  val buildCount = new AtomicInteger()
+  val advisoryReportCount = new AtomicInteger()
+  private val tableSchema = StructType(Seq(
+    StructField("a", IntegerType),
+    StructField("b", IntegerType),
+    StructField("c", IntegerType)))
+
+  override def name(): String = "advisory_test_v2_table"
+  override def schema(): StructType = tableSchema
+  override def capabilities(): java.util.Set[TableCapability] =
+    java.util.EnumSet.of(TableCapability.BATCH_READ, TableCapability.SCAN_MERGING)
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+    new AdvisoryTestV2ScanBuilder(
+      tableSchema, confirmation, buildCount, advisoryReportCount)
+}
+
+private class AdvisoryTestV2ScanBuilder(
+    tableSchema: StructType,
+    confirmation: AdvisoryConfirmation,
+    buildCount: AtomicInteger,
+    advisoryReportCount: AtomicInteger)
+  extends ScanBuilder with SupportsPushDownCatalystFilters
+    with SupportsPushDownRequiredColumns {
+  private var prunedSchema = tableSchema
+
+  override def pruneColumns(requiredSchema: StructType): Unit = prunedSchema = requiredSchema
+
+  override def pushFilters(filters: Seq[Expression]): Seq[Expression] = confirmation match {
+    case AdvisoryFullyPushed => Nil
+    case _ => filters
+  }
+
+  override def pushedFilters: Array[Predicate] = Array.empty
+
+  override def advisoryFilters: Seq[Expression] = confirmation match {
+    case AdvisoryReReported =>
+      advisoryReportCount.incrementAndGet()
+      Seq(GreaterThan(AttributeReference("a", IntegerType)(), Literal(10)))
+    case _ => Nil
+  }
+
+  override def build(): Scan = {
+    buildCount.incrementAndGet()
+    TestV2Scan(prunedSchema)
   }
 }
 

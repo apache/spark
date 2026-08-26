@@ -337,7 +337,7 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
   test("advisory filters do not block TABLESAMPLE pushdown") {
     registerCatalog("testsampleadvisory", classOf[InMemoryTableWithTableSampleAndAdvisoryCatalog])
     val table = "testsampleadvisory.ns.sample_tbl"
-    val advisory = "id = 1L"
+    val advisory = "id > 0L"
     val prop = InMemoryTableWithTableSampleAndAdvisoryFilters.ADVISORY_FILTER_PROP
     sql(s"CREATE TABLE $table (id bigint, data string) USING _ " +
       s"TBLPROPERTIES ('$prop' = '$advisory')")
