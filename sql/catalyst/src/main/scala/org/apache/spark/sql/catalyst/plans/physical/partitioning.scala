@@ -643,9 +643,16 @@ case class KeyedPartitioning(
       // the narrowing one.
       val projectedExpressions = joinKeyPositions.map(expressions)
       val projectedKeys = projectKeys(joinKeyPositions)._2
-      val distinctProjectedKeys = projectedKeys.distinct
+      // Sort the distinct projected keys the same way `GroupPartitionsExec` does. When only the
+      // keyed side is grouped, the other side is re-shuffled using this spec, and
+      // `ShuffleExchangeExec` routes it by the sorted keys. So the keys declared here have to be
+      // sorted too. Otherwise a `GroupPartitionsExec` that AQE plans over that shuffle reads its
+      // partitions in the wrong order. `toGrouped` drops the unknown-keys marker, so only its keys
+      // are taken.
+      val groupedProjectedKeys = new KeyedPartitioning(
+        projectedExpressions, projectedKeys, isGrouped = false).toGrouped.partitionKeys
       val projectedPartitioning = KeyedPartitioning(
-        projectedExpressions, distinctProjectedKeys,
+        projectedExpressions, groupedProjectedKeys,
         isGrouped = true, mayContainUnknownPartitionKeys = mayContainUnknownPartitionKeys)
       result.copy(partitioning = projectedPartitioning, joinKeyPositions = Some(joinKeyPositions))
     } else {
