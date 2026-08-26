@@ -1741,6 +1741,29 @@ class JDBCSuite extends SharedSparkSession {
       "SELECT a,b FROM test     FETCH FIRST 123 ROWS ONLY")
   }
 
+  test("DB2Dialect Join pushdown query test") {
+    // JDBC url is a required option but is not used in this test.
+    val options = new JDBCOptions(Map("url" -> "jdbc:db2://host:port", "dbtable" -> "test"))
+    val dialect = DB2Dialect()
+    val left = dialect
+      .getJdbcSQLQueryBuilder(options)
+      .withColumns(Array("a"))
+    val right = dialect
+      .getJdbcSQLQueryBuilder(options)
+      .withColumns(Array("b"))
+
+    val query = dialect
+      .getJdbcSQLQueryBuilder(options)
+      .withJoin(left, right, "L", "R", Array("a", "b"), "INNER JOIN", "L.a = R.b")
+      .build()
+      .replaceAll("\\s+", " ")
+
+    assert(query.contains("INNER JOIN"))
+    assert(query.contains("ON L.a = R.b"))
+    assert(query.contains("SELECT a FROM test"))
+    assert(query.contains("SELECT b FROM test"))
+  }
+
   test("table exists query by jdbc dialect") {
     val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
