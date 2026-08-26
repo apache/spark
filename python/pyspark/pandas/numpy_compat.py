@@ -70,21 +70,31 @@ unary_np_spark_mappings = {
     "rad2deg": F.degrees,
     "radians": F.radians,
     "reciprocal": lambda c: F.when(
-        F.typeof(c).isin("float", "double"),
+        # Floating-point and decimal inputs take a true reciprocal; numpy
+        # applies it element-wise to Decimal objects as well.
+        F.typeof(c).isin("float", "double") | F.typeof(c).startswith("decimal"),
         F.when(c.isNull(), c.cast("double"))
         .when(
-            c == 0,
+            # Cast to double so the zero check also analyzes for the integer and
+            # boolean columns that fall through to the otherwise branch (Spark
+            # type-checks every branch of the CASE, not just the taken one).
+            c.cast("double") == 0,
             F.when(c.cast("string") == "-0.0", F.lit(float("-inf"))).otherwise(F.lit(float("inf"))),
         )
-        .otherwise(F.lit(1.0) / c),
+        .otherwise(F.lit(1.0) / c.cast("double")),
     ).otherwise(
-        # Integer input: numpy does integer division (truncated toward zero),
-        # so casting the float quotient to long reproduces 1 -> 1, -1 -> -1,
-        # and every other magnitude -> 0. Dividing by 0 overflows to the int64
-        # minimum, matching numpy's behavior on integer arrays.
-        F.when(c == 0, F.lit(float(np.iinfo(np.int64).min))).otherwise(
-            (F.lit(1) / c).cast("long").cast("double")
-        )
+        # Integer and boolean inputs: numpy does integer division (truncated
+        # toward zero), so only +/-1 survive and every other magnitude -> 0.
+        # Dividing by 0 overflows to the width-specific integer minimum for int
+        # (int32) and bigint (int64), while narrower widths (tinyint, smallint,
+        # and boolean promoted to int8) return 0. Cast through long so boolean
+        # and narrower integers can take part in the division.
+        F.when(
+            c.cast("long") == 0,
+            F.when(F.typeof(c) == "int", F.lit(float(np.iinfo(np.int32).min)))
+            .when(F.typeof(c) == "bigint", F.lit(float(np.iinfo(np.int64).min)))
+            .otherwise(F.lit(0.0)),
+        ).otherwise((F.lit(1) / c.cast("long")).cast("long").cast("double"))
     ),
     "rint": lambda c: F.rint(c.cast("double")),
     "sign": F.signum,
