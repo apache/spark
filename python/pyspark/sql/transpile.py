@@ -759,9 +759,16 @@ class CatalystTranspiler(AbstractTranspiler):
                     return False
                 seen.add(self._param_index(params, name))
                 return True
-            case ast.BinOp(
-                left=left, op=ast.Add() | ast.Sub() | ast.Mult() | ast.Mod(), right=right
-            ):
+            # `*` is deliberately absent, and it used to be here. The argument for
+            # allowing it was that ANSI keeps every intermediate in IntegerType, so a
+            # product of int32 operands either stays under 2**31 or raises -- true
+            # until operand promotion, which now evaluates that product in bigint and
+            # lets it reach 2**62. Past 2**53 the cast to double rounds before
+            # dividing, so `(a * b) / c` on three int columns returned
+            # 422461242.77102745 where CPython gives 422461242.7710275. Addition and
+            # subtraction stay: their worst case is 2**32, comfortably exact as a
+            # double even after promotion widens them.
+            case ast.BinOp(left=left, op=ast.Add() | ast.Sub() | ast.Mod(), right=right):
                 return self._int32_exact(params, left, seen) and self._int32_exact(
                     params, right, seen
                 )
