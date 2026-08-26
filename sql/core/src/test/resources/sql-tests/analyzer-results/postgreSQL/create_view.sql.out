@@ -294,7 +294,7 @@ CreateViewCommand `v2_temp`, SELECT * FROM base_table, false, false, LocalTempVi
 DESC TABLE EXTENDED v2_temp
 -- !query analysis
 DescribeTableCommand `v2_temp`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedTempView v2_temp
++- ResolvedTempView v2_temp, `v2_temp`
 
 
 -- !query

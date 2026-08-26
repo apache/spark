@@ -93,7 +93,7 @@ class HiveSessionStateBuilder(
     override val singlePassMetadataResolverExtensions: Seq[ResolverExtension] = Seq(
       new DataSourceResolver(session),
       new FileResolver(session),
-      new HiveTableRelationResolver(catalog)
+      new HiveTableRelationResolver(catalog, session)
     )
 
     override val singlePassPostHocResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -141,10 +141,10 @@ class HiveSessionStateBuilder(
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
       DetectAmbiguousSelfJoin +:
-        RelationConversions(catalog) +:
+        RelationConversions(catalog, session) +:
         QualifyLocationWithWarehouse(catalog) +:
         PreprocessTableCreation(catalog) +:
-        PreprocessTableInsertion +:
+        new PreprocessTableInsertion(session) +:
         DataSourceAnalysis +:
         ApplyCharTypePadding +:
         HiveAnalysis +:

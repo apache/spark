@@ -293,7 +293,7 @@ case class ResolvedTempView(
   override lazy val output: Seq[Attribute] =
     toAttributes(CharVarcharUtils.replaceCharVarcharWithStringInSchema(metadata.schema))
 
-  override protected def stringArgs: Iterator[Any] = Iterator(identifier)
+  override protected def stringArgs: Iterator[Any] = Iterator(identifier, metadata.identifier)
 }
 
 object ResolvedTempView {

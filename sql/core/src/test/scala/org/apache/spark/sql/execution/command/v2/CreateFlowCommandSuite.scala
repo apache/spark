@@ -17,15 +17,8 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.catalyst.analysis.{
-  AnalysisTest,
-  UnresolvedIdentifier,
-  UnresolvedWriteTarget
-}
-import org.apache.spark.sql.catalyst.plans.logical.{
-  CreateFlowCommand,
-  InsertIntoStatement
-}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedIdentifier, UnresolvedWriteTarget}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateFlowCommand, InsertIntoStatement}
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.command.v1.CommandSuiteBase

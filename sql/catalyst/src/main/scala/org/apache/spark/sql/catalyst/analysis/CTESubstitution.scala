@@ -20,17 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{
-  Command,
-  CTEInChildren,
-  CTERelationDef,
-  CTERelationRef,
-  InsertIntoDir,
-  LogicalPlan,
-  ParsedStatement,
-  SubqueryAlias,
-  UnresolvedWith,
-  WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CTEInChildren, CTERelationDef, CTERelationRef, InsertIntoDir, LogicalPlan, ParsedStatement, SubqueryAlias, UnresolvedWith, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId

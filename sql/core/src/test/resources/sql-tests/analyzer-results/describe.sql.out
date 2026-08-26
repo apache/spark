@@ -263,35 +263,35 @@ DescribeNamespace true, [info_name#x, info_value#x]
 DESC temp_v
 -- !query analysis
 DescribeTableCommand `temp_v`, false, [col_name#x, data_type#x, comment#x]
-+- ResolvedTempView temp_v
++- ResolvedTempView temp_v, `temp_v`
 
 
 -- !query
 DESC TABLE temp_v
 -- !query analysis
 DescribeTableCommand `temp_v`, false, [col_name#x, data_type#x, comment#x]
-+- ResolvedTempView temp_v
++- ResolvedTempView temp_v, `temp_v`
 
 
 -- !query
 DESC FORMATTED temp_v
 -- !query analysis
 DescribeTableCommand `temp_v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedTempView temp_v
++- ResolvedTempView temp_v, `temp_v`
 
 
 -- !query
 DESC EXTENDED temp_v
 -- !query analysis
 DescribeTableCommand `temp_v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedTempView temp_v
++- ResolvedTempView temp_v, `temp_v`
 
 
 -- !query
 DESC temp_Data_Source_View
 -- !query analysis
 DescribeTableCommand `temp_Data_Source_View`, false, [col_name#x, data_type#x, comment#x]
-+- ResolvedTempView temp_Data_Source_View
++- ResolvedTempView temp_Data_Source_View, `temp_Data_Source_View`
 
 
 -- !query

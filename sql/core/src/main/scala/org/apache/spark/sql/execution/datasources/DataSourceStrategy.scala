@@ -76,9 +76,6 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
 
   def resolver: Resolver = conf.resolver
 
-  private def v1WriteRelation(insert: InsertIntoStatement): Option[LogicalPlan] =
-    InsertWriteRelation(SparkSession.active, insert)
-
   // Visible for testing.
   def convertStaticPartitions(
       sourceAttributes: Seq[Attribute],
@@ -237,17 +234,17 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
-    case insert: InsertIntoStatement =>
-      v1WriteRelation(insert) match {
-        case Some(relation @ LogicalRelationWithTable(_: InsertableRelation, _))
-            if insert.partitionSpec.isEmpty && !insert.ifPartitionNotExists &&
-              insert.replaceCriteriaOpt.isEmpty =>
-          InsertIntoDataSourceCommand(relation, insert.query, insert.overwrite)
-        case Some(relation @ LogicalRelationWithTable(hadoopFsRelation: HadoopFsRelation, table))
-            if insert.query.resolved && insert.replaceCriteriaOpt.isEmpty =>
-          convertHadoopFsRelation(insert, relation, hadoopFsRelation, table)
-        case _ => insert
-      }
+    case insert @ InsertIntoStatement(
+        relation @ LogicalRelationWithTable(_: InsertableRelation, _), _, _, _, _, _, _, _, _, _)
+        if insert.partitionSpec.isEmpty && !insert.ifPartitionNotExists &&
+          insert.replaceCriteriaOpt.isEmpty =>
+      InsertIntoDataSourceCommand(relation, insert.query, insert.overwrite)
+
+    case insert @ InsertIntoStatement(
+        relation @ LogicalRelationWithTable(hadoopFsRelation: HadoopFsRelation, table),
+        _, _, _, _, _, _, _, _, _)
+        if insert.query.resolved && insert.replaceCriteriaOpt.isEmpty =>
+      convertHadoopFsRelation(insert, relation, hadoopFsRelation, table)
 
     case InsertIntoDir(_, storage, provider, query, overwrite)
       if query.resolved && provider.isDefined &&
@@ -262,8 +259,9 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
 
 
 /**
- * Builds a provider relation for a resolved INSERT target. Callers consume the result locally;
- * it is never installed as the [[InsertIntoStatement]] target child.
+ * Builds a provider relation for a resolved INSERT target. The post-hoc insertion preprocessing
+ * rule installs the result as the target after normal analyzer resolution has finished, so the
+ * provider relation is derived only once and reused by later write-specific rules and checks.
  */
 private[sql] object InsertWriteRelation {
   def apply(
@@ -277,8 +275,6 @@ private[sql] object InsertWriteRelation {
       }
     case view: ResolvedTempView =>
       view.viewRelation.plan.map(EliminateSubqueryAliases.apply)
-    case relation: HiveTableRelation => Some(relation)
-    case relation: LogicalRelation => Some(relation)
     case _ => None
   }
 
@@ -351,15 +347,21 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case append @ AppendData(
         relation @ DataSourceV2Relation(
-          V1Table(table: CatalogTable), _, Some(catalog), Some(identifier), options, _),
+          V1Table(table: CatalogTable), _, catalog, identifier, options, _),
         _, _, _, _, _, _) if !append.isByName =>
+      val target = (catalog, identifier) match {
+        case (Some(c), Some(ident)) =>
+          ResolvedTable.create(c.asTableCatalog, ident, relation.table)
+        case _ =>
+          UnresolvedCatalogRelation(table, options)
+      }
       InsertIntoStatement(
-        ResolvedTable.create(catalog.asTableCatalog, identifier, relation.table),
+        target,
         table.partitionColumnNames.map(name => name -> None).toMap,
         Seq.empty,
         append.query,
         overwrite = false,
-        ifPartitionNotExists = append.isByName,
+        ifPartitionNotExists = false,
         tableOptions = options)
 
     // Skip streaming UnresolvedCatalogRelation here - they're handled by the

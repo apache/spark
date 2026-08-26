@@ -280,30 +280,68 @@ class RelationResolution(
           None
         }
 
-        table.map {
-          case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
-              v1Table.v1Table.isViewLike =>
-            val v1Ident = v1Table.catalogTable.identifier
-            val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
-            ResolvedPersistentView(catalog, v2Ident, new V1View(v1Table.catalogTable))
-          case delegatingTable: DelegatingTable =>
-            val v1Table = V1Table(V1Table.toCatalogTable(catalog, ident, delegatingTable))
-            ResolvedTable.create(catalog.asTableCatalog, ident, v1Table)
-          case loadedTable =>
-            ResolvedTable.create(catalog.asTableCatalog, ident, loadedTable)
-        }.orElse {
-          catalog match {
-            case vc: ViewCatalog =>
-              try {
-                Some(ResolvedPersistentView(catalog, ident, vc.loadView(ident)))
-              } catch {
-                case _: NoSuchViewException => None
-              }
-            case _ => None
-          }
+        loadTableOrView(catalog, ident, table, allowViewFallback = true).map { relation =>
+          mapPersistentRelation(
+            catalog,
+            ident,
+            relation,
+            createView = (viewIdent, view) =>
+              ResolvedPersistentView(catalog, viewIdent, view),
+            createV1Table = v1Table =>
+              ResolvedTable.create(catalog.asTableCatalog, ident, v1Table),
+            createDelegatingTable = v1Table =>
+              ResolvedTable.create(catalog.asTableCatalog, ident, v1Table),
+            createTable = loadedTable =>
+              ResolvedTable.create(catalog.asTableCatalog, ident, loadedTable))
         }
       case _ => None
     }
+  }
+
+  private def loadTableOrView(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      table: => Option[Table],
+      allowViewFallback: Boolean): Option[Relation] = {
+    table.orElse {
+      if (allowViewFallback) {
+        catalog match {
+          case viewCatalog: ViewCatalog =>
+            try {
+              Some(viewCatalog.loadView(ident))
+            } catch {
+              case _: NoSuchViewException => None
+            }
+          case _ => None
+        }
+      } else {
+        None
+      }
+    }
+  }
+
+  private def mapPersistentRelation[T](
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      relation: Relation,
+      createView: (Identifier, View) => T,
+      createV1Table: V1Table => T,
+      createDelegatingTable: V1Table => T,
+      createTable: Table => T): T = relation match {
+    case v1Table: V1Table
+        if CatalogV2Util.isSessionCatalog(catalog) && v1Table.v1Table.isViewLike =>
+      val v1Ident = v1Table.catalogTable.identifier
+      val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
+      createView(v2Ident, new V1View(v1Table.catalogTable))
+    case view: View =>
+      createView(ident, view)
+    case delegatingTable: DelegatingTable =>
+      createDelegatingTable(
+        V1Table(V1Table.toCatalogTable(catalog, ident, delegatingTable)))
+    case v1Table: V1Table =>
+      createV1Table(v1Table)
+    case table: Table =>
+      createTable(table)
   }
 
   /**
@@ -381,21 +419,12 @@ class RelationResolution(
                   // returned None (or was skipped because there's no TableCatalog mixin).
                   // Time-travel / write privileges only apply to tables, not views, so the
                   // fallback only fires when both are absent.
-                  tableSide.orElse {
-                    if (finalTimeTravelSpec.isEmpty && writePrivileges == null) {
-                      catalog match {
-                        case vc: ViewCatalog =>
-                          try {
-                            Some(vc.loadView(ident))
-                          } catch {
-                            case _: NoSuchViewException => None
-                          }
-                        case _ => None
-                      }
-                    } else {
-                      None
-                    }
-                  }
+                  loadTableOrView(
+                    catalog,
+                    ident,
+                    tableSide,
+                    allowViewFallback =
+                      finalTimeTravelSpec.isEmpty && writePrivileges == null)
               }
             }
             // `table` is `relation` filtered to tables only -- used for cache lookup since
@@ -510,56 +539,66 @@ class RelationResolution(
       }
     }
 
-    relation.map {
-      // A view is interpreted via v1: project it to a `CatalogTable` and run the v1 scan path,
-      // which expands the view text.
-      case v: View =>
-        createDataSourceV1Scan(V1Table.toCatalogTable(catalog, ident, v))
-
-      // To utilize this code path to execute V1 commands, e.g. INSERT,
-      // either it must be session catalog, or tracksPartitionsInCatalog
-      // must be false so it does not require use catalog to manage partitions.
-      // Obviously we cannot execute V1Table by V1 code path if the table
-      // is not from session catalog and the table still requires its catalog
-      // to manage partitions.
-      case v1Table: V1Table
-          if CatalogV2Util.isSessionCatalog(catalog)
-          || !v1Table.catalogTable.tracksPartitionsInCatalog =>
-        createDataSourceV1Scan(v1Table.v1Table)
-
-      // DelegatingTable is a sentinel meaning "interpret via v1", so unlike the V1Table
-      // case above we apply no session-catalog / tracksPartitionsInCatalog guard -- any catalog
-      // returning DelegatingTable has opted into v1 read semantics.
-      case t: DelegatingTable =>
-        createDataSourceV1Scan(V1Table.toCatalogTable(catalog, ident, t))
-
-      case table: Table =>
-        if (isStreaming) {
-          assert(timeTravelSpec.isEmpty, "time travel is not allowed in streaming")
-          val v1Fallback = table match {
-            case withFallback: V2TableWithV1Fallback =>
-              Some(UnresolvedCatalogRelation(withFallback.v1Table, isStreaming = true))
-            case _ => None
+    relation.map { loadedRelation =>
+      mapPersistentRelation(
+        catalog,
+        ident,
+        loadedRelation,
+        // A view is interpreted via v1: project it to a `CatalogTable` and run the v1 scan path,
+        // which expands the view text.
+        createView = (viewIdent, view) => view match {
+          case v1View: V1View => createDataSourceV1Scan(v1View.v1Table)
+          case _ => createDataSourceV1Scan(V1Table.toCatalogTable(catalog, viewIdent, view))
+        },
+        // To utilize this code path to execute V1 commands, e.g. INSERT, either it must be the
+        // session catalog, or tracksPartitionsInCatalog must be false so that v1 code does not
+        // need the v2 catalog to manage partitions.
+        createV1Table = v1Table => {
+          if (CatalogV2Util.isSessionCatalog(catalog) ||
+              !v1Table.catalogTable.tracksPartitionsInCatalog) {
+            createDataSourceV1Scan(v1Table.v1Table)
+          } else {
+            createDataSourceV2Relation(
+              catalog, ident, v1Table, options, isStreaming, timeTravelSpec)
           }
-          SubqueryAlias(
-            catalog.name +: ident.asMultipartIdentifier,
-            StreamingRelationV2(
-              None,
-              table.name,
-              table,
-              options,
-              table.columns.toOutputAttributes,
-              Some(catalog),
-              Some(ident),
-              v1Fallback
-            )
-          )
-        } else {
-          SubqueryAlias(
-            catalog.name +: ident.asMultipartIdentifier,
-            DataSourceV2Relation.create(table, Some(catalog), Some(ident), options, timeTravelSpec)
-          )
-        }
+        },
+        // DelegatingTable explicitly opts into v1 semantics, so it needs no partition guard.
+        createDelegatingTable = v1Table => createDataSourceV1Scan(v1Table.v1Table),
+        createTable = table =>
+          createDataSourceV2Relation(
+            catalog, ident, table, options, isStreaming, timeTravelSpec))
+    }
+  }
+
+  private def createDataSourceV2Relation(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      table: Table,
+      options: CaseInsensitiveStringMap,
+      isStreaming: Boolean,
+      timeTravelSpec: Option[TimeTravelSpec]): LogicalPlan = {
+    if (isStreaming) {
+      assert(timeTravelSpec.isEmpty, "time travel is not allowed in streaming")
+      val v1Fallback = table match {
+        case withFallback: V2TableWithV1Fallback =>
+          Some(UnresolvedCatalogRelation(withFallback.v1Table, isStreaming = true))
+        case _ => None
+      }
+      SubqueryAlias(
+        catalog.name +: ident.asMultipartIdentifier,
+        StreamingRelationV2(
+          None,
+          table.name,
+          table,
+          options,
+          table.columns.toOutputAttributes,
+          Some(catalog),
+          Some(ident),
+          v1Fallback))
+    } else {
+      SubqueryAlias(
+        catalog.name +: ident.asMultipartIdentifier,
+        DataSourceV2Relation.create(table, Some(catalog), Some(ident), options, timeTravelSpec))
     }
   }
 

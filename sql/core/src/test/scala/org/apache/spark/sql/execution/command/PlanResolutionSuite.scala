@@ -27,7 +27,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, FunctionRegistry, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolvedTempView, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, EmptyFunctionRegistry, FunctionRegistry, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolvedTempView, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
@@ -224,7 +224,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
 
   private val v1SessionCatalog: SessionCatalog = new SessionCatalog(
     new InMemoryCatalog,
-    FunctionRegistry.builtin.clone(),
+    EmptyFunctionRegistry,
     new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
   createTempView(v1SessionCatalog, "v", LocalRelation(Nil), false)
 
@@ -296,6 +296,19 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     new Analyzer(catalogManager) {
       override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Seq(
         new ResolveSessionCatalog(this.catalogManager))
+    }
+  }
+
+  private def withBuiltinFunctions[T](f: => T): T = {
+    val functionCatalog = new SessionCatalog(
+      new InMemoryCatalog,
+      FunctionRegistry.builtin.clone(),
+      new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
+    when(catalogManagerWithoutDefault.v1SessionCatalog).thenReturn(functionCatalog)
+    try {
+      f
+    } finally {
+      when(catalogManagerWithoutDefault.v1SessionCatalog).thenReturn(v1SessionCatalog)
     }
   }
 
@@ -1411,24 +1424,26 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
   }
 
   test("function-based IDENTIFIER in INSERT commands") {
-    val target =
-      "IDENTIFIER(lower(regexp_replace('TESTCAT.PLACEHOLDER', 'PLACEHOLDER', 'TAB')))"
-    val statements = Seq(
-      s"INSERT INTO $target SELECT * FROM v2Table" -> classOf[AppendData],
-      s"INSERT OVERWRITE TABLE $target SELECT * FROM v2Table" ->
-        classOf[OverwriteByExpression],
-      s"INSERT INTO $target REPLACE WHERE i = 1 SELECT * FROM v2Table" ->
-        classOf[OverwriteByExpression])
+    withBuiltinFunctions {
+      val target =
+        "IDENTIFIER(lower(regexp_replace('TESTCAT.PLACEHOLDER', 'PLACEHOLDER', 'TAB')))"
+      val statements = Seq(
+        s"INSERT INTO $target SELECT * FROM v2Table" -> classOf[AppendData],
+        s"INSERT OVERWRITE TABLE $target SELECT * FROM v2Table" ->
+          classOf[OverwriteByExpression],
+        s"INSERT INTO $target REPLACE WHERE i = 1 SELECT * FROM v2Table" ->
+          classOf[OverwriteByExpression])
 
-    statements.foreach { case (sqlText, expectedClass) =>
-      parseAndResolve(sqlText) match {
-        case write: V2WriteCommand =>
-          assert(expectedClass.isInstance(write))
-          assert(write.table.resolved)
-          assert(write.children === Seq(write.query))
-          assert(write.innerChildren.isEmpty)
-        case other =>
-          fail(s"Expected V2WriteCommand, but got: $other")
+      statements.foreach { case (sqlText, expectedClass) =>
+        parseAndResolve(sqlText) match {
+          case write: V2WriteCommand =>
+            assert(expectedClass.isInstance(write))
+            assert(write.table.resolved)
+            assert(write.children === Seq(write.query))
+            assert(write.innerChildren.isEmpty)
+          case other =>
+            fail(s"Expected V2WriteCommand, but got: $other")
+        }
       }
     }
   }
@@ -1442,6 +1457,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     assert(tableInsert.table.isInstanceOf[ResolvedTable])
     assert(tableInsert.children.head eq tableInsert.table)
     assert(tableInsert.tableOptions.get("write-option") === "value")
+    assert(tableInsert.simpleString(100).contains("[write-option=value]"))
 
     val tempViewInsert = analyzer.ResolveRelations(
       parsePlan("INSERT INTO v SELECT * FROM v2Table")).asInstanceOf[InsertIntoStatement]
@@ -1450,20 +1466,22 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
   }
 
   test("function-based IDENTIFIER in INSERT INTO REPLACE USING") {
-    checkError(
-      exception = intercept[AnalysisException] {
-        parseAndResolve(
-          """INSERT INTO IDENTIFIER(lower(regexp_replace(
-            |  'TESTCAT.PLACEHOLDER', 'PLACEHOLDER', 'TAB'))) AS t
-            |REPLACE USING (i)
-            |SELECT * FROM v2Table""".stripMargin)
-      },
-      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-      sqlState = "0A000",
-      parameters = Map(
-        "tableName" -> "`tab`",
-        "operation" -> "INSERT INTO ... REPLACE ON/USING")
-    )
+    withBuiltinFunctions {
+      checkError(
+        exception = intercept[AnalysisException] {
+          parseAndResolve(
+            """INSERT INTO IDENTIFIER(lower(regexp_replace(
+              |  'TESTCAT.PLACEHOLDER', 'PLACEHOLDER', 'TAB'))) AS t
+              |REPLACE USING (i)
+              |SELECT * FROM v2Table""".stripMargin)
+        },
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        sqlState = "0A000",
+        parameters = Map(
+          "tableName" -> "`tab`",
+          "operation" -> "INSERT INTO ... REPLACE ON/USING")
+      )
+    }
   }
 
   test("INSERT INTO REPLACE WHERE with column list") {

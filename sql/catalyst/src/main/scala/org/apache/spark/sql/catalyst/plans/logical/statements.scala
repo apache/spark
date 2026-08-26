@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{
-  FieldName,
-  FieldPosition,
-  UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.connector.catalog.ColumnDefaultValue
@@ -216,11 +213,9 @@ case class InsertIntoStatement(
 
   override def children: Seq[LogicalPlan] = Seq(table, query)
 
-  override protected def stringArgs: Iterator[Any] = {
-    super.stringArgs.filterNot {
-      case options: CaseInsensitiveStringMap => options eq tableOptions
-      case _ => false
-    }
+  override protected def stringArgs: Iterator[Any] = super.stringArgs.filterNot {
+    case options: CaseInsensitiveStringMap => options.isEmpty
+    case _ => false
   }
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {

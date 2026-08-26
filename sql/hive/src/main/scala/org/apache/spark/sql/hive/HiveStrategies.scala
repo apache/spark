@@ -22,6 +22,7 @@ import java.util.Locale
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, EliminateSubqueryAliases, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog._
@@ -34,7 +35,7 @@ import org.apache.spark.sql.connector.catalog.V1Table
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils, InsertIntoDataSourceDirCommand}
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceAnalysis, DataSourceStrategy, HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation, LogicalRelationWithTable, PreprocessTableInsertion}
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceStrategy, HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.execution.HiveScriptTransformationExec
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable.BY_CTAS
@@ -47,6 +48,7 @@ private object HiveWriteTable {
       view.viewRelation.plan
         .map(EliminateSubqueryAliases.apply)
         .collect { case relation: HiveTableRelation => relation.tableMeta }
+    case relation: HiveTableRelation => Some(relation.tableMeta)
     case _ => None
   }
 }
@@ -134,11 +136,22 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 
   override def conf: SQLConf = session.sessionState.conf
 
-  private[hive] def withTableStats(relation: HiveTableRelation): HiveTableRelation = {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case relation: HiveTableRelation
+      if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
+      DetermineTableStats.withTableStats(session, relation)
+  }
+}
+
+private object DetermineTableStats extends Logging {
+  def withTableStats(
+      session: SparkSession,
+      relation: HiveTableRelation): HiveTableRelation = {
     if (relation.tableMeta.stats.nonEmpty) {
       return relation
     }
 
+    val conf = session.sessionState.conf
     val table = relation.tableMeta
     val partitionCols = relation.partitionCols
     // For partitioned tables, the partition directory may be outside of the table directory.
@@ -160,12 +173,6 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 
     val stats = Some(Statistics(sizeInBytes = BigInt(sizeInBytes)))
     relation.copy(tableStats = stats)
-  }
-
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case relation: HiveTableRelation
-      if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
-      withTableStats(relation)
   }
 }
 
@@ -218,7 +225,8 @@ object HiveAnalysis extends Rule[LogicalPlan] {
  * `PreprocessTableCreation`, `PreprocessTableInsertion`, `DataSourceAnalysis` and `HiveAnalysis`.
  */
 case class RelationConversions(
-    sessionCatalog: HiveSessionCatalog) extends Rule[LogicalPlan] {
+    sessionCatalog: HiveSessionCatalog,
+    session: SparkSession) extends Rule[LogicalPlan] {
   private def isConvertible(relation: HiveTableRelation): Boolean = {
     isConvertible(relation.tableMeta)
   }
@@ -254,13 +262,8 @@ case class RelationConversions(
       case i @ HiveWriteTable(table) if i.query.resolved && DDLUtils.isHiveTable(table) =>
         val relation = DDLUtils.readHiveTable(table)
         if (shouldConvertForWrite(relation)) {
-          val relationWithStats = new DetermineTableStats(SparkSession.active)
-            .withTableStats(relation)
-          val converted = metastoreCatalog.convert(relationWithStats, isWrite = true)
-          // The provider relation is local to the write-specific pipeline and is consumed before
-          // this rule returns, so generic analyzer traversal never sees it as the INSERT target.
-          val preprocessed = PreprocessTableInsertion(i.copy(table = converted))
-          DataSourceAnalysis(preprocessed)
+          val relationWithStats = DetermineTableStats.withTableStats(session, relation)
+          i.copy(table = metastoreCatalog.convert(relationWithStats, isWrite = true))
         } else {
           i
         }

@@ -1208,8 +1208,7 @@ class AstBuilder extends DataTypeAstBuilder
     val options = resolveOptions(optionsClause)
     withIdentClause(ctx, parts => withOrigin(ctx) {
       UnresolvedWriteTarget(parts, options, writePrivileges)
-    })
-      .asInstanceOf[NamedRelation]
+    }).asInstanceOf[NamedRelation]
   }
 
   /**

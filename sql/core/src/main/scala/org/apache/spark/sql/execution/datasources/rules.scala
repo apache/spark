@@ -457,7 +457,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
  * table. It also does data type casting and field renaming, to make sure that the columns to be
  * inserted have the correct data type and fields have the correct names.
  */
-object PreprocessTableInsertion extends ResolveInsertionBase {
+class PreprocessTableInsertion(sparkSession: SparkSession) extends ResolveInsertionBase {
   private def preprocess(
       insert: InsertIntoStatement,
       tblName: String,
@@ -563,18 +563,21 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i: InsertIntoStatement if i.table.resolved && i.query.resolved =>
-      InsertWriteRelation(SparkSession.active, i) match {
-        case Some(relation: HiveTableRelation) =>
+      val insert = InsertWriteRelation(sparkSession, i)
+        .map(relation => i.copy(table = relation))
+        .getOrElse(i)
+      insert.table match {
+        case relation: HiveTableRelation =>
           val metadata = relation.tableMeta
-          preprocess(i, metadata.identifier.quotedString, metadata.partitionSchema,
+          preprocess(insert, metadata.identifier.quotedString, metadata.partitionSchema,
             Some(metadata))
-        case Some(LogicalRelationWithTable(h: HadoopFsRelation, catalogTable)) =>
+        case LogicalRelationWithTable(h: HadoopFsRelation, catalogTable) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
-          preprocess(i, tblName, h.partitionSchema, catalogTable)
-        case Some(LogicalRelationWithTable(_: InsertableRelation, catalogTable)) =>
+          preprocess(insert, tblName, h.partitionSchema, catalogTable)
+        case LogicalRelationWithTable(_: InsertableRelation, catalogTable) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
-          preprocess(i, tblName, new StructType(), catalogTable)
-        case _ => i
+          preprocess(insert, tblName, new StructType(), catalogTable)
+        case _ => insert
       }
   }
 
@@ -669,45 +672,42 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case insert: InsertIntoStatement =>
-        InsertWriteRelation(SparkSession.active, insert) match {
-          case Some(LogicalRelationWithTable(relation, _)) =>
-            // Get input data source relations from the query's child-plan tree.
-            val srcRelations = insert.query.collect {
-              case l: LogicalRelation => l.relation
-            }
-            if (srcRelations.contains(relation)) {
-              throw new AnalysisException(
-                errorClass = "UNSUPPORTED_INSERT.READ_FROM",
-                messageParameters = Map("relationId" -> toSQLId(relation.toString)))
-            }
-
-            relation match {
-              case _: HadoopFsRelation => // OK
-
-              // Right now, we do not support insert into a non-file-based data source table with
-              // partition specs.
-              case i: InsertableRelation if insert.partitionSpec.nonEmpty =>
-                throw new AnalysisException(
-                  errorClass = "UNSUPPORTED_INSERT.NOT_PARTITIONED",
-                  messageParameters = Map("relationId" -> toSQLId(i.toString)))
-
-              case _ =>
-                throw new AnalysisException(
-                  errorClass = "UNSUPPORTED_INSERT.NOT_ALLOWED",
-                  messageParameters = Map("relationId" -> toSQLId(relation.toString)))
-            }
-
-          case Some(t) if !t.isInstanceOf[LeafNode] ||
-              t.isInstanceOf[Range] ||
-              t.isInstanceOf[OneRowRelation] ||
-              t.isInstanceOf[LocalRelation] =>
-            throw new AnalysisException(
-              errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
-              messageParameters = Map.empty)
-
-          case _ => // OK
+      case InsertIntoStatement(LogicalRelationWithTable(relation, _), partition,
+          _, query, _, _, _, _, _, _) =>
+        // Get input data source relations from the query's child-plan tree.
+        val srcRelations = query.collect {
+          case l: LogicalRelation => l.relation
         }
+        if (srcRelations.contains(relation)) {
+          throw new AnalysisException(
+            errorClass = "UNSUPPORTED_INSERT.READ_FROM",
+            messageParameters = Map("relationId" -> toSQLId(relation.toString)))
+        }
+
+        relation match {
+          case _: HadoopFsRelation => // OK
+
+          // Right now, we do not support insert into a non-file-based data source table with
+          // partition specs.
+          case i: InsertableRelation if partition.nonEmpty =>
+            throw new AnalysisException(
+              errorClass = "UNSUPPORTED_INSERT.NOT_PARTITIONED",
+              messageParameters = Map("relationId" -> toSQLId(i.toString)))
+
+          case _ =>
+            throw new AnalysisException(
+              errorClass = "UNSUPPORTED_INSERT.NOT_ALLOWED",
+              messageParameters = Map("relationId" -> toSQLId(relation.toString)))
+        }
+
+      case InsertIntoStatement(t, _, _, _, _, _, _, _, _, _)
+          if !t.isInstanceOf[LeafNode] ||
+            t.isInstanceOf[Range] ||
+            t.isInstanceOf[OneRowRelation] ||
+            t.isInstanceOf[LocalRelation] =>
+        throw new AnalysisException(
+          errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+          messageParameters = Map.empty)
 
       case _ => // OK
     }
