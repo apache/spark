@@ -187,7 +187,7 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
     // `CommonExpressionRef` in the `child`. This cannot be used to hand the new `With` its own
     // reference objects: a rebuilt reference is `==` the one it replaces, since the binding it
     // carries is not part of its equality, so `transform` keeps the original. `eval` rebinds
-    // instead of relying on the references being unshared -- see [[refsToBind]].
+    // instead of relying on the references being unshared -- see `refsToBind`.
     val newChild = newDefs.filter(_.resolved).foldLeft(newChildren.head) { (result, newDef) =>
       defs.find(_.id == newDef.id).map { oldDef =>
         if (newDef.dataType != oldDef.dataType || newDef.nullable != oldDef.nullable) {

@@ -246,7 +246,7 @@ class RewriteWithExpressionSuite extends PlanTest {
 
   test("SPARK-58902: a cheap or single-reference definition in a branch is still inlined") {
     val Seq(a, b) = testRelation.output
-    // A bare attribute is cheap, so inlining it costs nothing and keeps the branch foldable.
+    // A bare attribute is cheap, so inlining it costs nothing.
     val cheap = With(a) { case Seq(ref) => ref * ref }
     comparePlans(
       Optimizer.execute(testRelation.select(Coalesce(Seq(b, cheap)).as("col"))),

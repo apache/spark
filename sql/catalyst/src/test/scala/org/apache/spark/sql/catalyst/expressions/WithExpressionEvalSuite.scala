@@ -80,9 +80,9 @@ class WithExpressionEvalSuite extends SparkFunSuite {
 
   test("a reference behind a short-circuiting operator is not read when the left side is false") {
     // Neither pre-evaluating the definition into a project nor guarding that column by the branch
-    // can express this: both evaluate on every row the branch is reached on, while `And` short
-    // circuits before the reference. The `And` is inside the `With` so that the `With` is entered
-    // and only the reference is skipped.
+    // can express this: both evaluate on every row the branch is reached on, while `And`
+    // short-circuits before the reference. The `And` is inside the `With` so that the `With` is
+    // entered and only the reference is skipped.
     val c = counter()
     val w = With(c) { case Seq(ref) =>
       And(Literal.FalseLiteral, GreaterThanOrEqual(ref, Literal(1)))
