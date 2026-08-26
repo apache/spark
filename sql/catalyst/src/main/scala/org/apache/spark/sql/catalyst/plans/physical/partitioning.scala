@@ -545,7 +545,7 @@ case class KeyedPartitioning(
   @transient lazy val expressionDataTypes: Seq[DataType] = expressions.map(_.dataType)
 
   @transient lazy val keyRowOrdering =
-    RowOrdering.createNaturalAscendingOrdering(expressionDataTypes)
+    KeyedPartitioning.groupedKeyRowOrdering(expressionDataTypes)
 
   @transient lazy val keyOrdering = keyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
 
@@ -620,10 +620,10 @@ case class KeyedPartitioning(
       val joinKeyPositions = result.keyPositions.map(_.nonEmpty).zipWithIndex.filter(_._1).map(_._2)
       val projectedExpressions = joinKeyPositions.map(expressions)
       val projectedKeys = projectKeys(joinKeyPositions)._2
-      // Sort the distinct projected keys the same way `GroupPartitionsExec` does. Otherwise, when
-      // only the keyed side is grouped and the other side is re-shuffled using this spec, the two
-      // `KeyedPartitioning`s carry the same keys in a different order and
-      // `PartitioningCollection.fromPartitionings` rejects them.
+      // Sort the distinct projected keys the same way `GroupPartitionsExec` does (both sort with
+      // `KeyedPartitioning.groupedKeyRowOrdering`). Otherwise, when only the keyed side is grouped
+      // and the other side is re-shuffled using this spec, the two `KeyedPartitioning`s carry the
+      // same keys in a different order and `PartitioningCollection.fromPartitionings` rejects them.
       val projectedPartitioning =
         new KeyedPartitioning(projectedExpressions, projectedKeys, isGrouped = false).toGrouped
       result.copy(partitioning = projectedPartitioning, joinKeyPositions = Some(joinKeyPositions))
@@ -667,6 +667,24 @@ object KeyedPartitioning {
       case _ => false
     }
   }
+
+  /**
+   * The ascending ordering in which grouped partition keys are laid out, for keys of the given
+   * data types.
+   *
+   * This is a shared contract, not a convenience: with `allowKeysSubsetOfPartitionKeys`,
+   * `createShuffleSpec` declares the keyed side's projected keys in this order (via `toGrouped`),
+   * and the other side of the join may be shuffled onto exactly those keys, while the
+   * `GroupPartitionsExec` inserted on the keyed side independently re-groups its partitions with
+   * the same key positions and sorts them with this same ordering
+   * (`GroupPartitionsExec.groupAndSortByKeys`). If the two sorts diverged, inner joins would fail
+   * loudly at planning time -- `ShuffledJoin` wraps both sides' partitionings into a
+   * `PartitioningCollection`, whose invariant requires equal partition keys -- but join types that
+   * expose only one side's partitioning (e.g. LEFT OUTER) run nothing that compares the two
+   * orders, and silently return wrong results.
+   */
+  def groupedKeyRowOrdering(dataTypes: Seq[DataType]): BaseOrdering =
+    RowOrdering.createNaturalAscendingOrdering(dataTypes)
 
   /**
    * Projects a sequence of partition keys by selecting only the specified positions.
