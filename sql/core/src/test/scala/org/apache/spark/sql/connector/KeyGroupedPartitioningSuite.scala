@@ -4217,6 +4217,45 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     }
   }
 
+  test("SPARK-58988: v2 bucketed table with subset join keys joining v1 table") {
+    // The v2 table is partitioned by an extra identity key `dt` plus `bucket(16, c1)`, while the
+    // join is only on `c1`. allowKeysSubsetOfPartitionKeys lets the operation key `c1` be a subset
+    // of the partition keys `[dt, bucket(16, c1)]`, so EnsureRequirements projects the keyed side
+    // to `[bucket(16, c1)]`. v2BucketingShuffleEnabled then re-shuffles only the v1 side using that
+    // projected KeyedPartitioning. ShuffledJoin wraps the two output partitionings into a
+    // PartitioningCollection, which requires all KeyedPartitionings to share equal partitionKeys.
+    // The v2 side's keys are sorted by GroupPartitionsExec, while the keys re-used for the v1 side
+    // keep their first-occurrence order from createShuffleSpec, so the two sequences disagree and
+    // the collection construction used to fail.
+    val cols = Array(
+      Column.create("c1", LongType),
+      Column.create("c2", StringType),
+      Column.create("dt", StringType))
+    val partitions = Array(identity("dt"), bucket(16, "c1"))
+
+    createTable("iceberg_t2", cols, partitions)
+    sql("INSERT INTO testcat.ns.iceberg_t2 VALUES (2, 'cc', '2020'), (1, 'aa', '2021')")
+
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c1 BIGINT, c2 STRING) USING parquet")
+      sql("INSERT INTO t1 VALUES (1, 'aa'), (2, 'cc')")
+
+      withSQLConf(
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = sql("SELECT * FROM testcat.ns.iceberg_t2 t0 JOIN t1 ON t0.c1 = t1.c1")
+        val plan = df.queryExecution.executedPlan
+        // Only the v1 side is re-shuffled; the v2 side is regrouped onto the join key instead.
+        assert(collectShuffles(plan).length == 1)
+        assert(collectGroupPartitions(plan).length == 1)
+        checkAnswer(df, Seq(
+          Row(1L, "aa", "2021", 1L, "aa"),
+          Row(2L, "cc", "2020", 2L, "cc")))
+      }
+    }
+  }
+
   test("SPARK-57881: storage-partitioned join leverages union output KeyedPartitioning to " +
       "avoid shuffle") {
     val cols = Array(
