@@ -1377,12 +1377,95 @@ class Analyzer(
           case table: ResolvedTable if !table.table.isInstanceOf[V1Table] =>
             Some(DataSourceV2Relation.create(
               table.table, Some(table.catalog), Some(table.identifier), insert.tableOptions))
-          case view: ResolvedTempView =>
-            view.viewRelation.plan
-              .map(EliminateSubqueryAliases.apply)
-              .collect { case relation: DataSourceV2Relation => relation }
           case _ => None
         }
+      }
+    }
+
+    private def resolveV2Write(
+        i: InsertIntoStatement,
+        relation: DataSourceV2Relation): LogicalPlan = {
+      if (i.replaceCriteriaOpt.exists(_.isReplaceOnOrUsing)) {
+        throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(relation.table.name())
+      } else if (i.replaceCriteriaOpt.isEmpty ||
+          i.replaceCriteriaOpt.exists(_.isReplaceWhere)) {
+        // ifPartitionNotExists is append with validation, but validation is not supported
+        if (i.ifPartitionNotExists) {
+          throw QueryCompilationErrors.unsupportedIfNotExistsError(relation.table.name)
+        }
+
+        // Create a project if this is an INSERT INTO BY NAME query.
+        val projectByName = if (i.userSpecifiedCols.nonEmpty) {
+          Some(createProjectForByNameQuery(relation.table.name, i))
+        } else {
+          None
+        }
+        val isByName = projectByName.nonEmpty || i.byName
+
+        val partCols = partitionColumnNames(relation.table)
+        validatePartitionSpec(partCols, i.partitionSpec)
+
+        val staticPartitions = i.partitionSpec.filter(_._2.isDefined).transform((_, v) => v.get)
+        val query = addStaticPartitionColumns(
+          relation, projectByName.getOrElse(i.query), staticPartitions, isByName)
+
+        if (!i.overwrite) {
+          if (isByName) {
+            AppendData.byName(
+              relation,
+              query,
+              withSchemaEvolution = i.withSchemaEvolution)
+          } else {
+            AppendData.byPosition(
+              relation,
+              query,
+              withSchemaEvolution = i.withSchemaEvolution)
+          }
+        // Dynamic partition overwrite applies only to plain INSERT OVERWRITE. REPLACE WHERE
+        // always deletes by its condition, so it falls through to the OverwriteByExpression
+        // branch below even when the session is in DYNAMIC partition-overwrite mode.
+        } else if (i.replaceCriteriaOpt.isEmpty &&
+            conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
+          if (isByName) {
+            OverwritePartitionsDynamic.byName(
+              relation,
+              query,
+              withSchemaEvolution = i.withSchemaEvolution)
+          } else {
+            OverwritePartitionsDynamic.byPosition(
+              relation,
+              query,
+              withSchemaEvolution = i.withSchemaEvolution)
+          }
+        } else {
+          val deleteExpr = i.replaceCriteriaOpt match {
+            case Some(InsertReplaceWhere(condition)) =>
+              if (staticPartitions.nonEmpty) {
+                throw SparkException.internalError(
+                  s"REPLACE WHERE must not carry static partitions, but got: $staticPartitions")
+              }
+              condition
+            case Some(other) => throw SparkException.internalError(
+              s"Replace criteria ${other.getClass.getSimpleName} must not reach " +
+                "ResolveInsertInto; REPLACE ON/USING are rejected earlier.")
+            case None => staticDeleteExpression(relation, staticPartitions)
+          }
+          if (isByName) {
+            OverwriteByExpression.byName(
+              table = relation,
+              df = query,
+              deleteExpr = deleteExpr,
+              withSchemaEvolution = i.withSchemaEvolution)
+          } else {
+            OverwriteByExpression.byPosition(
+              table = relation,
+              query = query,
+              deleteExpr = deleteExpr,
+              withSchemaEvolution = i.withSchemaEvolution)
+          }
+        }
+      } else {
+        i
       }
     }
 
@@ -1396,98 +1479,22 @@ class Analyzer(
           throw QueryCompilationErrors.insertIntoViewNotAllowedError(identifier, i.table)
         }
 
-      case i @ InsertIntoStatement(v: ResolvedTempView, _, _, _, _, _, _, _, _, _)
-          if v.viewRelation.plan.forall(p => EliminateSubqueryAliases(p).isInstanceOf[View]) =>
-        if (i.replaceCriteriaOpt.exists(_.isReplaceWhere)) {
-          throw QueryCompilationErrors.writeIntoViewNotAllowedError(v.metadata.identifier, i)
-        } else {
-          throw QueryCompilationErrors.insertIntoViewNotAllowedError(
-            v.metadata.identifier, i.table)
+      case i @ InsertIntoStatement(v: ResolvedTempView, _, _, _, _, _, _, _, _, _) =>
+        v.viewRelation.plan.map(EliminateSubqueryAliases.apply) match {
+          case None | Some(_: View) =>
+            if (i.replaceCriteriaOpt.exists(_.isReplaceWhere)) {
+              throw QueryCompilationErrors.writeIntoViewNotAllowedError(v.metadata.identifier, i)
+            } else {
+              throw QueryCompilationErrors.insertIntoViewNotAllowedError(
+                v.metadata.identifier, i.table)
+            }
+          case Some(relation: DataSourceV2Relation) if i.query.resolved =>
+            resolveV2Write(i, relation)
+          case _ => i
         }
 
       case i @ V2WriteRelation(r) if i.query.resolved =>
-        if (i.replaceCriteriaOpt.exists(_.isReplaceOnOrUsing)) {
-          throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(r.table.name())
-        } else if (i.replaceCriteriaOpt.isEmpty ||
-            i.replaceCriteriaOpt.exists(_.isReplaceWhere)) {
-          // ifPartitionNotExists is append with validation, but validation is not supported
-          if (i.ifPartitionNotExists) {
-            throw QueryCompilationErrors.unsupportedIfNotExistsError(r.table.name)
-          }
-
-          // Create a project if this is an INSERT INTO BY NAME query.
-          val projectByName = if (i.userSpecifiedCols.nonEmpty) {
-            Some(createProjectForByNameQuery(r.table.name, i))
-          } else {
-            None
-          }
-          val isByName = projectByName.nonEmpty || i.byName
-
-          val partCols = partitionColumnNames(r.table)
-          validatePartitionSpec(partCols, i.partitionSpec)
-
-          val staticPartitions = i.partitionSpec.filter(_._2.isDefined).transform((_, v) => v.get)
-          val query = addStaticPartitionColumns(
-            r, projectByName.getOrElse(i.query), staticPartitions, isByName)
-
-          if (!i.overwrite) {
-            if (isByName) {
-              AppendData.byName(
-                r,
-                query,
-                withSchemaEvolution = i.withSchemaEvolution)
-            } else {
-              AppendData.byPosition(
-                r,
-                query,
-                withSchemaEvolution = i.withSchemaEvolution)
-            }
-          // Dynamic partition overwrite applies only to plain INSERT OVERWRITE. REPLACE WHERE
-          // always deletes by its condition, so it falls through to the OverwriteByExpression
-          // branch below even when the session is in DYNAMIC partition-overwrite mode.
-          } else if (i.replaceCriteriaOpt.isEmpty &&
-              conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
-            if (isByName) {
-              OverwritePartitionsDynamic.byName(
-                r,
-                query,
-                withSchemaEvolution = i.withSchemaEvolution)
-            } else {
-              OverwritePartitionsDynamic.byPosition(
-                r,
-                query,
-                withSchemaEvolution = i.withSchemaEvolution)
-            }
-          } else {
-            val deleteExpr = i.replaceCriteriaOpt match {
-              case Some(InsertReplaceWhere(condition)) =>
-                if (staticPartitions.nonEmpty) {
-                  throw SparkException.internalError(
-                    s"REPLACE WHERE must not carry static partitions, but got: $staticPartitions")
-                }
-                condition
-              case Some(other) => throw SparkException.internalError(
-                s"Replace criteria ${other.getClass.getSimpleName} must not reach " +
-                  "ResolveInsertInto; REPLACE ON/USING are rejected earlier.")
-              case None => staticDeleteExpression(r, staticPartitions)
-            }
-            if (isByName) {
-              OverwriteByExpression.byName(
-                table = r,
-                df = query,
-                deleteExpr = deleteExpr,
-                withSchemaEvolution = i.withSchemaEvolution)
-            } else {
-              OverwriteByExpression.byPosition(
-                table = r,
-                query = query,
-                deleteExpr = deleteExpr,
-                withSchemaEvolution = i.withSchemaEvolution)
-            }
-          }
-        } else {
-          i
-        }
+        resolveV2Write(i, r)
     }
 
     private def partitionColumnNames(table: Table): Seq[String] = {

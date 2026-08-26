@@ -246,11 +246,11 @@ case class RelationConversions(
     if (serde.contains("parquet")) "parquet" else "orc"
   }
 
-  private def shouldConvertForWrite(relation: HiveTableRelation): Boolean = {
-    isConvertible(relation) &&
-      ((relation.isPartitioned &&
+  private def shouldConvertForWrite(table: CatalogTable): Boolean = {
+    isConvertible(table) &&
+      ((table.partitionColumnNames.nonEmpty &&
         conf.getConf(HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE)) ||
-        (!relation.isPartitioned &&
+        (table.partitionColumnNames.isEmpty &&
           conf.getConf(HiveUtils.CONVERT_INSERTING_UNPARTITIONED_TABLE)))
   }
 
@@ -260,8 +260,8 @@ case class RelationConversions(
     plan resolveOperators {
       // Write path
       case i @ HiveWriteTable(table) if i.query.resolved && DDLUtils.isHiveTable(table) =>
-        val relation = DDLUtils.readHiveTable(table)
-        if (shouldConvertForWrite(relation)) {
+        if (shouldConvertForWrite(table)) {
+          val relation = DDLUtils.readHiveTable(table)
           val relationWithStats = DetermineTableStats.withTableStats(session, relation)
           i.copy(table = metastoreCatalog.convert(relationWithStats, isWrite = true))
         } else {

@@ -550,7 +550,7 @@ class RelationResolution(
           case v1View: V1View => createDataSourceV1Scan(v1View.v1Table)
           case _ => createDataSourceV1Scan(V1Table.toCatalogTable(catalog, viewIdent, view))
         },
-        // To utilize this code path to execute V1 commands, e.g. INSERT, either it must be the
+        // To utilize this code path to execute V1 commands, e.g. INSERT, the catalog must be the
         // session catalog, or tracksPartitionsInCatalog must be false so that v1 code does not
         // need the v2 catalog to manage partitions.
         createV1Table = v1Table => {
