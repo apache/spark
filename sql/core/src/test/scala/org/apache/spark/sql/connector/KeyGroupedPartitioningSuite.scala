@@ -4133,6 +4133,78 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     }
   }
 
+  test("SPARK-59026: shuffle created from a narrowed KeyedPartitioning template keeps " +
+      "isNarrowed") {
+    // items is partitioned by (id, name) with unique ids, so projecting away 'name' narrows
+    // KP([id, name]) to KP([id], isNarrowed=true, isGrouped=true), which still satisfies the
+    // join distribution. purchases reports no partitioning, so with V2_BUCKETING_SHUFFLE_ENABLED
+    // the purchases side is shuffled using the narrowed KP as the template; the shuffled side
+    // mirrors the narrowed side's partition keys, so it must also report isNarrowed=true.
+    // The RIGHT OUTER join exposes only the shuffled side's partitioning; unioning it with t3
+    // (identity(id), overlapping keys) merges the keys with duplicates into an ungrouped KP
+    // whose isNarrowed flag must survive, so that the final aggregate cannot coalesce the
+    // narrowed keys without allowKeysSubsetOfPartitionKeys.
+    val items_partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+      s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
+      s"(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    createTable("t3", Array(Column.create("id", LongType)), Array(identity("id")))
+    sql("INSERT INTO testcat.ns.t3 VALUES (1), (2)")
+
+    val query =
+      s"""
+         |SELECT id, COUNT(*) AS cnt FROM (
+         |  ${selectWithMergeJoinHint("sub", "p")}
+         |  p.item_id AS id
+         |  FROM (SELECT id FROM testcat.ns.$items WHERE name >= 'aa') sub
+         |  RIGHT OUTER JOIN testcat.ns.$purchases p
+         |  ON sub.id = p.item_id
+         |  UNION ALL
+         |  SELECT id FROM testcat.ns.t3
+         |) GROUP BY id
+         |""".stripMargin
+    val expected = Seq(Row(1L, 2L), Row(2L, 2L), Row(3L, 1L))
+
+    Seq(false, true).foreach { allowSubset =>
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> allowSubset.toString) {
+        val df = sql(query)
+        val plan = df.queryExecution.executedPlan
+
+        val union = collect(plan) { case u: UnionExec => u }.head
+        val kp = union.outputPartitioning.asInstanceOf[physical.KeyedPartitioning]
+        assert(!kp.isGrouped, "keys 1 and 2 repeat across the union children")
+        if (!allowSubset) {
+          assert(kp.isNarrowed,
+            "isNarrowed must survive the shuffle created from the narrowed template")
+          assert(collectAllShuffles(plan).size == 2,
+            "the aggregate must shuffle: coalescing the narrowed keys needs " +
+              "allowKeysSubsetOfPartitionKeys")
+          assert(collectAllGroupPartitions(plan).isEmpty,
+            "no GroupPartitionsExec without allowKeysSubsetOfPartitionKeys")
+        } else {
+          assert(collectAllShuffles(plan).size == 1,
+            "only the purchases side shuffles; the aggregate coalesces the union output")
+          assert(collectAllGroupPartitions(plan).nonEmpty,
+            "GroupPartitionsExec coalesces the duplicate keys with the config enabled")
+        }
+        checkAnswer(df, expected)
+      }
+    }
+  }
+
   test("SPARK-46367: aggregate with GROUP BY subset of partition keys uses GroupPartitionsExec " +
       "with allowKeysSubsetOfPartitionKeys") {
     // Table partitioned by (id, name): id=1 maps to two distinct partition keys (1,'aa') and

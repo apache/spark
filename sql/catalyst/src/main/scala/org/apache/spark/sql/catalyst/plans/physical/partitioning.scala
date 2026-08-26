@@ -545,7 +545,7 @@ case class KeyedPartitioning(
   def toGrouped: KeyedPartitioning = {
     val groupedPartitionKeys = partitionKeys.distinct.sorted(keyOrdering)
 
-    new KeyedPartitioning(expressions, groupedPartitionKeys, isGrouped = true)
+    new KeyedPartitioning(expressions, groupedPartitionKeys, isGrouped = true, isNarrowed)
   }
 
   /**
@@ -1387,7 +1387,11 @@ case class KeyedShuffleSpec(
         te.copy(children = te.children.map(_ => clustering(positionSet.head)))
       case (_, positionSet) => clustering(positionSet.head)
     }
-    KeyedPartitioning(newExpressions, partitioning.partitionKeys, partitioning.isGrouped)
+    // The shuffled side mirrors this side's partition keys, so it inherits the same skew risk
+    // when this partitioning was narrowed from a finer-grained one. The flag must stay sticky
+    // here, or a downstream merge (e.g. `UnionExec`) would silently drop the protection.
+    KeyedPartitioning(newExpressions, partitioning.partitionKeys, partitioning.isGrouped,
+      partitioning.isNarrowed)
   }
 }
 

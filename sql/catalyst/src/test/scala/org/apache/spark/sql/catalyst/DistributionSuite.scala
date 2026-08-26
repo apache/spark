@@ -466,4 +466,23 @@ class DistributionSuite extends SparkFunSuite {
     }
     assert(arityMismatch.getMessage.contains("matching expression arity"))
   }
+
+  test("SPARK-59026: toGrouped and KeyedShuffleSpec.createPartitioning keep isNarrowed sticky") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+
+    val narrowedKP = KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(1), InternalRow(2)))
+      .copy(isNarrowed = true)
+    // The protection this flag provides: a narrowed, non-grouped KP must not satisfy
+    // ClusteredDistribution via grouping without allowKeysSubsetOfPartitionKeys.
+    assert(!narrowedKP.groupedSatisfies(ClusteredDistribution(Seq(x))))
+
+    assert(narrowedKP.toGrouped.isNarrowed, "toGrouped must keep isNarrowed sticky")
+
+    val spec = KeyedShuffleSpec(narrowedKP, ClusteredDistribution(Seq(x)))
+    val created = spec.createPartitioning(Seq(y)).asInstanceOf[KeyedPartitioning]
+    assert(created.isNarrowed, "createPartitioning must keep isNarrowed sticky: the shuffled " +
+      "side mirrors the narrowed side's partition keys and inherits its skew risk")
+    assert(!created.isGrouped)
+  }
 }
