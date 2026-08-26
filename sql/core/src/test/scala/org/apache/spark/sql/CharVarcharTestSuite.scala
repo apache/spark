@@ -1725,33 +1725,94 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         sql("DROP TEMPORARY FUNCTION IF EXISTS std_char_param")
         sql("DROP TEMPORARY FUNCTION IF EXISTS std_varchar_param")
       }
+    }
+  }
 
-      // ORC catalog tables stamp the catalyst type so typeof survives write/read.
-      withTable("std_orc") {
-        sql("CREATE TABLE std_orc (c CHAR(5), v VARCHAR(5)) USING orc")
-        sql("INSERT INTO std_orc VALUES ('ab', 'cd')")
-        assert(spark.table("std_orc").schema.map(_.dataType) ===
-          Seq(CharType(5), VarcharType(5)))
-        checkAnswer(
-          sql("SELECT concat('<', c, '>'), concat('<', v, '>') FROM std_orc"),
-          Row("<ab   >", "<cd>"))
-      }
+  test("SPARK-58814: major formats preserve CHAR/VARCHAR schemas and values") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq("parquet", "orc").foreach { format =>
+        Seq("v1" -> format, "v2" -> "").foreach { case (sourceVersion, useV1List) =>
+          withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              val input = spark.range(1).selectExpr(
+                "cast('ab' AS CHAR(4)) AS c",
+                "cast('xy' AS VARCHAR(3)) AS v",
+                "named_struct('c', cast('z' AS CHAR(2))) AS s",
+                "array(cast('q' AS VARCHAR(2))) AS a",
+                "map(cast('k' AS CHAR(2)), cast('v' AS VARCHAR(2))) AS m")
+              input.write.mode("overwrite").format(format).save(path)
 
-      // File-only ORC inference recovers the catalyst type stamped on write.
-      withTempPath { dir =>
-        val path = dir.getCanonicalPath
-        spark.range(1).selectExpr("cast('ab' AS CHAR(4)) AS c")
-          .write.mode("overwrite").orc(path)
-        val orcDf = spark.read.orc(path)
-        assert(orcDf.schema.head.dataType === CharType(4))
-        checkAnswer(orcDf.selectExpr("concat('<', c, '>')"), Row("<ab  >"))
-        // Reading with first-class types off replaces CHAR with STRING even if the
-        // file was stamped under standardSemantics.
-        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
-          val readOff = spark.read.orc(path)
-          assert(readOff.schema.head.dataType === StringType)
+              val readBack = spark.read.format(format).load(path)
+              assert(DataType.equalsIgnoreNullability(readBack.schema, input.schema),
+                s"$format $sourceVersion lost CHAR/VARCHAR schema")
+              checkAnswer(
+                readBack.selectExpr("concat('<', c, '>')", "v", "concat('<', s.c, '>')"),
+                Row("<ab  >", "xy", "<z >"))
+
+              withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+                val readOff = spark.read.format(format).load(path)
+                assert(DataType.equalsIgnoreNullability(
+                  readOff.schema,
+                  CharVarcharUtils.replaceCharVarcharWithString(input.schema)))
+              }
+              withSQLConf(
+                  SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                  SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+                assert(DataType.equalsIgnoreNullability(
+                  spark.read.format(format).load(path).schema,
+                  input.schema))
+              }
+            }
+          }
         }
       }
+
+      Seq("parquet", "orc", "csv").foreach { format =>
+        Seq("v1" -> format, "v2" -> "").foreach { case (sourceVersion, useV1List) =>
+          withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+            withTempPath { dir =>
+              Seq("ab").toDF("c").write.format(format).save(dir.getCanonicalPath)
+              val charDf = spark.read.schema("c CHAR(4)").format(format)
+                .load(dir.getCanonicalPath)
+              checkAnswer(charDf.selectExpr("concat('<', c, '>')"), Row("<ab  >"))
+            }
+            withTempPath { dir =>
+              Seq("abcdef").toDF("c").write.format(format).save(dir.getCanonicalPath)
+              Seq("CHAR", "VARCHAR").foreach { typ =>
+                withClue(s"$format $sourceVersion $typ: ") {
+                  val readDf = spark.read.schema(s"c $typ(4)").format(format)
+                    .load(dir.getCanonicalPath)
+                  checkError(
+                    exception = intercept[SparkRuntimeException] {
+                      readDf.collect()
+                    },
+                    condition = "EXCEED_LIMIT_LENGTH",
+                    parameters = Map("limit" -> "4"))
+                }
+              }
+            }
+
+            val table = s"std_${format}_${sourceVersion}_assignment"
+            withTable(table) {
+              sql(s"CREATE TABLE $table (c CHAR(4), v VARCHAR(4)) USING $format")
+              sql(s"INSERT INTO $table VALUES ('ab', 'xy')")
+              assert(spark.table(table).schema.map(_.dataType) ===
+                Seq(CharType(4), VarcharType(4)))
+              checkAnswer(
+                sql(s"SELECT concat('<', c, '>'), v FROM $table"),
+                Row("<ab  >", "xy"))
+              checkError(
+                exception = intercept[SparkRuntimeException] {
+                  sql(s"INSERT INTO $table VALUES ('abcde', 'xy')").collect()
+                },
+                condition = "EXCEED_LIMIT_LENGTH",
+                parameters = Map("limit" -> "4"))
+            }
+          }
+        }
+      }
+
       // First-class types off: CAST CHAR is STRING before the writer, so ORC does not stamp CHAR.
       withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
         withTempPath { dir =>
@@ -1759,17 +1820,6 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           spark.range(1).selectExpr("cast('ab' AS CHAR(4)) AS c")
             .write.mode("overwrite").orc(path)
           assert(spark.read.orc(path).schema.head.dataType === StringType)
-        }
-      }
-      // preserveCharVarcharTypeInfo also keeps first-class types, so write still stamps CHAR.
-      withSQLConf(
-          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
-          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
-        withTempPath { dir =>
-          val path = dir.getCanonicalPath
-          spark.range(1).selectExpr("cast('ab' AS CHAR(4)) AS c")
-            .write.mode("overwrite").orc(path)
-          assert(spark.read.orc(path).schema.head.dataType === CharType(4))
         }
       }
       // ORC stamps collated unbounded STRING as plain "string"; the inferred type is the
@@ -1853,7 +1903,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         }
       }
 
-      // JSON / CSV keep a user-specified CHAR/VARCHAR schema under the flag.
+      // JSON has no embedded schema, so a user-specified schema supplies the logical type.
       withTempPath { dir =>
         val path = dir.getCanonicalPath
         spark.range(1).selectExpr("cast(id AS STRING) AS c").write.mode("overwrite")
@@ -1861,13 +1911,6 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         val jsonDf = spark.read.schema("c CHAR(5)").json(s"$path/json")
         assert(jsonDf.schema.head.dataType === CharType(5))
         checkAnswer(jsonDf.selectExpr("concat('<', c, '>')"), Row("<0    >"))
-
-        spark.range(1).selectExpr("cast(id AS STRING) AS c").write.mode("overwrite")
-          .option("header", "true").csv(s"$path/csv")
-        val csvDf = spark.read.schema("c VARCHAR(5)").option("header", "true")
-          .csv(s"$path/csv")
-        assert(csvDf.schema.head.dataType === VarcharType(5))
-        checkAnswer(csvDf, Row("0"))
       }
     }
   }

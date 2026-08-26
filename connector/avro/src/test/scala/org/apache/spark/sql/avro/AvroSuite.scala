@@ -40,7 +40,7 @@ import org.apache.spark.sql.TestingUDT.IntervalData
 import org.apache.spark.sql.avro.AvroCompressionCodec._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Filter
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeTestUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.execution.{FileSourceScanExec, FormattedMode, SparkPlan}
@@ -3723,6 +3723,82 @@ abstract class AvroSuite
       val readDf = spark.read.format("avro").load(dir.toString)
       assert(readDf.schema("t").dataType == TimeType(TimeType.MICROS_PRECISION))
       checkAnswer(readDf, Row(java.time.LocalTime.of(12, 34, 56, 123456000)))
+    }
+  }
+
+  test("SPARK-58814: Avro infers nested CHAR/VARCHAR schema and values") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val input = spark.range(1).selectExpr(
+          "cast('ab' AS CHAR(4)) AS c",
+          "cast('xy' AS VARCHAR(3)) AS v",
+          "named_struct('c', cast('z' AS CHAR(2))) AS s",
+          "array(cast('q' AS VARCHAR(2))) AS a",
+          "map(cast('k' AS CHAR(2)), cast('v' AS VARCHAR(2))) AS m")
+        input.write.mode("overwrite").format("avro").save(path)
+
+        val readBack = spark.read.format("avro").load(path)
+        assert(DataType.equalsIgnoreNullability(readBack.schema, input.schema))
+        checkAnswer(
+          readBack.selectExpr("concat('<', c, '>')", "v", "concat('<', s.c, '>')"),
+          Row("<ab  >", "xy", "<z >"))
+
+        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+          assert(DataType.equalsIgnoreNullability(
+            spark.read.format("avro").load(path).schema,
+            CharVarcharUtils.replaceCharVarcharWithString(input.schema)))
+        }
+        withSQLConf(
+            SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+            SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+          assert(DataType.equalsIgnoreNullability(
+            spark.read.format("avro").load(path).schema,
+            input.schema))
+        }
+      }
+
+      withTempPath { dir =>
+        Seq("ab").toDF("c").write.format("avro").save(dir.getCanonicalPath)
+        val charDf = spark.read.schema("c CHAR(4)").format("avro").load(dir.getCanonicalPath)
+        checkAnswer(
+          charDf.selectExpr("concat('<', c, '>')"),
+          Row("<ab  >"))
+      }
+      withTempPath { dir =>
+        Seq("abcdef").toDF("c").write.format("avro").save(dir.getCanonicalPath)
+        Seq("CHAR", "VARCHAR").foreach { typ =>
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              spark.read.schema(s"c $typ(4)").format("avro")
+                .load(dir.getCanonicalPath).collect()
+            },
+            condition = "EXCEED_LIMIT_LENGTH",
+            parameters = Map("limit" -> "4"))
+        }
+      }
+
+      withTable("avro_char_varchar_assignment") {
+        sql(
+          """CREATE TABLE avro_char_varchar_assignment
+            |(c CHAR(4), v VARCHAR(4)) USING avro""".stripMargin)
+        sql("INSERT INTO avro_char_varchar_assignment VALUES ('ab', 'xy')")
+        assert(spark.table("avro_char_varchar_assignment").schema.map(_.dataType) ===
+          Seq(CharType(4), VarcharType(4)))
+        checkAnswer(
+          sql(
+            """SELECT concat('<', c, '>'), v
+              |FROM avro_char_varchar_assignment""".stripMargin),
+          Row("<ab  >", "xy"))
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            sql(
+              """INSERT INTO avro_char_varchar_assignment
+                |VALUES ('abcde', 'xy')""".stripMargin).collect()
+          },
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "4"))
+      }
     }
   }
 
