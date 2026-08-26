@@ -540,6 +540,17 @@ mllib = Module(
     ],
 )
 
+graphframes = Module(
+    name="graphframes",
+    dependencies=[graphx, mllib],
+    source_file_regexes=[
+        "graphframes/",
+    ],
+    sbt_test_goals=[
+        "graphframes/test",
+    ],
+)
+
 pipelines = Module(
     name="pipelines",
     dependencies=[sql],
@@ -551,7 +562,7 @@ pipelines = Module(
 
 connect = Module(
     name="connect",
-    dependencies=[hive, avro, protobuf, mllib],
+    dependencies=[hive, avro, protobuf, graphframes, mllib],
     source_file_regexes=[
         "sql/connect",
     ],
@@ -576,7 +587,9 @@ examples = Module(
 pyspark_core = Module(
     name="pyspark-core",
     dependencies=[core],
-    source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing))"],
+    source_file_regexes=[
+        "python/(?!pyspark/(graphframes|ml|mllib|sql|streaming|pandas|resource|testing))"
+    ],
     python_test_goals=[
         # doctests
         "pyspark.conf",
@@ -1352,6 +1365,19 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_scalar",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_grouped_agg",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_window",
+    ],
+)
+
+pyspark_graphframes = Module(
+    name="pyspark-graphframes",
+    dependencies=[pyspark_connect, graphframes],
+    source_file_regexes=[
+        "python/pyspark/graphframes",
+    ],
+    python_test_goals=[
+        "pyspark.graphframes.tests.test_graphframe",
+        "pyspark.graphframes.tests.connect.test_parity_graphframe",
+        "pyspark.graphframes.tests.connect.test_all_algorithms",
     ],
 )
 
