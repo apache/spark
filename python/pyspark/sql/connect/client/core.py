@@ -33,6 +33,7 @@ import time
 import traceback
 import urllib.parse
 import uuid
+import warnings
 import weakref
 from dataclasses import dataclass, fields
 from typing import (
@@ -128,6 +129,34 @@ if TYPE_CHECKING:
 
 PYSPARK_ROOT = os.path.dirname(pyspark.__file__)
 _OPERATION_ID_METADATA_KEY = "spark-connect-operation-id"
+
+
+# Error conditions a Spark Connect server raises when it does not implement an API that the
+# client requested. Spark Connect is only guaranteed to be backward compatible (an older client
+# talking to a newer server); a newer client may send a request that an older server does not
+# understand. When that happens the server rejects the request with one of these conditions
+# without performing any work. A request issued with ``optional=True`` downgrades such a failure
+# to a warning and behaves as a no-op instead of raising, giving graceful newer-client /
+# older-server handling. Keep this restricted to conditions that unambiguously mean "the server
+# does not implement this API"; do not add conditions that can also signal a genuine user error.
+_UNSUPPORTED_API_ERROR_CONDITIONS = frozenset({"CONNECT_INVALID_PLAN.NO_HANDLER_FOR_EXTENSION"})
+
+
+def _is_unsupported_api_error(error: BaseException) -> bool:
+    """Return True if ``error`` is a Spark Connect server rejection of an unsupported API."""
+    return (
+        isinstance(error, SparkConnectException)
+        and error.getCondition() in _UNSUPPORTED_API_ERROR_CONDITIONS
+    )
+
+
+def _warn_unsupported_api(error: SparkConnectException) -> None:
+    warnings.warn(
+        f"The Spark Connect server does not support this API and the request was skipped "
+        f"(error condition: {error.getCondition()}). This can happen when a newer client "
+        f"connects to an older server.",
+        RuntimeWarning,
+    )
 
 
 @dataclass(frozen=True)
@@ -1424,10 +1453,22 @@ class SparkConnectClient(object):
         return result
 
     def execute_command(
-        self, command: pb2.Command, observations: Optional[Dict[str, Observation]] = None
+        self,
+        command: pb2.Command,
+        observations: Optional[Dict[str, Observation]] = None,
+        optional: bool = False,
     ) -> Tuple[Optional[pd.DataFrame], Dict[str, Any], ExecutionInfo]:
         """
         Execute given command.
+
+        If ``optional`` is True, the command is sent on a best-effort basis: when the server
+        does not implement the API (for example, a newer client issued the request to an older
+        server), the failure is downgraded to a warning and this returns an empty no-op result
+        instead of raising. Only set ``optional`` for commands whose effect is safe to skip on
+        servers that do not support them; any other failure is always re-raised.
+
+        .. versionchanged:: 4.4.0
+            Added the ``optional`` parameter.
         """
         if logger.isEnabledFor(logging.DEBUG):
             # inside an if statement to not incur a performance cost converting proto to string
@@ -1435,9 +1476,15 @@ class SparkConnectClient(object):
             logger.debug(f"Execute command for command {self._proto_to_string(command, True)}")
         req = self._execute_plan_request_with_metadata()
         self._set_command_in_plan(req.plan, command)
-        data, _, metrics, observed_metrics, properties = self._execute_and_fetch(
-            req, observations or {}
-        )
+        try:
+            data, _, metrics, observed_metrics, properties = self._execute_and_fetch(
+                req, observations or {}
+            )
+        except SparkConnectException as e:
+            if optional and _is_unsupported_api_error(e):
+                _warn_unsupported_api(e)
+                return (None, {}, ExecutionInfo(None, None, req.operation_id))
+            raise
         # Create a query execution object.
         ei = ExecutionInfo(metrics, observed_metrics, req.operation_id)
         if data is not None:
@@ -1446,10 +1493,20 @@ class SparkConnectClient(object):
             return (None, properties, ei)
 
     def execute_command_as_iterator(
-        self, command: pb2.Command, observations: Optional[Dict[str, Observation]] = None
+        self,
+        command: pb2.Command,
+        observations: Optional[Dict[str, Observation]] = None,
+        optional: bool = False,
     ) -> Iterator[Dict[str, Any]]:
         """
         Execute given command. Similar to execute_command, but the value is returned using yield.
+
+        If ``optional`` is True, the command is sent on a best-effort basis: when the server does
+        not implement the API and rejects the request before producing any response, the failure
+        is downgraded to a warning and iteration ends without yielding. See ``execute_command``.
+
+        .. versionchanged:: 4.4.0
+            Added the ``optional`` parameter.
         """
         if logger.isEnabledFor(logging.DEBUG):
             # inside an if statement to not incur a performance cost converting proto to string
@@ -1459,16 +1516,26 @@ class SparkConnectClient(object):
             )
         req = self._execute_plan_request_with_metadata()
         self._set_command_in_plan(req.plan, command)
-        for response in self._execute_and_fetch_as_iterator(req, observations or {}):
-            if isinstance(response, dict):
-                yield response
-            else:
-                raise PySparkValueError(
-                    errorClass="UNKNOWN_RESPONSE",
-                    messageParameters={
-                        "response": str(response),
-                    },
-                )
+        yielded = False
+        try:
+            for response in self._execute_and_fetch_as_iterator(req, observations or {}):
+                if isinstance(response, dict):
+                    yielded = True
+                    yield response
+                else:
+                    raise PySparkValueError(
+                        errorClass="UNKNOWN_RESPONSE",
+                        messageParameters={
+                            "response": str(response),
+                        },
+                    )
+        except SparkConnectException as e:
+            # Only downgrade to a no-op when the server rejected the API before streaming any
+            # response; if partial results were already delivered, degrading would be unsafe.
+            if optional and not yielded and _is_unsupported_api_error(e):
+                _warn_unsupported_api(e)
+                return
+            raise
 
     def same_semantics(self, plan: pb2.Plan, other: pb2.Plan) -> bool:
         """
