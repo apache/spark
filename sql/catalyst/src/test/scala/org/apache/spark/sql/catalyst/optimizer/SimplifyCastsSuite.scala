@@ -19,9 +19,11 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -137,5 +139,29 @@ class SimplifyCastsSuite extends PlanTest {
       Optimize.execute(
         input.select($"a".cast(DecimalType(2, 1)).as("v")).analyze),
       input.select($"a".cast(DecimalType(2, 1)).as("v")).analyze)
+  }
+
+  test("SPARK-59016: do not drop CAST from CHAR/VARCHAR or annotated STRING to STRING") {
+    def keepsCast(plan: LogicalPlan): Boolean =
+      plan.exists(_.expressions.exists(_.exists(_.isInstanceOf[Cast])))
+
+    val charCol = AttributeReference("c", CharType(5))()
+    val charPlan = Project(Seq(Alias(Cast(charCol, StringType), "s")()), LocalRelation(charCol))
+    val charOpt = Optimize.execute(charPlan)
+    assert(keepsCast(charOpt), charOpt)
+
+    val varcharCol = AttributeReference("v", VarcharType(5))()
+    val varcharPlan =
+      Project(Seq(Alias(Cast(varcharCol, StringType), "s")()), LocalRelation(varcharCol))
+    val varcharOpt = Optimize.execute(varcharPlan)
+    assert(keepsCast(varcharOpt), varcharOpt)
+
+    val metadata = new MetadataBuilder()
+      .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "char(5)").build()
+    val annotated = AttributeReference("c", StringType, metadata = metadata)()
+    val annotatedPlan =
+      Project(Seq(Alias(Cast(annotated, StringType), "s")()), LocalRelation(annotated))
+    val annotatedOpt = Optimize.execute(annotatedPlan)
+    assert(keepsCast(annotatedOpt), annotatedOpt)
   }
 }

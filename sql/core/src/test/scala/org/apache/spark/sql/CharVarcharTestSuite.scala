@@ -1246,21 +1246,22 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
   // Allowlist for the inventory below: pass-through and container cases that may keep
   // CHAR(n)/VARCHAR(n): aggregates/ordering that return an input unchanged, null-handling,
   // element access, array/map/struct constructors, and collection rearrangements that keep
-  // element types. Coverage is limited to the seven fixed argumentShapes templates in the test;
-  // a leak only at another arity or nested shape would not fail here. For those shapes,
-  // anything not listed must reduce to plain STRING.
+  // element types. For the listed argument shapes, anything not listed must reduce to plain
+  // STRING.
   private val charVarcharPassThroughFunctions = Set(
     "any_value", "approx_top_k", "approx_top_k_accumulate", "array", "array_agg", "array_compact",
     "array_distinct", "array_max", "array_min", "array_repeat", "array_sort", "arrays_zip",
     "coalesce", "collect_list", "collect_set", "collect_union", "concat", "explode",
-    "explode_outer", "first", "first_value", "get", "greatest", "ifnull", "last", "last_value",
-    "least", "map", "max", "max_by", "measure", "min", "min_by", "mode", "named_struct", "nullif",
-    "nullifzero", "nvl", "reverse", "shuffle", "sort_array", "struct", "trim_array", "when")
+    "explode_outer", "first", "first_value", "flatten", "get", "greatest", "ifnull", "last",
+    "last_value", "least", "map", "map_concat", "map_entries", "map_keys", "map_values", "max",
+    "max_by", "measure", "min", "min_by", "mode", "named_struct", "nullif", "nullifzero", "nvl",
+    "nvl2", "reverse", "shuffle", "sort_array", "struct", "trim_array", "when")
 
-  test("SPARK-58794: inventoried shapes do not leak CHAR/VARCHAR under standardSemantics") {
+  test("SPARK-59016: inventoried shapes do not leak CHAR/VARCHAR under standardSemantics") {
     val argumentShapes = Seq(
-      "%s(c)", "%s(c, c)", "%s(c, 'x')", "%s('x', c)", "%s(c, 1)", "%s(array(c))",
-      "%s(array(c), '-')")
+      "%s(c)", "%s(c, c)", "%s(c, c, c)", "%s(c, 'x')", "%s('x', c)", "%s(c, 1)",
+      "%s(array(c))", "%s(array(c), '-')", "%s(array(array(c)))",
+      "%s(named_struct('x', c))", "%s(map(c, 1))", "%s(map(1, c))")
 
     withTable("std_inventory") {
       sql("CREATE TABLE std_inventory (c CHAR(5)) USING parquet")
@@ -2419,6 +2420,21 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
         intercept[AnalysisException] {
           sql("ALTER TABLE std_v2_alter CHANGE COLUMN c TYPE CHAR(5)")
         }
+      }
+    }
+  }
+
+  test("SPARK-59016: V2 column prune keeps CHAR/VARCHAR under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTable("std_v2_prune") {
+        sql(s"CREATE TABLE std_v2_prune (c CHAR(5), v VARCHAR(5), i INT) USING $format")
+        sql("INSERT INTO std_v2_prune VALUES ('ab', 'cd', 1)")
+        val charDf = sql("SELECT c FROM std_v2_prune WHERE c = 'ab   '")
+        assert(charDf.schema.head.dataType === CharType(5))
+        checkAnswer(charDf, Row("ab   "))
+        val varcharDf = sql("SELECT v FROM std_v2_prune WHERE v = 'cd'")
+        assert(varcharDf.schema.head.dataType === VarcharType(5))
+        checkAnswer(varcharDf, Row("cd"))
       }
     }
   }
