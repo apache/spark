@@ -430,6 +430,12 @@ class NumPyCompatTestsMixin:
         pdf = pd.DataFrame({"x1": [-(2**63), -(2**63)], "x2": [-1, 2]})
         self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2).astype("float64"))
 
+        # Finite operands whose quotient overflows to an infinity, which is its own floor.
+        pdf = pd.DataFrame(
+            {"x1": [1e300, -1e300, 1e300, -1e300], "x2": [1e-300, 1e-300, -1e-300, -1e-300]}
+        )
+        self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2))
+
     def test_np_logaddexp(self):
         for pdf in (
             pd.DataFrame(

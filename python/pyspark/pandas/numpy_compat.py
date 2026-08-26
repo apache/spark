@@ -191,11 +191,17 @@ def _floor_divide_floating(c1: Column, c2: Column) -> Column:
     quotient = F.when(
         (remainder != 0) & ((remainder < 0) != (c2 < 0)), truncated - F.lit(1.0)
     ).otherwise(truncated)
-    # The quotient is whole in exact arithmetic, but the division can leave it a few bits off.
-    # F.floor is unusable: a bigint cannot carry the infinities the caller's branches produce.
+    # The quotient is whole in exact arithmetic, but the division can leave it a few bits off, so
+    # round it back. F.floor cannot do this: it returns a bigint, which raises on an infinity.
     floor = quotient - F.pmod(quotient, F.lit(1.0))
-    # Flooring goes one too low when the division landed just under the whole number.
-    return F.when(quotient - floor > F.lit(0.5), floor + F.lit(1.0)).otherwise(floor)
+    return (
+        # An infinite quotient is its own floor, and has to be returned before the line above
+        # is used, since pmod of an infinity is nan and leaves `floor` nan.
+        F.when(quotient.isin(float("inf"), float("-inf")), quotient)
+        # Flooring goes one too low when the division landed just under the whole number.
+        .when(quotient - floor > F.lit(0.5), floor + F.lit(1.0))
+        .otherwise(floor)
+    )
 
 
 def _floor_divide_integral(c1: Column, c2: Column) -> Column:
