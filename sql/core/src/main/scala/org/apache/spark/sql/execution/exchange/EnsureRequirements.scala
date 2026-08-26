@@ -309,14 +309,6 @@ case class EnsureRequirements(
     case _ => false
   }
 
-  // Unwraps a `ShuffleSpecCollection` (possibly nested) to the spec that its
-  // `createPartitioning` delegates to, i.e. the head spec.
-  @tailrec
-  private def unwrapSpecCollection(spec: ShuffleSpec): ShuffleSpec = spec match {
-    case ShuffleSpecCollection(specs) => unwrapSpecCollection(specs.head)
-    case other => other
-  }
-
   // Generates all alternative plans in which one or more GroupPartitionsExec nodes in the subtree
   // have sorted-merge enabled (every possible combination). Returns a LazyList so the caller can
   // stop evaluating once a satisfying alternative is found.
@@ -770,6 +762,14 @@ case class EnsureRequirements(
         GroupPartitionsExec(plan, joinKeyPositions, Some(mergedPartitionKeys), reducers,
           distributePartitions)
     }
+  }
+
+  // Unwraps a `ShuffleSpecCollection` (possibly nested) to the spec that its
+  // `createPartitioning` delegates to, i.e. the head spec.
+  @tailrec
+  private def unwrapSpecCollection(spec: ShuffleSpec): ShuffleSpec = spec match {
+    case ShuffleSpecCollection(specs) => unwrapSpecCollection(specs.head)
+    case other => other
   }
 
   /**

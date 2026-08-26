@@ -2612,6 +2612,10 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
       assert(groupPartitions.size == 1 && groupPartitions.head.joinKeyPositions.isDefined,
         "the keyed side should be grouped by the join keys")
+      assert(groupPartitions.head.outputPartitioning.numPartitions == 3,
+        "the keyed side should be grouped down to 3 partitions")
+      assert(shuffles.head.outputPartitioning.numPartitions == 3,
+        "the shuffled side should match the 3 grouped partitions")
       checkAnswer(df, Seq(
         Row(1, 1, "ab", 30.0, 42.0),
         Row(1, 1, "ab", 30.0, 89.0),
