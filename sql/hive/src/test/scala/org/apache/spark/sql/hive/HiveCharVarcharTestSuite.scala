@@ -141,6 +141,22 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
           checkToRDD = false)
         assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount === 1)
       }
+
+      // A supported conjunct must not bypass client-side pruning of the CHAR predicate.
+      withTable("std_hive_part") {
+        sql(
+          s"""CREATE TABLE std_hive_part (i INT, ds INT, p CHAR(5))
+             |USING $format PARTITIONED BY (ds, p)""".stripMargin)
+        partitionValues.foreach { v =>
+          sql(s"INSERT INTO std_hive_part PARTITION (ds=1, p='$v') VALUES (1)")
+        }
+        HiveCatalogMetrics.reset()
+        QueryTest.checkAnswer(
+          sql("SELECT i FROM std_hive_part WHERE ds = 1 AND p = 'a    '"),
+          Seq(Row(1)),
+          checkToRDD = false)
+        assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount === 1)
+      }
     }
   }
 }

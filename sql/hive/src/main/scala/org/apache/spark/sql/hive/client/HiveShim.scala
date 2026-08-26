@@ -351,7 +351,12 @@ private[client] class Shim_v2_0 extends Shim with Logging {
     val filter = convertFilters(table, predicates)
 
     val partitions =
-      if (filter.isEmpty) {
+      if (referencesCharVarcharPartitionKey(catalogTable, predicates)) {
+        // convertFilters skips CHAR/VARCHAR keys. If another conjunct is supported, its
+        // non-empty filter would otherwise fetch a superset before residual pruning.
+        prunePartitionsFastFallback(
+          hive, table, catalogTable, predicates, forceClientSide = true)
+      } else if (filter.isEmpty) {
         prunePartitionsFastFallback(hive, table, catalogTable, predicates)
       } else {
         logDebug(s"Hive metastore filter is '$filter'.")
@@ -391,11 +396,29 @@ private[client] class Shim_v2_0 extends Shim with Logging {
     partitions.asScala.toSeq
   }
 
+  private def referencesCharVarcharPartitionKey(
+      catalogTable: CatalogTable,
+      predicates: Seq[Expression]): Boolean = {
+    SQLConf.get.charVarcharStandardSemantics && {
+      val charVarcharPartNames = catalogTable.partitionSchema.fields.collect {
+        case f if CharVarcharUtils.hasCharVarchar(f.dataType) => f.name
+      }
+      charVarcharPartNames.nonEmpty && {
+        val resolver = SQLConf.get.resolver
+        predicates.exists(_.exists {
+          case a: Attribute => charVarcharPartNames.exists(n => resolver(n, a.name))
+          case _ => false
+        })
+      }
+    }
+  }
+
   private def prunePartitionsFastFallback(
       hive: Hive,
       table: Table,
       catalogTable: CatalogTable,
-      predicates: Seq[Expression]): java.util.Collection[Partition] = {
+      predicates: Seq[Expression],
+      forceClientSide: Boolean = false): java.util.Collection[Partition] = {
     val timeZoneId = SQLConf.get.sessionLocalTimeZone
 
     // Because there is no way to know whether the partition properties has timeZone,
@@ -408,28 +431,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       }
     }
 
-    // CHAR/VARCHAR partition keys are excluded from the metastore filter (see
-    // SupportedAttribute), because Hive compares them with its own trailing-blank rules. When
-    // a predicate actually mentions such a key, prune on the client instead. Other empty-filter
-    // or MetaException fallbacks still honor metastorePartitionPruningFastFallback.
-    def referencesCharVarcharPartitionKey: Boolean = {
-      SQLConf.get.charVarcharStandardSemantics && {
-        val charVarcharPartNames = catalogTable.partitionSchema.fields.collect {
-          case f if CharVarcharUtils.hasCharVarchar(f.dataType) => f.name
-        }
-        charVarcharPartNames.nonEmpty && {
-          val resolver = SQLConf.get.resolver
-          predicates.exists(_.exists {
-            case a: Attribute => charVarcharPartNames.exists(n => resolver(n, a.name))
-            case _ => false
-          })
-        }
-      }
-    }
-    val useClientSidePrune = SQLConf.get.metastorePartitionPruningFastFallback ||
-      referencesCharVarcharPartitionKey
-
-    if (!useClientSidePrune ||
+    if ((!forceClientSide && !SQLConf.get.metastorePartitionPruningFastFallback) ||
         predicates.isEmpty ||
         predicates.exists(hasTimeZoneAwareExpression)) {
       recordHiveCall()
