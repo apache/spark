@@ -285,13 +285,33 @@ case class PythonPromotingMultiply(left: Expression, right: Expression)
     copy(left = newLeft, right = newRight)
 }
 
+case class PythonPromotingNegate(child: Expression)
+  extends UnaryExpression with PythonPromotingArithmetic {
+  // `UnaryMinus` keeps its operand's type and negates exactly, so `-x` on an int column holding
+  // Integer.MinValue raised where Python answers 2147483648. Same rule as `abs` -- two's
+  // complement has no positive counterpart for a width's minimum -- and it was an oversight that
+  // `forNegation`'s scaladoc said it covered unary minus while nothing called it for that.
+  override protected def promoted: Expression =
+    PythonNumericPromotion.forNegation(child.dataType) match {
+      case Some(widened) => UnaryMinus(Cast(child, widened))
+      case None => UnaryMinus(child)
+    }
+  override protected def unpromoted: Expression = UnaryMinus(child)
+  override def prettyName: String = "python_promoting_negate"
+  override protected def withNewChildInternal(newChild: Expression): PythonPromotingNegate =
+    copy(child = newChild)
+}
+
 case class PythonPromotingAbs(child: Expression)
   extends UnaryExpression with PythonPromotingArithmetic {
   override protected def promoted: Expression =
-    // Reuses the binary `widened` with the child in both slots, since the promotion target for a
-    // negation depends on that one type.
-    PythonNumericPromotion.widened(
-      child, child, (l, _) => PythonNumericPromotion.forNegation(l), (c, _) => Abs(c))
+    // Built directly rather than through the binary `widened`: passing the child into both slots
+    // evaluated it twice, which on a nested `abs` cost 2^(depth-1) leaf type reads and built a
+    // `Cast` that `op` then discarded.
+    PythonNumericPromotion.forNegation(child.dataType) match {
+      case Some(widened) => Abs(Cast(child, widened))
+      case None => Abs(child)
+    }
   override protected def unpromoted: Expression =
     Abs(child)
   override def prettyName: String = "python_promoting_abs"
