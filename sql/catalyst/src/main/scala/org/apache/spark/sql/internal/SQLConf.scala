@@ -2648,7 +2648,6 @@ object SQLConf {
     .createWithDefault(Level.TRACE)
 
   val USE_SEQUENTIAL_CACHE_NAME = buildConf("spark.sql.useSequentialCacheName")
-    .internal()
     .doc("When true and the cached table has no name, use a sequential number like " +
       "'CachedRDD 1' as the cached name instead of the abbreviated plan tree string. " +
       "Rendering the plan tree string can be expensive for large plans.")

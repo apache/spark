@@ -64,9 +64,11 @@ class InMemoryRelationSuite extends SparkFunSuite
       val r3 = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, Some("t1"))
       assert(r3.cacheBuilder.cachedName == "In-memory table t1")
     }
-    // The default keeps the abbreviated plan tree string.
-    val r4 = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, None)
-    assert(!r4.cacheBuilder.cachedName.startsWith("CachedRDD "))
+    // When disabled, the cached name keeps the abbreviated plan tree string.
+    withSQLConf(SQLConf.USE_SEQUENTIAL_CACHE_NAME.key -> "false") {
+      val r4 = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, None)
+      assert(!r4.cacheBuilder.cachedName.startsWith("CachedRDD "))
+    }
   }
 
   test("SPARK-47177: Cached SQL plan do not display final AQE plan in explain string") {
