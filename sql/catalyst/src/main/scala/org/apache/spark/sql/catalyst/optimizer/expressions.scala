@@ -1158,6 +1158,8 @@ object FoldablePropagation extends Rule[LogicalPlan] {
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
     _.containsPattern(CAST), ruleId) {
+    // Annotated STRING (flag off) is not unconstrained STRING. Dropping CAST(... AS STRING)
+    // would hide the type change. First-class CHAR/VARCHAR already fail e.dataType == StringType.
     case c @ Cast(e: NamedExpression, StringType, _, _)
       if e.dataType == StringType && e.metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY) => c
     case Cast(e, dataType, _, _) if e.dataType == dataType => e
