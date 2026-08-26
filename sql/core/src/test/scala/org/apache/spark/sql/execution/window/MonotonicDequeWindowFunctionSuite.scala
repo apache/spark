@@ -431,4 +431,61 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
         expectedDequeCount = 9)
     }
   }
+
+  // GROUPS frames (SPARK-58980): both bounds share a peer-group output cursor, so the deque
+  // frame must build them as a pair and reset them on every partition.
+
+  /** MIN/MAX of `v` over one GROUPS window, so both share a single deque frame. */
+  private def groupsMinMax(df: DataFrame, frame: String, orderBy: String = "ord"): DataFrame = {
+    val window = s"OVER (PARTITION BY pk ORDER BY $orderBy GROUPS BETWEEN $frame)"
+    df.selectExpr("id", s"min(v) $window AS mn", s"max(v) $window AS mx")
+  }
+
+  /** Random values with nulls, over an order key with peer groups and a null peer group. */
+  private def groupsDF: DataFrame = {
+    spark.range(0, 90).selectExpr(
+      "id",
+      "(id % 3) AS pk",
+      "IF(id % 17 = 0, NULL, CAST(id / 9 AS INT)) AS ord",
+      "CAST(id % 4 AS INT) AS ord2",
+      "IF(id % 7 = 0, NULL, CAST(rand(42) * 1000 AS INT)) AS v")
+  }
+
+  test("SPARK-58980: GROUPS frame counts peer groups") {
+    // Peer groups by `ord`: {10, 15}, {20}, {25, 30}, {40}.
+    val df = Seq((1, 10), (1, 15), (2, 20), (3, 25), (3, 30), (9, 40))
+      .toDF("ord", "v")
+      .selectExpr("CAST(v AS LONG) AS id", "1 AS pk", "ord", "v")
+    val build = () => groupsMinMax(df, "1 PRECEDING AND CURRENT ROW")
+    checkEquivalence(build, expectedDequeCount = 1)
+    withSQLConf(enableDeque.toSeq: _*) {
+      checkAnswer(build(), Seq(
+        Row(10L, 10, 15), Row(15L, 10, 15), Row(20L, 10, 20),
+        Row(25L, 20, 30), Row(30L, 20, 30), Row(40L, 25, 40)))
+    }
+  }
+
+  test("SPARK-58980: GROUPS frames on tied order key across partitions") {
+    Seq(
+      "1 PRECEDING AND 1 FOLLOWING",
+      "CURRENT ROW AND CURRENT ROW",
+      "CURRENT ROW AND 2 FOLLOWING",
+      // The lower bound is not consulted until the frame first becomes non-empty.
+      "3 PRECEDING AND 2 PRECEDING",
+      "2 FOLLOWING AND 4 FOLLOWING"
+    ).foreach { frame =>
+      withClue(s"GROUPS BETWEEN $frame: ") {
+        checkEquivalence(() => groupsMinMax(groupsDF, frame))
+      }
+    }
+  }
+
+  test("SPARK-58980: GROUPS frame with multi-column ORDER BY and spill") {
+    withSQLConf(
+      SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "4",
+      SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "8") {
+      checkEquivalence(() =>
+        groupsMinMax(groupsDF, "2 PRECEDING AND 1 FOLLOWING", orderBy = "ord, ord2 DESC"))
+    }
+  }
 }

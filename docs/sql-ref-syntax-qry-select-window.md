@@ -66,7 +66,7 @@ window_function [ nulls_option ] OVER
 
     **Syntax:**
 
-    `{ RANGE | ROWS } { frame_start | BETWEEN frame_start AND frame_end }`
+    `{ RANGE | ROWS | GROUPS } { frame_start | BETWEEN frame_start AND frame_end }`
 
     * `frame_start` and `frame_end` have the following syntax:
 
@@ -77,6 +77,13 @@ window_function [ nulls_option ] OVER
       `offset:` specifies the `offset` from the position of the current row.
 
     **Note:** If `frame_end` is omitted it defaults to `CURRENT ROW`.
+
+    **Note:** `GROUPS` offsets count peer groups: rows with equal values for all window
+    `ORDER BY` expressions within a partition. `GROUPS` requires `ORDER BY` and supports multiple
+    ordering expressions. `CURRENT ROW` starts at the first row of the current peer group when
+    used as a frame start, and ends at its last row when used as a frame end.
+    `0 PRECEDING` and `0 FOLLOWING` are equivalent to `CURRENT ROW`. Offsets must be constant,
+    non-null, non-negative integer expressions.
 
 ### Examples
 
@@ -217,6 +224,25 @@ SELECT id, v,
 | 7|   v|   v|   v|        y|          x|         v|
 | 8|NULL|NULL|NULL|        y|          x|         v|
 +--+----+----+----+---------+-----------+----------+
+
+CREATE TABLE batches (batch_id INT, amount INT);
+
+INSERT INTO batches VALUES (1, 10), (1, 15), (2, 20), (3, 25), (3, 30), (9, 40);
+
+SELECT batch_id, amount,
+    SUM(amount) OVER (ORDER BY batch_id GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW) AS moving_sum
+    FROM batches
+    ORDER BY batch_id, amount;
++--------+------+----------+
+|batch_id|amount|moving_sum|
++--------+------+----------+
+|       1|    10|        25|
+|       1|    15|        25|
+|       2|    20|        45|
+|       3|    25|        75|
+|       3|    30|        75|
+|       9|    40|        95|
++--------+------+----------+
 ```
 
 ### Related Statements
