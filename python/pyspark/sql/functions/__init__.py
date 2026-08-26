@@ -486,6 +486,7 @@ __all__ = [  # noqa: F405
     # VARIANT Functions
     "is_valid_variant",
     "is_variant_null",
+    "variant_array_length",
     "parse_json",
     "schema_of_variant",
     "schema_of_variant_agg",
