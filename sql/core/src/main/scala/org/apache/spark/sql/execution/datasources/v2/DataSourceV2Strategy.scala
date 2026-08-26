@@ -126,8 +126,17 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     tableSpec.withNewLocation(newLoc)
   }
 
+  private def removeNotEvaluatedFilters(
+      filters: Seq[Expression],
+      relation: DataSourceV2ScanRelation,
+      otherNotEvaluatedFilters: Seq[Expression] = Nil): Seq[Expression] = {
+    val notEvaluatedFilterSet =
+      ExpressionSet(otherNotEvaluatedFilters ++ relation.advisoryFilters)
+    filters.filterNot(notEvaluatedFilterSet.contains)
+  }
+
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(project, filters, ExtractV2ScanInfo(
+    case PhysicalOperation(project, filters, relation @ ExtractV2ScanInfo(
       v2Relation, V1ScanWrapper(scan, pushed, pushedDownOperators), output)) =>
       val v1Relation = scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
       if (v1Relation.schema != scan.readSchema()) {
@@ -151,13 +160,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         None,
         tableIdentifier)
       DataSourceV2Strategy.withProjectAndFilter(
-        project, filters, dsScan, needsUnsafeConversion = false) :: Nil
+        project, removeNotEvaluatedFilters(filters, relation),
+        dsScan, needsUnsafeConversion = false) :: Nil
 
     case PhysicalOperation(project, filters,
-        ExtractV2ScanInfo(_, scan: LocalScan, output)) =>
+        relation @ ExtractV2ScanInfo(_, scan: LocalScan, output)) =>
       val localScanExec = LocalTableScanExec(output, scan.rows().toImmutableArraySeq, None)
       DataSourceV2Strategy.withProjectAndFilter(
-        project, filters, localScanExec, needsUnsafeConversion = false) :: Nil
+        project, removeNotEvaluatedFilters(filters, relation),
+        localScanExec, needsUnsafeConversion = false) :: Nil
 
     case PhysicalOperation(project, filters, relation: DataSourceV2ScanRelation) =>
       // projection and filters were already pushed down in the optimizer.
@@ -203,10 +214,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         relation.ordering, relation.relation.table, relation.keyGroupedPartitioning)
       // Advisory filters are kept in the logical Filter for the optimizer only, and Spark never
       // evaluates them. See SupportsPushDownCatalystFilters.advisoryFilters.
-      val notEvaluatedFilterSet = ExpressionSet(
-        fullyPushedRuntimeFilters ++ relation.advisoryFilters)
       DataSourceV2Strategy.withProjectAndFilter(
-        project, postScanFilters.filterNot(notEvaluatedFilterSet.contains),
+        project,
+        removeNotEvaluatedFilters(postScanFilters, relation, fullyPushedRuntimeFilters),
         batchExec, !batchExec.supportsColumnar) :: Nil
 
     case PhysicalOperation(p, f, r: StreamingDataSourceV2ScanRelation)

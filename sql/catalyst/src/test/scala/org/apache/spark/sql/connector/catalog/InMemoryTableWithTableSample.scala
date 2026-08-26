@@ -375,7 +375,8 @@ class InMemoryTableWithLegacyTableSample(
 /**
  * Sample table plus Catalyst advisory filters. V1 `SupportsPushDownFilters` cannot
  * mix with `SupportsPushDownCatalystFilters` (`pushedFilters` return types clash),
- * so this wraps the sample builder. Advisory SQL is property `advisory-filter`.
+ * so this wraps the sample builder. The advisory SQL is specified by the `advisory-filter`
+ * property.
  */
 class InMemoryTableWithTableSampleAndAdvisoryFilters(
     name: String,

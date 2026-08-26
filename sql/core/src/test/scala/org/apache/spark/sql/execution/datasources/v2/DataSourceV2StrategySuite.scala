@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.util.EnumSet
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -35,9 +36,10 @@ import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, F
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.join.{JoinType => V2JoinType}
-import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownTopN, SupportsPushDownVariantExtractions, VariantExtraction}
+import org.apache.spark.sql.connector.read.{Batch, InputPartition, LocalScan, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownTopN, SupportsPushDownVariantExtractions, V1Scan, VariantExtraction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
+import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType, VariantType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -1112,6 +1114,35 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }, s"expected rebound quoted advisory filter in:\n$pushedPlan")
   }
 
+  test("advisory filters are not evaluated for V1 scans") {
+    checkAdvisoryNotEvaluatedForScan { tableSchema =>
+      new V1Scan {
+        override def readSchema(): StructType = tableSchema
+
+        override def toV1TableScan[T <: BaseRelation with TableScan](
+            context: SQLContext): T = {
+          new BaseRelation with TableScan {
+            override def sqlContext: SQLContext = context
+
+            override def schema: StructType = tableSchema
+
+            override def buildScan() = context.sparkContext.emptyRDD[Row]
+          }.asInstanceOf[T]
+        }
+      }
+    }
+  }
+
+  test("advisory filters are not evaluated for local scans") {
+    checkAdvisoryNotEvaluatedForScan { tableSchema =>
+      new LocalScan {
+        override def readSchema(): StructType = tableSchema
+
+        override def rows(): Array[InternalRow] = Array.empty
+      }
+    }
+  }
+
   test("advisory filters do not block limit pushdown") {
     val (table, relation) = newPushdownRelation()
     val id = relation.output.find(_.name == "id").get
@@ -1260,6 +1291,23 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }, s"advisory filters must not be evaluated:\n${physicalPlans.mkString("\n")}")
   }
 
+  private def checkAdvisoryNotEvaluatedForScan(scanFactory: StructType => Scan): Unit = {
+    val schema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("value", LongType, nullable = false)))
+    val advisoryFilter =
+      GreaterThanOrEqual(AttributeReference("value", LongType)(), Literal(0L))
+    val relation = DataSourceV2Relation.create(
+      new InMemoryCatalystFilterTable(schema, advisoryFilter, Some(scanFactory)),
+      None,
+      None,
+      CaseInsensitiveStringMap.empty)
+    val id = relation.output.find(_.name == "id").get
+    val pushedPlan = V2ScanRelationPushDown(Filter(EqualTo(id, Literal(1L)), relation))
+
+    assertAdvisoryFilter(pushedPlan)
+  }
+
   private def emptyBatch: Batch = new Batch {
     override def planInputPartitions() = Array.empty
 
@@ -1271,7 +1319,8 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
   private class InMemoryCatalystFilterTable(
       tableSchema: StructType,
-      advisoryFilter: Expression) extends Table with SupportsRead {
+      advisoryFilter: Expression,
+      scanFactory: Option[StructType => Scan] = None) extends Table with SupportsRead {
 
     override def name(): String = "in-memory-catalyst-filter-table"
 
@@ -1281,16 +1330,19 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       EnumSet.of(TableCapability.BATCH_READ)
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
-      new InMemoryCatalystFilterScanBuilder(tableSchema, advisoryFilter)
+      new InMemoryCatalystFilterScanBuilder(tableSchema, advisoryFilter, scanFactory)
   }
 
   private class InMemoryCatalystFilterScanBuilder(
       tableSchema: StructType,
-      advisoryFilter: Expression)
+      advisoryFilter: Expression,
+      scanFactory: Option[StructType => Scan])
     extends ScanBuilder with SupportsPushDownCatalystFilters {
 
-    override def build(): Scan = new Scan {
-      override def readSchema(): StructType = tableSchema
+    override def build(): Scan = scanFactory.map(_(tableSchema)).getOrElse {
+      new Scan {
+        override def readSchema(): StructType = tableSchema
+      }
     }
 
     override def pushFilters(filters: Seq[Expression]): Seq[Expression] = filters
