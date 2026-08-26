@@ -71,6 +71,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, TypedAggregateExpression}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExternalCommandExecutor}
+import org.apache.spark.sql.graphframes.{GraphFrameInternals, GraphFramesConnectUtils}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
 import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
@@ -233,6 +234,11 @@ class SparkConnectPlanner(
         // ML Relation
         case proto.Relation.RelTypeCase.ML_RELATION =>
           MLHandler.transformMLRelation(rel.getMlRelation, sessionHolder).logicalPlan
+
+        // Built-in GraphFrames relation.
+        case proto.Relation.RelTypeCase.GRAPH_FRAMES =>
+          GraphFrameInternals.planFromDataFrame(
+            GraphFramesConnectUtils.parseAPICall(rel.getGraphFrames, this))
 
         // Handle plugins for Spark Connect Relation types.
         case proto.Relation.RelTypeCase.EXTENSION =>
