@@ -272,7 +272,8 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     val recoveryPodOperations = mock[PODS]
     val recoveryPodsWithNamespace = mock[PODS_WITH_NAMESPACE]
     val recoveryNamedPod = mock[PodResource]
-    doReturn(recoveryResourceList).when(recoveryClient).resourceList(ArgumentMatchers.any[Array[HasMetadata]](): _*)
+    doReturn(recoveryResourceList)
+      .when(recoveryClient).resourceList(ArgumentMatchers.any[Array[HasMetadata]](): _*)
     when(recoveryClient.pods()).thenReturn(recoveryPodOperations)
     when(recoveryPodOperations.inNamespace(kconf.namespace)).thenReturn(recoveryPodsWithNamespace)
     when(recoveryPodsWithNamespace.withName(POD_NAME)).thenReturn(recoveryNamedPod)
