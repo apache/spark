@@ -1043,6 +1043,13 @@ class CatalystTranspiler(AbstractTranspiler):
                 "`round()`'s scale does not fit in an int, which Spark's `bround` "
                 "requires; the transpiler falls back to interpreted Python"
             )
+        # TODO (SPARK-55210): a negative scale still overflows a narrow column. `bround`
+        # keeps its child's type and multiplies the magnitude by 10**|scale|, so
+        # `round(x, -1)` on a tinyint holding 127 raises where Python answers 130 -- the
+        # same shape as `abs` before promotion, and equally fixable, since the worst case
+        # is `magnitude(input) * 10**|scale|`. It needs a widening cast the transpiler
+        # cannot size (only the JVM knows the column width), so it wants a promoting
+        # expression of its own rather than a Python-side hack.
         return bround(self._convert_chunk(params, args[0]), scale)
 
     def _safe_category(self, params: List[str], node: Optional[ast.AST]) -> Optional[str]:
@@ -1515,8 +1522,17 @@ class CatalystTranspiler(AbstractTranspiler):
                     )
                 if isinstance(op, ast.USub):
                     # Handles both literal negative ints (USub on a Constant)
-                    # and runtime negation of a column.
-                    return self._convert_chunk(params, operand).__neg__()
+                    # and runtime negation of a column. Promoting for the same
+                    # reason `abs` is: `UnaryMinus` keeps its operand's type and
+                    # negates exactly, so `-x` on an int column holding
+                    # Integer.MinValue raised where Python answers 2147483648 --
+                    # two's complement having no positive counterpart for a
+                    # minimum. `forNegation` is the shared rule.
+                    neg_cat = self._category(params, operand)
+                    neg_col = self._convert_chunk(params, operand)
+                    return _promoting_if_numeric(
+                        "negate", [neg_cat], lambda: neg_col.__neg__(), neg_col
+                    )
                 # `+x` -- identity, kept for symmetry with USub.
                 return self._convert_chunk(params, operand)
             case ast.UnaryOp(op=ast.Invert(), operand=operand):
