@@ -26,7 +26,8 @@ import scala.util.Random
 import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{
+  CodegenObjectFactoryMode, Expression, Literal, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
@@ -1180,6 +1181,15 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
+      checkAnswer(
+        df.select(array_sort($"a"), array_sort($"b")),
+        Seq(
+          Row(Seq(1, 2, 3), Seq("a", "b", "c")),
+          Row(Seq.empty[Int], Seq.empty[String]),
+          Row(null, null))
+      )
+    }
     checkAnswer(
       df.selectExpr("array_sort(a)", "array_sort(b)"),
       Seq(
