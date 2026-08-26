@@ -125,6 +125,50 @@ case class IsVariantNull(child: Expression) extends UnaryExpression
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the number of elements in a variant array. Returns NULL if " +
+    "the input is SQL NULL, a variant null, or any non-array variant value.",
+  arguments = """
+    Arguments:
+      * expr - A variant value to inspect.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json('[1, 2, 3]'));
+       3
+      > SELECT _FUNC_(parse_json('{"a": 1}'));
+       NULL
+      > SELECT _FUNC_(parse_json('null'));
+       NULL
+  """,
+  since = "5.0.0",
+  group = "variant_funcs")
+// scalastyle:on line.size.limit
+case class VariantArrayLength(child: Expression) extends UnaryExpression
+  with ExpectsInputTypes with RuntimeReplaceable {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    VariantExpressionEvalUtils.getClass,
+    IntegerType,
+    "variantArrayLength",
+    Seq(child),
+    inputTypes,
+    propagateNull = false,
+    returnNullable = true)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
+
+  override def dataType: DataType = IntegerType
+
+  override def nullable: Boolean = true
+
+  override def prettyName: String = "variant_array_length"
+
+  override protected def withNewChildInternal(newChild: Expression): VariantArrayLength =
+    copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
   usage = "_FUNC_(expr) - Convert a nested input (array/map/struct) into a variant where maps and structs are converted to variant objects which are unordered unlike SQL structs. Input maps can only have string keys.",
   arguments = """
     Arguments:

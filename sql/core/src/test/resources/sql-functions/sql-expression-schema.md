@@ -565,6 +565,7 @@
 | org.apache.spark.sql.catalyst.expressions.st.ST_Srid | st_srid | SELECT st_srid(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040')) | struct<st_srid(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040')):int> |
 | org.apache.spark.sql.catalyst.expressions.variant.IsValidVariant | is_valid_variant | SELECT is_valid_variant(parse_json('null')) | struct<is_valid_variant(parse_json(null)):boolean> |
 | org.apache.spark.sql.catalyst.expressions.variant.IsVariantNull | is_variant_null | SELECT is_variant_null(parse_json('null')) | struct<is_variant_null(parse_json(null)):boolean> |
+| org.apache.spark.sql.catalyst.expressions.variant.VariantArrayLength | variant_array_length | SELECT variant_array_length(parse_json('[1, 2, 3]')) | struct<variant_array_length(parse_json([1, 2, 3])):int> |
 | org.apache.spark.sql.catalyst.expressions.variant.ParseJsonExpressionBuilder | parse_json | SELECT parse_json('{"a":1,"b":0.8}') | struct<parse_json({"a":1,"b":0.8}):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.SchemaOfVariant | schema_of_variant | SELECT schema_of_variant(parse_json('null')) | struct<schema_of_variant(parse_json(null)):string> |
 | org.apache.spark.sql.catalyst.expressions.variant.SchemaOfVariantAgg | schema_of_variant_agg | SELECT schema_of_variant_agg(parse_json(j)) FROM VALUES ('1'), ('2'), ('3') AS tab(j) | struct<schema_of_variant_agg(parse_json(j)):string> |
