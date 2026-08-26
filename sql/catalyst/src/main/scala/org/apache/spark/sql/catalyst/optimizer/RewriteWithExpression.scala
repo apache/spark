@@ -68,14 +68,25 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
 
   /**
    * Rewrites the `With` expressions in a single expression tree by inlining their common
-   * expressions. Uses `transformUp` to handle nested `With`.
+   * expressions. Uses `transformUp` to handle nested `With`. Inlining duplicates a definition at
+   * every reference, so this rejects non-foldable definitions: inlining one referenced more than
+   * once would evaluate it more than once, breaking `With`'s evaluate-once contract.
    *
    * Does not descend into subquery plans (e.g. `ScalarSubquery`). A caller whose expression
    * may contain a subquery must rewrite those plans separately.
    */
-  def applyForExpression(expression: Expression): Expression = {
+  def applyForExpression(expression: Expression): Expression =
+    inlineWith(expression, rejectNonFoldableDefs = true)
+
+  // The plan-level rewrite shares this to inline `With` in conditional branches, which may not be
+  // evaluated and so can't be pulled into a Project; it passes false to allow non-foldable defs.
+  private def inlineWith(expression: Expression, rejectNonFoldableDefs: Boolean): Expression = {
     expression.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
       case With(child, defs) =>
+        if (rejectNonFoldableDefs && !defs.forall(_.child.foldable)) {
+          throw SparkException.internalError(
+            "Cannot inline a With expression with a non-foldable common expression definition.")
+        }
         val refToExpr = defs.map(commonExprDef => commonExprDef.id -> commonExprDef.child).toMap
         child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
           case ref: CommonExpressionRef if refToExpr.contains(ref.id) => refToExpr(ref.id)
@@ -199,9 +210,9 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
             _, inputPlans, commonExprsPerChild, commonExprIdSet, isNestedWith))
         val newExpr = c.withNewAlwaysEvaluatedInputs(newAlwaysEvaluatedInputs)
         // For With in the conditional branches, they may not be evaluated at all and we can't
-        // pull the common expressions into a project which will always be evaluated. Inline it.
-        // Use transformUp to handle nested With.
-        applyForExpression(newExpr)
+        // pull the common expressions into a project which will always be evaluated. Inline it,
+        // even when the definition is not foldable. Use transformUp to handle nested With.
+        inlineWith(newExpr, rejectNonFoldableDefs = false)
 
       case other => other.mapChildren(
         rewriteWithExprAndInputPlans(

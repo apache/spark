@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{Add, Coalesce, Literal, Nvl, RuntimeReplaceable}
-import org.apache.spark.sql.catalyst.plans.PlanTest
 
-class ReplaceExpressionsSuite extends PlanTest {
+class ReplaceExpressionsSuite extends SparkFunSuite {
 
   test("replace expands RuntimeReplaceable expressions") {
     val replaced = ReplaceExpressions.replace(new Nvl(Literal(1), Literal(2)))

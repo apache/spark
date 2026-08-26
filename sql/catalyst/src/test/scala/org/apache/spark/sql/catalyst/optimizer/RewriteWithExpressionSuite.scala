@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.TempResolvedColumn
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -59,33 +60,32 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(Optimizer.execute(plan), testRelation.select((a + a).as("col")))
   }
 
-  test("applyForExpression inlines With common expressions") {
-    val a = testRelation.output.head
-    val expr = With(a) { case Seq(ref) =>
+  test("applyForExpression inlines foldable common expressions") {
+    val expr = With(Literal(1)) { case Seq(ref) =>
       ref + ref
     }
     val rewritten = RewriteWithExpression.applyForExpression(expr)
     assert(!rewritten.isInstanceOf[With])
-    assert(rewritten == a + a)
+    assert(rewritten == Literal(1) + Literal(1))
   }
 
-  test("applyForExpression always inlines non-cheap common expressions") {
+  test("applyForExpression rejects non-foldable common expressions") {
+    // Inlining would duplicate `a + a` at every reference, violating the evaluate-once contract,
+    // so a non-foldable definition is rejected rather than inlined.
     val a = testRelation.output.head
     val expr = With(a + a) { case Seq(ref) =>
       ref * ref
     }
-    val rewritten = RewriteWithExpression.applyForExpression(expr)
-    assert(!rewritten.exists(_.isInstanceOf[With]))
-    assert(rewritten == (a + a) * (a + a))
+    intercept[SparkException] {
+      RewriteWithExpression.applyForExpression(expr)
+    }
   }
 
   test("applyForExpression handles nested With") {
-    val a = testRelation.output.head
-    val b = testRelation.output.last
-    val inner = With(a + a) { case Seq(ref) =>
+    val inner = With(Literal(1)) { case Seq(ref) =>
       ref * ref
     }
-    val outer = With(inner + b) { case Seq(ref) =>
+    val outer = With(inner + Literal(2)) { case Seq(ref) =>
       ref + ref
     }
     val rewritten = RewriteWithExpression.applyForExpression(outer)
@@ -101,16 +101,15 @@ class RewriteWithExpressionSuite extends PlanTest {
   test("applyForExpression defers a ref to an outer common expression to the enclosing With") {
     // The inner `With` is rewritten first, so the outer ref it references is not yet in scope
     // and must be left for the enclosing `With` to inline.
-    val a = testRelation.output.head
-    val outer = With(a + a) { case Seq(outerRef) =>
-      With(a * a) { case Seq(innerRef) =>
+    val outer = With(Literal(1)) { case Seq(outerRef) =>
+      With(Literal(2)) { case Seq(innerRef) =>
         outerRef + innerRef
       }
     }
     val rewritten = RewriteWithExpression.applyForExpression(outer)
     assert(!rewritten.exists(_.isInstanceOf[With]))
     assert(!rewritten.exists(_.isInstanceOf[CommonExpressionRef]))
-    assert(rewritten == (a + a) + (a * a))
+    assert(rewritten == Literal(1) + Literal(2))
   }
 
   test("non-cheap common expression") {

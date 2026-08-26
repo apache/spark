@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, EmptyTableFunctionRegistry, FakeV2SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Coalesce, CurrentCatalog, CurrentDatabase, Literal}
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.DefaultCatalogManager
 import org.apache.spark.sql.types.StringType
 
-class ReplaceCurrentLikeSuite extends PlanTest {
+class ReplaceCurrentLikeSuite extends SparkFunSuite {
   private val catalogManager = new DefaultCatalogManager(
     FakeV2SessionCatalog,
     new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, EmptyTableFunctionRegistry))
