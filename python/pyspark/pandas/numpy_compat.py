@@ -177,10 +177,56 @@ def _logaddexp_func(c1: Column, c2: Column, base2: bool = False) -> Column:
     )
 
 
+def _floor_divide_floating(c1: Column, c2: Column) -> Column:
+    """Return floor(c1 / c2) for finite non-zero double operands, derived from the remainder.
+
+    Flooring the quotient is wrong when the division rounds up across an integer: 1.0 / 0.1
+    rounds to exactly 10.0, so its floor is 10 where NumPy, pandas and Python return 9. A
+    remainder is exact, so NumPy's npy_divmod derives the quotient from it, as this does.
+    """
+    remainder = F.try_mod(c1, c2)
+    # The remainder carries the dividend's sign, so this is the truncating quotient.
+    truncated = (c1 - remainder) / c2
+    # Truncating and flooring differ by one on opposite signs with a remainder left over.
+    quotient = F.when(
+        (remainder != 0) & ((remainder < 0) != (c2 < 0)), truncated - F.lit(1.0)
+    ).otherwise(truncated)
+    # The quotient is whole in exact arithmetic, but the division can leave it a few bits off.
+    # F.floor is unusable: a bigint cannot carry the infinities the caller's branches produce.
+    floor = quotient - F.pmod(quotient, F.lit(1.0))
+    # Flooring goes one too low when the division landed just under the whole number.
+    return F.when(quotient - floor > F.lit(0.5), floor + F.lit(1.0)).otherwise(floor)
+
+
+def _floor_divide_integral(c1: Column, c2: Column) -> Column:
+    """Return floor(c1 / c2) for integral operands, keeping the quotient in integer space.
+
+    Casting an operand above 2**53 to double drops its low bits, turning 9007199254740993 into
+    9007199254740992, and Spark's `/` always divides as double. The long casts are no-ops for
+    the integral types the caller admits; they are there because `div` rejects a double even in
+    a branch the guard turns off.
+    """
+    c1_long = c1.cast("long")
+    c2_long = c2.cast("long")
+    # `div` is integer division, truncating toward zero, so it needs the same flooring
+    # correction as the floating helper. Integer arithmetic cannot round, so nothing more.
+    truncated = F.call_function("div", c1_long, c2_long)
+    remainder = F.try_mod(c1_long, c2_long)
+    return (
+        F.when((remainder != 0) & ((remainder < 0) != (c2_long < 0)), truncated - F.lit(1))
+        .otherwise(truncated)
+        .cast("double")
+    )
+
+
 def _floor_divide_func(c1: Column, c2: Column) -> Column:
     c1_double = c1.cast("double")
     c2_double = c2.cast("double")
+    integral_types = ["tinyint", "smallint", "int", "bigint"]
 
+    # Dispatched on type twice: floating operands need IEEE answers for infinities and signed
+    # zeros, and among the rest, at the end of the branch below, only integral operands can
+    # divide in integer space.
     return F.when(
         F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
         F.when(c1.isNull() | F.isnan(c1), c1_double)
@@ -211,9 +257,11 @@ def _floor_divide_func(c1: Column, c2: Column) -> Column:
             .otherwise(F.lit(float("inf"))),
         )
         .when(c1_double == 0, c1_double / c2_double)
-        .otherwise((c1_double / c2_double) - F.pmod(c1_double / c2_double, F.lit(1.0))),
+        .otherwise(_floor_divide_floating(c1_double, c2_double)),
     ).otherwise(
-        # np.floor_divide on pandas Series returns IEEE values for an integral zero divisor.
+        # Non-floating operands. pandas masks a zero divisor and upcasts, so 1 // 0 is inf,
+        # -1 // 0 is -inf and 0 // 0 is nan. A nullable Int64 returns 0 instead, but both dtypes
+        # arrive as bigint and cannot be told apart, so this follows the default one.
         F.when(c1.isNull() | F.isnan(c1), c1_double)
         .when(c2.isNull() | F.isnan(c2), c2_double)
         .when(
@@ -222,7 +270,13 @@ def _floor_divide_func(c1: Column, c2: Column) -> Column:
             .when(c1_double < 0, F.lit(float("-inf")))
             .otherwise(F.lit(float("inf"))),
         )
-        .otherwise((c1_double / c2_double) - F.pmod(c1_double / c2_double, F.lit(1.0)))
+        # A decimal column also lands here, and it cannot be named in a typeof test since the
+        # name carries its precision, so it falls through to the double casts.
+        .when(
+            F.typeof(c1).isin(integral_types) & F.typeof(c2).isin(integral_types),
+            _floor_divide_integral(c1, c2),
+        )
+        .otherwise(_floor_divide_floating(c1_double, c2_double))
     )
 
 
