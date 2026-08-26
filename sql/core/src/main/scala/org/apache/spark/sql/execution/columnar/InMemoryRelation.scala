@@ -710,7 +710,15 @@ case class InMemoryRelation(
     val newOutputOrdering = outputOrdering
       .map(_.transform { case a: Attribute => map(a) })
       .asInstanceOf[Seq[SortOrder]]
-    InMemoryRelation(newOutput, cacheBuilder, newOutputOrdering, statsOfPlanToCache)
+    // `attributeStats` is keyed by attribute, so it has to be re-keyed onto `newOutput` as well,
+    // otherwise every column stat lookup misses for the new relation and the estimates silently
+    // fall back to the un-filtered defaults. `statsOfPlanToCache` is a `var` that starts as null.
+    val newStatsOfPlanToCache = if (statsOfPlanToCache == null) {
+      null
+    } else {
+      LogicalRDD.rewriteStatistics(statsOfPlanToCache, map)
+    }
+    InMemoryRelation(newOutput, cacheBuilder, newOutputOrdering, newStatsOfPlanToCache)
   }
 
   // Goes through `withOutput` so that `outputOrdering` is re-mapped onto the fresh exprIds.

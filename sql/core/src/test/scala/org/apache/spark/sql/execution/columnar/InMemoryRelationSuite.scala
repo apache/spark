@@ -45,8 +45,10 @@ class InMemoryRelationSuite extends SparkFunSuite
     // The ordering must be re-mapped onto the new attributes, not left referencing the old ones.
     assert(r2.outputOrdering.nonEmpty)
     assert(AttributeSet(r2.outputOrdering.flatMap(_.references)).subsetOf(AttributeSet(r2.output)))
-    // Canonicalization re-maps `outputOrdering` through `output`, so a stale ordering would throw.
-    r2.canonicalized
+    // `sameResult` is what CacheManager lookups and exchange reuse rely on. It goes through
+    // `doCanonicalize`, which re-maps `outputOrdering` through `output`, so a stale ordering
+    // throws here rather than merely producing an unequal plan.
+    assert(r1.sameResult(r2))
   }
 
   test("SPARK-47177: Cached SQL plan do not display final AQE plan in explain string") {
