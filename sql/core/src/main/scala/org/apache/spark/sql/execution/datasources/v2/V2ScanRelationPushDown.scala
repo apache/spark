@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.optimizer.{CollapseGroupedSumOfCount, Colla
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LocalRelation, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.EXTERNAL_UDF
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
@@ -1282,6 +1283,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         val advisoryFilters = r.advisoryFilters.filter { filter =>
           filter.deterministic &&
             !SubqueryExpression.hasSubquery(filter) &&
+            !filter.containsPattern(EXTERNAL_UDF) &&
             !filter.exists(_.isInstanceOf[UserDefinedExpression])
         }
         rebindFilters(advisoryFilters, sHolder.output).flatMap(splitConjunctivePredicates)
