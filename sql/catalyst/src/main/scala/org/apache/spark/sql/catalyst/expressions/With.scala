@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode, FalseLiteral}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, TreePattern, WITH_EXPRESSION}
 import org.apache.spark.sql.types.DataType
@@ -79,14 +79,17 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
    * names. The list is found once, since the tree does not change between evaluations.
    *
    * Only `child` is scanned, which relies on a reference to one of these definitions never living
-   * inside another one of them: `With.apply` cannot build that, and `RewriteWithExpression`, which
-   * does rewrite inside a `With`, only ever replaces a reference with its definition's child or
-   * with an attribute -- it never puts a reference inside a definition. Scanning `children` instead
-   * would look safer and be worse -- it would also bind a reference sitting inside the definition
-   * it names, and since `CommonExpressionCell.get` sets `computed` only after the nested evaluation
-   * returns, that turns today's loud "outside its With" error into a StackOverflowError. A nested
-   * `With` is not affected either way: `children` is `child +: defs`, so this scan already descends
-   * into an inner `With`'s own definitions.
+   * inside another one of them. The helper `With(commonExprs: _*)(replaced)` builds the references
+   * outside the definitions and cannot produce that, and `RewriteWithExpression`, which does
+   * rewrite inside a `With`, only ever replaces a reference with its definition's child or with an
+   * attribute -- it never puts a reference inside a definition. The case class constructor does
+   * take `child` and `defs` directly, so a caller can hand a definition a reference to any of these
+   * ids; that reference is then never bound, and evaluating it raises "Cannot evaluate a common
+   * expression reference outside its With", which is the failure to want. Scanning `children`
+   * instead would look safer and be worse -- it would bind such a reference, and since
+   * `CommonExpressionCell.get` sets `computed` only after the nested evaluation returns, that loud
+   * error would become a StackOverflowError. A nested `With` is not affected either way: `children`
+   * is `child +: defs`, so this scan already descends into an inner `With`'s own definitions.
    */
   @transient private lazy val refsToBind: Seq[(CommonExpressionRef, CommonExpressionDef)] = {
     val idToDef = defs.map(d => d.id -> d).toMap
@@ -360,36 +363,25 @@ case class CommonExpressionRef(id: CommonExpressionId, dataType: DataType, nulla
 
   /**
    * Computes the definition into the shared slots if this row has not done so yet, then reads them.
-   * The definition's code is emitted here rather than by the enclosing `With`, so it runs where the
-   * first reference is reached -- behind a short-circuiting operator or a nested conditional, if
-   * that is where the reference sits.
+   * The code that computes it is emitted here rather than by the enclosing `With`, so it runs where
+   * the first reference is reached -- behind a short-circuiting operator or a nested conditional,
+   * if that is where the reference sits.
    *
-   * A second reference emits the same code text again, which never runs because the flag is set.
-   * The text is generated once and cached on the slots, so every copy shares whatever mutable
-   * state the definition allocated, and a nested `With` does not grow its code by a factor per
-   * level. The definition's locals are declared inside each guard, whose blocks are siblings, so
-   * repeating the text declares nothing twice in one scope.
-   *
-   * Whether the isNull slot exists is decided by the definition, so it is read off the slot rather
-   * than off this reference's own `nullable`: taking it from both would let the two disagree, and
-   * either emit `false = <isNull>;`, which does not compile, or leave the slot holding the previous
-   * row's nullness.
+   * A second reference emits the same code again, which never runs because the flag is set. What
+   * that code is depends on the definition: a call, where the definition can be put in a method, so
+   * that a definition that is or holds another `With` is not pasted once per reference at every
+   * level; the body itself otherwise, whose locals are declared inside each guard. No copy of one
+   * body encloses another -- for that, a definition would have to reference its own id, directly or
+   * through a sibling, which recurses in `fill` before any Java exists -- so repeating it declares
+   * nothing twice in one scope. See `CommonExprSlots.fill`, which also says what bounds the code
+   * when a method is not possible.
    */
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val slots = ctx.getCommonExpr(id.id)
-    val defGen = slots.definitionGen(ctx)
-    val assignIsNull = if (slots.value.isNull == FalseLiteral) {
-      ""
-    } else {
-      s"${slots.value.isNull} = ${defGen.isNull};"
-    }
     ev.copy(
       code = code"""
          |if (!${slots.computed}) {
-         |  ${defGen.code}
-         |  $assignIsNull
-         |  ${slots.value.value} = ${defGen.value};
-         |  ${slots.computed} = true;
+         |  ${slots.fill}
          |}
        """.stripMargin,
       isNull = slots.value.isNull,

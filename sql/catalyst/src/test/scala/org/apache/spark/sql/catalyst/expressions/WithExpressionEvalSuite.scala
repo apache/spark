@@ -20,13 +20,15 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode, GenerateMutableProjection}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
  * Evaluation of [[With]] and the memoization it gives a [[CommonExpressionRef]]. The rewrite that
  * decides which `With`s reach evaluation at all is covered by `RewriteWithExpressionSuite`.
  */
-class WithExpressionEvalSuite extends SparkFunSuite {
+class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
 
   /**
    * A stand-in for a stateful generator: every evaluation returns the next integer, so a second
@@ -153,15 +155,59 @@ class WithExpressionEvalSuite extends SparkFunSuite {
   }
 
   test("SPARK-58902: a definition's code is generated once however many references read it") {
-    // Every reference emits the definition's code inside its own `if (!computed)` guard, so the
-    // text appears once per reference -- but it has to be the same text, generated once, or each
-    // copy calls `addMutableState` again and the definition ends up owning one counter per
-    // reference. Two references in mutually exclusive positions would then draw from two counters
-    // sitting at the same position in their sequences, and hand out one value on two rows.
+    // This definition is short and holds no `With`, so it is emitted inline: every reference emits
+    // it inside its own `if (!computed)` guard, and the text appears once per reference -- but it
+    // has to be the same text, generated once, or each copy calls `addMutableState` again and the
+    // definition ends up owning one counter per reference. Two references in mutually exclusive
+    // positions would then draw from two counters sitting at the same position in their sequences,
+    // and hand out one value on two rows.
     val ctx = new CodegenContext
     With(MonotonicallyIncreasingID()) { case Seq(ref) => Add(ref, ref) }.genCode(ctx)
     val counters = ctx.inlinedMutableStates.count { case (_, name) => name.startsWith("count") }
     assert(counters == 1, s"the definition was generated $counters times")
+  }
+
+  test("SPARK-58902: nesting does not multiply a definition's body on the row-based path") {
+    // Each level of nested `With`s reads its definition twice, so a reference that pastes the body
+    // doubles it per level. What already stopped that from running away is
+    // `Expression.reduceCodeSize`, which hoists into a method whichever node's code first passes
+    // `methodSplitThreshold` as generation walks up: measured with the 237-character leaf below and
+    // the default threshold, the count settled at 4 from depth 2 on rather than doubling -- where
+    // it settles is where the threshold catches the doubling, so it is a property of those two
+    // numbers and not a law. Emitting the body into a method here makes it 2 at any depth, so the
+    // bound no longer grows with depth wherever the threshold sits.
+    //
+    // Whole-stage codegen is neither covered nor fixed: it generates the operators a `With` reaches
+    // with `currentVars` set, so neither this method nor `reduceCodeSize` applies, and the body is
+    // pasted per reference -- measured 2, 4, 8, ... 256 at depths 1 to 8. A bare `CodegenContext`
+    // has `INPUT_ROW` set and `currentVars` null, which is the row-based path and the only one
+    // below.
+    val marker = 1234567
+    def nested(depth: Int): Expression = {
+      val leaf: Expression = Add(BoundReference(0, IntegerType, nullable = false), Literal(marker))
+      (1 to depth).foldLeft(leaf) { (inner, _) =>
+        With(inner) { case Seq(ref) => Add(ref, ref) }
+      }
+    }
+    def markerCount(depth: Int): Int = {
+      val ctx = new CodegenContext
+      val source = nested(depth).genCode(ctx).code.toString + ctx.declareAddedFunctions()
+      marker.toString.r.findAllMatchIn(source).size
+    }
+    // The threshold decides whether the innermost body is inlined at all, so pin it rather than
+    // depend on the default: below the length of that body the fill would go into a method of its
+    // own and the count would be 1, for a reason that has nothing to do with nesting.
+    withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1024") {
+      (1 to 6).foreach { depth =>
+        val count = markerCount(depth)
+        assert(count == 2, s"the innermost body was emitted $count times at depth $depth")
+      }
+      // The values still come out right: each level doubles what the one below it produced. Four
+      // levels are enough to show that and keep the product inside Int, which ANSI `Add` would
+      // raise on rather than wrap past depth 10.
+      val proj = GenerateMutableProjection.generate(Seq(nested(4)))
+      assert(proj(InternalRow(1)).getInt(0) == (1 + marker) * 16)
+    }
   }
 
   test("SPARK-58902: a reference under a CodegenFallback still memoizes") {

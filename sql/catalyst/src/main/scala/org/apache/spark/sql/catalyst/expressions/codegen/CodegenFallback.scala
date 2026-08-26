@@ -38,11 +38,16 @@ object CodegenFallback {
    * its own tree -- see `With.doGenCode`.
    *
    * Three places reason about which subtrees run interpretively, and all of them dispatch on the
-   * trait: `CollapseCodegenStages.supportCodegen`, which turns whole-stage codegen off;
-   * `EquivalentExpressions.childrenToRecurse`, which keeps a subtree that only `eval` reaches out
-   * of subexpression elimination; and `With.refUnderCodegenFallback`, which decides whether a
-   * memoized reference is reached that way. A caller that is not a `CodegenFallback` is invisible
-   * to all three, so it has to be named in each of them as well.
+   * trait. `CollapseCodegenStages.supportCodegen` walks whole expression trees, so it finds a
+   * non-leaf descendant `CodegenFallback` whatever node called `generate` -- that is how a `With`
+   * holding one gets whole-stage codegen turned off without being one itself. The other two
+   * dispatch on the node in hand: `EquivalentExpressions.childrenToRecurse`, which keeps a subtree
+   * that only `eval` reaches out of subexpression elimination, and
+   * `With.refUnderCodegenFallback`, which decides whether a memoized reference is reached that way.
+   * A caller that is not a `CodegenFallback` is invisible to those two and has to be named in each.
+   * One that falls back for a reason other than holding such a descendant would have to be named in
+   * `CollapseCodegenStages` as well, since nothing else would tell it that the input row this code
+   * needs is not there.
    */
   def generate(e: Expression, ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // LeafNode does not need `input`

@@ -500,11 +500,11 @@ class ColumnExpressionSuite extends SharedSparkSession {
       // each copy owns its own generator seeded the same way, so they only differ once the first
       // comparison has skipped the second copy on some row.
       val df = spark.range(0, 20, 1, 1)
-      // `randstr(3, 0)` cannot be pre-evaluated into a project, because it raises on a negative
-      // length and so would raise on the rows whose branch is not taken. Memoizing it in place
-      // gives both comparisons of the BETWEEN one string, so the answer inside a branch is the same
-      // as outside one. `id` is selected alongside so that `checkAnswer`, which compares rows as a
-      // bag, is comparing per row rather than just counting trues.
+      // `randstr` draws a new string per row, so inlining gives the two comparisons of the BETWEEN
+      // two draws, while memoizing gives them one and makes the answer inside a branch the same as
+      // outside one. Its value is a string rather than a primitive, so this also exercises a slot
+      // that cannot be an inlined field. `id` is selected alongside so that `checkAnswer`, which
+      // compares rows as a bag, is comparing per row rather than just counting trues.
       val inBranch = df.selectExpr(
         "id", "CASE WHEN id < 0 THEN false ELSE randstr(3, 0) BETWEEN 'a' AND 'zzzz' END")
       checkAnswer(
