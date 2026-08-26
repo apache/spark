@@ -92,6 +92,18 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   @Path("allmiscellaneousprocess")
   def allProcessList(): Seq[ProcessSummary] = withUI(_.store.miscellaneousProcessList(false))
 
+  @GET
+  @Path("holdstatus")
+  def holdStatus(): ApplicationHoldStatus = {
+    val safeSparkContext = checkAndGetSparkContext("Hold status")
+    val held = safeSparkContext.executorsHeld
+    new ApplicationHoldStatus(
+      supported = safeSparkContext.executorHoldSupported,
+      held = held,
+      // The executors that have not exited yet are still draining their running tasks.
+      draining = if (held) safeSparkContext.getExecutorIds().size else 0)
+  }
+
   @Path("stages")
   def stages(): Class[StagesResource] = classOf[StagesResource]
 
