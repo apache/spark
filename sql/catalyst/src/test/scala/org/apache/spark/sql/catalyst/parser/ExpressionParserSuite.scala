@@ -583,6 +583,79 @@ class ExpressionParserSuite extends AnalysisTest {
         stop = 59))
   }
 
+  private def groupsBoundary(boundary: Expression): Expression = boundary match {
+    case s: SpecialFrameBoundary => s
+    case UnaryMinus(offset, _) => -GroupFrameOffset(offset)
+    case IntegerLiteral(offset) if offset < 0 => -GroupFrameOffset(Literal(-offset))
+    case offset => GroupFrameOffset(offset)
+  }
+
+  test("groups window function expressions") {
+    val func = $"foo".function(star())
+    def windowed(
+        partitioning: Seq[Expression] = Seq.empty,
+        ordering: Seq[SortOrder] = Seq.empty,
+        frame: WindowFrame = UnspecifiedFrame): Expression = {
+      WindowExpression(func, WindowSpecDefinition(partitioning, ordering, frame))
+    }
+
+    val boundaries = Seq(
+      // Single-bound forms.
+      ("unbounded preceding", UnboundedPreceding, CurrentRow),
+      ("10 preceding", -Literal(10), CurrentRow),
+      ("3 + 1 preceding", -Add(Literal(3), Literal(1)), CurrentRow),
+      ("0 preceding", -Literal(0), CurrentRow),
+      ("current row", CurrentRow, CurrentRow),
+      ("0 following", Literal(0), CurrentRow),
+      ("3 + 1 following", Add(Literal(3), Literal(1)), CurrentRow),
+      ("10 following", Literal(10), CurrentRow),
+      ("unbounded following", UnboundedFollowing, CurrentRow), // Will fail during analysis
+
+      // BETWEEN forms.
+      ("between unbounded preceding and 5 following", UnboundedPreceding, Literal(5)),
+      ("between unbounded preceding and current row", UnboundedPreceding, CurrentRow),
+      ("between 10 preceding and current row", -Literal(10), CurrentRow),
+      ("between 0 preceding and current row", -Literal(0), CurrentRow),
+      ("between current row and current row", CurrentRow, CurrentRow),
+      ("between current row and 0 following", CurrentRow, Literal(0)),
+      ("between current row and 5 following", CurrentRow, Literal(5)),
+      ("between current row and unbounded following", CurrentRow, UnboundedFollowing),
+      ("between 10 preceding and unbounded following", -Literal(10), UnboundedFollowing),
+      ("between 0 preceding and unbounded following", -Literal(0), UnboundedFollowing),
+      ("between 10 preceding and 5 following", -Literal(10), Literal(5)),
+      ("between unbounded preceding and unbounded following",
+        UnboundedPreceding, UnboundedFollowing)
+    )
+    boundaries.foreach {
+      case (boundarySql, begin, end) =>
+        val query = s"foo(*) over (partition by a order by b groups $boundarySql)"
+        val expr = windowed(Seq($"a"), Seq($"b".asc),
+          SpecifiedWindowFrame(GroupFrame, groupsBoundary(begin), groupsBoundary(end)))
+        assertEqual(query, expr)
+    }
+  }
+
+  test("GROUPS window frame sql output re-parses to an equal tree") {
+    val func = $"foo".function(star())
+    val frames = Seq(
+      SpecifiedWindowFrame(GroupFrame, UnboundedPreceding, CurrentRow),
+      SpecifiedWindowFrame(GroupFrame, CurrentRow, CurrentRow),
+      SpecifiedWindowFrame(GroupFrame, UnboundedPreceding, UnboundedFollowing),
+      SpecifiedWindowFrame(GroupFrame, CurrentRow, UnboundedFollowing),
+      SpecifiedWindowFrame(GroupFrame, Literal(-2), Literal(-1)),
+      SpecifiedWindowFrame(GroupFrame, Literal(1), Literal(2)),
+      SpecifiedWindowFrame(GroupFrame, Literal(0), CurrentRow)
+    )
+    frames.foreach { frame =>
+      val expr = WindowExpression(func,
+        WindowSpecDefinition(Seq($"a"), Seq($"b".asc),
+          frame.copy(lower = groupsBoundary(frame.lower), upper = groupsBoundary(frame.upper))))
+      val sqlText = s"foo(*) over (partition by a order by b ${frame.sql})"
+      val reparsed = defaultParser.parseExpression(sqlText)
+      compareExpressions(reparsed, expr)
+    }
+  }
+
   test("row constructor") {
     // Note that '(a)' will be interpreted as a nested expression.
     assertEqual("(a, b)", CreateStruct(Seq($"a", $"b")))

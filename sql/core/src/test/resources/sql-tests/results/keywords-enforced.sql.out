@@ -177,6 +177,7 @@ GLOBAL	false
 GRANT	true
 GROUP	true
 GROUPING	false
+GROUPS	false
 HANDLER	false
 HAVING	true
 HISTORY	false

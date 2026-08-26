@@ -1222,6 +1222,23 @@ class PlanParserSuite extends AnalysisTest {
     parsePlan("select approx, asof, distance, exact, nearest, similarity from t")
   }
 
+  test("GROUPS keyword is non-reserved (usable as identifier)") {
+    def checkGroupsAsIdentifier(): Unit = {
+      parsePlan("select groups from t")
+      parsePlan("select a as groups from t")
+      parsePlan("select * from groups")
+      parsePlan("select foo(*) over (order by groups) from t")
+      parsePlan(
+        "select foo(*) over (order by groups groups between 1 preceding and current row) from t")
+    }
+    checkGroupsAsIdentifier()
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
+      checkGroupsAsIdentifier()
+    }
+  }
+
   test("sampled relations") {
     val sql = "select * from t"
     assertEqual(s"$sql tablesample(100 rows)",

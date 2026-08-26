@@ -1953,6 +1953,21 @@
           "Filter expression <filter> of type <type> is not a boolean."
         ]
       },
+      "GROUPS_FRAME_NEGATIVE_OFFSET" : {
+        "message" : [
+          "The offset of a groups frame must be non-negative."
+        ]
+      },
+      "GROUPS_FRAME_NULL_OFFSET" : {
+        "message" : [
+          "The <location> bound of a groups frame must not be null."
+        ]
+      },
+      "GROUPS_FRAME_WITHOUT_ORDER" : {
+        "message" : [
+          "A groups window frame cannot be used in an unordered window specification."
+        ]
+      },
       "HASH_MAP_TYPE" : {
         "message" : [
           "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."

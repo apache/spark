@@ -460,6 +460,8 @@ final class SlidingWindowFunctionFrame(
     lowerBound = 0
     upperBound = 0
     buffer.clear()
+    lbound.prepare()
+    ubound.prepare()
   }
 
   /** Write the frame columns for the current row to the given target row. */
@@ -477,6 +479,10 @@ final class SlidingWindowFunctionFrame(
     // Add all rows to the buffer for which the input row value is equal to or less than
     // the output row upper bound.
     while (nextRow != null && ubound.compare(nextRow, upperBound, current, index) <= 0) {
+      // `nextRow` sits at `upperBound` but is passed as the row at `lowerBound`. The two
+      // coincide whenever this branch is taken: an admitted row is only below the lower bound
+      // when the buffer is empty, and then `lowerBound == upperBound`. This matters for
+      // `GroupBoundOrdering`, which unlike the other bounds reads both the row and the index.
       if (lbound.compare(nextRow, lowerBound, current, index) < 0) {
         lowerBound += 1
       } else {
@@ -597,6 +603,7 @@ final class UnboundedPrecedingWindowFunctionFrame(
     if (processor != null) {
       processor.initialize(input.length)
     }
+    ubound.prepare()
   }
 
   /** Write the frame columns for the current row to the given target row. */
@@ -660,6 +667,7 @@ final class UnboundedFollowingWindowFunctionFrame(
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
     inputIndex = 0
+    lbound.prepare()
   }
 
   /** Write the frame columns for the current row to the given target row. */

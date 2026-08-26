@@ -345,10 +345,9 @@ SELECT * FROM v_window;
 --   exclude no others) as sum_rows FROM generate_series(1, 10) i;
 -- SELECT * FROM v_window;
 
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
--- CREATE OR REPLACE TEMP VIEW v_window AS
--- SELECT i.id, sum(i.id) over (order by i.id groups between 1 preceding and 1 following) as sum_rows FROM range(1, 11) i;
--- SELECT * FROM v_window;
+CREATE OR REPLACE TEMP VIEW v_window AS
+SELECT i.id, sum(i.id) over (order by i.id groups between 1 preceding and 1 following) as sum_rows FROM range(1, 11) i;
+SELECT * FROM v_window;
 
 DROP VIEW v_window;
 -- [SPARK-29540] Thrift in some cases can't parse string to date
