@@ -399,11 +399,18 @@ object ShuffleExchangeExec {
           samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)
       case SinglePartition => new ConstantPartitioner
       case k: KeyedPartitioning =>
-        val keyGroupedPartitioning = k.toGrouped
-        val valueMap = keyGroupedPartitioning.partitionKeys.zipWithIndex.map {
-          case (key, index) => (key.row.toSeq(keyGroupedPartitioning.expressionDataTypes), index)
+        // `partitionKeys` is the physical layout its producer declared: partition `i` holds key
+        // `partitionKeys(i)`. Keep that order, whatever it is -- it need not be sorted, and
+        // re-deriving one here would disagree with the side this shuffle co-partitions with.
+        // Unique keys are a precondition, since each key gets exactly one partition;
+        // `KeyedShuffleSpec.canCreatePartitioning` is what refuses an ungrouped partitioning.
+        assert(k.isGrouped,
+          s"Expected a grouped KeyedPartitioning on ${k.expressions}, but got ${k.numPartitions} " +
+            "partition keys with duplicates among them")
+        val valueMap = k.partitionKeys.zipWithIndex.map {
+          case (key, index) => (key.row.toSeq(k.expressionDataTypes), index)
         }.toMap
-        new KeyGroupedPartitioner(mutable.Map.from(valueMap), keyGroupedPartitioning.numPartitions)
+        new KeyGroupedPartitioner(mutable.Map.from(valueMap), k.numPartitions)
       case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }

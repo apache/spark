@@ -424,6 +424,26 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     assert(!RangeShuffleSpec(10, distribution).canCreatePartitioning)
   }
 
+  test("SPARK-59022: canCreatePartitioning: KeyedShuffleSpec requires grouped partition keys") {
+    val a = $"a".int
+    val distribution = ClusteredDistribution(Seq(a))
+    def keyedSpec(keys: Seq[Int]): KeyedShuffleSpec = KeyedShuffleSpec(
+      KeyedPartitioning(Seq(a), keys.map(k => InternalRow(k))), distribution)
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val grouped = keyedSpec(Seq(2, 1))
+      assert(grouped.partitioning.isGrouped)
+      assert(grouped.canCreatePartitioning,
+        "unsorted keys are fine, the shuffle follows the declared order")
+
+      // Duplicate keys mean one key spans several partitions, which a KeyGroupedPartitioner cannot
+      // reproduce, so this spec must not be the target for shuffling the other child.
+      val ungrouped = keyedSpec(Seq(1, 1, 2))
+      assert(!ungrouped.partitioning.isGrouped)
+      assert(!ungrouped.canCreatePartitioning)
+    }
+  }
+
   test("createPartitioning: HashShuffleSpec") {
     checkCreatePartitioning(
       HashShuffleSpec(HashPartitioning(Seq($"a"), 10), ClusteredDistribution(Seq($"a", $"b"))),
