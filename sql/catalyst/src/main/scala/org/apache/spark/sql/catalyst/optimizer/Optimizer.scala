@@ -1145,7 +1145,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
           val owed = mustPreEvaluate(args, option)
           val shared = reads.distinct.filter { index =>
             (owed.contains(index) ||
-              (readsPerKey(shareKey(index)) > 1 && !CollapseProject.isCheap(args(index)))) &&
+              (readsPerKey(shareKey(index)) > 1 && !cheapToRepeat(args(index)))) &&
               canPlace(args(index))
           }
           if (!owed.forall(shared.contains)) {
@@ -1320,7 +1320,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
               // computes -- and can raise on -- an argument `transpile.py` promises is never
               // computed at all.
               val read = TranspiledUDFParameter.referencedIndexes(catalystExpr).toSet
-              read.find(_ >= s.arguments.length).foreach { index =>
+              read.find(index => index < 0 || index >= s.arguments.length).foreach { index =>
                 // Only a hand-built option can be out of range: the builder bounds-checks what it
                 // emits, and a pre-typed reference slips past the analyzer's check too.
                 throw QueryCompilationErrors.invalidUDFParameterPlaceholderIndex(

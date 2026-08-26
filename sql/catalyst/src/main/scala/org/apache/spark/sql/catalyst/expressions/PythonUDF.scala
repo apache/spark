@@ -379,7 +379,7 @@ object TranspiledUDFParameter {
       // Only a hand-built option gets here out of range; the builder bounds-checks what it emits.
       // Left untyped the node never resolves and CheckAnalysis blames an internal error, which
       // tells nobody anything.
-      if (p.index >= arguments.length) {
+      if (p.index < 0 || p.index >= arguments.length) {
         throw QueryCompilationErrors.invalidUDFParameterPlaceholderIndex(p.index, arguments.length)
       }
       val arg = arguments(p.index)
