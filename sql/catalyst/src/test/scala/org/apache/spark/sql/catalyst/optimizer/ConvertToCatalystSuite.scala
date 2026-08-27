@@ -180,6 +180,10 @@ class ConvertToCatalystSuite extends PlanTest {
     val zeroPyUDF = PythonUDF("udf", null, LongType, Seq.empty,
       PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
     assert(!TranspiledPythonUDF("udf", zeroPyUDF, List(Literal(42L))).hasOnlyPythonUDFInputs)
+    // An aggregate UDF's arguments sit under the AggregateExpression, not beside it: reading
+    // pythonUDFExpr.children saw (aggregateFunction, filter) and said false for every UDAF.
+    val aggOverPyUDF = makePyUDAF(innerPyUDF).toAggregateExpression()
+    assert(TranspiledPythonUDF("agg", aggOverPyUDF, List(catalystExpr)).hasOnlyPythonUDFInputs)
   }
 
   test("falls back to PythonUDF when ANSI is disabled") {

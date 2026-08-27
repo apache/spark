@@ -429,14 +429,12 @@ case class TranspiledPythonUDF(
     case other => other.children
   }
 
-  // True when every direct input to pythonUDFExpr is a plain PythonUDF (not a
-  // TranspiledPythonUDF). Used to decide whether to preserve the UDF batch pipeline
-  // rather than inserting a Catalyst node in the middle of a Python UDF chain.
+  // True when every argument is a plain PythonUDF (not a TranspiledPythonUDF). Used to decide
+  // whether to preserve the UDF batch pipeline rather than inserting a Catalyst node in the middle
+  // of a Python UDF chain. Reads `arguments`, not `pythonUDFExpr.children`: for an aggregate UDF
+  // the latter is the aggregate function and its filter, so this said false for every UDAF.
   def hasOnlyPythonUDFInputs: Boolean =
-    pythonUDFExpr.children.nonEmpty &&
-    pythonUDFExpr.children.forall {
-      _.isInstanceOf[PythonUDF]
-    }
+    arguments.nonEmpty && arguments.forall(_.isInstanceOf[PythonUDF])
 }
 
 /**

@@ -147,12 +147,9 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
 
   test("a call straddling both sides of a non-inner join fails the way Python does") {
     transpileOn {
-      // No column can go under a join, so a call owed an evaluation keeps the Python UDF -- and
-      // for a condition reading both sides, ExtractPythonUDFFromJoinCondition rejects a Python UDF
-      // on anything but an inner join. So this query fails, where a body reading its parameter once
-      // lowers and runs. That is the same error the query gets with transpilation off, but it is a
-      // change from this branch's own earlier behaviour, where the argument was copied to each read
-      // and the condition stayed pure Catalyst. Pinned so the trade is visible, not a surprise.
+      // No column can go under a join, so a call owed an evaluation keeps the Python UDF, and
+      // ExtractPythonUDFFromJoinCondition turns one down on anything but an inner join. Same error
+      // the query gets with transpilation off. A body reading its parameter once lowers and runs.
       val square = udfWith(Multiply(param(0), param(0)), arity = 2)
       val left = spark.range(0, 3).select(col("id").as("a"))
       val right = spark.range(0, 3).select(col("id").as("c"))
