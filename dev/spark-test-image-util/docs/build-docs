@@ -47,7 +47,7 @@ docker buildx build \
 docker run \
   --mount type=bind,source="${SPARK_HOME}",target="${DOCKER_MOUNT_SPARK_HOME}" \
   --interactive --tty "${IMG_URL}" \
-  /bin/bash -c "sh ${BUILD_DOCS_SCRIPT_PATH}"
+  "${BUILD_DOCS_SCRIPT_PATH}"
 
 if [[ "$SKIP_RDOC" != "1" ]]; then
   # 4.Build docs on host: `r doc`.
