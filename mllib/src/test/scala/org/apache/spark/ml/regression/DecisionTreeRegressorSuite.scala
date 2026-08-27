@@ -272,7 +272,8 @@ private[ml] object DecisionTreeRegressorSuite extends SparkFunSuite {
       data: RDD[LabeledPoint],
       dt: DecisionTreeRegressor,
       categoricalFeatures: Map[Int, Int]): Unit = {
-    val numFeatures = data.first().features.size
+    val features = data.first().features
+    val numFeatures = features.size
     val oldStrategy = dt.getOldStrategy(categoricalFeatures)
     val oldTree = OldDecisionTree.train(data.map(OldLabeledPoint.fromML), oldStrategy)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
@@ -281,6 +282,7 @@ private[ml] object DecisionTreeRegressorSuite extends SparkFunSuite {
     val oldTreeAsNew = DecisionTreeRegressionModel.fromOld(
       oldTree, newTree.parent.asInstanceOf[DecisionTreeRegressor], categoricalFeatures)
     TreeTests.checkEqual(oldTreeAsNew, newTree)
+    assert(oldTreeAsNew.predictLeaf(features) === newTree.predictLeaf(features))
     assert(newTree.numFeatures === numFeatures)
   }
 }

@@ -490,7 +490,8 @@ private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {
       dt: DecisionTreeClassifier,
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): Unit = {
-    val numFeatures = data.first().features.size
+    val features = data.first().features
+    val numFeatures = features.size
     val oldStrategy = dt.getOldStrategy(categoricalFeatures, numClasses)
     val oldTree = OldDecisionTree.train(data.map(OldLabeledPoint.fromML), oldStrategy)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
@@ -499,6 +500,7 @@ private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {
     val oldTreeAsNew = DecisionTreeClassificationModel.fromOld(
       oldTree, newTree.parent.asInstanceOf[DecisionTreeClassifier], categoricalFeatures)
     TreeTests.checkEqual(oldTreeAsNew, newTree)
+    assert(oldTreeAsNew.predictLeaf(features) === newTree.predictLeaf(features))
     assert(newTree.numFeatures === numFeatures)
   }
 }

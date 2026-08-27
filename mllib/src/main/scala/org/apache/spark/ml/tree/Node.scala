@@ -136,23 +136,19 @@ private[ml] object Node {
     new LeafNode(0.0, 0.0, ImpurityCalculator.getCalculator("gini", Array.empty, 0))
   }
 
-  /** Return a copy of the tree with left-to-right DFS indices assigned to leaves. */
+  /** Assign left-to-right DFS indices to leaves and return the same tree. */
   private[ml] def withLeafIndices(rootNode: Node): Node = {
-    withLeafIndices(rootNode, 0)._1
-  }
-
-  private def withLeafIndices(node: Node, nextLeafIndex: Int): (Node, Int) = {
-    node match {
+    var nextLeafIndex = 0
+    def assignLeafIndices(node: Node): Unit = node match {
       case n: LeafNode =>
-        (new LeafNode(n.prediction, n.impurity, n.impurityStats, nextLeafIndex),
-          nextLeafIndex + 1)
+        n.leafIndex = nextLeafIndex
+        nextLeafIndex += 1
       case n: InternalNode =>
-        val (leftChild, nextIndex) = withLeafIndices(n.leftChild, nextLeafIndex)
-        val (rightChild, endIndex) = withLeafIndices(n.rightChild, nextIndex)
-        val newNode = new InternalNode(n.prediction, n.impurity, n.gain, leftChild, rightChild,
-          n.split, n.impurityStats)
-        (newNode, endIndex)
+        assignLeafIndices(n.leftChild)
+        assignLeafIndices(n.rightChild)
     }
+    assignLeafIndices(rootNode)
+    rootNode
   }
 }
 
@@ -165,7 +161,7 @@ class LeafNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
     override private[ml] val impurityStats: ImpurityCalculator,
-    private[tree] val leafIndex: Int = -1) extends Node {
+    private[tree] var leafIndex: Int = -1) extends Node {
 
   override def toString: String =
     s"LeafNode(prediction = $prediction, impurity = $impurity)"

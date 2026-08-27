@@ -40,6 +40,17 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import RandomForestSuite.mapToVec
 
+  test("withLeafIndices assigns leaf indices in place") {
+    val left = new LeafNode(0.0, Double.NaN, null)
+    val right = new LeafNode(1.0, Double.NaN, null)
+    val root = new InternalNode(0.0, Double.NaN, Double.NaN, left, right,
+      new ContinuousSplit(0, 0.0), null)
+
+    assert(Node.withLeafIndices(root) eq root)
+    assert(left.leafIndex === 0)
+    assert(right.leafIndex === 1)
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests for split calculation
   /////////////////////////////////////////////////////////////////////////////
