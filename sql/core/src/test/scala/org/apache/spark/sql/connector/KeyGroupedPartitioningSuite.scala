@@ -248,8 +248,8 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
               SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
               SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable) {
 
-            // storage-partitioned join should kick in and fill the missing partitions & splits
-            // after dynamic filtering with empty partitions & splits, respectively.
+            // When partition values are pushed down, storage-partitioned join fills the missing
+            // partitions & splits after dynamic filtering with empty partitions & splits.
             val df = sql(s"SELECT sum(p.price) from " +
                 s"testcat.ns.$purchases p, testcat.ns.$items i WHERE " +
                 s"p.item_id = i.id AND p.price < 45.0")

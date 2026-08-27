@@ -23,7 +23,13 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, DynamicPruning, DynamicPruningExpression, EqualTo, Expression, GetStructField, GreaterThan, Literal, RLike}
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
-import org.apache.spark.sql.connector.catalog.{Column, InMemoryCatalystRuntimeFilterTable, InMemoryTable, InMemoryTableCatalystRuntimeFilterCatalog}
+import org.apache.spark.sql.connector.catalog.{
+  Column,
+  Identifier,
+  InMemoryCatalystRuntimeFilterTable,
+  InMemoryTable,
+  InMemoryTableCatalystRuntimeFilterCatalog,
+  TableCatalog}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Batch, HasPartitionKey, InputPartition, PartitionReaderFactory, Scan, SupportsRuntimeV2Filtering}
@@ -461,6 +467,23 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
 
       assert(collectBatchScan(df).runtimeFilters.isEmpty)
       assertPushedCatalystPredicates(df, 0)
+    }
+  }
+
+  test("ALTER TABLE keeps the Catalyst runtime-filter table type") {
+    val tbl = s"$catalogName.tbl_alter"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
+      sql(s"ALTER TABLE $tbl ADD COLUMNS (extra INT)")
+
+      val table = spark.sessionState.catalogManager.catalog(catalogName)
+        .asInstanceOf[TableCatalog]
+        .loadTable(Identifier.of(Array.empty, "tbl_alter"))
+      assert(table.isInstanceOf[InMemoryCatalystRuntimeFilterTable],
+        s"ALTER TABLE reconstructed ${table.getClass.getName}")
+
+      sql(s"INSERT INTO $tbl VALUES (0, 0, 10), (1, 1, 11)")
+      checkAnswer(sql(s"SELECT id, part FROM $tbl WHERE extra = 11"), Row(1, 1))
     }
   }
 
