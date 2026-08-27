@@ -238,26 +238,25 @@ class RandomForestRegressionModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
-    var predictionColNames = Seq.empty[String]
-    var predictionColumns = Seq.empty[Column]
+    if ($(predictionCol).nonEmpty || $(leafCol).nonEmpty) {
+      var predictionColNames = Seq.empty[String]
+      var predictionColumns = Seq.empty[Column]
+      val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
 
-    val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
+      if ($(predictionCol).nonEmpty) {
+        val predictUDF = udf { features: Vector => bcastModel.value.predict(features) }
+        predictionColNames :+= $(predictionCol)
+        predictionColumns :+= predictUDF(col($(featuresCol)))
+          .as($(predictionCol), outputSchema($(predictionCol)).metadata)
+      }
 
-    if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf { features: Vector => bcastModel.value.predict(features) }
-      predictionColNames :+= $(predictionCol)
-      predictionColumns :+= predictUDF(col($(featuresCol)))
-        .as($(predictionCol), outputSchema($(predictionCol)).metadata)
-    }
+      if ($(leafCol).nonEmpty) {
+        val leafUDF = udf { features: Vector => bcastModel.value.predictLeaf(features) }
+        predictionColNames :+= $(leafCol)
+        predictionColumns :+= leafUDF(col($(featuresCol)))
+          .as($(leafCol), outputSchema($(leafCol)).metadata)
+      }
 
-    if ($(leafCol).nonEmpty) {
-      val leafUDF = udf { features: Vector => bcastModel.value.predictLeaf(features) }
-      predictionColNames :+= $(leafCol)
-      predictionColumns :+= leafUDF(col($(featuresCol)))
-        .as($(leafCol), outputSchema($(leafCol)).metadata)
-    }
-
-    if (predictionColNames.nonEmpty) {
       dataset.withColumns(predictionColNames, predictionColumns)
     } else {
       this.logWarning(log"${MDC(LogKeys.UUID, uid)}: RandomForestRegressionModel.transform() " +
