@@ -51,4 +51,23 @@ class PushProjectThroughUnionSuite extends PlanTest {
 
     comparePlans(optimized, expected)
   }
+
+  test("SPARK-59042: PushProjectionThroughUnion handles unmapped/subquery attributes cleanly") {
+    val testRelation1 = LocalRelation($"a".int)
+    val testRelation2 = LocalRelation($"d".int)
+    val unmappedAttr = $"x".int
+    val query = testRelation1
+      .union(testRelation2)
+      .select($"a", unmappedAttr)
+      .analyze
+    val optimized = Optimize.execute(query)
+
+    val expected = testRelation1
+      .select($"a", unmappedAttr)
+      .union(testRelation2
+        .select($"d".as("a"), unmappedAttr))
+      .analyze
+
+    comparePlans(optimized, expected)
+  }
 }
