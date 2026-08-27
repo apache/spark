@@ -159,19 +159,19 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
     // This is a bit complicated since it tries to avoid repeated computation.
     var outputData = dataset
     var numColsOutput = 0
-    if (getRawPredictionCol != "") {
-      outputData = outputData.withColumn(getRawPredictionCol,
-        predictRawColumn(col(getFeaturesCol)),
+    if ($(rawPredictionCol).nonEmpty) {
+      outputData = outputData.withColumn($(rawPredictionCol),
+        predictRawColumn(col($(featuresCol))),
         outputSchema($(rawPredictionCol)).metadata)
       numColsOutput += 1
     }
-    if (getPredictionCol != "") {
-      val predCol = if (getRawPredictionCol != "") {
-        raw2predictionColumn(col(getRawPredictionCol))
+    if ($(predictionCol).nonEmpty) {
+      val predCol = if ($(rawPredictionCol).nonEmpty) {
+        raw2predictionColumn(col($(rawPredictionCol)))
       } else {
-        predictionColumn(col(getFeaturesCol))
+        predictionColumn(col($(featuresCol)))
       }
-      outputData = outputData.withColumn(getPredictionCol, predCol,
+      outputData = outputData.withColumn($(predictionCol), predCol,
         outputSchema($(predictionCol)).metadata)
       numColsOutput += 1
     }
