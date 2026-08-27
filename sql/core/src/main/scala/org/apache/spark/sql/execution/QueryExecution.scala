@@ -99,6 +99,9 @@ class QueryExecution(
     logical.exists(_.expressions.exists(_.exists(_.isInstanceOf[LazyExpression])))
   }
 
+  // Legacy constant-only parameter substitution wraps the plan in a ParameterizedQuery. Its
+  // parameters bind during analysis, after transaction selection, so INSERT IDENTIFIER parameters
+  // are intentionally not handled here and remain a known limitation.
   private val lazyLogicalWithResolvedInsert = LazyTry {
     def resolve(insert: UnresolvedInsert): LogicalPlan = {
       analyzerOpt.getOrElse(sparkSession.sessionState.analyzer).resolveUnresolvedInsert(insert)

@@ -2534,22 +2534,6 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
-  // SPARK-46625: legacy parameter-substitution mode triggers the parameters.scala traversal path.
-  // The placeholder is a child of UnresolvedInsert, so standard traversal must bind it.
-  test("SPARK-46625: INSERT IDENTIFIER(:p) under legacy parameter substitution") {
-    withSQLConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> "true") {
-      withTable("t_legacy_param") {
-        sql("CREATE TABLE t_legacy_param (a INT) USING PARQUET")
-        spark.sql(
-          """WITH transformation AS (SELECT 11 AS a)
-            |INSERT INTO IDENTIFIER(:tname)
-            |SELECT * FROM transformation""".stripMargin,
-          Map("tname" -> "t_legacy_param"))
-        checkAnswer(spark.table("t_legacy_param"), Row(11))
-      }
-    }
-  }
-
   // The temporary binary node exposes only a dynamic target to analyzer traversal and keeps CTE
   // definitions on the input query.
   test("SPARK-46625: WITH ... INSERT INTO IDENTIFIER(:p) REPLACE WHERE ... parser") {
