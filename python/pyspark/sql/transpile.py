@@ -1254,12 +1254,28 @@ class CatalystTranspiler(AbstractTranspiler):
             nan_val = lit(True)
             value_cmp = left_col != right_col
         nan_guard = self._nan_guard(lc, rc, left_col, right_col)
-        branches = when(left_null & right_null, both_null_val).when(
-            left_null | right_null, one_null_val
+        if nan_guard is None:
+            # No NaN can arise here (strings, provably-integral numerics, a None literal), and
+            # Spark's `<=>` *is* Python's None-equality: both-null true, one-null false, values
+            # otherwise. Measured against CPython over the full grid of {null, 0.0, -0.0, 1.0,
+            # NaN} on doubles and {null, 0, 1, -1} on bigints, both operand orders, and against
+            # an int literal on a bigint column (coercion intact) -- identical on every row.
+            # So the four-branch chain below is hand-rolling an operator we already have.
+            #
+            # Only on this path, though. `<=>` calls NaN equal to itself where Python does not,
+            # so where NaN is possible the guard has to stay -- and it deliberately stays *after*
+            # the null branches rather than being hoisted above an `eqNullSafe`, because
+            # `isnan(l) | isnan(r)` short-circuits: hoisting it would skip evaluating the right
+            # operand when the left is NaN, and an operand that raises (`x == 1.0 / y`) would
+            # then silently answer False instead of raising as Python does.
+            equal_null_safe = left_col.eqNullSafe(right_col)
+            return equal_null_safe if equal else ~equal_null_safe
+        return (
+            when(left_null & right_null, both_null_val)
+            .when(left_null | right_null, one_null_val)
+            .when(nan_guard, nan_val)
+            .otherwise(value_cmp)
         )
-        if nan_guard is not None:
-            branches = branches.when(nan_guard, nan_val)
-        return branches.otherwise(value_cmp)
 
     def _lower_value_compare(
         self,
