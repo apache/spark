@@ -370,7 +370,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
         ("codegen", Seq("WholeStageCodegen subtrees")),
         ("cost", Seq("== Optimized Logical Plan ==", "Statistics(sizeInBytes")),
         ("formatted", Seq("== Physical Plan ==", "Output", "Arguments")),
-        ("none", Seq("No plan description because spark.sql.ui.explainMode=none"))).foreach {
+        ("none", Seq(SQLExecution.NO_PLAN_DESCRIPTION))).foreach {
       case (mode, expected) =>
         checkPlanDescription(mode, expected)
     }

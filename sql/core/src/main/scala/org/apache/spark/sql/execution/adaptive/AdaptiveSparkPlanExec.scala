@@ -1145,14 +1145,9 @@ case class AdaptiveSparkPlanExec(
       context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveSQLMetricUpdates(
         executionId, newMetrics))
     } else {
-      val planDescription = if (conf.uiExplainMode == "NONE") {
-        "No plan description because spark.sql.ui.explainMode=none"
-      } else {
-        context.qe.explainString(ExplainMode.fromString(conf.uiExplainMode))
-      }
       context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
         executionId,
-        planDescription,
+        SQLExecution.planDescription(context.qe, conf.uiExplainMode),
         SparkPlanInfo.fromSparkPlan(context.qe.executedPlan)))
     }
   }
