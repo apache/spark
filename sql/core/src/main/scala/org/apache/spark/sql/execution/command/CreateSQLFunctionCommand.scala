@@ -34,6 +34,22 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand._
 import org.apache.spark.sql.types.{DataType, MetadataBuilder, StructField, StructType}
 
+/**
+ * The DDL command that creates a SQL function.
+ * For example:
+ * {{{
+ *    CREATE [OR REPLACE] [TEMPORARY] FUNCTION [IF NOT EXISTS] [db_name.]function_name
+ *    ([param_name param_type [COMMENT param_comment], ...])
+ *    RETURNS {ret_type | TABLE (ret_name ret_type [COMMENT ret_comment], ...])}
+ *    [function_properties] function_body;
+ *
+ *    function_properties:
+ *      [NOT] DETERMINISTIC | COMMENT function_comment | [ CONTAINS SQL | READS SQL DATA ]
+ *
+ *    function_body:
+ *      RETURN {expression | TABLE ( query )}
+ * }}}
+ */
 case class CreateSQLFunctionCommand(
     child: LogicalPlan,
     inputParamText: Option[String],
