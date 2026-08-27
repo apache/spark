@@ -1120,11 +1120,8 @@ class LogisticRegressionModel private[spark] (
     throw new SparkException("Multinomial models contain a vector of intercepts, use " +
       "interceptVector instead.")
   } else {
-    _intercept
+    interceptVector(0)
   }
-
-  private val _interceptVector = if (isMultinomial) interceptVector.toDense else null
-  private val _intercept = if (!isMultinomial) interceptVector(0) else Double.NaN
 
   @Since("1.5.0")
   override def setThreshold(value: Double): this.type = super.setThreshold(value)
@@ -1140,17 +1137,17 @@ class LogisticRegressionModel private[spark] (
 
   /** Score (probability) for class label 1.  For binary classification only. */
   private def score(features: Vector): Double = {
-    LogisticRegressionModel.score(features, _coefficients, _intercept)
+    LogisticRegressionModel.score(features, _coefficients, interceptVector(0))
   }
 
   override protected def predictRawColumn(features: Column): Column = if (isMultinomial) {
     val localCoefficientMatrix = coefficientMatrix
-    val localInterceptVector = _interceptVector
+    val localInterceptVector = interceptVector.toDense
     udf((features: Any) => LogisticRegressionModel.predictRaw(
       features.asInstanceOf[Vector], localCoefficientMatrix, localInterceptVector)).apply(features)
   } else {
     val localCoefficients = _coefficients
-    val localIntercept = _intercept
+    val localIntercept = interceptVector(0)
     udf((features: Any) => LogisticRegressionModel.predictRaw(
       features.asInstanceOf[Vector], localCoefficients, localIntercept)).apply(features)
   }
@@ -1170,7 +1167,7 @@ class LogisticRegressionModel private[spark] (
   override protected def predictProbabilityColumn(features: Column): Column = {
     if (isMultinomial) {
       val localCoefficientMatrix = coefficientMatrix
-      val localInterceptVector = _interceptVector
+      val localInterceptVector = interceptVector.toDense
       udf((features: Any) => {
         val rawPrediction = LogisticRegressionModel.predictRaw(
           features.asInstanceOf[Vector], localCoefficientMatrix, localInterceptVector)
@@ -1178,7 +1175,7 @@ class LogisticRegressionModel private[spark] (
       }).apply(features)
     } else {
       val localCoefficients = _coefficients
-      val localIntercept = _intercept
+      val localIntercept = interceptVector(0)
       udf((features: Any) => {
         val rawPrediction = LogisticRegressionModel.predictRaw(
           features.asInstanceOf[Vector], localCoefficients, localIntercept)
@@ -1221,7 +1218,7 @@ class LogisticRegressionModel private[spark] (
 
   override protected def predictionColumn(features: Column): Column = if (isMultinomial) {
     val localCoefficientMatrix = coefficientMatrix
-    val localInterceptVector = _interceptVector
+    val localInterceptVector = interceptVector.toDense
     val localThresholds = if (isDefined(thresholds)) getThresholds.clone() else null
     udf((features: Any) => {
       val rawPrediction = LogisticRegressionModel.predictRaw(
@@ -1236,7 +1233,7 @@ class LogisticRegressionModel private[spark] (
     }).apply(features)
   } else {
     val localCoefficients = _coefficients
-    val localIntercept = _intercept
+    val localIntercept = interceptVector(0)
     val localProbabilityThreshold = getThreshold
     udf((features: Any) => {
       val featureVector = features.asInstanceOf[Vector]
@@ -1308,9 +1305,9 @@ class LogisticRegressionModel private[spark] (
   @Since("3.0.0")
   override def predictRaw(features: Vector): Vector = {
     if (isMultinomial) {
-      LogisticRegressionModel.predictRaw(features, coefficientMatrix, _interceptVector)
+      LogisticRegressionModel.predictRaw(features, coefficientMatrix, interceptVector.toDense)
     } else {
-      LogisticRegressionModel.predictRaw(features, _coefficients, _intercept)
+      LogisticRegressionModel.predictRaw(features, _coefficients, interceptVector(0))
     }
   }
 
