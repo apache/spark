@@ -1691,6 +1691,43 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     }
   }
 
+  test("SPARK-59054: shuffle one side: partition keys with binary type") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, Array(
+      Column.create("id", BinaryType),
+      Column.create("name", StringType),
+      Column.create("price", DoubleType)), items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(X'0101', 'aa', 40.0), " +
+      "(X'0202', 'bb', 10.0), " +
+      "(X'0303', 'cc', 15.5), " +
+      "(X'0404', 'dd', 20.0)")
+
+    createTable(purchases, Array(
+      Column.create("item_id", BinaryType),
+      Column.create("price", DoubleType)), Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(X'0101', 42.0), (X'0101', 44.0), (X'0202', 11.0), (X'0202', 19.5), " +
+      "(X'0303', 26.0), (X'0303', 30.0), (X'0404', 50.0), (X'0404', 60.0)")
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val df = createJoinTestDF(Seq("id" -> "item_id"))
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.size == 1, "only shuffle one side not report partitioning")
+
+      checkAnswer(df, Seq(
+        Row(Array[Byte](1, 1), "aa", 40.0, 42.0),
+        Row(Array[Byte](1, 1), "aa", 40.0, 44.0),
+        Row(Array[Byte](2, 2), "bb", 10.0, 11.0),
+        Row(Array[Byte](2, 2), "bb", 10.0, 19.5),
+        Row(Array[Byte](3, 3), "cc", 15.5, 26.0),
+        Row(Array[Byte](3, 3), "cc", 15.5, 30.0),
+        Row(Array[Byte](4, 4), "dd", 20.0, 50.0),
+        Row(Array[Byte](4, 4), "dd", 20.0, 60.0)))
+    }
+  }
+
   test("SPARK-44641: duplicated records when SPJ is not triggered") {
     val items_partitions = Array(bucket(8, "id"))
     createTable(items, itemsColumns, items_partitions)

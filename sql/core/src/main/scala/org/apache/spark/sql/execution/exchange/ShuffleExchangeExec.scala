@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.exchange
 import java.util.concurrent.atomic.AtomicReference
 import java.util.function.Supplier
 
-import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
 import org.apache.spark._
@@ -31,8 +30,8 @@ import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProces
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{
-  Attribute, BoundReference, CollationAwareMurmur3Hash, Literal, Pmod, UnsafeProjection,
-  UnsafeRow, UnsafeRowChecksum}
+  Attribute, BoundReference, CollationAwareMurmur3Hash, GenericInternalRow, Literal, Pmod,
+  UnsafeProjection, UnsafeRow, UnsafeRowChecksum}
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
@@ -407,10 +406,15 @@ object ShuffleExchangeExec {
         assert(k.isGrouped,
           s"Expected a grouped KeyedPartitioning on ${k.expressions}, but got ${k.numPartitions} " +
             "partition keys with duplicates among them")
+        // Project the partition keys to UnsafeRows so that map lookups compare them by value
+        // (e.g. binary keys by content, NaNs as equal), consistently with both the
+        // InternalRowComparableWrapper semantics used to group `partitionKeys` and the lookup
+        // keys produced by `getPartitionKeyExtractor` below.
+        val projection = UnsafeProjection.create(k.expressionDataTypes.toArray)
         val valueMap = k.partitionKeys.zipWithIndex.map {
-          case (key, index) => (key.row.toSeq(k.expressionDataTypes), index)
-        }.toMap
-        new KeyGroupedPartitioner(mutable.Map.from(valueMap), k.numPartitions)
+          case (key, index) => (projection(key.row).copy(), index)
+        }.toMap[Any, Int]
+        new KeyGroupedPartitioner(valueMap, k.numPartitions)
       case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
@@ -463,8 +467,21 @@ object ShuffleExchangeExec {
         val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
         row => projection(row)
       case SinglePartition => identity
-      case KeyedPartitioning(expressions, _, _, _) =>
-        row => bindReferences(expressions, outputAttributes).map(_.eval(row))
+      case k: KeyedPartitioning =>
+        val expressions = bindReferences(k.expressions, outputAttributes).toArray
+        // Mirror the UnsafeRow projection used to build the KeyGroupedPartitioner's value map
+        // above, so that lookup keys compare equal to the map keys by value. The projected row
+        // is reused across records; KeyGroupedPartitioner does not retain lookup keys.
+        val projection = UnsafeProjection.create(k.expressionDataTypes.toArray)
+        val partitionKeyRow = new GenericInternalRow(expressions.length)
+        row => {
+          var i = 0
+          while (i < expressions.length) {
+            partitionKeyRow.update(i, expressions(i).eval(row))
+            i += 1
+          }
+          projection(partitionKeyRow)
+        }
       case s: ShufflePartitionIdPassThrough =>
         // For ShufflePartitionIdPassThrough, the expression directly evaluates to the partition ID
         // If the value is null, `InternalRow#getInt` returns 0.
