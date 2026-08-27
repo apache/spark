@@ -25,14 +25,14 @@ instead of promoting to an arbitrary-precision Python integer. If you flip
 transpilation on with ANSI off the UDF will fall back to interpreted
 Python execution and a warning is logged at UDF construction time.
 
-Python's ``+`` is overloaded for text, so an
-untyped parameter is transpiled into one option per input-type category
-(numeric and string) and the JVM picks the one matching the bound column
-types -- falling back to interpreted Python when none fit. Annotating the
-UDF's parameters (e.g. ``def f(a: int, b: str)``) pins each category and
-keeps the option matrix small; prefer doing so. To bound plan growth,
-functions with more than three untyped parameters only emit the
-all-numeric and all-string variants.
+Python's ``+`` is overloaded for text, so an untyped parameter is transpiled
+into one option per input-type category and the JVM picks the one matching the
+bound column types -- falling back to interpreted Python when none fit.
+Numeric comparison options distinguish integral from fractional inputs so
+NaN guards are only emitted where NaN is representable. Annotating the UDF's
+parameters (e.g. ``def f(a: int, b: str)``) pins each category and keeps the
+option matrix small; prefer doing so. To bound plan growth, functions with
+more than three untyped parameters only emit homogeneous variants.
 
 A lambda is lowered only when its source names it directly and alone: bind it
 to a name (``f = lambda x: x + 1``, annotated if you like) and give it a line
@@ -308,7 +308,11 @@ class CatalystTranspiler(AbstractTranspiler):
         right_col = self._convert_chunk(params, right_node)
         left_null = left_col.isNull()
         right_null = right_col.isNull()
-        numeric_nan = isnan(left_col) | isnan(right_col) if lc == rc == "numeric" else lit(False)
+        numeric_nan = (
+            self._nan_guard(params, left_node, left_col, right_node, right_col)
+            if lc == rc == "numeric"
+            else lit(False)
+        )
         if equal:
             both_null_val: Column = lit(True)
             one_null_val: Column = lit(False)
@@ -366,7 +370,11 @@ class CatalystTranspiler(AbstractTranspiler):
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
         null_guard = left_col.isNull() | right_col.isNull()
-        nan_guard = isnan(left_col) | isnan(right_col) if lc == "numeric" else lit(False)
+        nan_guard = (
+            self._nan_guard(params, left_node, left_col, right_node, right_col)
+            if lc == "numeric"
+            else lit(False)
+        )
         err = lit(
             "Python UDF transpiler: cannot compare NULL with operator "
             f"`{op_repr}`; Python would raise TypeError here. Add an "
@@ -377,6 +385,45 @@ class CatalystTranspiler(AbstractTranspiler):
             .when(nan_guard, lit(False))
             .otherwise(op(left_col, right_col))
         )
+
+    def _is_fractional(self, params: List[str], node: ast.AST) -> bool:
+        """Whether a numeric ``node`` produces a floating-point value in this variant."""
+        match node:
+            case ast.Constant(value=value):
+                return isinstance(value, float)
+            case ast.Name(id=name) if name in params:
+                category = self._param_categories.get(params.index(name), "numeric")
+                # Keep third-party/generic numeric variants conservative.
+                return category in ("fractional", "numeric")
+            case ast.UnaryOp(operand=operand):
+                return self._is_fractional(params, operand)
+            case ast.BinOp(left=left, right=right):
+                return self._is_fractional(params, left) or self._is_fractional(params, right)
+            case ast.Return(value=value) if value is not None:
+                return self._is_fractional(params, value)
+            case ast.IfExp(body=body, orelse=orelse):
+                return self._is_fractional(params, body) or self._is_fractional(params, orelse)
+            case _:
+                return False
+
+    def _nan_guard(
+        self,
+        params: List[str],
+        left_node: ast.AST,
+        left_col: Column,
+        right_node: ast.AST,
+        right_col: Column,
+    ) -> Column:
+        checks = [
+            isnan(column)
+            for node, column in ((left_node, left_col), (right_node, right_col))
+            if self._is_fractional(params, node)
+        ]
+        if not checks:
+            return lit(False)
+        if len(checks) == 1:
+            return checks[0]
+        return checks[0] | checks[1]
 
     def _category(self, params: List[str], node: ast.AST) -> str:
         """Infer ``"numeric"`` or ``"string"`` for ``node`` under the current
@@ -410,17 +457,15 @@ class CatalystTranspiler(AbstractTranspiler):
             case ast.Name(id=name) if name in params:
                 # ``params`` is the caller-facing list, so its indexes are already
                 # the ``_udf_param_N`` / category indexes -- see ``_transpile_func``.
-                return self._param_categories.get(params.index(name), "numeric")
+                category = self._param_categories.get(params.index(name), "numeric")
+                return "numeric" if category in ("integral", "fractional") else category
             case ast.BinOp(left=left, op=op, right=right):
                 lc = self._category(params, left)
                 rc = self._category(params, right)
                 if isinstance(op, ast.Add) and lc == rc:
                     return lc  # str + str -> str, num + num -> num
-                if isinstance(op, ast.Mult):
-                    if {lc, rc} == {"numeric", "numeric"}:
-                        return "numeric"
-                    if {lc, rc} == {"numeric", "string"}:
-                        return "string"  # str * int / int * str -> repeat
+                if isinstance(op, ast.Mult) and lc == rc == "numeric":
+                    return "numeric"
                 if isinstance(op, (ast.Sub, ast.Mod)) and lc == rc == "numeric":
                     return "numeric"
                 raise UnsupportedOperationException(
@@ -464,11 +509,13 @@ class CatalystTranspiler(AbstractTranspiler):
                 return "bool"
             case _:
                 # Remaining nodes (unsupported calls, subscripts, ...) don't
-                # drive concat/repeat selection and are rejected later by
+                # drive operator selection and are rejected later by
                 # `_convert_chunk`; treat as numeric for category purposes.
                 return "numeric"
 
     def _convert_chunk(self, params: List[str], body: ast.AST | None) -> Column:
+        # TODO(SPARK-58628): Track semantic nullability so parent unary and binary
+        # guards do not repeatedly embed the same lowered child expression trees.
         match body:
             case None:
                 # Special case literal None, the implicit return None
@@ -819,20 +866,23 @@ def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
 
 def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
     """Map a parameter's type annotation to a category
-    (``"numeric"``/``"string"``/``"bool"``/``"binary"``), or ``None`` when it's
-    absent or unrecognised (the caller then tries both numeric and string)."""
+    (``"integral"``/``"fractional"``/``"string"``/``"bool"``/``"binary"``), or
+    ``None`` when it's absent or unrecognised (the caller then tries the applicable
+    numeric and string categories)."""
     name: Optional[str] = None
     if isinstance(annotation, ast.Name):
         name = annotation.id
     elif isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
         name = annotation.value  # stringized annotation, e.g. def f(a: "int")
-    # str -> "string", int/float -> "numeric", bool -> "bool", bytes -> "binary"
-    # (matching the constant handling in ``_category``). complex and anything
-    # unrecognised return None so the caller tries both numeric and string.
+    # Match int and float separately so comparisons can omit NaN checks for integral
+    # inputs. complex and anything unrecognised return None so the caller tries all
+    # applicable numeric and string categories.
     if name == "str":
         return "string"
-    if name in ("int", "float"):
-        return "numeric"
+    if name == "int":
+        return "integral"
+    if name == "float":
+        return "fractional"
     if name == "bool":
         return "bool"
     if name == "bytes":
@@ -842,14 +892,22 @@ def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
 
 def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[str]) -> List[dict]:
     """Per-variant maps ``{public_param_index -> category}`` where category is
-    one of ``"numeric"``/``"string"``/``"bool"``/``"binary"``.
+    one of ``"numeric"``/``"integral"``/``"fractional"``/``"string"``/
+    ``"bool"``/``"binary"``.
 
-    A typed param (``def f(a: str, b: int)``) is pinned to its category; an
-    untyped param is tried as both numeric and string. To cap plan growth, when
-    more than three params are untyped we collapse the untyped ones to the
-    all-numeric and all-string variants (encourage typing inputs to keep the
-    matrix small) while keeping every typed param pinned.
+    A typed param (``def f(a: str, b: int)``) is pinned to its category. An
+    untyped param is normally tried as numeric and string; functions containing
+    value comparisons split numeric into integral and fractional so only the
+    latter emits NaN checks. To cap plan growth, when more than three params are
+    untyped we emit only homogeneous variants while keeping typed params pinned.
     """
+    value_comparison_ops = (ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE)
+    has_value_comparison = any(
+        isinstance(node, ast.Compare)
+        and any(isinstance(op, value_comparison_ops) for op in node.ops)
+        for node in ast.walk(function_ast)
+    )
+    numeric_candidates = ["integral", "fractional"] if has_value_comparison else ["numeric"]
     n = len(public_params)
     public_args = function_ast.args.args[len(function_ast.args.args) - n :]
     candidates: List[List[str]] = []
@@ -857,17 +915,17 @@ def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[st
     for arg in public_args:
         cat = _annotation_category(arg.annotation)
         if cat is None:
-            candidates.append(["numeric", "string"])
+            candidates.append(numeric_candidates + ["string"])
             untyped += 1
         else:
             candidates.append([cat])
     if untyped > 3:
-        # Cap the 2**untyped blow-up, but keep each typed param pinned to its
+        # Cap the exponential blow-up, but keep each typed param pinned to its
         # category (a single-element ``candidates`` entry); only the untyped
-        # params collapse to the all-numeric / all-string pair.
+        # params collapse to homogeneous numeric/string variants.
         return [
             {i: c[0] if len(c) == 1 else fill for i, c in enumerate(candidates)}
-            for fill in ("numeric", "string")
+            for fill in numeric_candidates + ["string"]
         ]
     return [{i: choice[i] for i in range(n)} for choice in itertools.product(*candidates)] or [{}]
 
@@ -1097,9 +1155,9 @@ def _transpile_func(
     method or callable instance) -- needed so the caller can resolve named-argument
     invocations to positional order at call time, since the ``_udf_param_N``
     substitution in :class:`UserDefinedPythonFunction` is positional.
-    list of per-option input-type categories (``"numeric"`` / ``"string"`` per
-    public param) -- the JVM picks the option whose categories match the bound
-    column types, or falls back to the Python UDF when none match.
+    list of per-option input-type categories (including numeric subcategories and
+    ``"string"`` per public param) -- the JVM picks the option whose categories
+    match the bound column types, or falls back to the Python UDF when none match.
     """
     try:
         # The transpiler lowers to atomic (numeric/string/boolean/binary)
@@ -1236,8 +1294,9 @@ def _transpile_func(
         input_categories: list[list[str]] = []
         errors = []
         # One transpiled option per (backend x input-type variant). Untyped
-        # params are tried as both numeric and string so the JVM can pick the
-        # option matching the actual column types (or fall back if none match).
+        # params are tried across the applicable numeric and string categories
+        # so the JVM can pick the option matching the actual column types (or
+        # fall back if none match).
         combos = _param_category_combos(function_ast, public_params)
         # Maybe multiple transpilers (think CUDA, etc.).
         transpilers = _get_transpilers(session)

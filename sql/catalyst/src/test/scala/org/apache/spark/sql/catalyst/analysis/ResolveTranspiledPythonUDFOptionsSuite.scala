@@ -54,6 +54,23 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
     assert(pruned.optionInputCategories.isEmpty)
   }
 
+  test("distinguishes integral and fractional numeric categories") {
+    val integralOpt = Literal(1L)
+    val fractionalOpt = Literal(2L)
+
+    val integralArg = $"integralArg".long
+    val integralNode = TranspiledPythonUDF("udf", pyUDF(Seq(integralArg)),
+      List(integralOpt, fractionalOpt), List(List("integral"), List("fractional")))
+    val prunedIntegral = prune(integralNode, LocalRelation(integralArg))
+    assert(prunedIntegral.transpiledOptions == List(integralOpt))
+
+    val fractionalArg = $"fractionalArg".double
+    val fractionalNode = TranspiledPythonUDF("udf", pyUDF(Seq(fractionalArg)),
+      List(integralOpt, fractionalOpt), List(List("integral"), List("fractional")))
+    val prunedFractional = prune(fractionalNode, LocalRelation(fractionalArg))
+    assert(prunedFractional.transpiledOptions == List(fractionalOpt))
+  }
+
   test("keeps the string option for string columns and drops the numeric one") {
     val a = $"a".string
     val b = $"b".string

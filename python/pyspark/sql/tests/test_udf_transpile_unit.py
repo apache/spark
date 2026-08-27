@@ -777,9 +777,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
     def test_udf_transpile_str_int_compare_matches_python(self):
         # Comparing a value against a string literal (``x == "5"`` / ``x < "5"``)
-        # under the untyped-parameter path produces two candidate options -- a
-        # numeric variant and a string variant. The numeric variant mixes
-        # categories (numeric column vs string literal): Python compares such
+        # under the untyped-parameter path produces integral, fractional, and
+        # string candidate options. The numeric variants mix categories
+        # (numeric column vs string literal): Python compares such
         # values as unequal / raises TypeError, while a lowered ``x = '5'`` would
         # coerce under ANSI and silently diverge -- so ``_lower_eq`` /
         # ``_lower_value_compare`` refuse it. Only the string variant survives.
@@ -1934,6 +1934,25 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             [False, False],
         )
 
+    def test_udf_transpile_nan_guard_only_for_fractional_inputs(self):
+        greater_than_zero = lambda x: x > 0  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            u = self._transpiled_udf(greater_than_zero, BooleanType())
+            self.assertEqual(
+                {("integral",), ("fractional",)},
+                {tuple(categories) for categories in u._transpiled_input_categories},
+            )
+
+            long_df = self.spark.createDataFrame([(1,), (-1,)], "a long")
+            long_result = long_df.select(u("a"))
+            self.assertNotIn("isnan", long_result._jdf.queryExecution().optimizedPlan().toString())
+            self.assertEqual([True, False], [row[0] for row in long_result.collect()])
+
+            double_df = self.spark.createDataFrame([(float("nan"),), (1.0,)], "a double")
+            double_result = double_df.select(u("a"))
+            self.assertIn("isnan", double_result._jdf.queryExecution().optimizedPlan().toString())
+            self.assertEqual([False, True], [row[0] for row in double_result.collect()])
+
     def test_udf_transpile_overflow_and_modulo_zero_raise(self):
         # Transpiled overflow raises under ANSI, while Python promotes to a big
         # integer. This documented v0 divergence remains until Catalyst can
@@ -1988,7 +2007,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # types fall back to the Python UDF, which raises the same way CPython does:
         # `str + int` (and reversed), `str - int`, `str * str`, `str % int`, and a
         # string column plus a numeric literal. The transpiler still emits numeric
-        # (and/or concat/repeat) variants, but none match the column types, so the
+        # and/or concat variants, but none match the column types, so the
         # JVM drops them and runs Python -- matching its TypeError.
         add = lambda a, b: a + b  # noqa: E731
         sub = lambda a, b: a - b  # noqa: E731
@@ -2100,6 +2119,17 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         self.assertEqual(len(combos), 2)
         for combo in combos:
             self.assertEqual(combo[0], "string")
+
+        compared = _ast.parse("def f(a, b, c, d): return a > b").body[0]
+        comparison_combos = _param_category_combos(compared, ["a", "b", "c", "d"])
+        self.assertEqual(
+            {
+                ("integral",) * 4,
+                ("fractional",) * 4,
+                ("string",) * 4,
+            },
+            {tuple(combo[i] for i in range(4)) for combo in comparison_combos},
+        )
 
 
 if __name__ == "__main__":
