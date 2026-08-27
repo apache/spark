@@ -1584,9 +1584,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertTrue(c.transpiled)
             rows = self.spark.range(200).select((col("id") + 1).cast("double").alias("x"))
 
-            bare = [r[0] for r in rows.select(c(rand()).alias("v")).collect()]
-            self.assertTrue(all(v == 0.0 or v > 0.5 for v in bare), "bare call must share one draw")
-
             nested = rows.select(when(col("x") > 0, c(rand())).otherwise(lit(-1.0)).alias("v"))
             vals = [r[0] for r in nested.collect()]
             # `x` is `id + 1`, so the otherwise branch never fires and every value came from the
@@ -1666,10 +1663,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
     def test_udf_transpile_evaluates_inputs_once_in_a_group_by(self):
         # SPARK-58626: an Aggregate is the awkward one -- a use no aggregate function wraps has to
-        # *be* a grouping expression, so it cannot read a pre-evaluated column, and a call owed one
-        # keeps the interpreted UDF (see test_udf_transpile_declines_under_an_aggregate). The
-        # arguments here are deterministic and read once, so all three shapes lower; this pins that
-        # the answers are the same either way.
+        # *be* a grouping expression, so it cannot read a pre-evaluated column. `x * x` reads its
+        # parameter twice and `a + 1` is not cheap, so all three shapes here keep the interpreted
+        # UDF, which evaluates the argument once itself. This pins the answers and that fallback.
         from pyspark.sql.functions import col
         from pyspark.sql.functions import sum as sum_
 

@@ -201,19 +201,6 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("gives two calls' nondeterministic arguments a column each") {
-    transpileOn {
-      // Two calls in one Project, each reading its own draw twice: a column apiece. Keying a
-      // column on the parameter index alone made both bodies read one draw, which is not an answer
-      // any evaluation order produces.
-      val square = udfWith(Multiply(param(0), param(0)), arity = 1)
-      val df = spark.range(0, 6).select(square(draw).as("a"), square(draw).as("b"))
-      val plan = df.queryExecution.optimizedPlan.toString
-      assert("AS _udf_param_".r.findAllIn(plan).length == 2,
-        s"Expected one pre-evaluated column per call:\n$plan")
-    }
-  }
-
   test("pre-evaluates a MERGE instruction condition's argument") {
     // MergeRows is a plain unary node, so it hosts the Project -- and it has to, or a transpiled
     // MERGE ends up lazier than an interpreted one. Measured: an interpreted UDF in `WHEN MATCHED

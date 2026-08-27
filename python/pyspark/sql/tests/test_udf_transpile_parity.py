@@ -20,8 +20,8 @@ transpilation enabled.
 
 Transpilation is only attempted when both
 ``spark.sql.experimental.optimizer.transpilePyUDFs`` and
-``spark.sql.ansi.enabled``. When disabled, or if transpilation fails,
-we fall back to the regular non-transpiled code path.
+``spark.sql.ansi.enabled`` are true. When either is off, or if transpilation
+fails, we fall back to the regular non-transpiled code path.
 
 These classes re-run the shared UDF mixins under that configuration to confirm
 turning the feature on does not change UDF results. In two cases the transpiled body

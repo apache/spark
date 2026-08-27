@@ -1037,10 +1037,10 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
     // here could otherwise escape and reach execution un-stripped.
     plan.transformDownWithSubqueriesAndPruning(
       _.containsPattern(TRANSPILED_PYTHON_UDF), ruleId) {
-      // Nothing to do unless this operator itself holds a call; the pruning above only skips
-      // subtrees, so every Filter and Sort on the way down lands here too. The node and not the
-      // tree-pattern bit: a SubqueryExpression reports its inner plan's bits, and a call in
-      // there is converted by this transform's own descent into the subquery, not by us.
+      // A fast path, not a correctness guard -- `convertOperator` hands back an operator it finds
+      // nothing to do in. The pruning above only skips subtrees, so every Filter and Sort between
+      // the root and a call lands here, and so does an operator whose only call sits in a subquery,
+      // since a SubqueryExpression reports its inner plan's tree-pattern bits.
       case p if !p.expressions.exists(_.exists(_.isInstanceOf[TranspiledPythonUDF])) => p
 
       case p => convertOperator(p)
@@ -1147,15 +1147,15 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
                   conf.decorrelateInnerQueryEnabledForExistsIn) ||
                 !arg.containsPattern(OUTER_REFERENCE)) &&
               !arg.containsPattern(TRANSPILED_UDF_PARAMETER)
-          // What we owe, plus what is merely worth sharing: two parameters holding equal arguments,
-          // each read once. Not every repeat earns a column -- a pointless Project sticks around
-          // under anything CollapseProject can't merge through, and stops SpecialLimits matching
-          // `Project(_, Sort(...))` for TakeOrderedAndProjectExec.
+          // Read more than once under one key and not cheap to repeat. That covers everything we
+          // owe (`owed` counts reads of one index; a key only ever merges indexes together, so its
+          // count is at least as high) plus what is merely worth sharing: two parameters holding
+          // equal arguments, each read once. Not every repeat earns a column -- a pointless Project
+          // sticks around under anything CollapseProject can't merge through, and stops
+          // SpecialLimits matching `Project(_, Sort(...))` for TakeOrderedAndProjectExec.
           val owed = mustPreEvaluate(args, option)
           val shared = reads.distinct.filter { index =>
-            (owed.contains(index) ||
-              (readsPerKey(shareKey(index)) > 1 && !cheapToRepeat(args(index)))) &&
-              canPlace(args(index))
+            readsPerKey(shareKey(index)) > 1 && !cheapToRepeat(args(index)) && canPlace(args(index))
           }
           if (!owed.forall(shared.contains)) {
             // Something we owe one evaluation has nowhere to go, so hand the call back to Python,
