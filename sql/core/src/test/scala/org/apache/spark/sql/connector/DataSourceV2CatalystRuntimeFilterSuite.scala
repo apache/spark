@@ -360,7 +360,7 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
 
       // The scan declares the top-level struct column `s` as its filter attribute, so the
       // predicate qualifies for pushdown even though it reaches into `s.tz`. Matching the nested
-      // access against the partition layout is left to the scan, which the fixture does not do.
+      // access against the partition layout is left to the scan, which this fixture does.
       val df = sql(s"SELECT * FROM $tbl WHERE s.tz = (SELECT max(val) FROM $dim)")
       checkAnswer(df, Row(1, Row("tz1")))
 
@@ -371,6 +371,40 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       assert(nestedAccesses.size === 1,
         s"expected the pushed predicate to keep the nested access, got ${pushed.head}")
       assert(nestedAccesses.head.childSchema.fieldNames.contains("tz"))
+    }
+  }
+
+  test("dotted top-level and nested partition columns -> bound to the correct partition slot") {
+    val tbl = s"$catalogName.tbl_dotted_collision"
+    val dim = s"$catalogName.dim_dotted_collision"
+    withTable(tbl, dim) {
+      // Two partition columns whose dotted names collide: the quoted top-level column `x.y` and
+      // the nested field `x`.`y`. They carry different values in each row, so a predicate bound
+      // to the wrong slot would prune the wrong partitions. `x.y` is 3 exactly where `x`.`y` is
+      // 30, so binding a filter on the nested field to the top-level slot would find nothing.
+      sql(s"CREATE TABLE $tbl (id INT, `x.y` INT, x STRUCT<y: INT>) USING $v2Source " +
+        "PARTITIONED BY (`x.y`, x.y)")
+      for (i <- 0 until 5) {
+        sql(s"INSERT INTO $tbl VALUES ($i, $i, named_struct('y', ${i * 10}))")
+      }
+      sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES (30)")
+
+      // Alias the table so `f.x.y` unambiguously reads the nested field, not the column `x.y`.
+      val df = sql(s"SELECT * FROM $tbl f WHERE f.x.y = (SELECT max(val) FROM $dim)")
+      checkAnswer(df, Row(3, 3, Row(30)))
+
+      assertScalarSubqueryRuntimeFilters(df)
+      // The pushed predicate keeps the nested access, and the scan prunes to the single partition
+      // whose nested `x`.`y` is 30 rather than binding to the colliding top-level `x.y` slot.
+      val pushed = getPushedCatalystPredicates(df)
+      assert(pushed.size === 1, s"expected a single pushed predicate, got $pushed")
+      assert(pushed.head.exists(_.isInstanceOf[GetStructField]),
+        s"expected the pushed predicate to keep the nested access, got ${pushed.head}")
+      val batchScan = collectBatchScan(df)
+      assert(batchScan.inputPartitions.size === 5)
+      assert(batchScan.filteredPartitions.flatten.size === 1,
+        s"expected 1 partition after pruning, got ${batchScan.filteredPartitions.flatten.size}")
     }
   }
 
@@ -394,23 +428,23 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
         condition = "_LEGACY_ERROR_TEMP_1137",
         parameters = Map("name" -> "missing", "outputStr" -> "id,part,s"))
 
-      // A nested reference is resolved as a field extraction on the top-level attribute, which
-      // fails as soon as that attribute is not a struct.
-      val nested = intercept[AnalysisException] {
+      // A nested reference is rejected up front, since `filterAttributes()` must return
+      // top-level read-schema attributes. This holds even over an int column that could never
+      // carry a nested field.
+      val nested = intercept[SparkException] {
         scanRelation.copy(scan = new NestedFilterAttributeScan).runtimeFilterAttrs
       }
-      checkError(
-        exception = nested,
-        condition = "INVALID_EXTRACT_BASE_FIELD_TYPE",
-        parameters = Map("base" -> "\"part\"", "other" -> "\"INT\""))
+      assert(nested.getMessage.contains("must be a top-level attribute"),
+        s"expected the nested reference to be rejected, got ${nested.getMessage}")
 
-      // Over a struct it does not fail at all: the reference widens to the struct column, so
-      // declaring `s.tz` makes filters over every field of `s` eligible, not just `s.tz`. This
-      // is shared with the two predicate-based interfaces, which resolve the same way.
-      val widened = scanRelation.copy(scan = new StructNestedFilterAttributeScan)
-        .runtimeFilterAttrs
-      assert(widened.map(_.name).toSeq === Seq("s"),
-        s"expected the nested reference to widen to the struct column, got $widened")
+      // Over a struct it is rejected the same way, rather than widening to the struct column:
+      // accepting `s.tz` would make runtime filters over every field of `s` eligible, not just
+      // `s.tz`.
+      val struct = intercept[SparkException] {
+        scanRelation.copy(scan = new StructNestedFilterAttributeScan).runtimeFilterAttrs
+      }
+      assert(struct.getMessage.contains("must be a top-level attribute"),
+        s"expected the nested struct reference to be rejected, got ${struct.getMessage}")
     }
   }
 
@@ -592,7 +626,7 @@ private class MissingFilterAttributeScan extends Scan with SupportsRuntimeCataly
 
 /**
  * A scan breaking the rule that a filter attribute must be a top level read schema column: it
- * reports `part.nested` over the int column `part`, so resolving it fails on the extract base.
+ * reports `part.nested` over the int column `part`, so it is rejected as a nested reference.
  */
 private class NestedFilterAttributeScan extends Scan with SupportsRuntimeCatalystFiltering {
 
@@ -605,8 +639,8 @@ private class NestedFilterAttributeScan extends Scan with SupportsRuntimeCatalys
 }
 
 /**
- * A scan breaking the same rule over a struct column: it reports `s.tz` where `s` is a struct, so
- * resolving it succeeds and widens to `s` rather than failing.
+ * A scan breaking the same rule over a struct column: it reports `s.tz` where `s` is a struct.
+ * The nested reference is rejected rather than widening to the struct column `s`.
  */
 private class StructNestedFilterAttributeScan extends Scan with SupportsRuntimeCatalystFiltering {
 

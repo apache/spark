@@ -725,6 +725,7 @@ abstract class InMemoryBaseTable(
       filterCalls += 1
       val partAttrs = partitionAttributes
       if (partAttrs.isEmpty) return
+      val partAttrRefs = partAttrs.map(_._2)
 
       expressions.foreach { expr =>
         // Top down, so `s.part` is rewritten before its `s` child is considered.
@@ -733,8 +734,8 @@ abstract class InMemoryBaseTable(
         }
         // Only evaluate expressions whose refs are all partition columns, so we can bind
         // against the partition key InternalRow (same approach as PartitionPredicateImpl).
-        if (remapped.references.forall(r => partAttrs.exists(_.exprId == r.exprId))) {
-          val bound = BindReferences.bindReference(remapped, partAttrs)
+        if (remapped.references.forall(r => partAttrRefs.exists(_.exprId == r.exprId))) {
+          val bound = BindReferences.bindReference(remapped, partAttrRefs)
           val pred = CatalystPredicate.createInterpreted(bound)
           self.data = self.data.filter { p =>
             try {
@@ -760,45 +761,54 @@ abstract class InMemoryBaseTable(
 
     /**
      * The `AttributeReference`s standing for the partition key InternalRow fields, in its field
-     * order, each named by the dotted path of its partition column. Example:
-     *   - `PARTITIONED BY (part, s.nested)` -> `AttributeReference(part)`, then
-     *     `AttributeReference(s.nested)`
+     * order, each paired with the name-part sequence of its partition column. The parts are kept
+     * unflattened so a quoted top-level column `a.b` (parts `Seq("a.b")`) stays distinct from a
+     * nested column `a`.`b` (parts `Seq("a", "b")`). Example:
+     *   - `PARTITIONED BY (part, s.nested)` -> `(Seq("part"), AttributeReference(part))`, then
+     *     `(Seq("s", "nested"), AttributeReference(s.nested))`
      */
-    private def partitionAttributes: Seq[AttributeReference] = {
+    private def partitionAttributes: Seq[(Seq[String], AttributeReference)] = {
       partitioning.flatMap(_.references()).flatMap { ref =>
         val path = ref.fieldNames.toImmutableArraySeq
         readSchema.findNestedField(path).orElse(tableSchema.findNestedField(path)).map {
           case (_, f) =>
-            AttributeReference(ref.fieldNames.mkString("."), f.dataType, f.nullable)()
+            path -> AttributeReference(ref.fieldNames.mkString("."), f.dataType, f.nullable)()
         }
       }.toSeq
     }
 
     /**
      * The partition key `AttributeReference` that `e` reads, or None if `e` reads no partition
-     * column. Examples, under `PARTITIONED BY (part, s.nested)` where `nested` is field 0 of `s`:
+     * column. The path `e` reads is compared to each partition column's name parts component-wise
+     * with the resolver, so a quoted top-level column `a.b` cannot collide with a nested column
+     * `a`.`b`. Examples, under `PARTITIONED BY (part, s.nested)` where `nested` is field 0 of `s`:
      *   - `AttributeReference(part)` -> `AttributeReference(part)`
      *   - `GetStructField(AttributeReference(s), 0)` -> `AttributeReference(s.nested)`
      *   - `AttributeReference(s)` -> None if `s` itself is not a partition column, only `s.nested`
      */
     private def partitionAttrFor(
         e: CatalystExpression,
-        partAttrs: Seq[AttributeReference]): Option[AttributeReference] = {
+        partAttrs: Seq[(Seq[String], AttributeReference)]): Option[AttributeReference] = {
       val resolver = SQLConf.get.resolver
-      partitionKeyPath(e).flatMap(path => partAttrs.find(p => resolver(p.name, path)))
+      partitionKeyPath(e).flatMap { path =>
+        partAttrs.collectFirst {
+          case (parts, attr) if parts.length == path.length &&
+            parts.lazyZip(path).forall((part, name) => resolver(part, name)) => attr
+        }
+      }
     }
 
     /**
-     * The dotted path `e` reads, or None if it reads neither a column nor a struct field. Each
+     * The name parts `e` reads, or None if it reads neither a column nor a struct field. Each
      * `GetStructField` ordinal is the field's position in its parent struct. Examples:
-     *   - `AttributeReference(a)` -> `"a"`, the top level column a
-     *   - `GetStructField(AttributeReference(a), 0)` -> `"a.b"`, the nested column a.b
-     *   - `GetStructField(GetStructField(AttributeReference(a), 0), 0)` -> `"a.b.c"`
+     *   - `AttributeReference(a)` -> `Seq("a")`, the top level column a
+     *   - `GetStructField(AttributeReference(a), 0)` -> `Seq("a", "b")`, the nested column a.b
+     *   - `GetStructField(GetStructField(AttributeReference(a), 0), 0)` -> `Seq("a", "b", "c")`
      */
-    private def partitionKeyPath(e: CatalystExpression): Option[String] = e match {
-      case a: AttributeReference => Some(a.name)
+    private def partitionKeyPath(e: CatalystExpression): Option[Seq[String]] = e match {
+      case a: AttributeReference => Some(Seq(a.name))
       case g: GetStructField =>
-        partitionKeyPath(g.child).map(parent => s"$parent.${g.childSchema(g.ordinal).name}")
+        partitionKeyPath(g.child).map(parent => parent :+ g.childSchema(g.ordinal).name)
       case _ => None
     }
   }

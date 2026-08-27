@@ -81,7 +81,8 @@ class InMemoryCatalystRuntimeFilterCatalog extends InMemoryCatalog {
 
     val tableName = s"$name.${ident.quoted}"
     val table = new InMemoryCatalystRuntimeFilterTable(
-      tableName, columns, partitions, properties, numRowsPerSplit)
+      tableName, columns, partitions, properties, constraints, distribution, ordering,
+      requiredNumPartitions, advisoryPartitionSize, distributionStrictlyRequired, numRowsPerSplit)
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table

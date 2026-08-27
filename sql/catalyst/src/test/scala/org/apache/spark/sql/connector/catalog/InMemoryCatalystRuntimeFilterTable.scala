@@ -21,7 +21,9 @@ import java.util
 
 import InMemoryCatalystRuntimeFilterTable._
 
-import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference, Transform}
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
+import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference, SortOrder, Transform}
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -42,8 +44,16 @@ class InMemoryCatalystRuntimeFilterTable(
     columns: Array[Column],
     partitioning: Array[Transform],
     properties: util.Map[String, String],
+    constraints: Array[Constraint] = Array.empty,
+    distribution: Distribution = Distributions.unspecified(),
+    ordering: Array[SortOrder] = Array.empty,
+    numPartitions: Option[Int] = None,
+    advisoryPartitionSize: Option[Long] = None,
+    isDistributionStrictlyRequired: Boolean = true,
     numRowsPerSplit: Int = Int.MaxValue)
-  extends InMemoryTableWithV2Filter(name, columns, partitioning, properties, numRowsPerSplit) {
+  extends InMemoryTableWithV2Filter(name, columns, partitioning, properties, constraints,
+    distribution, ordering, numPartitions, advisoryPartitionSize, isDistributionStrictlyRequired,
+    numRowsPerSplit) {
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new InMemoryCatalystRuntimeFilterScanBuilder(schema, options)

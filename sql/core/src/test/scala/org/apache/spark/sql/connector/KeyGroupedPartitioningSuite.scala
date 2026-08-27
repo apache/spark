@@ -88,7 +88,7 @@ abstract class KeyGroupedPartitioningSuiteBase extends DistributionAndOrderingSu
   }.toSet.toSeq
 
   protected def collectGroupPartitions(plan: SparkPlan): Seq[GroupPartitionsExec] = {
-    // here we skip collecting shuffle operators that are not associated with SMJ
+    // here we skip collecting group-partition operators that are not associated with SMJ
     collect(plan) {
       case s: SortMergeJoinExec => s
     }.flatMap(smj =>
