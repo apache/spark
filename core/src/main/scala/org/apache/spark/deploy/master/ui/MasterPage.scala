@@ -22,7 +22,7 @@ import scala.xml.Node
 import jakarta.servlet.http.HttpServletRequest
 import org.json4s.JValue
 
-import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, MasterStateResponse, RequestKillDriver, RequestMasterState}
+import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, MasterStateResponse, RequestApplicationHold, RequestKillDriver, RequestMasterState}
 import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.StandaloneResourceUtils._
 import org.apache.spark.deploy.master._
@@ -60,6 +60,27 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     handleKillRequest(request, id => {
       master.ask[KillDriverResponse](RequestKillDriver(id))
     })
+  }
+
+  def handleAppHoldRequest(request: HttpServletRequest): Unit = {
+    handleHoldRequest(request, hold = true)
+  }
+
+  def handleAppResumeRequest(request: HttpServletRequest): Unit = {
+    handleHoldRequest(request, hold = false)
+  }
+
+  private def handleHoldRequest(request: HttpServletRequest, hold: Boolean): Unit = {
+    if (parent.holdEnabled &&
+        parent.master.securityMgr.checkModifyPermissions(request.getRemoteUser)) {
+      Option(request.getParameter("id")).foreach { id =>
+        // Sent rather than asked: the driver drains its executors before answering, which takes
+        // far longer than this request should. The outcome is rendered on a later page load.
+        master.send(RequestApplicationHold(id, hold))
+
+        Thread.sleep(100)
+      }
+    }
   }
 
   private def handleKillRequest(request: HttpServletRequest, action: String => Unit): Unit = {
@@ -322,9 +343,28 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
            class="kill-link float-end">(kill)</a>
       </form>
     }
+    // Offered only for an application whose driver reported it as holdable and which did not
+    // disable the controls itself through spark.ui.holdEnabled. Rendered before the kill link:
+    // floated links stack right to left, so this keeps the two controls adjacent and leaves the
+    // kill link's left margin between the application id and the pair.
+    val holdLink = if (parent.holdEnabled && app.desc.holdEnabled && app.holdSupported &&
+      !app.isFinished) {
+      val (action, message) = if (app.isHeld) {
+        ("resume", s"Are you sure you want to resume application ${app.id} ?")
+      } else {
+        ("hold", s"Are you sure you want to hold application ${app.id}? All executors will " +
+          "be decommissioned after finishing their running tasks, and cached blocks are lost.")
+      }
+      <form action={s"app/$action/"} method="POST" class="d-inline">
+        <input type="hidden" name="id" value={app.id}/>
+        <a href="#" data-confirm-message={message}
+           class="confirm-link float-end">{s"($action)"}</a>
+      </form>
+    }
     <tr>
       <td>
         <a href={"app/?appId=" + app.id}>{app.id}</a>
+        {holdLink}
         {killLink}
       </td>
       <td>

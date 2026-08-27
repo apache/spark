@@ -30,6 +30,7 @@ import org.apache.spark.deploy.master._
 import org.apache.spark.deploy.master.ui.MasterWebUISuite._
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.internal.config.UI.MASTER_UI_VISIBLE_ENV_VAR_PREFIXES
+import org.apache.spark.internal.config.UI.UI_HOLD_ENABLED
 import org.apache.spark.internal.config.UI.UI_KILL_ENABLED
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
@@ -41,6 +42,7 @@ class ReadOnlyMasterWebUISuite extends SparkFunSuite {
 
   val conf = new SparkConf()
     .set(UI_KILL_ENABLED, false)
+    .set(UI_HOLD_ENABLED, false)
     .set(DECOMMISSION_ENABLED, false)
     .set(MASTER_UI_VISIBLE_ENV_VAR_PREFIXES.key, "SPARK_SCALA_")
   val securityMgr = new SecurityManager(conf)
@@ -104,6 +106,18 @@ class ReadOnlyMasterWebUISuite extends SparkFunSuite {
   test("/driver/kill POST method is not allowed") {
     val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/driver/kill/"
     val body = convPostDataToString(Map(("id", "driver-0"), ("terminate", "true")))
+    assert(sendHttpRequest(url, "POST", body).getResponseCode === SC_METHOD_NOT_ALLOWED)
+  }
+
+  test("SPARK-59061: /app/hold POST method is not allowed") {
+    val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/app/hold/"
+    val body = convPostDataToString(Map(("id", "app1")))
+    assert(sendHttpRequest(url, "POST", body).getResponseCode === SC_METHOD_NOT_ALLOWED)
+  }
+
+  test("SPARK-59061: /app/resume POST method is not allowed") {
+    val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/app/resume/"
+    val body = convPostDataToString(Map(("id", "app1")))
     assert(sendHttpRequest(url, "POST", body).getResponseCode === SC_METHOD_NOT_ALLOWED)
   }
 
