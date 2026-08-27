@@ -20,11 +20,13 @@ package org.apache.spark.sql.hive
 import java.io.IOException
 import java.util.Locale
 
+import scala.annotation.tailrec
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, EliminateSubqueryAliases, ResolvedTable, ResolvedTempView}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
@@ -42,11 +44,17 @@ import org.apache.spark.sql.hive.execution.InsertIntoHiveTable.BY_CTAS
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 
 private object HiveWriteTable {
+  @tailrec
+  private def stripSubqueryAliases(plan: LogicalPlan): LogicalPlan = plan match {
+    case SubqueryAlias(_, child) => stripSubqueryAliases(child)
+    case other => other
+  }
+
   def unapply(insert: InsertIntoStatement): Option[CatalogTable] = insert.table match {
     case ResolvedTable(_, _, V1Table(table: CatalogTable), _) => Some(table)
     case view: ResolvedTempView =>
       view.viewRelation.plan
-        .map(EliminateSubqueryAliases.apply)
+        .map(stripSubqueryAliases)
         .collect { case relation: HiveTableRelation => relation.tableMeta }
     case relation: HiveTableRelation => Some(relation.tableMeta)
     case _ => None

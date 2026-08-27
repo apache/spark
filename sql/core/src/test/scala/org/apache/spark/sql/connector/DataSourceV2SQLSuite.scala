@@ -44,7 +44,7 @@ import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelationWithTable}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -5238,7 +5238,7 @@ class DataSourceV2SQLSuiteV1Filter
         withTable(tbl) {
           sql(s"CREATE TABLE $tbl (i INT)")
 
-          // The query is resolved before the write target. Its load must still carry write
+          // The query is resolved before the write target. The target load must still carry write
           // privileges because write loads bypass the per-query read caches.
           assertPrivilegeError(sql(s"INSERT INTO $tbl SELECT * FROM $tbl"), "INSERT")
           assertPrivilegeError(
@@ -5283,6 +5283,26 @@ class DataSourceV2SQLSuiteV1Filter
     spark.sessionState.catalogManager.reset()
     checkWritesReadingTheTarget(SESSION_CATALOG_NAME)
     checkWritesReadingTheTarget("read_only_self_ref_cat")
+
+    // The source read populates the relation cache before the target is materialized. Keep the
+    // target bound to the independently loaded write state rather than the cached read state.
+    withSQLConf("spark.sql.catalog.v1_state_cat" -> classOf[V1TableStateCatalog].getName) {
+      val tbl = "v1_state_cat.default.t"
+      withTable(tbl) {
+        sql(s"CREATE TABLE $tbl (i INT) USING parquet")
+        val analyzed = spark.sessionState.executePlan(
+          spark.sessionState.sqlParser.parsePlan(
+            s"INSERT INTO $tbl SELECT * FROM $tbl")).analyzed
+        val command = analyzed.collectFirst {
+          case insert: InsertIntoHadoopFsRelationCommand => insert
+        }.get
+        val readStates = command.query.collect {
+          case LogicalRelationWithTable(_, Some(table)) => table.comment
+        }.flatten
+        assert(readStates == Seq("read"))
+        assert(command.catalogTable.flatMap(_.comment).contains("write"))
+      }
+    }
   }
 
   test("StagingTableCatalog without atomic support") {
@@ -5625,6 +5645,23 @@ class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
       ident: Identifier,
       writePrivileges: util.Set[TableWritePrivilege]): Table = {
     loadTable(ident)
+  }
+}
+
+class V1TableStateCatalog extends V2CatalogSupportBuiltinDataSource {
+  private def withState(table: Table, state: String): Table = table match {
+    case V1Table(v1Table) => V1Table(v1Table.copy(comment = Some(state)))
+    case other => other
+  }
+
+  override def loadTable(ident: Identifier): Table = {
+    withState(super.loadTable(ident), "read")
+  }
+
+  override def loadTable(
+      ident: Identifier,
+      writePrivileges: util.Set[TableWritePrivilege]): Table = {
+    withState(super.loadTable(ident), "write")
   }
 }
 

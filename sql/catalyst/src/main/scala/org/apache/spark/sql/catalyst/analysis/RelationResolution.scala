@@ -169,7 +169,8 @@ class RelationResolution(
       return resolveTemp(normalizeSessionQualifiedViewIdentifier(identifier))
     }
 
-    // Two-part session.v: local temp view `v`, or persistent relation `v` in schema `session`.
+    // Two-part session.v: local temp view `v`, or a persistent relation. If `session` names a
+    // registered catalog, persistent resolution uses that catalog; otherwise `session` is a schema.
     // Order follows [[SQLConf#prioritizeSystemCatalog]] (inverse of `PERSISTENT_CATALOG_FIRST`).
     if (identifier.length == 2 &&
         identifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
@@ -264,8 +265,9 @@ class RelationResolution(
       case CatalogAndIdentifier(catalog, ident) =>
         CatalogV2Util.rejectTimeTravelOptionsForWrite(catalog, ident, target.options)
 
-        // Table lookup carries the write privileges. Only after it reports that no table exists
-        // do we try the metadata-only persistent-view path, which accepts no write context.
+        // For table-capable catalogs, table lookup carries the write privileges. Only after it
+        // reports that no table exists do we try the metadata-only persistent-view path. View-only
+        // catalogs proceed directly to that path; persistent views accept no write context.
         val table = if (
           CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
         ) {

@@ -269,13 +269,30 @@ private[sql] object InsertWriteRelation {
       insert: InsertIntoStatement): Option[LogicalPlan] = insert.table match {
     case ResolvedTable(_, _, V1Table(table: CatalogTable), _) =>
       if (DDLUtils.isDatasourceTable(table)) {
-        Some(readDataSourceTable(sparkSession, table, insert.tableOptions))
+        val options = DataSourceUtils.generateDatasourceOptions(insert.tableOptions, table)
+        Some(buildDataSourceTable(sparkSession, table, options))
       } else {
         Some(DDLUtils.readHiveTable(table))
       }
     case view: ResolvedTempView =>
       view.viewRelation.plan.map(EliminateSubqueryAliases.apply)
     case _ => None
+  }
+
+  private def buildDataSourceTable(
+      sparkSession: SparkSession,
+      table: CatalogTable,
+      options: Map[String, String]): LogicalRelation = {
+    val dataSource = DataSource(
+      sparkSession,
+      // Older Spark versions allowed an empty table schema that was inferred at runtime.
+      userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
+      partitionColumns = table.partitionColumnNames,
+      bucketSpec = table.bucketSpec,
+      className = table.provider.get,
+      options = options,
+      catalogTable = Some(table))
+    LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
   }
 
   private[sql] def readDataSourceTable(
@@ -290,20 +307,11 @@ private[sql] object InsertWriteRelation {
       SQLConf.get.getConf(SQLConf.READ_FILE_SOURCE_TABLE_CACHE_IGNORE_OPTIONS)
     catalog.getCachedTable(qualifiedTableName) match {
       case null =>
-        val dataSource = DataSource(
-          sparkSession,
-          // Older Spark versions allowed an empty table schema that was inferred at runtime.
-          userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
-          partitionColumns = table.partitionColumnNames,
-          bucketSpec = table.bucketSpec,
-          className = table.provider.get,
-          options = dsOptions,
-          catalogTable = Some(table))
-        val plan = LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
+        val plan = buildDataSourceTable(sparkSession, table, dsOptions)
         catalog.cacheTable(qualifiedTableName, plan)
         plan
 
-      // Rebuild a cached file relation when target options matter and differ from the cached ones.
+      // Rebuild a cached file relation when table options matter and differ from the cached ones.
       case r @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, _, _)
           if !ignoreCachedOptions &&
             (new CaseInsensitiveStringMap(fsRelation.options.asJava) !=
