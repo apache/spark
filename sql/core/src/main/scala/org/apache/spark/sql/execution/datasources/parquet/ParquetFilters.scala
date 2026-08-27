@@ -23,11 +23,11 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalTime, Period}
 import java.time.temporal.ChronoField.MICRO_OF_DAY
-import java.util.HashSet
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
+import com.google.common.collect.Sets
 import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.filter2.predicate.SparkFilterApi._
 import org.apache.parquet.io.api.Binary
@@ -764,7 +764,7 @@ class ParquetFilters(
 
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
       (n: Array[String], values: Array[Any]) =>
-        val set = new HashSet[Integer]()
+        val set = Sets.newHashSetWithExpectedSize[Integer](values.length)
         for (value <- values) {
           set.add(toIntValue(value))
         }
@@ -772,7 +772,7 @@ class ParquetFilters(
 
     case ParquetLongType =>
       (n: Array[String], values: Array[Any]) =>
-        val set = new HashSet[JLong]()
+        val set = Sets.newHashSetWithExpectedSize[JLong](values.length)
         for (value <- values) {
           set.add(toLongValue(value))
         }
@@ -780,7 +780,7 @@ class ParquetFilters(
 
     case ParquetFloatType =>
       (n: Array[String], values: Array[Any]) =>
-        val set = new HashSet[JFloat]()
+        val set = Sets.newHashSetWithExpectedSize[JFloat](values.length)
         for (value <- values) {
           set.add(value.asInstanceOf[JFloat])
         }
@@ -788,7 +788,7 @@ class ParquetFilters(
 
     case ParquetDoubleType =>
       (n: Array[String], values: Array[Any]) =>
-        val set = new HashSet[JDouble]()
+        val set = Sets.newHashSetWithExpectedSize[JDouble](values.length)
         for (value <- values) {
           set.add(value.asInstanceOf[JDouble])
         }
@@ -796,7 +796,7 @@ class ParquetFilters(
 
     case ParquetStringType =>
       (n: Array[String], values: Array[Any]) =>
-        val set = new HashSet[Binary]()
+        val set = Sets.newHashSetWithExpectedSize[Binary](values.length)
         for (value <- values) {
           set.add(Option(value).map(s => Binary.fromString(s.asInstanceOf[String])).orNull)
         }
@@ -804,7 +804,7 @@ class ParquetFilters(
 
     case ParquetBinaryType =>
       (n: Array[String], values: Array[Any]) =>
-        val set = new HashSet[Binary]()
+        val set = Sets.newHashSetWithExpectedSize[Binary](values.length)
         for (value <- values) {
           set.add(Option(value)
             .map(b => Binary.fromReusedByteArray(b.asInstanceOf[Array[Byte]])).orNull)
@@ -813,7 +813,7 @@ class ParquetFilters(
 
     case ParquetDateType if pushDownDate =>
       (n: Array[String], values: Array[Any]) =>
-        val set = new HashSet[Integer]()
+        val set = Sets.newHashSetWithExpectedSize[Integer](values.length)
         for (value <- values) {
           set.add(Option(value).map(date => dateToDays(date).asInstanceOf[Integer]).orNull)
         }
@@ -821,7 +821,7 @@ class ParquetFilters(
 
     case ParquetTimestampMicrosType if pushDownTimestamp =>
       (n: Array[String], values: Array[Any]) =>
-        val set = new HashSet[JLong]()
+        val set = Sets.newHashSetWithExpectedSize[JLong](values.length)
         for (value <- values) {
           set.add(Option(value).map(timestampToMicros).orNull)
         }
@@ -829,7 +829,7 @@ class ParquetFilters(
 
     case ParquetTimestampMillisType if pushDownTimestamp =>
       (n: Array[String], values: Array[Any]) =>
-        val set = new HashSet[JLong]()
+        val set = Sets.newHashSetWithExpectedSize[JLong](values.length)
         for (value <- values) {
           set.add(Option(value).map(timestampToMillis).orNull)
         }
@@ -840,7 +840,7 @@ class ParquetFilters(
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], values: Array[Any]) =>
-        val set = new HashSet[Integer]()
+        val set = Sets.newHashSetWithExpectedSize[Integer](values.length)
         for (value <- values) {
           set.add(Option(value).map(d => decimalToInt32(d.asInstanceOf[JBigDecimal])).orNull)
         }
@@ -848,7 +848,7 @@ class ParquetFilters(
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT64, _) if pushDownDecimal =>
       (n: Array[String], values: Array[Any]) =>
-        val set = new HashSet[JLong]()
+        val set = Sets.newHashSetWithExpectedSize[JLong](values.length)
         for (value <- values) {
           set.add(Option(value).map(d => decimalToInt64(d.asInstanceOf[JBigDecimal])).orNull)
         }
@@ -857,7 +857,7 @@ class ParquetFilters(
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, FIXED_LEN_BYTE_ARRAY, length)
       if pushDownDecimal =>
       (n: Array[String], values: Array[Any]) =>
-        val set = new HashSet[Binary]()
+        val set = Sets.newHashSetWithExpectedSize[Binary](values.length)
         for (value <- values) {
           set.add(Option(value)
             .map(d => decimalToByteArray(d.asInstanceOf[JBigDecimal], length)).orNull)
