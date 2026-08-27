@@ -393,17 +393,27 @@ class Analyzer(
   def getRelationResolution: RelationResolution = relationResolution
 
   /**
-   * Resolves an identifier expression without resolving the plan it builds. This lets
-   * [[QueryExecution]] choose a transaction catalog before table lookup starts.
+   * Resolves a write target far enough for `QueryExecution` to choose its transaction catalog.
    */
-  private[sql] def resolveIdentifierPlanForTransaction(
-      plan: PlanWithUnresolvedIdentifier): LogicalPlan = {
-    val expressionPlan = Project(Seq(Alias(plan.identifierExpr, "_identifier")()), OneRowRelation())
-    val resolvedExpression = execute(expressionPlan).expressions.head
-    if (resolvedExpression.resolved) {
-      plan.planBuilder(IdentifierResolution.evalIdentifierExpr(resolvedExpression), plan.children)
-    } else {
-      plan
+  private[sql] def resolveWriteTargetForTransaction(plan: LogicalPlan): LogicalPlan = {
+    val identifierResolvedPlan = plan match {
+      case unresolved: PlanWithUnresolvedIdentifier =>
+        val expressionPlan = Project(
+          Seq(Alias(unresolved.identifierExpr, "_identifier")()), OneRowRelation())
+        val resolvedExpression = execute(expressionPlan).expressions.head
+        if (resolvedExpression.resolved) {
+          unresolved.planBuilder(
+            IdentifierResolution.evalIdentifierExpr(resolvedExpression), unresolved.children)
+        } else {
+          unresolved
+        }
+      case other => other
+    }
+
+    identifierResolvedPlan match {
+      case target: UnresolvedWriteTarget =>
+        relationResolution.resolveWriteTarget(target).getOrElse(target)
+      case other => other
     }
   }
 

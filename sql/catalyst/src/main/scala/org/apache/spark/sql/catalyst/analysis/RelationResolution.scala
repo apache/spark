@@ -149,7 +149,7 @@ class RelationResolution(
 
   /**
    * Resolution search path formatted for TABLE_OR_VIEW_NOT_FOUND error messages.
-   * Same order as [[relationResolutionSteps]]; each entry is quoted (e.g. "`system`.`session`").
+   * Same order as `relationResolutionSteps`; each entry is quoted (e.g. "`system`.`session`").
    */
   def resolutionSearchPathForError: Seq[String] = {
     relationResolutionEntries.map(toSQLId)
@@ -189,8 +189,8 @@ class RelationResolution(
       return resolveTemp(identifier).orElse(resolvePersistent(identifier))
     }
 
-    // 1-part name: try each step in [[relationResolutionSteps]] order (from
-    // [[CatalogManager#sqlResolutionPathEntries]]).
+    // 1-part name: try each step in `relationResolutionSteps` order (from
+    // `CatalogManager.sqlResolutionPathEntries`).
     relationResolutionSteps.iterator.map {
       case SessionScopeStep => resolveTemp(identifier)
       case PersistentCatalogStep(prefix) => resolvePersistent(prefix ++ identifier)

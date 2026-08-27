@@ -193,6 +193,27 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
       Seq(Row(1, 100, "hr"), Row(2, 200, "software")))
   }
 
+  test("transaction catalog follows SQL PATH") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }""")
+    val previousTxn = catalog.lastTransaction
+
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      try {
+        sql("SET PATH = cat.ns1, system.builtin")
+        val (txn, _) = executeTransaction {
+          sql("INSERT INTO test_table VALUES (2, 200, 'software')")
+        }
+
+        assert(txn ne previousTxn)
+        assert(txn.currentState === Committed)
+        assert(txn.isClosed)
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
+
   for (isDynamic <- Seq(false, true))
   test(s"SQL INSERT OVERWRITE with transactional checks - isDynamic: $isDynamic") {
     // create table with initial data; table is partitioned by dep

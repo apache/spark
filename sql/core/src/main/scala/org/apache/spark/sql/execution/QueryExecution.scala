@@ -31,7 +31,7 @@ import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, LazyExpression, NameParameterizedQuery, PlanWithUnresolvedIdentifier, UnsupportedOperationChecker}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, LazyExpression, NameParameterizedQuery, UnsupportedOperationChecker}
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, TransactionalWrite, Union, UnresolvedWith, WithCTE}
@@ -100,11 +100,7 @@ class QueryExecution(
   }
 
   private def transactionCatalog(write: TransactionalWrite): Option[TransactionalCatalogPlugin] = {
-    val table = write.table match {
-      case plan: PlanWithUnresolvedIdentifier =>
-        sparkSession.sessionState.analyzer.resolveIdentifierPlanForTransaction(plan)
-      case other => other
-    }
+    val table = sparkSession.sessionState.analyzer.resolveWriteTargetForTransaction(write.table)
     TransactionalWrite.catalogFor(table)
   }
 

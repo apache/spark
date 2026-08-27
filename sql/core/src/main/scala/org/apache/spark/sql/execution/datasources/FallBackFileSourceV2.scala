@@ -19,34 +19,38 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.analysis.ResolvedTempView
+import org.apache.spark.sql.catalyst.analysis.{ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table, FileTable}
 
 /**
- * Replace the File source V2 table in [[InsertIntoStatement]] to V1 [[FileFormat]].
- * E.g, with temporary view `t` using
- * [[org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2]], inserting into view `t` fails
- * since there is no corresponding physical plan.
+ * Replace File source V2 targets in [[InsertIntoStatement]] with V1 [[FileFormat]] relations.
+ * For example, inserting into a temporary view or persistent table backed by
+ * [[org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2]] otherwise fails because there
+ * is no corresponding physical plan.
  * This is a temporary hack for making current data source V2 work. It should be
  * removed when Catalog support of file data source v2 is finished.
  */
 class FallBackFileSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  private object TempViewFileTable {
+  private object FileTableTarget {
     def unapply(insert: InsertIntoStatement)
-        : Option[(ResolvedTempView, DataSourceV2Relation, FileTable)] = insert.table match {
+        : Option[(LogicalPlan, DataSourceV2Relation, FileTable)] = insert.table match {
       case view: ResolvedTempView =>
         view.viewRelation.plan.map(SubqueryAlias.stripLeadingAliases).collect {
           case d @ ExtractV2Table(table: FileTable) => (view, d, table)
         }
+      case target @ ResolvedTable(catalog, identifier, table: FileTable, _) =>
+        val relation = DataSourceV2Relation.create(
+          table, Some(catalog), Some(identifier), insert.tableOptions)
+        Some((target, relation, table))
       case _ => None
     }
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ TempViewFileTable(view, d, table) =>
+    case i @ FileTableTarget(originalTarget, d, table) =>
       val v1FileFormat = table.fallbackFileFormat.getDeclaredConstructor().newInstance()
       val relation = HadoopFsRelation(
         table.fileIndex,
@@ -55,10 +59,15 @@ class FallBackFileSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan]
         None,
         v1FileFormat,
         d.options.asScala.toMap)(sparkSession)
-      val target = ResolvedTempView(
-        view.identifier,
-        view.viewRelation.copy(plan = Some(LogicalRelation(relation))))
-      target.copyTagsFrom(view)
+      val logicalRelation = LogicalRelation(relation)
+      val target = originalTarget match {
+        case view: ResolvedTempView =>
+          ResolvedTempView(
+            view.identifier,
+            view.viewRelation.copy(plan = Some(logicalRelation)))
+        case _ => logicalRelation
+      }
+      target.copyTagsFrom(originalTarget)
       i.copy(table = target)
   }
 }
