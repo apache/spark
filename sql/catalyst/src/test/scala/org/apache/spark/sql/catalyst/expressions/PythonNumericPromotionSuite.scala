@@ -43,9 +43,9 @@ class PythonNumericPromotionSuite extends SparkFunSuite {
   }
 
   test("multiplication widens by the product, which climbs much faster") {
-    // 128 * 128 = 16384, so two tinyints still fit a smallint; but two ints reach 2**62, which
-    // needs the whole of LongType, and two bigints reach 2**126 -- 38 digits, landing exactly on
-    // DecimalType.MAX_PRECISION.
+    // 128 * 128 = 16384, so two tinyints still fit a smallint, and two ints reach 2**62, which
+    // needs the whole of LongType. Two bigints reach 2**126, which nothing integral holds -- and
+    // LongType is the ceiling on purpose, see narrowestFor -- so they are left alone.
     assert(PythonNumericPromotion.forMultiplication(ByteType, ByteType) === Some(ShortType))
     assert(PythonNumericPromotion.forMultiplication(IntegerType, IntegerType) === Some(LongType))
     assert(PythonNumericPromotion.forMultiplication(LongType, LongType).isEmpty)
