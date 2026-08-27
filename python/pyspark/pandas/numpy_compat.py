@@ -154,28 +154,26 @@ def _fmod_func(c1: Column, c2: Column) -> Column:
     c2_double = c2.cast("double")
     integral_types = ["tinyint", "smallint", "int", "bigint"]
 
-    # Dispatched on type twice: floating operands need a NaN for a zero divisor, and among the
-    # rest, at the end of the branch below, only integral operands can take the remainder in
-    # integer space.
-    return F.when(
-        F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
+    return (
+        # A null or a nan propagates for every operand type.
         F.when(c1.isNull() | F.isnan(c1), c1_double)
         .when(c2.isNull() | F.isnan(c2), c2_double)
-        .when(c2_double == 0, F.lit(float("nan")))
-        .otherwise(F.try_mod(c1_double, c2_double)),
-    ).otherwise(
-        # Non-floating operands, where NumPy normalizes a zero divisor to 0 instead of a NaN.
-        F.when(c1.isNull() | F.isnan(c1), c1_double)
-        .when(c2.isNull() | F.isnan(c2), c2_double)
-        .when(c2_double == 0, F.lit(0.0))
-        # Casting an operand above 2**53 to double drops its low bits, turning 9007199254740993
-        # into 9007199254740992, so integral operands take the remainder as longs. A decimal
-        # column cannot be named in a typeof test, so it falls through to the double casts.
+        # Integral operands take the remainder as longs: a double cannot hold 9007199254740993.
         .when(
             F.typeof(c1).isin(integral_types) & F.typeof(c2).isin(integral_types),
-            F.try_mod(c1.cast("long"), c2.cast("long")).cast("double"),
+            F.when(c2_double == 0, F.lit(0.0)).otherwise(
+                F.try_mod(c1.cast("long"), c2.cast("long")).cast("double")
+            ),
         )
-        .otherwise(F.try_mod(c1_double, c2_double))
+        # Floating operands, where a zero divisor is nan rather than the 0 above.
+        .when(
+            F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
+            F.when(c2_double == 0, F.lit(float("nan"))).otherwise(F.try_mod(c1_double, c2_double)),
+        )
+        # A decimal falls through here, since typeof carries its precision, as in decimal(10,2).
+        # np.fmod raises on Decimal objects, so there is no NumPy behavior to match: a zero
+        # divisor returns 0 and any other divisor takes the remainder in double.
+        .otherwise(F.when(c2_double == 0, F.lit(0.0)).otherwise(F.try_mod(c1_double, c2_double)))
     )
 
 
