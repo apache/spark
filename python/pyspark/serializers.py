@@ -357,7 +357,6 @@ if os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
             return (_restore, (name, fields, tuple(self)))
 
         cls.__reduce__ = __reduce__
-        cls._is_namedtuple_ = True
         return cls
 
     def _hijack_namedtuple():
