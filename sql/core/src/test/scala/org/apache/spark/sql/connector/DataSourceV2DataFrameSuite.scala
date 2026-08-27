@@ -26,6 +26,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SessionQueryTest, SparkSession}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, CachingInMemoryTableCatalog, CatalogV2Util, Column, ColumnDefaultValue, DefaultValue, GenerationExpression, Identifier, InMemoryBaseTable, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableCatalog, TableInfo, TypeChangeResetsColIdTableCatalog}
@@ -37,7 +38,7 @@ import org.apache.spark.sql.connector.expressions.{ApplyTransform, Cast => V2Cas
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate => V2Predicate}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
-import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, ReplaceTableExec}
+import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, DataSourceV2ScanRelation, ReplaceTableExec}
 import org.apache.spark.sql.functions.{lit, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
@@ -1722,6 +1723,249 @@ class DataSourceV2DataFrameSuite
 
       // execution should succeed as column additions are allowed
       checkAnswer(df, Seq(Row(1, "a")))
+    }
+  }
+
+  test("refresh reconciles a wider partially-pruned scan with stored temp view output") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      withView("v") {
+        sql(
+          s"""CREATE TABLE $t (id INT, salary INT) USING foo
+             |TBLPROPERTIES (
+             |  '${InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING}' = 'true')
+             |""".stripMargin)
+        sql(s"INSERT INTO $t VALUES (1, 100)")
+
+        spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+        checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+        val cat = catalog("testcat")
+        val addCol = TableChange.addColumn(Array("new_column"), IntegerType, true)
+        cat.alterTable(testIdent, addCol)
+        externalAppend(cat, testIdent, InternalRow(2, 200, -1))
+
+        val refreshedView = spark.table("v")
+        val scan = refreshedView.queryExecution.optimizedPlan.collectFirst {
+          case scan: DataSourceV2ScanRelation => scan
+        }.get
+        assert(scan.output.map(_.name) == Seq("id", "salary", "new_column"))
+        assert(refreshedView.queryExecution.optimizedPlan.output.map(_.name) == Seq("id", "salary"))
+        checkAnswer(refreshedView, Seq(Row(1, 100), Row(2, 200)))
+      }
+    }
+  }
+
+  test("refresh recreates a captured nested schema from a partially-pruned scan") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(
+        s"""CREATE TABLE $t (id INT, person STRUCT<name: STRING>) USING foo
+           |TBLPROPERTIES (
+           |  '${InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING}' = 'true')
+           |""".stripMargin)
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice'))")
+
+      val df = spark.table(t)
+      assert(df.queryExecution.analyzed.resolved)
+
+      sql(s"ALTER TABLE $t ADD COLUMN person.age INT FIRST")
+      sql(s"INSERT INTO $t VALUES (2, named_struct('age', 25, 'name', 'Bob'))")
+      sql(s"INSERT INTO $t VALUES (3, NULL)")
+
+      checkAnswer(df, Seq(
+        Row(1, Row("Alice")),
+        Row(2, Row("Bob")),
+        Row(3, null)))
+    }
+  }
+
+  test("refresh recreates a captured schema nested through a map and an array") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      // A struct is needed between the map and the array: CatalogV2Util.replace only walks into a
+      // collection whose element/value type is a struct, so ALTER TABLE cannot reach the inner
+      // field of MAP<STRING, ARRAY<STRUCT<...>>>. CapturedSchemaProjectionSuite covers that shape
+      // directly at the expression level.
+      sql(
+        s"""CREATE TABLE $t (
+           |  id INT,
+           |  data STRUCT<m: MAP<STRING, STRUCT<arr: ARRAY<STRUCT<v: STRING>>>>>)
+           |USING foo
+           |TBLPROPERTIES (
+           |  '${InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING}' = 'true')
+           |""".stripMargin)
+      sql(
+        s"""INSERT INTO $t VALUES (
+           |  1,
+           |  named_struct('m', map('k', named_struct('arr', array(named_struct('v', 'a'))))))
+           |""".stripMargin)
+
+      val df = spark.table(t)
+      assert(df.queryExecution.analyzed.resolved)
+
+      // Add a field at two depths, each FIRST, so the captured field that follows it moves to a
+      // different ordinal at each level.
+      sql(s"ALTER TABLE $t ADD COLUMN data.m.value.arr.element.extra INT FIRST")
+      sql(s"ALTER TABLE $t ADD COLUMN data.added INT FIRST")
+      sql(
+        s"""INSERT INTO $t VALUES (
+           |  2,
+           |  named_struct(
+           |    'added', 9,
+           |    'm', map('k', named_struct('arr', array(named_struct('extra', 7, 'v', 'b'))))))
+           |""".stripMargin)
+
+      checkAnswer(df, Seq(
+        Row(1, Row(Map("k" -> Row(Seq(Row("a")))))),
+        Row(2, Row(Map("k" -> Row(Seq(Row("b"))))))))
+    }
+  }
+
+  test("refresh preserves a captured metadata column across a wider partially-pruned scan") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      withView("v") {
+        sql(
+          s"""CREATE TABLE $t (id INT, salary INT) USING foo
+             |TBLPROPERTIES (
+             |  '${InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING}' = 'true')
+             |""".stripMargin)
+        sql(s"INSERT INTO $t VALUES (1, 100)")
+
+        spark.table(t).select("id", "salary", "index").createOrReplaceTempView("v")
+        checkAnswer(spark.table("v"), Seq(Row(1, 100, 0)))
+
+        val cat = catalog("testcat")
+        cat.alterTable(testIdent, TableChange.addColumn(Array("new_column"), IntegerType, true))
+        externalAppend(cat, testIdent, InternalRow(2, 200, -1))
+
+        val refreshedView = spark.table("v")
+        assert(refreshedView.schema.map(_.name) == Seq("id", "salary", "index"))
+        checkAnswer(refreshedView, Seq(Row(1, 100, 0), Row(2, 200, 0)))
+      }
+    }
+  }
+
+  // This test does not enable partial column pruning: the scan reports only the captured columns,
+  // so `toOutputAttrs` finds every name and nothing fails outright. Without the rebinding call the
+  // captured `index` would silently read the new data column instead of the metadata column, which
+  // is what the value assertions below catch.
+  test("refresh keeps a captured metadata column when a new data column takes its name") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      withView("v") {
+        sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+        sql(s"INSERT INTO $t VALUES (1, 100)")
+
+        spark.table(t).select("id", "salary", "index").createOrReplaceTempView("v")
+        checkAnswer(spark.table("v"), Seq(Row(1, 100, 0)))
+
+        // The new data column conflicts with the `index` metadata column, so the current relation
+        // exposes the metadata column under a conflict-renamed name.
+        val cat = catalog("testcat")
+        cat.alterTable(testIdent, TableChange.addColumn(Array("index"), IntegerType, true))
+        externalAppend(cat, testIdent, InternalRow(2, 200, -1))
+
+        val refreshedView = spark.table("v")
+        assert(refreshedView.schema.map(_.name) == Seq("id", "salary", "index"))
+        // `index` still resolves to the metadata column (0), not to the new data column (-1).
+        checkAnswer(refreshedView, Seq(Row(1, 100, 0), Row(2, 200, 0)))
+      }
+    }
+  }
+
+  test("refresh restores the captured column order when a column is added first") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      withView("v") {
+        sql(
+          s"""CREATE TABLE $t (id INT, salary INT) USING foo
+             |TBLPROPERTIES (
+             |  '${InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING}' = 'true')
+             |""".stripMargin)
+        sql(s"INSERT INTO $t VALUES (1, 100)")
+
+        spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+        checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+        sql(s"ALTER TABLE $t ADD COLUMN new_column INT FIRST")
+        sql(s"INSERT INTO $t VALUES (-1, 2, 200)")
+
+        val refreshedView = spark.table("v")
+        val scan = refreshedView.queryExecution.optimizedPlan.collectFirst {
+          case scan: DataSourceV2ScanRelation => scan
+        }.get
+        assert(scan.output.map(_.name) == Seq("new_column", "id", "salary"))
+        // The projection restores the captured order, not the current table order.
+        assert(refreshedView.queryExecution.optimizedPlan.output.map(_.name) == Seq("id", "salary"))
+        checkAnswer(refreshedView, Seq(Row(1, 100), Row(2, 200)))
+      }
+    }
+  }
+
+  // A case-only rename is rejected by ALTER TABLE, so it can only reach the refresh path when an
+  // external writer performs it directly through the catalog. This test also does not enable
+  // partial column pruning, but it still fails without the rebinding call: the scan reports renamed
+  // `SALARY` while the captured output has `salary`, and `toOutputAttrs` looks read-schema names up
+  // in `relation.output`.
+  test("refresh restores the captured column name after an external case-only rename") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      withView("v") {
+        sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+        sql(s"INSERT INTO $t VALUES (1, 100)")
+
+        spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+        checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+        val cat = catalog("testcat")
+        cat.alterTable(testIdent, TableChange.renameColumn(Array("salary"), "SALARY"))
+        assert(cat.loadTable(testIdent).columns().map(_.name).toSeq == Seq("id", "SALARY"))
+
+        // The scan reads the current name while the view keeps the captured one. Rows written
+        // before the rename are not asserted here: the in-memory connector resolves buffered rows
+        // by exact column name, so it cannot read them back under the new name.
+        val refreshedView = spark.table("v")
+        val scan = refreshedView.queryExecution.optimizedPlan.collectFirst {
+          case scan: DataSourceV2ScanRelation => scan
+        }.get
+        assert(scan.output.map(_.name) == Seq("id", "SALARY"))
+        assert(refreshedView.queryExecution.optimizedPlan.output.map(_.name) == Seq("id", "salary"))
+        assert(refreshedView.schema.map(_.name) == Seq("id", "salary"))
+      }
+    }
+  }
+
+  test("refresh rebinds every relation of a self-joined partially-pruned table") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      withView("v") {
+        sql(
+          s"""CREATE TABLE $t (id INT, salary INT) USING foo
+             |TBLPROPERTIES (
+             |  '${InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING}' = 'true')
+             |""".stripMargin)
+        sql(s"INSERT INTO $t VALUES (1, 100)")
+
+        sql(s"SELECT l.id, r.salary FROM $t l JOIN $t r ON l.id = r.id")
+          .createOrReplaceTempView("v")
+        checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+        val cat = catalog("testcat")
+        cat.alterTable(testIdent, TableChange.addColumn(Array("new_column"), IntegerType, true))
+        externalAppend(cat, testIdent, InternalRow(2, 200, -1))
+
+        val refreshedView = spark.table("v")
+        val scans = refreshedView.queryExecution.optimizedPlan.collect {
+          case scan: DataSourceV2ScanRelation => scan
+        }
+        assert(scans.size == 2)
+        // Both sides see the current schema; column pruning then keeps only what each side needs.
+        assert(scans.forall(_.relation.output.map(_.name) == Seq("id", "salary", "new_column")))
+        assert(refreshedView.schema.map(_.name) == Seq("id", "salary"))
+        checkAnswer(refreshedView, Seq(Row(1, 100), Row(2, 200)))
+      }
     }
   }
 
