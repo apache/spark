@@ -1644,6 +1644,7 @@ case class CreateUserDefinedFunction(
     containsSQL: Option[Boolean],
     language: org.apache.spark.sql.catalyst.catalog.RoutineLanguage,
     isTableFunc: Boolean,
+    isTemp: Boolean,
     ignoreIfExists: Boolean,
     replace: Boolean) extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): CreateUserDefinedFunction =

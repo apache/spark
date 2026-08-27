@@ -61,6 +61,7 @@ class CreateSQLFunctionParserSuite extends AnalysisTest {
       containsSQL = containsSQL,
       language = org.apache.spark.sql.catalyst.catalog.LanguageSQL,
       isTableFunc = isTableFunc,
+      isTemp = false,
       ignoreIfExists = ignoreIfExists,
       replace = replace)
   }
@@ -91,6 +92,7 @@ class CreateSQLFunctionParserSuite extends AnalysisTest {
       containsSQL = containsSQL,
       language = org.apache.spark.sql.catalyst.catalog.LanguageSQL,
       isTableFunc = isTableFunc,
+      isTemp = true,
       ignoreIfExists = ignoreIfExists,
       replace = replace)
   }

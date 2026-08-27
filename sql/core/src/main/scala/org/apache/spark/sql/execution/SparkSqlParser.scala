@@ -1053,6 +1053,7 @@ class SparkSqlAstBuilder extends AstBuilder {
             containsSQL,
             language,
             isTableFunc,
+            isTemp = false,
             ctx.EXISTS != null,
             ctx.REPLACE != null)
         } else {
@@ -1075,6 +1076,7 @@ class SparkSqlAstBuilder extends AstBuilder {
             containsSQL,
             language,
             isTableFunc,
+            isTemp = true,
             ctx.EXISTS != null,
             ctx.REPLACE != null)
         }

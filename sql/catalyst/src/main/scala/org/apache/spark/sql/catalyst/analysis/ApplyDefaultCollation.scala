@@ -207,7 +207,7 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
           newCreateView
 
         case createUserDefinedFunction@CreateUserDefinedFunction(ResolvedIdentifier(
-        catalog: SupportsNamespaces, identifier), _, _, _, _, _, _, _, _, _, _, _, _)
+        catalog: SupportsNamespaces, identifier), _, _, _, _, _, _, _, _, _, _, _, _, _)
           if createUserDefinedFunction.collation.isEmpty =>
           val newCreateUserDefinedFunction =
             CurrentOrigin.withOrigin(createUserDefinedFunction.origin) {
