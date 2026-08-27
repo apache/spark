@@ -81,10 +81,7 @@ abstract class ProbabilisticClassificationModel[
   }
 
   protected def predictProbabilityColumn(features: Column): Column = {
-    val localPredictProbability = predictProbability _
-    udf { value: Any =>
-      localPredictProbability(value.asInstanceOf[FeaturesType])
-    }.apply(features)
+    udf { value: Any => predictProbability(value.asInstanceOf[FeaturesType]) }.apply(features)
   }
 
   override protected def raw2predictionColumn(rawPrediction: Column): Column = {
