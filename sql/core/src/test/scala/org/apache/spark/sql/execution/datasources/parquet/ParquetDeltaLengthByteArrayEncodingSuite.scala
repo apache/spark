@@ -20,8 +20,9 @@ import java.nio.ByteBuffer
 import java.util.Random
 
 import org.apache.commons.lang3.RandomStringUtils
-import org.apache.parquet.bytes.{ByteBufferInputStream, DirectByteBufferAllocator}
+import org.apache.parquet.bytes.{ByteBufferInputStream, BytesInput, DirectByteBufferAllocator}
 import org.apache.parquet.column.values.Utils
+import org.apache.parquet.column.values.delta.DeltaBinaryPackingValuesWriterForInteger
 import org.apache.parquet.column.values.deltalengthbytearray.DeltaLengthByteArrayValuesWriter
 import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.io.api.Binary
@@ -106,6 +107,47 @@ class ParquetDeltaLengthByteArrayEncodingSuite
       reader.skipBinary(values.length)
     }
     assert(e.getMessage.contains("Failed to skip"))
+  }
+
+  test("readBinary, getBytes and skipBinary reject a negative decoded length") {
+    // Spark's own writer never emits a negative length, but a third-party or corrupt file can:
+    // the page is concat(lengthHeader, data), so write the length header directly with a
+    // negative entry. A negative length must be rejected before it reaches in.slice/in.skipFully
+    // or the column vector, where it would otherwise read stale bytes, rewind the stream, or move
+    // elementsAppended backwards silently.
+    def negativeLengthPage(): ByteBufferInputStream = {
+      val lengthWriter = new DeltaBinaryPackingValuesWriterForInteger(
+        128, 4, 100, 200, new DirectByteBufferAllocator())
+      Seq(3, -6, 3).foreach(lengthWriter.writeInteger)
+      val data = "abcdefghi".getBytes()
+      val page = BytesInput.concat(lengthWriter.getBytes, BytesInput.from(data)).toByteArray
+      ByteBufferInputStream.wrap(ByteBuffer.wrap(page))
+    }
+
+    // readBinary: the -6 entry is hit on the second value and must throw.
+    reader.initFromPage(3, negativeLengthPage())
+    val readVector = new OnHeapColumnVector(3, StringType)
+    val readError = intercept[ParquetDecodingException] {
+      reader.readBinary(3, readVector, 0)
+    }
+    assert(readError.getMessage.contains("negative length"))
+
+    // getBytes: reading the second row directly must throw as well.
+    reader = new VectorizedDeltaLengthByteArrayReader()
+    reader.initFromPage(3, negativeLengthPage())
+    val getBytesError = intercept[ParquetDecodingException] {
+      reader.getBytes(1)
+    }
+    assert(getBytesError.getMessage.contains("negative length"))
+
+    // skipBinary: the check stays per value inside the accumulation loop, so [3, -6, 3] throws
+    // instead of summing to 0 and silently advancing currentRow past an unmoved stream.
+    reader = new VectorizedDeltaLengthByteArrayReader()
+    reader.initFromPage(3, negativeLengthPage())
+    val skipError = intercept[ParquetDecodingException] {
+      reader.skipBinary(3)
+    }
+    assert(skipError.getMessage.contains("negative length"))
   }
 
   // Read the lengths from the beginning of the buffer and compare with the lengths of the values

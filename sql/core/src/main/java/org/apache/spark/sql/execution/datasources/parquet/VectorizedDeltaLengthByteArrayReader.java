@@ -58,7 +58,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
     ByteBufferOutputWriter outputWriter = ByteBufferOutputWriter::writeArrayByteBuffer;
     int length;
     for (int i = 0; i < total; i++) {
-      length = lengthsVector.getInt(currentRow + i);
+      length = checkLength(lengthsVector.getInt(currentRow + i));
       try {
         buffer = in.slice(length);
       } catch (EOFException e) {
@@ -88,7 +88,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
     ByteBufferOutputWriter outputWriter = ByteBufferOutputWriter::writeArrayByteBuffer;
     int length;
     for (int i = 0; i < total; i++) {
-      length = lengthsVector.getInt(currentRow + i);
+      length = checkLength(lengthsVector.getInt(currentRow + i));
       byte[] physicalValue;
       try {
         // Converts WKB into a physical representation of geometry/geography.
@@ -103,7 +103,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
   }
 
   public ByteBuffer getBytes(int rowId) {
-    int length = lengthsVector.getInt(rowId);
+    int length = checkLength(lengthsVector.getInt(rowId));
     try {
       return in.slice(length);
     } catch (EOFException e) {
@@ -115,11 +115,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
   public void skipBinary(int total) {
     long totalSkip = 0;
     for (int i = 0; i < total; i++) {
-      int length = lengthsVector.getInt(currentRow + i);
-      if (length < 0) {
-        throw new ParquetDecodingException("Encountered negative length: " + length);
-      }
-      totalSkip += length;
+      totalSkip += checkLength(lengthsVector.getInt(currentRow + i));
     }
     try {
       in.skipFully(totalSkip);
@@ -127,5 +123,18 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
       throw new ParquetDecodingException("Failed to skip " + totalSkip + " bytes", e);
     }
     currentRow += total;
+  }
+
+  /**
+   * Validates a length decoded from the page. Lengths are file-supplied and unverified, so a
+   * negative value (whether crafted or corrupt) must be rejected before it reaches
+   * {@code in.slice}, {@code in.skipFully}, or the column vector, where it would otherwise read
+   * stale bytes, rewind the stream, or move {@code elementsAppended} backwards silently.
+   */
+  private static int checkLength(int length) {
+    if (length < 0) {
+      throw new ParquetDecodingException("Encountered negative length: " + length);
+    }
+    return length;
   }
 }
