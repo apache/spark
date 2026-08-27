@@ -30,6 +30,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.{COUNT, RANGE}
+import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.linalg._
@@ -44,6 +45,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util._
@@ -1155,22 +1157,97 @@ class LogisticRegressionModel private[spark] (
   @Since("1.5.0")
   override def getThresholds: Array[Double] = super.getThresholds
 
-  /** Margin (rawPrediction) for class label 1.  For binary classification only. */
-  private val margin: Vector => Double = (features) => {
-    BLAS.dot(features, _coefficients) + _intercept
-  }
-
-  /** Margin (rawPrediction) for each class label. */
-  private val margins: Vector => Vector = (features) => {
-    val m = _interceptVector.copy
-    BLAS.gemv(1.0, coefficientMatrix, features, 1.0, m)
-    m
-  }
-
   /** Score (probability) for class label 1.  For binary classification only. */
-  private val score: Vector => Double = (features) => {
-    val m = margin(features)
-    1.0 / (1.0 + math.exp(-m))
+  private def score(features: Vector): Double = {
+    LogisticRegressionModel.score(features, _coefficients, _intercept)
+  }
+
+  private def predictRawFunction: Vector => Vector = if (isMultinomial) {
+    val localCoefficientMatrix = coefficientMatrix
+    val localInterceptVector = _interceptVector
+    features => LogisticRegressionModel.predictRaw(
+      features, localCoefficientMatrix, localInterceptVector)
+  } else {
+    val localCoefficients = _coefficients
+    val localIntercept = _intercept
+    features => LogisticRegressionModel.predictRaw(features, localCoefficients, localIntercept)
+  }
+
+  override protected def predictRawColumn(features: Column): Column = {
+    udf(predictRawFunction).apply(features)
+  }
+
+  override protected def raw2probabilityColumn(rawPrediction: Column): Column = {
+    val localIsMultinomial = isMultinomial
+    udf((rawPrediction: Vector) =>
+      LogisticRegressionModel.raw2probability(rawPrediction, localIsMultinomial)
+    ).apply(rawPrediction)
+  }
+
+  override protected def predictProbabilityColumn(features: Column): Column = {
+    val localPredictRaw = predictRawFunction
+    val localIsMultinomial = isMultinomial
+    udf((features: Vector) => LogisticRegressionModel.raw2probability(
+      localPredictRaw(features), localIsMultinomial)).apply(features)
+  }
+
+  override protected def raw2predictionColumn(rawPrediction: Column): Column = if (isMultinomial) {
+    val localThresholds = if (isDefined(thresholds)) getThresholds.clone() else null
+    if (localThresholds == null) {
+      udf((rawPrediction: Vector) => rawPrediction.argmax.toDouble).apply(rawPrediction)
+    } else {
+      probability2predictionColumn(raw2probabilityColumn(rawPrediction), localThresholds)
+    }
+  } else {
+    val localRawThreshold = _binaryThresholds(1)
+    val rawScore = MLFunctions.vector_get(rawPrediction, lit(1))
+    when(!isnan(rawScore) && rawScore > localRawThreshold, 1.0).otherwise(0.0)
+  }
+
+  override protected def probability2predictionColumn(
+      probability: Column): Column = if (isMultinomial) {
+    val localThresholds = if (isDefined(thresholds)) getThresholds.clone() else null
+    probability2predictionColumn(probability, localThresholds)
+  } else {
+    val localProbabilityThreshold = _binaryThresholds(0)
+    val probabilityScore = MLFunctions.vector_get(probability, lit(1))
+    when(!isnan(probabilityScore) && probabilityScore > localProbabilityThreshold, 1.0)
+      .otherwise(0.0)
+  }
+
+  private def probability2predictionColumn(
+      probability: Column,
+      localThresholds: Array[Double]): Column = {
+    udf((probability: Vector) =>
+      ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+    ).apply(probability)
+  }
+
+  override protected def predictionColumn(features: Column): Column = if (isMultinomial) {
+    val localPredictRaw = predictRawFunction
+    val localThresholds = if (isDefined(thresholds)) getThresholds.clone() else null
+    udf((features: Vector) => {
+      val rawPrediction = localPredictRaw(features)
+      if (localThresholds == null) {
+        rawPrediction.argmax.toDouble
+      } else {
+        val probability = LogisticRegressionModel.raw2probability(
+          rawPrediction, isMultinomial = true)
+        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+      }
+    }).apply(features)
+  } else {
+    val localCoefficients = _coefficients
+    val localIntercept = _intercept
+    val localProbabilityThreshold = _binaryThresholds(0)
+    udf((features: Vector) => {
+      if (LogisticRegressionModel.score(
+          features, localCoefficients, localIntercept) > localProbabilityThreshold) {
+        1.0
+      } else {
+        0.0
+      }
+    }).apply(features)
   }
 
   @Since("1.6.0")
@@ -1226,29 +1303,15 @@ class LogisticRegressionModel private[spark] (
   }
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
-    rawPrediction match {
-      case dv: DenseVector =>
-        val values = dv.values
-        if (isMultinomial) {
-          Utils.softmax(values)
-        } else {
-          values(0) = 1.0 / (1.0 + math.exp(-values(0)))
-          values(1) = 1.0 - values(0)
-        }
-        dv
-      case sv: SparseVector =>
-        throw new RuntimeException("Unexpected error in LogisticRegressionModel:" +
-          " raw2probabilitiesInPlace encountered SparseVector")
-    }
+    LogisticRegressionModel.raw2probabilityInPlace(rawPrediction, isMultinomial)
   }
 
   @Since("3.0.0")
   override def predictRaw(features: Vector): Vector = {
     if (isMultinomial) {
-      margins(features)
+      LogisticRegressionModel.predictRaw(features, coefficientMatrix, _interceptVector)
     } else {
-      val m = margin(features)
-      Vectors.dense(-m, m)
+      LogisticRegressionModel.predictRaw(features, _coefficients, _intercept)
     }
   }
 
@@ -1354,6 +1417,63 @@ class LogisticRegressionModel private[spark] (
 
 @Since("1.6.0")
 object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
+  private def margin(features: Vector, coefficients: Vector, intercept: Double): Double = {
+    BLAS.dot(features, coefficients) + intercept
+  }
+
+  private def margins(
+      features: Vector,
+      coefficientMatrix: Matrix,
+      interceptVector: DenseVector): Vector = {
+    val result = interceptVector.copy
+    BLAS.gemv(1.0, coefficientMatrix, features, 1.0, result)
+    result
+  }
+
+  private def score(features: Vector, coefficients: Vector, intercept: Double): Double = {
+    val m = margin(features, coefficients, intercept)
+    1.0 / (1.0 + math.exp(-m))
+  }
+
+  private def predictRaw(
+      features: Vector,
+      coefficients: Vector,
+      intercept: Double): Vector = {
+    val m = margin(features, coefficients, intercept)
+    Vectors.dense(-m, m)
+  }
+
+  private def predictRaw(
+      features: Vector,
+      coefficientMatrix: Matrix,
+      interceptVector: DenseVector): Vector = {
+    margins(features, coefficientMatrix, interceptVector)
+  }
+
+  private def raw2probability(rawPrediction: Vector, isMultinomial: Boolean): Vector = {
+    val probability = rawPrediction.copy
+    raw2probabilityInPlace(probability, isMultinomial)
+  }
+
+  private def raw2probabilityInPlace(
+      rawPrediction: Vector,
+      isMultinomial: Boolean): Vector = {
+    rawPrediction match {
+      case dv: DenseVector =>
+        val values = dv.values
+        if (isMultinomial) {
+          Utils.softmax(values)
+        } else {
+          values(0) = 1.0 / (1.0 + math.exp(-values(0)))
+          values(1) = 1.0 - values(0)
+        }
+        dv
+      case _: SparseVector =>
+        throw new RuntimeException("Unexpected error in LogisticRegressionModel:" +
+          " raw2probabilitiesInPlace encountered SparseVector")
+    }
+  }
+
   private[ml] case class Data(
     numClasses: Int,
     numFeatures: Int,
