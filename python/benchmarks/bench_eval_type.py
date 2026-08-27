@@ -119,6 +119,9 @@ class MockProtocolWriter:
                     "attemptNumber": 0,
                     "taskAttemptId": 0,
                     "cpus": 1,
+                    # Plain decimal string, matching CpuAmount.toDisplayString on
+                    # the JVM side; TaskContextInfo.from_stream requires the key.
+                    "cpuAmount": "1",
                     "resources": {},
                     "localProperties": {},
                 }
