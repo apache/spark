@@ -541,15 +541,22 @@ object Cast extends QueryErrorsBase {
   }
 
   private def decimalToTimestampMayOverflow(from: DecimalType): Boolean = {
-    val maxUnscaled = java.math.BigInteger.TEN.pow(from.precision)
-      .subtract(java.math.BigInteger.ONE)
-    val scaleDifference = from.scale - 6
-    val maxMicros = if (scaleDifference > 0) {
-      maxUnscaled.divide(java.math.BigInteger.TEN.pow(scaleDifference))
+    val scaleDifference = from.scale.toLong - 6L
+    val maxMicrosDigits = from.precision.toLong - scaleDifference
+    val maxLongDigits = Long.MaxValue.toString.length
+    if (maxMicrosDigits != maxLongDigits) {
+      maxMicrosDigits > maxLongDigits
     } else {
-      maxUnscaled.multiply(java.math.BigInteger.TEN.pow(-scaleDifference))
+      val maxUnscaled = java.math.BigInteger.TEN.pow(from.precision)
+        .subtract(java.math.BigInteger.ONE)
+      val scaleFactor = java.math.BigInteger.TEN.pow(Math.toIntExact(Math.abs(scaleDifference)))
+      val maxMicros = if (scaleDifference > 0) {
+        maxUnscaled.divide(scaleFactor)
+      } else {
+        maxUnscaled.multiply(scaleFactor)
+      }
+      maxMicros.compareTo(java.math.BigInteger.valueOf(Long.MaxValue)) > 0
     }
-    maxMicros.compareTo(java.math.BigInteger.valueOf(Long.MaxValue)) > 0
   }
 
   /**

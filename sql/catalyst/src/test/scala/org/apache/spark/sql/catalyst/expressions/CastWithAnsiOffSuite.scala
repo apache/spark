@@ -1003,6 +1003,7 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
       assert(!Cast.forceNullable(DecimalType(1, -12), TimestampType))
       assert(Cast.forceNullable(DecimalType(2, -11), TimestampType))
+      assert(Cast.forceNullable(DecimalType(1, Int.MinValue + 6), TimestampType))
     }
   }
 }
