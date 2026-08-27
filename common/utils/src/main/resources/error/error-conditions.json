@@ -1980,7 +1980,7 @@
       },
       "INVALID_JSON_RETURNING_TYPE" : {
         "message" : [
-          "<functionName> RETURNING clause must be STRING (CHAR/VARCHAR are normalized to STRING), but got <returningType>."
+          "<functionName> RETURNING clause must be a STRING type, but got <returningType>."
         ]
       },
       "INVALID_JSON_SCALAR_RETURNING_TYPE" : {
