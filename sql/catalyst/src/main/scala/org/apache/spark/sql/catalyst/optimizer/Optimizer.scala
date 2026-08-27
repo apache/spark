@@ -1132,8 +1132,15 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
           //    their own even while the global one is on.
           //  - It still holds an enclosing call's reference, which only that call can
           //    substitute, and only while the reference is in the option body.
+          // A nondeterministic column between a Filter and a Join takes the join's condition down
+          // with it: PushPredicateThroughNonJoin pushes nothing through a Project holding a
+          // nondeterministic field, so PushPredicateThroughJoin never sees `Filter(cond, Join)` and
+          // the join plans as a cartesian product: `where t1.a = t2.a and udf(rand()) < 2` loses
+          // its equi-join. Keep the Python UDF there instead; it computes its input once anyway.
+          val filterOverJoin = p.isInstanceOf[Filter] && child.isInstanceOf[Join]
           def canPlace(arg: Expression): Boolean =
-            arg.references.subsetOf(child.outputSet) &&
+            (arg.deterministic || !filterOverJoin) &&
+              arg.references.subsetOf(child.outputSet) &&
               PlanHelper.specialExpressionsInUnsupportedOperator(
                 Project(Seq(Alias(arg, "_udf_param")()), child)).isEmpty &&
               ((conf.decorrelateInnerQueryEnabled &&

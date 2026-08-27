@@ -496,7 +496,7 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("leaves an argument carrying an outer reference at each use site with decorrelation off") {
+  test("keeps the Python UDF for an argument carrying an outer reference, decorrelation off") {
     // A column holding an OuterReference lands inside the subquery. Decorrelation carries it out;
     // the fallback rewrites Filters only and would strand it, so with that off we turn it down.
     val arg = Add(OuterReference(attrA), Literal(1L))

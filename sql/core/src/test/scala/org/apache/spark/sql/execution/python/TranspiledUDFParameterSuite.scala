@@ -24,7 +24,7 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{AnalysisException, Column, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, Expression, Multiply, TranspiledPythonUDF, TranspiledUDFParameter}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, BaseEvalPython}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, BaseEvalPython, Join}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connector.catalog.InMemoryRowLevelOperationTableCatalog
 import org.apache.spark.sql.functions.{array, col, max, rand, sum, transform}
@@ -166,6 +166,25 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
       assert(!lowered.queryExecution.optimizedPlan.exists(_.isInstanceOf[BaseEvalPython]),
         s"Expected no Python:\n${lowered.queryExecution.optimizedPlan}")
       assert(lowered.collect().length == 9)
+    }
+  }
+
+  test("keeps the Python UDF where a draw's column would strand a join's condition") {
+    transpileOn {
+      // `where a = c and udf(rand()) > 0` over two tables: a nondeterministic column between the
+      // Filter and the Join stops PushPredicateThroughNonJoin pushing anything through it, so
+      // PushPredicateThroughJoin never sees the Filter and the join keeps no condition at all -- a
+      // cartesian product with the right answers. The call keeps the Python UDF instead, and the
+      // equi-join survives.
+      val square = udfWith(Multiply(param(0), param(0)), arity = 1)
+      val left = spark.range(0, 4).select(col("id").as("a"))
+      val right = spark.range(0, 4).select(col("id").as("c"))
+      val df = left.join(right).where(col("a") === col("c") && (square(draw) > 0))
+      val plan = df.queryExecution.optimizedPlan
+      assert(plan.collect { case j: Join => j }.exists(_.condition.isDefined),
+        s"Expected the join to keep its condition:\n$plan")
+      assert(!plan.toString.contains("_udf_param_"), s"Expected no column:\n$plan")
+      assert(plan.exists(_.isInstanceOf[BaseEvalPython]), s"Expected a Python fallback:\n$plan")
     }
   }
 
