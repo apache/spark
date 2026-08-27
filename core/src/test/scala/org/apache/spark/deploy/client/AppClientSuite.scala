@@ -217,6 +217,43 @@ class AppClientSuite
     }
   }
 
+  test("SPARK-59055: report the hold status of the application to the Master") {
+    Utils.tryWithResource(new AppClientInst(masterRpcEnv.address.toSparkURL)) { ci =>
+      ci.client.start()
+
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(getApplications().length === 1, "master should have 1 registered app")
+      }
+
+      // The Master knows nothing about the hold until the driver reports it.
+      val app = getApplications().head
+      assert(!app.holdSupported && !app.held && app.numDrainingExecutors === 0)
+
+      ci.client.reportHoldStatus(supported = true, held = false)
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(getApplications().head.holdSupported)
+      }
+      assert(!getApplications().head.held)
+
+      ci.client.reportHoldStatus(supported = true, held = true)
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(getApplications().head.held)
+      }
+
+      ci.client.reportHoldStatus(supported = true, held = false)
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(!getApplications().head.held)
+      }
+
+      // Issue stop command for Client to disconnect from Master
+      ci.client.stop()
+
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(getApplications().isEmpty, "master should have 0 registered apps")
+      }
+    }
+  }
+
   test("request from AppClient before initialized with master") {
     Utils.tryWithResource(new AppClientInst(masterRpcEnv.address.toSparkURL)) { ci =>
 

@@ -252,6 +252,10 @@ private[spark] class StandaloneSchedulerBackend(
   // executors can be held gracefully.
   private[spark] override def supportsExecutorHold: Boolean = true
 
+  private[spark] override def reportExecutorHoldStatus(supported: Boolean, held: Boolean): Unit = {
+    Option(client).foreach(_.reportHoldStatus(supported, held))
+  }
+
   /**
    * Kill the given list of executors through the Master.
    * @return whether the kill request is acknowledged.
