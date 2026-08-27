@@ -882,11 +882,11 @@ class CatalystTranspiler(AbstractTranspiler):
             # in the condition.
             return when(base_col.isNull(), lit(None)).otherwise(lit(1))
         # Each step is a promoting multiply, so the expansion widens as it grows rather than
-        # all at once: `x ** 2` on an int column lands on bigint, `x ** 2` on a bigint on
-        # decimal(38, 0), and a longer chain keeps climbing until the precision runs out and
-        # the operator is left to raise as it did before. That is why this no longer casts to
-        # long up front -- doing so would throw away the operand's real width and make every
-        # power look like a bigint one, promoting further than the column actually needs.
+        # all at once: `x ** 2` on a tinyint lands on smallint, on an int it lands on bigint,
+        # and on a bigint there is nowhere left to go so it raises exactly as it did before
+        # promotion existed. That is why this no longer casts to long up front -- doing so
+        # would throw away the operand's real width and make every power look like a bigint
+        # one, promoting further than the column needs and losing the narrow-column cases.
         result = base_col
         for _ in range(k - 1):
             result = _promoting("multiply", result, base_col)
@@ -1546,10 +1546,9 @@ class CatalystTranspiler(AbstractTranspiler):
                         "TypeError on floats and strings, and Spark would fail "
                         "analysis); the transpiler falls back to interpreted Python"
                     )
-                # Cast to long for the same reason the bitwise binary operators do:
-                # a promoted operand can arrive as a decimal (`~(x + 1)` on a bigint
-                # column), and `BitwiseNot` rejects a decimal child in analysis --
-                # which breaks the query rather than falling back.
+                # Normalise to a long, as the bitwise binary operators do. Also added for
+                # a promoted decimal child that the LongType ceiling now makes impossible,
+                # so likewise defensive rather than load bearing.
                 return bitwise_not(self._convert_chunk(params, operand).cast("long"))
             case ast.BoolOp(op=op, values=values):
                 # Python `and` / `or` short-circuit and return one of the
@@ -1831,14 +1830,18 @@ class CatalystTranspiler(AbstractTranspiler):
                         # have to go through `Column.bitwiseAND` and friends --
                         # `&` / `|` on a Column build logical And/Or, not bitwise.
                         if both_integral:
-                            # Narrow both sides back to a long first, the way the shifts
-                            # do. An operand can arrive as a promoted decimal now -- `(x +
-                            # 1) & 7` on a bigint column widens the add to decimal(20, 0)
-                            # -- and `bitwiseAND` on mixed decimal/integral fails *analysis*
-                            # with BINARY_OP_DIFF_TYPES rather than dropping the option, so
-                            # it breaks the query instead of falling back. Python's bitwise
-                            # operators are int-only anyway, so a decimal operand here is
-                            # only ever an artifact of promotion below us.
+                            # Normalise both sides to a long first, the way the shifts do.
+                            # This was added when promotion could hand us a decimal -- `(x +
+                            # 1) & 7` on a bigint widened the add to decimal(20, 0), and
+                            # `bitwiseAND` on mixed decimal/integral fails *analysis* with
+                            # BINARY_OP_DIFF_TYPES, breaking the query rather than falling
+                            # back. Promotion stops at LongType now, so that operand can no
+                            # longer arrive and the casts are defensive rather than load
+                            # bearing: a promoted operand is at worst a bigint, which
+                            # `bitwiseAND` coerces against an int happily. Kept because
+                            # Python's bitwise operators are int-only and normalising is
+                            # honest about that, but they could go with a test run -- see
+                            # NUMERICS.md.
                             left_bits = left_col.cast("long")
                             right_bits = right_col.cast("long")
                             if isinstance(op, ast.BitAnd):

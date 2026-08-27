@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.types.{ByteType, DataType, DoubleType, FloatType, IntegerType, LongType, ShortType}
 
 /**
@@ -146,11 +145,6 @@ object PythonNumericPromotion {
   def forNegation(child: DataType): Option[DataType] = promote(Seq(child), ms => ms(0))
 
   /**
-   * Build `op(cast(left, t), cast(right, t))` for the promoted `t`, or leave the operands alone
-   * when nothing needs widening. Lives here so the "cast both sides, then delegate" step exists
-   * once rather than in each operator below.
-   */
-  /**
    * The operator over its operands as given -- what we report before the children resolve and a
    * width can be chosen. The one thing it must do is align the operand types: a replacement never
    * goes through type coercion (`InheritAnalysisRules` is what normally arranges that, and we
@@ -172,8 +166,10 @@ object PythonNumericPromotion {
     // is an int.
     //
     // Widest-of-two is the whole rule here, and it is safe because these operators are only
-    // emitted for integral operands (see `_promoting_if_integral` on the Python side), where it
-    // agrees with Spark's own numeric precedence.
+    // emitted for numeric operands (see `_promoting_if_numeric` on the Python side), and it is
+    // Spark's own numeric precedence, so it agrees with what coercion would have done. Note the
+    // gate really is *numeric* and not *integral*: an unannotated parameter's category is plain
+    // "numeric", so an integral-only gate would refuse the commonest body of all.
     widestOf(l.dataType, r.dataType) match {
       case Some(t) if l.dataType != t || r.dataType != t => op(Cast(l, t), Cast(r, t))
       case _ => op(l, r)
@@ -197,6 +193,11 @@ object PythonNumericPromotion {
     }
   }
 
+  /**
+   * `op(cast(left, t), cast(right, t))` for the promoted `t`, or `plain` when nothing needs
+   * widening. Lives here so the "cast both sides, then delegate" step exists once rather than in
+   * each operator below.
+   */
   def widened(
       left: Expression,
       right: Expression,
@@ -223,12 +224,11 @@ object PythonNumericPromotion {
  *
  * These are [[RuntimeReplaceable]] rather than hand-written arithmetic because the whole point is
  * to run the *existing* operator at a wider type -- writing fresh `eval` and `doGenCode` bodies
- * would be a second implementation of Add to keep in step with the first. The replacement is lazy
- * because it needs the children's types, which are not known until they resolve.
+ * would be a second implementation of Add to keep in step with the first. The replacement is
+ * recomputed rather than cached, because it depends on the children's types -- see the note on
+ * `replacement` below.
  */
-trait PythonPromotingArithmetic extends Expression with RuntimeReplaceable {
-  override val nodePatterns: Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
-
+trait PythonPromotingArithmetic extends RuntimeReplaceable {
   /**
    * Deliberately a `def` and not a `lazy val`. `replacement` is derived from the children's
    * types, and a parent doing type coercion can ask for our `dataType` -- and so force this --
@@ -242,7 +242,17 @@ trait PythonPromotingArithmetic extends Expression with RuntimeReplaceable {
   /** The widened form, safe to build only once the children's types are known. */
   protected def promoted: Expression
 
-  /** What to report before the children resolve: the operator with its operands untouched. */
+  /**
+   * What to report when a width cannot be chosen yet.
+   *
+   * Not, despite the obvious reading, for a child that is unresolved in the
+   * `UnresolvedAttribute` sense: `plain` asks its operands for `dataType`, so such a child would
+   * throw `UnresolvedException` rather than be reported around. The case this actually serves is
+   * a child that is unresolved because its *own* type check failed while still reporting a
+   * dataType -- `ShiftLeft(tinyint, tinyint)`, say. Nothing reaches the throwing path through the
+   * SQL parser today, since `ResolveFunctions` waits for `childrenResolved`, but it is a trap for
+   * a single-pass resolver or a hand-built plan.
+   */
   protected def unpromoted: Expression
 }
 
