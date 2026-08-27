@@ -101,12 +101,14 @@ case class GroupPartitionsExec(
   }
 
   /**
-   * Groups and sorts partitions by their keys in ascending order.
+   * Groups and sorts partitions by their keys in ascending order. The sort must match
+   * `KeyedPartitioning.toGrouped`, which is why both use
+   * `KeyedPartitioning.groupedKeyRowOrdering` -- see its documentation for the contract.
    */
   private def groupAndSortByKeys(
       keyMap: Map[InternalRowComparableWrapper, Seq[Int]],
       dataTypes: Seq[DataType]) = {
-    val keyOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
+    val keyOrdering = KeyedPartitioning.groupedKeyRowOrdering(dataTypes)
     keyMap.toSeq.sorted(keyOrdering.on((t: (InternalRowComparableWrapper, _)) => t._1.row))
   }
 
