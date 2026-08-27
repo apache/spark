@@ -21,13 +21,27 @@ import java.util.UUID
 
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkSQLException
+import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl}
 import org.apache.spark.sql.pipelines.logging.PipelineEvent
 import org.apache.spark.sql.test.SharedSparkSession
 
 class SparkConnectSessionManagerSuite extends SharedSparkSession {
+
+  private def withSparkConf(pairs: (String, String)*)(f: => Unit): Unit = {
+    val conf = SparkEnv.get.conf
+    val previousValues = pairs.map { case (key, _) => key -> conf.getOption(key) }
+    pairs.foreach { case (key, value) => conf.set(key, value) }
+    try f
+    finally {
+      previousValues.foreach {
+        case (key, Some(value)) => conf.set(key, value)
+        case (key, None) => conf.remove(key)
+      }
+    }
+  }
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -175,6 +189,60 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
     assert(
       sessionHolder.getPipelineExecution(graphId).isEmpty,
       "pipeline execution was not removed")
+  }
+
+  test("SPARK-50569: cached data cleanup on session close is configurable and isolated") {
+    Seq(false, true).foreach { cleanupCachedData =>
+      withClue(s"cleanupCachedData=$cleanupCachedData") {
+        withSparkConf(
+          Connect.CONNECT_SESSION_MANAGER_CLEANUP_CACHED_DATA_ENABLED.key ->
+            cleanupCachedData.toString) {
+          val first = SparkConnectService.sessionManager.getOrCreateIsolatedSession(
+            SessionKey("user", UUID.randomUUID().toString), None)
+          val second = SparkConnectService.sessionManager.getOrCreateIsolatedSession(
+            SessionKey("user", UUID.randomUUID().toString), None)
+          val firstDataFrame = first.session.range(1)
+          second.session.range(1, 2).createTempView("second_view")
+          second.session.catalog.cacheTable("second_view")
+          val secondDataFrame = second.session.table("second_view")
+
+          firstDataFrame.persist()
+          SparkConnectService.sessionManager.closeSession(first.key)
+
+          assert(
+            first.session.sharedState.cacheManager.lookupCachedData(firstDataFrame).isDefined ===
+              !cleanupCachedData)
+          assert(
+            second.session.sharedState.cacheManager.lookupCachedData(secondDataFrame).isDefined)
+
+          SparkConnectService.sessionManager.closeSession(second.key)
+          assert(
+            second.session.sharedState.cacheManager.lookupCachedData(secondDataFrame).isDefined ===
+              !cleanupCachedData)
+          spark.catalog.clearCache()
+        }
+      }
+    }
+  }
+
+  test("SPARK-50569: cached data cleanup preserves entries persisted by another session") {
+    withSparkConf(Connect.CONNECT_SESSION_MANAGER_CLEANUP_CACHED_DATA_ENABLED.key -> "true") {
+      val first = SparkConnectService.sessionManager.getOrCreateIsolatedSession(
+        SessionKey("user", UUID.randomUUID().toString), None)
+      val second = SparkConnectService.sessionManager.getOrCreateIsolatedSession(
+        SessionKey("user", UUID.randomUUID().toString), None)
+      val firstDataFrame = first.session.range(1)
+      val secondDataFrame = second.session.range(1)
+
+      firstDataFrame.persist()
+      secondDataFrame.persist()
+      SparkConnectService.sessionManager.closeSession(first.key)
+
+      assert(second.session.sharedState.cacheManager.lookupCachedData(secondDataFrame).isDefined)
+
+      SparkConnectService.sessionManager.closeSession(second.key)
+      assert(second.session.sharedState.cacheManager.lookupCachedData(secondDataFrame).isEmpty)
+    }
   }
 
   test("baseSession allows creating sessions after default session is cleared") {
