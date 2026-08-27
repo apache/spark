@@ -866,7 +866,6 @@ jobs:
       uses: ./.github/actions/setup-build-env
       with:
         java-version: ${{ inputs.java }}
-        cache-maven-local: 'true'
         free-disk-space: container
     - name: License test
       run: ./dev/check-license
@@ -974,7 +973,6 @@ jobs:
       uses: ./.github/actions/setup-build-env
       with:
         java-version: ${{ inputs.java }}
-        cache-maven-local: 'true'
         free-disk-space: container
     - name: List Python packages
       run: |
