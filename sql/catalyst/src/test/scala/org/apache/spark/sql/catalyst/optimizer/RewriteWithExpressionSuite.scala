@@ -17,14 +17,21 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.time.Instant
+
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.analysis.TempResolvedColumn
+import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, EmptyTableFunctionRegistry, FakeV2SessionCatalog, TempResolvedColumn}
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.DefaultCatalogManager
+import org.apache.spark.sql.types.{DateType, StringType, TimestampNTZType, TimestampType, TimeType}
 
 class RewriteWithExpressionSuite extends PlanTest {
 
@@ -36,6 +43,21 @@ class RewriteWithExpressionSuite extends PlanTest {
 
   private val testRelation = LocalRelation($"a".int, $"b".int)
   private val testRelation2 = LocalRelation($"x".int, $"y".int)
+
+  private val catalogManager = new DefaultCatalogManager(
+    FakeV2SessionCatalog,
+    new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, EmptyTableFunctionRegistry))
+
+  /**
+   * Runs the expression-level rewrites that `applyForExpression` requires to have run first, in
+   * the same order as the optimizer's `FinishAnalysis` batch, then inlines the `With`.
+   */
+  private def finishAnalysisAndInline(expr: Expression, instant: Instant): Expression = {
+    val afterCurrentTime = ComputeCurrentTime.applyForExpression(expr, instant)
+    val afterCurrentLike = ReplaceCurrentLike(catalogManager).applyForExpression(afterCurrentTime)
+    RewriteWithExpression.applyForExpression(
+      SpecialDatetimeValues.applyForExpression(afterCurrentLike))
+  }
 
   private def normalizeCommonExpressionIds(plan: LogicalPlan): LogicalPlan = {
     plan.transformAllExpressions {
@@ -60,7 +82,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(Optimizer.execute(plan), testRelation.select((a + a).as("col")))
   }
 
-  test("applyForExpression inlines foldable common expressions") {
+  test("applyForExpression inlines a literal referenced more than once") {
     val expr = With(Literal(1)) { case Seq(ref) =>
       ref + ref
     }
@@ -69,15 +91,98 @@ class RewriteWithExpressionSuite extends PlanTest {
     assert(rewritten == Literal(1) + Literal(1))
   }
 
-  test("applyForExpression rejects non-foldable common expressions") {
-    // Inlining would duplicate `a + a` at every reference, violating the evaluate-once contract,
-    // so a non-foldable definition is rejected rather than inlined.
+  test("applyForExpression inlines a non-literal referenced at most once") {
+    // Inlining does not duplicate the definition here, so it is safe whatever the definition is.
+    val a = testRelation.output.head
+    val referencedOnce = With(a + a) { case Seq(ref) =>
+      ref * Literal(2)
+    }
+    assert(RewriteWithExpression.applyForExpression(referencedOnce) == (a + a) * Literal(2))
+    val neverReferenced = With(a + a) { case Seq(_) =>
+      Literal(3)
+    }
+    assert(RewriteWithExpression.applyForExpression(neverReferenced) == Literal(3))
+  }
+
+  test("applyForExpression rejects a non-literal referenced more than once") {
+    // Inlining would duplicate `a + a` at every reference, violating the evaluate-once contract.
     val a = testRelation.output.head
     val expr = With(a + a) { case Seq(ref) =>
       ref * ref
     }
     intercept[SparkException] {
       RewriteWithExpression.applyForExpression(expr)
+    }
+  }
+
+  test("applyForExpression inlines a tree of literals referenced more than once") {
+    val expr = With(Literal(1) + Literal(1)) { case Seq(ref) =>
+      ref * ref
+    }
+    val rewritten = RewriteWithExpression.applyForExpression(expr)
+    assert(rewritten == (Literal(1) + Literal(1)) * (Literal(1) + Literal(1)))
+  }
+
+  test("applyForExpression rejects an impure foldable definition referenced more than once") {
+    // aes_encrypt becomes a foldable StaticInvoke that draws a fresh random IV on every eval, so
+    // two inlined copies would encrypt to different values.
+    val aes = ReplaceExpressions.replace(
+      new AesEncrypt(Literal("abc".getBytes), Literal("1234567890123456".getBytes)))
+    assert(aes.foldable, "the AES rewrite is only interesting while it stays foldable")
+    val expr = With(aes) { case Seq(ref) =>
+      EqualTo(ref, ref)
+    }
+    intercept[SparkException] {
+      RewriteWithExpression.applyForExpression(expr)
+    }
+  }
+
+  test("applyForExpression rejects current_time referenced more than once") {
+    // CurrentTime is not a leaf and its only leaf is a literal precision, so the structural check
+    // alone would accept it.
+    val expr = With(CurrentTime()) { case Seq(ref) =>
+      EqualTo(ref, ref)
+    }
+    intercept[SparkException] {
+      RewriteWithExpression.applyForExpression(expr)
+    }
+  }
+
+  test("applyForExpression rejects a TIME -> TIMESTAMP cast referenced more than once") {
+    // The cast fills its date fields from the current date, so it is not safe to duplicate even
+    // though its only leaf is a literal.
+    val expr = With(Cast(Literal(0L, TimeType(6)), TimestampNTZType, Some("UTC"))) {
+      case Seq(ref) => EqualTo(ref, ref)
+    }
+    intercept[SparkException] {
+      RewriteWithExpression.applyForExpression(expr)
+    }
+  }
+
+  test("applyForExpression inlines an inner def referencing a foldable outer def") {
+    val outer = With(Literal(1)) { case Seq(outerRef) =>
+      With(outerRef + Literal(1)) { case Seq(innerRef) =>
+        innerRef + innerRef
+      }
+    }
+    val rewritten = RewriteWithExpression.applyForExpression(outer)
+    assert(!rewritten.exists(_.isInstanceOf[With]))
+    assert(!rewritten.exists(_.isInstanceOf[CommonExpressionRef]))
+    val inlinedInner = Literal(1) + Literal(1)
+    assert(rewritten == inlinedInner + inlinedInner)
+  }
+
+  test("applyForExpression rejects an inner def referencing a per-row outer def") {
+    // A ref is only safe to duplicate when its definition is: here the outer definition is an
+    // attribute, so duplicating `a + 1` would evaluate it once per reference.
+    val a = testRelation.output.head
+    val outer = With(a) { case Seq(outerRef) =>
+      With(outerRef + Literal(1)) { case Seq(innerRef) =>
+        innerRef + innerRef
+      }
+    }
+    intercept[SparkException] {
+      RewriteWithExpression.applyForExpression(outer)
     }
   }
 
@@ -91,6 +196,8 @@ class RewriteWithExpressionSuite extends PlanTest {
     val rewritten = RewriteWithExpression.applyForExpression(outer)
     assert(!rewritten.exists(_.isInstanceOf[With]))
     assert(!rewritten.exists(_.isInstanceOf[CommonExpressionRef]))
+    val inlinedInner = Literal(1) * Literal(1) + Literal(2)
+    assert(rewritten == inlinedInner + inlinedInner)
   }
 
   test("applyForExpression leaves expressions without With unchanged") {
@@ -110,6 +217,42 @@ class RewriteWithExpressionSuite extends PlanTest {
     assert(!rewritten.exists(_.isInstanceOf[With]))
     assert(!rewritten.exists(_.isInstanceOf[CommonExpressionRef]))
     assert(rewritten == Literal(1) + Literal(2))
+  }
+
+  test("applyForExpression rejects current_timestamp that ComputeCurrentTime has not folded") {
+    // current_timestamp() is foldable, but each eval re-reads the clock, so inlining it at two
+    // references could produce two different values.
+    val expr = With(CurrentTimestamp()) { case Seq(ref) =>
+      EqualTo(ref, ref)
+    }
+    intercept[SparkException] {
+      RewriteWithExpression.applyForExpression(expr)
+    }
+  }
+
+  test("applyForExpression inlines current_timestamp folded to one shared literal") {
+    val instant = Instant.now()
+    val expr = With(CurrentTimestamp()) { case Seq(ref) =>
+      EqualTo(ref, ref)
+    }
+    val expected = Literal.create(DateTimeUtils.instantToMicros(instant), TimestampType)
+    assert(finishAnalysisAndInline(expr, instant) == EqualTo(expected, expected))
+  }
+
+  test("applyForExpression inlines current_database folded by ReplaceCurrentLike") {
+    val expr = With(CurrentDatabase()) { case Seq(ref) =>
+      EqualTo(ref, ref)
+    }
+    val expected = Literal.create(catalogManager.currentNamespace.quoted, StringType)
+    assert(finishAnalysisAndInline(expr, Instant.now()) == EqualTo(expected, expected))
+  }
+
+  test("applyForExpression inlines a special datetime value folded by SpecialDatetimeValues") {
+    val expr = With(Cast(Literal("epoch"), DateType, Some("UTC"))) { case Seq(ref) =>
+      EqualTo(ref, ref)
+    }
+    val expected = Literal(0, DateType)
+    assert(finishAnalysisAndInline(expr, Instant.now()) == EqualTo(expected, expected))
   }
 
   test("non-cheap common expression") {
