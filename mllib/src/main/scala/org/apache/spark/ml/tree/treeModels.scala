@@ -527,10 +527,11 @@ private[ml] object EnsembleModelReadWrite {
       sparkSession: SparkSession,
       extraMetadata: JObject): Unit = {
     DefaultParamsWriter.saveMetadata(instance, path, sparkSession, Some(extraMetadata))
+    val treeWeights = instance.treeWeights
     val treesMetadataWeights = instance.trees.zipWithIndex.map { case (tree, treeID) =>
       (treeID,
         DefaultParamsWriter.getMetadataToSave(tree.asInstanceOf[Params], sparkSession),
-        instance.treeWeights(treeID))
+        treeWeights(treeID))
     }
     val treesMetadataPath = new Path(path, "treesMetadata").toString
     ReadWriteUtils.saveArray[(Int, String, Double)](
