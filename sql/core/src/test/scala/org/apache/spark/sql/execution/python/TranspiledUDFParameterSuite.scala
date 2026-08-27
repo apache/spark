@@ -20,9 +20,8 @@ package org.apache.spark.sql.execution.python
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkArithmeticException
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.{Column, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Column, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, Expression, Multiply, TranspiledPythonUDF, TranspiledUDFParameter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, BaseEvalPython}
