@@ -234,58 +234,41 @@ def _floor_divide_func(c1: Column, c2: Column) -> Column:
     c2_double = c2.cast("double")
     integral_types = ["tinyint", "smallint", "int", "bigint"]
 
-    # Dispatched on type twice: floating operands need IEEE answers for infinities and signed
-    # zeros, and among the rest, at the end of the branch below, only integral operands can
-    # divide in integer space.
-    return F.when(
-        F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
+    return (
+        # Null, nan and a zero divisor are handled the same way for every operand type.
         F.when(c1.isNull() | F.isnan(c1), c1_double)
         .when(c2.isNull() | F.isnan(c2), c2_double)
-        .when(
-            c1_double.isin(float("-inf"), float("inf")),
-            F.when(
-                c2_double == 0,
-                F.when(
-                    (c1_double < 0) != (c2_double.cast("string") == "-0.0"),
-                    F.lit(float("-inf")),
-                ).otherwise(F.lit(float("inf"))),
-            ).otherwise(F.lit(float("nan"))),
-        )
-        .when(
-            c2_double.isin(float("-inf"), float("inf")),
-            F.when(c1_double == 0, c1_double / c2_double)
-            .when((c1_double < 0) != (c2_double < 0), F.lit(-1.0))
-            .otherwise(F.lit(0.0)),
-        )
+        # pandas upcasts a zero divisor instead of raising. A negative zero divisor negates the
+        # result, and no comparison can see that sign, so the string form is used. A nullable Int64
+        # returns 0 instead, but arrives as bigint like a default int64, whose answer this follows.
         .when(
             c2_double == 0,
             F.when(c1_double == 0, F.lit(float("nan")))
-            .when(
-                (c1_double < 0) != (c2_double.cast("string") == "-0.0"),
-                F.lit(float("-inf")),
-            )
+            .when((c1_double < 0) != (c2_double.cast("string") == "-0.0"), F.lit(float("-inf")))
             .otherwise(F.lit(float("inf"))),
         )
-        .when(c1_double == 0, c1_double / c2_double)
-        .otherwise(_floor_divide_floating(c1_double, c2_double)),
-    ).otherwise(
-        # Non-floating operands. pandas masks a zero divisor and upcasts, so 1 // 0 is inf,
-        # -1 // 0 is -inf and 0 // 0 is nan. A nullable Int64 returns 0 instead, but both dtypes
-        # arrive as bigint and cannot be told apart, so this follows the default one.
-        F.when(c1.isNull() | F.isnan(c1), c1_double)
-        .when(c2.isNull() | F.isnan(c2), c2_double)
-        .when(
-            c2_double == 0,
-            F.when(c1_double == 0, F.lit(float("nan")))
-            .when(c1_double < 0, F.lit(float("-inf")))
-            .otherwise(F.lit(float("inf"))),
-        )
-        # A decimal column also lands here, and it cannot be named in a typeof test since the
-        # name carries its precision, so it falls through to the double casts.
+        # Integral operands divide as integers, so operands above 2**53 keep their low bits.
         .when(
             F.typeof(c1).isin(integral_types) & F.typeof(c2).isin(integral_types),
             _floor_divide_integral(c1, c2),
         )
+        # Only floating operands can be infinite or a negative zero, handled before the division.
+        .when(
+            F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
+            # An infinite dividend has no remainder, so NumPy's quotient is nan for any divisor.
+            F.when(c1_double.isin(float("-inf"), float("inf")), F.lit(float("nan")))
+            # An infinite divisor gives a quotient between -1 and 1, so the floor is 0 or -1.
+            .when(
+                c2_double.isin(float("-inf"), float("inf")),
+                F.when(c1_double == 0, c1_double / c2_double)
+                .when((c1_double < 0) != (c2_double < 0), F.lit(-1.0))
+                .otherwise(F.lit(0.0)),
+            )
+            # Dividing a zero dividend keeps its sign, so -0.0 // 3.0 is -0.0.
+            .when(c1_double == 0, c1_double / c2_double)
+            .otherwise(_floor_divide_floating(c1_double, c2_double)),
+        )
+        # A decimal cannot be matched by name: typeof reports its precision, as in decimal(10,2).
         .otherwise(_floor_divide_floating(c1_double, c2_double))
     )
 
