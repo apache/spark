@@ -214,7 +214,10 @@ private[spark] class ApplicationInfo(
 
   /**
    * The number of executors that have not exited yet while the application is held. They are
-   * still draining their running tasks; the hold is complete once this reaches zero.
+   * still draining their running tasks; the hold is complete once this reaches zero. Counting
+   * `executors` relies on `DECOMMISSIONED` not being a finished `ExecutorState`: the Master
+   * keeps a decommissioning executor in the map until it actually exits, which is what makes
+   * this count agree with the driver's own `draining` from its `/holdstatus` endpoint.
    */
   private[deploy] def numDrainingExecutors: Int = if (isHeld) executors.size else 0
 
