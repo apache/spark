@@ -636,13 +636,39 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertEqual(retired.pid, 456)
         self.assertEqual(retired.process_start_id, "process-1")
         self.assertEqual(retired.retired, 2.0)
+        self.assertFalse(retired.signalled)
         self.assertEqual(
             retired.as_data(),
-            {"pid": 456, "process_start_id": "process-1", "retired": 2.0},
+            {
+                "pid": 456,
+                "process_start_id": "process-1",
+                "retired": 2.0,
+                "signalled": False,
+            },
         )
+        delivered = RetiredState.from_data(
+            {
+                "pid": 456,
+                "process_start_id": "process-1",
+                "retired": 2,
+                "signalled": True,
+            }
+        )
+        assert delivered is not None
+        self.assertTrue(delivered.signalled)
         self.assertIsNone(
             RetiredState.from_data(
                 {"pid": 456, "process_start_id": "process-1", "retired": "not-a-time"}
+            )
+        )
+        self.assertIsNone(
+            RetiredState.from_data(
+                {
+                    "pid": 456,
+                    "process_start_id": "process-1",
+                    "retired": 2,
+                    "signalled": 1,
+                }
             )
         )
         self.assertIsNone(RetiredState.from_data({"pid": 456, "retired": 2}))
@@ -837,6 +863,143 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         for uid in records:
             self.assertEqual(set(self._states(uid)), {"server"})
 
+    def test_reap_server_unreachable_and_idle(self) -> None:
+        with self.subTest("unreachable member is retired"):
+            gone = self._live_process()
+            with _non_listening_socket() as port:
+                self._write_state(
+                    self._directory.server_path("dead"), self._server_data(port, gone.pid)
+                )
+                with self._directory:
+                    self._pool.reap("dead")
+            self.assertEqual(set(self._states("dead")), {"retired"})
+            self.assertTrue(_wait_proc_dead(gone))
+        with self.subTest("member idle past the timeout is retired"):
+            os.environ["SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT"] = "10"
+            with _listening_socket() as port:
+                idle = self._live_process()
+                self._write_state(
+                    self._directory.server_path("1d1e"),
+                    self._server_data(port, idle.pid, created=time.time() - 60),
+                )
+                fresh = self._live_process()
+                self._write_state(
+                    self._directory.server_path("f2e5"), self._server_data(port, fresh.pid)
+                )
+                with self._directory:
+                    self._pool.janitor()
+                self.assertEqual(set(self._states("1d1e")), {"retired"})
+                self.assertEqual(set(self._states("f2e5")), {"server"})
+                self.assertTrue(_wait_proc_dead(idle))
+                self.assertIsNone(fresh.poll())
+
+    def test_reap_does_not_signal_reused_server_pid(self) -> None:
+        unrelated = subprocess.Popen(
+            [sys.executable, "-c", "import sys; sys.stdin.buffer.read()"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        self._procs.append(unrelated)
+        with _non_listening_socket() as port:
+            self._write_state(
+                self._directory.server_path("bad6"), self._server_data(port, unrelated.pid)
+            )
+            with self._directory:
+                self._pool.reap("bad6")
+
+        self.assertEqual(set(self._states("bad6")), {"retired"})
+        self.assertIsNone(unrelated.poll())
+
+    def test_reap_malformed_member_recovers_server_pid(self) -> None:
+        # An out-of-range created value makes the full member invalid, but its independently
+        # valid pid must still be retired and tracked rather than leaving a live JVM orphaned.
+        invalid_created = self._live_process()
+        with _non_listening_socket() as port:
+            self._write_state(
+                self._directory.server_path("bad0"),
+                self._server_data(port, invalid_created.pid, created=2**100),
+            )
+            with self._directory:
+                self._pool.reap("bad0")
+        states = self._states("bad0")
+        self.assertEqual(set(states), {"retired"})
+        with self._directory as directory:
+            self.assertEqual(directory.read_json(states["retired"])["pid"], invalid_created.pid)
+        self.assertTrue(_wait_proc_dead(invalid_created))
+
+        # Claimed records use the same recovery when their client has disappeared.
+        claimed = self._live_process()
+        with _non_listening_socket() as port:
+            self._write_state(
+                self._directory.claimed_path(2**31 - 1, "bad2"),
+                self._server_data(port, claimed.pid, created=2**100),
+            )
+            with self._directory:
+                self._pool.reap("bad2")
+        states = self._states("bad2")
+        self.assertEqual(set(states), {"retired"})
+        with self._directory as directory:
+            self.assertEqual(directory.read_json(states["retired"])["pid"], claimed.pid)
+        self.assertTrue(_wait_proc_dead(claimed))
+
+        # If the record itself has no usable pid, fall back to spark-daemon.sh's pid file. The
+        # fallback keeps the shutdown tracked but lacks the process identity needed to signal it.
+        unreadable_pid = self._live_process()
+        self._write_daemon_pid("bad1", unreadable_pid.pid)
+        self._write_state(self._directory.server_path("bad1"), {"malformed": True})
+        with self._directory:
+            self._pool.reap("bad1")
+        states = self._states("bad1")
+        self.assertEqual(set(states), {"member", "retired"})
+        with self._directory as directory:
+            retired = directory.read_json(states["retired"])
+            assert retired is not None
+            self.assertEqual(retired["pid"], unreadable_pid.pid)
+            self.assertNotIn("process_start_id", retired)
+        self.assertIsNone(unreadable_pid.poll())
+
+    def test_reap_claimed_of_dead_client(self) -> None:
+        orphan = self._live_process()
+        dead_client = 2**31 - 1
+        ours = self._live_process()
+        with _non_listening_socket() as port:
+            self._write_state(
+                self._directory.claimed_path(dead_client, "0a0a"),
+                self._server_data(port, orphan.pid),
+            )
+            self._write_state(
+                self._directory.claimed_path(os.getpid(), "0b0b"),
+                self._server_data(port, ours.pid),
+            )
+            self._write_state(
+                self._directory.claimed_path(os.getpid(), "0c0c"),
+                self._server_data(port, 2**31 - 1),
+            )
+            with self._directory:
+                self._pool.janitor()
+        # The orphaned claim and our dead server are retired; our live claim is untouched.
+        self.assertEqual(set(self._states("0a0a")), {"retired"})
+        self.assertTrue(_wait_proc_dead(orphan), "the orphaned server was not stopped")
+        self.assertEqual(set(self._states("0b0b")), {"claimed"})
+        self.assertIsNone(ours.poll())
+        self.assertEqual(set(self._states("0c0c")), {"retired"})
+
+    def test_reap_claimed_detects_a_reused_server_pid(self) -> None:
+        unrelated = self._stubborn_process()
+        data = self._server_data(
+            12345,
+            unrelated.pid,
+            process_start_id="a-different-process-generation",
+        )
+        self._write_state(self._directory.claimed_path(os.getpid(), "bad6"), data)
+
+        with self._directory:
+            self.assertFalse(self._pool.reap("bad6"))
+
+        self.assertEqual(set(self._states("bad6")), {"retired"})
+        self.assertIsNone(unrelated.poll())
+
     def test_reap_retired_escalates_to_sigkill(self) -> None:
         with self.subTest("a fresh retirement is left to shut down gracefully"):
             fresh = self._stubborn_process()
@@ -875,9 +1038,11 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
 
     def test_reap_repairs_malformed_retired_state(self) -> None:
         server = self._stubborn_process()
+        malformed = self._retired_data(server.pid, "not-a-time")
+        malformed["signalled"] = True
         path = self._write_state(
             self._directory.retired_path("bad4"),
-            self._retired_data(server.pid, "not-a-time"),
+            malformed,
         )
 
         with self._directory as directory:
@@ -887,6 +1052,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         assert repaired is not None
         self.assertEqual(repaired["pid"], server.pid)
         self.assertIsInstance(repaired["retired"], float)
+        self.assertTrue(repaired["signalled"])
         self.assertIsNone(server.poll())
 
     def test_reap_keeps_retired_state_when_process_inspection_fails(self) -> None:
@@ -925,6 +1091,23 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertEqual(retained, original)
         self.assertIsNone(server.poll())
 
+    def test_reap_eventually_removes_state_without_a_process_handle(self) -> None:
+        uid = "fade"
+        self._write_state(self._directory.server_path(uid), {"malformed": True})
+
+        with self._directory as directory:
+            self.assertFalse(self._pool.reap(uid))
+            states = self._directory.states(uid)
+            self.assertEqual(set(states), {"retired"})
+            retired = directory.read_json(states["retired"])
+            assert retired is not None
+            self.assertNotIn("pid", retired)
+            retired["retired"] = time.time() - ServerPool._RETIRE_GIVE_UP_AFTER_SECONDS - 1
+            directory.write_json(states["retired"], retired)
+            self.assertTrue(self._pool.reap(uid))
+
+        self.assertFalse(self._states(uid))
+
     def test_reap_keeps_a_daemon_pid_without_a_process_identity(self) -> None:
         server = self._stubborn_process()
         uid = "daed"
@@ -941,6 +1124,13 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
 
         self.assertEqual(retained, original)
         self.assertIsNone(server.poll())
+
+        server.kill()
+        self.assertTrue(_wait_proc_dead(server))
+        with self._directory:
+            self.assertTrue(self._pool.reap(uid))
+        self.assertFalse(os.path.exists(path))
+        self.assertFalse(os.path.exists(self._directory.member_dir(uid)))
 
     def test_reap_prefers_the_record_pid_and_its_process_identity(self) -> None:
         recorded_server = self._stubborn_process()
@@ -1006,8 +1196,8 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertIsInstance(repaired["retired"], float)
         self.assertIsNone(server.poll())
 
-    def test_reap_retries_a_sigterm_missed_during_retirement(self) -> None:
-        server = self._live_process()
+    def test_reap_retries_sigterm_only_until_delivered(self) -> None:
+        server = self._stubborn_process()
         process_start_id = ServerPool._process_start_id(server.pid)
         assert process_start_id is not None
         state_path = self._write_state(
@@ -1015,16 +1205,32 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             self._server_data(12345, server.pid),
         )
 
-        with mock.patch.object(local_server_pool, "_is_local_connect_server", return_value=None):
-            with self._directory:
+        with self._directory as directory:
+            with mock.patch.object(
+                ServerPool,
+                "_signal_server",
+                side_effect=[False, False, True],
+            ) as signal_server:
                 self._pool._retire(state_path, server.pid, process_start_id)
+                retired_path = self._directory.retired_path("fade")
+                initial = directory.read_json(retired_path)
+                assert initial is not None
+                self.assertFalse(initial["signalled"])
+
+                self.assertFalse(self._pool.reap("fade"))
+                failed_retry = directory.read_json(retired_path)
+                self.assertEqual(failed_retry, initial)
+
+                self.assertFalse(self._pool.reap("fade"))
+                delivered = directory.read_json(retired_path)
+                assert delivered is not None
+                self.assertTrue(delivered["signalled"])
+                self.assertEqual(delivered["retired"], initial["retired"])
+
+                self.assertFalse(self._pool.reap("fade"))
+                self.assertEqual(signal_server.call_count, 3)
 
         self.assertIsNone(server.poll())
-        with self._directory:
-            self.assertFalse(self._pool.reap("fade"))
-        self.assertTrue(_wait_proc_dead(server), "the reaper did not retry graceful shutdown")
-        with self._directory:
-            self.assertTrue(self._pool.reap("fade"))
 
     def test_release_retires_the_claimed_member(self) -> None:
         server = self._live_process()
@@ -1046,7 +1252,10 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         states = self._states("a1a1")
         self.assertEqual(set(states), {"retired"})
         with self._directory as directory:
-            self.assertEqual(directory.read_json(states["retired"])["pid"], server.pid)
+            retired = directory.read_json(states["retired"])
+            assert retired is not None
+            self.assertEqual(retired["pid"], server.pid)
+            self.assertTrue(retired["signalled"])
         self.assertTrue(_wait_proc_dead(server), "release did not stop the server")
         # Releasing again is a no-op.
         local_server_pool.release_pooled_local_connect_server()
