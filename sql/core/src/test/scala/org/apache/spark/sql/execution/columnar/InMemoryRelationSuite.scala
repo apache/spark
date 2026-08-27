@@ -25,6 +25,7 @@ import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSessionBase
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 class InMemoryRelationSuite extends SparkFunSuite
   with SharedSparkSessionBase with AdaptiveSparkPlanHelper {
@@ -52,9 +53,9 @@ class InMemoryRelationSuite extends SparkFunSuite
     assert(r1.sameResult(r2))
   }
 
-  test("sequential cached name for anonymous cached tables") {
+  test("SPARK-59024: sequential cached name for anonymous cached tables") {
     val d = spark.range(1)
-    withSQLConf(SQLConf.USE_SEQUENTIAL_CACHE_NAME.key -> "true") {
+    withSQLConf(SQLConf.DATAFRAME_CACHE_SEQUENTIAL_NAME_ENABLED.key -> "true") {
       val r1 = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, None)
       val r2 = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, None)
       assert(r1.cacheBuilder.cachedName.matches("CachedRDD \\d+"))
@@ -65,9 +66,10 @@ class InMemoryRelationSuite extends SparkFunSuite
       assert(r3.cacheBuilder.cachedName == "In-memory table t1")
     }
     // When disabled, the cached name keeps the abbreviated plan tree string.
-    withSQLConf(SQLConf.USE_SEQUENTIAL_CACHE_NAME.key -> "false") {
+    withSQLConf(SQLConf.DATAFRAME_CACHE_SEQUENTIAL_NAME_ENABLED.key -> "false") {
       val r4 = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, None)
-      assert(!r4.cacheBuilder.cachedName.startsWith("CachedRDD "))
+      assert(r4.cacheBuilder.cachedName ==
+        Utils.abbreviate(r4.cacheBuilder.cachedPlan.toString, 1024))
     }
   }
 

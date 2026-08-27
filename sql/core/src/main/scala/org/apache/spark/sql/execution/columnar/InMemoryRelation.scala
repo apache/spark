@@ -258,8 +258,8 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
 }
 
 private[sql] object CachedRDDBuilder {
-  private val _nextCachedRDDId = new AtomicLong(0)
-  def nextCachedRDDId(): Long = _nextCachedRDDId.getAndIncrement
+  private val nextCachedRDDId = new AtomicLong(0)
+  def newCachedRDDId(): Long = nextCachedRDDId.getAndIncrement()
 }
 
 private[sql]
@@ -296,9 +296,11 @@ case class CachedRDDBuilder(
   // late updates from making a rebuilt cache appear complete.
   private var partitionStats = newPartitionStats()
 
-  val cachedName: String = tableName.map(n => s"In-memory table $n").getOrElse {
-    if (cachedPlan.session.conf.get(SQLConf.USE_SEQUENTIAL_CACHE_NAME)) {
-      s"CachedRDD ${CachedRDDBuilder.nextCachedRDDId()}"
+  // The sequential id is consumed when this lazy val is first forced; a copy of the builder
+  // would draw a new id.
+  lazy val cachedName: String = tableName.map(n => s"In-memory table $n").getOrElse {
+    if (cachedPlan.conf.getConf(SQLConf.DATAFRAME_CACHE_SEQUENTIAL_NAME_ENABLED)) {
+      s"CachedRDD ${CachedRDDBuilder.newCachedRDDId()}"
     } else {
       Utils.abbreviate(cachedPlan.toString, 1024)
     }
