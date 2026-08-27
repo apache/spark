@@ -310,18 +310,6 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     writeOptions.foreach(assertTargetOptions)
   }
 
-  private def assertOnlySnapshotRelationOptions(
-      catalog: InMemoryRelationCatalog,
-      expectedSnapshot: String,
-      expectedCalls: Int): Unit = {
-    val loadOptions = catalog.loadRelationCalls
-    assert(loadOptions.size === expectedCalls,
-      s"expected $expectedCalls relation loads, got: $loadOptions")
-    assert(loadOptions.forall { options =>
-      options.size() == 1 && options.get("snapshot") == expectedSnapshot
-    }, s"expected only snapshot=$expectedSnapshot to be forwarded, got: $loadOptions")
-  }
-
   test("SPARK-36680: Supports Dynamic Table Options for SQL Select") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {

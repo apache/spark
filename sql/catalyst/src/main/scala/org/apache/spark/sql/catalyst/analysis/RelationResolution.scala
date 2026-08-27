@@ -277,11 +277,12 @@ class RelationResolution(
               None
             }
 
-            // For a `RelationCatalog` with no table-state options, time travel, or write
-            // privileges, the single-RPC `loadRelation` answers both "is there a table?" and "is
-            // there a view?" in one call. Table-state options, time travel, and write privileges
-            // apply to tables only, so for those the lookup falls through to the table-only
-            // `loadTable` path below. A state-aware table miss can still fall back to `loadView`;
+            // When this lookup through a `RelationCatalog` has no table-state options, time travel,
+            // or write privileges, the single-RPC `loadRelation` answers both "is there a table?"
+            // and "is there a view?" in one call. Table-state options, time travel, and write
+            // privileges apply to tables only, so for those the lookup falls through to the
+            // table-only `loadTable` path below. A state-aware table miss can still fall back to
+            // `loadView`;
             // time-travel and write-privilege loads cannot.
             //
             // Skip the table-side lookup entirely for view-only catalogs (no `TableCatalog`
@@ -341,7 +342,7 @@ class RelationResolution(
               t <- table
               if pinnedTable.isEmpty && finalTimeTravelSpec.isEmpty &&
                 writePrivileges == null && !u.isStreaming
-              cached <- lookupSharedRelationCache(catalog, ident, t, finalOptions)
+              cached <- lookupSharedRelationCache(catalog, ident, t, tableKey.stateOptions)
             } yield {
               val updatedRelation = cached.copy(options = finalOptions)
               updatedRelation.copyTagsFrom(cached)
@@ -535,7 +536,7 @@ class RelationResolution(
           case None =>
             val table = CatalogV2Util.getTable(catalog, ref.identifier, options = ref.options)
             val sharedCacheMatch = if (ref.context.sharedCacheable) {
-              lookupSharedRelationCache(catalog, ref.identifier, table, ref.options)
+              lookupSharedRelationCache(catalog, ref.identifier, table, tableKey.stateOptions)
             } else {
               None
             }
