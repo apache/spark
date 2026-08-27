@@ -348,7 +348,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       </td>
       <td>{UIUtils.formatDate(app.submitDate)}</td>
       <td>{app.desc.user}</td>
-      <td>{app.state.toString}</td>
+      <td>{app.stateText}</td>
       <td sorttable_customkey={app.duration.toString}>
         {UIUtils.formatDuration(app.duration)}
       </td>
