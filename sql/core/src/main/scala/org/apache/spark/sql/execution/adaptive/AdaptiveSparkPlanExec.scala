@@ -571,13 +571,14 @@ case class AdaptiveSparkPlanExec(
       firstRun: Boolean): CreateStageResult = {
     plan match {
       // 1. ResultQueryStageExec is already created, no need to create non-result stages
-      case resultStage @ ResultQueryStageExec(_, optimizedPlan, _) =>
+      case resultStage @ ResultQueryStageExec(_, optimizedPlan, canonicalizedPlan, _) =>
         assertStageNotFailed(resultStage)
         if (firstRun) {
           // There is already an existing ResultQueryStage created in previous `withFinalPlanUpdate`
           // e.g, when we do `df.collect` multiple times. Here we create a new result stage to
           // execute it again, as the handler function can be different.
-          val newResultStage = ResultQueryStageExec(currentStageId, optimizedPlan, resultHandler)
+          val newResultStage = ResultQueryStageExec(currentStageId, optimizedPlan,
+            canonicalizedPlan, resultHandler)
           currentStageId += 1
           setLogicalLinkForNewQueryStage(newResultStage, optimizedPlan)
           CreateStageResult(newPlan = newResultStage,
@@ -693,7 +694,8 @@ case class AdaptiveSparkPlanExec(
       optimizeQueryStage(plan, isFinalStage = true),
       postStageCreationRules(supportsColumnar),
       "AQE Post Stage Creation")
-    val resultStage = ResultQueryStageExec(currentStageId, optimizedRootPlan, resultHandler)
+    val resultStage = ResultQueryStageExec(currentStageId, optimizedRootPlan, plan.canonicalized,
+      resultHandler)
     currentStageId += 1
     setLogicalLinkForNewQueryStage(resultStage, plan)
     resultStage
