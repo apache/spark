@@ -1192,7 +1192,9 @@ object StateStoreProvider extends Logging {
         // In non-streaming batch reads of state stores (e.g., spark.read.format("statestore")),
         // the coordinator may not exist. Return None to make snapshot upload reporting
         // best-effort rather than failing the read.
-        case e: SparkException =>
+        case e: SparkException if e.getCause != null &&
+            e.getCause.getMessage != null &&
+            e.getCause.getMessage.contains("Cannot find endpoint") =>
           logWarning(log"StateStoreCoordinator endpoint not available: " +
             log"${MDC(LogKeys.ERROR, e.getMessage)}")
           stateStoreCoordinatorRef = null
