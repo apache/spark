@@ -1381,7 +1381,8 @@ class Analyzer(
 
   /** Lower an INSERT as soon as its target identifier expression has been evaluated. */
   object ResolveUnresolvedInsert extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsPattern(UNRESOLVED_INSERT), ruleId) {
       case insert @ UnresolvedInsert(target: UnresolvedInsertTarget, _, _, _, _, _, _, _, _) =>
         insert.toInsertIntoStatement(toUnresolvedRelation(target))
     }

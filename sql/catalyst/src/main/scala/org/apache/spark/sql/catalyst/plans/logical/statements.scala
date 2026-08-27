@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.connector.catalog.ColumnDefaultValue
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.DataType
@@ -174,6 +175,8 @@ case class UnresolvedInsert(
     replaceCriteriaOpt: Option[InsertReplaceCriteria] = None,
     withSchemaEvolution: Boolean = false)
   extends ParsedStatement with TransactionalWrite {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_INSERT)
 
   override def children: Seq[LogicalPlan] = Seq(table, query)
 

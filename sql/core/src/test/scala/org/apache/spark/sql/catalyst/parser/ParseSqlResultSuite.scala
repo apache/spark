@@ -117,6 +117,16 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(sourceTableRefs("DROP TABLE t").isEmpty)
   }
 
+  test("dynamic INSERT targets retain query metadata") {
+    val sql = "INSERT INTO IDENTIFIER(lower('T')) SELECT a AS result FROM src"
+    val insert = obj(sql)
+    assert(insert \ "statement_identifier" === JString("INSERT"))
+    assert(insert \ "statement_code" === JInt(50))
+    assert(sourceTableRefs(sql) === Set(Seq("src")))
+    assert(insert \ "select_list" === JArray(List(
+      JObject("name" -> JArray(List(JString("result")))))))
+  }
+
   test("CTE aliases only shadow references within their own scope") {
     // The inner CTE named real_t must not hide the outer real table real_t.
     assert(sourceTableRefs(

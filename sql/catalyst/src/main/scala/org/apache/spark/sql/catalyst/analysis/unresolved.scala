@@ -63,9 +63,9 @@ trait UnresolvedUnaryNode extends UnaryNode with UnresolvedNode
  * Extends `NamedRelation` so it can occupy a `NamedRelation`-typed slot (e.g.
  * `OverwriteByExpression.table`) directly at parse time, instead of wrapping the whole command.
  *
- * The parser always places this node inside the command's identifier slot. For INSERT, the slot is
- * a child of `UnresolvedInsert` until the identifier expression has been evaluated. It is never the
- * substitution root of a `WITH ... <command>` subtree, so `CTEInChildren` semantics are not needed.
+ * Depending on the command shape, the parser uses this node either as the plan root or within the
+ * command's identifier slot. For INSERT, the slot is a child of `UnresolvedInsert` until the
+ * identifier expression has been evaluated.
  */
 case class PlanWithUnresolvedIdentifier(
     identifierExpr: Expression,
