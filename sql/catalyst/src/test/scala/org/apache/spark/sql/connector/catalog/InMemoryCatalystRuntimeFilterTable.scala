@@ -21,7 +21,9 @@ import java.util
 
 import InMemoryCatalystRuntimeFilterTable._
 
-import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
+import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference, SortOrder, Transform}
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -41,8 +43,17 @@ class InMemoryCatalystRuntimeFilterTable(
     name: String,
     columns: Array[Column],
     partitioning: Array[Transform],
-    properties: util.Map[String, String])
-  extends InMemoryTableWithV2Filter(name, columns, partitioning, properties) {
+    properties: util.Map[String, String],
+    constraints: Array[Constraint] = Array.empty,
+    distribution: Distribution = Distributions.unspecified(),
+    ordering: Array[SortOrder] = Array.empty,
+    numPartitions: Option[Int] = None,
+    advisoryPartitionSize: Option[Long] = None,
+    isDistributionStrictlyRequired: Boolean = true,
+    numRowsPerSplit: Int = Int.MaxValue)
+  extends InMemoryTableWithV2Filter(name, columns, partitioning, properties, constraints,
+    distribution, ordering, numPartitions, advisoryPartitionSize, isDistributionStrictlyRequired,
+    numRowsPerSplit) {
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new InMemoryCatalystRuntimeFilterScanBuilder(schema, options)
@@ -74,25 +85,35 @@ class InMemoryCatalystRuntimeFilterTable(
       Option(InMemoryCatalystRuntimeFilterTable.this.properties.get(FilterAttributesKey))
         .map(_.split(",").map(_.trim).toSet)
 
-    override def filterAttributes(): Array[NamedReference] = {
+    private val fullyPushedFilterAttrs: Set[String] = Option(
+      InMemoryCatalystRuntimeFilterTable.this.properties.get(FullyPushedFilterAttributesKey))
+      .map(_.split(",").map(_.trim).toSet)
+      .getOrElse(Set.empty)
+
+    /**
+     * The partition columns, each named by the top level read schema column it lives under, the
+     * form both interface methods require. Columns pruned out of the read schema are dropped,
+     * since neither method may name one. Examples:
+     *   - `PARTITIONED BY (part)` -> `"part"`
+     *   - `PARTITIONED BY (s.nested)` -> `"s"`, the struct column holding the partition field
+     */
+    private def partitionAttrNames: Array[String] = {
       val scanFields = readSchema.fields.map(_.name).toSet
-      partitioning.flatMap(_.references()).filter { ref =>
-        val name = ref.fieldNames.mkString(".")
-        scanFields.contains(name) &&
-          restrictedFilterAttrs.forall(_.contains(name))
-      }
+      partitioning.flatMap(_.references()).map(_.fieldNames.head).distinct
+        .filter(scanFields.contains)
     }
 
+    override def filterAttributes(): Array[NamedReference] = {
+      partitionAttrNames
+        .filter(name => restrictedFilterAttrs.forall(_.contains(name)))
+        .map(FieldReference.column)
+    }
+
+    // Not intersected with `filterAttributes()`, so a table can declare a fully pushed attribute
+    // that is not a filter attribute, a combination the interface forbids.
     override def fullyPushedFilterAttributes(): Array[NamedReference] = {
-      val fullyPushedFilterAttrs = Option(
-        InMemoryCatalystRuntimeFilterTable.this.properties.get(FullyPushedFilterAttributesKey))
-        .map(_.split(",").map(_.trim).toSet)
-        .getOrElse(Set.empty)
-      filterAttributes().filter { ref =>
-        fullyPushedFilterAttrs.contains(ref.fieldNames.mkString("."))
-      }
+      partitionAttrNames.filter(fullyPushedFilterAttrs.contains).map(FieldReference.column)
     }
-
   }
 }
 
