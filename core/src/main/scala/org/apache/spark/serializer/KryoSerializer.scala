@@ -555,7 +555,8 @@ private[serializer] object KryoSerializer {
     classOf[SparkConf],
     classOf[TaskCommitMessage],
     classOf[SerializedLambda],
-    classOf[BitSet]
+    classOf[BitSet],
+    classOf[java.util.HashMap[_, _]]
   )
 
   private val toRegisterSerializer = Map[Class[_], KryoClassSerializer[_]](

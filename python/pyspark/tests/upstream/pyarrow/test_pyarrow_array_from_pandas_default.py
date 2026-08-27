@@ -71,15 +71,15 @@ import decimal
 import unittest
 
 from pyspark.loose_version import LooseVersion
-from pyspark.testing.utils import (
-    have_pyarrow,
-    have_pandas,
-    have_numpy,
-    pyarrow_requirement_message,
-    pandas_requirement_message,
-    numpy_requirement_message,
-)
 from pyspark.testing.goldenutils import GoldenFileTestMixin
+from pyspark.testing.utils import (
+    have_numpy,
+    have_pandas,
+    have_pyarrow,
+    numpy_requirement_message,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 
 if have_pandas:
     import pandas as pd
@@ -120,9 +120,10 @@ class _PyArrowFromPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
         as a golden-file cell, returning ``ERR@<ExceptionClass>`` if the conversion raises.
         """
         try:
-            return self.repr_from_pandas_result(pa.Array.from_pandas(series, **from_pandas_kwargs))
+            result = pa.Array.from_pandas(series, **from_pandas_kwargs)
         except Exception as e:
             return f"ERR@{type(e).__name__}"
+        return self.repr_from_pandas_result(result)
 
     def _numpy_backed_sources(self):
         """

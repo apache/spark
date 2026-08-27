@@ -44,9 +44,9 @@ $ ./bin/spark-submit --driver-class-path /path/to/example/jar \
 {u'favorite_color': u'red', u'name': u'Ben'}
 """
 import sys
+from functools import reduce
 from typing import Any, Tuple
 
-from functools import reduce
 from pyspark import RDD
 from pyspark.sql import SparkSession
 

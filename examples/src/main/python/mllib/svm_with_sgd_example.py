@@ -16,9 +16,11 @@
 #
 
 from pyspark import SparkContext
+
 # $example on$
-from pyspark.mllib.classification import SVMWithSGD, SVMModel
+from pyspark.mllib.classification import SVMModel, SVMWithSGD
 from pyspark.mllib.regression import LabeledPoint
+
 # $example off$
 
 if __name__ == "__main__":

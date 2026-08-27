@@ -62,8 +62,7 @@ import sys
 
 # Shared with dev/merge_spark_pr.py so the two committer tools cannot disagree about where a
 # PR landed. Importable because Python puts this script's own directory first on sys.path.
-from spark_merge_footer import branches_with_merge_footer
-from spark_merge_footer import merge_footer_trailer
+from spark_merge_footer import branches_with_merge_footer, merge_footer_trailer
 
 REPO = "apache/spark"
 

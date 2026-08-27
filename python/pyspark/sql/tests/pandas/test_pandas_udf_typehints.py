@@ -16,9 +16,12 @@
 #
 import unittest
 from inspect import signature
-from typing import Union, Iterator, Tuple, get_type_hints
+from typing import Iterator, Tuple, Union, get_type_hints
 
-from pyspark.sql.functions import mean, lit
+from pyspark.sql import Row
+from pyspark.sql.functions import lit, mean
+from pyspark.sql.pandas.functions import PandasUDFType, pandas_udf
+from pyspark.sql.pandas.typehints import infer_eval_type, infer_group_pandas_eval_type
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     have_pandas,
@@ -26,14 +29,11 @@ from pyspark.testing.utils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.sql.pandas.typehints import infer_eval_type, infer_group_pandas_eval_type
-from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType
-from pyspark.sql import Row
 from pyspark.util import PythonEvalType
 
 if have_pandas:
-    import pandas as pd
     import numpy as np
+    import pandas as pd
     from pandas.testing import assert_frame_equal
 
 

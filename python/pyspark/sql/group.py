@@ -18,16 +18,16 @@
 # mypy: disable-error-code="empty-body"
 
 import sys
-
-from typing import Callable, List, Optional, TYPE_CHECKING, overload, Dict, Union, cast, Tuple
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Tuple, Union, cast, overload
 
 from pyspark.sql.column import Column
-from pyspark.sql.session import SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.group_ops import PandasGroupedOpsMixin
+from pyspark.sql.session import SparkSession
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+
     from pyspark.sql._typing import LiteralType
 
 __all__ = ["GroupedData"]
@@ -534,8 +534,9 @@ class GroupedData(PandasGroupedOpsMixin):
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.sql.group
+    from pyspark.sql import SparkSession
     from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.group.__dict__.copy()

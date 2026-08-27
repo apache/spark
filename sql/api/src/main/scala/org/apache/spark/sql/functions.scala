@@ -17856,6 +17856,32 @@ object functions {
    */
   def unwrap_udt(column: Column): Column = Column.internalFn("unwrap_udt", column)
 
+  /**
+   * Wrap a column as a user-defined type.
+   * @param column
+   *   the column to wrap. The column data type must match the UDT's underlying SQL type.
+   * @param udt
+   *   the target user-defined type.
+   * @group udf_funcs
+   * @since 4.4.0
+   */
+  def wrap_udt(column: Column, udt: UserDefinedType[_]): Column = {
+    wrap_udt(column, lit(udt.json))
+  }
+
+  /**
+   * Wrap a column as a user-defined type.
+   * @param column
+   *   the column to wrap. The column data type must match the UDT's underlying SQL type.
+   * @param udt
+   *   the target user-defined type as a constant JSON string column.
+   * @group udf_funcs
+   * @since 4.4.0
+   */
+  def wrap_udt(column: Column, udt: Column): Column = {
+    Column.internalFn("wrap_udt", column, udt)
+  }
+
   // ---------------------- Vector Functions ----------------------
 
   /**

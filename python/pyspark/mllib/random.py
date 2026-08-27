@@ -25,9 +25,9 @@ from typing import Any, Callable, Optional
 
 import numpy as np
 
-from pyspark.mllib.common import callMLlibFunc
 from pyspark.core.context import SparkContext
 from pyspark.core.rdd import RDD
+from pyspark.mllib.common import callMLlibFunc
 from pyspark.mllib.linalg import Vector
 
 __all__ = [
@@ -680,6 +680,7 @@ class RandomRDDs:
 
 def _test() -> None:
     import doctest
+
     from pyspark.sql import SparkSession
 
     globs = globals().copy()
