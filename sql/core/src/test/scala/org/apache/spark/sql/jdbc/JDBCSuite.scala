@@ -36,7 +36,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, Row}
 import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
@@ -1659,6 +1659,28 @@ class JDBCSuite extends SharedSparkSession {
       DateTimeTestUtils.withDefaultTimeZone(java.time.ZoneId.of(tz)) {
         assert(oracleDialect.convertJavaTimestampToTimestampNTZ(
           Timestamp.valueOf("1991-11-09 00:00:00")) === expected, s"tz=$tz")
+      }
+    }
+  }
+
+  test("SPARK-58876: Oracle NTZ conversions are gated by the legacy flag") {
+    val oracleDialect = JdbcDialects.get("jdbc:oracle")
+    // Under a non-UTC JVM zone the two conversions diverge: by default they read the wall-clock
+    // fields the driver decoded, while the legacy flag defers to the base UTC-rebased conversion.
+    // This restores the pre-4.4 value (not just the type) when a column still maps to NTZ via
+    // preferTimestampNTZ, so the flag is a full behavior restore as documented.
+    DateTimeTestUtils.withDefaultTimeZone(java.time.ZoneId.of("America/Los_Angeles")) {
+      val ts = Timestamp.valueOf("1991-11-09 00:00:00")
+      val ldt = LocalDateTime.of(1991, 11, 9, 0, 0, 0)
+      assert(oracleDialect.convertJavaTimestampToTimestampNTZ(ts) === ts.toLocalDateTime)
+      assert(oracleDialect.convertTimestampNTZToJavaTimestamp(ldt) === Timestamp.valueOf(ldt))
+      withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
+        assert(oracleDialect.convertJavaTimestampToTimestampNTZ(ts) ===
+          DateTimeUtils.microsToLocalDateTime(DateTimeUtils.fromJavaTimestampNoRebase(ts)))
+        assert(oracleDialect.convertTimestampNTZToJavaTimestamp(ldt) ===
+          DateTimeUtils.toJavaTimestampNoRebase(DateTimeUtils.localDateTimeToMicros(ldt)))
+        // The flag genuinely changes the value, not only the type.
+        assert(oracleDialect.convertJavaTimestampToTimestampNTZ(ts) !== ts.toLocalDateTime)
       }
     }
   }

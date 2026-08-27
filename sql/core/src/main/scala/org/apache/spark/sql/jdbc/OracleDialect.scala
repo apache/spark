@@ -184,22 +184,24 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       case INTERVAL_DS => Some(DayTimeIntervalType())
       case Types.TIMESTAMP if !conf.legacyOracleTimestampNTZMappingEnabled && typeName != null &&
           typeName.toUpperCase(Locale.ROOT).matches("DATE|TIMESTAMP") =>
-        // Oracle DATE and TIMESTAMP are zoneless (both report typeName DATE/TIMESTAMP under
-        // Types.TIMESTAMP), so NTZ is faithful; WITH [LOCAL] TIME ZONE hits the -101/-102 case.
+        // Oracle DATE and TIMESTAMP are zoneless and both surface as Types.TIMESTAMP with typeName
+        // DATE/TIMESTAMP, so NTZ is faithful; WITH [LOCAL] TIME ZONE hit TIMESTAMP_TZ/LTZ above.
         Some(TimestampNTZType)
       case _ => None
     }
   }
 
   // Preserve the zoneless wall-clock: the driver decoded the Timestamp in the JVM zone, and
-  // toLocalDateTime reads those same fields back, rather than rebasing through UTC. Mirrors
-  // PostgresDialect.
+  // toLocalDateTime reads those same fields back rather than rebasing through UTC (mirrors
+  // PostgresDialect). The legacy flag defers to the base conversion, restoring the pre-4.4 value.
   override def convertJavaTimestampToTimestampNTZ(t: Timestamp): LocalDateTime = {
-    t.toLocalDateTime
+    if (conf.legacyOracleTimestampNTZMappingEnabled) super.convertJavaTimestampToTimestampNTZ(t)
+    else t.toLocalDateTime
   }
 
   override def convertTimestampNTZToJavaTimestamp(ldt: LocalDateTime): Timestamp = {
-    Timestamp.valueOf(ldt)
+    if (conf.legacyOracleTimestampNTZMappingEnabled) super.convertTimestampNTZToJavaTimestamp(ldt)
+    else Timestamp.valueOf(ldt)
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
