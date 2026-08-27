@@ -394,7 +394,6 @@ class PandasConversionMixin:
 
                     batches = self._collect_as_arrow(
                         split_batches=arrowPySparkSelfDestructEnabled == "true",
-                        prefers_large_var_types=prefers_large_var_types,
                     )
 
                     if len(batches) > 0:
@@ -493,12 +492,12 @@ class PandasConversionMixin:
         import pyarrow as pa
 
         self_destruct = arrowPySparkSelfDestructEnabled == "true"
-        batches = self._collect_as_arrow(
-            split_batches=self_destruct,
-            empty_list_if_zero_records=False,
-            prefers_large_var_types=prefers_large_var_types,
-        )
-        table = pa.Table.from_batches(batches).cast(schema)
+        batches = self._collect_as_arrow(split_batches=self_destruct)
+        if batches:
+            table = pa.Table.from_batches(batches).cast(schema)
+        else:
+            # empty dataset
+            table = schema.empty_table()
         # Ensure only the table has a reference to the batches, so that
         # self_destruct (if enabled) is effective
         del batches
@@ -507,20 +506,14 @@ class PandasConversionMixin:
     def _collect_as_arrow(
         self,
         split_batches: bool = False,
-        empty_list_if_zero_records: bool = True,
-        prefers_large_var_types: bool = False,
     ) -> List["pa.RecordBatch"]:
         """
-        Returns all records as a list of Arrow RecordBatches. PyArrow must be installed
-        and available on driver and worker Python environments.
-        This is an experimental feature.
+        Returns all records as a list of Arrow RecordBatches, which is empty if the result has
+        0 records. PyArrow must be installed and available on driver and worker Python
+        environments. This is an experimental feature.
 
         :param split_batches: split batches such that each column is in its own allocation, so
             that the selfDestruct optimization is effective; default False.
-
-        :param empty_list_if_zero_records: If True (the default), returns an empty list if the
-            result has 0 records. Otherwise, returns a list of length 1 containing an empty
-            Arrow RecordBatch which includes the schema.
 
         .. note:: Experimental.
         """
@@ -562,18 +555,7 @@ class PandasConversionMixin:
                 # Join serving thread and raise any exceptions from collectAsArrowToPython
                 jsocket_auth_server.getResult()
 
-        if len(batches) or empty_list_if_zero_records:
-            return batches
-        else:
-            import pyarrow as pa
-
-            from pyspark.sql.pandas.types import to_arrow_schema
-
-            schema = to_arrow_schema(
-                self.schema, timezone="UTC", prefers_large_types=prefers_large_var_types
-            )
-            empty_arrays = [pa.array([], type=field.type) for field in schema]
-            return [pa.RecordBatch.from_arrays(empty_arrays, schema=schema)]
+        return batches
 
 
 class SparkConversionMixin:

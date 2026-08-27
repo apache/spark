@@ -21,7 +21,6 @@ import unittest
 from pyspark import serializers
 from pyspark.serializers import (
     AutoBatchedSerializer,
-    AutoSerializer,
     BatchedSerializer,
     CartesianDeserializer,
     CloudPickleSerializer,
@@ -151,7 +150,6 @@ class SerializationTestCase(unittest.TestCase):
         hash(UTF8Deserializer())
         hash(CPickleSerializer())
         hash(MarshalSerializer())
-        hash(AutoSerializer())
         hash(BatchedSerializer(CPickleSerializer()))
         hash(AutoBatchedSerializer(MarshalSerializer()))
         hash(PairDeserializer(NoOpSerializer(), UTF8Deserializer()))
