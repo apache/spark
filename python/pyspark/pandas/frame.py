@@ -11761,9 +11761,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         method: Literal["average", "min", "max", "first", "dense"] = "average",
         ascending: bool = True,
         numeric_only: bool = False,
+        axis: Axis = 0,
         na_option: Literal["keep", "top", "bottom"] = "keep",
         pct: bool = False,
-        axis: Axis = 0,
     ) -> "DataFrame":
         """
         Compute numerical data ranks (1 through n) along axis. Equal values are
@@ -11790,6 +11790,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             .. versionchanged:: 4.0.0
                 The default value of ``numeric_only`` is now ``False``.
 
+        axis : {0 or 'index', 1 or 'columns'}, default 0
+            Axis along which to rank:
+
+            * 0 or 'index': rank each column independently
+            * 1 or 'columns': rank each row independently (across columns)
+
+            .. note:: For axis=1, pandas UDF is used which may have performance overhead
+                for very wide DataFrames (100+ columns).
+
         na_option : {'keep', 'top', 'bottom'}, default 'keep'
             * keep: leave NA values where they are
             * top: smallest rank if ascending
@@ -11801,15 +11810,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Whether or not to display the returned rankings in percentile form.
 
             .. versionadded:: 4.4.0
-
-        axis : {0 or 'index', 1 or 'columns'}, default 0
-            Axis along which to rank:
-
-            * 0 or 'index': rank each column independently
-            * 1 or 'columns': rank each row independently (across columns)
-
-            .. note:: For axis=1, pandas UDF is used which may have performance overhead
-                for very wide DataFrames (100+ columns).
 
         Returns
         -------

@@ -4195,9 +4195,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         method: str = "average",
         ascending: bool = True,
         numeric_only: bool = False,
+        axis: int = 0,
         na_option: Literal["keep", "top", "bottom"] = "keep",
         pct: bool = False,
-        axis: int = 0,
     ) -> "Series":
         """
         Compute numerical data ranks (1 through n) along axis. Equal values are
@@ -4224,6 +4224,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             .. versionchanged:: 4.0.0
                 The default value of ``numeric_only`` is now ``False``.
 
+        axis : {0 or 'index'}, default 0
+            Parameter needed for compatibility with DataFrame.
+
         na_option : {'keep', 'top', 'bottom'}, default 'keep'
             * keep: leave NA values where they are
             * top: smallest rank if ascending
@@ -4235,9 +4238,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             Whether or not to display the returned rankings in percentile form.
 
             .. versionadded:: 4.4.0
-
-        axis : {0 or 'index'}, default 0
-            Parameter needed for compatibility with DataFrame.
 
         Returns
         -------
