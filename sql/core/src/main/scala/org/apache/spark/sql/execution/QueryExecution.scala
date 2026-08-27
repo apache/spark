@@ -31,16 +31,16 @@ import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, LazyExpression, NameParameterizedQuery, UnsupportedOperationChecker}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, LazyExpression, NameParameterizedQuery, ResolvedTempView, UnsupportedOperationChecker}
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, TransactionalWrite, Union, UnresolvedWith, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, TransactionalWrite, Union, UnresolvedWith, WithCTE}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.transactions.TransactionUtils
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{LookupCatalog, TransactionalCatalogPlugin}
+import org.apache.spark.sql.connector.catalog.LookupCatalog
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.execution.SQLExecution.EXECUTION_ROOT_ID_KEY
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
@@ -99,9 +99,35 @@ class QueryExecution(
     logical.exists(_.expressions.exists(_.exists(_.isInstanceOf[LazyExpression])))
   }
 
-  private def transactionCatalog(write: TransactionalWrite): Option[TransactionalCatalogPlugin] = {
-    val table = sparkSession.sessionState.analyzer.resolveWriteTargetForTransaction(write.table)
-    TransactionalWrite.catalogFor(table)
+  private case class TransactionContext(
+      transaction: Option[Transaction],
+      writeTarget: Option[Analyzer.WriteTargetResolution]) {
+
+    def prepareForAnalysis(plan: LogicalPlan): LogicalPlan = writeTarget match {
+      case Some(result) =>
+        plan.transformDown {
+          case insert: InsertIntoStatement if insert.table eq result.originalTarget =>
+            insert.copy(
+              table = result.target,
+              tableOptions = result.options.getOrElse(insert.tableOptions))
+          case target if target eq result.originalTarget => result.target
+        }
+      case None => plan
+    }
+  }
+
+  private def transactionContext(write: TransactionalWrite): TransactionContext = {
+    val result = sparkSession.sessionState.analyzer.resolveWriteTargetForTransaction(write.table)
+    val transaction = result.transaction.orElse {
+      TransactionalWrite.catalogFor(result.target).map(TransactionUtils.beginTransaction)
+    }
+    val replacement = result.target match {
+      // Let ResolveRelations retain its special handling for stored temp-view plans.
+      case _: ResolvedTempView => None
+      case _ if result.target eq result.originalTarget => None
+      case _ => Some(result)
+    }
+    TransactionContext(transaction, replacement)
   }
 
   // 1. At the pre-Analyzed plan we look for nodes that implement the TransactionalWrite trait.
@@ -115,23 +141,25 @@ class QueryExecution(
   //    should keep state about the reads (tables+predicates) that occurred during the transaction.
   // 3. The analyzer instance is passed to nested Query Execution instances. These need to respect
   //    the open transaction instead of creating their own.
-  private val lazyTransactionOpt = LazyTry {
+  private val lazyTransactionContext = LazyTry {
     // Always inherit an active transaction from the outer analyzer, regardless of mode.
-    analyzerOpt.flatMap(_.catalogManager.transaction).orElse {
+    analyzerOpt.flatMap(_.catalogManager.transaction).map { transaction =>
+      TransactionContext(Some(transaction), None)
+    }.getOrElse {
       // Only begin a new transaction for outer QEs that lead to execution.
       if (mode != CommandExecutionMode.SKIP) {
-        val catalog = logical match {
-          case UnresolvedWith(write: TransactionalWrite, _, _) => transactionCatalog(write)
-          case write: TransactionalWrite => transactionCatalog(write)
-          case _ => None
+        logical match {
+          case UnresolvedWith(write: TransactionalWrite, _, _) => transactionContext(write)
+          case write: TransactionalWrite => transactionContext(write)
+          case _ => TransactionContext(None, None)
         }
-        catalog.map(TransactionUtils.beginTransaction)
       } else {
-        None
+        TransactionContext(None, None)
       }
     }
   }
-  private def transactionOpt: Option[Transaction] = lazyTransactionOpt.get
+  private def transactionContext: TransactionContext = lazyTransactionContext.get
+  private def transactionOpt: Option[Transaction] = transactionContext.transaction
 
   // Per-query analyzer: uses a transaction-aware CatalogManager when a transaction is active,
   // so that all catalog lookups and rule applications during analysis see the correct state
@@ -201,7 +229,7 @@ class QueryExecution(
     try {
       val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
         // We can't clone `logical` here, which will reset the `_analyzed` flag.
-        analyzer.executeAndCheck(sqlScriptExecuted, tracker)
+        analyzer.executeAndCheck(transactionContext.prepareForAnalysis(sqlScriptExecuted), tracker)
       }
       tracker.setAnalyzed(plan)
       plan

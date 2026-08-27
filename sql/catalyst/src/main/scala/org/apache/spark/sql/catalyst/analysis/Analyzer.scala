@@ -58,6 +58,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
+import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -291,6 +292,12 @@ object AnalysisContext {
 }
 
 object Analyzer {
+  private[sql] case class WriteTargetResolution(
+      originalTarget: LogicalPlan,
+      target: LogicalPlan,
+      transaction: Option[Transaction],
+      options: Option[CaseInsensitiveStringMap])
+
   // Configs with bindingPolicy SESSION or NOT_APPLICABLE are retained when resolving views and
   // SQL UDFs, so that their values propagate from the active session rather than falling back to
   // Spark defaults. Note: configs defined in lazily-loaded modules (e.g., sql/hive) will only
@@ -395,7 +402,8 @@ class Analyzer(
   /**
    * Resolves a write target far enough for `QueryExecution` to choose its transaction catalog.
    */
-  private[sql] def resolveWriteTargetForTransaction(plan: LogicalPlan): LogicalPlan = {
+  private[sql] def resolveWriteTargetForTransaction(
+      plan: LogicalPlan): Analyzer.WriteTargetResolution = {
     val identifierResolvedPlan = plan match {
       case unresolved: PlanWithUnresolvedIdentifier =>
         val expressionPlan = Project(
@@ -410,11 +418,15 @@ class Analyzer(
       case other => other
     }
 
-    identifierResolvedPlan match {
+    val (target, transaction, options) = identifierResolvedPlan match {
       case target: UnresolvedWriteTarget =>
-        relationResolution.resolveWriteTarget(target).getOrElse(target)
-      case other => other
+        relationResolution.resolveWriteTargetForTransaction(target) match {
+          case Some(result) => (result.plan, result.transaction, Some(target.options))
+          case None => (target, None, Some(target.options))
+        }
+      case other => (other, None, None)
     }
+    Analyzer.WriteTargetResolution(plan, target, transaction, options)
   }
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {

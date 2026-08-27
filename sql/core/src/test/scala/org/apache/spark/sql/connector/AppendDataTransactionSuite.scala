@@ -22,6 +22,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.{
   Aborted,
   Committed,
+  InMemoryRowLevelOperationTableCatalog,
   TableContext,
   TableWritePrivilege,
   TimeTravel,
@@ -179,6 +180,9 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }""")
 
+    val baseTargetLoadCount = catalog.loadTableCalls.count {
+      case (context, _) => !context.writePrivileges().isEmpty
+    }
     val (txn, txnTables) = executeTransaction {
       sql(s"INSERT INTO IDENTIFIER(lower('$tableNameAsString')) $targetOptionsClause " +
         "VALUES (2, 200, 'software')")
@@ -187,6 +191,9 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
     assert(txn.currentState === Committed)
     assert(txn.isClosed)
     assert(txnTables.isEmpty)
+    assert(catalog.loadTableCalls.count {
+      case (context, _) => !context.writePrivileges().isEmpty
+    } === baseTargetLoadCount)
     assertTargetLoadAndWriteOptions(txn, java.util.Set.of(TableWritePrivilege.INSERT))
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -198,16 +205,42 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
       """{ "pk": 1, "salary": 100, "dep": "hr" }""")
     val previousTxn = catalog.lastTransaction
 
-    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+    withSQLConf(
+        SQLConf.PATH_ENABLED.key -> "true",
+        "spark.sql.catalog.empty" ->
+          classOf[InMemoryRowLevelOperationTableCatalog].getName) {
       try {
-        sql("SET PATH = cat.ns1, system.builtin")
+        sql("SET PATH = empty.ns1, cat.ns1, system.builtin")
+        val emptyCatalog = spark.sessionState.catalogManager.catalog("empty")
+          .asInstanceOf[InMemoryRowLevelOperationTableCatalog]
+        val baseTargetLoadCount = catalog.loadTableCalls.count {
+          case (context, _) => !context.writePrivileges().isEmpty
+        }
+        val observedTransactionCount = catalog.observedTransactions.size
         val (txn, _) = executeTransaction {
           sql("INSERT INTO test_table VALUES (2, 200, 'software')")
         }
 
+        assert(emptyCatalog.observedTransactions.size === 1)
+        val emptyTxn = emptyCatalog.observedTransactions.head
+        assert(emptyTxn.currentState === Aborted)
+        assert(emptyTxn.isClosed)
+        assert(emptyTxn.catalog.loadTableCalls.exists {
+          case (context, _) => context.writePrivileges() ===
+            java.util.Set.of(TableWritePrivilege.INSERT)
+        })
+        assert(emptyCatalog.loadTableCalls.isEmpty)
+        assert(catalog.loadTableCalls.count {
+          case (context, _) => !context.writePrivileges().isEmpty
+        } === baseTargetLoadCount)
         assert(txn ne previousTxn)
         assert(txn.currentState === Committed)
         assert(txn.isClosed)
+        assert(catalog.observedTransactions.drop(observedTransactionCount) === Seq(txn))
+        assert(txn.catalog.loadTableCalls.exists {
+          case (context, _) => context.writePrivileges() ===
+            java.util.Set.of(TableWritePrivilege.INSERT)
+        })
       } finally {
         sql("SET PATH = DEFAULT_PATH")
       }

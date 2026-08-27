@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.catalog.{
 }
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.transactions.TransactionUtils
 import org.apache.spark.sql.connector.catalog.{
   CatalogManager,
   CatalogPlugin,
@@ -39,6 +40,7 @@ import org.apache.spark.sql.connector.catalog.{
   RelationCatalog,
   Table,
   TableCatalog,
+  TransactionalCatalogPlugin,
   V1Table,
   V1View,
   V2TableWithV1Fallback,
@@ -46,11 +48,18 @@ import org.apache.spark.sql.connector.catalog.{
   ViewCatalog
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
+
+object RelationResolution {
+  private[sql] case class WriteTargetResolution(
+      plan: LogicalPlan,
+      transaction: Option[Transaction])
+}
 
 class RelationResolution(
     override val catalogManager: CatalogManager,
@@ -59,6 +68,8 @@ class RelationResolution(
     with Logging
     with LookupCatalog
     with SQLConfHelper {
+
+  import RelationResolution.WriteTargetResolution
 
   val v1SessionCatalog = catalogManager.v1SessionCatalog
 
@@ -247,6 +258,22 @@ class RelationResolution(
     }
   }
 
+  /**
+   * Resolves an INSERT target while starting transactions before write-context table loads.
+   * Transactions for path candidates that do not contain the target are aborted immediately.
+   */
+  private[sql] def resolveWriteTargetForTransaction(
+      target: UnresolvedWriteTarget): Option[WriteTargetResolution] = {
+    val resolved = resolveInPath(
+      target.multipartIdentifier,
+      resolveTempWriteTarget(target, _).map(WriteTargetResolution(_, None)),
+      resolvePersistentWriteTargetForTransaction(target, _))
+    resolved.map { result =>
+      result.plan.copyTagsFrom(target)
+      result
+    }
+  }
+
   private def resolveTempWriteTarget(
       target: UnresolvedWriteTarget,
       lookupIdentifier: Seq[String]): Option[LogicalPlan] = {
@@ -264,40 +291,100 @@ class RelationResolution(
     expandIdentifier(identifier) match {
       case CatalogAndIdentifier(catalog, ident) =>
         CatalogV2Util.rejectTimeTravelOptionsForWrite(catalog, ident, target.options)
+        resolvePersistentWriteTarget(target, catalog, catalog, ident)
+      case _ => None
+    }
+  }
 
-        // For table-capable catalogs, table lookup carries the write privileges. Only after it
-        // reports that no table exists do we try the metadata-only persistent-view path. View-only
-        // catalogs proceed directly to that path; persistent views accept no write context.
-        val table = if (
+  private def resolvePersistentWriteTargetForTransaction(
+      target: UnresolvedWriteTarget,
+      identifier: Seq[String]): Option[WriteTargetResolution] = {
+    expandIdentifier(identifier) match {
+      case CatalogAndIdentifier(catalog, ident) =>
+        CatalogV2Util.rejectTimeTravelOptionsForWrite(catalog, ident, target.options)
+        val canLoadTable =
           CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
-        ) {
-          try {
-            Option(CatalogV2Util.loadTableForWrite(
-              catalog, ident, target.writePrivileges, target.options))
-          } catch {
-            case _: NoSuchTableException => None
-            case _: NoSuchDatabaseException => None
-          }
-        } else {
-          None
-        }
+        catalog match {
+          case transactional: TransactionalCatalogPlugin if canLoadTable =>
+            val transaction = TransactionUtils.beginTransaction(transactional)
+            val resolved = try {
+              resolvePersistentWriteTarget(target, catalog, transaction.catalog, ident)
+            } catch {
+              case cause: Throwable => abortTransactionAfterFailure(transaction, cause)
+            }
+            resolved match {
+              case Some(table: ResolvedTable) =>
+                Some(WriteTargetResolution(table, Some(transaction)))
+              case other =>
+                TransactionUtils.abort(transaction)
+                other.map(WriteTargetResolution(_, None))
+            }
 
-        loadTableOrView(catalog, ident, table, allowViewFallback = true).map { relation =>
-          mapPersistentRelation(
-            catalog,
-            ident,
-            relation,
-            createView = (viewIdent, view) =>
-              ResolvedPersistentView(catalog, viewIdent, view),
-            createV1Table = v1Table =>
-              ResolvedTable.create(catalog.asTableCatalog, ident, v1Table),
-            createDelegatingTable = v1Table =>
-              ResolvedTable.create(catalog.asTableCatalog, ident, v1Table),
-            createTable = loadedTable =>
-              ResolvedTable.create(catalog.asTableCatalog, ident, loadedTable))
+          case _ =>
+            resolvePersistentWriteTarget(target, catalog, catalog, ident)
+              .map(WriteTargetResolution(_, None))
         }
       case _ => None
     }
+  }
+
+  private def resolvePersistentWriteTarget(
+      target: UnresolvedWriteTarget,
+      catalog: CatalogPlugin,
+      tableCatalog: CatalogPlugin,
+      ident: Identifier): Option[LogicalPlan] = {
+    // For table-capable catalogs, table lookup carries the write privileges. Only after it
+    // reports that no table exists do we try the metadata-only persistent-view path. View-only
+    // catalogs proceed directly to that path; persistent views accept no write context.
+    val canLoadTable =
+      CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
+    val table = if (canLoadTable) {
+      try {
+        Option(CatalogV2Util.loadTableForWrite(
+          tableCatalog, ident, target.writePrivileges, target.options))
+      } catch {
+        case _: NoSuchTableException => None
+        case _: NoSuchDatabaseException => None
+      }
+    } else {
+      None
+    }
+
+    table.map { relation =>
+      mapPersistentRelation(
+        tableCatalog,
+        ident,
+        relation,
+        createView = (viewIdent, view) =>
+          ResolvedPersistentView(catalog, viewIdent, view),
+        createV1Table = v1Table =>
+          ResolvedTable.create(tableCatalog.asTableCatalog, ident, v1Table),
+        createDelegatingTable = v1Table =>
+          ResolvedTable.create(tableCatalog.asTableCatalog, ident, v1Table),
+        createTable = loadedTable =>
+          ResolvedTable.create(tableCatalog.asTableCatalog, ident, loadedTable))
+    }.orElse {
+      catalog match {
+        case viewCatalog: ViewCatalog =>
+          try {
+            Some(ResolvedPersistentView(catalog, ident, viewCatalog.loadView(ident)))
+          } catch {
+            case _: NoSuchViewException => None
+          }
+        case _ => None
+      }
+    }
+  }
+
+  private def abortTransactionAfterFailure(
+      transaction: Transaction,
+      cause: Throwable): Nothing = {
+    try {
+      TransactionUtils.abort(transaction)
+    } catch {
+      case abortCause: Throwable => cause.addSuppressed(abortCause)
+    }
+    throw cause
   }
 
   private def loadTableOrView(
