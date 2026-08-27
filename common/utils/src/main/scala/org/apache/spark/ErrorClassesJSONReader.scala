@@ -122,7 +122,8 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
               s"but subclass '$sub' was requested."))
         val errorSubInfo = subClasses.getOrElse(
           sub,
-          throw SparkException.internalError(s"Error class '$mainErrorClass' has no '$sub' subclass."))
+          throw SparkException.internalError(
+            s"Error class '$mainErrorClass' has no '$sub' subclass."))
         errorInfo.messageTemplate + " " + errorSubInfo.messageTemplate
     }
   }
