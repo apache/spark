@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, ResolvedTempView}
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan}
+import org.apache.spark.sql.catalyst.analysis.ResolvedTempView
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table, FileTable}
@@ -38,7 +38,7 @@ class FallBackFileSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan]
     def unapply(insert: InsertIntoStatement)
         : Option[(ResolvedTempView, DataSourceV2Relation, FileTable)] = insert.table match {
       case view: ResolvedTempView =>
-        view.viewRelation.plan.map(EliminateSubqueryAliases.apply).collect {
+        view.viewRelation.plan.map(SubqueryAlias.stripLeadingAliases).collect {
           case d @ ExtractV2Table(table: FileTable) => (view, d, table)
         }
       case _ => None

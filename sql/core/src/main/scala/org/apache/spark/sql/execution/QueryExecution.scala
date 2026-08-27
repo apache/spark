@@ -31,16 +31,16 @@ import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, LazyExpression, NameParameterizedQuery, UnsupportedOperationChecker}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, LazyExpression, NameParameterizedQuery, PlanWithUnresolvedIdentifier, UnsupportedOperationChecker}
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union, UnresolvedWith, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, TransactionalWrite, Union, UnresolvedWith, WithCTE}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.transactions.TransactionUtils
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.LookupCatalog
+import org.apache.spark.sql.connector.catalog.{LookupCatalog, TransactionalCatalogPlugin}
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.execution.SQLExecution.EXECUTION_ROOT_ID_KEY
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
@@ -99,6 +99,14 @@ class QueryExecution(
     logical.exists(_.expressions.exists(_.exists(_.isInstanceOf[LazyExpression])))
   }
 
+  private def transactionCatalog(write: TransactionalWrite): Option[TransactionalCatalogPlugin] = {
+    val table = write.table match {
+      case plan: PlanWithUnresolvedIdentifier =>
+        sparkSession.sessionState.analyzer.resolveIdentifierPlanForTransaction(plan)
+      case other => other
+    }
+    TransactionalWrite.catalogFor(table)
+  }
 
   // 1. At the pre-Analyzed plan we look for nodes that implement the TransactionalWrite trait.
   //    When a plan contains such a node we initiate a transaction. Note, we should never start
@@ -117,8 +125,8 @@ class QueryExecution(
       // Only begin a new transaction for outer QEs that lead to execution.
       if (mode != CommandExecutionMode.SKIP) {
         val catalog = logical match {
-          case UnresolvedWith(TransactionalWrite(c), _, _) => Some(c)
-          case TransactionalWrite(c) => Some(c)
+          case UnresolvedWith(write: TransactionalWrite, _, _) => transactionCatalog(write)
+          case write: TransactionalWrite => transactionCatalog(write)
           case _ => None
         }
         catalog.map(TransactionUtils.beginTransaction)

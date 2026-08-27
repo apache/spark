@@ -2067,6 +2067,12 @@ case class SubqueryAlias(
 }
 
 object SubqueryAlias {
+  @scala.annotation.tailrec
+  private[sql] def stripLeadingAliases(plan: LogicalPlan): LogicalPlan = plan match {
+    case SubqueryAlias(_, child) => stripLeadingAliases(child)
+    case other => other
+  }
+
   def apply(
       identifier: String,
       child: LogicalPlan): SubqueryAlias = {

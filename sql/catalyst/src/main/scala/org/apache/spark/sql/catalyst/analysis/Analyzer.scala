@@ -392,6 +392,21 @@ class Analyzer(
 
   def getRelationResolution: RelationResolution = relationResolution
 
+  /**
+   * Resolves an identifier expression without resolving the plan it builds. This lets
+   * [[QueryExecution]] choose a transaction catalog before table lookup starts.
+   */
+  private[sql] def resolveIdentifierPlanForTransaction(
+      plan: PlanWithUnresolvedIdentifier): LogicalPlan = {
+    val expressionPlan = Project(Seq(Alias(plan.identifierExpr, "_identifier")()), OneRowRelation())
+    val resolvedExpression = execute(expressionPlan).expressions.head
+    if (resolvedExpression.resolved) {
+      plan.planBuilder(IdentifierResolution.evalIdentifierExpr(resolvedExpression), plan.children)
+    } else {
+      plan
+    }
+  }
+
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
     if (plan.analyzed) {
       plan
@@ -1371,17 +1386,6 @@ class Analyzer(
 
   /** Handle INSERT INTO for DSv2 */
   object ResolveInsertInto extends ResolveInsertionBase {
-    private object V2WriteRelation {
-      def unapply(insert: InsertIntoStatement): Option[DataSourceV2Relation] = {
-        insert.table match {
-          case table: ResolvedTable if !table.table.isInstanceOf[V1Table] =>
-            Some(DataSourceV2Relation.create(
-              table.table, Some(table.catalog), Some(table.identifier), insert.tableOptions))
-          case _ => None
-        }
-      }
-    }
-
     private def resolveV2Write(
         i: InsertIntoStatement,
         relation: DataSourceV2Relation): LogicalPlan = {
@@ -1480,7 +1484,7 @@ class Analyzer(
         }
 
       case i @ InsertIntoStatement(v: ResolvedTempView, _, _, _, _, _, _, _, _, _) =>
-        v.viewRelation.plan.map(EliminateSubqueryAliases.apply) match {
+        v.viewRelation.plan.map(SubqueryAlias.stripLeadingAliases) match {
           case None | Some(_: View) =>
             if (i.replaceCriteriaOpt.exists(_.isReplaceWhere)) {
               throw QueryCompilationErrors.writeIntoViewNotAllowedError(v.metadata.identifier, i)
@@ -1493,8 +1497,12 @@ class Analyzer(
           case _ => i
         }
 
-      case i @ V2WriteRelation(r) if i.query.resolved =>
-        resolveV2Write(i, r)
+      case i @ InsertIntoStatement(
+          table: ResolvedTable, _, _, _, _, _, _, _, _, _)
+          if i.query.resolved && !table.table.isInstanceOf[V1Table] =>
+        val relation = DataSourceV2Relation.create(
+          table.table, Some(table.catalog), Some(table.identifier), i.tableOptions)
+        resolveV2Write(i, relation)
     }
 
     private def partitionColumnNames(table: Table): Seq[String] = {
