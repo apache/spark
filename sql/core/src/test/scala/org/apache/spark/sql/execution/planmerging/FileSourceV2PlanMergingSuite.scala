@@ -32,17 +32,17 @@ import org.apache.spark.sql.test.SharedSparkSession
  * [[FileTable]] declares the `SCAN_MERGING` table capability, so [[PlanMerger]] may fuse two file
  * scans of the same table that differ only in their projected columns and/or pushed filters. For a
  * file source the strictly enforced filters are the partition filters and the best-effort ones are
- * the data filters, which is what decides the shapes that merge here.
+ * the data filters.
  *
- * The read entry point matters: SQL-on-file and catalog tables resolve to the V1 `FileFormat`
- * regardless of `spark.sql.sources.useV1SourceList`, so every test goes through `DataFrameReader`
- * and asserts the plan really is V2 before asserting anything about merging.
+ * SQL-on-file and catalog tables resolve to the V1 `FileFormat` regardless of
+ * `spark.sql.sources.useV1SourceList`, so every test goes through `DataFrameReader` and asserts the
+ * plan is V2 before asserting anything about merging.
  */
 class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 
-  // The built-in formats living in sql/core. Avro is in connector/avro, covered by that module.
+  // The multi-column formats in sql/core; text is single-column and Avro lives in connector/avro.
   private val multiColumnFormats = Seq("parquet", "orc", "json", "csv")
 
   private val flatSchema = "a long, b long, c long, d long"
@@ -329,7 +329,8 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
               // Nested pruning narrows s to the one field each side reads, so the read column is
               // no longer a same-type subset of the relation's s and the merge is declined -- the
               // field ordinals in the extractors above the scan are resolved against the narrowed
-              // type. Without pruning both scans read the whole struct and are simply identical.
+              // type. Without pruning both scans read the whole struct and are canonically equal,
+              // so they merge on PlanMerger's identical-plan path, which needs no capability.
               assert(distinctScans(df) == (if (nestedPruning) 2 else 1),
                 s"unexpected scan count:\n${df.queryExecution.optimizedPlan}")
             }
@@ -441,10 +442,10 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
           |""".stripMargin
       Seq(false, true).foreach { enableAQE =>
         withClue(s"AQE=$enableAQE: ") {
-          // The one shape where the two paths still differ. V1 keeps the partition filter in a
-          // Filter node until physical planning, so symmetric propagation can widen it; on the V2
-          // path V2ScanRelationPushDown has already absorbed it into the scan as a strict filter by
-          // the time MergeSubplans runs, and strict filters have to be equal to merge. Same rows.
+          // V1 keeps the partition filter in a Filter node until physical planning, so symmetric
+          // propagation can widen it; on the V2 path V2ScanRelationPushDown has already pushed it
+          // into the scan as a strict filter by the time MergeSubplans runs, and strict filters
+          // have to be equal to merge. Both paths return the same rows.
           assert(mergedCounts(path, query, Row(45, 100), useV1 = true, enableAQE) == ((1, 1)))
           assert(mergedCounts(path, query, Row(45, 100), useV1 = false, enableAQE) == ((2, 0)))
         }
@@ -452,31 +453,46 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("SPARK-57205: merging widens the columns a CSV scan parses, as it already does on V1") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      Seq("0,0", "1,10", "2,BAD", "3,30", "4,40").toDS().write.text(path)
-      val query =
-        """
-          |SELECT
-          |  (SELECT sum(a) FROM t),
-          |  (SELECT sum(b) FROM t)
-          |""".stripMargin
+  test("SPARK-57205: merging widens the columns a text-based scan parses, as it does on V1") {
+    // A record malformed only in the column the other scan reads. The parsers are handed just the
+    // requested columns (spark.sql.csv.parser.columnPruning.enabled for CSV), so which columns a
+    // scan reads decides which malformed values it notices.
+    val cases = Seq(
+      "csv" -> Seq("0,0", "1,10", "2,BAD", "3,30", "4,40"),
+      "json" -> Seq(
+        """{"a":0,"b":0}""",
+        """{"a":1,"b":10}""",
+        """{"a":2,"b":"BAD"}""",
+        """{"a":3,"b":30}""",
+        """{"a":4,"b":40}"""))
+    val query =
+      """
+        |SELECT
+        |  (SELECT sum(a) FROM t),
+        |  (SELECT sum(b) FROM t)
+        |""".stripMargin
 
-      def rows(useV1: Boolean): Seq[Row] =
-        withFileView("csv", path, useV1 = useV1, schema = Some("a long, b long"),
-          options = Map("mode" -> "DROPMALFORMED")) {
-          sql(query).collect().toSeq
+    cases.foreach { case (format, lines) =>
+      withClue(s"format=$format: ") {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          lines.toDS().write.text(path)
+
+          def rows(useV1: Boolean): Seq[Row] =
+            withFileView(format, path, useV1 = useV1, schema = Some("a long, b long"),
+              options = Map("mode" -> "DROPMALFORMED")) {
+              sql(query).collect().toSeq
+            }
+
+          // Merging makes one scan parse both a and b, so the record malformed in b is dropped for
+          // both aggregates and sum(a) is 8, not the 10 two separate scans produce. The merged scan
+          // therefore reads fewer rows than the a-only scan did, which SCAN_MERGING's "superset of
+          // their rows" premise does not allow. V1 already read the union after merging, so the V2
+          // path now matches it.
+          assert(rows(useV1 = false) == Seq(Row(8, 80)))
+          assert(rows(useV1 = true) == rows(useV1 = false))
         }
-
-      // The CSV parser only sees the columns the scan requests
-      // (spark.sql.csv.parser.columnPruning.enabled), so which columns a scan reads decides which
-      // malformed values it notices. Merging makes one scan parse both a and b, and the record
-      // malformed in b is then dropped for both aggregates: sum(a) is 8, not the 10 two separate
-      // scans would produce. V1 already read the union after merging, so this is the V2 path
-      // catching up rather than a new meaning for a merge.
-      assert(rows(useV1 = false) == Seq(Row(8, 80)))
-      assert(rows(useV1 = true) == rows(useV1 = false))
+      }
     }
   }
 }
