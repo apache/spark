@@ -1852,6 +1852,8 @@ abstract class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBa
 
     // test null latestAvailablePartitionOffsets
     assert(KafkaMicroBatchStream.metrics(Optional.ofNullable(offset), None).isEmpty)
+    assert(KafkaMicroBatchStream.metrics(
+      Optional.ofNullable(offset), Some(null).asInstanceOf[Option[PartitionOffsetMap]]).isEmpty)
   }
 
   test("SPARK-57438: metrics should not NPE when latestPartitionOffsets is null") {
