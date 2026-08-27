@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import io.fabric8.kubernetes.api.model.PodSpec
+import io.fabric8.kubernetes.api.model.{PodBuilder, PodSpec}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -52,18 +52,56 @@ class ExecutorKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with B
     assertSAName("executor-name", spec)
   }
 
+  test("SPARK-58910: keep the service account named by the executor pod template") {
+    baseConf.set(KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME, "executor-name")
+    // Either spelling means the template already picked an account, so the configured one must not
+    // replace it.
+    Seq(
+      (podWithAccount(serviceAccountName = Some("template-name")), "template-name", null),
+      (podWithAccount(serviceAccount = Some("template-name")), null, "template-name")
+    ).foreach { case (templatePod, expectedName, expectedAlias) =>
+      val spec = evaluateStep(templatePod)
+      assert(spec.getServiceAccountName === expectedName)
+      assert(spec.getServiceAccount === expectedAlias)
+    }
+  }
+
+  test("SPARK-58910: an empty service account name in the template counts as unset") {
+    baseConf.set(KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME, "executor-name")
+    // SetDefaults_PodSpec keys off the name being empty rather than null, and an empty alias copies
+    // up as an empty name, so neither leaves the pod with an account.
+    Seq(
+      podWithAccount(serviceAccountName = Some("")),
+      podWithAccount(serviceAccount = Some(""))
+    ).foreach(templatePod => assertSAName("executor-name", evaluateStep(templatePod)))
+  }
+
   private def assertSAName(expectedServiceAccountName: String,
       spec: PodSpec): Unit = {
     assert(spec.getServiceAccountName.equals(expectedServiceAccountName))
     assert(spec.getServiceAccount.equals(expectedServiceAccountName))
   }
 
-  private def evaluateStep(): PodSpec = {
+  /**
+   * An executor pod whose spec names a service account, standing in for a user pod template. A
+   * template is parsed with no API-server defaulting, so it can name either field on its own.
+   */
+  private def podWithAccount(
+      serviceAccount: Option[String] = None,
+      serviceAccountName: Option[String] = None): SparkPod = {
+    val basePod = SparkPod.initialPod()
+    val spec = new PodBuilder(basePod.pod).editOrNewSpec()
+    serviceAccount.foreach(spec.withServiceAccount(_))
+    serviceAccountName.foreach(spec.withServiceAccountName(_))
+    SparkPod(spec.endSpec().build(), basePod.container)
+  }
+
+  private def evaluateStep(pod: SparkPod = SparkPod.initialPod()): PodSpec = {
     val executorConf = KubernetesTestConf.createExecutorConf(
         sparkConf = baseConf)
     val step = new ExecutorKubernetesCredentialsFeatureStep(executorConf)
     step
-      .configurePod(SparkPod.initialPod())
+      .configurePod(pod)
       .pod
       .getSpec
   }

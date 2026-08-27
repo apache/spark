@@ -28,14 +28,20 @@ private[spark] class ExecutorKubernetesCredentialsFeatureStep(kubernetesConf: Ku
     kubernetesConf.get(KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME)
 
   override def configurePod(pod: SparkPod): SparkPod = {
-      pod.copy(
-        // if not setup by the pod template, fallback to the executor's sa,
-        // if executor's sa is not setup, the last option is driver's sa.
-        pod = if (Option(pod.pod.getSpec.getServiceAccount).isEmpty) {
-          buildPodWithServiceAccount(executorServiceAccount
-            .orElse(driverServiceAccount), pod).getOrElse(pod.pod)
-        } else {
-          pod.pod
-        })
-    }
+    // A pod template is deserialized with no API-server defaulting, so it can name the account in
+    // either spec field. Read both, `serviceAccountName` winning and an empty one counting as
+    // unset, matching Kubernetes' SetDefaults_PodSpec.
+    val spec = pod.pod.getSpec
+    val templateServiceAccount = Option(spec.getServiceAccountName).filter(_.nonEmpty)
+      .orElse(Option(spec.getServiceAccount).filter(_.nonEmpty))
+    pod.copy(
+      // if not setup by the pod template, fallback to the executor's sa,
+      // if executor's sa is not setup, the last option is driver's sa.
+      pod = if (templateServiceAccount.isEmpty) {
+        buildPodWithServiceAccount(executorServiceAccount
+          .orElse(driverServiceAccount), pod).getOrElse(pod.pod)
+      } else {
+        pod.pod
+      })
+  }
 }
