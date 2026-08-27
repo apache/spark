@@ -244,6 +244,15 @@ private[spark] class StandaloneAppClient(
             logWarning("Attempted to kill executors before registering with Master.")
             context.reply(false)
         }
+
+      case SetApplicationHold(hold) =>
+        // Holding drains the executors and talks to the cluster manager, so the listener does
+        // the work off this thread and the reply follows the future it returns.
+        listener.holdApplication(hold).andThen {
+          case Success(acknowledged) => context.reply(acknowledged)
+          case Failure(_: InterruptedException) => // Cancelled
+          case Failure(NonFatal(t)) => context.sendFailure(t)
+        }(ThreadUtils.sameThread)
     }
 
     private def askAndReplyAsync[T](

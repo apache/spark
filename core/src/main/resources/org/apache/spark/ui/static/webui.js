@@ -131,10 +131,14 @@ $(function() {
     }
   });
 
-  // generic links guarded by a confirmation prompt before navigating
+  // generic links guarded by a confirmation prompt before navigating, or before submitting the
+  // form they are wrapped in
   $(document).on("click", "a.confirm-link[data-confirm-message]", function(e) {
     if (!window.confirm($(this).data("confirm-message"))) {
       e.preventDefault();
+    } else if ($(this).closest("form").length > 0) {
+      e.preventDefault();
+      $(this).closest("form").submit();
     }
   });
 

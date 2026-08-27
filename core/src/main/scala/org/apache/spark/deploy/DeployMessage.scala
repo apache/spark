@@ -224,6 +224,9 @@ private[deploy] object DeployMessages {
 
   case class WorkerRemoved(id: String, host: String, message: String)
 
+  // Hold or resume the whole application, replying whether the request was acknowledged.
+  case class SetApplicationHold(hold: Boolean)
+
   // DriverClient <-> Master
 
   case class RequestSubmitDriver(driverDescription: DriverDescription) extends DeployMessage
@@ -268,6 +271,8 @@ private[deploy] object DeployMessages {
   // MasterWebUI To Master
 
   case object RequestMasterState
+
+  case class RequestApplicationHold(appId: String, hold: Boolean)
 
   // Master to MasterWebUI
 
