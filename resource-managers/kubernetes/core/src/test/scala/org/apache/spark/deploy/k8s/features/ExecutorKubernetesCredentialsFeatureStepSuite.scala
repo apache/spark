@@ -55,7 +55,8 @@ class ExecutorKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with B
   test("SPARK-58910: keep the service account named by the executor pod template") {
     baseConf.set(KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME, "executor-name")
     // Either spelling means the template already picked an account, so the configured one must not
-    // replace it.
+    // replace it. The field the template left alone stays null: the step hands the pod back as it
+    // came rather than mirroring the account into both fields.
     Seq(
       (podWithAccount(serviceAccountName = Some("template-name")), "template-name", null),
       (podWithAccount(serviceAccount = Some("template-name")), null, "template-name")
