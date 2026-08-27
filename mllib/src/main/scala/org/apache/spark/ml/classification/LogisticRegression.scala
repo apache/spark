@@ -1125,25 +1125,6 @@ class LogisticRegressionModel private[spark] (
 
   private val _interceptVector = if (isMultinomial) interceptVector.toDense else null
   private val _intercept = if (!isMultinomial) interceptVector(0) else Double.NaN
-  // Array(0.5, 0.0) is the value for default threshold (0.5) and thresholds (unset)
-  private var _binaryThresholds: Array[Double] = if (!isMultinomial) Array(0.5, 0.0) else null
-
-  private[ml] override def onParamChange(param: Param[_]): Unit = {
-    if (!isMultinomial && (param.name == "threshold" || param.name == "thresholds")) {
-      if (isDefined(threshold) || isDefined(thresholds)) {
-        val _threshold = getThreshold
-        if (_threshold == 0.0) {
-          _binaryThresholds = Array(_threshold, Double.NegativeInfinity)
-        } else if (_threshold == 1.0) {
-          _binaryThresholds = Array(_threshold, Double.PositiveInfinity)
-        } else {
-          _binaryThresholds = Array(_threshold, math.log(_threshold / (1.0 - _threshold)))
-        }
-      } else {
-        _binaryThresholds = null
-      }
-    }
-  }
 
   @Since("1.5.0")
   override def setThreshold(value: Double): this.type = super.setThreshold(value)
@@ -1214,7 +1195,7 @@ class LogisticRegressionModel private[spark] (
       udf((rawPrediction: Vector) => rawPrediction.argmax.toDouble).apply(rawPrediction)
     }
   } else {
-    val localRawThreshold = _binaryThresholds(1)
+    val localRawThreshold = LogisticRegressionModel.rawThreshold(getThreshold)
     val rawScore = MLFunctions.vector_get(rawPrediction, lit(1))
     when(!isnan(rawScore) && rawScore > localRawThreshold, 1.0).otherwise(0.0)
   }
@@ -1224,7 +1205,7 @@ class LogisticRegressionModel private[spark] (
     val localThresholds = if (isDefined(thresholds)) getThresholds.clone() else null
     probability2predictionColumn(probability, localThresholds)
   } else {
-    val localProbabilityThreshold = _binaryThresholds(0)
+    val localProbabilityThreshold = getThreshold
     val probabilityScore = MLFunctions.vector_get(probability, lit(1))
     when(!isnan(probabilityScore) && probabilityScore > localProbabilityThreshold, 1.0)
       .otherwise(0.0)
@@ -1256,7 +1237,7 @@ class LogisticRegressionModel private[spark] (
   } else {
     val localCoefficients = _coefficients
     val localIntercept = _intercept
-    val localProbabilityThreshold = _binaryThresholds(0)
+    val localProbabilityThreshold = getThreshold
     udf((features: Any) => {
       val featureVector = features.asInstanceOf[Vector]
       if (LogisticRegressionModel.score(
@@ -1316,8 +1297,8 @@ class LogisticRegressionModel private[spark] (
   override def predict(features: Vector): Double = if (isMultinomial) {
     super.predict(features)
   } else {
-    // Note: We should use _threshold instead of $(threshold) since getThreshold is overridden.
-    if (score(features) > _binaryThresholds(0)) 1 else 0
+    // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.
+    if (score(features) > getThreshold) 1 else 0
   }
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
@@ -1355,8 +1336,9 @@ class LogisticRegressionModel private[spark] (
     if (isMultinomial) {
       super.raw2prediction(rawPrediction)
     } else {
-      // Note: We should use _threshold instead of $(threshold) since getThreshold is overridden.
-      if (rawPrediction(1) > _binaryThresholds(1)) 1.0 else 0.0
+      // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.
+      val localRawThreshold = LogisticRegressionModel.rawThreshold(getThreshold)
+      if (rawPrediction(1) > localRawThreshold) 1.0 else 0.0
     }
   }
 
@@ -1364,8 +1346,8 @@ class LogisticRegressionModel private[spark] (
     if (isMultinomial) {
       super.probability2prediction(probability)
     } else {
-      // Note: We should use _threshold instead of $(threshold) since getThreshold is overridden.
-      if (probability(1) > _binaryThresholds(0)) 1.0 else 0.0
+      // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.
+      if (probability(1) > getThreshold) 1.0 else 0.0
     }
   }
 
@@ -1451,6 +1433,16 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
   private def score(features: Vector, coefficients: Vector, intercept: Double): Double = {
     val m = margin(features, coefficients, intercept)
     1.0 / (1.0 + math.exp(-m))
+  }
+
+  private def rawThreshold(threshold: Double): Double = {
+    if (threshold == 0.0) {
+      Double.NegativeInfinity
+    } else if (threshold == 1.0) {
+      Double.PositiveInfinity
+    } else {
+      math.log(threshold / (1.0 - threshold))
+    }
   }
 
   private def predictRaw(
