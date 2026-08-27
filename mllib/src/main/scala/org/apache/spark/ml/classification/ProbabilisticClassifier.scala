@@ -75,19 +75,42 @@ abstract class ProbabilisticClassificationModel[
     M <: ProbabilisticClassificationModel[FeaturesType, M]]
   extends ClassificationModel[FeaturesType, M] with ProbabilisticClassifierParams {
 
-  /** Additional column expressions used by probabilistic classification models. */
+  /**
+   * Returns an expression that converts a raw-prediction vector column to a probability vector.
+   *
+   * @param rawPrediction input raw-prediction column
+   * @return probability column of type `Vector`
+   */
   protected def raw2probabilityColumn(rawPrediction: Column): Column = {
     udf(raw2probability _).apply(rawPrediction)
   }
 
+  /**
+   * Returns an expression that produces a probability vector directly from a features column.
+   *
+   * @param features input features column
+   * @return probability column of type `Vector`
+   */
   protected def predictProbabilityColumn(features: Column): Column = {
     udf { value: Any => predictProbability(value.asInstanceOf[FeaturesType]) }.apply(features)
   }
 
+  /**
+   * Returns an expression that produces a predicted label from a raw-prediction vector column.
+   *
+   * @param rawPrediction input raw-prediction column
+   * @return prediction column of type `Double`
+   */
   override protected def raw2predictionColumn(rawPrediction: Column): Column = {
     udf(raw2prediction _).apply(rawPrediction)
   }
 
+  /**
+   * Returns an expression that produces a predicted label from a probability vector column.
+   *
+   * @param probability input probability column
+   * @return prediction column of type `Double`
+   */
   protected def probability2predictionColumn(probability: Column): Column = {
     udf(probability2prediction _).apply(probability)
   }
