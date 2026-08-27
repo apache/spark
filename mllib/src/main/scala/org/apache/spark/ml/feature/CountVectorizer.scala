@@ -195,7 +195,9 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     val input = dataset.select($(inputCol))
     val inputSizeCol = input.select(count(lit(0))).scalar()
     val minDfCol = if ($(minDF) >= 1.0) lit($(minDF)) else inputSizeCol * lit($(minDF))
-    val maxDfCol = if ($(maxDF) >= 1.0) lit($(maxDF)) else inputSizeCol * lit($(maxDF))
+    var maxDfCol = if ($(maxDF) >= 1.0) lit($(maxDF)) else inputSizeCol * lit($(maxDF))
+    maxDfCol = when(maxDfCol >= minDfCol, maxDfCol)
+      .otherwise(raise_error(lit("maxDF must be >= minDF.")))
     val filteringRequired = isSet(minDF) || isSet(maxDF)
     val wordCounts = if (filteringRequired) {
       input
