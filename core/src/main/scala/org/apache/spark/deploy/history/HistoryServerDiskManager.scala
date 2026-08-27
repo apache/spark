@@ -176,7 +176,7 @@ private class HistoryServerDiskManager(
       val path = appStorePath(appId, attemptId)
       if (path.isDirectory()) {
         if (delete) {
-          // If the app was not actively tracked, its size was not deducted above; do it now.
+          // Use the tracked size if the app was active; otherwise measure it from disk.
           val size = oldSizeOpt.getOrElse(sizeOf(path))
           updateUsage(-size, committed = true)
           deleteStore(path)
@@ -190,8 +190,8 @@ private class HistoryServerDiskManager(
           updateUsage(newSize, committed = true)
         }
       } else if (oldSizeOpt.isDefined) {
-        // The store was already deleted (e.g., evicted by a concurrent makeRoom()); just
-        // drop the accounting.
+        // The store directory is already gone (e.g., deleted out of band); just drop the
+        // accounting.
         updateUsage(-oldSizeOpt.get, committed = true)
       }
     }
@@ -249,16 +249,22 @@ private class HistoryServerDiskManager(
       if (evicted.nonEmpty) {
         val freed = new ListBuffer[Long]()
         evicted.foreach { info =>
+          val path = new File(info.path)
           active.synchronized {
             // The candidate may have become active or been deleted by a concurrent release()
             // since it was collected; re-check under the lock to deduct its size at most once.
-            if (!active.contains(info.appId -> info.attemptId) &&
-                new File(info.path).isDirectory()) {
-              logInfo(log"Deleting store for" +
-                log" ${MDC(APP_ID, info.appId)}/${MDC(APP_ATTEMPT_ID, info.attemptId)}.")
-              deleteStore(new File(info.path))
-              updateUsage(-info.size, committed = true)
-              freed += info.size
+            if (!active.contains(info.appId -> info.attemptId)) {
+              if (path.isDirectory()) {
+                logInfo(log"Deleting store for" +
+                  log" ${MDC(APP_ID, info.appId)}/${MDC(APP_ATTEMPT_ID, info.attemptId)}.")
+                deleteStore(path)
+                updateUsage(-info.size, committed = true)
+                freed += info.size
+              } else {
+                // The store directory is already gone (e.g., deleted out of band); drop the
+                // leftover listing entry so it stops counting against future evictions.
+                listing.delete(classOf[ApplicationStoreInfo], info.path)
+              }
             }
           }
         }
