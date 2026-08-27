@@ -715,6 +715,10 @@ class SparkContext(config: SparkConf) extends Logging {
     postEnvironmentUpdate()
     postApplicationStart()
 
+    // Advertise whether this application can be held, now that the shuffle driver components and
+    // the allocation manager, which decide it, are up.
+    reportExecutorHoldStatus()
+
     // After application started, attach handlers to started server and start handler.
     _ui.foreach(_.attachAllHandlers())
     // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
@@ -2143,7 +2147,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   @DeveloperApi
   def holdExecutors(): Boolean = {
-    schedulerBackend match {
+    val acknowledged = schedulerBackend match {
       case cg: CoarseGrainedSchedulerBackend if cg.supportsExecutorHold =>
         require(executorHoldSupported,
           s"holdExecutors() requires ${DECOMMISSION_ENABLED.key} and either " +
@@ -2203,6 +2207,8 @@ class SparkContext(config: SparkConf) extends Logging {
         logWarning("Holding executors is not supported by current scheduler.")
         false
     }
+    reportExecutorHoldStatus()
+    acknowledged
   }
 
   // Gracefully decommission all the current executors of a held application and let the
@@ -2249,7 +2255,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   @DeveloperApi
   def resumeExecutors(): Boolean = {
-    schedulerBackend match {
+    val acknowledged = schedulerBackend match {
       case cg: CoarseGrainedSchedulerBackend =>
         synchronized {
           if (!_executorsHeld) {
@@ -2308,6 +2314,20 @@ class SparkContext(config: SparkConf) extends Logging {
         logWarning("Resuming executors is not supported by current scheduler.")
         false
     }
+    reportExecutorHoldStatus()
+    acknowledged
+  }
+
+  /**
+   * Tell the cluster manager whether this application can be held and whether it currently is,
+   * so that it can show the hold status on its own UI. Called once the context is fully started
+   * -- `executorHoldSupported` reads the shuffle driver components, which are initialized late
+   * -- and again after every transition.
+   */
+  private def reportExecutorHoldStatus(): Unit = schedulerBackend match {
+    case cg: CoarseGrainedSchedulerBackend =>
+      cg.reportExecutorHoldStatus(executorHoldSupported, _executorsHeld)
+    case _ =>
   }
 
   /** The version of Spark on which this application is running. */

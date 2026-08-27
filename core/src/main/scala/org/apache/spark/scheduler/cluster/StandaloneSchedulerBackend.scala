@@ -253,6 +253,16 @@ private[spark] class StandaloneSchedulerBackend(
   private[spark] override def supportsExecutorHold: Boolean = true
 
   /**
+   * `spark.ui.holdEnabled` gates the hold and resume controls on the driver UI. An application
+   * that opted out of being held reports itself as not holdable, so that the Master does not
+   * show a hold status that the driver UI does not offer to change.
+   */
+  private[spark] override def reportExecutorHoldStatus(supported: Boolean, held: Boolean): Unit = {
+    Option(client).foreach(
+      _.reportHoldStatus(supported && conf.get(config.UI.UI_HOLD_ENABLED), held))
+  }
+
+  /**
    * Kill the given list of executors through the Master.
    * @return whether the kill request is acknowledged.
    */

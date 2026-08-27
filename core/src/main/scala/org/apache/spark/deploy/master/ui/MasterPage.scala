@@ -311,6 +311,24 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     </tr>
   }
 
+  /**
+   * The application state, annotated with the hold reported by its driver. An executor that has
+   * not exited yet is still draining its running tasks; the hold is complete at zero. A finished
+   * application is never annotated: its driver is gone, so the last reported hold is stale.
+   */
+  private def appStateText(app: ApplicationInfo): String = {
+    if (!app.held || app.isFinished) {
+      app.state.toString
+    } else {
+      val draining = app.numDrainingExecutors
+      if (draining == 0) {
+        s"${app.state} (held)"
+      } else {
+        s"${app.state} (held, draining $draining executor${if (draining > 1) "s" else ""})"
+      }
+    }
+  }
+
   private def appRow(app: ApplicationInfo): Seq[Node] = {
     val killLink = if (parent.killEnabled &&
       (app.state == ApplicationState.RUNNING || app.state == ApplicationState.WAITING)) {
@@ -348,7 +366,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       </td>
       <td>{UIUtils.formatDate(app.submitDate)}</td>
       <td>{app.desc.user}</td>
-      <td>{app.state.toString}</td>
+      <td>{appStateText(app)}</td>
       <td sorttable_customkey={app.duration.toString}>
         {UIUtils.formatDuration(app.duration)}
       </td>

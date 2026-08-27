@@ -44,6 +44,11 @@ private[spark] class ApplicationInfo(
   @transient var endTime: Long = _
   @transient var appSource: ApplicationSource = _
 
+  // Hold state reported by the driver. Transient, because it belongs to the running driver and
+  // not to the recovered application: a new Master learns it again when the driver re-registers.
+  @transient var holdSupported: Boolean = _
+  @transient var held: Boolean = _
+
   @transient private var executorsPerResourceProfileId: mutable.HashMap[Int, mutable.Set[Int]] = _
   @transient private var targetNumExecutorsPerResourceProfileId: mutable.HashMap[Int, Int] = _
   @transient private var rpIdToResourceProfile: mutable.HashMap[Int, ResourceProfile] = _
@@ -63,6 +68,8 @@ private[spark] class ApplicationInfo(
     executors = new mutable.HashMap[Int, ExecutorDesc]
     coresGranted = 0
     endTime = -1L
+    holdSupported = false
+    held = false
     appSource = new ApplicationSource(this)
     nextExecutorId = 0
     removedExecutors = new ArrayBuffer[ExecutorDesc]
@@ -196,6 +203,12 @@ private[spark] class ApplicationInfo(
   private[deploy] def getExecutorLimit: Int = {
     targetNumExecutorsPerResourceProfileId.values.sum
   }
+
+  /**
+   * The number of executors that have not exited yet while the application is held. They are
+   * still draining their running tasks; the hold is complete once this reaches zero.
+   */
+  private[deploy] def numDrainingExecutors: Int = if (held) executors.size else 0
 
   def duration: Long = {
     if (endTime != -1) {
