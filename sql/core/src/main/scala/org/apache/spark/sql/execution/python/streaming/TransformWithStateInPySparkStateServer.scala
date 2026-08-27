@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.python.streaming
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException, InterruptedIOException}
-import java.nio.channels.{Channels, ClosedByInterruptException, ServerSocketChannel}
+import java.nio.channels.{Channels, ClosedByInterruptException, ServerSocketChannel, SocketChannel}
 import java.time.Duration
 
 import scala.collection.mutable
@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.streaming.state.StateMessage.KeyAndValuePa
 import org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithListGet
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * This class is used to handle the state requests from the Python side. It runs on a separate
@@ -140,6 +141,13 @@ class TransformWithStateInPySparkStateServer(
   def run(): Unit = {
     val listeningSocket = stateServerSocket.accept()
 
+    // The task completion listener closes only the listening server socket, and the
+    // request loop has several early returns, so the accepted connection is closed
+    // through tryWithResource.
+    Utils.tryWithResource(listeningSocket)(serveRequests)
+  }
+
+  private def serveRequests(listeningSocket: SocketChannel): Unit = {
     // SPARK-51667: We have a pattern of sending messages continuously from one side
     // (Python -> JVM, and vice versa) before getting response from other side. Since most
     // messages we are sending are small, this triggers the bad combination of Nagle's algorithm
