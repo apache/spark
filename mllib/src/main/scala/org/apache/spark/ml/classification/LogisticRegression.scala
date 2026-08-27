@@ -1295,9 +1295,9 @@ class LogisticRegressionModel private[spark] (
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     if (isMultinomial) {
-      LogisticRegressionModel.raw2probabilityInPlaceMultinomial(rawPrediction)
+      LogisticRegressionModel.raw2probabilityInPlaceMultinomial(rawPrediction.toDense)
     } else {
-      LogisticRegressionModel.raw2probabilityInPlaceBinary(rawPrediction)
+      LogisticRegressionModel.raw2probabilityInPlaceBinary(rawPrediction.toDense)
     }
   }
 
@@ -1441,34 +1441,23 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
   }
 
   private def raw2probabilityBinary(rawPrediction: Vector): Vector = {
-    val probability = rawPrediction.copy
-    raw2probabilityInPlaceBinary(probability)
+    raw2probabilityInPlaceBinary(rawPrediction.toDense)
   }
 
   private def raw2probabilityMultinomial(rawPrediction: Vector): Vector = {
-    val probability = rawPrediction.copy
-    raw2probabilityInPlaceMultinomial(probability)
+    raw2probabilityInPlaceMultinomial(rawPrediction.toDense)
   }
 
-  private def raw2probabilityInPlaceBinary(rawPrediction: Vector): Vector = {
-    val probability = requireDenseRawPrediction(rawPrediction)
+  private def raw2probabilityInPlaceBinary(probability: DenseVector): Vector = {
     val values = probability.values
     values(0) = 1.0 / (1.0 + math.exp(-values(0)))
     values(1) = 1.0 - values(0)
     probability
   }
 
-  private def raw2probabilityInPlaceMultinomial(rawPrediction: Vector): Vector = {
-    val probability = requireDenseRawPrediction(rawPrediction)
+  private def raw2probabilityInPlaceMultinomial(probability: DenseVector): Vector = {
     Utils.softmax(probability.values)
     probability
-  }
-
-  private def requireDenseRawPrediction(rawPrediction: Vector): DenseVector = rawPrediction match {
-    case dv: DenseVector => dv
-    case _: SparseVector =>
-      throw new RuntimeException("Unexpected error in LogisticRegressionModel:" +
-        " raw2probabilitiesInPlace encountered SparseVector")
   }
 
   private[ml] case class Data(
