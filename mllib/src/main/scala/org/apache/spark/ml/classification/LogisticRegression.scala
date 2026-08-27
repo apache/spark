@@ -1303,9 +1303,9 @@ class LogisticRegressionModel private[spark] (
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     if (isMultinomial) {
-      LogisticRegressionModel.raw2probabilityInPlaceMultinomial(rawPrediction.toDense)
+      LogisticRegressionModel.raw2probabilityInPlaceMultinomial(rawPrediction)
     } else {
-      LogisticRegressionModel.raw2probabilityInPlaceBinary(rawPrediction.toDense)
+      LogisticRegressionModel.raw2probabilityInPlaceBinary(rawPrediction)
     }
   }
 
@@ -1449,23 +1449,24 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
   }
 
   private def raw2probabilityBinary(rawPrediction: Vector): Vector = {
-    raw2probabilityInPlaceBinary(rawPrediction.toDense)
+    raw2probabilityInPlaceBinary(rawPrediction)
   }
 
   private def raw2probabilityMultinomial(rawPrediction: Vector): Vector = {
-    raw2probabilityInPlaceMultinomial(rawPrediction.toDense)
+    raw2probabilityInPlaceMultinomial(rawPrediction)
   }
 
-  private def raw2probabilityInPlaceBinary(probability: DenseVector): Vector = {
-    val values = probability.values
+  private def raw2probabilityInPlaceBinary(rawPrediction: Vector): Vector = {
+    val values = rawPrediction.toArray
     values(0) = 1.0 / (1.0 + math.exp(-values(0)))
     values(1) = 1.0 - values(0)
-    probability
+    Vectors.dense(values)
   }
 
-  private def raw2probabilityInPlaceMultinomial(probability: DenseVector): Vector = {
-    Utils.softmax(probability.values)
-    probability
+  private def raw2probabilityInPlaceMultinomial(rawPrediction: Vector): Vector = {
+    val values = rawPrediction.toArray
+    Utils.softmax(values)
+    Vectors.dense(values)
   }
 
   private[ml] case class Data(
