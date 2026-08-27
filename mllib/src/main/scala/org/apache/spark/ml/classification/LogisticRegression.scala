@@ -1150,11 +1150,11 @@ class LogisticRegressionModel private[spark] (
   override protected def raw2probabilityColumn(rawPrediction: Column): Column = {
     if (isMultinomial) {
       udf((rawPrediction: Vector) =>
-        LogisticRegressionModel.raw2probabilityMultinomial(rawPrediction)
+        LogisticRegressionModel.raw2probabilityInPlaceMultinomial(rawPrediction)
       ).apply(rawPrediction)
     } else {
       udf((rawPrediction: Vector) =>
-        LogisticRegressionModel.raw2probabilityBinary(rawPrediction)
+        LogisticRegressionModel.raw2probabilityInPlaceBinary(rawPrediction)
       ).apply(rawPrediction)
     }
   }
@@ -1166,7 +1166,7 @@ class LogisticRegressionModel private[spark] (
       udf((features: Any) => {
         val rawPrediction = LogisticRegressionModel.predictRaw(
           features.asInstanceOf[Vector], localCoefficientMatrix, localInterceptVector)
-        LogisticRegressionModel.raw2probabilityMultinomial(rawPrediction)
+        LogisticRegressionModel.raw2probabilityInPlaceMultinomial(rawPrediction)
       }).apply(features)
     } else {
       val localCoefficients = _coefficients
@@ -1174,7 +1174,7 @@ class LogisticRegressionModel private[spark] (
       udf((features: Any) => {
         val rawPrediction = LogisticRegressionModel.predictRaw(
           features.asInstanceOf[Vector], localCoefficients, localIntercept)
-        LogisticRegressionModel.raw2probabilityBinary(rawPrediction)
+        LogisticRegressionModel.raw2probabilityInPlaceBinary(rawPrediction)
       }).apply(features)
     }
   }
@@ -1223,7 +1223,8 @@ class LogisticRegressionModel private[spark] (
       udf((features: Any) => {
         val rawPrediction = LogisticRegressionModel.predictRaw(
           features.asInstanceOf[Vector], localCoefficientMatrix, localInterceptVector)
-        val probability = LogisticRegressionModel.raw2probabilityMultinomial(rawPrediction)
+        val probability =
+          LogisticRegressionModel.raw2probabilityInPlaceMultinomial(rawPrediction)
         ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
       }).apply(features)
     } else {
@@ -1446,14 +1447,6 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
     val margins = interceptVector.copy
     BLAS.gemv(1.0, coefficientMatrix, features, 1.0, margins)
     margins
-  }
-
-  private def raw2probabilityBinary(rawPrediction: Vector): Vector = {
-    raw2probabilityInPlaceBinary(rawPrediction)
-  }
-
-  private def raw2probabilityMultinomial(rawPrediction: Vector): Vector = {
-    raw2probabilityInPlaceMultinomial(rawPrediction)
   }
 
   private def raw2probabilityInPlaceBinary(rawPrediction: Vector): Vector = {
