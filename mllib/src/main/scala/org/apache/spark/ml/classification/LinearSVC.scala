@@ -382,8 +382,8 @@ class LinearSVCModel private[classification] (
   override protected def predictRawColumn(features: Column): Column = {
     val localCoefficients = coefficients
     val localIntercept = intercept
-    udf((features: Any) => {
-      val margin = BLAS.dot(features.asInstanceOf[Vector], localCoefficients) + localIntercept
+    udf((features: Vector) => {
+      val margin = BLAS.dot(features, localCoefficients) + localIntercept
       Vectors.dense(-margin, margin)
     }).apply(features)
   }
@@ -398,8 +398,8 @@ class LinearSVCModel private[classification] (
     val localCoefficients = coefficients
     val localIntercept = intercept
     val localThreshold = getThreshold
-    udf((features: Any) => {
-      val margin = BLAS.dot(features.asInstanceOf[Vector], localCoefficients) + localIntercept
+    udf((features: Vector) => {
+      val margin = BLAS.dot(features, localCoefficients) + localIntercept
       if (margin > localThreshold) 1.0 else 0.0
     }).apply(features)
   }
@@ -426,7 +426,8 @@ class LinearSVCModel private[classification] (
   }
 
   override def predict(features: Vector): Double = {
-    if (BLAS.dot(features, coefficients) + intercept > $(threshold)) 1.0 else 0.0
+    val margin = BLAS.dot(features, coefficients) + intercept
+    if (margin > $(threshold)) 1.0 else 0.0
   }
 
   @Since("3.0.0")
