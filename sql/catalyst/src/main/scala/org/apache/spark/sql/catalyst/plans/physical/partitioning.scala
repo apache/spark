@@ -694,7 +694,7 @@ case class KeyedPartitioning(
    */
   def reduceKeys(
   def reduceKeys(
-      reducers: Seq[Option[(Reducer[_, _], TransformExpression)]]):
+      reducers: Seq[Option[KeyReducer]]):
       (Seq[DataType], Seq[InternalRowComparableWrapper]) =
     KeyedPartitioning.reduceKeys(partitionKeys, keyDataTypes, reducers)
 
@@ -873,10 +873,10 @@ object KeyedPartitioning {
   def reduceKeys(
       keys: Seq[InternalRowComparableWrapper],
       dataTypes: Seq[DataType],
-      reducers: Seq[Option[(Reducer[_, _], TransformExpression)]]):
+      reducers: Seq[Option[KeyReducer]]):
       (Seq[DataType], Seq[InternalRowComparableWrapper]) = {
     val reducedDataTypes = dataTypes.zip(reducers).map {
-      case (_, Some((reducer: Reducer[Any, Any], _))) => reducer.resultType()
+      case (_, Some(KeyReducer(reducer: Reducer[Any, Any], _))) => reducer.resultType()
       case (t, _) => t
     }
     val comparableKeyWrapperFactory =
@@ -884,7 +884,7 @@ object KeyedPartitioning {
     val reducedKeys = keys.map { key =>
       val keyValues = key.row.toSeq(dataTypes)
       val reducedKey = keyValues.zip(reducers).map {
-        case (v, Some((reducer: Reducer[Any, Any], _))) => reducer.reduce(v)
+        case (v, Some(KeyReducer(reducer: Reducer[Any, Any], _))) => reducer.reduce(v)
         case (v, _) => v
       }.toArray
       comparableKeyWrapperFactory(new GenericInternalRow(reducedKey))
@@ -1439,6 +1439,21 @@ case class CoalescedHashShuffleSpec(
 }
 
 /**
+ * A [[Reducer]] paired with the reduced partition expression it produces.
+ *
+ * When a key-grouped partitioning is reduced onto another partitioning's key space, the original
+ * partition expressions no longer describe the reduced keys (their data type and their value are
+ * those of the target key space). This pair carries both the reducer and the expression the
+ * reduced keys correspond to, so the output partitioning can report a type-correct expression.
+ *
+ * @param reducer reducer that maps this side's partition key values onto the other side's key space
+ * @param reducedExpression expression whose data type matches the reduced keys; for the
+ *                          identity-vs-transform and single-side-transform reducers this is the
+ *                          target transform re-targeted at this side's child attribute
+ */
+case class KeyReducer(reducer: Reducer[_, _], reducedExpression: TransformExpression)
+
+/**
  * [[ShuffleSpec]] created by [[KeyedPartitioning]].
  *
  * @param partitioning key grouped partitioning
@@ -1544,11 +1559,25 @@ case class KeyedShuffleSpec(
    *
    * @param other other key-grouped shuffle spec
    */
-  def reducers(
-      other: KeyedShuffleSpec): Option[Seq[Option[(Reducer[_, _], TransformExpression)]]] = {
+  def reducers(other: KeyedShuffleSpec): Option[Seq[Option[KeyReducer]]] = {
     val results = partitioning.expressions.zip(other.partitioning.expressions).map {
       case (e1: TransformExpression, e2: TransformExpression) =>
-        e1.reducers(e2).map(reducer => (reducer, e1))
+        e1.reducers(e2).map { reducer =>
+          if (e2.reducers(e1).isEmpty) {
+            // Only this side reduces. The reducer contract is r(f1(x)) = f2(x) where "=" matches
+            // both value and data type, so the reduced keys equal the target transform applied to
+            // this side's child. Report that expression (re-targeted at this side's attribute)
+            // instead of the un-reduced `e1`, whose type can differ from the reduced keys.
+            val thisSideChild = e1.references.head
+            val reducedExpr = e2.transform { case _: AttributeReference => thisSideChild }
+            KeyReducer(reducer, reducedExpr.asInstanceOf[TransformExpression])
+          } else {
+            // Both sides reduce: the reduced keys are r1(f1(x)) = r2(f2(x)), which no single
+            // transform describes. Keep reporting the original expression. Known gap, tracked in
+            // the follow-up for SPARK-59045.
+            KeyReducer(reducer, e1)
+          }
+        }
 
       // Identity transform on this side, arbitrary transform on the other side: create a reducer
       // that applies the other's transform to the raw identity values. The symmetric case
@@ -1563,7 +1592,7 @@ case class KeyedShuffleSpec(
           override def resultType(): DataType = reducerExpr.dataType
           override def displayName(): String = reducerExpr.toString
         }
-        Some((reducer, reducerExpr.asInstanceOf[TransformExpression]))
+        Some(KeyReducer(reducer, reducerExpr.asInstanceOf[TransformExpression]))
 
       case (_, _) => None
     }

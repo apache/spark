@@ -779,6 +779,10 @@ class KeyGroupedPartitioningSuite
     // first join reduces t1 to bucket(4, id) (data type changes), and the second join reduces the
     // result to bucket(2, id). The reduced expression reported by the first join must remain a
     // ReducibleFunction so the second reduction can be computed.
+    // This test deliberately leaves `V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS` off: both
+    // joins use the whole partition key, and without the config the failure on base is exercised
+    // through the second, independent trigger (`reduceKeys` at the second join) instead of
+    // `createShuffleSpec` -> `toGrouped`.
     val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
     createTable("t1", cols, Array(identity("id")))
     createTable("t2", cols, Array(bucket(4, "id")))
@@ -792,10 +796,34 @@ class KeyGroupedPartitioningSuite
         "JOIN testcat.ns.t2 ON t1.id = t2.id JOIN testcat.ns.t3 ON t1.id = t3.id")
 
     withSQLConf(
-        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
-        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
       checkAnswer(df, Seq(
         Row(1, "a", "x", "p"), Row(2, "b", "y", "q"), Row(3, "c", "z", "r")))
+      assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+        "storage-partitioned join should not shuffle")
+    }
+  }
+
+  test("SPARK-59045: reduced expression is retargeted per KeyedPartitioning") {
+    // A chained SPJ's output partitioning reports one `KeyedPartitioning` per join side, but the
+    // reduced expression is derived from the single spec that `createKeyedShuffleSpec` picks
+    // (`collectFirst`). Re-targeting it at each `KeyedPartitioning`'s own key attribute keeps the
+    // other sides' partitionings intact - otherwise a GROUP BY on the other side's key no longer
+    // sees a partitioning on it and the query shuffles (0 shuffles on base, 1 after the fix).
+    val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+    createTable("b16", cols, Array(bucket(16, "id")))
+    createTable("b8", cols, Array(bucket(8, "id")))
+    createTable("b4", cols, Array(bucket(4, "id")))
+    val values = (0 until 16).map(i => s"($i, 'v$i')").mkString(", ")
+    Seq("b16", "b8", "b4").foreach(t => sql(s"INSERT INTO testcat.ns.$t VALUES $values"))
+
+    val df = sql(
+      "SELECT b8.id, count(*) FROM testcat.ns.b16 " +
+        "JOIN testcat.ns.b8 ON b16.id = b8.id JOIN testcat.ns.b4 ON b16.id = b4.id " +
+        "GROUP BY b8.id")
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      checkAnswer(df, (0 until 16).map(i => Row(i.toLong, 1L)))
       assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
         "storage-partitioned join should not shuffle")
     }

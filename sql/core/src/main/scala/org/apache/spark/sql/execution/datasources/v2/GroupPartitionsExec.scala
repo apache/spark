@@ -25,9 +25,8 @@ import org.apache.spark.rdd.{CoalescedRDD, PartitionCoalescer, PartitionGroup, R
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
-import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, KeyReducer, Partitioning}
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
-import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.execution.{SafeForKWayMerge, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
@@ -59,7 +58,7 @@ case class GroupPartitionsExec(
     child: SparkPlan,
     @transient joinKeyPositions: Option[Seq[Int]] = None,
     @transient expectedPartitionKeys: Option[Seq[(InternalRowComparableWrapper, Int)]] = None,
-    @transient reducers: Option[Seq[Option[(Reducer[_, _], TransformExpression)]]] = None,
+    @transient reducers: Option[Seq[Option[KeyReducer]]] = None,
     @transient distributePartitions: Boolean = false,
     @transient enableSortedMerge: Boolean = false
   ) extends UnaryExecNode {
@@ -71,8 +70,10 @@ case class GroupPartitionsExec(
         // There can be multiple `KeyedPartitioning`s in an output partitioning of a join, but they
         // can only differ in `expressions`. Their `partitionKeys` reference and `isCollapsed` flag
         // are shared (enforced by `PartitioningCollection`), so the grouping is computed once.
-        // When reducers are applied, the reduced expressions (whose data type matches the reduced
-        // partition keys) are reported instead of the original ones.
+        // When reducers are applied, the reduced expressions are reported instead of the original
+        // ones. For the identity-vs-transform and single-side-transform reducers their data type
+        // matches the reduced partition keys by construction; for the both-sides-reduce shape no
+        // single transform describes the keys (see `KeyedShuffleSpec.reducers`).
         val partitionKeys = grouping.partitions.map(_._1)
         p.transform {
           case k: KeyedPartitioning =>
@@ -81,7 +82,12 @@ case class GroupPartitionsExec(
               case Some(exprs) =>
                 assert(projectedExpressions.length == exprs.length)
                 projectedExpressions.zip(exprs).map {
-                  case (expr, Some((_, reduced))) => reduced
+                  case (expr, Some(KeyReducer(_, reduced))) =>
+                    // `reduced` was derived from the single spec that `createKeyedShuffleSpec`
+                    // picked (`collectFirst`); re-target it at this `KeyedPartitioning`'s own key
+                    // attribute so that every `KeyedPartitioning` in a collection keeps its own.
+                    val attr = expr.references.head
+                    reduced.transform { case _: AttributeReference => attr }
                   case (expr, None) => expr
                 }
               case None => projectedExpressions
@@ -357,7 +363,7 @@ case class GroupPartitionsExec(
     }.iterator
     val expectedStr = expectedPartitionKeys.map(ks => s"ExpectedPartitionKeys: ${ks.size}")
     val reducersStr = reducers.map { seq =>
-      val names = seq.map(_.map(_._1.displayName()).getOrElse("identity"))
+      val names = seq.map(_.map(_.reducer.displayName()).getOrElse("identity"))
       s"Reducers: ${truncatedString(names, "[", ", ", "]", joinKeyMaxFields)}"
     }
     val distributeStr = Iterator(s"DistributePartitions: $distributePartitions")
