@@ -1114,6 +1114,19 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
     AttributeMap(left.output.zip(right.output))
   }
 
+  private def updateOuterReferencesInSubquery(
+      plan: LogicalPlan,
+      rewrites: AttributeMap[Attribute]): LogicalPlan = {
+    plan.transformDown { case currentFragment =>
+      currentFragment.transformExpressions {
+        case OuterReference(a: Attribute) =>
+          OuterReference(rewrites.getOrElse(a, a))
+        case pe: PlanExpression[LogicalPlan @unchecked] =>
+          pe.withNewPlan(updateOuterReferencesInSubquery(pe.plan, rewrites))
+      }
+    }
+  }
+
   /**
    * Rewrites an expression so that it can be pushed to the right side of a
    * Union or Except operator. This method relies on the fact that the output attributes
@@ -1122,6 +1135,8 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
   private def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]) = {
     val result = e transform {
       case a: Attribute => rewrites.getOrElse(a, a)
+      case pe: PlanExpression[LogicalPlan @unchecked] =>
+        pe.withNewPlan(updateOuterReferencesInSubquery(pe.plan, rewrites))
     } match {
       // Make sure exprId is unique in each child of Union.
       case Alias(child, alias) => Alias(child, alias)()
