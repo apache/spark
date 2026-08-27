@@ -58,7 +58,6 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
-import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -292,12 +291,6 @@ object AnalysisContext {
 }
 
 object Analyzer {
-  private[sql] case class WriteTargetResolution(
-      originalTarget: LogicalPlan,
-      target: LogicalPlan,
-      transaction: Option[Transaction],
-      options: Option[CaseInsensitiveStringMap])
-
   // Configs with bindingPolicy SESSION or NOT_APPLICABLE are retained when resolving views and
   // SQL UDFs, so that their values propagate from the active session rather than falling back to
   // Spark defaults. Note: configs defined in lazily-loaded modules (e.g., sql/hive) will only
@@ -399,35 +392,33 @@ class Analyzer(
 
   def getRelationResolution: RelationResolution = relationResolution
 
-  /**
-   * Resolves a write target far enough for `QueryExecution` to choose its transaction catalog.
-   */
-  private[sql] def resolveWriteTargetForTransaction(
-      plan: LogicalPlan): Analyzer.WriteTargetResolution = {
+  private def toUnresolvedRelation(target: UnresolvedInsertTarget): UnresolvedRelation = {
+    val relation = withOrigin(target.origin) {
+      UnresolvedRelation(target.multipartIdentifier, target.options)
+        .requireWritePrivileges(target.writePrivileges)
+    }
+    relation.copyTagsFrom(target)
+    relation
+  }
+
+  /** Resolves only the dynamic identifier of an INSERT so transaction detection can inspect it. */
+  private[sql] def resolveUnresolvedInsert(insert: UnresolvedInsert): LogicalPlan = {
     runWithSessionConf {
-      val identifierResolvedPlan = plan match {
-        case unresolved: PlanWithUnresolvedIdentifier =>
-          val expressionPlan = Project(
-            Seq(Alias(unresolved.identifierExpr, "_identifier")()), OneRowRelation())
-          val resolvedExpression = execute(expressionPlan).expressions.head
-          if (resolvedExpression.resolved) {
-            unresolved.planBuilder(
-              IdentifierResolution.evalIdentifierExpr(resolvedExpression), unresolved.children)
-          } else {
-            unresolved
-          }
+      val identifierResolvedTarget = insert.table match {
+        case p: PlanWithUnresolvedIdentifier => execute(p)
         case other => other
       }
-
-      val (target, transaction, options) = identifierResolvedPlan match {
-        case target: UnresolvedWriteTarget =>
-          relationResolution.resolveWriteTargetForTransaction(target) match {
-            case Some(result) => (result.plan, result.transaction, Some(target.options))
-            case None => (target, None, Some(target.options))
-          }
-        case other => (other, None, None)
+      withOrigin(insert.origin) {
+        identifierResolvedTarget match {
+          case target: UnresolvedInsertTarget =>
+            insert.toInsertIntoStatement(toUnresolvedRelation(target))
+          case target if !target.fastEquals(insert.table) =>
+            val updated = insert.copy(table = target)
+            updated.copyTagsFrom(insert)
+            updated
+          case _ => insert
+        }
       }
-      Analyzer.WriteTargetResolution(plan, target, transaction, options)
     }
   }
 
@@ -483,7 +474,7 @@ class Analyzer(
    */
   def withCatalogManager(newCatalogManager: CatalogManager): Analyzer = {
     val self = this
-    new Analyzer(newCatalogManager, sharedRelationCache, sessionConf) {
+    new Analyzer(newCatalogManager, sharedRelationCache) {
       override val hintResolutionRules: Seq[Rule[LogicalPlan]] = self.hintResolutionRules
       override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = self.extendedResolutionRules
       override val postHocResolutionRules: Seq[Rule[LogicalPlan]] = self.postHocResolutionRules
@@ -608,6 +599,7 @@ class Analyzer(
 
   override def batches: Seq[Batch] = earlyBatches ++ Seq(
     Batch("Resolution", fixedPoint,
+      ResolveUnresolvedInsert ::
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
       ResolveRelations ::
@@ -1187,47 +1179,26 @@ class Analyzer(
       }
     }
 
-    // A DataFrame temp view may be a direct alias of a V2TableReference and remain a supported
-    // write target. Do not traverse any other plan shape: non-writable views must be rejected
-    // without resolving their stored bodies.
-    private def resolveDirectTableReferenceInTempView(plan: LogicalPlan): Option[LogicalPlan] = {
-      plan match {
-        case alias @ SubqueryAlias(_, child) =>
-          resolveDirectTableReferenceInTempView(child).map { resolvedChild =>
-            val resolvedAlias = alias.copy(child = resolvedChild)
-            resolvedAlias.copyTagsFrom(alias)
-            resolvedAlias
-          }
-        case ref: V2TableReference
-            if ref.context.isInstanceOf[V2TableReference.TemporaryViewContext] =>
-          Some(relationResolution.resolveReference(ref))
-        case _ => None
-      }
-    }
-
-    private def resolveWriteTarget(target: UnresolvedWriteTarget): Option[LogicalPlan] = {
-      withOrigin(target.origin) {
-        relationResolution.resolveWriteTarget(target)
-      }.map {
-        case view: ResolvedTempView =>
-          val resolvedView = view.viewRelation.plan
-            .flatMap(resolveDirectTableReferenceInTempView)
-            .map { resolvedPlan =>
-              ResolvedTempView(view.identifier, view.viewRelation.copy(plan = Some(resolvedPlan)))
-            }
-            .getOrElse(view)
-          resolvedView.copyTagsFrom(view)
-          resolvedView
-        case other => other
-      }
-    }
-
     def apply(plan: LogicalPlan)
         : LogicalPlan = plan.resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
-      case i @ InsertIntoStatement(u: UnresolvedWriteTarget, _, _, _, _, _, _, _, _, _) =>
-        resolveWriteTarget(u).map { target =>
-          i.copy(table = target, tableOptions = u.options)
-        }.getOrElse(i)
+      case i @ InsertIntoStatement(table, _, _, _, _, _, _, _, _) =>
+        val relation = table match {
+          case u: UnresolvedRelation if !u.isStreaming =>
+            resolveRelation(u).getOrElse(u)
+          case other => other
+        }
+
+        // Inserting into a file-based temporary view is allowed.
+        // (e.g., spark.read.parquet("path").createOrReplaceTempView("t").
+        // Thus, we need to look at the raw plan if `relation` is a temporary view.
+        // unwrapRelationPlan also resolves V2TableReference nodes in temp view plans.
+        unwrapRelationPlan(relation) match {
+          case v: View if i.replaceCriteriaOpt.exists(_.isReplaceWhere) =>
+            throw QueryCompilationErrors.writeIntoViewNotAllowedError(v.desc.identifier, i)
+          case v: View =>
+            throw QueryCompilationErrors.insertIntoViewNotAllowedError(v.desc.identifier, table)
+          case other => i.copy(table = other)
+        }
 
       case write: V2StreamingWriteCommand =>
         write.table match {
@@ -1325,7 +1296,7 @@ class Analyzer(
         identifier: Seq[String],
         viewOnly: Boolean = false): Option[LogicalPlan] = {
       relationResolution.lookupTempView(identifier).map { tempView =>
-        ResolvedTempView(identifier.asIdentifier, tempView)
+        ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
       }.orElse {
         relationResolution.expandIdentifier(identifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
@@ -1408,60 +1379,75 @@ class Analyzer(
     }
   }
 
+  /** Lower an INSERT as soon as its target identifier expression has been evaluated. */
+  object ResolveUnresolvedInsert extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case insert @ UnresolvedInsert(target: UnresolvedInsertTarget, _, _, _, _, _, _, _, _) =>
+        insert.toInsertIntoStatement(toUnresolvedRelation(target))
+    }
+  }
+
   /** Handle INSERT INTO for DSv2 */
   object ResolveInsertInto extends ResolveInsertionBase {
-    private def resolveV2Write(
-        i: InsertIntoStatement,
-        relation: DataSourceV2Relation): LogicalPlan = {
-      if (i.replaceCriteriaOpt.exists(_.isReplaceOnOrUsing)) {
-        throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(relation.table.name())
-      } else if (i.replaceCriteriaOpt.isEmpty ||
-          i.replaceCriteriaOpt.exists(_.isReplaceWhere)) {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+      AlwaysProcess.fn, ruleId) {
+      case i: InsertIntoStatement
+          if i.table.isInstanceOf[DataSourceV2Relation] &&
+            i.query.resolved &&
+            i.replaceCriteriaOpt.exists(_.isReplaceOnOrUsing) =>
+        throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(
+          i.table.asInstanceOf[DataSourceV2Relation].table.name())
+
+      case i: InsertIntoStatement
+          if i.table.isInstanceOf[DataSourceV2Relation] &&
+            i.query.resolved &&
+            (i.replaceCriteriaOpt.isEmpty || i.replaceCriteriaOpt.exists(_.isReplaceWhere)) =>
+        val r = i.table.asInstanceOf[DataSourceV2Relation]
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
-          throw QueryCompilationErrors.unsupportedIfNotExistsError(relation.table.name)
+          throw QueryCompilationErrors.unsupportedIfNotExistsError(r.table.name)
         }
 
         // Create a project if this is an INSERT INTO BY NAME query.
         val projectByName = if (i.userSpecifiedCols.nonEmpty) {
-          Some(createProjectForByNameQuery(relation.table.name, i))
+          Some(createProjectForByNameQuery(r.table.name, i))
         } else {
           None
         }
         val isByName = projectByName.nonEmpty || i.byName
 
-        val partCols = partitionColumnNames(relation.table)
+        val partCols = partitionColumnNames(r.table)
         validatePartitionSpec(partCols, i.partitionSpec)
 
         val staticPartitions = i.partitionSpec.filter(_._2.isDefined).transform((_, v) => v.get)
-        val query = addStaticPartitionColumns(
-          relation, projectByName.getOrElse(i.query), staticPartitions, isByName)
+        val query = addStaticPartitionColumns(r, projectByName.getOrElse(i.query), staticPartitions,
+          isByName)
 
         if (!i.overwrite) {
           if (isByName) {
             AppendData.byName(
-              relation,
+              r,
               query,
               withSchemaEvolution = i.withSchemaEvolution)
           } else {
             AppendData.byPosition(
-              relation,
+              r,
               query,
               withSchemaEvolution = i.withSchemaEvolution)
           }
-        // Dynamic partition overwrite applies only to plain INSERT OVERWRITE. REPLACE WHERE
-        // always deletes by its condition, so it falls through to the OverwriteByExpression
-        // branch below even when the session is in DYNAMIC partition-overwrite mode.
+        // Dynamic partition overwrite applies only to plain INSERT OVERWRITE. REPLACE WHERE always
+        // deletes by its condition, so it falls through to the OverwriteByExpression branch below
+        // even when the session is in DYNAMIC partition-overwrite mode.
         } else if (i.replaceCriteriaOpt.isEmpty &&
             conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
           if (isByName) {
             OverwritePartitionsDynamic.byName(
-              relation,
+              r,
               query,
               withSchemaEvolution = i.withSchemaEvolution)
           } else {
             OverwritePartitionsDynamic.byPosition(
-              relation,
+              r,
               query,
               withSchemaEvolution = i.withSchemaEvolution)
           }
@@ -1476,57 +1462,22 @@ class Analyzer(
             case Some(other) => throw SparkException.internalError(
               s"Replace criteria ${other.getClass.getSimpleName} must not reach " +
                 "ResolveInsertInto; REPLACE ON/USING are rejected earlier.")
-            case None => staticDeleteExpression(relation, staticPartitions)
+            case None => staticDeleteExpression(r, staticPartitions)
           }
           if (isByName) {
             OverwriteByExpression.byName(
-              table = relation,
+              table = r,
               df = query,
               deleteExpr = deleteExpr,
               withSchemaEvolution = i.withSchemaEvolution)
           } else {
             OverwriteByExpression.byPosition(
-              table = relation,
+              table = r,
               query = query,
               deleteExpr = deleteExpr,
               withSchemaEvolution = i.withSchemaEvolution)
           }
         }
-      } else {
-        i
-      }
-    }
-
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
-      AlwaysProcess.fn, ruleId) {
-      case i @ InsertIntoStatement(v: ResolvedPersistentView, _, _, _, _, _, _, _, _, _) =>
-        val identifier = v.identifier.asLegacyTableIdentifier(v.catalog.name)
-        if (i.replaceCriteriaOpt.exists(_.isReplaceWhere)) {
-          throw QueryCompilationErrors.writeIntoViewNotAllowedError(identifier, i)
-        } else {
-          throw QueryCompilationErrors.insertIntoViewNotAllowedError(identifier, i.table)
-        }
-
-      case i @ InsertIntoStatement(v: ResolvedTempView, _, _, _, _, _, _, _, _, _) =>
-        v.viewRelation.plan.map(SubqueryAlias.stripLeadingAliases) match {
-          case None | Some(_: View) =>
-            if (i.replaceCriteriaOpt.exists(_.isReplaceWhere)) {
-              throw QueryCompilationErrors.writeIntoViewNotAllowedError(v.metadata.identifier, i)
-            } else {
-              throw QueryCompilationErrors.insertIntoViewNotAllowedError(
-                v.metadata.identifier, i.table)
-            }
-          case Some(relation: DataSourceV2Relation) if i.query.resolved =>
-            resolveV2Write(i, relation)
-          case _ => i
-        }
-
-      case i @ InsertIntoStatement(
-          table: ResolvedTable, _, _, _, _, _, _, _, _, _)
-          if i.query.resolved && !table.table.isInstanceOf[V1Table] =>
-        val relation = DataSourceV2Relation.create(
-          table.table, Some(table.catalog), Some(table.identifier), i.tableOptions)
-        resolveV2Write(i, relation)
     }
 
     private def partitionColumnNames(table: Table): Seq[String] = {
@@ -1714,6 +1665,16 @@ class Analyzer(
     }
 
     def doApply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      // V2WriteCommand.table is a non-child LogicalPlan slot, so recurse explicitly when it
+      // contains an identifier expression that may refer to a SQL variable.
+      case w: V2WriteCommand
+          if w.table.isInstanceOf[PlanWithUnresolvedIdentifier] &&
+             !w.table.asInstanceOf[PlanWithUnresolvedIdentifier].identifierExpr.resolved =>
+        val p = w.table.asInstanceOf[PlanWithUnresolvedIdentifier]
+        val resolvedExpr = resolveExpressionByPlanChildren(
+          p.identifierExpr, p, includeLastResort = true)
+        w.withNewTable(p.copy(identifierExpr = resolvedExpr))
+
       // Don't wait other rules to resolve the child plans of `InsertIntoStatement` as we need
       // to resolve column "DEFAULT" in the child plans so that they must be unresolved.
       case i: InsertIntoStatement => resolveColumnDefaultInCommandInputQuery(i)

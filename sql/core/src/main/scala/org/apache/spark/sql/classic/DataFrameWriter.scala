@@ -25,7 +25,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, UnresolvedIdentifier, UnresolvedWriteTarget}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, UnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -390,8 +390,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
   private def insertIntoCommand(tableIdent: TableIdentifier): LogicalPlan = {
     assertSchemaEvolutionNotEnabledForV1Write()
     InsertIntoStatement(
-      table = UnresolvedWriteTarget(
-        tableIdent.nameParts, CaseInsensitiveStringMap.empty(), getWritePrivileges),
+      table = UnresolvedRelation(tableIdent).requireWritePrivileges(getWritePrivileges),
       partitionSpec = Map.empty[String, Option[String]],
       Nil,
       query = df.logicalPlan,

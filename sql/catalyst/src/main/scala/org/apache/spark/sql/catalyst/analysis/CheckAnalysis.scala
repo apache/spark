@@ -328,9 +328,11 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   }
 
   def checkAnalysis0(plan: LogicalPlan): Unit = {
-    // Report target-not-found errors before errors in input queries.
+    // The target table is not a child plan of the insert command. We should report errors for table
+    // not found first, instead of errors in the input query of the insert command, by doing a
+    // top-down traversal.
     plan.foreach {
-      case InsertIntoStatement(u: UnresolvedWriteTarget, _, _, _, _, _, _, _, _, _) =>
+      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _, _, _) =>
         u.tableNotFound(
           u.multipartIdentifier,
           searchPathForUnresolvedRelation(u.multipartIdentifier))

@@ -30,7 +30,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, QueryPlanningTracker, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TemporaryViewRelation}
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -40,10 +40,9 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
-import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
+import org.apache.spark.sql.connector.catalog.InMemoryTable
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -52,51 +51,6 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
-
-  test("resolved temporary view payload is opaque") {
-    val metadata = CatalogTable(
-      TableIdentifier("v"),
-      CatalogTableType.VIEW,
-      CatalogStorageFormat.empty,
-      StructType(Nil))
-    val identifier = Identifier.of(Array.empty, "v")
-    val viewRelation = TemporaryViewRelation(metadata)
-    val tempView = ResolvedTempView(identifier, viewRelation)
-    val sameViewRelation = ResolvedTempView(identifier, viewRelation)
-    val copiedViewRelation = ResolvedTempView(identifier, viewRelation.copy())
-    assert(tempView.children.isEmpty)
-    assert(!tempView.treeString.contains("TemporaryViewRelation"))
-    assert(!tempView.toJSON.contains(classOf[TemporaryViewRelation].getName))
-    assert(tempView == sameViewRelation)
-    assert(tempView.hashCode() == sameViewRelation.hashCode())
-    assert(tempView != copiedViewRelation)
-  }
-
-  test("withCatalogManager preserves sessionConf") {
-    val sessionConf = new SQLConf()
-    var observedConf = Option.empty[SQLConf]
-    val analyzer = new Analyzer(getAnalyzer.catalogManager, sessionConf = Some(sessionConf)) {
-      override val extendedResolutionRules = Seq(new Rule[LogicalPlan] {
-        override def apply(plan: LogicalPlan): LogicalPlan = {
-          observedConf = Some(SQLConf.get)
-          plan
-        }
-      })
-    }
-    val replacementCatalogManager = getAnalyzer.catalogManager
-    val clonedAnalyzer = analyzer.withCatalogManager(replacementCatalogManager)
-
-    assert(clonedAnalyzer.catalogManager eq replacementCatalogManager)
-    assert(clonedAnalyzer.sessionConf.exists(_ eq sessionConf))
-    clonedAnalyzer.execute(OneRowRelation())
-    assert(observedConf.exists(_ eq sessionConf))
-
-    val outerConf = new SQLConf()
-    SQLConf.withExistingConf(outerConf) {
-      clonedAnalyzer.execute(OneRowRelation())
-    }
-    assert(observedConf.exists(_ eq outerConf))
-  }
 
   test("fail for unresolved plan") {
     intercept[AnalysisException] {

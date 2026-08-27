@@ -464,8 +464,8 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
       case ResolvedPersistentView(_, _, info) =>
         schemaToColumns(info.schema)
 
-      case view: ResolvedTempView =>
-        schemaToColumns(view.metadata.schema)
+      case ResolvedTempView(_, metadata) =>
+        schemaToColumns(metadata.schema)
 
       case _ => throw QueryCompilationErrors.tableOrViewNotFound(ident)
     }

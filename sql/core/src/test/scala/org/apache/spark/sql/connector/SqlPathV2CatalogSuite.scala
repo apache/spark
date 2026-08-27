@@ -88,13 +88,9 @@ class SqlPathV2CatalogSuite extends SharedSparkSession {
       try {
         sql("SET PATH = pathcat.ns, pathcat2.ns, system.builtin")
         checkAnswer(sql("SELECT id FROM path_v2_t"), Row(10))
-        sql("INSERT INTO path_v2_t VALUES (30)")
-        checkAnswer(sql("SELECT id FROM pathcat.ns.path_v2_t"), Seq(Row(10), Row(30)))
 
         sql("SET PATH = pathcat2.ns, pathcat.ns, system.builtin")
         checkAnswer(sql("SELECT id FROM path_v2_t"), Row(20))
-        sql("INSERT INTO path_v2_t VALUES (40)")
-        checkAnswer(sql("SELECT id FROM pathcat2.ns.path_v2_t"), Seq(Row(20), Row(40)))
       } finally {
         sql("SET PATH = DEFAULT_PATH")
         sql("DROP TABLE IF EXISTS pathcat.ns.path_v2_t")

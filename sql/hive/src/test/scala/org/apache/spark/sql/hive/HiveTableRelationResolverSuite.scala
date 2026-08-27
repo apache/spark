@@ -79,8 +79,7 @@ class HiveTableRelationResolverSuite extends TestHiveSingleton with QueryTest {
       extensions = spark.sessionState.analyzer.singlePassMetadataResolverExtensions
     )
     val hiveTableRelationResolver = new HiveTableRelationResolver(
-      spark.sessionState.catalog.asInstanceOf[HiveSessionCatalog],
-      spark
+      spark.sessionState.catalog.asInstanceOf[HiveSessionCatalog]
     )
 
     val unresolvedPlan = spark.sql(sqlText).queryExecution.logical

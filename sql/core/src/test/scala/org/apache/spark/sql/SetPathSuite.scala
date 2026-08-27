@@ -671,12 +671,8 @@ class SetPathSuite extends SharedSparkSession {
       try {
         sql("SET PATH = spark_catalog.path_res_a, spark_catalog.path_res_b, system.builtin")
         checkAnswer(sql("SELECT x FROM tbl"), Row(1))
-        sql("INSERT INTO tbl VALUES (3)")
-        checkAnswer(sql("SELECT x FROM path_res_a.tbl"), Seq(Row(1), Row(3)))
         sql("SET PATH = spark_catalog.path_res_b, spark_catalog.path_res_a, system.builtin")
         checkAnswer(sql("SELECT x FROM tbl"), Row(2))
-        sql("INSERT INTO tbl VALUES (4)")
-        checkAnswer(sql("SELECT x FROM path_res_b.tbl"), Seq(Row(2), Row(4)))
       } finally {
         sql("DROP TABLE IF EXISTS path_res_a.tbl")
         sql("DROP TABLE IF EXISTS path_res_b.tbl")

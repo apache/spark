@@ -24,7 +24,6 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
-import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.{
   AnalysisContext,
   AsOfVersion,
@@ -1204,24 +1203,41 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("persistent write targets stay isolated from source reads") {
+  test("persistent write targets establish table pins for subsequent reads") {
     withStateAwareTable { (stateCatalog, tableName) =>
       stateCatalog.resetLoadTableCalls()
-      val parsed = spark.sessionState.sqlParser.parsePlan(
-        s"INSERT INTO $tableName SELECT * FROM $tableName")
-      val analyzed =
-        spark.sessionState.analyzer.executeAndCheck(parsed, new QueryPlanningTracker)
-      val append = analyzed.collectFirst { case write: AppendData => write }
-        .getOrElse(fail(s"expected AppendData, got:\n$analyzed"))
-      val targetRelation = append.table.asInstanceOf[DataSourceV2Relation]
-      val sourceRelation = append.query.collectFirst { case r: DataSourceV2Relation => r }
-        .getOrElse(fail(s"expected a source DataSourceV2Relation, got:\n${append.query}"))
+      val resolver = new RelationResolution(
+        spark.sessionState.catalogManager,
+        RelationCache.empty)
+      val writeOptions = new CaseInsensitiveStringMap(
+        java.util.Map.of("snapshot", "s1", "split-size", "5"))
+      val readOptions = new CaseInsensitiveStringMap(
+        java.util.Map.of("snapshot", "s1", "split-size", "9"))
+      val write = UnresolvedRelation(tableName.split("\\.").toSeq, writeOptions)
+        .requireWritePrivileges(Set(TableWritePrivilege.INSERT))
+      val read = UnresolvedRelation(tableName.split("\\.").toSeq, readOptions)
 
-      assert(targetRelation.table ne sourceRelation.table)
-      assert(stateCatalog.loadTableCalls.size == 2)
-      assert(stateCatalog.loadTableCalls.count(_._1.writePrivileges().isEmpty) == 1)
-      assert(stateCatalog.loadTableCalls.count(
-        _._1.writePrivileges().contains(TableWritePrivilege.INSERT)) == 1)
+      def resolve(relation: UnresolvedRelation): DataSourceV2Relation = {
+        resolver.resolveRelation(relation).flatMap(_.collectFirst {
+          case r: DataSourceV2Relation => r
+        }).getOrElse(fail(s"failed to resolve ${relation.name} as a v2 relation"))
+      }
+
+      AnalysisContext.withNewAnalysisContext {
+        val writeRelation = resolve(write)
+        val readRelation = resolve(read)
+
+        assert(writeRelation.table eq readRelation.table)
+        assert(writeRelation.options.get("split-size") == "5")
+        assert(readRelation.options.get("split-size") == "9")
+        assert(AnalysisContext.get.tableCache.size == 1)
+        assert(AnalysisContext.get.relationCache.size == 2)
+      }
+
+      assert(stateCatalog.loadTableCalls.size == 1)
+      assert(stateCatalog.loadTableCalls.head._1.writePrivileges().contains(
+        TableWritePrivilege.INSERT))
+      assertOnlySnapshotOptions(stateCatalog, "s1")
     }
   }
 

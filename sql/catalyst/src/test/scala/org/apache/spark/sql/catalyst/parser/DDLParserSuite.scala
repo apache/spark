@@ -45,8 +45,6 @@ class DDLParserSuite extends AnalysisTest {
   private def parseCompare(sql: String, expected: LogicalPlan): Unit = {
     // We don't care the write privileges in this suite.
     val parsed = parsePlan(sql).transform {
-      case u: UnresolvedWriteTarget =>
-        UnresolvedRelation(u.multipartIdentifier, u.options)
       case u: UnresolvedRelation => u.clearWritePrivileges
       case i: InsertIntoStatement =>
         i.table match {

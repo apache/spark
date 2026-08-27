@@ -142,25 +142,6 @@ class DataSourceV2MetadataViewSuite extends SharedSparkSession {
     }
   }
 
-  test("INSERT resolves an unqualified V2 view through SET PATH") {
-    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
-      try {
-        sql("SET PATH = view_catalog.ansi, system.builtin")
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql("INSERT INTO test_view VALUES ('a', 1)")
-          },
-          condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-          parameters = Map(
-            "viewName" -> "`view_catalog`.`ansi`.`test_view`",
-            "operation" -> "INSERT"),
-          context = ExpectedContext(fragment = "test_view", start = 12, stop = 20))
-      } finally {
-        sql("SET PATH = DEFAULT_PATH")
-      }
-    }
-  }
-
   test("ALTER VIEW on a pure ViewCatalog (no TableCatalog mixin)") {
     withSQLConf(
       "spark.sql.catalog.view_only" -> classOf[TestingViewOnlyCatalog].getName) {

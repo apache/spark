@@ -457,7 +457,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
  * table. It also does data type casting and field renaming, to make sure that the columns to be
  * inserted have the correct data type and fields have the correct names.
  */
-class PreprocessTableInsertion(sparkSession: SparkSession) extends ResolveInsertionBase {
+object PreprocessTableInsertion extends ResolveInsertionBase {
   private def preprocess(
       insert: InsertIntoStatement,
       tblName: String,
@@ -562,22 +562,20 @@ class PreprocessTableInsertion(sparkSession: SparkSession) extends ResolveInsert
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i: InsertIntoStatement if i.table.resolved && i.query.resolved =>
-      val insert = InsertWriteRelation(sparkSession, i)
-        .map(relation => i.copy(table = relation))
-        .getOrElse(i)
-      insert.table match {
+    case i @ InsertIntoStatement(table, _, _, query, _, _, _, _, _)
+      if table.resolved && query.resolved =>
+      table match {
         case relation: HiveTableRelation =>
           val metadata = relation.tableMeta
-          preprocess(insert, metadata.identifier.quotedString, metadata.partitionSchema,
+          preprocess(i, metadata.identifier.quotedString, metadata.partitionSchema,
             Some(metadata))
         case LogicalRelationWithTable(h: HadoopFsRelation, catalogTable) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
-          preprocess(insert, tblName, h.partitionSchema, catalogTable)
+          preprocess(i, tblName, h.partitionSchema, catalogTable)
         case LogicalRelationWithTable(_: InsertableRelation, catalogTable) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
-          preprocess(insert, tblName, new StructType(), catalogTable)
-        case _ => insert
+          preprocess(i, tblName, new StructType(), catalogTable)
+        case _ => i
       }
   }
 
@@ -673,8 +671,8 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case InsertIntoStatement(LogicalRelationWithTable(relation, _), partition,
-          _, query, _, _, _, _, _, _) =>
-        // Get input data source relations from the query's child-plan tree.
+          _, query, _, _, _, _, _) =>
+        // Get all input data source relations of the query.
         val srcRelations = query.collect {
           case l: LogicalRelation => l.relation
         }
@@ -682,6 +680,8 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
           throw new AnalysisException(
             errorClass = "UNSUPPORTED_INSERT.READ_FROM",
             messageParameters = Map("relationId" -> toSQLId(relation.toString)))
+        } else {
+          // OK
         }
 
         relation match {
@@ -700,11 +700,11 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
               messageParameters = Map("relationId" -> toSQLId(relation.toString)))
         }
 
-      case InsertIntoStatement(t, _, _, _, _, _, _, _, _, _)
-          if !t.isInstanceOf[LeafNode] ||
-            t.isInstanceOf[Range] ||
-            t.isInstanceOf[OneRowRelation] ||
-            t.isInstanceOf[LocalRelation] =>
+      case InsertIntoStatement(t, _, _, _, _, _, _, _, _)
+        if !t.isInstanceOf[LeafNode] ||
+          t.isInstanceOf[Range] ||
+          t.isInstanceOf[OneRowRelation] ||
+          t.isInstanceOf[LocalRelation] =>
         throw new AnalysisException(
           errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
           messageParameters = Map.empty)

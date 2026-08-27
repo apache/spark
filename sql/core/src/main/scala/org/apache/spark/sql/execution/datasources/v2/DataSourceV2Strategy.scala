@@ -294,7 +294,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case ResolvedPersistentView(_, _, info: V1View) => V1Table(info.v1Table)
         case rpv @ ResolvedPersistentView(viewCatalog, viewIdent, _) =>
           V1Table(V1Table.toCatalogTable(viewCatalog, viewIdent, rpv.info))
-        case view: ResolvedTempView => V1Table(view.metadata)
+        case ResolvedTempView(_, meta) => V1Table(meta)
       }
       val location = locationStr.map { loc =>
         val uri = CatalogUtils.stringToURI(loc)

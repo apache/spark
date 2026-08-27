@@ -60,12 +60,12 @@ trait UnresolvedUnaryNode extends UnaryNode with UnresolvedNode
  * A logical plan placeholder that holds the identifier clause string expression. It will be
  * replaced by the actual logical plan with the evaluated identifier string.
  *
- * Extends `NamedRelation` so write parsers can place it directly in a target table slot instead of
- * wrapping the whole command.
+ * Extends `NamedRelation` so it can occupy a `NamedRelation`-typed slot (e.g.
+ * `OverwriteByExpression.table`) directly at parse time, instead of wrapping the whole command.
  *
- * In particular, the INSERT parser places this node in `InsertIntoStatement.table`. This keeps the
- * placeholder within the command while `CTEInChildren` attaches CTE definitions to its query.
- * Other `withIdentClause` callers may still use this node as the substitution root.
+ * The parser always places this node inside the command's identifier slot. For INSERT, the slot is
+ * a child of `UnresolvedInsert` until the identifier expression has been evaluated. It is never the
+ * substitution root of a `WITH ... <command>` subtree, so `CTEInChildren` semantics are not needed.
  */
 case class PlanWithUnresolvedIdentifier(
     identifierExpr: Expression,
@@ -121,23 +121,17 @@ case class ExpressionWithUnresolvedIdentifier(
 }
 
 /**
- * Holds the name and lookup context of a table targeted by a write command.
+ * Holds the raw table identifier and lookup context for an unresolved INSERT target.
  *
- * Unlike [[UnresolvedRelation]], this node describes a write target and is never interpreted as a
- * relation to read. The analyzer resolves it to [[ResolvedTable]], [[ResolvedPersistentView]],
- * or [[ResolvedTempView]].
+ * This is deliberately not a [[NamedRelation]]: while it is a child of
+ * [[org.apache.spark.sql.catalyst.plans.logical.UnresolvedInsert]], it must not be interpreted as
+ * a readable relation or substituted with a same-named CTE. It is converted to an
+ * [[UnresolvedRelation]] when the enclosing INSERT is lowered to `InsertIntoStatement`.
  */
-case class UnresolvedWriteTarget(
+case class UnresolvedInsertTarget(
     multipartIdentifier: Seq[String],
     options: CaseInsensitiveStringMap,
-    writePrivileges: Set[TableWritePrivilege])
-  extends UnresolvedLeafNode with NamedRelation {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
-  override def name: String = multipartIdentifier.quoted
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_RELATION)
-}
+    writePrivileges: Set[TableWritePrivilege]) extends UnresolvedLeafNode
 
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.

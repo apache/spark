@@ -22,7 +22,7 @@ import scala.annotation.nowarn
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationChanges, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases, UnresolvedWriteTarget}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationChanges, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -46,8 +46,6 @@ class PlanParserSuite extends AnalysisTest {
   private def assertEqual(sqlCommand: String, plan: LogicalPlan): Unit = {
     // We don't care the write privileges in this suite.
     val parsed = parsePlan(sqlCommand).transform {
-      case u: UnresolvedWriteTarget =>
-        UnresolvedRelation(u.multipartIdentifier, u.options)
       case u: UnresolvedRelation => u.clearWritePrivileges
       case i: InsertIntoStatement =>
         i.table match {

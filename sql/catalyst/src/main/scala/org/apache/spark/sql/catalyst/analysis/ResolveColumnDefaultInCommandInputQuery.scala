@@ -62,7 +62,7 @@ class ResolveColumnDefaultInCommandInputQuery(val catalogManager: CatalogManager
       // the INSERT has a column list, we reorder the table schema w.r.t. the column list and pass
       // the reordered schema as the expected schema to `resolveColumnDefault`.
       if (i.userSpecifiedCols.isEmpty) {
-        i.copy(query = resolveColumnDefault(i.query, expectedQuerySchema))
+        i.withNewChildren(Seq(resolveColumnDefault(i.query, expectedQuerySchema)))
       } else {
         val colNamesToFields: Map[String, StructField] = expectedQuerySchema.map { field =>
           normalizeFieldName(field.name) -> field
@@ -71,7 +71,7 @@ class ResolveColumnDefaultInCommandInputQuery(val catalogManager: CatalogManager
           colNamesToFields.get(normalizeFieldName(col))
         }
         if (reorder.forall(_.isDefined)) {
-          i.copy(query = resolveColumnDefault(i.query, reorder.flatten))
+          i.withNewChildren(Seq(resolveColumnDefault(i.query, reorder.flatten)))
         } else {
           i
         }

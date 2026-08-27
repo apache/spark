@@ -20,16 +20,13 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql.catalyst.analysis.resolver.{LogicalPlanResolver, ResolverExtension}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.classic.SparkSession
 
 /**
  * This is a [[ResolverExtension]] component that conditionally converts [[HiveTableRelation]]
  * to [[LogicalRelation]].
  */
-class HiveTableRelationResolver(
-    hiveCatalog: HiveSessionCatalog,
-    session: SparkSession) extends ResolverExtension {
-  private val relationConversions = RelationConversions(hiveCatalog, session)
+class HiveTableRelationResolver(hiveCatalog: HiveSessionCatalog) extends ResolverExtension {
+  private val relationConversions = RelationConversions(hiveCatalog)
 
   override def resolveOperator(
       operator: LogicalPlan,

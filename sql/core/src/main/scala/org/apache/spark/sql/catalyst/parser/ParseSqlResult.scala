@@ -223,8 +223,10 @@ object ParseSqlResult {
       case m: MergeIntoTable =>
         visitPlan(m.targetTable, scope, TableRefRole.Target)(f)
         visitPlan(m.sourceTable, scope, TableRefRole.Source)(f)
-      case i: InsertIntoStatement =>
+      case i: UnresolvedInsert =>
         visitPlan(i.table, scope, TableRefRole.Target)(f)
+        visitPlan(i.query, nextScope, TableRefRole.Source)(f)
+      case i: InsertIntoStatement =>
         visitPlan(i.query, nextScope, TableRefRole.Source)(f)
       case c: CreateTableAsSelect =>
         visitPlan(c.name, scope, TableRefRole.Target)(f)
@@ -269,6 +271,8 @@ object ParseSqlResult {
           visitPlan(ctePlan, bodyScope, TableRefRole.Source)(f)
           definitionScope += normalized
         }
+      case i: InsertIntoStatement =>
+        visitPlan(i.table, scope, TableRefRole.Target)(f)
       case c: CacheTable if c.multipartIdentifier.isEmpty =>
         visitPlan(c.table, scope, TableRefRole.Target)(f)
       case c: CompoundBody =>
@@ -296,7 +300,7 @@ object ParseSqlResult {
    * Collect multipart table/view identifiers, function names, and parameter
    * markers for lineage in a single deep walk. Target references name the
    * table/view a DML or DDL statement writes to or alters; source references
-   * name tables read in FROM clauses and query bodies. A single-part source name is
+   * name tables read in FROM clauses and query bodies. A single-part name is
    * dropped only when a CTE alias in scope at that node shadows it. Function /
    * variable identifiers are not collected as tables. Deduplicates while
    * preserving first-seen order within each category.
@@ -314,8 +318,7 @@ object ParseSqlResult {
     }
 
     def addTable(parts: Seq[String], scope: CteScope, role: TableRefRole): Unit = {
-      if (parts.nonEmpty &&
-          (role == TableRefRole.Target || !isCteName(parts, scope))) {
+      if (parts.nonEmpty && (role == TableRefRole.Target || !isCteName(parts, scope))) {
         role match {
           case TableRefRole.Target => targetTables += parts
           case TableRefRole.Source => sourceTables += parts
@@ -342,7 +345,7 @@ object ParseSqlResult {
       foreachExpressionDeep(p)(visitExpr)
       def add(parts: Seq[String]): Unit = addTable(parts, scope, role)
       p match {
-        case u: UnresolvedWriteTarget => add(u.multipartIdentifier)
+        case u: UnresolvedInsertTarget => add(u.multipartIdentifier)
         case u: UnresolvedRelation => add(u.multipartIdentifier)
         case u: UnresolvedTable => add(u.multipartIdentifier)
         case u: UnresolvedView => add(u.multipartIdentifier)
@@ -387,7 +390,9 @@ object ParseSqlResult {
 
   private def primaryQueryPlan(plan: LogicalPlan): LogicalPlan = plan match {
     case UnresolvedWith(child, _, _) => primaryQueryPlan(child)
-    case InsertIntoStatement(_, _, _, query, _, _, _, _, _, _) =>
+    case UnresolvedInsert(_, _, _, query, _, _, _, _, _) =>
+      primaryQueryPlan(query)
+    case InsertIntoStatement(_, _, _, query, _, _, _, _, _) =>
       primaryQueryPlan(query)
     case c: CreateTableAsSelect => primaryQueryPlan(c.query)
     case r: ReplaceTableAsSelect => primaryQueryPlan(r.query)

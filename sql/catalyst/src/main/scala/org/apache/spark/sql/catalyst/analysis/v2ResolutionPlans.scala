@@ -19,10 +19,10 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, TemporaryViewRelation}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, LeafExpression, Unevaluable}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_FUNC, UNRESOLVED_PROCEDURE}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -34,24 +34,6 @@ import org.apache.spark.sql.connector.catalog.procedures.Procedure
 import org.apache.spark.sql.types.{DataType, StructField}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
-
-private[sql] final class OpaqueLogicalPlan private (val plan: LogicalPlan) {
-  // Do not recursively compare or hash the wrapped plan. Temporary views may contain large trees.
-  override def equals(other: Any): Boolean = other match {
-    case that: OpaqueLogicalPlan => plan.eq(that.plan)
-    case _ => false
-  }
-
-  override def hashCode(): Int = System.identityHashCode(plan)
-
-  override def toString: String = plan.nodeName
-}
-
-private[sql] object OpaqueLogicalPlan {
-  def apply(plan: LogicalPlan): OpaqueLogicalPlan = new OpaqueLogicalPlan(plan)
-
-  def unapply(holder: OpaqueLogicalPlan): Some[LogicalPlan] = Some(holder.plan)
-}
 
 /**
  * Holds the name of a namespace that has yet to be looked up in a catalog. It will be resolved to
@@ -281,27 +263,9 @@ case class ResolvedPersistentView(
 /**
  * A plan containing resolved (global) temp views.
  */
-case class ResolvedTempView(
-    identifier: Identifier,
-    private val viewRelationPlan: OpaqueLogicalPlan)
+case class ResolvedTempView(identifier: Identifier, metadata: CatalogTable)
   extends LeafNodeWithoutStats {
-  def viewRelation: TemporaryViewRelation =
-    viewRelationPlan.plan.asInstanceOf[TemporaryViewRelation]
-
-  def metadata: CatalogTable = viewRelation.tableMeta
-
-  override lazy val output: Seq[Attribute] =
-    toAttributes(CharVarcharUtils.replaceCharVarcharWithStringInSchema(metadata.schema))
-
-  override protected def stringArgs: Iterator[Any] = Iterator(identifier, metadata.identifier)
-}
-
-object ResolvedTempView {
-  def apply(
-      identifier: Identifier,
-      viewRelation: TemporaryViewRelation): ResolvedTempView = {
-    new ResolvedTempView(identifier, OpaqueLogicalPlan(viewRelation))
-  }
+  override def output: Seq[Attribute] = Nil
 }
 
 /**

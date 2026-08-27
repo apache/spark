@@ -46,7 +46,6 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn, PushableExpression, ResolveDefaultColumns}
 import org.apache.spark.sql.classic.{SparkSession, Strategy}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, V1Table}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation}
@@ -55,7 +54,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, PushedDownOperators}
+import org.apache.spark.sql.execution.datasources.v2.{ExtractV2Table, PushedDownOperators}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
@@ -142,77 +141,6 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
     projectList
   }
 
-  private def convertHadoopFsRelation(
-      insert: InsertIntoStatement,
-      relation: LogicalRelation,
-      hadoopFsRelation: HadoopFsRelation,
-      table: Option[CatalogTable]): LogicalPlan = {
-    // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
-    // the user has specified static partitions, we add a Project operator on top of the query
-    // to include those constant column values in the query result.
-    //
-    // Example:
-    // Let's say that we have a table "t", which is created by
-    // CREATE TABLE t (a INT, b INT, c INT) USING parquet PARTITIONED BY (b, c)
-    // The statement of "INSERT INTO TABLE t PARTITION (b=2, c) SELECT 1, 3"
-    // will be converted to "INSERT INTO TABLE t PARTITION (b, c) SELECT 1, 2, 3".
-    //
-    // Basically, we will put those partition columns having an assigned value back
-    // to the SELECT clause. The output of the SELECT clause is organized as
-    // normal_columns static_partitioning_columns dynamic_partitioning_columns.
-    // static_partitioning_columns are partitioning columns having assigned
-    // values in the PARTITION clause (e.g. b in the above example).
-    // dynamic_partitioning_columns are partitioning columns that do not have assigned
-    // values in the PARTITION clause (e.g. c in the above example).
-    val actualQuery = if (insert.partitionSpec.exists(_._2.isDefined)) {
-      val projectList = convertStaticPartitions(
-        sourceAttributes = insert.query.output,
-        providedPartitions = insert.partitionSpec,
-        targetAttributes = relation.output,
-        targetPartitionSchema = hadoopFsRelation.partitionSchema)
-      Project(projectList, insert.query)
-    } else {
-      insert.query
-    }
-
-    // Sanity check
-    if (hadoopFsRelation.location.rootPaths.size != 1) {
-      throw QueryCompilationErrors
-        .cannotWriteDataToRelationsWithMultiplePathsError(hadoopFsRelation.location.rootPaths)
-    }
-
-    val outputPath = hadoopFsRelation.location.rootPaths.head
-    val mode = if (insert.overwrite) SaveMode.Overwrite else SaveMode.Append
-
-    val partitionSchema = actualQuery.resolve(
-      hadoopFsRelation.partitionSchema,
-      hadoopFsRelation.sparkSession.sessionState.analyzer.resolver)
-    val staticPartitions =
-      insert.partitionSpec.filter(_._2.nonEmpty).map { case (k, v) => k -> v.get }
-
-    val insertCommand = InsertIntoHadoopFsRelationCommand(
-      outputPath,
-      staticPartitions,
-      insert.ifPartitionNotExists,
-      partitionSchema,
-      hadoopFsRelation.bucketSpec,
-      hadoopFsRelation.fileFormat,
-      hadoopFsRelation.options,
-      actualQuery,
-      mode,
-      table,
-      Some(hadoopFsRelation.location),
-      actualQuery.output.map(_.name))
-
-    // For dynamic partition overwrite, we do not delete partition directories ahead.
-    // We write to staging directories and move to final partition directories after the write
-    // job is done. So it is okay to have outputPath try to overwrite the input path.
-    if (insert.overwrite && !insertCommand.dynamicPartitionOverwrite) {
-      DDLUtils.verifyNotReadPath(actualQuery, outputPath, table)
-    }
-    insertCommand
-  }
-
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
       ResolveDefaultColumns.validateTableProviderForDefaultValue(
@@ -234,17 +162,10 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
-    case insert @ InsertIntoStatement(
-        relation @ LogicalRelationWithTable(_: InsertableRelation, _), _, _, _, _, _, _, _, _, _)
-        if insert.partitionSpec.isEmpty && !insert.ifPartitionNotExists &&
-          insert.replaceCriteriaOpt.isEmpty =>
-      InsertIntoDataSourceCommand(relation, insert.query, insert.overwrite)
-
-    case insert @ InsertIntoStatement(
-        relation @ LogicalRelationWithTable(hadoopFsRelation: HadoopFsRelation, table),
-        _, _, _, _, _, _, _, _, _)
-        if insert.query.resolved && insert.replaceCriteriaOpt.isEmpty =>
-      convertHadoopFsRelation(insert, relation, hadoopFsRelation, table)
+    case InsertIntoStatement(l @ LogicalRelationWithTable(_: InsertableRelation, _),
+        parts, _, query, overwrite, false, _, replaceCriteriaOpt, _)
+        if parts.isEmpty && replaceCriteriaOpt.isEmpty =>
+      InsertIntoDataSourceCommand(l, query, overwrite)
 
     case InsertIntoDir(_, storage, provider, query, overwrite)
       if query.resolved && provider.isDefined &&
@@ -254,85 +175,122 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
 
       InsertIntoDataSourceDirCommand(storage, provider.get, query, overwrite)
 
-  }
-}
-
-
-/**
- * Builds a provider relation for a resolved INSERT target. The post-hoc insertion preprocessing
- * rule installs the result as the target after normal analyzer resolution has finished, so the
- * provider relation is derived only once and reused by later write-specific rules and checks.
- */
-private[sql] object InsertWriteRelation {
-  def apply(
-      sparkSession: SparkSession,
-      insert: InsertIntoStatement): Option[LogicalPlan] = insert.table match {
-    case ResolvedTable(_, _, V1Table(table: CatalogTable), _) =>
-      if (DDLUtils.isDatasourceTable(table)) {
-        val options = DataSourceUtils.generateDatasourceOptions(insert.tableOptions, table)
-        Some(buildDataSourceTable(sparkSession, table, options))
+    case i @ InsertIntoStatement(l @ LogicalRelationWithTable(t: HadoopFsRelation, table),
+        parts, _, query, overwrite, _, _, replaceCriteriaOpt, _)
+        if query.resolved && replaceCriteriaOpt.isEmpty =>
+      // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
+      // the user has specified static partitions, we add a Project operator on top of the query
+      // to include those constant column values in the query result.
+      //
+      // Example:
+      // Let's say that we have a table "t", which is created by
+      // CREATE TABLE t (a INT, b INT, c INT) USING parquet PARTITIONED BY (b, c)
+      // The statement of "INSERT INTO TABLE t PARTITION (b=2, c) SELECT 1, 3"
+      // will be converted to "INSERT INTO TABLE t PARTITION (b, c) SELECT 1, 2, 3".
+      //
+      // Basically, we will put those partition columns having a assigned value back
+      // to the SELECT clause. The output of the SELECT clause is organized as
+      // normal_columns static_partitioning_columns dynamic_partitioning_columns.
+      // static_partitioning_columns are partitioning columns having assigned
+      // values in the PARTITION clause (e.g. b in the above example).
+      // dynamic_partitioning_columns are partitioning columns that do not assigned
+      // values in the PARTITION clause (e.g. c in the above example).
+      val actualQuery = if (parts.exists(_._2.isDefined)) {
+        val projectList = convertStaticPartitions(
+          sourceAttributes = query.output,
+          providedPartitions = parts,
+          targetAttributes = l.output,
+          targetPartitionSchema = t.partitionSchema)
+        Project(projectList, query)
       } else {
-        Some(DDLUtils.readHiveTable(table))
+        query
       }
-    case view: ResolvedTempView =>
-      view.viewRelation.plan.map(EliminateSubqueryAliases.apply)
-    case _ => None
-  }
 
-  private def buildDataSourceTable(
-      sparkSession: SparkSession,
-      table: CatalogTable,
-      options: Map[String, String]): LogicalRelation = {
-    val dataSource = DataSource(
-      sparkSession,
-      // Older Spark versions allowed an empty table schema that was inferred at runtime.
-      userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
-      partitionColumns = table.partitionColumnNames,
-      bucketSpec = table.bucketSpec,
-      className = table.provider.get,
-      options = options,
-      catalogTable = Some(table))
-    LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
-  }
+      // Sanity check
+      if (t.location.rootPaths.size != 1) {
+        throw QueryCompilationErrors
+          .cannotWriteDataToRelationsWithMultiplePathsError(t.location.rootPaths)
+      }
 
-  private[sql] def readDataSourceTable(
-      sparkSession: SparkSession,
-      table: CatalogTable,
-      extraOptions: CaseInsensitiveStringMap): LogicalPlan = {
-    val qualifiedTableName =
-      QualifiedTableName(table.identifier.catalog.get, table.database, table.identifier.table)
-    val catalog = sparkSession.sessionState.catalog
-    val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
-    val ignoreCachedOptions =
-      SQLConf.get.getConf(SQLConf.READ_FILE_SOURCE_TABLE_CACHE_IGNORE_OPTIONS)
-    catalog.getCachedTable(qualifiedTableName) match {
-      case null =>
-        val plan = buildDataSourceTable(sparkSession, table, dsOptions)
-        catalog.cacheTable(qualifiedTableName, plan)
-        plan
+      val outputPath = t.location.rootPaths.head
+      val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
 
-      // Rebuild a cached file relation when table options matter and differ from the cached ones.
-      case r @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, _, _)
-          if !ignoreCachedOptions &&
-            (new CaseInsensitiveStringMap(fsRelation.options.asJava) !=
-              new CaseInsensitiveStringMap(dsOptions.asJava)) =>
-        r.copy(relation = fsRelation.copy(options = dsOptions)(sparkSession))
+      val partitionSchema = actualQuery.resolve(
+        t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver)
+      val staticPartitions = parts.filter(_._2.nonEmpty).map { case (k, v) => k -> v.get }
 
-      case other => other
-    }
+      val insertCommand = InsertIntoHadoopFsRelationCommand(
+        outputPath,
+        staticPartitions,
+        i.ifPartitionNotExists,
+        partitionSchema,
+        t.bucketSpec,
+        t.fileFormat,
+        t.options,
+        actualQuery,
+        mode,
+        table,
+        Some(t.location),
+        actualQuery.output.map(_.name))
+
+      // For dynamic partition overwrite, we do not delete partition directories ahead.
+      // We write to staging directories and move to final partition directories after writing
+      // job is done. So it is ok to have outputPath try to overwrite inputpath.
+      if (overwrite && !insertCommand.dynamicPartitionOverwrite) {
+        DDLUtils.verifyNotReadPath(actualQuery, outputPath, table)
+      }
+      insertCommand
   }
 }
+
 
 /**
  * Replaces [[UnresolvedCatalogRelation]] with concrete relation logical plans.
  *
- * TODO: remove the special handling for Hive tables once Hive is fully supported as a
+ * TODO: we should remove the special handling for hive tables after completely making hive as a
  * data source.
  */
 class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   private def readDataSourceTable(
       table: CatalogTable, extraOptions: CaseInsensitiveStringMap): LogicalPlan = {
-    InsertWriteRelation.readDataSourceTable(sparkSession, table, extraOptions)
+    val qualifiedTableName =
+      QualifiedTableName(table.identifier.catalog.get, table.database, table.identifier.table)
+    val catalog = sparkSession.sessionState.catalog
+    val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
+    val readFileSourceTableCacheIgnoreOptions =
+      SQLConf.get.getConf(SQLConf.READ_FILE_SOURCE_TABLE_CACHE_IGNORE_OPTIONS)
+    catalog.getCachedTable(qualifiedTableName) match {
+      case null =>
+        val dataSource =
+          DataSource(
+            sparkSession,
+            // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
+            // inferred at runtime. We should still support it.
+            userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
+            partitionColumns = table.partitionColumnNames,
+            bucketSpec = table.bucketSpec,
+            className = table.provider.get,
+            options = dsOptions,
+            catalogTable = Some(table))
+        val plan = LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
+        catalog.cacheTable(qualifiedTableName, plan)
+        plan
+
+      // If readFileSourceTableCacheIgnoreOptions is false AND
+      // the cached table relation's options differ from the new options:
+      // 1. Create a new HadoopFsRelation with updated options
+      // 2. Return a new LogicalRelation with the updated HadoopFsRelation
+      // This ensures the relation reflects any changes in data source options.
+      // Otherwise, leave the cached table relation as is
+      case r @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, _, _)
+        if !readFileSourceTableCacheIgnoreOptions &&
+          (new CaseInsensitiveStringMap(fsRelation.options.asJava) !=
+          new CaseInsensitiveStringMap(dsOptions.asJava)) =>
+        val newFsRelation = fsRelation.copy(options = dsOptions)(sparkSession)
+        r.copy(relation = newFsRelation)
+
+      case other => other
+    }
   }
 
   private def getStreamingRelation(
@@ -353,24 +311,19 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, options, false),
+        _, _, _, _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>
+      i.copy(table = readDataSourceTable(tableMeta, options))
+
+    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, false),
+        _, _, _, _, _, _, _, _) =>
+      i.copy(table = DDLUtils.readHiveTable(tableMeta))
+
     case append @ AppendData(
-        relation @ DataSourceV2Relation(
-          V1Table(table: CatalogTable), _, catalog, identifier, options, _),
-        _, _, _, _, _, _) if !append.isByName =>
-      val target = (catalog, identifier) match {
-        case (Some(c), Some(ident)) =>
-          ResolvedTable.create(c.asTableCatalog, ident, relation.table)
-        case _ =>
-          UnresolvedCatalogRelation(table, options)
-      }
-      InsertIntoStatement(
-        target,
+        ExtractV2Table(V1Table(table: CatalogTable)), _, _, _, _, _, _) if !append.isByName =>
+      InsertIntoStatement(UnresolvedCatalogRelation(table),
         table.partitionColumnNames.map(name => name -> None).toMap,
-        Seq.empty,
-        append.query,
-        overwrite = false,
-        ifPartitionNotExists = false,
-        tableOptions = options)
+        Seq.empty, append.query, false, append.isByName)
 
     // Skip streaming UnresolvedCatalogRelation here - they're handled by the
     // NamedStreamingRelation case below to preserve the source identifying name.

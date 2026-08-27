@@ -254,7 +254,7 @@ abstract class BaseSessionStateBuilder(
       DetectAmbiguousSelfJoin +:
         QualifyLocationWithWarehouse(catalog) +:
         PreprocessTableCreation(catalog) +:
-        new PreprocessTableInsertion(session) +:
+        PreprocessTableInsertion +:
         DataSourceAnalysis +:
         ApplyCharTypePadding +:
         ReplaceCharWithVarchar +:

@@ -19,20 +19,14 @@ package org.apache.spark.sql.connector
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.{
-  Identifier,
-  SupportsRead,
-  SupportsWrite,
-  Table,
-  TableCapability}
+import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.execution.{FileSourceScanExec, QueryExecution}
 import org.apache.spark.sql.execution.datasources.{FileFormat, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.datasources.v2.{FileDataSourceV2, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -87,8 +81,6 @@ class DummyWriteOnlyFileTable extends Table with SupportsWrite {
 }
 
 class FileDataSourceV2FallBackSuite extends SharedSparkSession {
-
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   private val dummyReadOnlyFileSourceV2 = classOf[DummyReadOnlyFileDataSourceV2].getName
   private val dummyWriteOnlyFileSourceV2 = classOf[DummyWriteOnlyFileDataSourceV2].getName
@@ -160,40 +152,6 @@ class FileDataSourceV2FallBackSuite extends SharedSparkSession {
       // Writes should fall back to v1 and succeed.
       df.write.format(dummyWriteOnlyFileSourceV2).save(path.getCanonicalPath)
       checkAnswer(spark.read.parquet(path.getCanonicalPath), df)
-    }
-  }
-
-  test("persistent FileTable uses V1 write fallback") {
-    withTable("t") {
-      sql("CREATE TABLE t (id BIGINT) USING parquet")
-      val table = spark.sessionState.catalogManager.v2SessionCatalog.asTableCatalog
-        .loadTable(Identifier.of(Array("default"), "t"))
-      assert(table.isInstanceOf[FileTable])
-
-      val commands = ArrayBuffer.empty[LogicalPlan]
-      val listener = new QueryExecutionListener {
-        override def onFailure(
-            funcName: String,
-            qe: QueryExecution,
-            exception: Exception): Unit = {}
-
-        override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
-          if (funcName == "command") {
-            commands += qe.logical
-          }
-        }
-      }
-      spark.listenerManager.register(listener)
-      try {
-        sql("INSERT INTO t VALUES (1)")
-        sparkContext.listenerBus.waitUntilEmpty()
-      } finally {
-        spark.listenerManager.unregister(listener)
-      }
-
-      assert(commands.length === 1)
-      assert(commands.head.isInstanceOf[InsertIntoHadoopFsRelationCommand])
-      checkAnswer(sql("TABLE t"), Row(1L))
     }
   }
 

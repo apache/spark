@@ -589,7 +589,7 @@ object ResolvedChildHelper {
       table: TableIdentifier): CatalogTable = {
     val catalog = sparkSession.sessionState.catalog
     child match {
-      case view: ResolvedTempView => view.metadata
+      case ResolvedTempView(_, metadata) => metadata
       // v1 inspection commands always see a v1 (`V1View`) view here -- the v2 strategy
       // handles non-session views before this method is reached.
       case ResolvedPersistentView(_, _, info: V1View) => info.v1Table

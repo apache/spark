@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.connector.catalog.ColumnDefaultValue
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A logical plan node that contains exactly what was parsed from SQL.
@@ -158,7 +157,53 @@ case class QualifiedColType(
 }
 
 /**
- * An INSERT INTO statement, as parsed from SQL.
+ * A temporary INSERT plan whose target identifier expression still needs analyzer traversal.
+ *
+ * The target is exposed as a child only until it becomes an `UnresolvedInsertTarget`. The analyzer
+ * then converts this node to the unary [[InsertIntoStatement]], before resolving the target as a
+ * relation.
+ */
+case class UnresolvedInsert(
+    table: LogicalPlan,
+    partitionSpec: Map[String, Option[String]],
+    userSpecifiedCols: Seq[String],
+    query: LogicalPlan,
+    overwrite: Boolean,
+    ifPartitionNotExists: Boolean,
+    byName: Boolean = false,
+    replaceCriteriaOpt: Option[InsertReplaceCriteria] = None,
+    withSchemaEvolution: Boolean = false)
+  extends ParsedStatement with TransactionalWrite {
+
+  override def children: Seq[LogicalPlan] = Seq(table, query)
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    copy(query = WithCTE(query, cteDefs))
+  }
+
+  def toInsertIntoStatement(target: LogicalPlan): InsertIntoStatement = {
+    val statement = InsertIntoStatement(
+      table = target,
+      partitionSpec = partitionSpec,
+      userSpecifiedCols = userSpecifiedCols,
+      query = query,
+      overwrite = overwrite,
+      ifPartitionNotExists = ifPartitionNotExists,
+      byName = byName,
+      replaceCriteriaOpt = replaceCriteriaOpt,
+      withSchemaEvolution = withSchemaEvolution)
+    statement.copyTagsFrom(this)
+    statement
+  }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): UnresolvedInsert = {
+    copy(table = newChildren(0), query = newChildren(1))
+  }
+}
+
+/**
+ * An INSERT INTO statement whose target identifier is ready for relation resolution.
  *
  * @param table                the logical plan representing the table.
  * @param userSpecifiedCols    the user specified list of columns that belong to the table.
@@ -178,7 +223,6 @@ case class QualifiedColType(
  *                             which atomically deletes existing rows that satisfy the replace
  *                             criteria and then inserts the query result rows into the table.
  * @param withSchemaEvolution  If true, enables automatic schema evolution for the operation.
- * @param tableOptions         options used to resolve and write to the target table.
  */
 case class InsertIntoStatement(
     table: LogicalPlan,
@@ -189,13 +233,12 @@ case class InsertIntoStatement(
     ifPartitionNotExists: Boolean,
     byName: Boolean = false,
     replaceCriteriaOpt: Option[InsertReplaceCriteria] = None,
-    withSchemaEvolution: Boolean = false,
-    tableOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
+    withSchemaEvolution: Boolean = false)
   // Extends TransactionalWrite so that QueryExecution can detect a potential transaction on the
   // unresolved logical plan before analysis runs. InsertIntoStatement is shared between V1 and V2
   // inserts, but the LookupCatalog.TransactionalWrite extractor only matches when the target
   // catalog implements TransactionalCatalogPlugin, so V1 inserts are never assigned a transaction.
-  extends ParsedStatement with TransactionalWrite {
+  extends UnaryParsedStatement with TransactionalWrite {
 
   require(overwrite || !ifPartitionNotExists,
     "IF NOT EXISTS is only valid in INSERT OVERWRITE")
@@ -211,21 +254,9 @@ case class InsertIntoStatement(
   require(replaceCriteriaOpt.isEmpty || overwrite,
     "REPLACE USING/ON/WHERE requires overwrite to be true")
 
-  override def children: Seq[LogicalPlan] = Seq(table, query)
-
-  override protected def stringArgs: Iterator[Any] = super.stringArgs.filterNot {
-    case options: CaseInsensitiveStringMap => options.isEmpty
-    case _ => false
-  }
-
-  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
-    copy(query = WithCTE(query, cteDefs))
-  }
-
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[LogicalPlan]): InsertIntoStatement = {
-    copy(table = newChildren(0), query = newChildren(1))
-  }
+  override def child: LogicalPlan = query
+  override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoStatement =
+    copy(query = newChild)
 }
 
 sealed abstract class InsertReplaceCriteria extends Expression with Unevaluable {

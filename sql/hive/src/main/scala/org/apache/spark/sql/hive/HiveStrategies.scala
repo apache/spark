@@ -20,20 +20,16 @@ package org.apache.spark.sql.hive
 import java.io.IOException
 import java.util.Locale
 
-import scala.annotation.tailrec
-
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, ResolvedTable, ResolvedTempView}
+import org.apache.spark.sql.catalyst.analysis.AnalysisContext
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, InsertIntoDir, InsertIntoStatement, LogicalPlan, ScriptTransformation, Statistics, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.Strategy
-import org.apache.spark.sql.connector.catalog.V1Table
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils, InsertIntoDataSourceDirCommand}
@@ -42,24 +38,6 @@ import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.execution.HiveScriptTransformationExec
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable.BY_CTAS
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
-
-private object HiveWriteTable {
-  @tailrec
-  private def stripSubqueryAliases(plan: LogicalPlan): LogicalPlan = plan match {
-    case SubqueryAlias(_, child) => stripSubqueryAliases(child)
-    case other => other
-  }
-
-  def unapply(insert: InsertIntoStatement): Option[CatalogTable] = insert.table match {
-    case ResolvedTable(_, _, V1Table(table: CatalogTable), _) => Some(table)
-    case view: ResolvedTempView =>
-      view.viewRelation.plan
-        .map(stripSubqueryAliases)
-        .collect { case relation: HiveTableRelation => relation.tableMeta }
-    case relation: HiveTableRelation => Some(relation.tableMeta)
-    case _ => None
-  }
-}
 
 
 /**
@@ -144,22 +122,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 
   override def conf: SQLConf = session.sessionState.conf
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case relation: HiveTableRelation
-      if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
-      DetermineTableStats.withTableStats(session, relation)
-  }
-}
-
-private object DetermineTableStats extends Logging {
-  def withTableStats(
-      session: SparkSession,
-      relation: HiveTableRelation): HiveTableRelation = {
-    if (relation.tableMeta.stats.nonEmpty) {
-      return relation
-    }
-
-    val conf = session.sessionState.conf
+  private def hiveTableWithStats(relation: HiveTableRelation): HiveTableRelation = {
     val table = relation.tableMeta
     val partitionCols = relation.partitionCols
     // For partitioned tables, the partition directory may be outside of the table directory.
@@ -182,6 +145,18 @@ private object DetermineTableStats extends Logging {
     val stats = Some(Statistics(sizeInBytes = BigInt(sizeInBytes)))
     relation.copy(tableStats = stats)
   }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case relation: HiveTableRelation
+      if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
+      hiveTableWithStats(relation)
+
+    // handles InsertIntoStatement specially as the table in InsertIntoStatement is not added in its
+    // children, hence not matched directly by previous HiveTableRelation case.
+    case i @ InsertIntoStatement(relation: HiveTableRelation, _, _, _, _, _, _, _, _)
+      if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
+      i.copy(table = hiveTableWithStats(relation))
+  }
 }
 
 /**
@@ -192,9 +167,11 @@ private object DetermineTableStats extends Logging {
  */
 object HiveAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ HiveWriteTable(table) if DDLUtils.isHiveTable(table) && i.query.resolved =>
-      InsertIntoHiveTable(table, i.partitionSpec, i.query, i.overwrite,
-        i.ifPartitionNotExists, i.query.output.map(_.name))
+    case InsertIntoStatement(
+          r: HiveTableRelation, partSpec, _, query, overwrite, ifPartitionNotExists, _, _, _)
+        if DDLUtils.isHiveTable(r.tableMeta) && query.resolved =>
+      InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite,
+        ifPartitionNotExists, query.output.map(_.name))
 
     case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>
       CreateTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
@@ -233,8 +210,7 @@ object HiveAnalysis extends Rule[LogicalPlan] {
  * `PreprocessTableCreation`, `PreprocessTableInsertion`, `DataSourceAnalysis` and `HiveAnalysis`.
  */
 case class RelationConversions(
-    sessionCatalog: HiveSessionCatalog,
-    session: SparkSession) extends Rule[LogicalPlan] {
+    sessionCatalog: HiveSessionCatalog) extends Rule[LogicalPlan] {
   private def isConvertible(relation: HiveTableRelation): Boolean = {
     isConvertible(relation.tableMeta)
   }
@@ -254,27 +230,35 @@ case class RelationConversions(
     if (serde.contains("parquet")) "parquet" else "orc"
   }
 
-  private def shouldConvertForWrite(table: CatalogTable): Boolean = {
-    isConvertible(table) &&
-      ((table.partitionColumnNames.nonEmpty &&
-        conf.getConf(HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE)) ||
-        (table.partitionColumnNames.isEmpty &&
-          conf.getConf(HiveUtils.CONVERT_INSERTING_UNPARTITIONED_TABLE)))
-  }
-
   private val metastoreCatalog = sessionCatalog.metastoreCatalog
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan resolveOperators {
       // Write path
-      case i @ HiveWriteTable(table) if i.query.resolved && DDLUtils.isHiveTable(table) =>
-        if (shouldConvertForWrite(table)) {
-          val relation = DDLUtils.readHiveTable(table)
-          val relationWithStats = DetermineTableStats.withTableStats(session, relation)
-          i.copy(table = metastoreCatalog.convert(relationWithStats, isWrite = true))
-        } else {
-          i
-        }
+      case InsertIntoStatement(
+            r: HiveTableRelation,
+            partition,
+            cols,
+            query,
+            overwrite,
+            ifPartitionNotExists,
+            byName,
+            replaceCriteriaOpt,
+            withSchemaEvolution)
+          if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
+            ((r.isPartitioned && conf.getConf(HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE)) ||
+              (!r.isPartitioned && conf.getConf(HiveUtils.CONVERT_INSERTING_UNPARTITIONED_TABLE)))
+            && isConvertible(r) =>
+        InsertIntoStatement(
+          metastoreCatalog.convert(r, isWrite = true),
+          partition,
+          cols,
+          query,
+          overwrite,
+          ifPartitionNotExists,
+          byName,
+          replaceCriteriaOpt,
+          withSchemaEvolution)
 
       // Read path
       case relation: HiveTableRelation if doConvertHiveTableRelationForRead(relation) =>

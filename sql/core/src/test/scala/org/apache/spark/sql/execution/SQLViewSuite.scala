@@ -435,33 +435,6 @@ abstract class SQLViewSuite extends QueryTest {
     }
   }
 
-  test("INSERT into a view does not resolve the view body") {
-    val baseTable = "insert_view_base"
-    val viewName = "insert_view"
-    withTable(baseTable) {
-      withView(viewName) {
-        sql(s"CREATE TABLE $baseTable (i INT) USING parquet")
-        sql(s"CREATE VIEW $viewName AS SELECT * FROM $baseTable")
-        sql(s"DROP TABLE $baseTable")
-
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql(s"INSERT INTO TABLE $viewName SELECT 1")
-          },
-          condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-          parameters = Map(
-            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$viewName`",
-            "operation" -> "INSERT"
-          ),
-          context = ExpectedContext(fragment = viewName, start = 18, stop = 28)
-        )
-
-        // Restore the dependency so view cleanup does not need to analyze a broken definition.
-        sql(s"CREATE TABLE $baseTable (i INT) USING parquet")
-      }
-    }
-  }
-
   test("error handling: fail if the view sql itself is invalid") {
     // A database that does not exist
     assertRelationNotFound(

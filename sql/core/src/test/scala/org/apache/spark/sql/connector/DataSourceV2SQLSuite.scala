@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, InsertIntoStatement}
+import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, _}
@@ -44,7 +44,7 @@ import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelationWithTable}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -101,36 +101,6 @@ abstract class DataSourceV2SQLSuite
 
   protected def analysisException(sqlText: String): AnalysisException = {
     intercept[AnalysisException](sql(sqlText))
-  }
-
-  test("transaction target resolution uses the analyzer session config") {
-    val catalogName = "session"
-    val tableName = s"$catalogName.target"
-    withSQLConf(
-        s"spark.sql.catalog.$catalogName" ->
-          classOf[InMemoryRowLevelOperationTableCatalog].getName,
-        SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
-      withTable(tableName) {
-        withTempView("target") {
-          sql(s"CREATE TABLE $tableName (i INT) USING foo")
-          spark.range(1).createOrReplaceTempView("target")
-          val insert = spark.sessionState.sqlParser
-            .parsePlan(s"INSERT INTO $tableName VALUES (1)")
-            .asInstanceOf[InsertIntoStatement]
-          val otherSession = spark.newSession()
-          otherSession.conf.set(SQLConf.PERSISTENT_CATALOG_FIRST.key, false)
-
-          val result = otherSession.withActive {
-            spark.sessionState.analyzer.resolveWriteTargetForTransaction(insert.table)
-          }
-          val transaction = result.transaction.getOrElse {
-            fail("expected the persistent target to start a transaction")
-          }
-          transaction.abort()
-          transaction.close()
-        }
-      }
-    }
   }
 
   test("EXPLAIN") {
@@ -4550,23 +4520,6 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("function-based target IDENTIFIER in INSERT REPLACE WHERE") {
-    val t = "testcat.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      spark.sql(s"INSERT INTO TABLE $t VALUES (1, 'a'), (2, 'b')")
-
-      spark.sql(
-        """INSERT INTO IDENTIFIER(
-          |  lower(regexp_replace(:table_name, 'PLACEHOLDER', 'TBL')))
-          |REPLACE WHERE id = 1
-          |VALUES (1, 'updated')""".stripMargin,
-        Map("table_name" -> "TESTCAT.PLACEHOLDER"))
-
-      checkAnswer(spark.table(t), Seq(Row(1L, "updated"), Row(2L, "b")))
-    }
-  }
-
   test("Session variable in INSERT REPLACE WHERE") {
     val t = "testcat.tbl"
     withTable(t) {
@@ -5268,8 +5221,8 @@ class DataSourceV2SQLSuiteV1Filter
         withTable(tbl) {
           sql(s"CREATE TABLE $tbl (i INT)")
 
-          // The write target is resolved before the query. Its load must still carry write
-          // privileges because write loads bypass the per-query read caches.
+          // The write target is resolved after its query, so it used to find the query's
+          // relation in the per-query relation cache and skip `loadTable(ident, writePrivileges)`.
           assertPrivilegeError(sql(s"INSERT INTO $tbl SELECT * FROM $tbl"), "INSERT")
           assertPrivilegeError(
             sql(s"INSERT OVERWRITE $tbl SELECT * FROM $tbl"), "DELETE,INSERT")
@@ -5313,26 +5266,6 @@ class DataSourceV2SQLSuiteV1Filter
     spark.sessionState.catalogManager.reset()
     checkWritesReadingTheTarget(SESSION_CATALOG_NAME)
     checkWritesReadingTheTarget("read_only_self_ref_cat")
-
-    // The source read populates the relation cache before the target is materialized. Keep the
-    // target bound to the independently loaded write state rather than the cached read state.
-    withSQLConf("spark.sql.catalog.v1_state_cat" -> classOf[V1TableStateCatalog].getName) {
-      val tbl = "v1_state_cat.default.t"
-      withTable(tbl) {
-        sql(s"CREATE TABLE $tbl (i INT) USING parquet")
-        val analyzed = spark.sessionState.executePlan(
-          spark.sessionState.sqlParser.parsePlan(
-            s"INSERT INTO $tbl SELECT * FROM $tbl")).analyzed
-        val command = analyzed.collectFirst {
-          case insert: InsertIntoHadoopFsRelationCommand => insert
-        }.get
-        val readStates = command.query.collect {
-          case LogicalRelationWithTable(_, Some(table)) => table.comment
-        }.flatten
-        assert(readStates == Seq("read"))
-        assert(command.catalogTable.flatMap(_.comment).contains("write"))
-      }
-    }
   }
 
   test("StagingTableCatalog without atomic support") {
@@ -5384,44 +5317,6 @@ class DataSourceV2SQLSuiteV1Filter
         spark.table(t).createOrReplaceTempView(v)
         sql(s"INSERT INTO v VALUES (1)")
         checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1)))
-      }
-    }
-  }
-
-  test("INSERT into a temp view does not resolve the view body") {
-    val table = "testcat.default.temp_view_source"
-    val view = "broken_temp_view"
-    withTable(table) {
-      withTempView(view) {
-        sql(s"CREATE TABLE $table (id INT) USING foo")
-        sql(s"CREATE TEMP VIEW $view AS SELECT * FROM $table")
-        sql(s"DROP TABLE $table")
-
-        val statement = s"INSERT INTO $view VALUES (1)"
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql(statement)
-          },
-          condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-          parameters = Map("viewName" -> s"`$view`", "operation" -> "INSERT"),
-          context = ExpectedContext(
-            fragment = view,
-            start = "INSERT INTO ".length,
-            stop = "INSERT INTO ".length + view.length - 1))
-      }
-    }
-  }
-
-  test("insert replace where into temp view on DSv2 table") {
-    val t = "testcat.default.t"
-    val v = "v"
-    withTable(t) {
-      withTempView(v) {
-        sql(s"CREATE TABLE $t (id INT, data STRING) USING foo PARTITIONED BY (id)")
-        sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
-        spark.table(t).createOrReplaceTempView(v)
-        sql(s"INSERT INTO $v REPLACE WHERE id = 1 VALUES (1, 'updated')")
-        checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, "updated"), Row(2, "b")))
       }
     }
   }
@@ -5675,23 +5570,6 @@ class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
       ident: Identifier,
       writePrivileges: util.Set[TableWritePrivilege]): Table = {
     loadTable(ident)
-  }
-}
-
-class V1TableStateCatalog extends V2CatalogSupportBuiltinDataSource {
-  private def withState(table: Table, state: String): Table = table match {
-    case V1Table(v1Table) => V1Table(v1Table.copy(comment = Some(state)))
-    case other => other
-  }
-
-  override def loadTable(ident: Identifier): Table = {
-    withState(super.loadTable(ident), "read")
-  }
-
-  override def loadTable(
-      ident: Identifier,
-      writePrivileges: util.Set[TableWritePrivilege]): Table = {
-    withState(super.loadTable(ident), "write")
   }
 }
 

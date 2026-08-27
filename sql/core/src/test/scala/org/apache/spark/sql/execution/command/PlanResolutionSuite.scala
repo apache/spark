@@ -27,12 +27,12 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, EmptyFunctionRegistry, FunctionRegistry, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolvedTempView, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, EmptyFunctionRegistry, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DescribeTablePartition, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable, V2WriteCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DescribeTablePartition, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -287,36 +287,19 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     manager
   }
 
-  private def newAnalyzer(withDefault: Boolean): Analyzer = {
+  def parseAndResolve(
+      query: String,
+      withDefault: Boolean = false,
+      checkAnalysis: Boolean = false): LogicalPlan = {
     val catalogManager = if (withDefault) {
       catalogManagerWithDefault
     } else {
       catalogManagerWithoutDefault
     }
-    new Analyzer(catalogManager) {
+    val analyzer = new Analyzer(catalogManager) {
       override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Seq(
         new ResolveSessionCatalog(this.catalogManager))
     }
-  }
-
-  private def withBuiltinFunctions[T](f: => T): T = {
-    val functionCatalog = new SessionCatalog(
-      new InMemoryCatalog,
-      FunctionRegistry.builtin.clone(),
-      new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
-    when(catalogManagerWithoutDefault.v1SessionCatalog).thenReturn(functionCatalog)
-    try {
-      f
-    } finally {
-      when(catalogManagerWithoutDefault.v1SessionCatalog).thenReturn(v1SessionCatalog)
-    }
-  }
-
-  def parseAndResolve(
-      query: String,
-      withDefault: Boolean = false,
-      checkAnalysis: Boolean = false): LogicalPlan = {
-    val analyzer = newAnalyzer(withDefault)
     // We don't check analysis here by default, as we expect the plan to be unresolved
     // such as `CreateTable`.
     val analyzed = analyzer.execute(parsePlan(query))
@@ -1317,7 +1300,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case InsertIntoStatement(
         _, _, _,
         UnresolvedInlineTable(_, Seq(Seq(UnresolvedAttribute(Seq("DEFAULT"))))),
-        _, _, _, _, _, _) =>
+        _, _, _, _, _) =>
 
       case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
     }
@@ -1325,7 +1308,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case InsertIntoStatement(
         _, _, _,
         Project(Seq(UnresolvedAttribute(Seq("DEFAULT"))), _),
-        _, _, _, _, _, _) =>
+        _, _, _, _, _) =>
 
       case _ => fail("Expect UpdateTable, but got:\n" + parsed2.treeString)
     }
@@ -1421,67 +1404,6 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         "tableName" -> "`tab`",
         "operation" -> "INSERT INTO ... REPLACE ON/USING")
     )
-  }
-
-  test("function-based IDENTIFIER in INSERT commands") {
-    withBuiltinFunctions {
-      val target =
-        "IDENTIFIER(lower(regexp_replace('TESTCAT.PLACEHOLDER', 'PLACEHOLDER', 'TAB')))"
-      val statements = Seq(
-        s"INSERT INTO $target SELECT * FROM v2Table" -> classOf[AppendData],
-        s"INSERT OVERWRITE TABLE $target SELECT * FROM v2Table" ->
-          classOf[OverwriteByExpression],
-        s"INSERT INTO $target REPLACE WHERE i = 1 SELECT * FROM v2Table" ->
-          classOf[OverwriteByExpression])
-
-      statements.foreach { case (sqlText, expectedClass) =>
-        parseAndResolve(sqlText) match {
-          case write: V2WriteCommand =>
-            assert(expectedClass.isInstance(write))
-            assert(write.table.resolved)
-            assert(write.children === Seq(write.query))
-            assert(write.innerChildren.isEmpty)
-          case other =>
-            fail(s"Expected V2WriteCommand, but got: $other")
-        }
-      }
-    }
-  }
-
-  test("ResolveRelations uses a direct metadata node for INSERT targets") {
-    val analyzer = newAnalyzer(withDefault = false)
-
-    val tableInsert = analyzer.ResolveRelations(
-      parsePlan("INSERT INTO testcat.tab WITH (`write-option` = 'value') SELECT * FROM v2Table"))
-      .asInstanceOf[InsertIntoStatement]
-    assert(tableInsert.table.isInstanceOf[ResolvedTable])
-    assert(tableInsert.children.head eq tableInsert.table)
-    assert(tableInsert.tableOptions.get("write-option") === "value")
-    assert(tableInsert.simpleString(100).contains("[write-option=value]"))
-
-    val tempViewInsert = analyzer.ResolveRelations(
-      parsePlan("INSERT INTO v SELECT * FROM v2Table")).asInstanceOf[InsertIntoStatement]
-    assert(tempViewInsert.table.isInstanceOf[ResolvedTempView])
-    assert(tempViewInsert.children.head eq tempViewInsert.table)
-  }
-
-  test("function-based IDENTIFIER in INSERT INTO REPLACE USING") {
-    withBuiltinFunctions {
-      checkError(
-        exception = intercept[AnalysisException] {
-          parseAndResolve(
-            """INSERT INTO IDENTIFIER(lower(regexp_replace(
-              |  'TESTCAT.PLACEHOLDER', 'PLACEHOLDER', 'TAB'))) AS t
-              |REPLACE USING (i)
-              |SELECT * FROM v2Table""".stripMargin)
-        },
-        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-        sqlState = "0A000",
-        parameters = Map(
-          "tableName" -> "`tab`",
-          "operation" -> "INSERT INTO ... REPLACE ON/USING")
-      )
-    }
   }
 
   test("INSERT INTO REPLACE WHERE with column list") {

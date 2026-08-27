@@ -19,8 +19,8 @@ package org.apache.spark.sql.connector.catalog
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{ResolvedTable, UnresolvedIdentifier, UnresolvedRelation, UnresolvedWriteTarget, V2TableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, TransactionalWrite}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedIdentifier, UnresolvedRelation, V2TableReference}
+import org.apache.spark.sql.catalyst.plans.logical.TransactionalWrite
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
@@ -168,14 +168,7 @@ private[sql] trait LookupCatalog extends Logging {
 
   object TransactionalWrite {
     def unapply(write: TransactionalWrite): Option[TransactionalCatalogPlugin] = {
-      catalogFor(write.table)
-    }
-
-    private[sql] def catalogFor(table: LogicalPlan): Option[TransactionalCatalogPlugin] = {
-      SubqueryAlias.stripLeadingAliases(table) match {
-        case UnresolvedWriteTarget(
-            CatalogAndIdentifier(c: TransactionalCatalogPlugin, _), _, _) =>
-          Some(c)
+      EliminateSubqueryAliases(write.table) match {
         case UnresolvedRelation(CatalogAndIdentifier(c: TransactionalCatalogPlugin, _), _, _) =>
           Some(c)
         case UnresolvedIdentifier(CatalogAndIdentifier(c: TransactionalCatalogPlugin, _), _) =>
@@ -185,8 +178,6 @@ private[sql] trait LookupCatalog extends Logging {
             case c: TransactionalCatalogPlugin => Some(c)
             case _ => None
           }
-        case ResolvedTable(c: TransactionalCatalogPlugin, _, _, _) =>
-          Some(c)
         case _ =>
           None
       }
