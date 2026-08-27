@@ -326,9 +326,10 @@ class CountVectorizerModel(
       }
       val effectiveMinTF = if (localMinTF >= 1.0) localMinTF else tokenCount * localMinTF
       val effectiveCounts = if (localBinary) {
-        termCounts.filter(_._2 >= effectiveMinTF).map(p => (p._1, 1.0)).toSeq
+        termCounts.iterator.filter(_._2 >= effectiveMinTF).map(p => (p._1, 1.0)).toSeq
       } else {
-        termCounts.filter(_._2 >= effectiveMinTF).map(p => (p._1, p._2.toDouble)).toSeq
+        termCounts.iterator
+          .filter(_._2 >= effectiveMinTF).map(p => (p._1, p._2.toDouble)).toSeq
       }
 
       Vectors.sparse(dictSize, effectiveCounts)
