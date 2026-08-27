@@ -49,9 +49,9 @@ class TransformExpressionSuite extends SparkFunSuite {
 
   test("SPARK-58769: expression equality follows the function's own equals") {
     // Spark does not derive transform identity itself -- it defers to the connector, because only
-    // the connector knows which of its state matters. A function that does not implement `equals`
-    // therefore yields expressions that do not compare equal across separate binds, which costs
-    // deduplication and reuse but never correctness. See BoundFunction#equals.
+    // the connector knows which of its state matters. Separate instances of a function that does
+    // not implement `equals` therefore yield expressions that do not compare equal. See
+    // BoundFunction#equals.
     assert(
       bucket(new NamedFunction("test.bucket"), a) != bucket(new NamedFunction("test.bucket"), a),
       "no equals on the function means no equality across binds")
@@ -62,7 +62,7 @@ class TransformExpressionSuite extends SparkFunSuite {
     // A function that does implement it gets the deduplication.
     val left = bucket(new ComparableFunction, a)
     val right = bucket(new ComparableFunction, a)
-    assert(left.function ne right.function, "the fixture must bind a fresh instance per call")
+    assert(left.function ne right.function, "the fixture must use distinct function instances")
     assert(left == right)
     assert(left.semanticEquals(right))
     assert(ExpressionSet(Seq(left, right)).size == 1)
@@ -75,7 +75,7 @@ class TransformExpressionSuite extends SparkFunSuite {
     // bucket(4, right.id) and recovers the positions separately, while equality does not.
     val left = bucket(new ComparableFunction, a)
     val right = bucket(new ComparableFunction, b)
-    assert(left.function ne right.function, "the fixture must bind a fresh instance per call")
+    assert(left.function ne right.function, "the fixture must use distinct function instances")
     assert(left.function == right.function)
     assert(left.function.canonicalName() == right.function.canonicalName())
     assert(left.isSameFunction(right), "the same partition function, arguments aside")
