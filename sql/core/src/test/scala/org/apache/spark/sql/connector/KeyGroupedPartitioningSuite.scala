@@ -4388,6 +4388,45 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     }
   }
 
+  test("SPARK-59027: v2 bucketed table with subset join keys left-outer joining v1 table") {
+    // Same shape as the SPARK-58988 test above, but LEFT OUTER: `ShuffledJoin` then exposes only
+    // the left side's partitioning, so no `PartitioningCollection` invariant compares the two
+    // sides' declared keys at planning time. If the order declared by `createShuffleSpec` and the
+    // physical layouts of the two sides (`GroupPartitionsExec` on the keyed side, the shuffle
+    // partitioner on the other) ever diverged, this join would silently lose matches instead of
+    // failing planning, so the answer check is the guard here. The unmatched row distinguishes a
+    // legitimate outer-join null from a lost match.
+    val cols = Array(
+      Column.create("c1", LongType),
+      Column.create("c2", StringType),
+      Column.create("dt", StringType))
+    val partitions = Array(identity("dt"), bucket(16, "c1"))
+
+    createTable("iceberg_t3", cols, partitions)
+    sql("INSERT INTO testcat.ns.iceberg_t3 VALUES " +
+      "(2, 'cc', '2020'), (1, 'aa', '2021'), (3, 'ee', '2022')")
+
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c1 BIGINT, c2 STRING) USING parquet")
+      sql("INSERT INTO t1 VALUES (1, 'aa'), (2, 'cc')")
+
+      withSQLConf(
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = sql("SELECT * FROM testcat.ns.iceberg_t3 t0 LEFT JOIN t1 ON t0.c1 = t1.c1")
+        val plan = df.queryExecution.executedPlan
+        // Only the v1 side is re-shuffled; the v2 side is regrouped onto the join key instead.
+        assert(collectShuffles(plan).length == 1)
+        assert(collectGroupPartitions(plan).length == 1)
+        checkAnswer(df, Seq(
+          Row(1L, "aa", "2021", 1L, "aa"),
+          Row(2L, "cc", "2020", 2L, "cc"),
+          Row(3L, "ee", "2022", null, null)))
+      }
+    }
+  }
+
   test("SPARK-57881: storage-partitioned join leverages union output KeyedPartitioning to " +
       "avoid shuffle") {
     val cols = Array(
