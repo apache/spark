@@ -274,17 +274,17 @@ class GBTRegressionModel private[ml](
     if ($(predictionCol).nonEmpty || $(leafCol).nonEmpty) {
       var predColNames = Seq.empty[String]
       var predCols = Seq.empty[Column]
-      val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
+      val bcModel = dataset.sparkSession.sparkContext.broadcast(this)
 
       if ($(predictionCol).nonEmpty) {
-        val predictUDF = udf { features: Vector => bcastModel.value.predict(features) }
+        val predictUDF = udf { features: Vector => bcModel.value.predict(features) }
         predColNames :+= $(predictionCol)
         predCols :+= predictUDF(col($(featuresCol)))
           .as($(predictionCol), outputSchema($(predictionCol)).metadata)
       }
 
       if ($(leafCol).nonEmpty) {
-        val leafUDF = udf { features: Vector => bcastModel.value.predictLeaf(features) }
+        val leafUDF = udf { features: Vector => bcModel.value.predictLeaf(features) }
         predColNames :+= $(leafCol)
         predCols :+= leafUDF(col($(featuresCol)))
           .as($(leafCol), outputSchema($(leafCol)).metadata)
