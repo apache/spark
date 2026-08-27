@@ -16,15 +16,15 @@
 #
 import contextlib
 import io
+import json
+import logging
 import os
 import tempfile
 import unittest
-import logging
-import json
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Callable, Iterable, List, Union, Iterator, Tuple
+from typing import Callable, Iterable, Iterator, List, Tuple, Union
 
 from pyspark.errors import AnalysisException, PythonException
 from pyspark.memory_profiler_ext import has_memory_profiler
@@ -53,7 +53,7 @@ from pyspark.sql.datasource import (
 )
 from pyspark.sql.functions import spark_partition_id
 from pyspark.sql.session import SparkSession
-from pyspark.sql.types import Row, StructField, StructType, IntegerType, DecimalType, VariantVal
+from pyspark.sql.types import DecimalType, IntegerType, Row, StructField, StructType, VariantVal
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     SPARK_HOME,

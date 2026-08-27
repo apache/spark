@@ -25,7 +25,7 @@ import time
 import unittest
 from unittest import mock
 
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
 
 if should_test_connect:
     from pyspark.sql.connect.local_server import _pid_alive

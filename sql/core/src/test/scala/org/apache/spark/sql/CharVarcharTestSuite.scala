@@ -21,10 +21,14 @@ import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.{Attribute, EqualTo, GreaterThan, Literal, ScalarSubquery, StringRPad}
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverGuard
+import org.apache.spark.sql.catalyst.expressions.{
+  ArrayJoin, Attribute, Concat, EqualTo, Expression, GreaterThan, Literal, ScalarSubquery,
+  StringRPad, StringToMap, Upper
+}
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, InMemoryPartitionTableCatalog}
@@ -982,6 +986,29 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       checkAnswer(
         sql("SELECT cast('he' AS CHAR(4)) || cast('llo' AS CHAR(3)) AS c"),
         Row("he  llo"))
+      // Collated CHAR must promote to the same collation, not UTF8_BINARY STRING.
+      assert(sql(
+        """SELECT concat(
+          |  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+          |  cast('b' AS CHAR(3) COLLATE UTF8_LCASE)) AS c""".stripMargin)
+        .schema.head.dataType === StringType("UTF8_LCASE"))
+      checkAnswer(
+        sql("""SELECT concat(
+          |  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+          |  cast('b' AS CHAR(3) COLLATE UTF8_LCASE)) AS c""".stripMargin),
+        Row("a  b  "))
+      assert(sql(
+        """SELECT elt(
+          |  1,
+          |  cast('ab' AS CHAR(5) COLLATE UTF8_LCASE),
+          |  cast('x' AS CHAR(1) COLLATE UTF8_LCASE)) AS c""".stripMargin)
+        .schema.head.dataType === StringType("UTF8_LCASE"))
+      checkAnswer(
+        sql("""SELECT elt(
+          |  1,
+          |  cast('ab' AS CHAR(5) COLLATE UTF8_LCASE),
+          |  cast('x' AS CHAR(1) COLLATE UTF8_LCASE)) AS c""".stripMargin),
+        Row("ab   "))
       assert(sql("SELECT substr(cast('hello' AS VARCHAR(5)), 1, 2) AS c")
         .schema.head.dataType === StringType)
       assert(sql(
@@ -1015,13 +1042,13 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-58796: preserve vs standardSemantics R1 matrix") {
+  test("SPARK-58796: preserve vs standardSemantics result-type matrix") {
     // preserve-only: transforming ops may keep Char/Varchar (leaky experimental path).
     withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
       assert(sql("SELECT upper(cast('ab' AS CHAR(2))) AS c")
         .schema.head.dataType === CharType(2))
     }
-    // standardSemantics: R1 forces STRING even if preserve is also on.
+    // standardSemantics: transforming ops return STRING even if preserve is also on.
     withSQLConf(
         SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
         SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
@@ -1165,7 +1192,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-58794: R1 promotion unifies CHAR/VARCHAR with STRING at plain-string inputs") {
+  test("SPARK-58794: promotion unifies CHAR/VARCHAR with STRING at plain-string inputs") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       withTable("std_promote") {
         sql("CREATE TABLE std_promote (c CHAR(5), v VARCHAR(5)) USING parquet")
@@ -1180,7 +1207,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           "listagg(c, '-')" -> "ab   ",
           "elt(1, c, 'x')" -> "ab   ",
           // right() is RuntimeReplaceable; its literal branches must agree with the substring
-          // branch, which R1 has already reduced to STRING.
+          // branch, which promotion has already reduced to STRING.
           "right(c, 2)" -> "  ",
           "left(c, 2)" -> "ab").foreach { case (expr, expected) =>
           val df = sql(s"SELECT $expr AS r FROM std_promote")
@@ -1199,7 +1226,8 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           checkAnswer(df, Row(expected))
         }
 
-        // Promotion must not reach pass-through / LCT sites, which preserve CHAR/VARCHAR (R2/R3).
+        // Promotion must not reach pass-through / least-common-type sites, which preserve
+        // CHAR/VARCHAR.
         Seq(
           "c", "coalesce(c, c)", "case when true then c else c end", "max(c)",
           "element_at(array(c), 1)", "transform(array(c), x -> x)[0]",
@@ -1208,50 +1236,78 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           assert(df.schema.head.dataType === CharType(5), s"$expr should stay CHAR(5)")
         }
 
-        // reverse() on non-string inputs is unaffected by the R1 change.
+        // reverse() on non-string inputs is unaffected by the promotion.
         assert(sql("SELECT reverse(array(1, 2)) AS r").schema.head.dataType ===
           ArrayType(IntegerType, containsNull = false))
       }
     }
   }
 
-  // Allowlist for the inventory below: R2/R3 pass-through and container cases that may keep
-  // CHAR(n)/VARCHAR(n): aggregates/ordering that return an input unchanged, null-handling,
-  // element access, array/map/struct constructors, and collection rearrangements that keep
-  // element types. Coverage is limited to the seven fixed argumentShapes templates in the test;
-  // a leak only at another arity or nested shape would not fail here. For those shapes,
-  // anything not listed must reduce to plain STRING (R1).
+  // Pass-through and container functions that may keep CHAR(n)/VARCHAR(n): aggregates
+  // and ordering that return an input unchanged, null-handling, element access,
+  // array/map/struct constructors, and collection rearrangements that keep element types.
+  // Legitimacy is still per shape: reverse(array(c)) may keep CHAR, reverse(c) must not.
   private val charVarcharPassThroughFunctions = Set(
     "any_value", "approx_top_k", "approx_top_k_accumulate", "array", "array_agg", "array_compact",
     "array_distinct", "array_max", "array_min", "array_repeat", "array_sort", "arrays_zip",
     "coalesce", "collect_list", "collect_set", "collect_union", "concat", "explode",
-    "explode_outer", "first", "first_value", "get", "greatest", "ifnull", "last", "last_value",
-    "least", "map", "max", "max_by", "measure", "min", "min_by", "mode", "named_struct", "nullif",
-    "nullifzero", "nvl", "reverse", "shuffle", "sort_array", "struct", "trim_array", "when")
+    "explode_outer", "first", "first_value", "flatten", "get", "greatest", "ifnull", "last",
+    "last_value", "least", "map", "map_concat", "map_entries", "map_keys", "map_values", "max",
+    "max_by", "measure", "min", "min_by", "mode", "named_struct", "nullif", "nullifzero", "nvl",
+    "nvl2", "reverse", "shuffle", "sort_array", "struct", "trim_array", "when")
+
+  // String-transforming shapes of otherwise pass-through functions. These must reduce to
+  // unconstrained STRING even though the same function keeps CHAR on collection inputs.
+  private val charVarcharTransformingCalls = Set(
+    "concat(c)", "concat(c, c)", "concat(c, c, c)", "concat(c, 'x')", "concat('x', c)",
+    "reverse(c)")
+
+  private val inventoryScalarShapes = Seq(
+    "%s(c)", "%s(c, c)", "%s(c, 'x')", "%s('x', c)", "%s(c, 1)", "%s(array(c))",
+    "%s(array(c), '-')")
+
+  private val inventoryNestedShapes = Seq(
+    "%s(c, c, c)", "%s(array(array(c)))", "%s(named_struct('x', c))",
+    "%s(map(c, 1))", "%s(map(1, c))")
+
+  private def assertNoInventoriedCharVarcharLeaks(argumentShapes: Seq[String]): Unit = {
+    val (passThroughLeaks, transformingLeaks) =
+      FunctionRegistry.functionSet.map(_.funcName).toSeq.sorted.flatMap { name =>
+        argumentShapes.map(_.format(name)).flatMap { call =>
+          // Most shapes do not typecheck for a given function; those are simply not evidence.
+          val keepsCharVarchar =
+            Try(sql(s"SELECT $call AS r FROM std_inventory").schema.head.dataType)
+              .toOption
+              .exists(CharVarcharUtils.hasCharVarchar)
+          Option.when(keepsCharVarchar &&
+            (!charVarcharPassThroughFunctions.contains(name) ||
+              charVarcharTransformingCalls.contains(call)))((name, call))
+        }
+      }.partition { case (_, call) => !charVarcharTransformingCalls.contains(call) }
+
+    assert(passThroughLeaks.isEmpty,
+      "these inventoried calls returned a CHAR/VARCHAR type; if they legitimately pass through " +
+        "their input type, add the function name to charVarcharPassThroughFunctions: " +
+        passThroughLeaks.map(_._2).mkString(", "))
+    assert(transformingLeaks.isEmpty,
+      "these transforming calls returned a CHAR/VARCHAR type; fix the expression to return " +
+        "plain STRING: " + transformingLeaks.map(_._2).mkString(", "))
+  }
 
   test("SPARK-58794: inventoried shapes do not leak CHAR/VARCHAR under standardSemantics") {
-    val argumentShapes = Seq(
-      "%s(c)", "%s(c, c)", "%s(c, 'x')", "%s('x', c)", "%s(c, 1)", "%s(array(c))",
-      "%s(array(c), '-')")
-
     withTable("std_inventory") {
       sql("CREATE TABLE std_inventory (c CHAR(5)) USING parquet")
       withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-        val leaks = FunctionRegistry.functionSet.map(_.funcName).toSeq.sorted
-          .filterNot(charVarcharPassThroughFunctions.contains)
-          .flatMap { name =>
-            argumentShapes.map(_.format(name)).filter { call =>
-              // Most shapes do not typecheck for a given function; those are simply not evidence.
-              Try(sql(s"SELECT $call AS r FROM std_inventory").schema.head.dataType)
-                .toOption
-                .exists(CharVarcharUtils.hasCharVarchar)
-            }
-          }
+        assertNoInventoriedCharVarcharLeaks(inventoryScalarShapes)
+      }
+    }
+  }
 
-        assert(leaks.isEmpty,
-          "these inventoried calls returned a CHAR/VARCHAR type; either fix the expression to " +
-            "return plain STRING or add it to charVarcharPassThroughFunctions: " +
-            leaks.mkString(", "))
+  test("SPARK-59016: nested inventoried shapes do not leak CHAR/VARCHAR") {
+    withTable("std_inventory") {
+      sql("CREATE TABLE std_inventory (c CHAR(5)) USING parquet")
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+        assertNoInventoriedCharVarcharLeaks(inventoryNestedShapes)
       }
     }
   }
@@ -1347,6 +1403,33 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58794: ImplicitTypeCasts promotes CHAR/VARCHAR to STRING") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      def analyzed(sqlText: String): LogicalPlan = sql(sqlText).queryExecution.analyzed
+      def exprs(plan: LogicalPlan): Seq[Expression] =
+        plan.flatMap(_.expressions.flatMap(e => e +: e.collect { case c => c }))
+
+      val upper = exprs(analyzed("SELECT upper(cast('ab' AS CHAR(2)))"))
+        .collect { case u: Upper => u }.head
+      assert(upper.child.dataType === StringType)
+
+      val concat = exprs(analyzed(
+        "SELECT concat(cast('a' AS CHAR(2)), cast('b' AS CHAR(3)))"))
+        .collect { case c: Concat => c }.head
+      assert(concat.children.forall(_.dataType == StringType))
+
+      val arrayJoin = exprs(analyzed(
+        "SELECT array_join(array(cast('ab' AS CHAR(5))), '-')"))
+        .collect { case a: ArrayJoin => a }.head
+      assert(arrayJoin.array.dataType === ArrayType(StringType, containsNull = false))
+
+      val stringToMap = exprs(analyzed("SELECT str_to_map(cast('a:1' AS CHAR(5)))"))
+        .collect { case s: StringToMap => s }.head
+      assert(stringToMap.first.dataType === StringType)
+      assert(stringToMap.dataType === MapType(StringType, StringType, valueContainsNull = true))
+    }
+  }
+
   test("SPARK-58794: parameterized CHAR/VARCHAR lengths under standardSemantics") {
     // Length positions accept parameter markers (`integerValue` -> `parameterMarker`). Under
     // standardSemantics the bound type stays first-class: CAST keeps CHAR/VARCHAR, pads and
@@ -1398,7 +1481,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
 
   test("SPARK-58794: language surfaces keep CHAR/VARCHAR under standardSemantics") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-      // CTAS / CREATE VIEW inherit projected CHAR/VARCHAR (D13).
+      // CTAS / CREATE VIEW inherit projected CHAR/VARCHAR.
       withTable("std_src", "std_ctas") {
         sql("CREATE TABLE std_src (c CHAR(5), v VARCHAR(5)) USING parquet")
         sql("INSERT INTO std_src VALUES ('ab', 'ab')")
@@ -1794,14 +1877,24 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     // silently lost: the HybridAnalyzer compares output schema and normalized plan across the
     // two analyzers and fails with HYBRID_ANALYZER_EXCEPTION on any divergence. Resolver has no
     // Char/Varchar-specific logic; it inherits Expression.dataType and shared TypeCoercion, so
-    // this matrix is the proof that LCT/CAST/R1 stay aligned (D19).
+    // this matrix is the proof that least common type, CAST, and promotion stay aligned.
     withSQLConf(
         SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
         SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true",
         SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE.key -> "1.0",
         SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
         SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_EXPOSE_RESOLVER_GUARD_FAILURE.key -> "true") {
-      // CAST / try_cast introduce the type (R3).
+      def sql(sqlText: String): DataFrame = {
+        val parsed = spark.sessionState.sqlParser.parsePlan(sqlText)
+        val unsupportedReason =
+          new ResolverGuard(spark.sessionState.catalogManager).apply(parsed).planUnsupportedReason
+        assert(
+          unsupportedReason.isEmpty,
+          s"ResolverGuard skipped dual-run for [$sqlText]: $unsupportedReason")
+        spark.sql(sqlText)
+      }
+
+      // CAST / try_cast introduce the type.
       assert(sql("SELECT CAST('ab' AS CHAR(5)) AS c").schema.head.dataType === CharType(5))
       assert(sql("SELECT CAST('hello' AS VARCHAR(5)) AS c").schema.head.dataType ===
         VarcharType(5))
@@ -1820,7 +1913,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           |  CAST('x' AS VARCHAR(4) COLLATE UTF8_LCASE)) AS c""".stripMargin),
         Row("ab"))
 
-      // Least common type (R2): COALESCE / CASE / NULL / CHAR+VARCHAR / CHAR+STRING.
+      // Least common type: COALESCE / CASE / NULL / CHAR+VARCHAR / CHAR+STRING.
       assert(sql(
         "SELECT coalesce(CAST('a' AS VARCHAR(3)), CAST('bb' AS VARCHAR(7))) AS c")
         .schema.head.dataType === VarcharType(7))
@@ -1845,7 +1938,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         sql("SELECT CAST('a' AS CHAR(2)) IN (CAST('a ' AS CHAR(2)), CAST('bbb' AS VARCHAR(3)))"),
         Row(true))
 
-      // Transforming operators return STRING (R1).
+      // Transforming operators return STRING.
       assert(sql("SELECT upper(CAST('ab' AS CHAR(2))) AS c").schema.head.dataType === StringType)
       assert(sql("SELECT lower(CAST('AB' AS VARCHAR(2))) AS c").schema.head.dataType ===
         StringType)
@@ -1861,7 +1954,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assert(sql("SELECT mask(CAST('ab' AS CHAR(2))) AS c").schema.head.dataType === StringType)
       assert(sql("SELECT split(CAST('a,b' AS CHAR(3)), ',') AS c").schema.head.dataType ===
         ArrayType(StringType, containsNull = false))
-      // R1 after LCT: coalesce stays CHAR, upper widens to STRING.
+      // Promotion after least common type: coalesce stays CHAR, upper widens to STRING.
       assert(sql(
         "SELECT upper(coalesce(CAST('a' AS CHAR(2)), CAST('b' AS CHAR(4)))) AS c")
         .schema.head.dataType === StringType)
@@ -1924,10 +2017,10 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assert(mixedCharUnion.schema.head.dataType === CharType(4))
       checkAnswer(mixedCharUnion, Seq(Row("a   "), Row("bb  ")))
 
-      // Bare column references keep the declared type (R3) through dual-run analysis.
+      // Bare column references keep the declared type through dual-run analysis.
       withTable("char_varchar_dual_run") {
-        sql("CREATE TABLE char_varchar_dual_run (c CHAR(5), v VARCHAR(5)) USING parquet")
-        sql("INSERT INTO char_varchar_dual_run VALUES ('ab', 'ab')")
+        spark.sql("CREATE TABLE char_varchar_dual_run (c CHAR(5), v VARCHAR(5)) USING parquet")
+        spark.sql("INSERT INTO char_varchar_dual_run VALUES ('ab', 'ab')")
         val df = sql("SELECT c, v FROM char_varchar_dual_run")
         assert(df.schema("c").dataType === CharType(5))
         assert(df.schema("v").dataType === VarcharType(5))
@@ -2092,6 +2185,47 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-59001: empty CHAR/VARCHAR partition values become null like STRING") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // CHAR(n>0) pads '' to spaces; CHAR(0) is the empty CHAR that empty2null should treat
+      // the same as VARCHAR/STRING.
+      Seq("CHAR(0)", "VARCHAR(5)").foreach { typ =>
+        withTempPath { path =>
+          sql(s"SELECT 0 AS id, CAST('' AS $typ) AS p UNION ALL SELECT 1, CAST(NULL AS $typ)")
+            .write.mode("overwrite").partitionBy("p").parquet(path.getCanonicalPath)
+          val df = spark.read.parquet(path.getCanonicalPath)
+          checkAnswer(df.where("p IS NULL").select("id"), Seq(Row(0), Row(1)))
+          val dirs = path.listFiles().filterNot(
+            f => f.getName.startsWith(".") || f.getName.startsWith("_"))
+          assert(dirs.length === 1, dirs.map(_.getName).mkString(","))
+        }
+      }
+    }
+  }
+
+  test("SPARK-59001: text datasource accepts CHAR/VARCHAR as a string family type") {
+    Seq("text", "").foreach { useV1SourceList =>
+      withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceList) {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          sql("SELECT CAST('ab' AS CHAR(4)) AS value").write.mode("overwrite").text(path)
+          val df = spark.read.schema("value CHAR(4)").text(path)
+          assert(df.schema.head.dataType === CharType(4))
+          checkAnswer(df.selectExpr("concat('<', value, '>')"), Row("<ab  >"))
+        }
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          sql("SELECT CAST('cd' AS VARCHAR(5)) AS value").write.mode("overwrite").text(path)
+          val df = spark.read.schema("value VARCHAR(5)").text(path)
+          assert(df.schema.head.dataType === VarcharType(5))
+          checkAnswer(df, Row("cd"))
+        }
+      }
+    }
+  }
 }
 
 class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSparkSession {
@@ -2158,7 +2292,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
   }
 
   test("SPARK-58794: EXTERNAL TABLE CHAR/VARCHAR pad, assignment, and oversize") {
-    // D14: external file tables use the same store assignment on write and pad +
+    // External file tables use the same store assignment on write and pad +
     // length-check on scan. Hive TRANSFORM is out of scope for this epic.
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       withTempPath { dir =>
@@ -2186,7 +2320,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           }
         }
       }
-      // Bypass-writer oversize non-blank values fail on scan (D12).
+      // Bypass-writer oversize non-blank values fail on scan.
       withTempPath { dir =>
         val path = dir.getCanonicalPath
         sql("SELECT 'abcdef' AS c").write.format(format).save(path)

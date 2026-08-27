@@ -19,12 +19,12 @@ from typing import Any, Callable, Tuple, Union, no_type_check
 import numpy as np
 
 from pyspark.loose_version import LooseVersion
-from pyspark.sql import Column, functions as F
-from pyspark.sql.pandas.functions import pandas_udf
-from pyspark.sql.types import DoubleType, BooleanType
 from pyspark.pandas._typing import SeriesOrIndex
 from pyspark.pandas.base import IndexOpsMixin
-
+from pyspark.sql import Column
+from pyspark.sql import functions as F
+from pyspark.sql.pandas.functions import pandas_udf
+from pyspark.sql.types import BooleanType, DoubleType
 
 unary_np_spark_mappings = {
     "abs": F.abs,
@@ -70,21 +70,31 @@ unary_np_spark_mappings = {
     "rad2deg": F.degrees,
     "radians": F.radians,
     "reciprocal": lambda c: F.when(
-        F.typeof(c).isin("float", "double"),
+        # Floating-point and decimal inputs take a true reciprocal; numpy
+        # applies it element-wise to Decimal objects as well.
+        F.typeof(c).isin("float", "double") | F.typeof(c).startswith("decimal"),
         F.when(c.isNull(), c.cast("double"))
         .when(
-            c == 0,
+            # Cast to double so the zero check also analyzes for the integer and
+            # boolean columns that fall through to the otherwise branch (Spark
+            # type-checks every branch of the CASE, not just the taken one).
+            c.cast("double") == 0,
             F.when(c.cast("string") == "-0.0", F.lit(float("-inf"))).otherwise(F.lit(float("inf"))),
         )
-        .otherwise(F.lit(1.0) / c),
+        .otherwise(F.lit(1.0) / c.cast("double")),
     ).otherwise(
-        # Integer input: numpy does integer division (truncated toward zero),
-        # so casting the float quotient to long reproduces 1 -> 1, -1 -> -1,
-        # and every other magnitude -> 0. Dividing by 0 overflows to the int64
-        # minimum, matching numpy's behavior on integer arrays.
-        F.when(c == 0, F.lit(float(np.iinfo(np.int64).min))).otherwise(
-            (F.lit(1) / c).cast("long").cast("double")
-        )
+        # Integer and boolean inputs: numpy does integer division (truncated
+        # toward zero), so only +/-1 survive and every other magnitude -> 0.
+        # Dividing by 0 overflows to the width-specific integer minimum for int
+        # (int32) and bigint (int64), while narrower widths (tinyint, smallint,
+        # and boolean promoted to int8) return 0. Cast through long so boolean
+        # and narrower integers can take part in the division.
+        F.when(
+            c.cast("long") == 0,
+            F.when(F.typeof(c) == "int", F.lit(float(np.iinfo(np.int32).min)))
+            .when(F.typeof(c) == "bigint", F.lit(float(np.iinfo(np.int64).min)))
+            .otherwise(F.lit(0.0)),
+        ).otherwise((F.lit(1) / c.cast("long")).cast("long").cast("double"))
     ),
     "rint": lambda c: F.rint(c.cast("double")),
     "sign": F.signum,
@@ -120,6 +130,23 @@ unary_np_spark_mappings = {
         * (F.abs(c.cast("double")) - (F.abs(c.cast("double")) % F.lit(1.0)))
     ),
 }
+
+
+def _copysign_func(c1: Column, c2: Column) -> Column:
+    # Sign of y is taken from its IEEE-754 sign bit, so -0.0 counts as negative.
+    # c2 < 0 misses -0.0, so detect it via the string cast, the same way the
+    # 'reciprocal' mapping distinguishes -0.0 from 0.0. NaN's sign bit is positive
+    # and c2 < 0 is already false for NaN, so it correctly falls through to +1.0.
+    sign = F.when((c2 < 0) | (c2.cast("string") == "-0.0"), F.lit(-1.0)).otherwise(F.lit(1.0))
+    # An integer y column's NULL is a genuine missing value and propagates. A
+    # float/double column instead stores its missing value as NaN (surfaced as a
+    # Spark NULL by pandas-on-Spark), for which copysign(x, NaN) returns |x|. A
+    # nullable Float64 <NA> collapses to that same Spark NULL, so it is likewise
+    # treated as NaN and returns |x| rather than propagating; this cannot be
+    # distinguished here and matches the prior pandas_udf behavior.
+    return F.when(
+        c2.isNull() & ~F.typeof(c2).isin("float", "double"), F.lit(None).cast("double")
+    ).otherwise(F.abs(c1.cast("double")) * sign)
 
 
 def _fmod_func(c1: Column, c2: Column) -> Column:
@@ -237,9 +264,7 @@ binary_np_spark_mappings = {
     "bitwise_and": lambda c1, c2: c1.bitwiseAND(c2),
     "bitwise_or": lambda c1, c2: c1.bitwiseOR(c2),
     "bitwise_xor": lambda c1, c2: c1.bitwiseXOR(c2),
-    "copysign": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.copysign(s1, s2), DoubleType()
-    ),
+    "copysign": _copysign_func,
     "float_power": lambda c1, c2: F.pow(c1.cast("double"), c2.cast("double")),
     # np.floor_divide dispatches to the pandas-on-Spark floordiv dunder operation
     # before this registry is consulted, so this mapping is not used for that case.
@@ -418,11 +443,12 @@ def maybe_dispatch_ufunc_to_spark_func(
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.numpy_compat
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

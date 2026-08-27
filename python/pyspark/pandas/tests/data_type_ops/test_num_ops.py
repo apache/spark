@@ -15,15 +15,15 @@
 # limitations under the License.
 #
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.utils import is_ansi_mode_test
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.sql.types import DecimalType, IntegralType
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.utils import is_ansi_mode_test
 
 
 class NumOpsTestsMixin:

@@ -15,12 +15,13 @@
 # limitations under the License.
 #
 
+import itertools
 import json
 import os
 import sys
-import itertools
 from multiprocessing.pool import ThreadPool
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -33,39 +34,39 @@ from typing import (
     Union,
     cast,
     overload,
-    TYPE_CHECKING,
 )
 
 import numpy as np
 
-from pyspark import keyword_only, since, inheritable_thread_target
-from pyspark.ml import Estimator, Transformer, Model
-from pyspark.ml.common import inherit_doc, _py2java, _java2py
+from pyspark import inheritable_thread_target, keyword_only, since
+from pyspark.ml.base import Estimator, Model, Transformer
+from pyspark.ml.common import _java2py, _py2java, inherit_doc
 from pyspark.ml.evaluation import Evaluator, JavaEvaluator
-from pyspark.ml.param import Params, Param, TypeConverters
+from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasCollectSubModels, HasParallelism, HasSeed
 from pyspark.ml.util import (
     DefaultParamsReader,
     DefaultParamsWriter,
+    JavaMLWriter,
     MetaAlgorithmReadWrite,
     MLReadable,
     MLReader,
     MLWritable,
     MLWriter,
-    JavaMLWriter,
-    try_remote_write,
-    try_remote_read,
     _cache_spark_dataset,
+    try_remote_read,
+    try_remote_write,
 )
-from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
+from pyspark.ml.wrapper import JavaEstimator, JavaParams, JavaWrapper
 from pyspark.sql import functions as F
 from pyspark.sql.dataframe import DataFrame
 
 if TYPE_CHECKING:
-    from pyspark.ml._typing import ParamMap
-    from py4j.java_gateway import JavaObject
     from py4j.java_collections import JavaArray
+    from py4j.java_gateway import JavaObject
+
     from pyspark.core.context import SparkContext
+    from pyspark.ml._typing import ParamMap
 
 __all__ = [
     "ParamGridBuilder",

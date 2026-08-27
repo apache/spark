@@ -18,8 +18,8 @@
 import numpy as np
 import pandas as pd
 
-from pyspark.sql import functions as sf
 from pyspark import pandas as ps
+from pyspark.sql import functions as sf
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 

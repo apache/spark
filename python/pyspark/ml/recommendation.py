@@ -16,22 +16,22 @@
 #
 
 import sys
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from pyspark import since, keyword_only
-from pyspark.ml.param.shared import (
-    HasPredictionCol,
-    HasBlockSize,
-    HasMaxIter,
-    HasRegParam,
-    HasCheckpointInterval,
-    HasSeed,
-    HasIntermediateStorageLevel,
-)
-from pyspark.ml.wrapper import JavaEstimator, JavaModel
+from pyspark import keyword_only, since
 from pyspark.ml.common import inherit_doc
-from pyspark.ml.param import Params, TypeConverters, Param
-from pyspark.ml.util import JavaMLWritable, JavaMLReadable, try_remote_attribute_relation
+from pyspark.ml.param import Param, Params, TypeConverters
+from pyspark.ml.param.shared import (
+    HasBlockSize,
+    HasCheckpointInterval,
+    HasIntermediateStorageLevel,
+    HasMaxIter,
+    HasPredictionCol,
+    HasRegParam,
+    HasSeed,
+)
+from pyspark.ml.util import JavaMLReadable, JavaMLWritable, try_remote_attribute_relation
+from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.sql import DataFrame
 
 if TYPE_CHECKING:
@@ -720,6 +720,7 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable["ALSMo
 
 if __name__ == "__main__":
     import doctest
+
     import pyspark.ml.recommendation
     from pyspark.sql import SparkSession
 
