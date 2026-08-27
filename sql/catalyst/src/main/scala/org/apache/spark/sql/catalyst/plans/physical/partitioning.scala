@@ -693,7 +693,9 @@ case class KeyedPartitioning(
    * Returns the reduced keys and their data types.
    */
   def reduceKeys(
-      reducers: Seq[Option[Reducer[_, _]]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) =
+  def reduceKeys(
+      reducers: Seq[Option[(Reducer[_, _], TransformExpression)]]):
+      (Seq[DataType], Seq[InternalRowComparableWrapper]) =
     KeyedPartitioning.reduceKeys(partitionKeys, keyDataTypes, reducers)
 
   override def satisfies0(required: Distribution): Boolean = {
@@ -871,9 +873,10 @@ object KeyedPartitioning {
   def reduceKeys(
       keys: Seq[InternalRowComparableWrapper],
       dataTypes: Seq[DataType],
-      reducers: Seq[Option[Reducer[_, _]]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) = {
+      reducers: Seq[Option[(Reducer[_, _], TransformExpression)]]):
+      (Seq[DataType], Seq[InternalRowComparableWrapper]) = {
     val reducedDataTypes = dataTypes.zip(reducers).map {
-      case (_, Some(reducer: Reducer[Any, Any])) => reducer.resultType()
+      case (_, Some((reducer: Reducer[Any, Any], _))) => reducer.resultType()
       case (t, _) => t
     }
     val comparableKeyWrapperFactory =
@@ -881,7 +884,7 @@ object KeyedPartitioning {
     val reducedKeys = keys.map { key =>
       val keyValues = key.row.toSeq(dataTypes)
       val reducedKey = keyValues.zip(reducers).map {
-        case (v, Some(reducer: Reducer[Any, Any])) => reducer.reduce(v)
+        case (v, Some((reducer: Reducer[Any, Any], _))) => reducer.reduce(v)
         case (v, _) => v
       }.toArray
       comparableKeyWrapperFactory(new GenericInternalRow(reducedKey))
@@ -1541,9 +1544,11 @@ case class KeyedShuffleSpec(
    *
    * @param other other key-grouped shuffle spec
    */
-  def reducers(other: KeyedShuffleSpec): Option[Seq[Option[Reducer[_, _]]]] = {
+  def reducers(
+      other: KeyedShuffleSpec): Option[Seq[Option[(Reducer[_, _], TransformExpression)]]] = {
     val results = partitioning.expressions.zip(other.partitioning.expressions).map {
-      case (e1: TransformExpression, e2: TransformExpression) => e1.reducers(e2)
+      case (e1: TransformExpression, e2: TransformExpression) =>
+        e1.reducers(e2).map(reducer => (reducer, e1))
 
       // Identity transform on this side, arbitrary transform on the other side: create a reducer
       // that applies the other's transform to the raw identity values. The symmetric case
@@ -1553,11 +1558,12 @@ case class KeyedShuffleSpec(
       case (a: AttributeReference, t: TransformExpression) =>
         val reducerExpr = t.transform { case _: AttributeReference => a }
         val boundExpr = BindReferences.bindReference(reducerExpr, AttributeSeq(Seq(a)))
-        Some(new Reducer[Any, Any] {
+        val reducer = new Reducer[Any, Any] {
           override def reduce(v: Any): Any = boundExpr.eval(new GenericInternalRow(Array[Any](v)))
           override def resultType(): DataType = reducerExpr.dataType
           override def displayName(): String = reducerExpr.toString
-        })
+        }
+        Some((reducer, reducerExpr.asInstanceOf[TransformExpression]))
 
       case (_, _) => None
     }

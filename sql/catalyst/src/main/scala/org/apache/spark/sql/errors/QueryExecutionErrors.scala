@@ -38,7 +38,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, TransformExpression}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -3376,12 +3376,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def storagePartitionJoinIncompatibleReducedTypesError(
-      leftReducers: Option[Seq[Option[Reducer[_, _]]]],
+      leftReducers: Option[Seq[Option[(Reducer[_, _], TransformExpression)]]],
       leftReducedDataTypes: Seq[DataType],
-      rightReducers: Option[Seq[Option[Reducer[_, _]]]],
+      rightReducers: Option[Seq[Option[(Reducer[_, _], TransformExpression)]]],
       rightReducedDataTypes: Seq[DataType]): Throwable = {
-    def reducersNames(reducers: Option[Seq[Option[Reducer[_, _]]]]) = {
-      reducers.toSeq.flatMap(_.map(_.map(_.displayName()).getOrElse("identity")))
+    def reducersNames(
+        reducers: Option[Seq[Option[(Reducer[_, _], TransformExpression)]]]) = {
+      reducers.toSeq.flatMap(_.map(_.map(_._1.displayName()).getOrElse("identity")))
         .mkString("[", ", ", "]")
     }
 

@@ -746,7 +746,7 @@ case class EnsureRequirements(
       plan: SparkPlan,
       joinKeyPositions: Option[Seq[Int]],
       mergedPartitionKeys: Seq[(InternalRowComparableWrapper, Int)],
-      reducers: Option[Seq[Option[Reducer[_, _]]]],
+      reducers: Option[Seq[Option[(Reducer[_, _], TransformExpression)]]],
       distributePartitions: Boolean): SparkPlan = {
     plan match {
       case g: GroupPartitionsExec =>

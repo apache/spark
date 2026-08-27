@@ -748,6 +748,87 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59045: compatible identity and bucket transforms reduce data type") {
+    // `identity(id)` reports a Long partition key while `bucket(4, id)` reports an Integer one.
+    // The identity->bucket reducer maps the Long keys to Integer; the GroupPartitionsExec output
+    // partitioning must report the reduced (Integer) expression, not the original Long identity,
+    // or the key ordering derived from the expressions fails with a ClassCastException.
+    val cols = Array(
+      Column.create("id", LongType),
+      Column.create("data", StringType))
+    createTable("t1", cols, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+    createTable("t2", cols, Array(bucket(4, "id")))
+    sql("INSERT INTO testcat.ns.t2 VALUES (1, 'x'), (2, 'y'), (3, 'z')")
+
+    val df = sql(
+      "SELECT t1.id, t1.data, t2.data FROM testcat.ns.t1 JOIN testcat.ns.t2 ON t1.id = t2.id")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      checkAnswer(df, Seq(Row(1, "a", "x"), Row(2, "b", "y"), Row(3, "c", "z")))
+      assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+        "storage-partitioned join should not shuffle")
+    }
+  }
+
+  test("SPARK-59045: compatible transforms reduce multiple times") {
+    // t1 is partitioned by identity(id) (Long), t2 by bucket(4, id), t3 by bucket(2, id). The
+    // first join reduces t1 to bucket(4, id) (data type changes), and the second join reduces the
+    // result to bucket(2, id). The reduced expression reported by the first join must remain a
+    // ReducibleFunction so the second reduction can be computed.
+    val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+    createTable("t1", cols, Array(identity("id")))
+    createTable("t2", cols, Array(bucket(4, "id")))
+    createTable("t3", cols, Array(bucket(2, "id")))
+    sql("INSERT INTO testcat.ns.t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+    sql("INSERT INTO testcat.ns.t2 VALUES (1, 'x'), (2, 'y'), (3, 'z')")
+    sql("INSERT INTO testcat.ns.t3 VALUES (1, 'p'), (2, 'q'), (3, 'r')")
+
+    val df = sql(
+      "SELECT t1.id, t1.data, t2.data, t3.data FROM testcat.ns.t1 " +
+        "JOIN testcat.ns.t2 ON t1.id = t2.id JOIN testcat.ns.t3 ON t1.id = t3.id")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      checkAnswer(df, Seq(
+        Row(1, "a", "x", "p"), Row(2, "b", "y", "q"), Row(3, "c", "z", "r")))
+      assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+        "storage-partitioned join should not shuffle")
+    }
+  }
+
+  test("SPARK-59045: compatible transforms reduce data type with subset join keys") {
+    // The join is on `id`, a subset of the partition keys `[identity(dt), identity(id)]` and
+    // `[identity(dt), bucket(2, id)]`. The identity(id) side is reduced to bucket(2, id), whose
+    // data type differs, while the dt partition key is projected away.
+    val cols = Array(
+      Column.create("id", LongType),
+      Column.create("dt", StringType),
+      Column.create("data", StringType))
+    createTable("t1", cols, Array(identity("dt"), identity("id")))
+    createTable("t2", cols, Array(identity("dt"), bucket(2, "id")))
+    sql("INSERT INTO testcat.ns.t1 VALUES (1, '2020', 'a'), (2, '2020', 'b'), (3, '2021', 'c')")
+    sql("INSERT INTO testcat.ns.t2 VALUES (1, '2020', 'x'), (2, '2020', 'y'), (3, '2021', 'z')")
+
+    val df = sql(
+      "SELECT t1.id, t1.dt, t1.data, t2.dt, t2.data FROM testcat.ns.t1 " +
+        "JOIN testcat.ns.t2 ON t1.id = t2.id")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      checkAnswer(df, Seq(
+        Row(1, "2020", "a", "2020", "x"), Row(2, "2020", "b", "2020", "y"),
+        Row(3, "2021", "c", "2021", "z")))
+      assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+        "storage-partitioned join should not shuffle")
+    }
+  }
+
   test("partitioned join: join with two partition keys and matching & sorted partitions") {
     val items_partitions = Array(bucket(8, "id"), days("arrive_time"))
     createTable(items, itemsColumns, items_partitions)

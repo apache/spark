@@ -59,7 +59,7 @@ case class GroupPartitionsExec(
     child: SparkPlan,
     @transient joinKeyPositions: Option[Seq[Int]] = None,
     @transient expectedPartitionKeys: Option[Seq[(InternalRowComparableWrapper, Int)]] = None,
-    @transient reducers: Option[Seq[Option[Reducer[_, _]]]] = None,
+    @transient reducers: Option[Seq[Option[(Reducer[_, _], TransformExpression)]]] = None,
     @transient distributePartitions: Boolean = false,
     @transient enableSortedMerge: Boolean = false
   ) extends UnaryExecNode {
@@ -68,14 +68,26 @@ case class GroupPartitionsExec(
     child.outputPartitioning match {
       case p: Partitioning with Expression =>
         // There can be multiple `KeyedPartitioning`s in an output partitioning of a join, but they
+        // There can be multiple `KeyedPartitioning`s in an output partitioning of a join, but they
         // can only differ in `expressions`. Their `partitionKeys` reference and `isCollapsed` flag
         // are shared (enforced by `PartitioningCollection`), so the grouping is computed once.
+        // When reducers are applied, the reduced expressions (whose data type matches the reduced
+        // partition keys) are reported instead of the original ones.
         val partitionKeys = grouping.partitions.map(_._1)
         p.transform {
           case k: KeyedPartitioning =>
             val projectedExpressions = joinKeyPositions.fold(k.expressions)(_.map(k.expressions))
+            val effectiveExpressions = reducers match {
+              case Some(exprs) =>
+                assert(projectedExpressions.length == exprs.length)
+                projectedExpressions.zip(exprs).map {
+                  case (expr, Some((_, reduced))) => reduced
+                  case (expr, None) => expr
+                }
+              case None => projectedExpressions
+            }
             KeyedPartitioning(
-              projectedExpressions, partitionKeys, grouping.isGrouped, grouping.isCollapsed)
+              effectiveExpressions, partitionKeys, grouping.isGrouped, grouping.isCollapsed)
         }.asInstanceOf[Partitioning]
       case o => o
     }
@@ -345,7 +357,7 @@ case class GroupPartitionsExec(
     }.iterator
     val expectedStr = expectedPartitionKeys.map(ks => s"ExpectedPartitionKeys: ${ks.size}")
     val reducersStr = reducers.map { seq =>
-      val names = seq.map(_.map(_.displayName()).getOrElse("identity"))
+      val names = seq.map(_.map(_._1.displayName()).getOrElse("identity"))
       s"Reducers: ${truncatedString(names, "[", ", ", "]", joinKeyMaxFields)}"
     }
     val distributeStr = Iterator(s"DistributePartitions: $distributePartitions")
