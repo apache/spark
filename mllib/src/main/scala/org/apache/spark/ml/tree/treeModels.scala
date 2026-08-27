@@ -79,18 +79,6 @@ private[spark] trait DecisionTreeModel {
   /** Convert to spark.mllib DecisionTreeModel (losing some information) */
   private[spark] def toOld: OldDecisionTreeModel
 
-  /**
-   * @return an iterator that traverses (DFS, left to right) the leaves
-   *         in the subtree of this node.
-   */
-  private def leafIterator(node: Node): Iterator[LeafNode] = {
-    node match {
-      case l: LeafNode => Iterator.single(l)
-      case n: InternalNode =>
-        leafIterator(n.leftChild) ++ leafIterator(n.rightChild)
-    }
-  }
-
   private[ml] def treeStats: NodeStats
 
   private[ml] def numLeaves: Int = treeStats.numLeaves
@@ -101,16 +89,14 @@ private[spark] trait DecisionTreeModel {
     leafAttr.withName(leafCol).toStructField()
   }
 
-  @transient private lazy val leafIndices: Map[LeafNode, Int] = {
-    leafIterator(rootNode).zipWithIndex.toMap
-  }
-
   /**
    * @return The index of the leaf corresponding to the feature vector.
    *         Leaves are indexed in pre-order from 0.
    */
   def predictLeaf(features: Vector): Double = {
-    leafIndices(rootNode.predictImpl(features)).toDouble
+    val leaf = rootNode.predictImpl(features)
+    assert(leaf.leafIndex >= 0, "Leaf indices are not assigned.")
+    leaf.leafIndex.toDouble
   }
 
   def getEstimatedSize(): Long = {

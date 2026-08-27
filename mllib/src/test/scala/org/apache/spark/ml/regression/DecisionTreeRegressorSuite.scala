@@ -222,6 +222,8 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
         model2: DecisionTreeRegressionModel): Unit = {
       TreeTests.checkEqual(model, model2)
       assert(model.numFeatures === model2.numFeatures)
+      val features = Vectors.dense(0.0, 0.0)
+      assert(model.predictLeaf(features) === model2.predictLeaf(features))
     }
 
     val dt = new DecisionTreeRegressor()

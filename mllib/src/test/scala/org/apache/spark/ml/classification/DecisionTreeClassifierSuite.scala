@@ -427,6 +427,8 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
       TreeTests.checkEqual(model, model2)
       assert(model.numFeatures === model2.numFeatures)
       assert(model.numClasses === model2.numClasses)
+      val features = Vectors.dense(0.0, 0.0)
+      assert(model.predictLeaf(features) === model2.predictLeaf(features))
     }
 
     val dt = new DecisionTreeClassifier()
