@@ -157,7 +157,8 @@ private[ml] object Node {
 class LeafNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
-    override private[ml] val impurityStats: ImpurityCalculator) extends Node {
+    override private[ml] val impurityStats: ImpurityCalculator,
+    private[tree] val leafIndex: Int = -1) extends Node {
 
   override def toString: String =
     s"LeafNode(prediction = $prediction, impurity = $impurity)"
