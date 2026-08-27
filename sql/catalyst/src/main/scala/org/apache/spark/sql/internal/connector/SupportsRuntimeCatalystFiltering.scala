@@ -42,8 +42,8 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    *
    * Spark will call [[filter]] if it can derive a runtime filter for any of these attributes.
    * Each reference must be a top-level attribute present in [[Scan.readSchema]]. Nested
-   * references and attributes pruned out of the read schema fail to resolve when Spark builds
-   * the scan relation.
+   * references are rejected, and attributes pruned out of the read schema fail to resolve, when
+   * Spark builds the scan relation.
    */
   def filterAttributes(): Array[NamedReference]
 
@@ -64,8 +64,8 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * predicate over it.
    *
    * Each reference must be a top-level attribute present in [[Scan.readSchema]]. Nested
-   * references and attributes pruned out of the read schema fail to resolve when Spark builds
-   * the scan relation.
+   * references are rejected, and attributes pruned out of the read schema fail to resolve, when
+   * Spark builds the scan relation.
    */
   def fullyPushedFilterAttributes(): Array[NamedReference] = Array.empty
 
