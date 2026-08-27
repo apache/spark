@@ -393,6 +393,16 @@ private[deploy] class Master(
         log" ${MDC(LogKeys.APP_ID, applicationId)}")
       idToApp.get(applicationId).foreach(finishApplication)
 
+    case ApplicationHoldUpdated(appId, supported, held) =>
+      idToApp.get(appId) match {
+        case Some(app) =>
+          app.holdSupported = supported
+          app.held = held
+        case None =>
+          logWarning(log"Got hold status for unknown application " +
+            log"${MDC(LogKeys.APP_ID, appId)}")
+      }
+
     case CheckForWorkerTimeOut =>
       timeOutDeadWorkers()
 

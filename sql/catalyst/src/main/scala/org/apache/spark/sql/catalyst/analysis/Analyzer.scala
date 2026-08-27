@@ -963,7 +963,8 @@ class Analyzer(
     // TODO: Support Pandas UDF.
     private def checkValidAggregateExpression(expr: Expression): Unit = expr match {
       case a: AggregateExpression =>
-        if (a.aggregateFunction.isInstanceOf[PythonUDAF]) {
+        if (a.aggregateFunction.isInstanceOf[PythonUDAF] ||
+            a.aggregateFunction.isInstanceOf[PythonAggregate]) {
           throw QueryCompilationErrors.pandasUDFAggregateNotSupportedInPivotError()
         } else {
           // OK and leave the argument check to CheckAnalysis.

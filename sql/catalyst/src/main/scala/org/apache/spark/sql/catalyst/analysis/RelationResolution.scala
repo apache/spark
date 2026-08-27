@@ -161,16 +161,26 @@ class RelationResolution(
   def resolveRelation(
       u: UnresolvedRelation,
       timeTravelSpec: Option[TimeTravelSpec] = None): Option[LogicalPlan] = {
-    val timeTravelSpecFromOptions = TimeTravelSpec.fromOptions(
-      u.options,
-      conf.getConf(SQLConf.TIME_TRAVEL_TIMESTAMP_KEY),
-      conf.getConf(SQLConf.TIME_TRAVEL_VERSION_KEY),
-      conf.sessionLocalTimeZone
-    )
+    val isWriteTarget = u.options.containsKey(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
+    val hasTimeTravelWriteOptions =
+      isWriteTarget && CatalogV2Util.containsTimeTravelOptions(u.options)
+    val timeTravelSpecFromOptions = if (hasTimeTravelWriteOptions) {
+      // Time travel applies to reads only. Defer the option check until the identifier is resolved
+      // so every write API reports the same qualified relation ID, without parsing the options as
+      // a read time-travel specification first.
+      None
+    } else {
+      TimeTravelSpec.fromOptions(
+        u.options,
+        conf.getConf(SQLConf.TIME_TRAVEL_TIMESTAMP_KEY),
+        conf.getConf(SQLConf.TIME_TRAVEL_VERSION_KEY),
+        conf.sessionLocalTimeZone)
+    }
     if (timeTravelSpec.nonEmpty && timeTravelSpecFromOptions.nonEmpty) {
       throw new AnalysisException("MULTIPLE_TIME_TRAVEL_SPEC", Map.empty[String, String])
     }
     val finalTimeTravelSpec = timeTravelSpec.orElse(timeTravelSpecFromOptions)
+    val isTimeTravel = finalTimeTravelSpec.isDefined || hasTimeTravelWriteOptions
     val identifier = u.multipartIdentifier
 
     // system.session.v (3 parts): only local temp view by name; same as SessionCatalog matching.
@@ -179,7 +189,7 @@ class RelationResolution(
       return resolveTempView(
         normalized,
         u.isStreaming,
-        finalTimeTravelSpec.isDefined
+        isTimeTravel
       )
     }
 
@@ -189,7 +199,7 @@ class RelationResolution(
         identifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
       val viewNameOnly = Seq(identifier.last)
       val tempSession = () =>
-        resolveTempView(viewNameOnly, u.isStreaming, finalTimeTravelSpec.isDefined)
+        resolveTempView(viewNameOnly, u.isStreaming, isTimeTravel)
       val persistentSessionDb = () =>
         tryResolvePersistent(u, identifier, finalTimeTravelSpec)
       return if (conf.prioritizeSystemCatalog) {
@@ -205,7 +215,7 @@ class RelationResolution(
       return resolveTempView(
         identifier,
         u.isStreaming,
-        finalTimeTravelSpec.isDefined
+        isTimeTravel
       ).orElse(tryResolvePersistent(u, identifier, finalTimeTravelSpec))
     }
 
@@ -215,7 +225,7 @@ class RelationResolution(
     for (step <- steps) {
       val result = step match {
         case SessionScopeStep =>
-          resolveTempView(identifier, u.isStreaming, finalTimeTravelSpec.isDefined)
+          resolveTempView(identifier, u.isStreaming, isTimeTravel)
         case PersistentCatalogStep(prefix) =>
           tryResolvePersistent(u, prefix ++ identifier, finalTimeTravelSpec)
       }
@@ -236,15 +246,19 @@ class RelationResolution(
         val planId = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
         val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
         val finalOptions = u.clearWritePrivileges.options
-        // Time travel applies to reads only; reject it on a write target (reachable via the option
-        // form, e.g. `INSERT INTO t WITH ('versionAsOf' = ...)`) with a user-facing error.
+        if (writePrivileges != null) {
+          CatalogV2Util.rejectTimeTravelOptionsForWrite(catalog, ident, finalOptions)
+        }
+        // Time travel applies to reads only; reject an explicit time-travel specification on a
+        // write target with a user-facing error.
         if (finalTimeTravelSpec.nonEmpty && writePrivileges != null) {
-          throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(identifier))
+          throw QueryCompilationErrors.timeTravelUnsupportedError(
+            toSQLId(ident.toQualifiedNameParts(catalog)))
         }
         val key = toCacheKey(catalog, ident, finalTimeTravelSpec, finalOptions)
         // A reference that requires write privileges is never served from the per-query relation
-        // cache. The catalog authorizes the write in `loadTable(ident, writePrivileges)` below, and
-        // a cache hit would skip that call entirely. The hit happens whenever the write target is
+        // cache. The catalog authorizes the write during the uncached `loadTable` below, and a
+        // cache hit would skip that call entirely. The hit happens whenever the write target is
         // also read in the same statement -- the target is resolved after its query (see
         // `ResolveRelations`), so it finds the relation the query already put in the cache, e.g.
         // for `INSERT INTO t SELECT * FROM t`.
@@ -548,6 +562,9 @@ class RelationResolution(
    */
   private def loadRelation(ref: V2TableReference): LogicalPlan = {
     val resolvedCatalog = catalogManager.catalog(ref.catalog.name).asTableCatalog
+    // Only WriteTargetContext gets here (the sole non-cacheable context); it is currently used by
+    // transactional streaming writes and does not retain required write privileges. Keep the
+    // legacy load unchanged; options and privileges must be handled together in a follow-up.
     val table = resolvedCatalog.loadTable(ref.identifier)
     createRelation(ref, resolvedCatalog, table)
   }

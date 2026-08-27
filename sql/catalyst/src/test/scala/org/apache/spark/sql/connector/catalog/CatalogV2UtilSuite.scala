@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, eq => mockEq}
 import org.mockito.Mockito.{mock, verify, when}
 
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
-import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, TimeTravelSpec}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.{
+  AsOfTimestamp, AsOfVersion, TimeTravelSpec, UnresolvedRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -101,6 +105,62 @@ class CatalogV2UtilSuite extends SparkFunSuite {
       CatalogV2Util.getTable(testCatalog, ident, Some(AsOfVersion("v1")), Some("INSERT"))
     }
     assert(e.getMessage.contains("Cannot set both time travel and write privileges"))
+  }
+
+  test("loadTableForV2Write forwards write privileges and only table-state options") {
+    val testCatalog = mock(classOf[TableCatalog])
+    when(testCatalog.tableStateOptionKeys()).thenReturn(java.util.Set.of("state"))
+    val ident = mock(classOf[Identifier])
+    val options = new CaseInsensitiveStringMap(
+      java.util.Map.of("state", "branch", "custom", "value"))
+    val contextCaptor = ArgumentCaptor.forClass(classOf[TableContext])
+
+    CatalogV2Util.loadTableForV2Write(
+      testCatalog, ident, Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), options)
+
+    val expectedStateOptions =
+      new CaseInsensitiveStringMap(java.util.Map.of("state", "branch"))
+    verify(testCatalog).loadTable(
+      mockEq(ident), contextCaptor.capture(), mockEq(expectedStateOptions))
+    assert(contextCaptor.getValue.timeTravel().isEmpty)
+    assert(contextCaptor.getValue.writePrivileges() ===
+      java.util.Set.of(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
+  }
+
+  test("loadTableForV2Write rejects configured time travel options") {
+    val testCatalog = mock(classOf[TableCatalog])
+    when(testCatalog.name()).thenReturn("testcat")
+    val ident = Identifier.of(Array("ns"), "table")
+    val conf = new SQLConf
+    conf.setConf(SQLConf.TIME_TRAVEL_VERSION_KEY, "customVersion")
+    conf.setConf(SQLConf.TIME_TRAVEL_TIMESTAMP_KEY, "customTimestamp")
+
+    SQLConf.withExistingConf(conf) {
+      Seq("customVersion", "customTimestamp").foreach { key =>
+        val options = new CaseInsensitiveStringMap(java.util.Map.of(key, "value"))
+        val e = intercept[AnalysisException] {
+          CatalogV2Util.loadTableForV2Write(
+            testCatalog, ident, Set(TableWritePrivilege.INSERT), options)
+        }
+        assert(e.getCondition === "UNSUPPORTED_FEATURE.TIME_TRAVEL")
+      }
+    }
+  }
+
+  test("UnresolvedRelation preserves option key case while updating write privileges") {
+    val options = new CaseInsensitiveStringMap(java.util.Map.of(
+      "targetLoadOption", "loadValue",
+      "targetWriteOption", "writeValue"))
+    val relation = UnresolvedRelation(Seq("catalog", "table"), options)
+
+    val withPrivileges = relation.requireWritePrivileges(Set(TableWritePrivilege.INSERT))
+    assert(withPrivileges.options.asCaseSensitiveMap().containsKey("targetLoadOption"))
+    assert(withPrivileges.options.asCaseSensitiveMap().containsKey("targetWriteOption"))
+    assert(!withPrivileges.options.asCaseSensitiveMap().containsKey("targetloadoption"))
+    assert(withPrivileges.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES) === "INSERT")
+
+    val cleared = withPrivileges.clearWritePrivileges
+    assert(cleared.options.asCaseSensitiveMap() === options.asCaseSensitiveMap())
   }
 
   test("TableContext normalizes null time travel and null write privileges to empty") {

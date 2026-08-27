@@ -107,18 +107,13 @@ import org.apache.spark.sql.types.VariantType
  *
  * Cast-error surface: relocating a strict extraction (`variant_get(..., failOnError = true)` or a
  * strict `Cast`) below a `Join` means it is evaluated at the scan on rows the join later eliminates
- * -- so a cast failure can surface for a row the un-hoisted plan would never have cast (here the
- * eliminating rows come from the *other* joined table). This is the same pre-existing trade-off as
- * [[PushVariantIntoScan]] pushing casts below a `Filter`, not a new error class: in both, the
- * strict cast runs before the operator that would have discarded the failing row. This rule only
- * relocates the extraction into a `Project`; [[PushVariantIntoScan]] still does the scan-level
- * materialization and, when [[SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR]] is set (default
- * false), wraps the cast with a per-row cast-error companion slot so the error is only raised when
- * the original expression consumes the failing row. That deferral is provenance-agnostic -- it acts
- * on the relocated extraction regardless of how it reached the `Project` -- so enabling the flag
- * suppresses the join-eliminated-row error exactly as it does the filter-eliminated-row case. With
- * the flag off (the default), the strict cast raises immediately on any failing scanned row, as
- * documented for below-`Filter` pushdown.
+ * -- so a cast failure can surface for a row the un-hoisted plan would never have cast. This is the
+ * same pre-existing trade-off as [[PushVariantIntoScan]] pushing casts below a `Filter`. When
+ * [[SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR]] is set, the cast error is deferred until the
+ * original expression consumes the failing row, suppressing errors from rows eliminated by either
+ * operator. With the flag off, strict `VariantGet` and `Cast` retain their existing behavior
+ * because they are not currently classified as [[Expression.throwable]]. If an extraction is
+ * classified as throwable, it crosses a join only when cast-error deferral is enabled.
  */
 object PullOutVariantExtractions extends Rule[LogicalPlan] {
 
@@ -177,11 +172,18 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
     case _ => false
   }
 
+  private def isJoinHoistable(e: Expression): Boolean = {
+    // Unlike optimizer rules that must stop at throwable expressions, scan pushdown can preserve
+    // the original error timing with its per-row cast-error companion column when enabled.
+    isHoistable(e) && (!e.throwable ||
+      SQLConf.get.getConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR))
+  }
+
   /**
    * Collects hoisted extractions as aliases, de-duplicated by canonical form so a repeated
    * extraction maps to a single output slot.
    */
-  private class ExtractionHoister {
+  private class ExtractionHoister(hoistable: Expression => Boolean = isHoistable) {
     private val extracted = mutable.LinkedHashMap.empty[Expression, Alias]
 
     def aliases: Seq[NamedExpression] = extracted.values.toSeq
@@ -194,8 +196,23 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
 
     /** Replaces every hoistable extraction in `e` with a reference to its (new) alias. */
     def hoist(e: Expression): Expression = e.transformDown {
-      case ex if isHoistable(ex) => aliasFor(ex)
+      case ex if hoistable(ex) => aliasFor(ex)
     }
+  }
+
+  // Mirrors the traversal in pushSideAliases for one extraction. A Project is pass-through only
+  // when the extraction resolves against its child; all other operators stop alias placement.
+  private def extractionCrossesJoin(child: LogicalPlan, e: Expression): Boolean = child match {
+    case _: Join => true
+    case Project(_, grandChild) if e.references.subsetOf(grandChild.outputSet) =>
+      extractionCrossesJoin(grandChild, e)
+    case _ => false
+  }
+
+  private def extractionHoister(child: LogicalPlan): ExtractionHoister = {
+    new ExtractionHoister(e =>
+      if (extractionCrossesJoin(child, e)) isJoinHoistable(e) else isHoistable(e)
+    )
   }
 
   // Recursively pushes hoisted extraction aliases down through a join tree until each lands in a
@@ -299,7 +316,7 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
       rightHoister: ExtractionHoister): Seq[NamedExpression] = {
     projectList.map { e =>
       e.transformDown {
-        case ex if isHoistable(ex) =>
+        case ex if isJoinHoistable(ex) =>
           if (ex.references.subsetOf(leftOutput)) {
             leftHoister.aliasFor(ex)
           } else if (ex.references.subsetOf(rightOutput)) {
@@ -312,7 +329,7 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
   }
 
   private def rewriteAggregate(agg: Aggregate): LogicalPlan = {
-    val hoister = new ExtractionHoister
+    val hoister = extractionHoister(agg.child)
     // Only hoist extractions that sit inside an aggregate function's arguments (or filter). A
     // top-level extraction in `aggregateExpressions` is a grouping-key reference (grouping keys are
     // already pulled out by `PullOutGroupingExpressions`); hoisting it would leave the `Aggregate`
@@ -388,7 +405,7 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
 
   private def rewriteSortUnderProject(
       project: Project, projectList: Seq[NamedExpression], sort: Sort): LogicalPlan = {
-    val hoister = new ExtractionHoister
+    val hoister = extractionHoister(sort.child)
     val newOrder = sort.order.map(hoister.hoist(_).asInstanceOf[SortOrder])
     if (hoister.isEmpty) {
       project
@@ -419,7 +436,7 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
   // yielding a multi-slot shredded struct with a full-variant slot -- the same shape as a
   // Sort-under-Project whose `v` is also selected. See the class doc.
   private def rewriteBareSort(sort: Sort): LogicalPlan = {
-    val hoister = new ExtractionHoister
+    val hoister = extractionHoister(sort.child)
     val newOrder = sort.order.map(hoister.hoist(_).asInstanceOf[SortOrder])
     if (hoister.isEmpty) {
       sort
@@ -442,6 +459,7 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
       project: Project, projectList: Seq[NamedExpression], join: Join): LogicalPlan = {
     val leftOutput = join.left.outputSet
     val rightOutput = join.right.outputSet
+    // Join-crossing eligibility is checked at the routing sites before aliasFor is called.
     val leftHoister = new ExtractionHoister
     val rightHoister = new ExtractionHoister
 
@@ -451,7 +469,7 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
     // join (its extractions -- e.g. aggregate arguments hoisted here by `rewriteAggregate`, or a
     // user's `SELECT variant_get(...)`), so the pushdown sees them below the join.
     val newCondition = join.condition.map(_.transformDown {
-      case ex if isHoistable(ex) =>
+      case ex if isJoinHoistable(ex) =>
         if (ex.references.subsetOf(leftOutput)) {
           leftHoister.aliasFor(ex)
         } else if (ex.references.subsetOf(rightOutput)) {

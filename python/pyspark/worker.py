@@ -19,28 +19,28 @@
 Worker that receives input from Piped RDD.
 """
 
-import os
-import sys
 import dataclasses
-import time
 import inspect
 import itertools
 import json
+import os
+import sys
+import time
 import warnings
 from collections.abc import Iterator
 from typing import (
+    TYPE_CHECKING,
     Any,
+    BinaryIO,
     Callable,
     Iterable,
     Optional,
     Tuple,
     Type,
     TypeVar,
-    TYPE_CHECKING,
     Union,
     get_args,
     get_origin,
-    BinaryIO,
 )
 
 T = TypeVar("T")
@@ -51,35 +51,40 @@ if TYPE_CHECKING:
 
     from pyspark.sql.pandas._typing import GroupedBatch
 
+from pyspark import _NoValue, shuffle
 from pyspark.accumulators import (
     SpecialAccumulatorIds,
     _accumulatorRegistry,
     _deserialize_accumulator,
 )
-from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
-from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
-from pyspark.taskcontext import BarrierTaskContext, TaskContext
-from pyspark.util import PythonEvalType
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
+from pyspark.logger.worker_io import capture_outputs
+from pyspark.messages import (
+    SparkMessageReceiver,
+    SparkSocketMessageReceiver,
+)
 from pyspark.serializers import (
+    BatchedSerializer,
+    CPickleSerializer,
+    SpecialLengths,
     write_int,
     write_long,
-    SpecialLengths,
-    CPickleSerializer,
-    BatchedSerializer,
 )
 from pyspark.sql.conversion import (
-    LocalDataToArrowConversion,
-    ArrowTableToRowsConversion,
     ArrowBatchTransformer,
+    ArrowTableToRowsConversion,
+    LocalDataToArrowConversion,
     PandasToArrowConversion,
 )
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
-    ArrowStreamSerializer,
-    ArrowStreamGroupSerializer,
     ArrowStreamCoGroupSerializer,
+    ArrowStreamGroupSerializer,
+    ArrowStreamSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
+from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
+from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -94,30 +99,25 @@ from pyspark.sql.types import (
     _create_row,
     _parse_datatype_json_string,
 )
+from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.util import (
+    PythonEvalType,
     fail_on_stopiteration,
     handle_worker_exception,
-    with_faulthandler,
     start_faulthandler_periodic_traceback,
+    with_faulthandler,
 )
-from pyspark import _NoValue, shuffle
-from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.worker_message import WorkerInitInfo
 from pyspark.worker_util import (
+    Conf,
     check_python_version,
     get_sock_file_to_executor,
-    read_command,
     pickleSer,
+    read_command,
     send_accumulator_updates,
     setup_broadcasts,
     setup_memory_limits,
     setup_spark_files,
-    Conf,
-)
-from pyspark.logger.worker_io import capture_outputs
-from pyspark.messages import (
-    SparkMessageReceiver,
-    SparkSocketMessageReceiver,
 )
 
 
@@ -144,6 +144,16 @@ class RunnerConf(Conf):
     def use_legacy_pandas_udtf_conversion(self) -> bool:
         return (
             self.get("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "false")
+            == "true"
+        )
+
+    @property
+    def map_in_batch_legacy_accept_any_iterable(self) -> bool:
+        return (
+            self.get(
+                "spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled",
+                "false",
+            )
             == "true"
         )
 
@@ -254,6 +264,42 @@ def report_times(outfile, boot, init, finish, processing_time_ms):
 def chain(f, g):
     """chain two functions together"""
     return lambda *a: g(f(*a))
+
+
+# Sentinel standing in for NaN grouping-key values in the map-side incremental-aggregate combine.
+# ``float('nan') != float('nan')``, so distinct NaN objects would never collide in a dict; mapping
+# them to one sentinel lets the map-side combine collapse them (correctness does not depend on it,
+# as the FINAL stage re-groups authoritatively).
+_NAN_GROUPING_KEY = object()
+
+
+def _hashable_grouping_key(key_values: Tuple[Any, ...]) -> Any:
+    """
+    Canonicalize a grouping-key value tuple (extracted from Arrow via ``to_pylist``) into a
+    hashable form usable as a ``dict`` key for the map-side PARTIAL combine of incremental Python
+    aggregators.
+
+    Lists (from ``array`` columns) become tuples and dicts (from ``struct`` columns) become tuples
+    of ``(name, value)`` pairs, so nested complex keys hash by value; NaN floats map to a sentinel.
+    This is a best-effort combine only: an exotic unhashable value falls back to a unique object so
+    the row forms its own group, and the FINAL stage merges any keys left uncollapsed here.
+    """
+
+    def canon(v: Any) -> Any:
+        if isinstance(v, float) and v != v:
+            return _NAN_GROUPING_KEY
+        if isinstance(v, list):
+            return tuple(canon(x) for x in v)
+        if isinstance(v, dict):
+            return tuple((k, canon(x)) for k, x in v.items())
+        return v
+
+    try:
+        canonical = tuple(canon(v) for v in key_values)
+        hash(canonical)
+        return canonical
+    except TypeError:
+        return object()
 
 
 def verify_return_type(result: T, expected_type: Type[T]) -> T:
@@ -555,13 +601,12 @@ def wrap_perf_profiler(f, eval_type, result_id):
 
 
 def wrap_memory_profiler(f, eval_type, result_id):
+    import pyspark.memory_profiler_ext
     from pyspark.sql.profiler import (
         ProfileResultsParam,
         ProfileResultsParamV2,
         WorkerMemoryProfiler,
     )
-
-    import pyspark.memory_profiler_ext
 
     if not pyspark.memory_profiler_ext.has_memory_profiler:
         return f
@@ -636,6 +681,16 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
 
     # The last returnType will be the return type of UDF. Eval types are grouped below by the
     # shape of the value they return.
+
+    # Incremental Python aggregators: the pickled "function" is the Aggregator object itself, whose
+    # zero/reduce/merge/finish methods the worker calls directly. Return it unwrapped (not through
+    # fail_on_stopiteration, which would treat it as a plain callable).
+    if eval_type in (
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF,
+    ):
+        return chained_func, args_offsets, kwargs_offsets, return_type
 
     # Scalar, aggregation and window UDFs: (func, args_offsets, kwargs_offsets, return_type).
     if eval_type in (
@@ -2019,6 +2074,9 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF,
     ):
         # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
         if eval_type in (
@@ -2026,12 +2084,17 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+            # The map-side PARTIAL stage streams ordinary (multi-group) batches and hash-combines
+            # inside the worker, so it uses the plain (non-grouped) stream serializer below. Only
+            # the post-shuffle FINAL stage receives one Arrow stream per group.
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
             PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
             PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
             PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
             PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
             PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
             PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+            PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF,
         ):
             ser = ArrowStreamGroupSerializer(write_start_stream=True)
         elif eval_type in (
@@ -2097,6 +2160,20 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
             # invoke the UDF
             output_batches = udf_func(input_batches)
+
+            # The declared signature is Iterator[...], so a strict iterator is required by
+            # default. With the legacy flag, accept any object Python can iterate over -- via
+            # iter(...), which honors both __iter__ and the sequence protocol (__getitem__) --
+            # by adapting it into an iterator before the shared element-type verification.
+            if runner_conf.map_in_batch_legacy_accept_any_iterable and not isinstance(
+                output_batches, Iterator
+            ):
+                try:
+                    output_batches = iter(output_batches)
+                except TypeError:
+                    # Not iterable at all; leave it so verify_return_type below raises the
+                    # standard UDF_RETURN_TYPE error.
+                    pass
 
             # Post-processing
             verified_iter = verify_return_type(
@@ -2272,9 +2349,175 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         # profiling is not supported for UDF
         return grouped_func, None, ser, ser
 
-    if eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
+    if eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF:
         import pyarrow as pa
+
+        # Map-side PARTIAL stage: hash-combine input rows into a per-group buffer via the
+        # aggregator's `reduce`. Ordinary (multi-group) batches are streamed in; the worker keeps
+        # one running buffer per distinct grouping key -- never whole groups of rows -- and, at end
+        # of partition, emits one row per key: the grouping key columns followed by one buffer
+        # struct column per aggregator. Because the FINAL stage re-groups these authoritatively
+        # after the shuffle, the worker's grouping only needs to be a best-effort combine: any keys
+        # it fails to collapse (e.g. NaN, which compares unequal to itself) are merged downstream.
+        #
+        # The leading `num_grouping_keys` input columns are the grouping keys (see the operator);
+        # `grouping_key_schema` carries their names/types so the emitted key columns round-trip.
+        grouping_key_schema = eval_conf.grouping_key_schema
+        num_grouping_keys = (
+            len(grouping_key_schema.fields) if grouping_key_schema is not None else 0
+        )
+
+        buffer_col_names = ["_%d" % i for i in range(len(udfs))]
+        buffer_arrow_types = [
+            to_arrow_type(
+                agg.bufferSchema,
+                timezone="UTC",
+                prefers_large_types=runner_conf.use_large_var_types,
+            )
+            for agg, _, _, _ in udfs
+        ]
+        # Buffer field names are invariant across groups; compute them once per aggregator.
+        field_names_by_udf = [[f.name for f in agg.bufferSchema.fields] for agg, _, _, _ in udfs]
+
+        # The aggregator's `reduce` receives a single positional tuple, so any named arguments at
+        # the call site are appended after the positional ones, in call order (kwargs_offsets
+        # preserves that order). This mirrors how a Python call `f(*args, **kwargs)` would order
+        # them into one value tuple.
+        input_offsets_by_udf = [
+            list(args_offsets) + list(kwargs_offsets.values())
+            for _, args_offsets, kwargs_offsets, _ in udfs
+        ]
+        # Input columns actually consumed per batch: the leading grouping keys plus every
+        # aggregator input, deduplicated. A UDF input may reuse a grouping-key column (the operator
+        # dedups its projection), so converting by distinct offset avoids repeated `to_pylist()`.
+        needed_offsets = sorted(
+            set(range(num_grouping_keys)) | {o for offsets in input_offsets_by_udf for o in offsets}
+        )
+
+        # Cap the map-side buffer so a high-cardinality partition -- exactly where partial
+        # aggregation degenerates -- cannot grow the per-key dict without bound and OOM the worker.
+        # When the distinct-key count reaches the cap we flush the whole map as one batch and start
+        # fresh; end-of-partition buffers are emitted in equally bounded chunks. This is safe
+        # because the FINAL stage re-groups the emitted partial buffers authoritatively after the
+        # shuffle and merges any duplicate keys that early flushes produce. A non-positive
+        # maxRecordsPerBatch means "unbounded" (mirroring the reader side).
+        max_records = runner_conf.arrow_max_records_per_batch
+        cap = max_records if max_records > 0 else None
+
+        def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+            # hashable key -> (representative key value tuple, list of per-aggregator buffers)
+            groups: "dict[Any, tuple]" = {}
+            key_field_types: Optional[list] = None
+
+            def make_batch(entries: list) -> pa.RecordBatch:
+                arrays = []
+                names = []
+                for j in range(num_grouping_keys):
+                    arrays.append(
+                        pa.array(
+                            [e[0][j] for e in entries],
+                            type=key_field_types[j],  # type: ignore
+                        )
+                    )
+                    names.append("k_%d" % j)
+                for i, (agg, _, _, _) in enumerate(udfs):
+                    field_names = field_names_by_udf[i]
+                    structs = [
+                        {name: e[1][i][t] for t, name in enumerate(field_names)} for e in entries
+                    ]
+                    arrays.append(pa.array(structs, type=buffer_arrow_types[i]))
+                    names.append(buffer_col_names[i])
+                return pa.RecordBatch.from_arrays(arrays, names)
+
+            for batch in data:
+                if key_field_types is None:
+                    key_field_types = [batch.schema.field(j).type for j in range(num_grouping_keys)]
+                pylist_by_offset = {o: batch.column(o).to_pylist() for o in needed_offsets}
+                key_cols = [pylist_by_offset[j] for j in range(num_grouping_keys)]
+                udf_cols = [
+                    [pylist_by_offset[o] for o in input_offsets_by_udf[i]] for i in range(len(udfs))
+                ]
+                for r in range(batch.num_rows):
+                    key_values = tuple(key_cols[j][r] for j in range(num_grouping_keys))
+                    hashable_key = _hashable_grouping_key(key_values)
+                    entry = groups.get(hashable_key)
+                    if entry is None:
+                        buffers = [agg.zero() for agg, _, _, _ in udfs]
+                        groups[hashable_key] = (key_values, buffers)
+                    else:
+                        buffers = entry[1]
+                    for i, (agg, _, _, _) in enumerate(udfs):
+                        cols_i = udf_cols[i]
+                        buffers[i] = agg.reduce(buffers[i], tuple(c[r] for c in cols_i))
+                if cap is not None and len(groups) >= cap:
+                    yield make_batch(list(groups.values()))
+                    groups = {}
+
+            if not groups:
+                # Empty partition (or fully flushed above): emit nothing more. The FINAL stage
+                # supplies the global-aggregation identity row when there is no input at all.
+                return
+
+            entries = list(groups.values())
+            if cap is None:
+                yield make_batch(entries)
+            else:
+                for start in range(0, len(entries), cap):
+                    yield make_batch(entries[start : start + cap])
+
+        # profiling is not supported for UDF
+        return func, None, ser, ser
+
+    if eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF:
+        import pyarrow as pa
+
+        # Post-shuffle FINAL stage: merge each group's partial buffers via the aggregator's `merge`
+        # and produce the output via `finish`. Buffers are streamed and merged one batch at a time.
+        # Every group the JVM sends yields exactly one output row; null partial-buffer rows are
+        # skipped, so an empty global aggregation (a single all-null buffer row injected by the
+        # operator) still produces `finish(zero)`.
+        col_names = ["_%d" % i for i in range(len(udfs))]
+        return_schema = to_arrow_schema(
+            StructType([StructField(name, rt) for name, (_, _, _, rt) in zip(col_names, udfs)]),
+            timezone="UTC",
+            prefers_large_types=runner_conf.use_large_var_types,
+        )
+        # Buffer field names are invariant across groups and batches; compute once per aggregator.
+        field_names_by_udf = [[f.name for f in agg.bufferSchema.fields] for agg, _, _, _ in udfs]
+
+        def grouped_func(
+            split_index: int, data: Iterator["GroupedBatch"]
+        ) -> Iterator[pa.RecordBatch]:
+            for group in data:
+                merged: list = [None] * len(udfs)
+                for batch in group:
+                    for i, (agg, args_offsets, _, _) in enumerate(udfs):
+                        field_names = field_names_by_udf[i]
+                        m = merged[i]
+                        for row in batch.column(args_offsets[0]).to_pylist():
+                            if row is None:
+                                continue
+                            partial = tuple(row[name] for name in field_names)
+                            m = partial if m is None else agg.merge(m, partial)
+                        merged[i] = m
+                results = []
+                for i, (agg, _, _, _) in enumerate(udfs):
+                    m = merged[i] if merged[i] is not None else agg.zero()
+                    results.append(agg.finish(m))
+                # Type each output array explicitly (mirroring the PARTIAL stage) so a non-trivial
+                # outputType or an all-None column does not depend on Arrow type inference.
+                result_arrays = [
+                    pa.array([r], type=return_schema.field(i).type) for i, r in enumerate(results)
+                ]
+                batch = pa.RecordBatch.from_arrays(result_arrays, col_names)
+                yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
+
+        # profiling is not supported for UDF
+        return grouped_func, None, ser, ser
+
+    if eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         import pandas as pd
+        import pyarrow as pa
 
         col_names = ["_%d" % i for i in range(len(udfs))]
         output_schema = StructType(
@@ -2317,8 +2560,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         return grouped_func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         assert num_udfs == 1, "One GROUPED_AGG_PANDAS_ITER UDF expected here."
         udf_func, args_offsets, _, return_type = udfs[0]
@@ -2430,9 +2673,104 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         # profiling is not supported for UDF
         return grouped_func, None, ser, ser
 
-    if eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
+    if eval_type == PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF:
         import pyarrow as pa
+
+        # Window aggregation with an incremental ``Aggregator``. The operator sends each frame --
+        # the whole partition for an unbounded frame, or per-row ``[begin, end)`` slices for a
+        # bounded one -- and the worker folds the frame's rows with ``reduce`` (from a fresh
+        # ``zero``) and produces the value with ``finish``, one output value per input row. A window
+        # has no shuffle, so the intermediate buffer never leaves the worker (unlike the two-stage
+        # groupBy path); ``merge`` is not used here.
+        window_bound_types_str = runner_conf.get("window_bound_types")
+        window_bound_types = [t.strip().lower() for t in window_bound_types_str.split(",")]
+
+        col_names = ["_%d" % i for i in range(len(udfs))]
+        return_schema = to_arrow_schema(
+            StructType([StructField(name, rt) for name, (_, _, _, rt) in zip(col_names, udfs)]),
+            timezone="UTC",
+            prefers_large_types=runner_conf.use_large_var_types,
+        )
+
+        def fold(agg: Any, buffer: Any, value_cols: list, start: int, end: int) -> Any:
+            # Fold rows ``[start, end)`` (each a tuple across ``value_cols``, matching the call-site
+            # argument order) into ``buffer`` via the aggregator's ``reduce``.
+            for r in range(start, end):
+                buffer = agg.reduce(buffer, tuple(c[r] for c in value_cols))
+            return buffer
+
+        def grouped_func(
+            split_index: int, data: Iterator["GroupedBatch"]
+        ) -> Iterator[pa.RecordBatch]:
+            for group in data:
+                batch_list = list(group)
+                if not batch_list:
+                    continue
+                if hasattr(pa, "concat_batches"):
+                    concatenated = pa.concat_batches(batch_list)
+                else:
+                    # pyarrow.concat_batches not supported before 19.0.0
+                    # remove this once we drop support for old versions
+                    concatenated = pa.RecordBatch.from_struct_array(
+                        pa.concat_arrays([b.to_struct_array() for b in batch_list])
+                    )
+                num_rows = concatenated.num_rows
+
+                result_arrays = []
+                for udf_index, (agg, args_offsets, kwargs_offsets, _) in enumerate(udfs):
+                    bound_type = window_bound_types[udf_index]
+                    result_type = return_schema.field(udf_index).type
+                    if bound_type == "unbounded":
+                        # One frame spanning the whole partition: compute once, repeat per row.
+                        value_cols = [concatenated.column(o).to_pylist() for o in args_offsets] + [
+                            concatenated.column(v).to_pylist() for v in kwargs_offsets.values()
+                        ]
+                        result = agg.finish(fold(agg, agg.zero(), value_cols, 0, num_rows))
+                        result_arrays.append(pa.array([result] * num_rows, type=result_type))
+                    elif bound_type == "bounded":
+                        # Per-row frame ``[begin, end)``. Materialize the aggregator's input columns
+                        # once; frames index into them by row.
+                        begin_col = concatenated.column(args_offsets[0])
+                        end_col = concatenated.column(args_offsets[1])
+                        data_offsets = list(args_offsets[2:]) + list(kwargs_offsets.values())
+                        value_cols = [concatenated.column(o).to_pylist() for o in data_offsets]
+                        # When consecutive frames share the same lower bound and only grow on the
+                        # right (e.g. rowsBetween(unboundedPreceding, currentRow)), extend the
+                        # running buffer by the newly-included rows instead of refolding from
+                        # ``zero`` -- O(n) overall rather than O(n^2). Otherwise -- the lower bound
+                        # advanced (a row left the window, which ``reduce`` cannot subtract) or the
+                        # frame shrank -- refold the frame from ``zero``.
+                        results = []
+                        have_running = False
+                        running: Any = None
+                        prev_begin = -1
+                        prev_end = 0
+                        for i in range(num_rows):
+                            begin = begin_col[i].as_py()
+                            end = end_col[i].as_py()
+                            if have_running and begin == prev_begin and end >= prev_end:
+                                running = fold(agg, running, value_cols, prev_end, end)
+                            else:
+                                running = fold(agg, agg.zero(), value_cols, begin, end)
+                            have_running = True
+                            prev_begin, prev_end = begin, end
+                            results.append(agg.finish(running))
+                        result_arrays.append(pa.array(results, type=result_type))
+                    else:
+                        raise PySparkRuntimeError(
+                            errorClass="INVALID_WINDOW_BOUND_TYPE",
+                            messageParameters={"window_bound_type": bound_type},
+                        )
+
+                batch = pa.RecordBatch.from_arrays(result_arrays, col_names)
+                yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
+
+        # profiling is not supported for UDF
+        return grouped_func, None, ser, ser
+
+    if eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
         import pandas as pd
+        import pyarrow as pa
 
         window_bound_types_str = runner_conf.get("window_bound_types")
         window_bound_types = [t.strip().lower() for t in window_bound_types_str.split(",")]
@@ -2644,8 +2982,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         return grouped_func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         assert num_udfs == 1, "One GROUPED_MAP_PANDAS UDF expected here."
         grouped_udf, arg_offsets, return_type, num_udf_args = udfs[0]
@@ -2715,8 +3053,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         return grouped_func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         assert num_udfs == 1, "One GROUPED_MAP_PANDAS_ITER UDF expected here."
         grouped_udf, arg_offsets, return_type, num_udf_args = udfs[0]
@@ -2844,8 +3182,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         return cogrouped_func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         assert num_udfs == 1, "One MAP_PANDAS_ITER UDF expected here."
         map_udf, _, _, return_type = udfs[0]
@@ -2873,11 +3211,19 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         df_for_struct=True,
                     )[0]
 
-            # mapInPandas accepts any iterable (e.g. a list), not just an
-            # iterator, so the standard verify_return_type (which requires an
-            # Iterator) is intentionally not reused here.
             result = map_udf(dataframe_iter())
-            if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
+            # The declared signature is Iterator[...], so a strict iterator is required by
+            # default. With the legacy flag, accept any object Python can iterate over -- via
+            # iter(...), which honors both __iter__ and the sequence protocol (__getitem__) --
+            # by adapting it into an iterator.
+            if runner_conf.map_in_batch_legacy_accept_any_iterable and not isinstance(
+                result, Iterator
+            ):
+                try:
+                    result = iter(result)
+                except TypeError:
+                    pass  # Not iterable; fall through to the UDF_RETURN_TYPE error below.
+            if not isinstance(result, Iterator):
                 raise PySparkTypeError(
                     errorClass="UDF_RETURN_TYPE",
                     messageParameters={
@@ -2913,8 +3259,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         return func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         assert num_udfs == 1, "One COGROUPED_MAP_PANDAS UDF expected here."
         cogrouped_udf, arg_offsets, return_type, num_udf_args = udfs[0]
@@ -3735,8 +4081,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         return func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         assert num_udfs == 1, "One TRANSFORM_WITH_STATE_PANDAS UDF expected here."
         udf, arg_offsets, return_type = udfs[0]
@@ -3876,8 +4222,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         return transform_with_state_func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         assert num_udfs == 1, "One TRANSFORM_WITH_STATE_PANDAS_INIT_STATE UDF expected here."
         udf, arg_offsets, return_type = udfs[0]
@@ -4087,8 +4433,9 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         return func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
+
         from pyspark.sql.streaming.state import GroupState
 
         assert num_udfs == 1, "One GROUPED_MAP_PANDAS_UDF_WITH_STATE UDF expected here."
@@ -4698,22 +5045,26 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         # profiling is not supported for UDF
         return func, None, ser, ser
 
+    elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
+        # Plain Python (pickle) UDFs, the only eval type reaching this branch. read_single_udf
+        # prepared each UDF as an (arg_offsets, eval_func) pair. Apply every one to each input
+        # row: a single UDF yields its bare result, multiple UDFs yield a tuple of results,
+        # which is the shape the JVM side expects. num_udfs is fixed, so the single-result
+        # case is handled once here rather than by unwrapping a one-element tuple per row.
+        def func(split_index: int, data: Iterator[Any]) -> Iterator[Any]:
+            if num_udfs == 1:
+                arg_offsets, f = udfs[0]
+                return (f(*[row[offset] for offset in arg_offsets]) for row in data)
+            return (
+                tuple(f(*[row[offset] for offset in arg_offsets]) for arg_offsets, f in udfs)
+                for row in data
+            )
+
+        # profiling is not supported for UDF
+        return func, None, ser, ser
+
     else:
-
-        def mapper(a):
-            result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
-            # In the special case of a single UDF this will return a single result rather
-            # than a tuple of results; this is the format that the JVM side expects.
-            if len(result) == 1:
-                return result[0]
-            else:
-                return result
-
-    def func(_, it):
-        return map(mapper, it)
-
-    # profiling is not supported for UDF
-    return func, None, ser, ser
+        raise ValueError("Unknown eval type: {}".format(eval_type))
 
 
 def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):

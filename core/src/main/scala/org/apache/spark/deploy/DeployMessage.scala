@@ -201,6 +201,12 @@ private[deploy] object DeployMessages {
 
   case class KillExecutors(appId: String, executorIds: Seq[String])
 
+  // Whether this application can be held and whether it currently is. Pushed on every
+  // transition and re-sent on failover, since a new Master starts without it. The number of
+  // executors still draining is not carried here: the Master already tracks the executors of
+  // the application and derives it from them.
+  case class ApplicationHoldUpdated(appId: String, supported: Boolean, held: Boolean)
+
   // Master to AppClient
 
   case class RegisteredApplication(appId: String, master: RpcEndpointRef) extends DeployMessage
@@ -250,6 +256,10 @@ private[deploy] object DeployMessages {
   // Internal message in AppClient
 
   case object StopAppClient
+
+  // Reports the hold status of the application to the Master, and caches it in the endpoint so
+  // that it can be re-sent on failover.
+  case class ReportApplicationHold(supported: Boolean, held: Boolean)
 
   // Master to Worker & AppClient
 

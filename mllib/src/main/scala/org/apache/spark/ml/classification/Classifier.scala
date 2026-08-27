@@ -199,13 +199,12 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
   (ClassificationModel[FeaturesType, M], String, String) = {
     val model = if ($(rawPredictionCol).isEmpty && $(predictionCol).isEmpty) {
       copy(ParamMap.empty)
-        .setRawPredictionCol("rawPrediction_" + java.util.UUID.randomUUID.toString)
-        .setPredictionCol("prediction_" + java.util.UUID.randomUUID.toString)
+        .setRawPredictionCol(Identifiable.randomUID("rawPrediction"))
+        .setPredictionCol(Identifiable.randomUID("prediction"))
     } else if ($(rawPredictionCol).isEmpty) {
-      copy(ParamMap.empty).setRawPredictionCol("rawPrediction_" +
-        java.util.UUID.randomUUID.toString)
+      copy(ParamMap.empty).setRawPredictionCol(Identifiable.randomUID("rawPrediction"))
     } else if ($(predictionCol).isEmpty) {
-      copy(ParamMap.empty).setPredictionCol("prediction_" + java.util.UUID.randomUUID.toString)
+      copy(ParamMap.empty).setPredictionCol(Identifiable.randomUID("prediction"))
     } else {
       this
     }

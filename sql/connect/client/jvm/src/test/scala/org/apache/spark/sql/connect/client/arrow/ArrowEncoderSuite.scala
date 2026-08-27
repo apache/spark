@@ -40,7 +40,7 @@ import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec, OuterScopes}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, NullEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, RowEncoder, ScalaDecimalEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, YearMonthIntervalEncoder}
-import org.apache.spark.sql.catalyst.encoders.RowEncoder.{encoderFor => toRowEncoder}
+import org.apache.spark.sql.catalyst.encoders.RowEncoder.{encoderFor => toRowEncoder, encoderForResultSchema => toResultRowEncoder}
 import org.apache.spark.sql.catalyst.util.{DateFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
@@ -48,7 +48,7 @@ import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
 import org.apache.spark.sql.catalyst.util.SparkIntervalUtils._
 import org.apache.spark.sql.connect.client.arrow.FooEnum.FooEnum
 import org.apache.spark.sql.connect.test.ConnectFunSuite
-import org.apache.spark.sql.types.{ArrayType, DataType, DayTimeIntervalType, Decimal, DecimalType, Geography, Geometry, IntegerType, Metadata, SQLUserDefinedType, StringType, StructType, UserDefinedType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, CharType, DataType, DayTimeIntervalType, Decimal, DecimalType, Geography, Geometry, IntegerType, Metadata, SQLUserDefinedType, StringType, StructType, UserDefinedType, VarcharType, YearMonthIntervalType}
 import org.apache.spark.sql.util.CloseableIterator
 import org.apache.spark.unsafe.types.VariantVal
 import org.apache.spark.util.{MaybeNull, SparkStringUtils}
@@ -306,6 +306,28 @@ class ArrowEncoderSuite extends ConnectFunSuite {
         values.iterator.map(Option(_).map(_.getBytes("utf8").toSeq)),
         binaries.map(Option(_).map(_.toSeq)))
       binaries.close()
+    }
+  }
+
+  test("SPARK-58794: char/varchar round trip") {
+    // The client cannot see the server's charVarchar configuration, so a result schema carrying
+    // CHAR/VARCHAR must be decodable regardless of the local one. Values are padded and length
+    // checked by the server, so the client passes them through unchanged.
+    val encoder = toResultRowEncoder(
+      new StructType()
+        .add("c", CharType(4))
+        .add("v", VarcharType(6))
+        .add("s", new StructType().add("c", CharType(4)))
+        .add("a", ArrayType(VarcharType(6))))
+    roundTripAndCheckIdentical(encoder) { () =>
+      val maybeNull = MaybeNull(7)
+      Iterator.tabulate(101) { i =>
+        Row(
+          maybeNull("ab  "),
+          maybeNull("cd"),
+          maybeNull(Row("ef  ")),
+          maybeNull(mutable.ArraySeq.make[String](Array("gh"))))
+      }
     }
   }
 

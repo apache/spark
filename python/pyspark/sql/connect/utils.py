@@ -16,9 +16,9 @@
 #
 import sys
 
+from pyspark.errors import PySparkImportError
 from pyspark.loose_version import LooseVersion
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
-from pyspark.errors import PySparkImportError
 
 
 def check_dependencies() -> None:
@@ -29,7 +29,7 @@ def check_dependencies() -> None:
         and not hasattr(sys, "ps1")
     ):
         # The main module is not initialized at all at this point. We must be running doctests.
-        from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+        from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
 
         if not should_test_connect:
             print(

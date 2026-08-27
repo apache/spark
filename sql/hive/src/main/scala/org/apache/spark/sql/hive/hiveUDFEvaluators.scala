@@ -36,7 +36,7 @@ import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.types.DataType
 
 abstract class HiveUDFEvaluatorBase[UDFType <: AnyRef](
-    funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
+    protected val funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends HiveInspectors with Serializable {
 
   @transient
@@ -114,6 +114,15 @@ class HiveSimpleUDFEvaluator(
 class HiveGenericUDFEvaluator(
     funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends HiveUDFEvaluatorBase[GenericUDF](funcWrapper, children) {
+
+  // SPARK-58792: copied expression nodes (e.g. via withNewChildrenInternal) share one
+  // HiveFunctionWrapper, whose cached GenericUDF instance is mutable: initialize()
+  // rewrites its converters and output holders based on the arguments of whichever
+  // copy initialized it last. Give every evaluator its own clone so copied nodes
+  // cannot corrupt each other.
+  @transient
+  override lazy val function: GenericUDF =
+    HiveFunctionRegistryUtils.cloneGenericUDF(funcWrapper.createFunction[GenericUDF]())
 
   @transient
   private lazy val argumentInspectors = children.map(toInspector).toArray

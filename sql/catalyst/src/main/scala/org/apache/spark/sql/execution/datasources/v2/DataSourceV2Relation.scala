@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION, DATA_SOURCE_V2_SCAN_RELATION, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
@@ -145,6 +146,8 @@ case class DataSourceV2Relation(
     table.capabilities.contains(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION)
 
   def isVersioned: Boolean = table.version != null
+
+  override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_RELATION)
 }
 
 /**
@@ -207,8 +210,7 @@ case class DataSourceV2ScanRelation(
       case s: SupportsRuntimeCatalystFiltering => s.filterAttributes()
       case _ => Array.empty[NamedReference]
     }
-    AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](
-      filterAttrs.toImmutableArraySeq, this))
+    resolveTopLevelFilterAttrs(filterAttrs)
   }
 
   /**
@@ -221,9 +223,26 @@ case class DataSourceV2ScanRelation(
       case s: SupportsRuntimeCatalystFiltering => s.fullyPushedFilterAttributes()
       case _ => Array.empty[NamedReference]
     }
+    resolveTopLevelFilterAttrs(filterAttrs)
+  }
+
+  /**
+   * Resolves the given runtime-filter references against this relation's output. Both runtime
+   * filtering interfaces require each reference to be a top-level attribute of the read schema,
+   * so a nested reference is rejected.
+   */
+  private def resolveTopLevelFilterAttrs(filterAttrs: Array[NamedReference]): AttributeSet = {
+    filterAttrs.find(_.fieldNames.length > 1).foreach { ref =>
+      throw SparkException.internalError(
+        s"Runtime filter attribute '${ref.fieldNames.mkString(".")}' declared by " +
+        s"${scan.getClass.getName} must be a top-level attribute of the scan read schema, " +
+        "but it is a nested reference.")
+    }
     AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](
       filterAttrs.toImmutableArraySeq, this))
   }
+
+  override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_SCAN_RELATION)
 
   override def name: String = relation.name
 

@@ -15,35 +15,18 @@
 # limitations under the License.
 #
 
-import unittest
 import datetime
 import decimal
+import unittest
 from typing import List
 
+import numpy as np
 import pandas
 import pandas as pd
 from pandas.api.types import CategoricalDtype
-import numpy as np
 
+from pyspark import pandas as ps
 from pyspark.loose_version import LooseVersion
-from pyspark.sql.types import (
-    ArrayType,
-    BinaryType,
-    BooleanType,
-    FloatType,
-    IntegerType,
-    LongType,
-    StringType,
-    StructField,
-    StructType,
-    ByteType,
-    ShortType,
-    DateType,
-    DecimalType,
-    DoubleType,
-    TimestampType,
-)
-
 from pyspark.pandas.typedef import (
     as_spark_type,
     extension_dtypes_available,
@@ -52,7 +35,23 @@ from pyspark.pandas.typedef import (
     infer_return_type,
     pandas_on_spark_type,
 )
-from pyspark import pandas as ps
+from pyspark.sql.types import (
+    ArrayType,
+    BinaryType,
+    BooleanType,
+    ByteType,
+    DateType,
+    DecimalType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
+    ShortType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+)
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 

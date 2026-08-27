@@ -95,6 +95,9 @@ private[deploy] object JsonProtocol {
    *         `resourcesperexecutor` minimal resources required to each executor
    *         `submitdate` time in Date that the application is submitted
    *         `state` state of the application, see [[ApplicationState]]
+   *         `holdsupported` whether the driver reported that it can be held
+   *         `held` whether the application is currently held; always false once it finishes
+   *         `draining` the number of executors still draining while the application is held
    *         `duration` time in milliseconds that the application has been running
    * For compatibility also returns the deprecated `memoryperslave` & `resourcesperslave` fields.
    */
@@ -112,6 +115,9 @@ private[deploy] object JsonProtocol {
       .toList.map(writeResourceRequirement)) ~
     ("submitdate" -> obj.submitDate.toString) ~
     ("state" -> obj.state.toString) ~
+    ("holdsupported" -> obj.holdSupported) ~
+    ("held" -> obj.isHeld) ~
+    ("draining" -> obj.numDrainingExecutors) ~
     ("duration" -> obj.duration)
   }
 

@@ -31,6 +31,7 @@ import org.apache.spark.deploy.master.ui.MasterWebUISuite._
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.internal.config.UI.MASTER_UI_VISIBLE_ENV_VAR_PREFIXES
 import org.apache.spark.internal.config.UI.UI_KILL_ENABLED
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
 import org.apache.spark.util.Utils
 
@@ -70,6 +71,27 @@ class ReadOnlyMasterWebUISuite extends SparkFunSuite {
       masterWebUI.stop()
     } finally {
       super.afterAll()
+    }
+  }
+
+  test("SPARK-59055: annotate the state of a held application") {
+    val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/"
+    app1.holdSupported = true
+    app1.held = true
+    app1.addExecutor(createWorkerInfo(), 1, 1234, Map.empty, DEFAULT_RESOURCE_PROFILE_ID)
+    app1.addExecutor(createWorkerInfo(), 1, 1234, Map.empty, DEFAULT_RESOURCE_PROFILE_ID)
+    try {
+      var result = Source.fromInputStream(sendHttpRequest(url, "GET", "").getInputStream).mkString
+      assert(result.contains("WAITING (held, draining 2 executors)"))
+
+      // An application that did not report the hold as supported is not annotated.
+      app1.holdSupported = false
+      result = Source.fromInputStream(sendHttpRequest(url, "GET", "").getInputStream).mkString
+      assert(!result.contains("(held"))
+    } finally {
+      app1.holdSupported = false
+      app1.held = false
+      app1.executors.values.toSeq.foreach(app1.removeExecutor)
     }
   }
 
