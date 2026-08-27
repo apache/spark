@@ -407,11 +407,18 @@ object ShuffleExchangeExec {
         assert(k.isGrouped,
           s"Expected a grouped KeyedPartitioning on ${k.expressions}, but got ${k.numPartitions} " +
             "partition keys with duplicates among them")
-        // The map keys are the partitioning's own `InternalRowComparableWrapper`s and
-        // `getPartitionKeyExtractor` below wraps each record's key the same way, so map lookups
-        // share the exact equivalence (`RowOrdering`, e.g. binary keys by content, -0.0 == 0.0,
-        // NaNs equal) that grouped and de-duplicated `partitionKeys`.
-        val valueMap = k.partitionKeys.zipWithIndex.toMap[Any, Int]
+        // The map keys and the lookup keys produced by `getPartitionKeyExtractor` below are
+        // wrapped through the same `InternalRowComparableWrapper` factory over this
+        // partitioning's expression data types, so map lookups share the exact equivalence
+        // (`RowOrdering`, e.g. binary keys by content, -0.0 == 0.0, NaNs equal) that grouped and
+        // de-duplicated `partitionKeys`. Re-wrapping the stored keys matters: `KeyedShuffleSpec
+        // .createPartitioning` substitutes this side's expressions but retains the other side's
+        // `partitionKeys`, whose wrappers may carry a schema that differs in struct field names,
+        // which wrapper equality would reject.
+        val wrapperFactory = InternalRowComparableWrapper
+          .getInternalRowComparableWrapperFactory(k.expressionDataTypes)
+        val valueMap = k.partitionKeys.map(key => wrapperFactory(key.row)).zipWithIndex
+          .toMap[Any, Int]
         new KeyGroupedPartitioner(valueMap, k.numPartitions)
       case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
