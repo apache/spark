@@ -272,25 +272,25 @@ class GBTRegressionModel private[ml](
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
     if ($(predictionCol).nonEmpty || $(leafCol).nonEmpty) {
-      var predictionColNames = Seq.empty[String]
-      var predictionColumns = Seq.empty[Column]
+      var predColNames = Seq.empty[String]
+      var predCols = Seq.empty[Column]
       val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
 
       if ($(predictionCol).nonEmpty) {
         val predictUDF = udf { features: Vector => bcastModel.value.predict(features) }
-        predictionColNames :+= $(predictionCol)
-        predictionColumns :+= predictUDF(col($(featuresCol)))
+        predColNames :+= $(predictionCol)
+        predCols :+= predictUDF(col($(featuresCol)))
           .as($(predictionCol), outputSchema($(predictionCol)).metadata)
       }
 
       if ($(leafCol).nonEmpty) {
         val leafUDF = udf { features: Vector => bcastModel.value.predictLeaf(features) }
-        predictionColNames :+= $(leafCol)
-        predictionColumns :+= leafUDF(col($(featuresCol)))
+        predColNames :+= $(leafCol)
+        predCols :+= leafUDF(col($(featuresCol)))
           .as($(leafCol), outputSchema($(leafCol)).metadata)
       }
 
-      dataset.withColumns(predictionColNames, predictionColumns)
+      dataset.withColumns(predColNames, predCols)
     } else {
       this.logWarning(log"${MDC(LogKeys.UUID, uid)}: GBTRegressionModel.transform() " +
         log"does nothing because no output columns were set.")
