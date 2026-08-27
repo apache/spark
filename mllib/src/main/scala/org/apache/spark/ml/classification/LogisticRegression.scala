@@ -1187,8 +1187,8 @@ class LogisticRegressionModel private[spark] (
   override protected def predictProbabilityColumn(features: Column): Column = {
     val localPredictRaw = predictRawFunction
     val localIsMultinomial = isMultinomial
-    udf((features: Vector) => LogisticRegressionModel.raw2probability(
-      localPredictRaw(features), localIsMultinomial)).apply(features)
+    udf((features: Any) => LogisticRegressionModel.raw2probability(
+      localPredictRaw(features.asInstanceOf[Vector]), localIsMultinomial)).apply(features)
   }
 
   override protected def raw2predictionColumn(rawPrediction: Column): Column = if (isMultinomial) {
@@ -1240,9 +1240,10 @@ class LogisticRegressionModel private[spark] (
     val localCoefficients = _coefficients
     val localIntercept = _intercept
     val localProbabilityThreshold = _binaryThresholds(0)
-    udf((features: Vector) => {
+    udf((features: Any) => {
+      val featureVector = features.asInstanceOf[Vector]
       if (LogisticRegressionModel.score(
-          features, localCoefficients, localIntercept) > localProbabilityThreshold) {
+          featureVector, localCoefficients, localIntercept) > localProbabilityThreshold) {
         1.0
       } else {
         0.0
