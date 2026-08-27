@@ -481,7 +481,7 @@ class Analyzer(
    */
   def withCatalogManager(newCatalogManager: CatalogManager): Analyzer = {
     val self = this
-    new Analyzer(newCatalogManager, sharedRelationCache) {
+    new Analyzer(newCatalogManager, sharedRelationCache, sessionConf) {
       override val hintResolutionRules: Seq[Rule[LogicalPlan]] = self.hintResolutionRules
       override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = self.extendedResolutionRules
       override val postHocResolutionRules: Seq[Rule[LogicalPlan]] = self.postHocResolutionRules

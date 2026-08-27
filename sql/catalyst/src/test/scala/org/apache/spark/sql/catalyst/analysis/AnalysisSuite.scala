@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -69,6 +70,32 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assert(tempView == sameViewRelation)
     assert(tempView.hashCode() == sameViewRelation.hashCode())
     assert(tempView != copiedViewRelation)
+  }
+
+  test("withCatalogManager preserves sessionConf") {
+    val sessionConf = new SQLConf()
+    var observedConf = Option.empty[SQLConf]
+    val analyzer = new Analyzer(getAnalyzer.catalogManager, sessionConf = Some(sessionConf)) {
+      override val extendedResolutionRules = Seq(new Rule[LogicalPlan] {
+        override def apply(plan: LogicalPlan): LogicalPlan = {
+          observedConf = Some(SQLConf.get)
+          plan
+        }
+      })
+    }
+    val replacementCatalogManager = getAnalyzer.catalogManager
+    val clonedAnalyzer = analyzer.withCatalogManager(replacementCatalogManager)
+
+    assert(clonedAnalyzer.catalogManager eq replacementCatalogManager)
+    assert(clonedAnalyzer.sessionConf.exists(_ eq sessionConf))
+    clonedAnalyzer.execute(OneRowRelation())
+    assert(observedConf.exists(_ eq sessionConf))
+
+    val outerConf = new SQLConf()
+    SQLConf.withExistingConf(outerConf) {
+      clonedAnalyzer.execute(OneRowRelation())
+    }
+    assert(observedConf.exists(_ eq outerConf))
   }
 
   test("fail for unresolved plan") {
