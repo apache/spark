@@ -240,8 +240,11 @@ abstract class ProbabilisticClassificationModel[
    * @return  predicted label
    */
   protected def probability2prediction(probability: Vector): Double = {
-    val localThresholds = if (isDefined(thresholds)) getThresholds else null
-    ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+    if (isDefined(thresholds)) {
+      ProbabilisticClassificationModel.probability2prediction(probability, getThresholds)
+    } else {
+      probability.argmax
+    }
   }
 
   /**
@@ -269,27 +272,23 @@ abstract class ProbabilisticClassificationModel[
 private[ml] object ProbabilisticClassificationModel {
 
   def probability2prediction(probability: Vector, thresholds: Array[Double]): Double = {
-    if (thresholds == null) {
-      probability.argmax
-    } else {
-      var argMax = 0
-      var max = Double.NegativeInfinity
-      var i = 0
-      val probabilitySize = probability.size
-      while (i < probabilitySize) {
-        // Thresholds are all > 0, excepting that at most one may be 0.
-        // The single class whose threshold is 0, if any, will always be predicted
-        // ('scaled' = +Infinity). However in the case that this class also has
-        // 0 probability, the class will not be selected ('scaled' is NaN).
-        val scaled = probability(i) / thresholds(i)
-        if (scaled > max) {
-          max = scaled
-          argMax = i
-        }
-        i += 1
+    var argMax = 0
+    var max = Double.NegativeInfinity
+    var i = 0
+    val probabilitySize = probability.size
+    while (i < probabilitySize) {
+      // Thresholds are all > 0, excepting that at most one may be 0.
+      // The single class whose threshold is 0, if any, will always be predicted
+      // ('scaled' = +Infinity). However in the case that this class also has
+      // 0 probability, the class will not be selected ('scaled' is NaN).
+      val scaled = probability(i) / thresholds(i)
+      if (scaled > max) {
+        max = scaled
+        argMax = i
       }
-      argMax
+      i += 1
     }
+    argMax
   }
 
   /**

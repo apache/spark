@@ -1194,8 +1194,12 @@ class LogisticRegressionModel private[spark] (
 
   override protected def probability2predictionColumn(
       probability: Column): Column = if (isMultinomial) {
-    val localThresholds = if (isDefined(thresholds)) getThresholds.clone() else null
-    probability2predictionColumn(probability, localThresholds)
+    if (isDefined(thresholds)) {
+      val localThresholds = getThresholds.clone()
+      probability2predictionColumn(probability, localThresholds)
+    } else {
+      udf((probability: Vector) => probability.argmax.toDouble).apply(probability)
+    }
   } else {
     val localProbabilityThreshold = getThreshold
     val probabilityScore = MLFunctions.vector_get(probability, lit(1))
@@ -1214,17 +1218,21 @@ class LogisticRegressionModel private[spark] (
   override protected def predictionColumn(features: Column): Column = if (isMultinomial) {
     val localCoefficientMatrix = coefficientMatrix
     val localInterceptVector = interceptVector.toDense
-    val localThresholds = if (isDefined(thresholds)) getThresholds.clone() else null
-    udf((features: Any) => {
-      val rawPrediction = LogisticRegressionModel.predictRaw(
-        features.asInstanceOf[Vector], localCoefficientMatrix, localInterceptVector)
-      if (localThresholds == null) {
-        rawPrediction.argmax.toDouble
-      } else {
+    if (isDefined(thresholds)) {
+      val localThresholds = getThresholds.clone()
+      udf((features: Any) => {
+        val rawPrediction = LogisticRegressionModel.predictRaw(
+          features.asInstanceOf[Vector], localCoefficientMatrix, localInterceptVector)
         val probability = LogisticRegressionModel.raw2probabilityMultinomial(rawPrediction)
         ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
-      }
-    }).apply(features)
+      }).apply(features)
+    } else {
+      udf((features: Any) => {
+        val rawPrediction = LogisticRegressionModel.predictRaw(
+          features.asInstanceOf[Vector], localCoefficientMatrix, localInterceptVector)
+        rawPrediction.argmax.toDouble
+      }).apply(features)
+    }
   } else {
     val localCoefficients = _coefficients
     val localIntercept = interceptVector(0)
