@@ -91,9 +91,8 @@ class AutoCdcCrossScdConvergenceSuite
       // eagerly).
       withClue(
         s"\ncross-SCD convergence testName=$crossScdConvergenceTestName " +
-        s"seedIndex=$seedIndex iterationSeed=$seed " +
-        s"(rerun this test with -D$baseSeedSystemProperty=$configuredBaseSeed " +
-        s"-D$numSeedsSystemProperty=1 to reproduce)\n" +
+        s"seedIndex=$seedIndex seed=$seed " +
+        s"(rerun this test with -D$convergenceReproSeedSystemProperty=$seed to reproduce)\n" +
         s"keys=$numDistinctKeys maxEventsPerKey=$maxUniqueEventsPerKey " +
         s"numBatches=$numBatches expectedLiveKeys=$expectedLiveKeyCount " +
         s"events=${sortedEventStream.size}\n"

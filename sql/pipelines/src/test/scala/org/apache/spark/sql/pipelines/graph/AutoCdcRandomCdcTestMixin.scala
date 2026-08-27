@@ -22,6 +22,7 @@ import scala.util.Random
 
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.graph.AutoCdcRandomCdcTestMixin.SourceRow
 import org.apache.spark.sql.pipelines.utils.ExecutionTest
@@ -56,8 +57,9 @@ object AutoCdcRandomCdcTestMixin {
  * suites.
  *
  * Exposed random data generation knobs (optional; defaults are CI-sized):
- *   - `spark.sql.test.autocdc.convergenceBaseSeed`
- *   - `spark.sql.test.autocdc.convergenceNumSeeds`
+ *   - `spark.sql.test.autocdc.convergenceMultiRunBaseSeed` (multi-run mode)
+ *   - `spark.sql.test.autocdc.convergenceMultiRunNumSeeds` (multi-run mode)
+ *   - `spark.sql.test.autocdc.convergenceReproSeed` (repro mode; overrides multi-run)
  *   - `spark.sql.test.autocdc.convergenceNumKeys`
  *   - `spark.sql.test.autocdc.convergenceMaxEventsPerKey`
  *   - `spark.sql.test.autocdc.convergenceNumBatches`
@@ -66,15 +68,19 @@ object AutoCdcRandomCdcTestMixin {
  * stress testing, for example:
  * {{{
  * build/sbt \
- *   -Dspark.sql.test.autocdc.convergenceNumSeeds=10 \
+ *   -Dspark.sql.test.autocdc.convergenceMultiRunNumSeeds=10 \
  *   -Dspark.sql.test.autocdc.convergenceNumKeys=100 \
  *   'pipelines/testOnly *AutoCdcCrossScdConvergenceSuite'
  * }}}
  *
- * The shared base seed property supplies the first iteration's seed and deterministically derives
- * any remaining per-iteration seeds from it.
+ * Two execution modes:
+ *   - Multi-run (default): each test generates `convergenceMultiRunNumSeeds` random CDC streams
+ *     from `convergenceMultiRunBaseSeed`. Used for CI and local stress testing.
+ *   - Repro: when `convergenceReproSeed` is set, each test runs a single stream with that seed
+ *     and ignores `convergenceMultiRunBaseSeed` and `convergenceMultiRunNumSeeds`. Used to replay
+ *     one failing case from the seed printed in a failure message.
  */
-trait AutoCdcRandomCdcTestMixin {
+trait AutoCdcRandomCdcTestMixin extends Logging {
   self: ExecutionTest with SharedSparkSession with AutoCdcGraphExecutionTestMixin =>
 
   // Probability an event is a delete; (1 - this) is the upsert probability.
@@ -98,10 +104,12 @@ trait AutoCdcRandomCdcTestMixin {
   protected val defaultNumSeedsPerRun: Int = 1
 
   // Exposed so suite failure clues can tell callers how to force a deterministic replay.
-  protected val baseSeedSystemProperty: String =
-    "spark.sql.test.autocdc.convergenceBaseSeed"
-  protected val numSeedsSystemProperty: String =
-    "spark.sql.test.autocdc.convergenceNumSeeds"
+  protected val multiRunBaseSeedSystemProperty: String =
+    "spark.sql.test.autocdc.convergenceMultiRunBaseSeed"
+  protected val multiRunNumSeedsSystemProperty: String =
+    "spark.sql.test.autocdc.convergenceMultiRunNumSeeds"
+  protected val convergenceReproSeedSystemProperty: String =
+    "spark.sql.test.autocdc.convergenceReproSeed"
   private val numKeysSystemProperty: String =
     "spark.sql.test.autocdc.convergenceNumKeys"
   private val maxEventsPerKeySystemProperty: String =
@@ -116,12 +124,15 @@ trait AutoCdcRandomCdcTestMixin {
   }
 
   protected def configuredBaseSeed: Long =
-    Option(System.getProperty(baseSeedSystemProperty))
+    Option(System.getProperty(multiRunBaseSeedSystemProperty))
       .map(_.toLong)
       .getOrElse(defaultBaseSeed)
 
+  private def configuredReproSeed: Option[Long] =
+    Option(System.getProperty(convergenceReproSeedSystemProperty)).map(_.toLong)
+
   private def resolveNumSeeds(): Int =
-    positiveIntProp(numSeedsSystemProperty, defaultNumSeedsPerRun)
+    positiveIntProp(multiRunNumSeedsSystemProperty, defaultNumSeedsPerRun)
 
   protected def resolveNumDistinctKeys(): Int =
     positiveIntProp(numKeysSystemProperty, defaultNumDistinctKeys)
@@ -133,17 +144,29 @@ trait AutoCdcRandomCdcTestMixin {
     positiveIntProp(numBatchesSystemProperty, defaultNumBatches)
 
   /**
-   * Invoke `callback(seed, seedIndex)` once per configured seed. The first iteration uses
-   * [[configuredBaseSeed]] mixed with [[testName]]; any remaining iteration seeds are
-   * deterministically derived from that per-test base.
+   * Invoke `callback(seed, seedIndex)` for each convergence iteration.
+   *
+   * When [[configuredReproSeed]] is set, invokes the callback once with that seed (repro mode).
+   * Otherwise derives `numSeeds` iterations from [[configuredBaseSeed]] and [[testName]]
+   * (multi-run mode).
    */
   protected def forEachConvergenceSeed(testName: String)(callback: (Long, Int) => Unit): Unit = {
-    val effectiveBaseSeed = configuredBaseSeed ^ testName.hashCode.toLong
-    val numSeeds = resolveNumSeeds()
-    val masterRand = new Random(effectiveBaseSeed)
-    val seeds = effectiveBaseSeed +: Seq.fill(numSeeds - 1)(masterRand.nextLong())
-    seeds.zipWithIndex.foreach { case (seed, seedIndex) =>
-      callback(seed, seedIndex)
+    configuredReproSeed match {
+      case Some(reproSeed) =>
+        logInfo(
+          s"AutoCDC convergence repro mode for test '$testName': " +
+          s"-D$convergenceReproSeedSystemProperty=$reproSeed " +
+          s"(-D$multiRunBaseSeedSystemProperty and " +
+          s"-D$multiRunNumSeedsSystemProperty are ignored)")
+        callback(reproSeed, 0)
+      case None =>
+        val perTestBaseSeed = configuredBaseSeed ^ testName.hashCode.toLong
+        val numSeeds = resolveNumSeeds()
+        val masterRand = new Random(perTestBaseSeed)
+        val seeds = perTestBaseSeed +: Seq.fill(numSeeds - 1)(masterRand.nextLong())
+        seeds.zipWithIndex.foreach { case (seed, seedIndex) =>
+          callback(seed, seedIndex)
+        }
     }
   }
 

@@ -53,9 +53,8 @@ class AutoCdcOutOfOrderConvergenceSuite
 
       withClue(
         s"\nout-of-order convergence scdType=${scdType.label} testName=$testName " +
-        s"seedIndex=$seedIndex iterationSeed=$seed " +
-        s"(rerun this test with -D$baseSeedSystemProperty=$configuredBaseSeed " +
-        s"-D$numSeedsSystemProperty=1 to reproduce)\n" +
+        s"seedIndex=$seedIndex seed=$seed " +
+        s"(rerun this test with -D$convergenceReproSeedSystemProperty=$seed to reproduce)\n" +
         s"keys=$numDistinctKeys maxEventsPerKey=$maxUniqueEventsPerKey " +
         s"numBatches=$numBatches events=${sortedEventStream.size}\n"
       ) {
