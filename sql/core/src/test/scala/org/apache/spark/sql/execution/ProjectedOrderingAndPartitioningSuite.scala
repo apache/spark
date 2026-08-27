@@ -506,6 +506,8 @@ class ProjectedOrderingAndPartitioningSuite
     assert(kp.isNarrowed && !kp.isGrouped)
 
     Seq(true, false).foreach { requireAll =>
+      // Both values on purpose: the whole claim of the fix is that the guard answers the same
+      // either way, so the `false` iteration is the control that must keep behaving as before.
       // The required clustering is exactly this partitioning's single key, so the
       // `requireAllClusterKeys` branch on its own would accept it.
       val required = ClusteredDistribution(Seq(x), requireAllClusterKeys = requireAll)
