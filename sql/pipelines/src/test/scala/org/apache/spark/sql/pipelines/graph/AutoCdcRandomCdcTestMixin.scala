@@ -20,9 +20,9 @@ package org.apache.spark.sql.pipelines.graph
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.graph.AutoCdcRandomCdcTestMixin.SourceRow
 import org.apache.spark.sql.pipelines.utils.ExecutionTest
