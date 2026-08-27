@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, InsertIntoStatement}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, _}
@@ -101,6 +101,36 @@ abstract class DataSourceV2SQLSuite
 
   protected def analysisException(sqlText: String): AnalysisException = {
     intercept[AnalysisException](sql(sqlText))
+  }
+
+  test("transaction target resolution uses the analyzer session config") {
+    val catalogName = "session"
+    val tableName = s"$catalogName.target"
+    withSQLConf(
+        s"spark.sql.catalog.$catalogName" ->
+          classOf[InMemoryRowLevelOperationTableCatalog].getName,
+        SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
+      withTable(tableName) {
+        withTempView("target") {
+          sql(s"CREATE TABLE $tableName (i INT) USING foo")
+          spark.range(1).createOrReplaceTempView("target")
+          val insert = spark.sessionState.sqlParser
+            .parsePlan(s"INSERT INTO $tableName VALUES (1)")
+            .asInstanceOf[InsertIntoStatement]
+          val otherSession = spark.newSession()
+          otherSession.conf.set(SQLConf.PERSISTENT_CATALOG_FIRST.key, false)
+
+          val result = otherSession.withActive {
+            spark.sessionState.analyzer.resolveWriteTargetForTransaction(insert.table)
+          }
+          val transaction = result.transaction.getOrElse {
+            fail("expected the persistent target to start a transaction")
+          }
+          transaction.abort()
+          transaction.close()
+        }
+      }
+    }
   }
 
   test("EXPLAIN") {
@@ -5238,7 +5268,7 @@ class DataSourceV2SQLSuiteV1Filter
         withTable(tbl) {
           sql(s"CREATE TABLE $tbl (i INT)")
 
-          // The query is resolved before the write target. The target load must still carry write
+          // The write target is resolved before the query. Its load must still carry write
           // privileges because write loads bypass the per-query read caches.
           assertPrivilegeError(sql(s"INSERT INTO $tbl SELECT * FROM $tbl"), "INSERT")
           assertPrivilegeError(

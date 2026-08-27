@@ -404,29 +404,31 @@ class Analyzer(
    */
   private[sql] def resolveWriteTargetForTransaction(
       plan: LogicalPlan): Analyzer.WriteTargetResolution = {
-    val identifierResolvedPlan = plan match {
-      case unresolved: PlanWithUnresolvedIdentifier =>
-        val expressionPlan = Project(
-          Seq(Alias(unresolved.identifierExpr, "_identifier")()), OneRowRelation())
-        val resolvedExpression = execute(expressionPlan).expressions.head
-        if (resolvedExpression.resolved) {
-          unresolved.planBuilder(
-            IdentifierResolution.evalIdentifierExpr(resolvedExpression), unresolved.children)
-        } else {
-          unresolved
-        }
-      case other => other
-    }
+    runWithSessionConf {
+      val identifierResolvedPlan = plan match {
+        case unresolved: PlanWithUnresolvedIdentifier =>
+          val expressionPlan = Project(
+            Seq(Alias(unresolved.identifierExpr, "_identifier")()), OneRowRelation())
+          val resolvedExpression = execute(expressionPlan).expressions.head
+          if (resolvedExpression.resolved) {
+            unresolved.planBuilder(
+              IdentifierResolution.evalIdentifierExpr(resolvedExpression), unresolved.children)
+          } else {
+            unresolved
+          }
+        case other => other
+      }
 
-    val (target, transaction, options) = identifierResolvedPlan match {
-      case target: UnresolvedWriteTarget =>
-        relationResolution.resolveWriteTargetForTransaction(target) match {
-          case Some(result) => (result.plan, result.transaction, Some(target.options))
-          case None => (target, None, Some(target.options))
-        }
-      case other => (other, None, None)
+      val (target, transaction, options) = identifierResolvedPlan match {
+        case target: UnresolvedWriteTarget =>
+          relationResolution.resolveWriteTargetForTransaction(target) match {
+            case Some(result) => (result.plan, result.transaction, Some(target.options))
+            case None => (target, None, Some(target.options))
+          }
+        case other => (other, None, None)
+      }
+      Analyzer.WriteTargetResolution(plan, target, transaction, options)
     }
-    Analyzer.WriteTargetResolution(plan, target, transaction, options)
   }
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {

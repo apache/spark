@@ -103,14 +103,28 @@ class QueryExecution(
       transaction: Option[Transaction],
       writeTarget: Option[Analyzer.WriteTargetResolution]) {
 
+    private def replaceWriteTarget(
+        write: TransactionalWrite,
+        result: Analyzer.WriteTargetResolution): LogicalPlan = write match {
+      case insert: InsertIntoStatement if insert.table eq result.originalTarget =>
+        insert.copy(
+          table = result.target,
+          tableOptions = result.options.getOrElse(insert.tableOptions))
+      case other =>
+        other.mapChildren {
+          case target if target eq result.originalTarget => result.target
+          case child => child
+        }
+    }
+
     def prepareForAnalysis(plan: LogicalPlan): LogicalPlan = writeTarget match {
       case Some(result) =>
-        plan.transformDown {
-          case insert: InsertIntoStatement if insert.table eq result.originalTarget =>
-            insert.copy(
-              table = result.target,
-              tableOptions = result.options.getOrElse(insert.tableOptions))
-          case target if target eq result.originalTarget => result.target
+        plan match {
+          case unresolvedWith @ UnresolvedWith(write: TransactionalWrite, _, _) =>
+            unresolvedWith.copy(child = replaceWriteTarget(write, result))
+          case write: TransactionalWrite =>
+            replaceWriteTarget(write, result)
+          case other => other
         }
       case None => plan
     }
