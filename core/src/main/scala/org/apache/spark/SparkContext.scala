@@ -2322,12 +2322,15 @@ class SparkContext(config: SparkConf) extends Logging {
    * Tell the cluster manager whether this application can be held and whether it currently is,
    * so that it can show the hold status on its own UI. Called once the context is fully started
    * -- `executorHoldSupported` reads the shuffle driver components, which are initialized late
-   * -- and again after every transition.
+   * -- and again after every transition. Synchronized so that concurrent transitions cannot
+   * deliver their reports inverted: whichever call serializes last reports the current state.
    */
-  private def reportExecutorHoldStatus(): Unit = schedulerBackend match {
-    case cg: CoarseGrainedSchedulerBackend =>
-      cg.reportExecutorHoldStatus(executorHoldSupported, _executorsHeld)
-    case _ =>
+  private def reportExecutorHoldStatus(): Unit = synchronized {
+    schedulerBackend match {
+      case cg: CoarseGrainedSchedulerBackend =>
+        cg.reportExecutorHoldStatus(executorHoldSupported, _executorsHeld)
+      case _ =>
+    }
   }
 
   /** The version of Spark on which this application is running. */

@@ -205,10 +205,35 @@ private[spark] class ApplicationInfo(
   }
 
   /**
+   * Whether the application is held right now, per the last report from its running driver. An
+   * application that did not report the hold as supported is not considered held -- its driver
+   * UI offers no control to change it -- and neither is a finished application, whose driver is
+   * gone, so the last reported hold is stale.
+   */
+  private[deploy] def isHeld: Boolean = held && holdSupported && !isFinished
+
+  /**
    * The number of executors that have not exited yet while the application is held. They are
    * still draining their running tasks; the hold is complete once this reaches zero.
    */
-  private[deploy] def numDrainingExecutors: Int = if (held) executors.size else 0
+  private[deploy] def numDrainingExecutors: Int = if (isHeld) executors.size else 0
+
+  /**
+   * The application state, annotated with the hold reported by its driver, for example
+   * `RUNNING (held, draining 2 executors)`.
+   */
+  private[deploy] def stateText: String = {
+    if (!isHeld) {
+      state.toString
+    } else {
+      val draining = numDrainingExecutors
+      if (draining == 0) {
+        s"$state (held)"
+      } else {
+        s"$state (held, draining $draining executor${if (draining > 1) "s" else ""})"
+      }
+    }
+  }
 
   def duration: Long = {
     if (endTime != -1) {

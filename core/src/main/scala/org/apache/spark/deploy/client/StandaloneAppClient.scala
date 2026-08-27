@@ -354,6 +354,8 @@ private[spark] class StandaloneAppClient(
   def reportHoldStatus(supported: Boolean, held: Boolean): Unit = {
     if (endpoint.get != null) {
       endpoint.get.send(ReportApplicationHold(supported, held))
+    } else {
+      logWarning("Attempted to report the hold status before driver fully initialized.")
     }
   }
 
