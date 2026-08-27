@@ -146,8 +146,8 @@ class HiveSessionStateBuilder(
         PreprocessTableCreation(catalog) +:
         new PreprocessTableInsertion(session) +:
         DataSourceAnalysis +:
-        ApplyCharTypePadding +:
         HiveAnalysis +:
+        ApplyCharTypePadding +:
         ReplaceCharWithVarchar +:
         customPostHocResolutionRules
 
