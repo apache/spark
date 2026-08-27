@@ -773,10 +773,9 @@ An executor that has not exited yet is still finishing its running tasks, and th
 once no executor is left. The Master's `/json/` endpoint reports the same in the `holdsupported`,
 `held`, and `draining` fields of each application.
 
-Only applications whose driver reports that it can be held are annotated, which requires
-`spark.ui.holdEnabled` to be true on that application in addition to the preconditions described
-in [Web UI](web-ui.html#jobs-tab). Holding and resuming an application is done from its own driver
-web UI.
+Only applications whose driver reports that it can be held are annotated, per the preconditions
+described in [Web UI](web-ui.html#jobs-tab). Holding and resuming an application is done from its
+own driver web UI.
 
 
 # Running Alongside Hadoop

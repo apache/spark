@@ -715,8 +715,8 @@ class SparkContext(config: SparkConf) extends Logging {
     postEnvironmentUpdate()
     postApplicationStart()
 
-    // Advertise whether this application can be held, now that the shuffle driver components and
-    // the allocation manager, which decide it, are up.
+    // Advertise whether this application can be held, now that the shuffle driver components,
+    // which decide it, are up.
     reportExecutorHoldStatus()
 
     // After application started, attach handlers to started server and start handler.

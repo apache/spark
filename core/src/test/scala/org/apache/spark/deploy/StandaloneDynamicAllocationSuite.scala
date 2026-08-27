@@ -520,7 +520,7 @@ class StandaloneDynamicAllocationSuite
     }
   }
 
-  test("SPARK-59055: spark.ui.holdEnabled=false is reported as not holdable") {
+  test("SPARK-59055: spark.ui.holdEnabled=false does not suppress the hold status") {
     sc = new SparkContext(appConf
       .set(config.SHUFFLE_SERVICE_ENABLED, true)
       .set(config.DECOMMISSION_ENABLED, true)
@@ -529,15 +529,16 @@ class StandaloneDynamicAllocationSuite
       assert(getApplications().length === 1)
     }
 
-    // holdExecutors() is a developer API that the config does not gate, so the hold itself is
-    // still reported -- but not as supported, so the Master does not treat the app as held.
+    // spark.ui.holdEnabled gates the controls on the driver UI, not the capability itself:
+    // holdExecutors() is a developer API that the config does not touch, so a hold made with
+    // the config off must still be visible on the Master.
     assert(sc.holdExecutors())
     eventually(timeout(10.seconds), interval(10.millis)) {
       assert(getApplications().head.held)
     }
-    assert(!getApplications().head.holdSupported)
-    assert(!getApplications().head.isHeld)
-    assert(getApplications().head.numDrainingExecutors === 0)
+    assert(getApplications().head.holdSupported)
+    assert(getApplications().head.isHeld)
+    assert(getApplications().head.numDrainingExecutors === 2)
   }
 
   test("executor registration on a excluded host must fail") {

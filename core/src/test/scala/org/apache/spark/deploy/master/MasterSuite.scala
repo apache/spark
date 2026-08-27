@@ -270,10 +270,15 @@ class MasterSuite extends MasterSuiteBase {
     // The hold is complete once the last executor is gone.
     appInfo.executors.values.toSeq.foreach(appInfo.removeExecutor)
     assert(appInfo.numDrainingExecutors === 0)
+    assert(appInfo.isHeld)
+    assert(appInfo.stateText === "WAITING (held)")
+
+    // A single draining executor is reported in the singular.
+    appInfo.addExecutor(worker, 1, 1024, Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    assert(appInfo.stateText === "WAITING (held, draining 1 executor)")
 
     // A finished application is never held, even though the Master keeps its executors for the
     // UI: its driver is gone, so the last reported hold is stale.
-    appInfo.addExecutor(worker, 1, 1024, Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     appInfo.markFinished(ApplicationState.FINISHED)
     assert(!appInfo.isHeld)
     assert(appInfo.numDrainingExecutors === 0)
