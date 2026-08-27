@@ -63,7 +63,6 @@ import struct
 import sys
 import types
 import zlib
-from itertools import chain, product
 
 pickle_protocol = pickle.HIGHEST_PROTOCOL
 
@@ -125,9 +124,6 @@ class Serializer:
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
     def __repr__(self):
         return "%s()" % self.__class__.__name__
 
@@ -172,13 +168,6 @@ class FramedSerializer(Serializer):
             raise EOFError
         return self.loads(obj)
 
-    def dumps(self, obj):
-        """
-        Serialize an object into a byte array.
-        When batching is used, this will be called with an array of objects.
-        """
-        raise NotImplementedError
-
     def loads(self, obj):
         """
         Deserialize an object from a byte array.
@@ -211,7 +200,7 @@ class BatchedSerializer(Serializer):
         self.serializer.dump_stream(self._batched(iterator), stream)
 
     def load_stream(self, stream):
-        return chain.from_iterable(self._load_stream_without_unbatching(stream))
+        return itertools.chain.from_iterable(self._load_stream_without_unbatching(stream))
 
     def _load_stream_without_unbatching(self, stream):
         return self.serializer.load_stream(stream)
@@ -290,10 +279,10 @@ class CartesianDeserializer(Serializer):
         val_batch_stream = self.val_ser._load_stream_without_unbatching(stream)
         for key_batch, val_batch in zip(key_batch_stream, val_batch_stream):
             # for correctness with repeated cartesian/zip this must be returned as one batch
-            yield product(key_batch, val_batch)
+            yield itertools.product(key_batch, val_batch)
 
     def load_stream(self, stream):
-        return chain.from_iterable(self._load_stream_without_unbatching(stream))
+        return itertools.chain.from_iterable(self._load_stream_without_unbatching(stream))
 
     def __repr__(self):
         return "CartesianDeserializer(%s, %s)" % (str(self.key_ser), str(self.val_ser))
@@ -327,7 +316,7 @@ class PairDeserializer(Serializer):
             yield zip(key_batch, val_batch)
 
     def load_stream(self, stream):
-        return chain.from_iterable(self._load_stream_without_unbatching(stream))
+        return itertools.chain.from_iterable(self._load_stream_without_unbatching(stream))
 
     def __repr__(self):
         return "PairDeserializer(%s, %s)" % (str(self.key_ser), str(self.val_ser))
@@ -484,7 +473,6 @@ class CompressedSerializer(FramedSerializer):
     """
 
     def __init__(self, serializer):
-        FramedSerializer.__init__(self)
         assert isinstance(serializer, FramedSerializer), "serializer must be a FramedSerializer"
         self.serializer = serializer
 

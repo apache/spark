@@ -46,7 +46,8 @@ case class TextTable(
     }
   }
 
-  override def supportsDataType(dataType: DataType): Boolean = dataType == StringType
+  override def supportsDataType(dataType: DataType): Boolean =
+    dataType.isInstanceOf[StringType]
 
   override def formatName: String = "Text"
 }
