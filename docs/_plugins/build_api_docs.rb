@@ -284,7 +284,7 @@ def build_scala_and_java_docs
   print_header "Building Scala and Java API docs"
   cd(SPARK_PROJECT_ROOT)
 
-  if not (ENV['SKIP_UNIDOC'] == '1')
+  if not (ENV['SKIP_UNIDOC_BUILD'] == '1')
     build_unidoc
   end
 

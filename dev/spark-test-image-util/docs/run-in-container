@@ -19,7 +19,7 @@
 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64
 export PATH=$JAVA_HOME/bin:$PATH
 export SKIP_SPARK_BUILD=1
-export SKIP_UNIDOC=1
+export SKIP_UNIDOC_BUILD=1
 # We expect to compile the R document on the host.
 export SKIP_RDOC=1
 
