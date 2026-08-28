@@ -427,13 +427,15 @@ private[spark] class ExecutorAllocationManager(
       tasksPerExecutor).toInt
 
     val maxNeededWithSpeculationLocalityOffset =
-      if (tasksPerExecutor > 1 && maxNeeded == 1 && pendingSpeculative > 0) {
-      // If we have pending speculative tasks and only need a single executor, allocate one more
-      // to satisfy the locality requirements of speculation
-      maxNeeded + 1
-    } else {
-      maxNeeded
-    }
+      if ((tasksPerExecutor > 1 && maxNeeded == 1 && pendingSpeculative > 0) ||
+          (pendingSpeculative > 0 &&
+           maxNeeded == executorMonitor.executorCountWithResourceProfile(rpId))) {
+        // If we have pending speculative tasks and maxNeeded equals the active executor count,
+        // allocate one more to satisfy the locality requirements of speculation.
+        maxNeeded + 1
+      } else {
+        maxNeeded
+      }
 
     if (unschedulableTaskSets > 0) {
       // Request additional executors to account for task sets having tasks that are unschedulable
