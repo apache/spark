@@ -77,25 +77,10 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
   // SQL layer must detach each row from the producer's reused buffer before the writer sees it.
   override def requiresDetachedRecords: Boolean = true
 
-  // Shuffle ids this manager currently holds rendezvous state for: added at registration (driver
-  // side, once per shuffle), removed at unregister. A channel shuffle registers with NO output
-  // tracker (usesStreamingShuffleOutputTracker = false), so the ContextCleaner cannot tell one of
-  // ours apart from an already-cleaned regular shuffle by tracker membership alone; it asks
-  // holdsShuffle instead, so its tracker-less cleanup arm fires only for a shuffle we actually
-  // own. This is the ONE registry the manager keeps -- deliberately just a membership set, not the
-  // per-shuffle metadata an earlier design kept and lost to a mid-job unregister (see class doc);
-  // a stale entry cannot mis-serve a reader (numMaps lives in the handle), only scope cleanup.
-  private val registeredShuffleIds =
-    java.util.concurrent.ConcurrentHashMap.newKeySet[Int]()
-
   override def registerShuffle[K, V, C](
       shuffleId: Int,
-      dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
-    registeredShuffleIds.add(shuffleId)
+      dependency: ShuffleDependency[K, V, C]): ShuffleHandle =
     new ChannelShuffleHandle(shuffleId, dependency, dependency.rdd.partitions.length)
-  }
-
-  override def holdsShuffle(shuffleId: Int): Boolean = registeredShuffleIds.contains(shuffleId)
 
   override def getWriter[K, V](
       handle: ShuffleHandle,
@@ -131,7 +116,6 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
   }
 
   override def unregisterShuffle(shuffleId: Int): Boolean = {
-    registeredShuffleIds.remove(shuffleId)
     ChannelShuffleRendezvous.removeShuffle(shuffleId)
     true
   }

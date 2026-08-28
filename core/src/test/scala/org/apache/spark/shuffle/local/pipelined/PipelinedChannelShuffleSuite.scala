@@ -189,40 +189,153 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
     }
   }
 
-  test("the tracker-less cleanup arm is scoped to shuffles the manager actually holds") {
-    // The tracker-less arm of doCleanupShuffle must fire only for a shuffle the channel manager
-    // OWNS, not for any shuffle that happens to be in neither tracker while the manager is active.
-    // A REGULAR shuffle in a feature-on session is eagerly cleaned (RDD.cleanShuffleDependencies
-    // unregisters it from the MapOutputTracker), then GC re-cleans it -- reaching this arm. Before
-    // the holdsShuffle gate that fired a duplicate cluster-wide RemoveShuffle RPC + shuffleCleaned
-    // callback for it; now holdsShuffle is false for a shuffle the manager never registered, so the
-    // arm is a no-op. Assert the gating predicate directly on the manager.
+  test("the tracker-less cleanup arm is scoped to shuffles the rendezvous actually holds") {
+    // The tracker-less arm of doCleanupShuffle must fire only for a shuffle the channel rendezvous
+    // holds state for, not for any shuffle that happens to be in neither tracker while the manager
+    // is active. The gating signal is ChannelShuffleRendezvous.holdsShuffle (NOT the manager's
+    // registration), because a channel shuffle unregistered before its job runs recreates its
+    // queues lazily even though the manager no longer lists it -- keying off the rendezvous frees
+    // those recreated queues while staying false for a regular shuffle (never present here).
     withPipelinedSparkContext(cores = 8) { sc =>
-      val mgr = SparkEnv.get.pipelinedShuffleManager
-        .asInstanceOf[PipelinedChannelShuffleManager]
-
-      // A channel (pipelined) shuffle: registered with the manager, so it is held...
+      // A channel (pipelined) shuffle: after it runs, the rendezvous holds its queues...
       val keyed: RDD[(Int, Int)] = sc.parallelize(0 until 1000, 3).map(v => (v, v))
       val rdd = new PipelinedShuffledRDD[Int, Int, Int](keyed, new HashPartitioner(4))
       val pipelinedId = rdd.dependencies.head
         .asInstanceOf[org.apache.spark.ShuffleDependency[_, _, _]].shuffleId
       rdd.collect()
-      assert(mgr.holdsShuffle(pipelinedId),
-        "the manager must hold a pipelined shuffle it registered")
+      assert(ChannelShuffleRendezvous.holdsShuffle(pipelinedId),
+        "the rendezvous must hold a channel shuffle that has run")
 
-      // A REGULAR shuffle in the same feature-on context routes to the DEFAULT manager, never the
-      // channel manager, so the channel manager does not hold it -- the arm must skip it.
+      // A REGULAR shuffle in the same feature-on context routes to the DEFAULT manager and never
+      // touches the rendezvous, so holdsShuffle is false -- the arm skips it (no duplicate RPC).
       val regular = sc.parallelize(0 until 1000, 3).map(v => (v, v)).reduceByKey(_ + _)
       val regularId = regular.dependencies.head
         .asInstanceOf[org.apache.spark.ShuffleDependency[_, _, _]].shuffleId
       regular.collect()
-      assert(!mgr.holdsShuffle(regularId),
-        "the channel manager must NOT hold a regular shuffle (it never registered it)")
+      assert(!ChannelShuffleRendezvous.holdsShuffle(regularId),
+        "the rendezvous must NOT hold a regular shuffle")
 
-      // Unregister drops the pipelined id from the held set, so a GC-time re-clean is a no-op.
-      mgr.unregisterShuffle(pipelinedId)
-      assert(!mgr.holdsShuffle(pipelinedId),
-        "unregisterShuffle must drop the shuffle from the held set")
+      // Unregister frees the rendezvous state, so a later GC-time re-clean is a no-op.
+      ChannelShuffleRendezvous.removeShuffle(pipelinedId)
+      assert(!ChannelShuffleRendezvous.holdsShuffle(pipelinedId),
+        "removeShuffle must clear the rendezvous state for the shuffle")
+    }
+  }
+
+  test("cleanup frees a channel shuffle unregistered BEFORE it ran (re-run recreated its queues)") {
+    // Regression for the unregister-before-run leak: a shuffle whose SQL scope ended (Dataset.rdd
+    // under fileCleanup) unregisters it before any job runs, then the job runs and recreates the
+    // rendezvous queues lazily. An earlier fix keyed cleanup off the manager's registration, which
+    // was dropped at that unregister and never re-added, so holdsShuffle stayed false forever and
+    // the recreated queues leaked. Keying off the rendezvous fixes that: the recreated queues make
+    // holdsShuffle true again, so doCleanupShuffle's arm frees them.
+    withPipelinedSparkContext(cores = 8) { sc =>
+      val keyed: RDD[(Int, Int)] = sc.parallelize(0 until 1000, 3).map(v => (v, v))
+      val rdd = new PipelinedShuffledRDD[Int, Int, Int](keyed, new HashPartitioner(4))
+      val shuffleId = rdd.dependencies.head
+        .asInstanceOf[org.apache.spark.ShuffleDependency[_, _, _]].shuffleId
+
+      // Simulate the unregister-before-run: clear any state, then run so the writer/reader recreate
+      // the queues -- WITHOUT any manager re-registration in between.
+      ChannelShuffleRendezvous.removeShuffle(shuffleId)
+      rdd.collect()
+      assert(ChannelShuffleRendezvous.holdsShuffle(shuffleId),
+        "running the shuffle must recreate its rendezvous queues")
+
+      // The cleanup arm must now free them (it keys off the rendezvous, not a stale registry).
+      sc.cleaner.get.doCleanupShuffle(shuffleId, blocking = true)
+      assert(!ChannelShuffleRendezvous.holdsShuffle(shuffleId),
+        "doCleanupShuffle must free the recreated queues for a re-run channel shuffle")
+    }
+  }
+
+  /**
+   * Run a job over only SOME of `rdd`'s partitions -- a PARTIAL READ, the shape that makes the
+   * DAGScheduler stamp a live reduce-partition set on a pipelined producer (see
+   * DAGScheduler.liveReduceSet). Returns the rows the read partitions produced, under a deadline:
+   * if the live set is mapped wrongly the producer keeps feeding a partition no reader will drain,
+   * fills its bounded queue and parks forever, so a regression surfaces as a timeout, not a hang.
+   *
+   * These are RDD-level on purpose. The SQL LIMIT shapes that used to cover this now fall back to
+   * a regular shuffle (a LIMIT operator builds a hidden regular shuffle in doExecute, so the
+   * enabling rules refuse to pipeline a plan containing one), which would make a SQL-level partial
+   * read test vacuous -- it would pass while exercising nothing.
+   */
+  private def partialReadWithin(
+      sc: SparkContext, seconds: Int, rdd: RDD[_], partitions: Seq[Int]): Option[Long] = {
+    val pool = java.util.concurrent.Executors.newSingleThreadExecutor()
+    val fut = pool.submit(new java.util.concurrent.Callable[Long] {
+      override def call(): Long = {
+        // Count rows per read partition. `PipelinedChannelShuffleSuite.countRows` is a static
+        // (companion) function so the job closure captures nothing from the suite instance --
+        // a closure capturing the suite is not serializable.
+        sc.runJob(rdd, PipelinedChannelShuffleSuite.countRows _, partitions).sum
+      }
+    })
+    try {
+      Some(fut.get(seconds.toLong, java.util.concurrent.TimeUnit.SECONDS))
+    } catch {
+      case _: java.util.concurrent.TimeoutException =>
+        fut.cancel(true)
+        None
+    } finally {
+      pool.shutdownNow()
+    }
+  }
+
+  test("partial read of a pipelined shuffle completes (identity narrow chain)") {
+    // The result RDD reads the shuffle through a 1:1 chain, so the live reduce set is the read
+    // partition set itself. Only partition 0 is read; the writer must drop 1..3 rather than fill
+    // their queues and park.
+    withPipelinedSparkContext(cores = 8) { sc =>
+      val keyed: RDD[(Int, Int)] = sc.parallelize(0 until 400000, 4).map(v => (v, v))
+      val shuffled = new PipelinedShuffledRDD[Int, Int, Int](keyed, new HashPartitioner(4))
+      // A 1:1 map keeps the chain narrow and same-index (OneToOneDependency).
+      val mapped = shuffled.map { case (k, v) => (k, v) }
+      // Read a NON-ZERO partition on purpose: a live-set bug that collapses to {0} (or to the
+      // result-partition ids when they differ from the reduce ids) would starve this reader and
+      // hang, instead of accidentally being right.
+      val got = partialReadWithin(sc, 90, mapped, Seq(2))
+      assert(got.isDefined,
+        "partial read of a pipelined shuffle hung: the producer kept feeding partitions that " +
+          "have no reader (the live reduce set was mapped wrongly)")
+      assert(got.get > 0, "the read partition should have produced rows")
+    }
+  }
+
+  test("partial read through a union of two pipelined shuffles completes") {
+    // union() reaches each shuffle through a RangeDependency whose getParents applies a per-branch
+    // offset, so liveReduceSet must map the read partition set through both branches' offsets.
+    withPipelinedSparkContext(cores = 12) { sc =>
+      def branch(): RDD[(Int, Int)] = {
+        val keyed: RDD[(Int, Int)] = sc.parallelize(0 until 200000, 4).map(v => (v, v))
+        new PipelinedShuffledRDD[Int, Int, Int](keyed, new HashPartitioner(4))
+      }
+      // Both branches share a HashPartitioner, so union() yields a PartitionerAwareUnionRDD whose
+      // partition i draws from partition i of BOTH branches (4 partitions total, not 8). That is
+      // exactly the fan-in shape under test: one read partition must contribute a live reduce
+      // partition to EACH branch's shuffle.
+      val unioned = branch().union(branch())
+      val got = partialReadWithin(sc, 90, unioned, Seq(2))
+      assert(got.isDefined,
+        "partial read through a union of pipelined shuffles hung: the live set was not mapped " +
+          "through the union's per-branch offsets")
+    }
+  }
+
+  test("partial read through a zip of two pipelined shuffles completes") {
+    // zip() fans in over a ZippedPartitionsRDD: one narrow branch per side down to that side's
+    // shuffle, so liveReduceSet must contribute the live set from EVERY branch reaching a shuffle.
+    withPipelinedSparkContext(cores = 12) { sc =>
+      def branch(): RDD[(Int, Int)] = {
+        val keyed: RDD[(Int, Int)] = sc.parallelize(0 until 200000, 4).map(v => (v, v))
+        new PipelinedShuffledRDD[Int, Int, Int](keyed, new HashPartitioner(4))
+      }
+      val zipped = branch().zipPartitions(branch())((a, b) => a.zip(b))
+      val got = partialReadWithin(sc, 90, zipped, Seq(2))
+      assert(got.isDefined,
+        "partial read through a zip of pipelined shuffles hung: the live set was not contributed " +
+          "from both zip branches")
     }
   }
 
@@ -407,4 +520,9 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
       ChannelShuffleRendezvous.clear()
     }
   }
+}
+
+private object PipelinedChannelShuffleSuite {
+  /** Row count of one partition; a top-level function so a job closure captures no suite state. */
+  def countRows(it: Iterator[_]): Long = it.size.toLong
 }

@@ -144,6 +144,27 @@ private[spark] object ChannelShuffleRendezvous {
   }
 
   /**
+   * Whether this rendezvous currently holds any state (a queue or an abandoned mark, under any
+   * epoch) for `shuffleId`. This is the authoritative signal for the `ContextCleaner`'s
+   * tracker-less cleanup arm: the queues are created lazily on first writer/reader access, so a
+   * shuffle unregistered BEFORE its job runs (Dataset.rdd under fileCleanup) and then run
+   * recreates its queues here even though the manager's registry no longer lists it. Keying
+   * cleanup off the rendezvous (rather than the manager's registry) frees those recreated queues,
+   * and is still false for a regular shuffle (never present here), so the arm stays scoped.
+   */
+  def holdsShuffle(shuffleId: Int): Boolean = {
+    val qi = queues.keySet().iterator()
+    while (qi.hasNext) {
+      if (qi.next()._1 == shuffleId) return true
+    }
+    val ai = abandoned.iterator()
+    while (ai.hasNext) {
+      if (ai.next()._1 == shuffleId) return true
+    }
+    false
+  }
+
+  /**
    * Drop every queue and every abandoned mark. Called when the owning manager stops (i.e. the
    * SparkContext stops): this object is process-wide and epochs (jobIds) restart at 0 in a new
    * SparkContext, so without this a fresh context in the same JVM -- a test fork, a REPL/notebook

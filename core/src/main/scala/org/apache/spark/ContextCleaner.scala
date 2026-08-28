@@ -289,17 +289,23 @@ private[spark] class ContextCleaner(
   }
 
   /**
-   * Whether a pipelined shuffle manager that keeps NO output tracker is configured AND it holds
-   * `shuffleId` -- the only case where a shuffle in neither tracker legitimately holds cleanup
-   * state (in-process rendezvous queues) that doCleanupShuffle's else arm must free. False for the
-   * default (no pipelined manager, or the RPC streaming manager, which registers in the streaming
-   * tracker), and false for a REGULAR shuffle in a feature-on session (the tracker-less manager
-   * never registered it, so holdsShuffle is false) -- so an already-cleaned shuffle reaching that
-   * else stays a no-op rather than firing a duplicate cluster-wide RemoveShuffle RPC.
+   * Whether a pipelined shuffle manager that keeps NO output tracker is configured AND the
+   * in-process rendezvous currently holds state for `shuffleId` -- the only case where a shuffle
+   * in neither tracker legitimately holds cleanup state (rendezvous queues / abandoned marks) that
+   * doCleanupShuffle's else arm must free. False for the default (no pipelined manager, or the RPC
+   * streaming manager, which registers in the streaming tracker), and false for a REGULAR shuffle
+   * in a feature-on session (never present in the rendezvous) -- so an already-cleaned shuffle
+   * reaching that else stays a no-op rather than firing a duplicate cluster-wide RemoveShuffle RPC.
+   *
+   * The "holds" test consults the rendezvous, not the manager's registration, on purpose: a
+   * channel shuffle unregistered BEFORE its job runs (Dataset.rdd under fileCleanup) then run
+   * recreates its queues lazily even though the manager no longer lists it; keying off the
+   * rendezvous frees those recreated queues, where keying off a manager registry would leak them.
    */
   private def heldByTracklessPipelinedManager(shuffleId: Int): Boolean = {
     val mgr = SparkEnv.get.pipelinedShuffleManager
-    mgr != null && !mgr.usesStreamingShuffleOutputTracker && mgr.holdsShuffle(shuffleId)
+    mgr != null && !mgr.usesStreamingShuffleOutputTracker &&
+      org.apache.spark.shuffle.local.pipelined.ChannelShuffleRendezvous.holdsShuffle(shuffleId)
   }
 
   /** Perform broadcast cleanup. */

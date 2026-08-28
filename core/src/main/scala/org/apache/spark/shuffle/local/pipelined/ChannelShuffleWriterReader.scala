@@ -139,8 +139,12 @@ private[spark] class ChannelShuffleWriter[K, V](
     // then the main job; executeTake batches; a re-executed classic plan) used a different epoch
     // and its leftovers are physically separate -- this run starts against empty per-epoch state.
 
-    // One in-progress batch per reduce partition, plus its fill count.
-    val batches = Array.fill(numPartitions)(new Array[AnyRef](batchSize))
+    // One in-progress batch per reduce partition, plus its fill count. A partition's batch array
+    // is allocated LAZILY, on its first record (batches(pid) starts null), so a map task pays for
+    // only the partitions it actually writes -- a wide shuffle (thousands of partitions) or a
+    // partial read (liveMask leaves most partitions dead) does not eagerly allocate
+    // numPartitions * batchSize empty slots up front.
+    val batches = new Array[Array[AnyRef]](numPartitions)
     val sizes = new Array[Int](numPartitions)
 
     while (records.hasNext) {
@@ -149,6 +153,7 @@ private[spark] class ChannelShuffleWriter[K, V](
       // Only accumulate for partitions a consumer reads (liveMask). Abandonment is not checked
       // here -- it is handled at hand-off in putUnlessAbandoned (see liveMask's comment).
       if (liveMask(pid)) {
+        if (batches(pid) == null) batches(pid) = new Array[AnyRef](batchSize)
         // Records must already be detached from the producer's reused row buffers by the time
         // they reach here (the producer reuses its output UnsafeRow across iterations, and the
         // consumer reads on another thread). The copy is done in the SQL layer's
@@ -162,7 +167,10 @@ private[spark] class ChannelShuffleWriter[K, V](
         sizes(pid) += 1
         if (sizes(pid) == batchSize) {
           putUnlessAbandoned(pid, batches(pid), batchSize)
-          batches(pid) = new Array[AnyRef](batchSize)
+          // Hand off ownership of the filled array to the consumer; the next record for this
+          // partition re-allocates lazily (so a partition whose last record just filled a batch
+          // does not allocate a fresh array it never uses).
+          batches(pid) = null
           sizes(pid) = 0
         }
       }

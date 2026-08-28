@@ -149,18 +149,6 @@ private[spark] trait PipelinedShuffleManager extends ShuffleManager {
    * channel transport shares object references across threads and overrides this to true.
    */
   def requiresDetachedRecords: Boolean = false
-
-  /**
-   * Whether this manager currently holds driver-side cleanup state for `shuffleId` -- i.e. this
-   * shuffle was registered with this manager and not yet unregistered. Used by the
-   * `ContextCleaner` to scope its tracker-less cleanup arm to shuffles this manager actually owns:
-   * a manager that keeps NO output tracker (an in-process transport) has its shuffles miss both
-   * output trackers, so the cleaner would otherwise not know whether a shuffle in neither tracker
-   * is one of ours or an already-cleaned regular shuffle. Defaults to false; a tracker-less
-   * manager overrides it to answer from its own registry. A manager that DOES use an output
-   * tracker never needs this (its shuffles are found in the tracker) and keeps the default.
-   */
-  def holdsShuffle(shuffleId: Int): Boolean = false
 }
 
 /**
