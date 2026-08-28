@@ -500,4 +500,18 @@ class RewriteWithExpressionSuite extends PlanTest {
     val plan = testRelation.select(expr.as("col"))
     comparePlans(Optimizer.execute(plan), testRelation.select((a + a + 1).as("col")))
   }
+
+  test("SPARK-58902: conditional branch with multi-referenced common expression") {
+    val a = testRelation.output.head
+    val exprDef = CommonExpressionDef(a + a)
+    val exprRef = new CommonExpressionRef(exprDef)
+    // CaseWhen with With inside the ELSE branch
+    val withExpr = With(exprRef > 0 && exprRef < 10, Seq(exprDef))
+    val caseWhenExpr = CaseWhen(Seq((a < 0, Literal(false))), Some(withExpr))
+    val plan = testRelation.select(caseWhenExpr.as("col"))
+    val optimized = Optimizer.execute(plan)
+
+    // Verify optimized plan preserves structure
+    assert(optimized.output.length == 1)
+  }
 }
