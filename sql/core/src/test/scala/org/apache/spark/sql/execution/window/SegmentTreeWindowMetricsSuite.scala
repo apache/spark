@@ -72,6 +72,7 @@ class SegmentTreeWindowMetricsSuite
     withSQLConf(
         SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
         SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1",
+        SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       // Two aggregates share one Window -> one frame; 3 partitions => 3 frames.
       val df = baseDF.select($"id",
@@ -90,6 +91,7 @@ class SegmentTreeWindowMetricsSuite
         SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
         // Threshold > partition size (40 rows/partition) forces fallback on every partition.
         SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1000",
+        SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df = baseDF.select($"id", min($"v").over(winSpec).as("mn"))
       val m = windowMetricValues(df)
@@ -103,6 +105,7 @@ class SegmentTreeWindowMetricsSuite
   test("feature flag off: both segment-tree counters stay at zero") {
     withSQLConf(
         SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "false",
+        SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df = baseDF.select($"id", min($"v").over(winSpec).as("mn"))
       val m = windowMetricValues(df)
@@ -127,6 +130,7 @@ class SegmentTreeWindowMetricsSuite
     withSQLConf(
         SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
         SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "64",
+        SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false",
         SQLConf.SHUFFLE_PARTITIONS.key -> "1",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       // 3 window partitions x 100 rows, all >= 64 => segtree, one task.
@@ -144,6 +148,7 @@ class SegmentTreeWindowMetricsSuite
     withSQLConf(
         SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
         SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "64",
+        SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false",
         SQLConf.SHUFFLE_PARTITIONS.key -> "1",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       // Two distinct keys, each exactly 200 rows (> 64 => segtree).
@@ -164,6 +169,7 @@ class SegmentTreeWindowMetricsSuite
     withSQLConf(
         SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
         SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "64",
+        SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false",
         SQLConf.SHUFFLE_PARTITIONS.key -> "1",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       // 100 unique keys, 1 row each, all < 64 => fallback. Old guard
@@ -182,6 +188,7 @@ class SegmentTreeWindowMetricsSuite
     withSQLConf(
         SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
         SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "64",
+        SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false",
         SQLConf.SHUFFLE_PARTITIONS.key -> "1",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       // 4 window partitions with lengths (50, 50, 100, 100) in sort order.

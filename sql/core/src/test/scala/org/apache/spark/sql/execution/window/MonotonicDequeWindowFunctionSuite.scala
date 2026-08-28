@@ -339,4 +339,23 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
           max($"v_bin").over(winSpec)))
     }
   }
+
+  // RANGE + spill: after e02bbe4, RANGE is the only frame type that opens a
+  // second SpillableArrayIterator (lowerIterator) concurrently with
+  // inputIterator. Both iterators have independent UnsafeRow cursors (each
+  // SpillableArrayIterator allocates its own currentRow on construction), so
+  // advancing lowerIterator while inputIterator still holds nextRow is safe.
+  // Spill thresholds are set low enough to force ExternalAppendOnlyUnsafeRowArray
+  // into its SpillableArrayIterator path, pinning this two-iterator invariant.
+  test("SPARK-58201: Range-based moving frame: MIN/MAX with spill") {
+    val df = baseDF.selectExpr("id", "pk", "CAST(id / 2 AS INT) AS ord_val", "v_int")
+    withSQLConf(
+      SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "8",
+      SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "16") {
+      val winSpec = Window.partitionBy($"pk").orderBy($"ord_val").rangeBetween(-2, 2)
+      checkEquivalence(() =>
+        df.select($"id", min($"v_int").over(winSpec), max($"v_int").over(winSpec)))
+    }
+  }
 }
+
