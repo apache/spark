@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.execution.window
 
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
@@ -158,7 +157,8 @@ class WindowSegmentTreeAllowlistSuite
 
   test("percentile_approx falls through (sketch buffer not auditable)") {
     checkFallbackEquivalence(() =>
-      baseDF.withColumn("agg", percentile_approx($"vd", lit(0.5), lit(100)).over(winSpec)))
+      baseDF.withColumn("agg",
+        percentile_approx($"vd", lit(0.5), lit(100)).over(winSpec)))
   }
 
   // Gate: aggregates carrying a FILTER (WHERE ...) clause fall through.
