@@ -68,14 +68,21 @@ case class CreateSQLFunctionCommand(
 
   import SQLFunction._
 
-  lazy val name: FunctionIdentifier = child match {
-    case ResolvedIdentifier(c, ident) =>
-      FunctionIdentifier(ident.name(), ident.namespace().headOption)
-    case u: UnresolvedIdentifier =>
-      FunctionIdentifier(u.nameParts.last, u.nameParts.dropRight(1).lastOption)
-    case _ =>
-      throw SparkException.internalError(
-        s"Unexpected child plan in CreateSQLFunctionCommand: $child")
+  lazy val name: FunctionIdentifier = {
+    val rawIdent = child match {
+      case ResolvedIdentifier(c, ident) =>
+        FunctionIdentifier(ident.name(), ident.namespace().headOption)
+      case u: UnresolvedIdentifier =>
+        FunctionIdentifier(u.nameParts.last, u.nameParts.dropRight(1).lastOption)
+      case _ =>
+        throw SparkException.internalError(
+          s"Unexpected child plan in CreateSQLFunctionCommand: $child")
+    }
+    if (isTemp) {
+      FunctionIdentifier(rawIdent.funcName, None)
+    } else {
+      rawIdent
+    }
   }
 
   override protected def withNewChildInternal(
