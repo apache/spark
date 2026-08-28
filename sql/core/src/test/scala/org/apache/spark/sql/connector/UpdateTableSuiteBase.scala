@@ -1377,7 +1377,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         |{ "pk": 2, "salary": 200, "dep": "software" }
         |""".stripMargin)
 
-    withSessionVariable("target_dep", "STRING", "'hr'") {
+    withSessionVariable("target_dep") {
+      sql("DECLARE VARIABLE target_dep STRING DEFAULT 'hr'")
       sql(s"UPDATE $tableNameAsString SET salary = 999 WHERE dep = target_dep")
 
       checkAnswer(

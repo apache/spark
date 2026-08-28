@@ -127,15 +127,6 @@ abstract class RowLevelOperationSuiteBase
     catalog.createTable(ident, tableInfo)
   }
 
-  /** Declares a session variable for the duration of `f`, dropping it afterwards. */
-  protected def withSessionVariable(
-      name: String,
-      dataType: String,
-      default: String)(f: => Unit): Unit = {
-    sql(s"DECLARE OR REPLACE VARIABLE $name $dataType DEFAULT $default")
-    try f finally sql(s"DROP TEMPORARY VARIABLE IF EXISTS $name")
-  }
-
   protected def createAndInitTable(schemaString: String, jsonData: String): Unit = {
     createTable(schemaString)
     append(schemaString, jsonData)

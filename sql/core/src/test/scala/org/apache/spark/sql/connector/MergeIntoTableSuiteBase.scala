@@ -3061,7 +3061,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           |""".stripMargin)
       Seq(1, 2).toDF("pk").createOrReplaceTempView("source")
 
-      withSessionVariable("target_dep", "STRING", "'hr'") {
+      withSessionVariable("target_dep") {
+        sql("DECLARE VARIABLE target_dep STRING DEFAULT 'hr'")
         sql(
           s"""MERGE INTO $tableNameAsString t
              |USING source s
@@ -3084,7 +3085,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           |""".stripMargin)
       Seq(1).toDF("pk").createOrReplaceTempView("source")
 
-      withSessionVariable("salary_threshold", "INT", "150") {
+      withSessionVariable("salary_threshold") {
+        sql("DECLARE VARIABLE salary_threshold INT DEFAULT 150")
         sql(
           s"""MERGE INTO $tableNameAsString t
              |USING source s
@@ -3108,7 +3110,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       Seq((2, 200, "software"), (3, 300, "hr"))
         .toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
-      withSessionVariable("pk_threshold", "INT", "3") {
+      withSessionVariable("pk_threshold") {
+        sql("DECLARE VARIABLE pk_threshold INT DEFAULT 3")
         sql(
           s"""MERGE INTO $tableNameAsString t
              |USING source s
@@ -3132,7 +3135,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       Seq((2, 200, "software"), (3, 300, "hr"))
         .toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
-      withSessionVariable("pk_threshold", "INT", "3") {
+      withSessionVariable("pk_threshold") {
+        sql("DECLARE VARIABLE pk_threshold INT DEFAULT 3")
         sql(
           s"""MERGE INTO $tableNameAsString t
              |USING source s
