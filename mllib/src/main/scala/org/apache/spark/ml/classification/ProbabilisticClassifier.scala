@@ -141,10 +141,11 @@ abstract class ProbabilisticClassificationModel[
    *
    * `transform` uses this when both [[rawPredictionCol]] and
    * [[probabilityCol]] are set. It consumes the output of [[predictRawColumn]].
-   * Thresholds do not affect this conversion; they are applied only when producing a prediction.
    *
    * @param rawPrediction input raw-prediction column
    * @return probability column of type `Vector`
+   * @note Thresholds do not affect this conversion; they are applied only when producing a
+   *       prediction.
    */
   protected def raw2probabilityColumn(rawPrediction: Column): Column = {
     udf(raw2probability _).apply(rawPrediction)
@@ -169,11 +170,12 @@ abstract class ProbabilisticClassificationModel[
    *
    * `transform` uses this when both [[rawPredictionCol]] and
    * [[predictionCol]] are set. It consumes the output of [[predictRawColumn]].
-   * Unlike the default classification behavior, probabilistic classification honors
-   * [[thresholds]] by converting raw predictions to probabilities before selecting a prediction.
    *
    * @param rawPrediction input raw-prediction column
    * @return prediction column of type `Double`
+   * @note Unlike the default classification behavior, probabilistic classification honors
+   *       [[thresholds]] by converting raw predictions to probabilities before selecting a
+   *       prediction.
    */
   override protected def raw2predictionColumn(rawPrediction: Column): Column = {
     udf(raw2prediction _).apply(rawPrediction)
