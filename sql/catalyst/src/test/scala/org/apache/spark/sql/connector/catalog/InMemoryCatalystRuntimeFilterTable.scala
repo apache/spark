@@ -25,6 +25,7 @@ import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{NamedReference, SortOrder, Transform}
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -93,7 +94,8 @@ class InMemoryCatalystRuntimeFilterTable(
     /** Partition source columns that are present in the scan read schema. */
     private def partitionAttrs: Array[NamedReference] = {
       partitioning.flatMap(_.references()).distinct
-        .filter(ref => readSchema.findNestedField(ref.fieldNames.toImmutableArraySeq).isDefined)
+        .filter(ref => readSchema.findNestedField(
+          ref.fieldNames.toImmutableArraySeq, resolver = SQLConf.get.resolver).isDefined)
     }
 
     override def filterAttributes(): Array[NamedReference] = {

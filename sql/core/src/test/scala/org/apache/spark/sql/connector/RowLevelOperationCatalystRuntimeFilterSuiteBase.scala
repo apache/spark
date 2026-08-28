@@ -137,7 +137,8 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
   protected def assertCatalystGroupFilter(
       executedPlan: SparkPlan,
       expectedFilterAttrs: Seq[String],
-      expectedFilter: GroupFilter): Unit = {
+      expectedFilter: GroupFilter,
+      expectedFilterRefs: Seq[String] = Seq.empty): Unit = {
     val batchScans = collect(executedPlan) { case s: BatchScanExec => s }
     assert(batchScans.nonEmpty, "expected a batch scan for the row-level operation")
     val scan = catalystScan(batchScans.head)
@@ -147,11 +148,12 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
     val filterAttrs = scan.filterAttributes().map(_.fieldNames.mkString(".")).toSeq
     assert(filterAttrs === expectedFilterAttrs,
       s"expected the scan to declare $expectedFilterAttrs as filter attributes, got $filterAttrs")
+    val filterRefs = if (expectedFilterRefs.nonEmpty) expectedFilterRefs else expectedFilterAttrs
 
     batchScans.foreach { batchScan =>
       batchScan.runtimeFilters match {
         case Seq(DynamicPruningExpression(inSubquery: InSubqueryExec)) =>
-          assertGroupFilter(inSubquery, expectedFilterAttrs, expectedFilter)
+          assertGroupFilter(inSubquery, filterRefs, expectedFilter)
         case other => fail(s"expected a single dynamic pruning group filter, got $other")
       }
     }
@@ -163,7 +165,7 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
       s"expected each of the ${batchScans.size} scan node(s) to push the filter once, got $pushed")
     pushed.foreach {
       case inSubquery: InSubqueryExec =>
-        assertGroupFilter(inSubquery, expectedFilterAttrs, expectedFilter)
+        assertGroupFilter(inSubquery, filterRefs, expectedFilter)
       case other =>
         fail(s"expected the group filter pushed as an InSubqueryExec, got $other")
     }

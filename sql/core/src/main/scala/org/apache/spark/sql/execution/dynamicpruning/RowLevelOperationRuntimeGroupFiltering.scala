@@ -18,11 +18,11 @@
 package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, DynamicPruningExpression, Expression, InSubquery, ListQuery, PredicateHelper, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, DynamicPruningExpression, Expression, InSubquery, ListQuery, NamedExpression, PredicateHelper, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.optimizer.RewritePredicateSubquery
 import org.apache.spark.sql.catalyst.planning.{DeltaBasedRowLevelOperation, GroupBasedRowLevelOperation}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, RowLevelWrite}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project, RowLevelWrite}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{REPLACE_DATA, WRITE_DELTA}
 import org.apache.spark.sql.connector.expressions.NamedReference
@@ -97,8 +97,9 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
         val relation = r.relation.copy(table = originalTable)
         val matchingRowsPlan = buildMatchingRowsPlan(write, relation, cond)
         val filterAttrsSeq = filterAttrs.toImmutableArraySeq
-        val buildKeys = V2ExpressionUtils.resolveRefs[Attribute](filterAttrsSeq, matchingRowsPlan)
-        val pruningKeys = V2ExpressionUtils.resolveRefs[Attribute](filterAttrsSeq, r)
+        val buildKeys =
+          V2ExpressionUtils.resolveRefs[NamedExpression](filterAttrsSeq, matchingRowsPlan)
+        val pruningKeys = V2ExpressionUtils.resolveRefs[NamedExpression](filterAttrsSeq, r)
         Filter(buildDynamicPruningCond(matchingRowsPlan, buildKeys, pruningKeys), r)
     }
     // optimize subqueries to rewrite them as joins and trigger job planning
@@ -143,13 +144,26 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
 
   private def buildDynamicPruningCond(
       matchingRowsPlan: LogicalPlan,
-      buildKeys: Seq[Attribute],
-      pruningKeys: Seq[Attribute]): Expression = {
+      buildKeys: Seq[NamedExpression],
+      pruningKeys: Seq[NamedExpression]): Expression = {
     assert(buildKeys.nonEmpty && pruningKeys.nonEmpty)
 
-    val buildQuery = Aggregate(buildKeys, buildKeys, matchingRowsPlan)
+    // Nested references resolve to aliases over field-extraction expressions. Materialize those
+    // aliases before aggregation so grouping-expression cleanup preserves the subquery schema.
+    val buildKeyAliases = buildKeys.collect { case alias: Alias => alias }
+    val buildPlan = if (buildKeyAliases.nonEmpty) {
+      Project(matchingRowsPlan.output ++ buildKeyAliases, matchingRowsPlan)
+    } else {
+      matchingRowsPlan
+    }
+    val buildKeyAttrs = buildKeys.map(_.toAttribute)
+    val buildQuery = Aggregate(buildKeyAttrs, buildKeyAttrs, buildPlan)
+    val pruningExprs = pruningKeys.map {
+      case alias: Alias => alias.child
+      case other => other
+    }
     DynamicPruningExpression(
-      InSubquery(pruningKeys, ListQuery(buildQuery, numCols = buildQuery.output.length)))
+      InSubquery(pruningExprs, ListQuery(buildQuery, numCols = buildQuery.output.length)))
   }
 
   private def buildTableToScanAttrMap(

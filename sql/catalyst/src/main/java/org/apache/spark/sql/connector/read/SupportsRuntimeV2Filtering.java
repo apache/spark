@@ -51,6 +51,9 @@ public interface SupportsRuntimeV2Filtering extends Scan {
    * <p>
    * Spark will call {@link #filter(Predicate[])} if it can derive a runtime
    * predicate for any of the filter attributes.
+   * <p>
+   * Each reference must resolve against the scan relation output when Spark builds it. Attributes
+   * pruned out of {@link Scan#readSchema()} fail to resolve.
    */
   NamedReference[] filterAttributes();
 
@@ -59,6 +62,11 @@ public interface SupportsRuntimeV2Filtering extends Scan {
    * <p>
    * The provided expressions must be interpreted as a set of predicates that are ANDed together.
    * Implementations may use the predicates to prune initially planned {@link InputPartition}s.
+   * <p>
+   * Spark tracks runtime-filter eligibility by root attribute. If {@link #filterAttributes()}
+   * returns a nested reference, this method may receive a predicate on another nested field under
+   * the same root. Implementations must inspect each predicate and use only predicates they can
+   * apply.
    * <p>
    * If the scan also implements {@link SupportsReportPartitioning}, it must preserve
    * the originally reported partitioning during runtime filtering. While applying runtime

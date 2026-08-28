@@ -22,7 +22,7 @@ import java.util.{Collections, Optional, OptionalLong}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, SortOrder, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, NamedExpression, SortOrder, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
@@ -213,37 +213,28 @@ case class DataSourceV2ScanRelation(
     resolveFilterAttrs(filterAttrs)
   }
 
+  private lazy val declaredFullyPushedRuntimeFilterAttrs: Array[NamedReference] = scan match {
+    case s: SupportsRuntimeCatalystFiltering => s.fullyPushedFilterAttributes()
+    case _ => Array.empty
+  }
+
   /**
    * Resolved attributes for which a Catalyst runtime-filtering scan fully evaluates predicates.
    * Empty for a [[SupportsRuntimeV2Filtering]] scan, which keeps its post-scan filters.
    */
   lazy val fullyPushedRuntimeFilterAttrs: AttributeSet = {
     checkRuntimeFilteringInterfaces()
-    val filterAttrs = scan match {
-      case s: SupportsRuntimeCatalystFiltering => s.fullyPushedFilterAttributes()
-      case _ => Array.empty[NamedReference]
-    }
-    resolveTopLevelFilterAttrs(filterAttrs)
+    resolveFilterAttrs(declaredFullyPushedRuntimeFilterAttrs)
   }
 
   /**
-   * Resolves fully pushed runtime-filter references against this relation's output. Nested
-   * references are rejected because [[AttributeSet]] keeps only their root attribute, which could
-   * make a predicate on a sibling field appear fully pushed and remove its post-scan evaluation.
+   * Resolves runtime-filter references against this relation's output.
+   *
+   * [[AttributeSet]] reduces nested references to their root attributes. This is sufficient for
+   * ordinary runtime-filter eligibility because Spark retains the post-scan predicate.
    */
-  private def resolveTopLevelFilterAttrs(filterAttrs: Array[NamedReference]): AttributeSet = {
-    filterAttrs.find(_.fieldNames.length > 1).foreach { ref =>
-      throw SparkException.internalError(
-        s"Fully pushed runtime filter attribute '${ref.fieldNames.mkString(".")}' declared by " +
-        s"${scan.getClass.getName} must be a top-level attribute of the scan read schema, " +
-        "but it is a nested reference.")
-    }
-    resolveFilterAttrs(filterAttrs)
-  }
-
-  /** Resolves the given runtime-filter references against this relation's output. */
   private def resolveFilterAttrs(filterAttrs: Array[NamedReference]): AttributeSet = {
-    AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](
+    AttributeSet(V2ExpressionUtils.resolveRefs[NamedExpression](
       filterAttrs.toImmutableArraySeq, this))
   }
 
@@ -295,12 +286,22 @@ case class DataSourceV2ScanRelation(
     Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
 
-  private def checkRuntimeFilteringInterfaces(): Unit = scan match {
-    case _: SupportsRuntimeV2Filtering with SupportsRuntimeCatalystFiltering =>
-      throw SparkException.internalError(
-        "A scan must not implement both SupportsRuntimeV2Filtering and " +
-        s"SupportsRuntimeCatalystFiltering, but ${scan.getClass.getName} implements both.")
-    case _ =>
+  private def checkRuntimeFilteringInterfaces(): Unit = {
+    scan match {
+      case _: SupportsRuntimeV2Filtering with SupportsRuntimeCatalystFiltering =>
+        throw SparkException.internalError(
+          "A scan must not implement both SupportsRuntimeV2Filtering and " +
+          s"SupportsRuntimeCatalystFiltering, but ${scan.getClass.getName} implements both.")
+      case _: SupportsRuntimeCatalystFiltering =>
+        declaredFullyPushedRuntimeFilterAttrs.find(_.fieldNames.length > 1).foreach { ref =>
+          throw SparkException.internalError(
+            "Fully pushed runtime filter attribute " +
+            s"'${ref.fieldNames.mkString(".")}' declared by " +
+            s"${scan.getClass.getName} must be a top-level attribute of the scan read schema, " +
+            "but it is a nested reference.")
+        }
+      case _ =>
+    }
   }
 
   override def doCanonicalize(): DataSourceV2ScanRelation = {

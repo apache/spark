@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue,
 import org.apache.spark.sql.connector.expressions.filter.{And, Predicate}
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsOverwriteV2, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -78,7 +79,8 @@ class InMemoryTableWithV2Filter(
 
     override def filterAttributes(): Array[NamedReference] = {
       partitioning.flatMap(_.references)
-        .filter(ref => readSchema.findNestedField(ref.fieldNames.toImmutableArraySeq).isDefined)
+        .filter(ref => readSchema.findNestedField(
+          ref.fieldNames.toImmutableArraySeq, resolver = SQLConf.get.resolver).isDefined)
     }
 
     override def filter(filters: Array[Predicate]): Unit = {

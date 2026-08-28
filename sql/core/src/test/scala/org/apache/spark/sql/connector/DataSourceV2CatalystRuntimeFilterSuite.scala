@@ -116,28 +116,36 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
-  test("nested fully pushed filter attribute -> rejected") {
+  test("nested fully pushed filter attribute -> rejected without a runtime filter") {
     val tbl = s"$catalogName.tbl_nested_fully_pushed"
     withTable(tbl) {
       sql(s"CREATE TABLE $tbl (id INT, s STRUCT<part: INT, other: INT>) USING $v2Source " +
         "PARTITIONED BY (s.part) " +
         "TBLPROPERTIES('fully-pushed-filter-attributes' = 's.part')")
 
-      val scanRelation = sql(s"SELECT * FROM $tbl").queryExecution.optimizedPlan.collectFirst {
-        case r: DataSourceV2ScanRelation => r
-      }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
-
-      // Ordinary nested filter attributes remain supported for partition pruning.
-      val runtimeFilterAttrs = scanRelation.runtimeFilterAttrs
-      assert(runtimeFilterAttrs.map(_.name).toSeq === Seq("s"))
-
-      // Fully pushed eligibility cannot use the root-only AttributeSet representation: doing so
-      // would make a predicate on `s.other` appear covered by the declaration of `s.part`.
       val e = intercept[SparkException] {
-        scanRelation.fullyPushedRuntimeFilterAttrs
+        sql(s"SELECT * FROM $tbl").queryExecution.executedPlan
       }
       assert(e.getMessage.contains("must be a top-level attribute"),
         s"expected the nested fully pushed reference to be rejected, got ${e.getMessage}")
+    }
+  }
+
+  test("nested filter attribute under a non-struct column -> rejected during resolution") {
+    val tbl = s"$catalogName.tbl_malformed_nested_filter_attr"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
+
+      val scanRelation = sql(s"SELECT * FROM $tbl").queryExecution.optimizedPlan.collectFirst {
+        case r: DataSourceV2ScanRelation => r
+      }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
+      val e = intercept[AnalysisException] {
+        scanRelation.copy(scan = new NestedFilterAttributeScan).runtimeFilterAttrs
+      }
+      checkError(
+        exception = e,
+        condition = "INVALID_EXTRACT_BASE_FIELD_TYPE",
+        parameters = Map("base" -> "\"part\"", "other" -> "\"INT\""))
     }
   }
 
@@ -670,6 +678,17 @@ private class MissingFilterAttributeScan extends SupportsRuntimeCatalystFilterin
   override def readSchema(): StructType = new StructType().add("part", IntegerType)
 
   override def filterAttributes(): Array[NamedReference] = Array(FieldReference("missing"))
+
+  override def filter(expressions: Array[Expression]): Unit = {}
+}
+
+/** A scan declaring a nested runtime-filter attribute beneath an integer column. */
+private class NestedFilterAttributeScan extends SupportsRuntimeCatalystFiltering {
+
+  override def readSchema(): StructType = new StructType().add("part", IntegerType)
+
+  override def filterAttributes(): Array[NamedReference] =
+    Array(FieldReference(Seq("part", "nested")))
 
   override def filter(expressions: Array[Expression]): Unit = {}
 }
