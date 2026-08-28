@@ -101,19 +101,19 @@ class SimplifyStringCaseConversionSuite extends PlanTest {
   }
 
   test("SPARK-59043: mixed case expressions with multiple layers") {
-    // Upper(Lower(Upper(str))) should preserve unchanged as there are no adjacent same-case operations
+    // Upper(Lower(Upper(str))) is preserved as there are no adjacent same-case operations
     val query1 = testRelation.select(Upper(Lower(Upper($"a"))) as "res")
     val optimized1 = Optimize.execute(query1.analyze)
     val expected1 = testRelation.select(Upper(Lower(Upper($"a"))) as "res").analyze
     comparePlans(optimized1, expected1)
 
-    // Lower(Upper(Upper(str))) should simplify the inner Upper(Upper) to Upper, resulting in Lower(Upper(str))
+    // Lower(Upper(Upper(str))) simplifies inner Upper(Upper) to Upper -> Lower(Upper(str))
     val query2 = testRelation.select(Lower(Upper(Upper($"a"))) as "res")
     val optimized2 = Optimize.execute(query2.analyze)
     val expected2 = testRelation.select(Lower(Upper($"a")) as "res").analyze
     comparePlans(optimized2, expected2)
 
-    // Upper(Lower(Lower(str))) should simplify the inner Lower(Lower) to Lower, resulting in Upper(Lower(str))
+    // Upper(Lower(Lower(str))) simplifies inner Lower(Lower) to Lower -> Upper(Lower(str))
     val query3 = testRelation.select(Upper(Lower(Lower($"a"))) as "res")
     val optimized3 = Optimize.execute(query3.analyze)
     val expected3 = testRelation.select(Upper(Lower($"a")) as "res").analyze

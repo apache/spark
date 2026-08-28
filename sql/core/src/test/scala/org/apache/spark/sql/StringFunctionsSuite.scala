@@ -1565,7 +1565,7 @@ class StringFunctionsSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-59043: SimplifyCaseConversionExpressions preserves Unicode case-conversion semantics") {
+  test("SPARK-59043: SimplifyCaseConversionExpressions preserves Unicode semantics") {
     val excludedConf = "org.apache.spark.sql.catalyst.optimizer.SimplifyCaseConversionExpressions"
     Seq(true, false).foreach { optimizerEnabled =>
       val confModifier = if (optimizerEnabled) {
