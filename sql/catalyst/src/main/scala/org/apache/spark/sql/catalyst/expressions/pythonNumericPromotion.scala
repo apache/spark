@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ByteType, DataType, DoubleType, FloatType, IntegerType, LongType, ShortType}
 
 /**
@@ -159,6 +160,7 @@ object PythonNumericPromotion {
   def plain(
       left: Expression,
       right: Expression,
+      context: NumericEvalContext,
       op: (Expression, Expression) => Expression): Expression = {
     // Align the operand types ourselves rather than emitting `Add(bigint, int)` and hoping. A
     // replacement has to be resolvable *as written*: `InheritAnalysisRules` is what normally
@@ -177,10 +179,22 @@ object PythonNumericPromotion {
     // replacement to answer, so asking twice does the work twice.
     val (lt, rt) = (left.dataType, right.dataType)
     widestOf(lt, rt) match {
-      case Some(t) if lt != t || rt != t => op(Cast(left, t), Cast(right, t))
+      case Some(t) if lt != t || rt != t => op(cast(left, t, context), cast(right, t, context))
       case _ => op(left, right)
     }
   }
+
+  /**
+   * A widening cast carrying the caller's eval mode rather than reading the ambient conf.
+   *
+   * Behaviour is the same either way -- every cast we emit widens (tinyint to smallint and so on),
+   * so there is no value to overflow and nothing for ANSI to raise about. What it buys is a stable
+   * canonical form: `Cast`'s `evalMode` defaults from `SQLConf.get`, and because our replacement is
+   * built lazily, two identical nodes forced under different conf would otherwise disagree and
+   * stop sharing.
+   */
+  private def cast(child: Expression, target: DataType, context: NumericEvalContext): Expression =
+    Cast(child, target, None, context.evalMode)
 
   /**
    * The wider of two numeric types, or None if either is not one we rank.
@@ -207,12 +221,13 @@ object PythonNumericPromotion {
       left: Expression,
       right: Expression,
       target: (DataType, DataType) => Option[DataType],
+      context: NumericEvalContext,
       op: (Expression, Expression) => Expression): Expression = {
     target(left.dataType, right.dataType) match {
-      case Some(t) => op(Cast(left, t), Cast(right, t))
+      case Some(t) => op(cast(left, t, context), cast(right, t, context))
       // No promotion to apply, but the operands may still disagree, and an unaligned replacement
       // does not resolve -- so fall through to `plain`, which aligns them.
-      case None => plain(left, right, op)
+      case None => plain(left, right, context, op)
     }
   }
 
@@ -256,6 +271,31 @@ trait PythonPromotingArithmetic extends RuntimeReplaceable {
 
   @transient private lazy val promotedOnce: Expression = promoted
 
+  /**
+   * SQL configuration captured when this expression was built, and threaded into whatever
+   * `promoted` and `unpromoted` construct.
+   *
+   * Storing it is the documented contract for anything that wraps arithmetic --
+   * [[NumericEvalContext]] states that a context "must be stored as part of the expression's
+   * state to ensure deterministic evaluation", because otherwise copying the expression or
+   * evaluating it somewhere else (inside a view, say) can read different conf. We are a
+   * particularly sharp case of that: the replacement is built lazily, so without a stored
+   * context the operator's eval mode would be decided by *when* something first asked for our
+   * `dataType`, not by the query. Two otherwise identical nodes then canonicalize differently
+   * and stop sharing, and a plan analyzed under ANSI could be optimized into a non-ANSI `Add`.
+   */
+  def evalContext: NumericEvalContext
+
+  /**
+   * `failOnError` for the unary operators, which predate [[NumericEvalContext]] and take a
+   * Boolean. Same mapping `BinaryArithmetic` uses, TRY included: TRY evaluates as though it
+   * would fail and captures the error afterwards.
+   */
+  protected def failOnError: Boolean = evalContext.evalMode match {
+    case EvalMode.ANSI | EvalMode.TRY => true
+    case _ => false
+  }
+
   /** The widened form, safe to build only once the children's types are known. */
   protected def promoted: Expression
 
@@ -273,74 +313,100 @@ trait PythonPromotingArithmetic extends RuntimeReplaceable {
   protected def unpromoted: Expression
 }
 
-case class PythonPromotingAdd(left: Expression, right: Expression)
+// Each of these carries `evalContext` as a defaulted field, and a two-child secondary
+// constructor beside it, because `FunctionRegistryBase.build` looks for a constructor whose
+// parameter types are *all* `Expression`. Without the secondary one, registry lookup fails at
+// the call site rather than at startup. `Add` and friends do exactly the same thing.
+case class PythonPromotingAdd(
+    left: Expression,
+    right: Expression,
+    evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get))
   extends BinaryExpression with PythonPromotingArithmetic {
+  def this(left: Expression, right: Expression) =
+    this(left, right, NumericEvalContext.fromSQLConf(SQLConf.get))
   override protected def promoted: Expression =
     PythonNumericPromotion.widened(
-      left, right, PythonNumericPromotion.forAddition, Add(_, _))
+      left, right, PythonNumericPromotion.forAddition, evalContext, Add(_, _, evalContext))
   override protected def unpromoted: Expression =
-    PythonNumericPromotion.plain(left, right, Add(_, _))
+    PythonNumericPromotion.plain(left, right, evalContext, Add(_, _, evalContext))
   override def prettyName: String = "python_promoting_add"
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): PythonPromotingAdd =
     copy(left = newLeft, right = newRight)
 }
 
-case class PythonPromotingSubtract(left: Expression, right: Expression)
+case class PythonPromotingSubtract(
+    left: Expression,
+    right: Expression,
+    evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get))
   extends BinaryExpression with PythonPromotingArithmetic {
+  def this(left: Expression, right: Expression) =
+    this(left, right, NumericEvalContext.fromSQLConf(SQLConf.get))
   override protected def promoted: Expression =
     PythonNumericPromotion.widened(
-      left, right, PythonNumericPromotion.forAddition, Subtract(_, _))
+      left, right, PythonNumericPromotion.forAddition, evalContext, Subtract(_, _, evalContext))
   override protected def unpromoted: Expression =
-    PythonNumericPromotion.plain(left, right, Subtract(_, _))
+    PythonNumericPromotion.plain(left, right, evalContext, Subtract(_, _, evalContext))
   override def prettyName: String = "python_promoting_subtract"
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): PythonPromotingSubtract =
     copy(left = newLeft, right = newRight)
 }
 
-case class PythonPromotingMultiply(left: Expression, right: Expression)
+case class PythonPromotingMultiply(
+    left: Expression,
+    right: Expression,
+    evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get))
   extends BinaryExpression with PythonPromotingArithmetic {
+  def this(left: Expression, right: Expression) =
+    this(left, right, NumericEvalContext.fromSQLConf(SQLConf.get))
   override protected def promoted: Expression =
     PythonNumericPromotion.widened(
-      left, right, PythonNumericPromotion.forMultiplication, Multiply(_, _))
+      left, right, PythonNumericPromotion.forMultiplication, evalContext,
+      Multiply(_, _, evalContext))
   override protected def unpromoted: Expression =
-    PythonNumericPromotion.plain(left, right, Multiply(_, _))
+    PythonNumericPromotion.plain(left, right, evalContext, Multiply(_, _, evalContext))
   override def prettyName: String = "python_promoting_multiply"
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): PythonPromotingMultiply =
     copy(left = newLeft, right = newRight)
 }
 
-case class PythonPromotingNegate(child: Expression)
+case class PythonPromotingNegate(
+    child: Expression,
+    evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get))
   extends UnaryExpression with PythonPromotingArithmetic {
+  def this(child: Expression) = this(child, NumericEvalContext.fromSQLConf(SQLConf.get))
   // `UnaryMinus` keeps its operand's type and negates exactly, so `-x` on an int column holding
   // Integer.MinValue raised where Python answers 2147483648. Same rule as `abs` -- two's
   // complement has no positive counterpart for a width's minimum -- and it was an oversight that
   // `forNegation`'s scaladoc said it covered unary minus while nothing called it for that.
   override protected def promoted: Expression =
     PythonNumericPromotion.forNegation(child.dataType) match {
-      case Some(widened) => UnaryMinus(Cast(child, widened))
-      case None => UnaryMinus(child)
+      case Some(target) => UnaryMinus(Cast(child, target, None, evalContext.evalMode), failOnError)
+      case None => UnaryMinus(child, failOnError)
     }
-  override protected def unpromoted: Expression = UnaryMinus(child)
+  override protected def unpromoted: Expression = UnaryMinus(child, failOnError)
   override def prettyName: String = "python_promoting_negate"
   override protected def withNewChildInternal(newChild: Expression): PythonPromotingNegate =
     copy(child = newChild)
 }
 
-case class PythonPromotingAbs(child: Expression)
+case class PythonPromotingAbs(
+    child: Expression,
+    evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get))
   extends UnaryExpression with PythonPromotingArithmetic {
+  def this(child: Expression) = this(child, NumericEvalContext.fromSQLConf(SQLConf.get))
   override protected def promoted: Expression =
     // Built directly rather than through the binary `widened`: passing the child into both slots
     // evaluated it twice, which on a nested `abs` cost 2^(depth-1) leaf type reads and built a
     // `Cast` that `op` then discarded.
     PythonNumericPromotion.forNegation(child.dataType) match {
-      case Some(widened) => Abs(Cast(child, widened))
-      case None => Abs(child)
+      case Some(target) => Abs(Cast(child, target, None, evalContext.evalMode), failOnError)
+      case None => Abs(child, failOnError)
     }
   override protected def unpromoted: Expression =
-    Abs(child)
+    Abs(child, failOnError)
   override def prettyName: String = "python_promoting_abs"
   override protected def withNewChildInternal(newChild: Expression): PythonPromotingAbs =
     copy(child = newChild)
