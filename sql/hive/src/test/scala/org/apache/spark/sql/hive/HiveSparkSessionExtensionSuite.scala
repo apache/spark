@@ -32,8 +32,8 @@ import org.apache.spark.util.Utils
  * from BaseSessionStateBuilder. Without hintResolutionRules, injectHintResolutionRule
  * is a no-op under enableHiveSupport() (Hive Thrift / jdbc:hive2).
  *
- * Do not use TestHiveSingleton: that session is already built, so withExtensions
- * on a new builder is required.
+ * SPARK-59081: Do not use TestHiveSingleton: that session is already built, so
+ * withExtensions on a new builder is required.
  */
 class HiveSparkSessionExtensionSuite extends SparkFunSuite {
 
@@ -80,7 +80,7 @@ class HiveSparkSessionExtensionSuite extends SparkFunSuite {
       }
   }
 
-  test("inject custom hint rule") {
+  test("SPARK-59081: inject custom hint rule") {
     withHiveSession(Seq(_.injectHintResolutionRule(MyHintRule))) { session =>
       assert(session.sessionState.catalog.getClass.getName.contains("HiveSessionCatalog"))
       assert(session.sessionState.analyzer.hintResolutionRules.contains(MyHintRule(session)))
@@ -90,7 +90,7 @@ class HiveSparkSessionExtensionSuite extends SparkFunSuite {
     }
   }
 
-  test("hint rule sees UnresolvedRelation for path SQL before ResolveSQLOnFile") {
+  test("SPARK-59081: hint rule sees UnresolvedRelation for path SQL before ResolveSQLOnFile") {
     var hintSawUnresolved = false
     var resolutionSawUnresolved = false
 
