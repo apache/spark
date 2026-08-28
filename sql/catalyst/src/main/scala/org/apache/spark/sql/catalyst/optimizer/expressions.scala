@@ -1184,8 +1184,12 @@ object SimplifyCasts extends Rule[LogicalPlan] {
 
 
 /**
- * Removes the inner case conversion expressions that are unnecessary because
- * the inner conversion is overwritten by the outer one.
+ * Removes redundant same-case conversion expressions (e.g. UPPER(UPPER(x)) or LOWER(LOWER(x)))
+ * that are unnecessary because the case conversion operation is idempotent.
+ *
+ * Note: Cross-case conversions (UPPER(LOWER(x)) or LOWER(UPPER(x))) are NOT simplified
+ * because they are not semantics-preserving for non-ASCII Unicode characters (e.g. Turkish
+ * dotless 'ı' where LOWER(UPPER('ı')) = 'i' != LOWER('ı')).
  */
 object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
@@ -1193,8 +1197,6 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
     case q: LogicalPlan => q.transformExpressionsUpWithPruning(
       _.containsPattern(UPPER_OR_LOWER), ruleId) {
       case Upper(Upper(child)) => Upper(child)
-      case Upper(Lower(child)) => Upper(child)
-      case Lower(Upper(child)) => Lower(child)
       case Lower(Lower(child)) => Lower(child)
     }
   }
