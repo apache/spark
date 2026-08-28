@@ -1076,6 +1076,12 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
    *    fail MISSING_AGGREGATION. Splitting the Aggregate to make room was tried and reverted: it
    *    reshapes correlated subqueries, which broke `splitSubquery` on a HAVING and flipped
    *    COUNT-bug handling, for a column in one uncommon shape.
+   *  - Anything whose child is an Aggregate, for the second half of that same trap:
+   *    `splitSubquery` finds a subquery's Aggregate by matching `Filter(_, Aggregate)`, so a
+   *    Project in between hides it and the COUNT bug goes unhandled. Measured on
+   *    `HAVING udf(count(*) + 1) > 0`: the outer rows that match nothing came back dropped where
+   *    the same plan without the column returns them. It runs before the pushdown that would
+   *    collapse the Project away, so being invisible later is no help.
    *
    * MergeRows is on neither list, on purpose. Its instructions are first-match-wins, so a column
    * runs `WHEN ... AND udf(a / b) > 0` for every row of the join -- but so does the interpreted
@@ -1102,7 +1108,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
     val callIds = new java.util.IdentityHashMap[TranspiledPythonUDF, java.lang.Long]()
     val preEvaluate: Option[PreEvaluate] =
       if (withColumns && p.children.length == 1 && !p.isInstanceOf[Command] &&
-          !p.isInstanceOf[Aggregate]) {
+          !p.isInstanceOf[Aggregate] && !p.children.head.isInstanceOf[Aggregate]) {
         val child = p.children.head
         // Once per operator, not once per call: an operator can hold several, and this walks the
         // whole child plan. See `canPlaceColumn`, which is the only reader.
@@ -1236,7 +1242,11 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
       ((conf.decorrelateInnerQueryEnabled &&
           conf.decorrelateInnerQueryEnabledForExistsIn) ||
         !arg.containsPattern(OUTER_REFERENCE)) &&
-      !arg.containsPattern(TRANSPILED_UDF_PARAMETER)
+      // Bit first, then a walk, as in `apply`: a SubqueryExpression reports its inner plan's bits
+      // but `exists` does not descend into it, so an argument holding a subquery that merely
+      // *contains* a call would fail the bit test over a reference that is not ours to substitute.
+      !(arg.containsPattern(TRANSPILED_UDF_PARAMETER) &&
+        arg.exists(_.isInstanceOf[TranspiledUDFParameter]))
 
   /**
    * Notes the columns to add to the operator's child, and points the option's refs at them. None

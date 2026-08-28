@@ -447,6 +447,21 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
+  test("keeps the Python UDF in a HAVING, where a column would hide the Aggregate") {
+    transpileOn {
+      // A Filter on an Aggregate could host the Project perfectly well, and that is the trap:
+      // `splitSubquery` finds a correlated subquery's Aggregate by matching `Filter(_, Aggregate)`,
+      // so a Project between them hides it and the COUNT bug goes unhandled. Measured end to end in
+      // test_udf_transpile_puts_no_column_directly_above_an_aggregate.
+      val call = makeTPUDF(makePyUDF(Add(attrA, Literal(1L))), Add(pref(0), pref(0)))
+      val agg = Aggregate(Seq(attrA), Seq(attrA), LocalRelation(attrA))
+      val converted = convert(Filter(GreaterThan(call, Literal(0L)), agg))
+      assert(paramColumns(converted).isEmpty, s"Expected no column: $converted")
+      assert(converted.expressions.exists(_.exists(_.isInstanceOf[PythonUDF])),
+        s"Expected the Python UDF kept: $converted")
+    }
+  }
+
   test("puts one argument in a column though another can't go in one") {
     transpileOn {
       // `f(sum(a), a + 1)`, the aggregate read once and `a + 1` twice: no Project can hold the

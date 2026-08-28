@@ -1676,7 +1676,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # an operator that cannot hold one, leaving an attribute where the call was -- and so no
         # arguments for the option's references to point at. The call keeps the Python path there
         # rather than failing the query, which is also one evaluation: the projection computes it
-        # once. All three shapes raised INVALID_UDF_PARAMETER_PLACEHOLDER_INDEX before.
+        # once. Master lowered these, with the draw spliced into the option body and read twice from
+        # the column PullOutNondeterministic left; this gives up that lowering, not correctness.
         from pyspark.sql.functions import col, rand
 
         add_self = lambda x: x + x  # noqa: E731
@@ -1744,6 +1745,39 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     "(SELECT 1 FROM t_58626 i WHERE sq_test_58626(o.a + 1) = i.a)"
                 )
                 self.assertEqual([0, 1], sorted(r[0] for r in outer_arg.collect()))
+
+    def test_udf_transpile_puts_no_column_directly_above_an_aggregate(self):
+        # SPARK-58626: `splitSubquery` finds the Aggregate a correlated scalar subquery is built on
+        # by matching `Filter(_, Aggregate)` -- adjacency, not a search -- in an earlier batch than
+        # the pushdown that would collapse a Project away. A column between a HAVING and its
+        # Aggregate hid it, `mayHaveCountBug` read false, and the outer rows matching nothing were
+        # dropped instead of counted 0: measured as [] where the same plan without the column
+        # returns [3, 4]. So nothing goes directly above an Aggregate. The call keeps the Python UDF
+        # and raises here exactly as transpilation-off does, because a Python eval node lands
+        # between the Filter and the Aggregate just the same -- that half is not ours.
+        square_fn = lambda x: x * x  # noqa: E731
+        legacy = {**_TRANSPILE_ON, "spark.sql.legacy.scalarSubqueryCountBugBehavior": True}
+        # `count(*) + 1` is read twice and is not cheap, so it is what would be owed a column.
+        query = (
+            "SELECT o.a FROM t_out_58626 o WHERE "
+            "(SELECT count(*) FROM t_in_58626 i WHERE i.a = o.a "
+            "HAVING sq_test_58626(count(*) + 1) > 0) = 0"
+        )
+        with self.sql_conf(legacy):
+            square = UserDefinedFunction(square_fn, LongType())
+            self.assertTrue(square.transpiled)
+            with (
+                self.temp_func("sq_test_58626"),
+                self.temp_view("t_out_58626"),
+                self.temp_view("t_in_58626"),
+            ):
+                self.spark.udf.register("sq_test_58626", square)
+                self.spark.range(0, 5).selectExpr("id as a").createOrReplaceTempView("t_out_58626")
+                self.spark.range(0, 3).selectExpr("id as a").createOrReplaceTempView("t_in_58626")
+                df = self.spark.sql(query)
+                plan = self._optimized_plan(df)
+                self.assertNotIn(self._SHARED_ARG_ALIAS, plan, plan)
+                self.assertEqual(1, self._eval_python_count(df), plan)
 
     def test_udf_transpile_unused_argument_diverges_under_ansi(self):
         # SPARK-58626: an argument the body never uses never reaches the option, so nothing
