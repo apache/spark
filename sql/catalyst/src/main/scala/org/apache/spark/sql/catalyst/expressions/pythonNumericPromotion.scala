@@ -63,6 +63,10 @@ import org.apache.spark.sql.types.{ByteType, DataType, DoubleType, FloatType, In
  */
 object PythonNumericPromotion {
 
+  /** Spark's numeric precedence, for `widestOf`. A val, not a local -- `widestOf` is hot. */
+  private val rank: Seq[DataType] =
+    Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)
+
   /**
    * The largest magnitude a value of `dt` can have, or None if `dt` is not an integral type we
    * promote. Note these are magnitudes, not maxima -- two's complement reaches one further in
@@ -121,11 +125,11 @@ object PythonNumericPromotion {
     if (magnitudes.exists(_.isEmpty)) {
       None
     } else {
-      narrowestFor(worst(magnitudes.map(_.get))).filter { widened =>
-        // Only report a promotion that actually widens. A body whose worst case already fits the
-        // operands' own type gains nothing from a cast, and emitting one would just grow the plan.
-        inputs.exists(_ != widened)
-      }
+      // Whatever comes back is always strictly wider than every input, so there is nothing to
+      // filter out: `narrowestFor(m)` answers T only when m <= T.MaxValue, which is one below
+      // `magnitude(T)`, and `worst` is at least the widest input's magnitude for all three
+      // functions below. `PythonNumericPromotionSuite` pins that down.
+      narrowestFor(worst(magnitudes.map(_.get)))
     }
   }
 
@@ -156,7 +160,6 @@ object PythonNumericPromotion {
       left: Expression,
       right: Expression,
       op: (Expression, Expression) => Expression): Expression = {
-    val (l, r) = (left, right)
     // Align the operand types ourselves rather than emitting `Add(bigint, int)` and hoping. A
     // replacement has to be resolvable *as written*: `InheritAnalysisRules` is what normally
     // hands a replacement to type coercion, and we cannot use it (building ours needs the
@@ -170,9 +173,12 @@ object PythonNumericPromotion {
     // Spark's own numeric precedence, so it agrees with what coercion would have done. Note the
     // gate really is *numeric* and not *integral*: an unannotated parameter's category is plain
     // "numeric", so an integral-only gate would refuse the commonest body of all.
-    widestOf(l.dataType, r.dataType) match {
-      case Some(t) if l.dataType != t || r.dataType != t => op(Cast(l, t), Cast(r, t))
-      case _ => op(l, r)
+    // Read each operand's type once: `dataType` on a RuntimeReplaceable child builds its
+    // replacement to answer, so asking twice does the work twice.
+    val (lt, rt) = (left.dataType, right.dataType)
+    widestOf(lt, rt) match {
+      case Some(t) if lt != t || rt != t => op(Cast(left, t), Cast(right, t))
+      case _ => op(left, right)
     }
   }
 
@@ -186,7 +192,6 @@ object PythonNumericPromotion {
    * every numeric category -- and because we never produce one ourselves.
    */
   private def widestOf(left: DataType, right: DataType): Option[DataType] = {
-    val rank = Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)
     (rank.indexOf(left), rank.indexOf(right)) match {
       case (l, r) if l >= 0 && r >= 0 => Some(rank(math.max(l, r)))
       case _ => None
@@ -203,12 +208,11 @@ object PythonNumericPromotion {
       right: Expression,
       target: (DataType, DataType) => Option[DataType],
       op: (Expression, Expression) => Expression): Expression = {
-    val (l, r) = (left, right)
-    target(l.dataType, r.dataType) match {
-      case Some(t) => op(Cast(l, t), Cast(r, t))
+    target(left.dataType, right.dataType) match {
+      case Some(t) => op(Cast(left, t), Cast(right, t))
       // No promotion to apply, but the operands may still disagree, and an unaligned replacement
       // does not resolve -- so fall through to `plain`, which aligns them.
-      case None => plain(l, r, op)
+      case None => plain(left, right, op)
     }
   }
 
@@ -224,20 +228,33 @@ object PythonNumericPromotion {
  *
  * These are [[RuntimeReplaceable]] rather than hand-written arithmetic because the whole point is
  * to run the *existing* operator at a wider type -- writing fresh `eval` and `doGenCode` bodies
- * would be a second implementation of Add to keep in step with the first. The replacement is
- * recomputed rather than cached, because it depends on the children's types -- see the note on
- * `replacement` below.
+ * would be a second implementation of Add to keep in step with the first. Because the replacement
+ * depends on the children's types, when it may be cached is subtle -- see `replacement` below.
  */
 trait PythonPromotingArithmetic extends RuntimeReplaceable {
   /**
-   * Deliberately a `def` and not a `lazy val`. `replacement` is derived from the children's
-   * types, and a parent doing type coercion can ask for our `dataType` -- and so force this --
-   * while those children are still unresolved. A `lazy val` would cache whatever the unresolved
-   * tree happened to say and never revisit it, which showed up as every *compound* body falling
-   * back (`(x + 1) // 3`) while a bare `x + y` lowered fine. Recomputing is cheap; the promotion
-   * rule is a few BigInt comparisons.
+   * Recomputed while the children are unresolved, then cached the moment they are not.
+   *
+   * Both halves are load bearing. It cannot be a plain `lazy val`: `replacement` is derived from
+   * the children's types, and a parent doing type coercion can ask for our `dataType` -- and so
+   * force this -- while those children are still unresolved. Caching there pins whatever the
+   * unresolved tree happened to say and never revisits it, which showed up as every *compound*
+   * body falling back (`(x + 1) // 3`) while a bare `x + y` lowered fine.
+   *
+   * But it cannot be a bare `def` either. [[RuntimeReplaceable]] derives `dataType` and `nullable`
+   * from `replacement` with no memoization of their own, so one type read on a nested node rebuilt
+   * its whole subtree, and each level multiplied the level below it. Measured on a chain of
+   * promoting multiplies over a tinyint: 0.10s at 9 nodes, 0.48s at 11, 3.5s at 13, and 19 nodes
+   * did not finish in nine minutes. That is not a corner -- `x ** 8` lowers to seven nested
+   * multiplies on its own, and a hand-written chain of `*` has no cap at all.
+   *
+   * Gating the cache on `childrenResolved` gets both: the lazy val is never forced while a child
+   * is unresolved, and children never go back to being unresolved, so once forced it cannot go
+   * stale. New children arrive as a new instance through `withNewChildren`, with a fresh cache.
    */
-  override def replacement: Expression = if (childrenResolved) promoted else unpromoted
+  override def replacement: Expression = if (childrenResolved) promotedOnce else unpromoted
+
+  @transient private lazy val promotedOnce: Expression = promoted
 
   /** The widened form, safe to build only once the children's types are known. */
   protected def promoted: Expression

@@ -1142,9 +1142,9 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
                 interpreted_value = _SENTINEL_RAISED
                 interpreted_error = e
 
-        # If the transpiled path raises an exception we also need the interpreted path to raise one,
-        # however if the Python code (that in the interpreted path) raises an exception, the transpiled
-        # path may return a valid value.
+        # If the transpiled path raises, the interpreted path has to raise too. The converse does
+        # not hold: where Python raises, the transpiled path may legitimately return a value --
+        # that is the ANSI-overflow tier, where promotion is the whole point.
         if transpiled_error is not None:
             self.assertIsNotNone(
                 interpreted_error,

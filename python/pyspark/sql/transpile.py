@@ -303,16 +303,17 @@ def _wider_numeric(lc: str, rc: str) -> str:
 # lives in ResolveTranspiledPythonUDFOptions.
 _INTEGRAL_CATEGORIES = frozenset({"integral", "integral32"})
 _NUMERIC_CATEGORIES = frozenset({"numeric", "fractional"}) | _INTEGRAL_CATEGORIES
-# Categories a lowering may tighten (see ``CatalystTranspiler._narrow``). Only the
-# numeric ones that span more than one kind of number: narrowing "fractional" to
-# an integral category would change the assumption rather than tighten it, and the
-# non-numeric categories have nothing to narrow to.
-_NARROWABLE_CATEGORIES = frozenset({"numeric"}) | _INTEGRAL_CATEGORIES
-# Increasing narrowness, so a later entry matches strictly fewer column types than
+# Categories a lowering may tighten (see ``CatalystTranspiler._narrow``), in
+# increasing narrowness, so a later entry matches strictly fewer column types than
 # an earlier one. Requirements from different lowerings in one option are
 # conjunctive -- every one of them has to hold for the option to be exact -- so
 # when two apply to the same parameter the narrowest wins.
+#
+# Only the numeric categories spanning more than one kind of number are in here:
+# narrowing "fractional" to an integral category would change the assumption rather
+# than tighten it, and the non-numeric categories have nothing to narrow to.
 _NARROWING_ORDER = ("numeric", "integral", "integral32")
+_NARROWABLE_CATEGORIES = frozenset(_NARROWING_ORDER)
 # Python builtins the transpiler can lower. Only reached after the name is proven
 # to still refer to the builtin (see ``_resolvable_builtins``).
 _SUPPORTED_BUILTINS = frozenset({"abs", "min", "max", "round"})
@@ -793,18 +794,64 @@ class CatalystTranspiler(AbstractTranspiler):
         return index
 
     def _narrow(self, params: List[str], category: str, *nodes: ast.AST) -> None:
-        """Require every parameter under ``nodes`` to be ``category``.
+        """Require every parameter whose *value* reaches ``nodes`` to be ``category``.
 
         For lowerings that are exact only on a narrower column type than the
         variant assumed: ``/`` needs int32 operands and a string repeat needs an
         integral count (``"ab" * 2.5`` is a TypeError in Python). Narrowing is
         safe -- it only ever matches fewer column types, so the JVM drops the
         option and falls back rather than picking a wrong one.
+
+        Value positions only, which is the same line ``_int32_exact`` draws and for
+        the same reason: what a parameter contributes to a *condition* cannot change
+        the kind of the value, so dragging it in refuses columns the lowering
+        handles perfectly well. ``s * (2 if n > 1.0 else 3)`` is the shape that
+        showed it -- the count is the literal 2 or 3 whatever ``n`` is, yet walking
+        the whole subtree tagged ``n`` integral and dropped the option for a double.
         """
         for node in nodes:
-            for sub in ast.walk(node):
-                if isinstance(sub, ast.Name) and sub.id in params:
-                    self._record_narrowing(self._param_index(params, sub.id), category)
+            self._narrow_indexes(self._value_params(params, node), category)
+
+    def _value_params(self, params: List[str], node: Optional[ast.AST]) -> Set[int]:
+        """Indexes of the parameters whose value reaches ``node``'s result.
+
+        Deliberately not ``ast.walk``: an ``IfExp``'s test and an ``If``'s test are
+        skipped, since they steer which value comes back without contributing to it.
+        Everything a value can actually flow through is listed, and an unrecognised
+        node contributes nothing -- the lowering for it would have raised first.
+        """
+        match node:
+            case ast.Name(id=name) if name in params:
+                return {self._param_index(params, name)}
+            case ast.BinOp(left=left, right=right):
+                return self._value_params(params, left) | self._value_params(params, right)
+            case ast.UnaryOp(operand=operand):
+                return self._value_params(params, operand)
+            # `a and b` evaluates to one of its operands in Python, so both are
+            # value positions -- unlike a comparison, whose operands only feed the
+            # bool it produces (harmless to include, and cheaper than proving it
+            # cannot be reached).
+            case ast.BoolOp(values=values):
+                return set().union(set(), *(self._value_params(params, v) for v in values))
+            case ast.Compare(left=left, comparators=comparators):
+                return set().union(
+                    self._value_params(params, left),
+                    *(self._value_params(params, c) for c in comparators),
+                )
+            case ast.IfExp(body=body, orelse=orelse):
+                return self._value_params(params, body) | self._value_params(params, orelse)
+            case ast.Return(value=value):
+                return self._value_params(params, value)
+            case ast.If(body=body, orelse=orelse):
+                return set().union(
+                    set(),
+                    *(self._value_params(params, s) for s in body),
+                    *(self._value_params(params, s) for s in orelse),
+                )
+            case ast.Call(args=args):
+                return set().union(set(), *(self._value_params(params, a) for a in args))
+            case _:
+                return set()
 
     def _narrow_indexes(self, indexes: Set[int], category: str) -> None:
         """``_narrow`` for parameter indexes already identified."""
@@ -1847,16 +1894,11 @@ class CatalystTranspiler(AbstractTranspiler):
                         # `&` / `|` on a Column build logical And/Or, not bitwise.
                         if both_integral:
                             # Normalise both sides to a long first, the way the shifts do.
-                            # This was added when promotion could hand us a decimal -- `(x +
-                            # 1) & 7` on a bigint widened the add to decimal(20, 0), and
-                            # `bitwiseAND` on mixed decimal/integral fails *analysis* with
-                            # BINARY_OP_DIFF_TYPES, breaking the query rather than falling
-                            # back. Promotion stops at LongType now, so that operand can no
-                            # longer arrive and the casts are defensive rather than load
-                            # bearing: a promoted operand is at worst a bigint, which
-                            # `bitwiseAND` coerces against an int happily. Kept because
-                            # Python's bitwise operators are int-only and normalising is
-                            # honest about that, but they could go with a test run.
+                            # Python's bitwise operators are int-only, so a single width for
+                            # both operands is what the semantics actually are; it also keeps
+                            # `bitwiseAND` off the mixed-width path, where an operand pair it
+                            # cannot coerce fails *analysis* with BINARY_OP_DIFF_TYPES and
+                            # breaks the query rather than falling back.
                             left_bits = left_col.cast("long")
                             right_bits = right_col.cast("long")
                             if isinstance(op, ast.BitAnd):
@@ -1892,7 +1934,14 @@ class CatalystTranspiler(AbstractTranspiler):
                 )
             case ast.Return(value=value):
                 return self._convert_chunk(params, value)
-            case ast.Call():
+            # Only a call through a plain name can be one of the builtins we lower.
+            # Anything else -- `(lambda y: y + 1)(x)`, a method call, a call through a
+            # subscript -- falls through to the generic "AST node Call is not
+            # supported" message below, which names the node and is the more useful
+            # thing to read. Matching every Call here instead reported the
+            # builtin-positional-args complaint for bodies that were never calling a
+            # builtin at all.
+            case ast.Call(func=ast.Name()):
                 return self._lower_builtin_call(params, body)
             case ast.Constant(value=value):
                 # Avoid circular import issue.
@@ -2047,6 +2096,20 @@ class CatalystTranspiler(AbstractTranspiler):
                     "NULL there, so lowering it to a truncating cast would silently "
                     "diverge -- declare a float/double return type to transpile this"
                 )
+            # That check only catches the *provable* floats. A bare parameter is a
+            # float exactly when its column is, and an unrefined body's category is
+            # plain "numeric", which admits DoubleType -- so
+            # `udf(lambda x: x * 2, LongType())` on a double column holding 3.7
+            # lowered to `cast((x * 2.0) as bigint)` and answered 7, where the
+            # interpreted UDF returns NULL. Narrowing closes it without emitting a
+            # single extra variant: the option stops matching a double column, and
+            # that column falls back to interpreted Python, which is where the NULL
+            # comes from. An integral return type is the whole condition -- a
+            # float/double one converts the same way on both paths.
+            if isinstance(returnType, NumericType) and not isinstance(
+                returnType, (FloatType, DoubleType, DecimalType)
+            ):
+                self._narrow(params, "integral", function_body[0])
         converted = self._convert_chunk(params, function_body[0])
         if self._null_guard_emitted:
             warnings.warn(

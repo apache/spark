@@ -108,4 +108,88 @@ class PythonNumericPromotionSuite extends SparkFunSuite {
       a, b, PythonNumericPromotion.forAddition, Add(_, _))
     assert(result === Add(a, b), "a double add should not collect casts it cannot use")
   }
+
+  test("promotion always widens, so there is nothing to filter") {
+    // `promote` used to drop a target that matched an input type, on the theory that a body whose
+    // worst case already fits gains nothing. That case cannot arise: `narrowestFor(m)` answers T
+    // only when m <= T.MaxValue, one below `magnitude(T)`, while every worst case here is at
+    // least the widest input's magnitude. Asserted over the whole cross product so that a future
+    // magnitude or width edit cannot quietly reintroduce the possibility.
+    val types = Seq(ByteType, ShortType, IntegerType, LongType)
+    for (l <- types; r <- types) {
+      PythonNumericPromotion.forAddition(l, r).foreach { t =>
+        assert(t != l && t != r, s"forAddition($l, $r) returned an operand type")
+      }
+      PythonNumericPromotion.forMultiplication(l, r).foreach { t =>
+        assert(t != l && t != r, s"forMultiplication($l, $r) returned an operand type")
+      }
+    }
+    types.foreach { t =>
+      PythonNumericPromotion.forNegation(t).foreach { w =>
+        assert(w != t, s"forNegation($t) returned its own operand type")
+      }
+    }
+  }
+
+  test("the replacement is built once the children resolve, and then reused") {
+    // The `def` this replaced rebuilt the whole subtree on every `dataType` read, because
+    // RuntimeReplaceable derives `dataType` and `nullable` straight from `replacement`. Identity
+    // is the assertion that catches a revert: a `def` hands back a fresh tree each call.
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val add = PythonPromotingAdd(a, b)
+    assert(add.childrenResolved, "attribute references should count as resolved")
+    assert(add.replacement eq add.replacement, "a resolved replacement should be cached")
+    assert(add.dataType === LongType, "two int operands should evaluate in bigint")
+  }
+
+  test("an unresolved child is reported around rather than promoted") {
+    // Not an `UnresolvedAttribute`: `plain` asks its operands for `dataType`, so that would throw
+    // rather than fall to `unpromoted`. The case that actually reaches it is a child that reports
+    // a dataType while its own type check fails -- `ShiftLeft` wants an int on the left.
+    val b = AttributeReference("b", ByteType)()
+    val bad = ShiftLeft(b, b)
+    assert(!bad.resolved, "ShiftLeft on two tinyints should fail its type check")
+    val add = PythonPromotingAdd(bad, Literal(1.toByte))
+    assert(!add.childrenResolved)
+    // Unpromoted, but still aligned -- an unaligned replacement does not resolve at all.
+    assert(add.replacement === Add(bad, Literal(1.toByte)))
+  }
+
+  test("plain aligns an operand pair the promotion rule declines to widen") {
+    // `x + 1` on a bigint: forAddition gives up (2**63 + 2**31 overruns LongType), so this goes
+    // through `plain`, whose whole job is that the replacement resolves. Unaligned, CheckAnalysis
+    // reports INTERNAL_ERROR -- a broken query rather than a fallback to interpreted Python.
+    val a = AttributeReference("a", LongType)()
+    val add = PythonPromotingAdd(a, Literal(1))
+    assert(PythonNumericPromotion.forAddition(LongType, IntegerType).isEmpty)
+    assert(add.replacement.resolved, s"unaligned replacement: ${add.replacement}")
+    assert(add.dataType === LongType)
+  }
+
+  test("subtraction keeps its operands in order through withNewChildren") {
+    // A left/right swap here is invisible in a plan and wrong in every row.
+    val a = AttributeReference("a", ByteType)()
+    val b = AttributeReference("b", ByteType)()
+    val swapped = PythonPromotingSubtract(a, a).withNewChildren(Seq(a, b))
+    assert(swapped === PythonPromotingSubtract(a, b))
+    swapped.asInstanceOf[PythonPromotingSubtract].replacement match {
+      case Subtract(Cast(l, ShortType, _, _), Cast(r, ShortType, _, _), _) =>
+        assert(l === a && r === b, "operands should keep their order")
+      case other => fail(s"expected a widened subtract, got $other")
+    }
+  }
+
+  test("a deep chain of promoting nodes stays cheap to type") {
+    // The regression guard for the rebuild-per-read blowup: nested nodes each asked their child
+    // for a type, which rebuilt that child's subtree, which asked again. Measured before the fix:
+    // 3.5s at 13 nodes and no answer at all in nine minutes at 19. `x ** 8` alone lowers to seven
+    // nested multiplies, so this is a shape real UDFs reach. If it regresses, this test hangs.
+    val a = AttributeReference("a", ByteType)()
+    val deep = (1 to 24).foldLeft[Expression](a)((acc, _) => PythonPromotingMultiply(acc, a))
+    // Byte * Byte lands on Short, Short * Byte on Int, Int * Byte on Long, and from there the
+    // rule runs out of integral room and leaves the multiply where it is.
+    assert(deep.dataType === LongType)
+    assert(deep.resolved)
+  }
 }
