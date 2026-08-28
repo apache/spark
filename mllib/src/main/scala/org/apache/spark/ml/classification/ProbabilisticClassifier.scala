@@ -123,7 +123,7 @@ abstract class ProbabilisticClassifier[
  *     <td>Set</td>
  *     <td>Set</td>
  *     <td>Set</td>
- *     <td><code>predictRawColumn</code> => <code>raw2probabilityColumn</code> and
+ *     <td><code>predictRawColumn</code> => <code>raw2probabilityColumn</code> =>
  *       <code>raw2predictionColumn</code></td>
  *   </tr>
  * </table>
@@ -190,6 +190,7 @@ abstract class ProbabilisticClassificationModel[
    *
    * @param probability input probability column
    * @return prediction column of type `Double`
+   * @note This method honors [[thresholds]] when they are set.
    */
   protected def probability2predictionColumn(probability: Column): Column = {
     udf(probability2prediction _).apply(probability)
