@@ -18,6 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.types.{ByteType, DataType, DecimalType, DoubleType, IntegerType, LongType, ShortType, StringType}
 
 /**
@@ -29,6 +31,9 @@ import org.apache.spark.sql.types.{ByteType, DataType, DecimalType, DoubleType, 
 class PythonNumericPromotionSuite extends SparkFunSuite {
 
   private def dec(p: Int): DataType = DecimalType(p, 0)
+
+  private val ansi = NumericEvalContext(EvalMode.ANSI, allowDecimalPrecisionLoss = true)
+  private val legacy = NumericEvalContext(EvalMode.LEGACY, allowDecimalPrecisionLoss = true)
 
   test("addition widens far enough for the sum of the operands' extremes") {
     // Two tinyints reach 256, which a tinyint cannot hold but a smallint can. Two bigints reach
@@ -93,7 +98,7 @@ class PythonNumericPromotionSuite extends SparkFunSuite {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
     PythonNumericPromotion.widened(
-      a, b, PythonNumericPromotion.forAddition, Add(_, _)) match {
+      a, b, PythonNumericPromotion.forAddition, ansi, Add(_, _, ansi)) match {
       case Add(Cast(l, LongType, _, _), Cast(r, LongType, _, _), _) =>
         assert(l === a && r === b)
       case other =>
@@ -105,8 +110,8 @@ class PythonNumericPromotionSuite extends SparkFunSuite {
     val a = AttributeReference("a", DoubleType)()
     val b = AttributeReference("b", DoubleType)()
     val result = PythonNumericPromotion.widened(
-      a, b, PythonNumericPromotion.forAddition, Add(_, _))
-    assert(result === Add(a, b), "a double add should not collect casts it cannot use")
+      a, b, PythonNumericPromotion.forAddition, ansi, Add(_, _, ansi))
+    assert(result === Add(a, b, ansi), "a double add should not collect casts it cannot use")
   }
 
   test("promotion always widens, so there is nothing to filter") {
@@ -177,6 +182,85 @@ class PythonNumericPromotionSuite extends SparkFunSuite {
       case Subtract(Cast(l, ShortType, _, _), Cast(r, ShortType, _, _), _) =>
         assert(l === a && r === b, "operands should keep their order")
       case other => fail(s"expected a widened subtract, got $other")
+    }
+  }
+
+  test("the stored eval context is what the replacement carries") {
+    // Not the ambient conf. The replacement is built lazily, so without a stored context the
+    // operator's eval mode would be decided by whenever something first asked for our dataType.
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    Seq(ansi, legacy).foreach { context =>
+      PythonPromotingAdd(a, b, context).replacement match {
+        case Add(_, _, ctx) => assert(ctx === context, s"expected $context on the Add")
+        case other => fail(s"expected an Add, got $other")
+      }
+      // The widening casts carry it too. Behaviour is identical either way -- these only ever
+      // widen -- but a differing evalMode would split the canonical form.
+      PythonPromotingAdd(a, b, context).replacement.collect { case c: Cast => c }.foreach { c =>
+        assert(c.evalMode === context.evalMode, "a widening cast should carry the same mode")
+      }
+    }
+  }
+
+  test("the eval context makes the canonical form deterministic") {
+    // The point of storing it. Two nodes built with the same context agree no matter when their
+    // replacement is forced; before, canonical form was a function of force ordering, which
+    // silently cost subexpression elimination and plan dedup.
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    assert(PythonPromotingAdd(a, b, ansi).canonicalized === PythonPromotingAdd(a, b, ansi)
+      .canonicalized)
+    assert(PythonPromotingAdd(a, b, ansi).semanticEquals(PythonPromotingAdd(a, b, ansi)))
+    // And two genuinely different contexts stay distinguishable rather than colliding.
+    assert(PythonPromotingAdd(a, b, ansi).canonicalized !==
+      PythonPromotingAdd(a, b, legacy).canonicalized)
+  }
+
+  test("the eval context survives withNewChildren") {
+    // "Copying an expression" is the case NumericEvalContext's own scaladoc calls out.
+    val a = AttributeReference("a", ByteType)()
+    val b = AttributeReference("b", ByteType)()
+    val copied = PythonPromotingSubtract(a, a, legacy).withNewChildren(Seq(a, b))
+    assert(copied.asInstanceOf[PythonPromotingSubtract].evalContext === legacy)
+    val negated = PythonPromotingNegate(a, legacy).withNewChildren(Seq(b))
+    assert(negated.asInstanceOf[PythonPromotingNegate].evalContext === legacy)
+  }
+
+  test("the unary operators map the eval mode onto failOnError") {
+    // `Abs` and `UnaryMinus` predate NumericEvalContext and take a Boolean. TRY counts as
+    // failing, the same way BinaryArithmetic reads it: it evaluates as though it would fail and
+    // captures the error afterwards.
+    val a = AttributeReference("a", ByteType)()
+    val tryMode = NumericEvalContext(EvalMode.TRY, allowDecimalPrecisionLoss = true)
+    Seq(ansi -> true, tryMode -> true, legacy -> false).foreach { case (context, expected) =>
+      PythonPromotingAbs(a, context).replacement match {
+        case Abs(_, failOnError) => assert(failOnError === expected, s"for $context")
+        case other => fail(s"expected an Abs, got $other")
+      }
+      PythonPromotingNegate(a, context).replacement match {
+        case UnaryMinus(_, failOnError) => assert(failOnError === expected, s"for $context")
+        case other => fail(s"expected a UnaryMinus, got $other")
+      }
+    }
+  }
+
+  test("the function registry can still build these from children alone") {
+    // Adding a defaulted `evalContext` changed the primary constructor's arity, and
+    // FunctionRegistryBase.build looks for a constructor whose parameters are *all* Expression.
+    // Without the two-child secondary constructor this fails at the call site, not at startup,
+    // so every transpiled UDF breaks while the suite above stays green.
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    Seq(
+      ("python_promoting_add", Seq(a, b)),
+      ("python_promoting_subtract", Seq(a, b)),
+      ("python_promoting_multiply", Seq(a, b)),
+      ("python_promoting_abs", Seq(a)),
+      ("python_promoting_negate", Seq(a))).foreach { case (name, children) =>
+      val built = FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name), children)
+      assert(built.isInstanceOf[PythonPromotingArithmetic], s"$name built ${built.getClass}")
+      assert(built.children === children, s"$name lost its children")
     }
   }
 
