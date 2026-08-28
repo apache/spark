@@ -27,7 +27,7 @@ import time
 import unittest
 from io import StringIO
 from typing import Any, Callable, Dict
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from pyspark import SparkConf, SparkContext
 from pyspark.ml.torch.distributor import TorchDistributor, _get_gpus_owned
@@ -256,6 +256,24 @@ class TorchDistributorBaselineUnitTestsMixin:
         with self.assertRaisesRegex(RuntimeError, "abcdef"):
             error_command = ["bash", "-c", "'abc''def'"]
             TorchDistributor._execute_command(error_command)
+
+    def test_execute_command_survives_log_socket_drop(self) -> None:
+        """A dropped log-streaming socket must not kill the task.
+
+        The socket is best effort and can be closed (e.g. a cloud-provider
+        idle-timeout) mid-run, making getpeername() raise OSError. The command
+        must still complete and its logs fall back to stdout.
+        """
+        client = MagicMock()
+        client.failed = False
+        client.sock.getsockname.return_value = ("10.0.0.1", 12345)
+        client.sock.getpeername.side_effect = OSError(107, "Transport endpoint is not connected")
+
+        with patch_stdout() as output:
+            TorchDistributor._execute_command(
+                ["echo", "hello_after_socket_drop"], log_streaming_client=client
+            )
+        self.assertIn("hello_after_socket_drop", output.getvalue().strip())
 
     def test_create_torchrun_command(self) -> None:
         train_path = "train.py"
