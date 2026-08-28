@@ -18,7 +18,8 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.ml.classification.ClassifierSuite.{MockClassificationModel, MockClassifier}
+import org.apache.spark.ml.classification.ClassifierSuite.{
+  MockClassificationModelWithColumnFunctions, MockClassifier}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
@@ -68,12 +69,12 @@ class ClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
     val expectedRawPrediction = Vectors.dense(-1.0, 1.0)
     val data = Seq(Tuple1(expectedRawPrediction)).toDF("features")
 
-    val model = new MockClassificationModel
+    val model = new MockClassificationModelWithColumnFunctions
     val bothOutputs = model.transform(data).select("rawPrediction", "prediction").head()
     assert(bothOutputs.getAs[Vector](0) === expectedRawPrediction)
     assert(bothOutputs.getDouble(1) === 1.0)
 
-    val predictionOnly = new MockClassificationModel().setRawPredictionCol("")
+    val predictionOnly = new MockClassificationModelWithColumnFunctions().setRawPredictionCol("")
       .transform(data).select("prediction").head()
     assert(predictionOnly.getDouble(0) === 1.0)
   }
@@ -110,6 +111,19 @@ object ClassifierSuite {
 
     def this() = this(Identifiable.randomUID("mockclassificationmodel"))
 
+    override def predictRaw(features: Vector): Vector = throw new UnsupportedOperationException()
+
+    override def copy(extra: ParamMap): MockClassificationModel =
+      throw new UnsupportedOperationException()
+
+    override def numClasses: Int = throw new UnsupportedOperationException()
+  }
+
+  class MockClassificationModelWithColumnFunctions(override val uid: String)
+    extends ClassificationModel[Vector, MockClassificationModelWithColumnFunctions] {
+
+    def this() = this(Identifiable.randomUID("mockclassificationmodelwithcolumnfunctions"))
+
     override protected def predictRawColumn(features: Column): Column = {
       udf((value: Vector) => value).apply(features)
     }
@@ -130,7 +144,7 @@ object ClassifierSuite {
       throw new UnsupportedOperationException()
     }
 
-    override def copy(extra: ParamMap): MockClassificationModel =
+    override def copy(extra: ParamMap): MockClassificationModelWithColumnFunctions =
       throw new UnsupportedOperationException()
 
     override def numClasses: Int = 2
