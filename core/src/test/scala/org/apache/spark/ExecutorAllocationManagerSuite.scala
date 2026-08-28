@@ -2062,6 +2062,10 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     manager.executorMonitor.executorsPendingToRemove()
   }
 
+  private def executorsDecommissioning(manager: ExecutorAllocationManager): Set[String] = {
+    manager.executorMonitor.executorsDecommissioning()
+  }
+
   test("SPARK-49485: request additional executor when speculative tasks equal maxNeeded") {
     val manager = createManager(createConf(1, 5, 2))
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 0)
@@ -2081,7 +2085,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 2)
 
     // Task 0 is submitted as speculatable
-    post(SparkListenerSpeculativeTaskSubmitted(0, 0, 0))
+    post(SparkListenerSpeculativeTaskSubmitted(0, 0))
 
     // With pendingSpeculative > 0 and maxNeeded == activeExecutors (2), offset allocates 1 more
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 3)
