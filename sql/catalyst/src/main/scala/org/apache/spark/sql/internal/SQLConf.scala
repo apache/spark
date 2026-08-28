@@ -1263,7 +1263,7 @@ object SQLConf {
       "(spark.shuffle.manager.incremental) instead of being materialized. A plan whose " +
       "pipelined stage group cannot fit the local task-concurrency limit fails with an " +
       "explicit CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT error. Experimental.")
-    .version("4.3.0")
+    .version("4.4.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(false)

@@ -1859,7 +1859,7 @@ package object config {
         "amortize the queue's per-operation lock cost at the price of higher hand-off latency " +
         "and per-partition buffering. Only used when spark.shuffle.manager.incremental is the " +
         "in-process channel manager.")
-      .version("4.3.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .checkValue(_ > 0, "batch size must be positive")
@@ -1874,7 +1874,7 @@ package object config {
         "numPartitions rows held as strong references (not tracked by the memory manager and not " +
         "spilled), so raise it together with an eye on that product. Only used when " +
         "spark.shuffle.manager.incremental is the in-process channel manager.")
-      .version("4.3.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .checkValue(_ > 0, "queue capacity must be positive")
