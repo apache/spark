@@ -243,6 +243,8 @@ def _floor_divide_func(c1: Column, c2: Column) -> Column:
 _tie_returns_first_operand = LooseVersion(np.__version__) >= LooseVersion("2.3.0")
 
 
+# Every branch returns one of the operands, so without a cast the result keeps their
+# common type: an integral pair stays exact past 2^53 and the dtype matches NumPy's.
 def _fmax_func(c1: Column, c2: Column) -> Column:
     tie = c1 if _tie_returns_first_operand else c2
     return (
@@ -250,13 +252,12 @@ def _fmax_func(c1: Column, c2: Column) -> Column:
         .when(F.isnan(c2.cast("double")), c1)
         .when(c1 == c2, tie)
         .otherwise(F.greatest(c1, c2))
-        .cast("double")
     )
 
 
 def _fmin_func(c1: Column, c2: Column) -> Column:
     tie = c1 if _tie_returns_first_operand else c2
-    return F.when(c1 == c2, tie).otherwise(F.least(c1, c2)).cast("double")
+    return F.when(c1 == c2, tie).otherwise(F.least(c1, c2))
 
 
 binary_np_spark_mappings = {
