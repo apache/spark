@@ -78,6 +78,9 @@ abstract class ProbabilisticClassificationModel[
   /**
    * Returns an expression that converts a raw-prediction vector column to a probability vector.
    *
+   * [[ProbabilisticClassificationModel.transform]] uses this when both [[rawPredictionCol]] and
+   * [[probabilityCol]] are set. It consumes the output of [[predictRawColumn]].
+   *
    * @param rawPrediction input raw-prediction column
    * @return probability column of type `Vector`
    */
@@ -87,6 +90,10 @@ abstract class ProbabilisticClassificationModel[
 
   /**
    * Returns an expression that produces a probability vector directly from a features column.
+   *
+   * [[ProbabilisticClassificationModel.transform]] uses this when [[probabilityCol]] is set and
+   * [[rawPredictionCol]] is not set. When [[predictionCol]] is also set, it is used
+   * together with [[probability2predictionColumn]].
    *
    * @param features input features column
    * @return probability column of type `Vector`
@@ -98,6 +105,9 @@ abstract class ProbabilisticClassificationModel[
   /**
    * Returns an expression that produces a predicted label from a raw-prediction vector column.
    *
+   * [[ProbabilisticClassificationModel.transform]] uses this when both [[rawPredictionCol]] and
+   * [[predictionCol]] are set. It consumes the output of [[predictRawColumn]].
+   *
    * @param rawPrediction input raw-prediction column
    * @return prediction column of type `Double`
    */
@@ -107,6 +117,10 @@ abstract class ProbabilisticClassificationModel[
 
   /**
    * Returns an expression that produces a predicted label from a probability vector column.
+   *
+   * [[ProbabilisticClassificationModel.transform]] uses this when [[predictionCol]] and
+   * [[probabilityCol]] are set and [[rawPredictionCol]] is not set. It consumes the output of
+   * [[predictProbabilityColumn]].
    *
    * @param probability input probability column
    * @return prediction column of type `Double`
