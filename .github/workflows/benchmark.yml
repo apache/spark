@@ -95,6 +95,8 @@ jobs:
           fetch-depth: 0
       - name: Setup build environment
         uses: ./.github/actions/setup-build-env
+        with:
+          coursier: cache
       - name: Cache TPC-DS generated data
         id: cache-tpcds-sf-1
         uses: actions/cache@v5
@@ -170,6 +172,7 @@ jobs:
       uses: ./.github/actions/setup-build-env
       with:
         java-version: ${{ inputs.jdk }}
+        coursier: cache
     - name: Cache TPC-DS generated data
       if: inputs.generate-tpcds
       id: cache-tpcds-sf-1
