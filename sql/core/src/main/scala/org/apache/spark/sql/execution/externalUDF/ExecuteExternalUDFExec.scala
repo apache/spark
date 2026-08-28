@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.externalUDF
 
-import org.apache.spark.TaskContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -52,13 +51,9 @@ case class ExecuteExternalUDFExec(
   override def producedAttributes: AttributeSet = AttributeSet(Seq(resultAttr))
 
   override protected def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitionsInternal { rows =>
-      withUDFWorkerSession(TaskContext.get(), securityScope = None) { session =>
-        // TODO(SPARK-55278): Stream rows to and from the worker through session.process().
-        throw QueryExecutionErrors.methodNotImplementedError(
-          "ExecuteExternalUDFExec.doExecute")
-      }
-    }
+    // TODO(SPARK-55278): Stream rows to and from the worker through session.process().
+    throw QueryExecutionErrors.methodNotImplementedError(
+      "ExecuteExternalUDFExec.doExecute")
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): ExecuteExternalUDFExec =

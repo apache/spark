@@ -3016,10 +3016,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("joinType" -> toSQLStmt(joinType.sql)))
   }
 
-  def externalUDFWithMultipleChildrenUnsupportedError(): Throwable = {
+  def externalUDFsDisabledError(config: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.EXTERNAL_UDF",
+      messageParameters = Map("config" -> toSQLConf(config)))
+  }
+
+  def externalUDFWithMultipleChildrenUnsupportedError(udf: Expression): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.EXTERNAL_UDF_WITH_MULTIPLE_CHILDREN",
-      messageParameters = Map.empty)
+      messageParameters = Map("funcName" -> toSQLExpr(udf)))
   }
 
   def conflictingAttributesInJoinConditionError(

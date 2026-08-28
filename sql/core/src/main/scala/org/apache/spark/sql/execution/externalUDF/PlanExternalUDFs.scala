@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.externalUDF
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.JOIN_CONDITION
 import org.apache.spark.sql.catalyst.expressions._
@@ -47,17 +46,15 @@ private[sql] object PlanExternalUDFs
     case subquery: Subquery if subquery.correlated => plan
     case _ if !conf.getConf(SQLConf.UNIFIED_UDF_EXECUTION_ENABLED) =>
       if (plan.containsPattern(EXTERNAL_UDF)) {
-        throw new SparkUnsupportedOperationException(
-          errorClass = "UNSUPPORTED_FEATURE.EXTERNAL_UDF",
-          messageParameters = Map(
-            "config" -> SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key))
+        throw QueryCompilationErrors.externalUDFsDisabledError(
+          SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key)
       }
       plan
     case _ =>
-      val joinPlan = extractExternalUDFFromJoinCondition(plan)
-      val aggregatePlan = extractExternalUDFFromAggregate(joinPlan)
-      val groupingPlan = extractGroupingExternalUDFFromAggregate(aggregatePlan)
-      groupingPlan.transformUpWithPruning(_.containsPattern(EXTERNAL_UDF)) {
+      var preparedPlan = extractExternalUDFFromJoinCondition(plan)
+      preparedPlan = extractExternalUDFFromAggregate(preparedPlan)
+      preparedPlan = extractGroupingExternalUDFFromAggregate(preparedPlan)
+      preparedPlan.transformUpWithPruning(_.containsPattern(EXTERNAL_UDF)) {
         // These nodes already own their external UDF expressions.
         case udfPlan: ExternalUDF => udfPlan
         case other => extract(other)
@@ -242,7 +239,7 @@ private[sql] object PlanExternalUDFs
           udf.references.subsetOf(child.outputSet)
         }
         if (childIndex < 0) {
-          throw QueryCompilationErrors.externalUDFWithMultipleChildrenUnsupportedError()
+          throw QueryCompilationErrors.externalUDFWithMultipleChildrenUnsupportedError(udf)
         }
 
         val resultAttr = AttributeReference("externalUDF", udf.dataType, udf.nullable)()

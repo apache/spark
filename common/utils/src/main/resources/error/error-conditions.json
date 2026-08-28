@@ -8945,7 +8945,7 @@
       },
       "EXTERNAL_UDF" : {
         "message" : [
-          "External UDF expressions. Set <config> to true to enable them."
+          "External UDF expressions are disabled. Set <config> to true to enable planning."
         ]
       },
       "EXTERNAL_UDF_IN_ON_CLAUSE" : {
@@ -8955,7 +8955,7 @@
       },
       "EXTERNAL_UDF_WITH_MULTIPLE_CHILDREN" : {
         "message" : [
-          "External UDF whose arguments reference more than one child operator. Rewrite the query so the UDF is evaluated after the inputs are combined."
+          "External UDF <funcName> uses columns from more than one input relation. Rewrite the query so the UDF is evaluated after the inputs are combined."
         ]
       },
       "GEOSPATIAL_DISABLED" : {

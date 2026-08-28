@@ -21,6 +21,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckSuccess
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_UDF, TreePattern}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 
@@ -68,9 +69,20 @@ case class ExternalUserDefinedFunction(
 
   override def checkInputDataTypes(): TypeCheckResult = {
     inputTypes match {
-      case Some(types) => ExpectsInputTypes.checkInputDataTypes(children, types)
+      case Some(types) if types.length != children.length =>
+        throw QueryCompilationErrors.wrongNumArgsError(
+          name = name.getOrElse(prettyName),
+          validParametersCount = Seq(types.length),
+          actualNumber = children.length)
+      case Some(types) =>
+        ExpectsInputTypes.checkInputDataTypes(children, types)
       case None => TypeCheckSuccess
     }
+  }
+
+  // Worker specifications and payloads can contain sensitive execution details.
+  override def toString: String = {
+    s"${name.getOrElse(prettyName)}(${children.mkString(", ")})#${resultId.id}$typeSuffix"
   }
 
   override lazy val canonicalized: Expression = {

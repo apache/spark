@@ -23,16 +23,17 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, And, ArrayTransform, Attribute,
-  AttributeReference, CreateArray, EqualTo, Expression, ExternalUserDefinedFunction, GreaterThan,
-  Lag, LambdaFunction, Literal, NamedLambdaVariable, UnspecifiedFrame, WindowExpression,
-  WindowSpecDefinition}
+  AttributeReference, AttributeSet, CreateArray, EqualTo, Expression,
+  ExternalUserDefinedFunction, GreaterThan, Lag, LambdaFunction, Literal, NamedLambdaVariable,
+  UnspecifiedFrame, WindowExpression, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, BinaryNode, ExecuteExternalUDF,
-  Filter, Join, JoinHint, LocalLimit, LocalRelation, LogicalPlan, Project, Range, Window}
+  Filter, Join, JoinHint, LocalLimit, LocalRelation, LogicalPlan, MapPartitionsExternalUDF, Project,
+  Range, Window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType}
+import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, StructField, StructType}
 import org.apache.spark.udf.worker.{DirectWorker, ProcessCallable, UDFWorkerProperties,
   UDFWorkerSpecification, WorkerEnvironment}
 
@@ -52,9 +53,15 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
 
   private val input = AttributeReference("input", IntegerType, nullable = false)()
   private val relation = LocalRelation(Seq(input))
-  private def workerSpec(name: String): UDFWorkerSpecification = {
+  private def workerSpec(
+      name: String,
+      environmentVariables: Map[String, String] = Map.empty): UDFWorkerSpecification = {
+    val runner = ProcessCallable.newBuilder().addCommand(name)
+    environmentVariables.foreach { case (key, value) =>
+      runner.putEnvironmentVariables(key, value)
+    }
     val direct = DirectWorker.newBuilder()
-      .setRunner(ProcessCallable.newBuilder().addCommand(name))
+      .setRunner(runner)
       .setProperties(UDFWorkerProperties.newBuilder())
 
     UDFWorkerSpecification.newBuilder()
@@ -88,7 +95,10 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
   }
 
   private def extract(expression: Expression): LogicalPlan = {
-    extract(Project(Seq(Alias(expression, "result")()), relation))
+    val plan = Project(Seq(Alias(expression, "result")()), relation)
+    val extracted = extract(plan)
+    assert(extracted.output == plan.output)
+    extracted
   }
 
   private def optimize(plan: LogicalPlan): LogicalPlan = {
@@ -101,6 +111,27 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
     plan.collect { case eval: ExecuteExternalUDF => eval }
   }
 
+  private def singleEvalNode(plan: LogicalPlan): ExecuteExternalUDF = {
+    evalNodes(plan) match {
+      case Seq(node) => node
+      case nodes => fail(s"Expected one ExecuteExternalUDF node, found ${nodes.size}:\n$plan")
+    }
+  }
+
+  private def singleOutput(plan: LogicalPlan): Attribute = {
+    plan.output match {
+      case Seq(attribute) => attribute
+      case output => fail(s"Expected one output attribute, found ${output.size}: $output")
+    }
+  }
+
+  private def singleProjectExpression(plan: LogicalPlan): Expression = {
+    plan match {
+      case Project(Seq(alias: Alias), _) => alias.child
+      case other => fail(s"Expected a Project with one Alias, found:\n$other")
+    }
+  }
+
   private def callCount(expression: Expression): Int = {
     expression.collect { case _: ExternalUserDefinedFunction => 1 }.size
   }
@@ -110,18 +141,38 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
     val expression = udf("outer", spec,
       Seq(udf("middle", spec, Seq(udf("inner", spec, Seq(input))))))
 
-    val nodes = evalNodes(extract(expression))
-    assert(nodes.size == 3)
-    assert(nodes.forall(node => callCount(node.udf) == 1))
+    val extracted = extract(expression)
+    val nodes = evalNodes(extracted)
+    nodes match {
+      case Seq(outer, middle, inner) =>
+        assert(outer.udf.children == Seq(middle.resultAttr))
+        assert(middle.udf.children == Seq(inner.resultAttr))
+        assert(inner.udf.children == Seq(input))
+        assert(inner.child == relation)
+        assert(singleProjectExpression(extracted).semanticEquals(outer.resultAttr))
+        assert(Seq(outer, middle, inner).forall(node => callCount(node.udf) == 1))
+      case _ =>
+        fail(
+          s"Expected outer, middle, and inner evaluation nodes, found:\n${nodes.mkString("\n")}")
+    }
   }
 
   test("independent UDF expressions use separate nodes") {
     val spec = workerSpec("independent")
     val expression = Add(udf("left", spec, Seq(input)), udf("right", spec, Seq(input)))
 
-    val nodes = evalNodes(extract(expression))
-    assert(nodes.size == 2)
-    assert(nodes.forall(node => callCount(node.udf) == 1))
+    val extracted = extract(expression)
+    val nodes = evalNodes(extracted)
+    nodes match {
+      case Seq(upper, lower) =>
+        assert(upper.child == lower)
+        assert(lower.child == relation)
+        assert(nodes.forall(_.udf.children == Seq(input)))
+        assert(nodes.forall(node => callCount(node.udf) == 1))
+        val projectExpression = singleProjectExpression(extracted)
+        assert(nodes.forall(node => projectExpression.references.contains(node.resultAttr)))
+      case _ => fail(s"Expected two independent evaluation nodes, found:\n${nodes.mkString("\n")}")
+    }
   }
 
   test("equivalent deterministic UDF expressions use separate nodes") {
@@ -150,9 +201,19 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
     val right = udf("right", spec, Seq(input))
     val expression = udf("outer", spec, Seq(Add(left, right)))
 
-    val nodes = evalNodes(extract(expression))
-    assert(nodes.size == 3)
-    assert(nodes.forall(node => callCount(node.udf) == 1))
+    val extracted = extract(expression)
+    val nodes = evalNodes(extracted)
+    nodes match {
+      case Seq(outer, upperBranch, lowerBranch) =>
+        assert(outer.child == upperBranch)
+        assert(upperBranch.child == lowerBranch)
+        assert(lowerBranch.child == relation)
+        assert(outer.udf.references ==
+          AttributeSet(Seq(upperBranch.resultAttr, lowerBranch.resultAttr)))
+        assert(singleProjectExpression(extracted).semanticEquals(outer.resultAttr))
+        assert(nodes.forall(node => callCount(node.udf) == 1))
+      case _ => fail(s"Expected three branched evaluation nodes, found:\n${nodes.mkString("\n")}")
+    }
   }
 
   test("UDFs with different worker specifications use separate nodes") {
@@ -164,6 +225,33 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
     assert(nodes.size == 2)
     assert(nodes.map(_.workerSpec).toSet == Set(outerSpec, innerSpec))
     assert(nodes.forall(node => callCount(node.udf) == 1))
+  }
+
+  test("external UDF rendering hides worker execution details") {
+    val sensitiveValue = "sensitive-worker-value"
+    val spec = workerSpec("safe-rendering", Map("UDF_SECRET" -> sensitiveValue))
+    val function = udf("safeRendering", spec, Seq(input))
+    val resultAttr = AttributeReference("externalUDF", IntegerType, nullable = false)()
+    val logicalPlan = ExecuteExternalUDF(function, resultAttr, relation)
+    // Structured logging renders MDC values with toString, including join conditions.
+    val loggedCondition = EqualTo(function, Literal(1)).toString
+    val physicalPlan = spark.sessionState.planner.plan(logicalPlan).toSeq match {
+      case Seq(node: ExecuteExternalUDFExec) => node
+      case other =>
+        fail(s"Expected one ExecuteExternalUDFExec node, found:\n${other.mkString("\n")}")
+    }
+
+    assert(function.sql == "safeRendering(input)")
+    Seq(
+      function.toString,
+      loggedCondition,
+      logicalPlan.treeString,
+      physicalPlan.treeString).foreach { display =>
+      // Plan rendering includes expression IDs on attributes, unlike Expression.sql.
+      assert(display.contains("safeRendering(input"))
+      assert(!display.contains(sensitiveValue))
+      assert(!display.contains("environment_variables"))
+    }
   }
 
   test("external UDF input types are validated during analysis") {
@@ -180,21 +268,72 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
     assert(exception.getCondition == "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
   }
 
+  test("external UDF input types reject fewer declarations than arguments") {
+    val spec = workerSpec("too-few-input-types")
+    val plan = Project(Seq(Alias(
+      udf(
+        "tooFewInputTypes",
+        spec,
+        Seq(input, input),
+        inputTypes = Some(Seq(IntegerType))),
+      "result")()), relation)
+
+    val exception = intercept[AnalysisException] {
+      spark.sessionState.analyzer.executeAndCheck(plan, new QueryPlanningTracker)
+    }
+    checkError(
+      exception = exception,
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`tooFewInputTypes`",
+        "expectedNum" -> "1",
+        "actualNum" -> "2",
+        "docroot" -> "https://spark.apache.org/docs/latest"))
+  }
+
+  test("external UDF input types reject more declarations than arguments") {
+    val spec = workerSpec("too-many-input-types")
+    val plan = Project(Seq(Alias(
+      udf(
+        "tooManyInputTypes",
+        spec,
+        Seq(input),
+        inputTypes = Some(Seq(IntegerType, IntegerType))),
+      "result")()), relation)
+
+    val exception = intercept[AnalysisException] {
+      spark.sessionState.analyzer.executeAndCheck(plan, new QueryPlanningTracker)
+    }
+    checkError(
+      exception = exception,
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`tooManyInputTypes`",
+        "expectedNum" -> "2",
+        "actualNum" -> "1",
+        "docroot" -> "https://spark.apache.org/docs/latest"))
+  }
+
   test("an external UDF in a higher-order function lambda is rejected") {
-    val spec = workerSpec("lambda")
+    val sensitiveValue = "sensitive-lambda-value"
+    val spec = workerSpec("lambda", Map("UDF_SECRET" -> sensitiveValue))
     val lambdaVariable = NamedLambdaVariable("x", IntegerType, nullable = false)
+    val function = udf("lambda", spec, Seq(lambdaVariable))
     val transform = ArrayTransform(
       CreateArray(Seq(input)),
       LambdaFunction(
-        udf("lambda", spec, Seq(lambdaVariable)),
+        function,
         Seq(lambdaVariable)))
     val plan = Project(Seq(Alias(transform, "result")()), relation)
 
     val exception = intercept[AnalysisException] {
       spark.sessionState.analyzer.executeAndCheck(plan, new QueryPlanningTracker)
     }
-    assert(exception.getCondition ==
-      "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_EXTERNAL_UDF")
+    checkError(
+      exception = exception,
+      condition = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_EXTERNAL_UDF",
+      parameters = Map("funcName" -> ("\"" + function.sql + "\"")))
+    assert(!exception.getMessage.contains(sensitiveValue))
   }
 
   test("an external UDF over an aggregate expression is evaluated after aggregate") {
@@ -205,9 +344,10 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
       aggregateExpressions = Seq(Alias(udf("aggregate", spec, Seq(sum)), "result")()),
       child = relation)
 
-    val nodes = evalNodes(extract(plan))
-    assert(nodes.size == 1)
-    assert(nodes.head.child.isInstanceOf[Aggregate])
+    val evaluation = singleEvalNode(extract(plan))
+    assert(evaluation.child.isInstanceOf[Aggregate])
+    assert(evaluation.udf.references.subsetOf(evaluation.child.outputSet))
+    assert(!evaluation.udf.exists(_.isInstanceOf[Sum]))
   }
 
   test("a zero-argument non-deterministic UDF is evaluated after aggregate") {
@@ -219,9 +359,8 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
       child = relation)
 
     val extracted = extract(plan)
-    val nodes = evalNodes(extracted)
-    assert(nodes.size == 1)
-    assert(nodes.head.child.isInstanceOf[Aggregate])
+    val evaluation = singleEvalNode(extracted)
+    assert(evaluation.child.isInstanceOf[Aggregate])
     assert(extracted.output == plan.output)
   }
 
@@ -233,8 +372,22 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
       child = relation)
 
     val extracted = extract(plan)
-    val aggregate = extracted.collectFirst { case node: Aggregate => node }.get
-    assert(aggregate.child.collect { case node: ExecuteExternalUDF => node }.size == 1)
+    val aggregate = extracted.collectFirst { case node: Aggregate => node }.getOrElse {
+      fail(s"Expected an Aggregate node, found:\n$extracted")
+    }
+    val projectedGrouping = aggregate.child match {
+      case Project(projectList, evaluation: ExecuteExternalUDF) =>
+        projectList.collectFirst {
+          case alias: Alias if alias.child.semanticEquals(evaluation.resultAttr) =>
+            alias.toAttribute
+        }.getOrElse {
+          fail(s"Expected the grouping UDF result in the Project, found:\n$aggregate")
+        }
+      case other => fail(s"Expected Project and ExecuteExternalUDF below Aggregate, found:\n$other")
+    }
+    assert(aggregate.groupingExpressions.exists(_.semanticEquals(projectedGrouping)))
+    assert(!aggregate.aggregateExpressions.exists(
+      _.exists(_.isInstanceOf[ExternalUserDefinedFunction])))
   }
 
   test("an external UDF over a window expression is evaluated after window") {
@@ -248,7 +401,7 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
       child = relation)
 
     val extracted = extract(plan)
-    val evaluation = evalNodes(extracted).head
+    val evaluation = singleEvalNode(extracted)
     assert(evaluation.child.isInstanceOf[Window])
     assert(!evaluation.udf.exists(_.isInstanceOf[WindowExpression]))
     assert(evaluation.udf.references.subsetOf(evaluation.child.outputSet))
@@ -267,8 +420,13 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
       child = relation)
 
     val extracted = extract(plan)
-    val window = extracted.collectFirst { case node: Window => node }.get
-    val evaluation = window.child.asInstanceOf[ExecuteExternalUDF]
+    val window = extracted.collectFirst { case node: Window => node }.getOrElse {
+      fail(s"Expected a Window node, found:\n$extracted")
+    }
+    val evaluation = window.child match {
+      case node: ExecuteExternalUDF => node
+      case other => fail(s"Expected ExecuteExternalUDF below Window, found:\n$other")
+    }
     assert(evaluation.child == relation)
   }
 
@@ -280,10 +438,19 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
     val plan = Join(relation, right, Inner, Some(condition), JoinHint.NONE)
 
     val extracted = extract(plan)
-    val filter = extracted.collectFirst { case node: Filter => node }.get
-    val evaluation = filter.child.asInstanceOf[ExecuteExternalUDF]
-    val join = evaluation.child.asInstanceOf[Join]
+    val filter = extracted.collectFirst { case node: Filter => node }.getOrElse {
+      fail(s"Expected a Filter node, found:\n$extracted")
+    }
+    val evaluation = filter.child match {
+      case node: ExecuteExternalUDF => node
+      case other => fail(s"Expected ExecuteExternalUDF below Filter, found:\n$other")
+    }
+    val join = evaluation.child match {
+      case node: Join => node
+      case other => fail(s"Expected Join below ExecuteExternalUDF, found:\n$other")
+    }
     assert(join.condition.isEmpty)
+    assert(filter.condition.semanticEquals(evaluation.resultAttr))
   }
 
   test("an external UDF join condition rejects unsupported join types") {
@@ -317,7 +484,7 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = exception,
       condition = "UNSUPPORTED_FEATURE.EXTERNAL_UDF_WITH_MULTIPLE_CHILDREN",
-      parameters = Map.empty)
+      parameters = Map("funcName" -> "\"multiple-children(input, right)\""))
   }
 
   test("external UDF expressions are rejected when unified execution is disabled") {
@@ -332,51 +499,107 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = exception,
       condition = "UNSUPPORTED_FEATURE.EXTERNAL_UDF",
-      parameters = Map("config" -> SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key))
+      parameters = Map(
+        "config" -> s"\"${SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key}\""))
   }
 
   test("optimizer pushes a local limit through an external UDF node") {
     val spec = workerSpec("limit")
     val range = Range(0, 10, 1, 1)
-    val function = udf("limit", spec, Seq(range.output.head))
+    val function = udf("limit", spec, Seq(singleOutput(range)))
     val resultAttr = AttributeReference("externalUDF", IntegerType, nullable = false)()
     val plan = LocalLimit(Literal(1), ExecuteExternalUDF(function, resultAttr, range))
 
     val optimized = optimize(plan)
-    val evaluation = optimized.collectFirst { case node: ExecuteExternalUDF => node }.get
+    val evaluation = singleEvalNode(optimized)
     assert(evaluation.child.isInstanceOf[LocalLimit])
   }
 
   test("strategy plans an external UDF execution node") {
     val spec = workerSpec("physical-planning")
     val range = Range(0, 10, 1, 1)
-    val function = udf("physical-planning", spec, Seq(range.output.head))
+    val function = udf("physical-planning", spec, Seq(singleOutput(range)))
     val resultAttr = AttributeReference("externalUDF", IntegerType, nullable = false)()
     val logicalPlan = ExecuteExternalUDF(function, resultAttr, range)
 
-    val physicalPlan = spark.sessionState.planner.plan(logicalPlan).next()
-    val execution = physicalPlan.asInstanceOf[ExecuteExternalUDFExec]
+    val execution = spark.sessionState.planner.plan(logicalPlan).toSeq match {
+      case Seq(node: ExecuteExternalUDFExec) => node
+      case other =>
+        fail(s"Expected one ExecuteExternalUDFExec node, found:\n${other.mkString("\n")}")
+    }
     assert(execution.udf == function)
     assert(execution.resultAttr == resultAttr)
     assert(execution.workerSpec == spec)
   }
 
+  test("scalar external UDF execution reports unimplemented before worker startup") {
+    val spec = workerSpec("unimplemented-scalar")
+    val range = Range(0, 10, 1, 1)
+    val function = udf("unimplemented-scalar", spec, Seq(singleOutput(range)))
+    val resultAttr = AttributeReference("externalUDF", IntegerType, nullable = false)()
+    val logicalPlan = ExecuteExternalUDF(function, resultAttr, range)
+    val execution = spark.sessionState.planner.plan(logicalPlan).toSeq match {
+      case Seq(node: ExecuteExternalUDFExec) => node
+      case other =>
+        fail(s"Expected one ExecuteExternalUDFExec node, found:\n${other.mkString("\n")}")
+    }
+
+    val exception = intercept[SparkUnsupportedOperationException] {
+      execution.execute()
+    }
+    checkError(
+      exception = exception,
+      condition = "_LEGACY_ERROR_TEMP_2041",
+      parameters = Map("methodName" -> "ExecuteExternalUDFExec.doExecute"))
+  }
+
+  test("map partitions external UDF execution reports unimplemented before worker startup") {
+    val spec = workerSpec("unimplemented-map-partitions")
+    val range = Range(0, 10, 1, 1)
+    val outputType = StructType(Seq(StructField("result", IntegerType)))
+    val function = udf(
+      "unimplemented-map-partitions",
+      spec,
+      Seq.empty,
+      dataType = outputType)
+    val logicalPlan = MapPartitionsExternalUDF(
+      function,
+      isBarrier = false,
+      profile = None,
+      child = range)
+    val execution = spark.sessionState.planner.plan(logicalPlan).toSeq match {
+      case Seq(node: MapPartitionsExternalUDFExec) => node
+      case other =>
+        fail(s"Expected one MapPartitionsExternalUDFExec node, found:\n${other.mkString("\n")}")
+    }
+
+    val exception = intercept[SparkUnsupportedOperationException] {
+      execution.execute()
+    }
+    checkError(
+      exception = exception,
+      condition = "_LEGACY_ERROR_TEMP_2041",
+      parameters = Map("methodName" -> "MapPartitionsExternalUDFExec.doExecute"))
+  }
+
   test("optimizer pushes child-only predicates through an external UDF node") {
     val spec = workerSpec("predicate")
     val range = Range(0, 10, 1, 1)
-    val function = udf("predicate", spec, Seq(range.output.head))
+    val inputAttribute = singleOutput(range)
+    val function = udf("predicate", spec, Seq(inputAttribute))
     val resultAttr = AttributeReference("externalUDF", IntegerType, nullable = false)()
-    val childPredicate = GreaterThan(range.output.head, Literal(0L))
+    val childPredicate = GreaterThan(inputAttribute, Literal(0L))
     val resultPredicate = EqualTo(resultAttr, Literal(1))
     val plan = Filter(
       And(childPredicate, resultPredicate),
       ExecuteExternalUDF(function, resultAttr, range))
 
     val optimized = optimize(plan)
-    val evaluation = optimized.collectFirst { case node: ExecuteExternalUDF => node }.get
-    val pushedPredicate = evaluation.child.collectFirst {
+    val evaluation = singleEvalNode(optimized)
+    val pushedPredicate = evaluation.child match {
       case Filter(condition, _) => condition
-    }.get
+      case other => fail(s"Expected Filter below ExecuteExternalUDF, found:\n$other")
+    }
     assert(pushedPredicate.semanticEquals(childPredicate))
   }
 
@@ -387,7 +610,7 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
     val condition = udf(
       "cartesian",
       spec,
-      Seq(left.output.head, right.output.head),
+      Seq(singleOutput(left), singleOutput(right)),
       dataType = BooleanType)
     val plan = Join(left, right, Inner, Some(condition), JoinHint.NONE)
 
