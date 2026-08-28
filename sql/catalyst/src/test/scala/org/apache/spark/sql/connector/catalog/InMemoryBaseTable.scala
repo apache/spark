@@ -208,6 +208,7 @@ abstract class InMemoryBaseTable(
     case _: SortedBucketTransform =>
     case _: ClusterByTransform =>
     case NamedTransform("truncate", Seq(_: NamedReference, _: V2Literal[_])) =>
+    case NamedTransform("signed_zeros", Seq(_: NamedReference)) =>
     case t if !allowUnsupportedTransforms =>
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")
   }
@@ -320,6 +321,15 @@ abstract class InMemoryBaseTable(
         extractor(ref.fieldNames, cleanedSchema, row) match {
           case (str: UTF8String, StringType) =>
             str.substring(0, length.value.asInstanceOf[Int])
+          case (v, t) =>
+            throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
+        }
+      // the result should be consistent with SignedZerosFunction defined at
+      // transformFunctions.scala
+      case NamedTransform("signed_zeros", Seq(ref: NamedReference)) =>
+        extractor(ref.fieldNames, cleanedSchema, row) match {
+          case (value: Long, LongType) =>
+            if (value == 1L) -0.0d else if (value == 2L) 0.0d else value.toDouble
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
