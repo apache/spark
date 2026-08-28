@@ -749,34 +749,30 @@ private[spark] class DAGScheduler(
       shuffleDep: ShuffleDependency[_, _, _]): Option[ShuffleOutputTrackerMaster] = {
     if (shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]]) {
       // A pipelined shuffle uses the StreamingShuffleOutputTracker only when its manager
-      // discovers writers over RPC. An in-process transport declares it needs no tracker
-      // (SparkEnv then creates none); such a shuffle registers with no output tracker at all,
-      // and its map-stage availability is tracked locally on the ShuffleMapStage. When a
-      // tracker IS expected (the RPC streaming manager) but absent, that is a real
-      // misconfiguration, so keep failing loudly.
-      sc.env.streamingShuffleOutputTracker match {
-        case some @ Some(_) => some.map(_.asInstanceOf[StreamingShuffleOutputTrackerMaster])
-        case None =>
-          // Defense-in-depth, and currently UNREACHABLE by construction. This throw guards the
-          // state "a manager declares it needs a tracker (usesStreamingShuffleOutputTracker) yet
-          // none exists." But SparkEnv.initializeStreamingShuffleOutputTracker reads the SAME flag
-          // to decide whether to CREATE the tracker: flag true => a tracker was created => this
-          // `None` arm is not taken; flag false => usesTracker is false below => no throw. So with
-          // all three current managers (RPC streaming true, channel false, and any test double) the
-          // flag is constant and the two decisions are locked consistent -- usesTracker is always
-          // false when this arm is reached. The guard is kept deliberately: it costs nothing on the
-          // hot path and would fail loud rather than register a pipelined shuffle in no tracker
-          // (stranding its consumer) IF the two sites ever diverged -- e.g. a future manager whose
-          // flag is not constant, or a wiring change that builds the tracker conditionally. If the
-          // two flag reads are ever unified (SparkEnv the sole reader, this arm trusting only
-          // tracker presence), delete this branch; see the feasibility doc's decoupling section.
-          val usesTracker = SparkEnv.get.pipelinedShuffleManager.usesStreamingShuffleOutputTracker
-          if (usesTracker) {
+      // discovers writers over RPC. An in-process transport declares it needs no tracker; such a
+      // shuffle registers with no output tracker at all, and its map-stage availability is tracked
+      // locally on the ShuffleMapStage.
+      //
+      // Key off the manager's flag, NOT merely off tracker PRESENCE: a tracker can exist even when
+      // the pipelined (incremental) manager does not want one. SparkEnv.initialize-
+      // StreamingShuffleOutputTracker creates the tracker when the incremental manager needs it OR
+      // when the BLOCKING manager is a MultiShuffleManager (blockingIsMulti). In the latter case
+      // (MultiShuffleManager blocking + in-process channel incremental) the tracker is present but
+      // the channel manager reports usesStreamingShuffleOutputTracker = false, so a channel shuffle
+      // must still register with NO tracker -- registering it there would be inert (the channel
+      // reader/writer never consult it) but would contradict this invariant and the one
+      // PipelinedShuffleRoutingSuite pins. When the manager DOES want a tracker but none exists,
+      // that is a real misconfiguration (a consumer would find no writer locations), so fail loud.
+      if (!SparkEnv.get.pipelinedShuffleManager.usesStreamingShuffleOutputTracker) {
+        None
+      } else {
+        sc.env.streamingShuffleOutputTracker match {
+          case some @ Some(_) => some.map(_.asInstanceOf[StreamingShuffleOutputTrackerMaster])
+          case None =>
             throw new IllegalStateException(
               s"A pipelined shuffle (id ${shuffleDep.shuffleId}) requires a " +
                 "StreamingShuffleOutputTracker, but none is configured")
-          }
-          None
+        }
       }
     } else {
       Some(mapOutputTracker)
@@ -1166,6 +1162,16 @@ private[spark] class DAGScheduler(
 
   /** Classify `finalRDD`'s shuffle graph; see [[JobShuffleShape]] for the shape semantics. */
   private def classifyJobShuffleShape(finalRDD: RDD[_]): JobShuffleShape = {
+    // Early-out for every deployment without the opt-in transport: with no pipelined shuffle
+    // manager configured, no PipelinedShuffleDependency can exist, so the shape is trivially
+    // all-regular. This keeps the walk below (a HashMap of boundaries, a visited set of
+    // (RDD, Boolean) tuples, one tuple allocated per node per context) off the critical path of
+    // EVERY job submission on a default cluster -- an opt-in feature must not tax the default path.
+    if (SparkEnv.get == null || SparkEnv.get.pipelinedShuffleManager == null) {
+      return JobShuffleShape(
+        hasPipelined = false, hasUnmaterializedRegularBoundary = false,
+        hasPipelinedBelowRegular = false)
+    }
     var hasPipelined = false
     var pipelinedBelow = false
     // Frontier regular shuffle boundaries: those reachable from the final RDD WITHOUT crossing
@@ -1206,21 +1212,30 @@ private[spark] class DAGScheduler(
       }
     }
 
+    // The materialization check only matters for a pipelined job: `isUnsupportedMix` consumes
+    // `hasUnmaterializedRegularBoundary` only when `hasPipelined` is true (a pipelined shuffle
+    // below an unmaterialized regular boundary is the rejected shape). A job with no pipelined
+    // dependency -- every job on a feature-off deployment -- would otherwise pay K
+    // getNumAvailableOutputs lookups (a read-locked shuffleStatuses count) for a value never read,
+    // on the single-threaded event loop. So skip the loop entirely unless the walk saw a pipelined
+    // dependency; a non-pipelined job reports hasUnmaterialized = false (unused).
     var hasUnmaterialized = false
-    regularBoundaries.values.foreach { sd =>
-      // Materialized means every MAP partition has a registered output: the tracker counts map
-      // outputs, so compare against the producer RDD's partition count (matching how
-      // ShuffleMapStage.isAvailable derives completeness), not the reducer-side partitioner.
-      // This is a point-in-time check at job submission. If a materialized prefix's output were
-      // LOST after this classification but before the pipelined suffix finished (executor loss),
-      // the prefix would need to re-run while the gang holds all slots -- the very deadlock this
-      // shape check forbids. That is safe here for two reasons: (1) the only supported deployment
-      // is single-executor local mode, where executor loss does not occur in normal operation;
-      // and (2) if a FetchFailed did strip the prefix, handleTaskCompletion routes it to a
-      // WHOLE-GROUP abort (the failing stage is a pipelined group member), not a lone-stage
-      // resubmit into the held slots -- the job reruns from scratch rather than deadlocking.
-      if (mapOutputTracker.getNumAvailableOutputs(sd.shuffleId) != sd.rdd.partitions.length) {
-        hasUnmaterialized = true
+    if (hasPipelined) {
+      regularBoundaries.values.foreach { sd =>
+        // Materialized means every MAP partition has a registered output: the tracker counts map
+        // outputs, so compare against the producer RDD's partition count (matching how
+        // ShuffleMapStage.isAvailable derives completeness), not the reducer-side partitioner.
+        // This is a point-in-time check at job submission. If a materialized prefix's output were
+        // LOST after this classification but before the pipelined suffix finished (executor loss),
+        // the prefix would need to re-run while the gang holds all slots -- the very deadlock this
+        // shape check forbids. That is safe here for two reasons: (1) the only supported deployment
+        // is single-executor local mode, where executor loss does not occur in normal operation;
+        // and (2) if a FetchFailed did strip the prefix, handleTaskCompletion routes it to a
+        // WHOLE-GROUP abort (the failing stage is a pipelined group member), not a lone-stage
+        // resubmit into the held slots -- the job reruns from scratch rather than deadlocking.
+        if (mapOutputTracker.getNumAvailableOutputs(sd.shuffleId) != sd.rdd.partitions.length) {
+          hasUnmaterialized = true
+        }
       }
     }
     JobShuffleShape(hasPipelined, hasUnmaterialized, pipelinedBelow)
@@ -1868,42 +1883,102 @@ private[spark] class DAGScheduler(
    */
   private def liveReduceSet(
       rdd: RDD[_], liveResultPartitions: Set[Int], targetShuffleId: Int): Option[Set[Int]] = {
-    // Reached the target shuffle: the reader RDD's live partition indices ARE the reduce indices
-    // (width-1 reader spec), verified by the partition-count identity guard.
-    val reachesTarget = rdd.dependencies.collectFirst {
-      case sd: ShuffleDependency[_, _, _] if sd.shuffleId == targetShuffleId => sd
-    }
-    reachesTarget match {
-      case Some(sd) =>
-        if (rdd.partitions.length == sd.partitioner.numPartitions) Some(liveResultPartitions)
-        else None // a non-identity reader spec (e.g. an offset coalesce) -- cannot map safely
-      case None =>
-        // Follow every dependency whose subtree reaches the target shuffle, mapping the live set
-        // through that (narrow) dependency's getParents. A non-narrow edge that is not the target
-        // is unmappable.
-        val branches = rdd.dependencies.filter(d => dependencyReachesShuffle(d, targetShuffleId))
-        if (branches.isEmpty) {
-          None
-        } else {
-          val mapped = branches.map {
-            case nd: NarrowDependency[_] =>
-              val parentLive = liveResultPartitions.flatMap(nd.getParents)
-              liveReduceSet(nd.rdd, parentLive, targetShuffleId)
-            case _ => None // a non-target ShuffleDependency on the path -- unmappable
+    // Precompute, ONCE, which RDDs reach the target shuffle (memoized, iterative -- see
+    // rddReachesShuffle). The walk below queries this map instead of re-walking the subtree per
+    // branch per level, which was O(n^2) on a deep narrow chain and exponential on a narrow
+    // diamond (a shared ancestor reached by several branches, e.g. a self-join's zip).
+    val reaches = rddReachesShuffle(rdd, targetShuffleId)
+
+    // Explicit worklist (not recursion) so a chain thousands of operators deep does not overflow
+    // the dag-scheduler event-loop's stack. The work unit is (rdd -> the live subset of ITS
+    // partition indices on the path from the result RDD). A node reachable via several branches
+    // with different live subsets is processed with the UNION of them: getParents distributes over
+    // union (union(A,B).flatMap(f) == union(A.flatMap(f), B.flatMap(f))), so merging the live sets
+    // at a node and mapping once equals the recursion's per-branch map + final union. Re-enqueue a
+    // node only when its accumulated set actually GREW (set inequality, not size -- two distinct
+    // sets can share a size); sets grow monotonically in a finite index domain, so it converges.
+    val liveAt = new HashMap[RDD[_], Set[Int]]
+    val worklist = new ListBuffer[RDD[_]]
+    val resultReduce = scala.collection.mutable.Set.empty[Int]
+    var unmappable = false
+    liveAt(rdd) = liveResultPartitions
+    worklist += rdd
+    while (worklist.nonEmpty && !unmappable) {
+      val cur = worklist.remove(0)
+      val live = liveAt(cur)
+      // A direct target dependency wins (matches the old collectFirst): the reader RDD's live
+      // partition indices ARE the reduce indices, guarded by the partition-count identity check.
+      cur.dependencies.collectFirst {
+        case sd: ShuffleDependency[_, _, _] if sd.shuffleId == targetShuffleId => sd
+      } match {
+        case Some(sd) =>
+          if (cur.partitions.length == sd.partitioner.numPartitions) resultReduce ++= live
+          else unmappable = true // a non-identity reader spec (e.g. an offset coalesce)
+        case None =>
+          // Follow every dependency whose subtree reaches the target, mapping the live set through
+          // that (narrow) dependency's getParents. A reaching non-narrow edge (should not occur --
+          // reachability does not cross a non-target shuffle) is unmappable. A node that reaches
+          // nothing is a dead end -> unmappable (matches the old branches.isEmpty => None).
+          val reachingDeps = cur.dependencies.filter {
+            case nd: NarrowDependency[_] => reaches.getOrElse(nd.rdd, false)
+            case _ => false
           }
-          if (mapped.contains(None)) None else Some(mapped.flatMap(_.get).toSet)
-        }
+          if (reachingDeps.isEmpty) {
+            unmappable = true
+          } else {
+            reachingDeps.foreach { case nd: NarrowDependency[_] =>
+              val parentLive = live.flatMap(nd.getParents)
+              val merged = liveAt.get(nd.rdd).map(_ ++ parentLive).getOrElse(parentLive)
+              if (!liveAt.get(nd.rdd).contains(merged)) {
+                liveAt(nd.rdd) = merged
+                worklist += nd.rdd
+              }
+            }
+          }
+      }
     }
+    if (unmappable) None else Some(resultReduce.toSet)
   }
 
-  /** Whether the RDD graph reachable through `dep` contains `targetShuffleId`. */
-  private def dependencyReachesShuffle(dep: Dependency[_], targetShuffleId: Int): Boolean =
-    dep match {
-      case sd: ShuffleDependency[_, _, _] => sd.shuffleId == targetShuffleId
-      case nd: NarrowDependency[_] =>
-        nd.rdd.dependencies.exists(dependencyReachesShuffle(_, targetShuffleId))
-      case _ => false
+  /**
+   * Whether the RDD graph rooted at `startRdd` reaches `targetShuffleId`: some dependency IS the
+   * target shuffle, or some NarrowDependency's rdd reaches it. A non-target ShuffleDependency does
+   * NOT propagate reachability (a regular boundary is not crossed). Memoized and computed
+   * iteratively (a two-phase post-order over an explicit stack) so a shared ancestor is visited
+   * once and a deep chain does not overflow the stack. Returns the full memo so a caller walking
+   * the same graph can query any node.
+   */
+  private def rddReachesShuffle(
+      startRdd: RDD[_], targetShuffleId: Int): HashMap[RDD[_], Boolean] = {
+    val memo = new HashMap[RDD[_], Boolean]
+    // Each stack entry is (rdd, childrenDone): the first visit pushes the node back as done and
+    // pushes its unvisited narrow-dependency parents; the done visit computes from the (now
+    // memoized) parents.
+    val stack = new ListBuffer[(RDD[_], Boolean)]
+    stack.prepend((startRdd, false))
+    while (stack.nonEmpty) {
+      val entry = stack.remove(0)
+      val cur = entry._1
+      val childrenDone = entry._2
+      if (childrenDone) {
+        memo(cur) = cur.dependencies.exists {
+          case sd: ShuffleDependency[_, _, _] => sd.shuffleId == targetShuffleId
+          case nd: NarrowDependency[_] => memo.getOrElse(nd.rdd, false)
+          case _ => false
+        }
+      } else if (!memo.contains(cur)) {
+        // Mark visited pre-emptively (guards a diamond from being scheduled twice) then compute on
+        // the done pass; the value is overwritten there.
+        memo(cur) = false
+        stack.prepend((cur, true))
+        cur.dependencies.foreach {
+          case nd: NarrowDependency[_] if !memo.contains(nd.rdd) => stack.prepend((nd.rdd, false))
+          case _ =>
+        }
+      }
     }
+    memo
+  }
 
   /**
    * The total concurrent-task demand of a pipelined job's group, computed from the RDD graph
@@ -2829,8 +2904,8 @@ private[spark] class DAGScheduler(
               //      case: the writer would feed reduce partitions with no reader and hang.
               //
               // Only (b) with a partial read fails fast; every other None leaves it fully live.
-              val reaches = rs.rdd.dependencies
-                .exists(dependencyReachesShuffle(_, sms.shuffleDep.shuffleId))
+              val reaches =
+                rddReachesShuffle(rs.rdd, sms.shuffleDep.shuffleId).getOrElse(rs.rdd, false)
               val partialRead = rs.partitions.length < rs.rdd.partitions.length
               if (reaches && partialRead) {
                 abortStage(sms, "Pipelined shuffle cannot determine the live reduce-partition " +
