@@ -39,19 +39,15 @@ all-numeric and all-string variants.
 Other ``len`` arguments (numbers, lists, ...) stay interpreted Python.
 ``len(None)`` raises (via ``raise_error`` on NULL), matching CPython.
 
-Ordering comparisons (``<``, ``<=``, ``>``, ``>=``) raise in Python when an operand
-is ``None`` where Spark would return NULL, so their lowering carries a check that
-raises. (Arithmetic does not yet: ``x + 1`` on NULL still returns NULL rather than
-reproducing Python's ``TypeError`` -- see the ``BinOp`` notes below and
-SPARK-55210.) Those checks are gated on what can be proven about NULL-ness rather
-than emitted unconditionally: a test the UDF already makes narrows its branches
-(``if x is not None:``, the else arm of ``if x is None:``, and the operands after
-one in an ``and`` / ``or`` chain), and a literal is never NULL. A UDF that still
-needs a raising check gets a warning at construction time, because such a check
-makes the expression ``throwable`` and the optimizer will not push a filter
-containing one through a join or combine it with an adjacent filter. Binding a
-non-nullable column removes the rest: on the JVM, ``NullPropagation`` folds a
-check over a non-nullable column away.
+Ordering comparisons (``<``, ``<=``, ``>``, ``>=``) raise in Python on a ``None``
+operand where Spark returns NULL, so their lowering carries a check that raises.
+(Arithmetic does not yet -- ``x + 1`` on NULL still yields NULL; see SPARK-55210.)
+Those checks are emitted only where NULL is actually possible: a test the UDF
+already makes narrows its branches, and a literal is never NULL. A UDF that still
+needs one is warned about at construction, since the check makes the expression
+``throwable`` and the optimizer will not push such a filter through a join.
+Binding a non-nullable column removes the rest -- ``NullPropagation`` folds those
+away on the JVM.
 
 A lambda is lowered only when its source names it directly and alone: bind it
 to a name (``f = lambda x: x + 1``, annotated if you like) and give it a line
@@ -232,12 +228,9 @@ def _is_definitely_boolean(node: ast.AST) -> bool:
 def _none_check_operand(left: ast.AST, comparator: ast.AST) -> Optional[ast.AST]:
     """The non-``None`` side of an ``x is None`` / ``None is x`` pair, else ``None``.
 
-    Python allows either operand order and Spark has one ``isNull``, so both the
-    lowering in ``_convert_chunk`` and the nullability facts in ``_null_facts`` need
-    the same normalisation. They share it here rather than each spelling it out:
-    ``is``/``is not`` against anything other than the literal ``None`` is an
-    object-identity test with no SQL equivalent, and the two callers must agree on
-    exactly which shapes those are.
+    Shared by ``_convert_chunk``'s lowering and ``_null_facts``, which must agree on
+    exactly which shapes count: a comparison against anything but the literal ``None``
+    is an object-identity test with no SQL equivalent.
     """
     is_none_left = isinstance(left, ast.Constant) and left.value is None
     is_none_right = isinstance(comparator, ast.Constant) and comparator.value is None
@@ -249,9 +242,8 @@ def _none_check_operand(left: ast.AST, comparator: ast.AST) -> Optional[ast.AST]
 def _none_check_subject(node: ast.AST) -> Optional[str]:
     """The parameter name in an ``x is None`` / ``x == None`` test, or ``None``.
 
-    Accepts the ``==``/``!=`` spellings as well as ``is``/``is not``, in either
-    operand order. Only a bare name is reported: a name is the only subject the
-    nullability environment can key on.
+    Either operand order, and the ``==``/``!=`` spellings too. Only a bare name is
+    reported -- that is all the nullability environment can key on.
     """
     if not isinstance(node, ast.Compare) or len(node.ops) != 1 or len(node.comparators) != 1:
         return None
@@ -262,19 +254,12 @@ def _none_check_subject(node: ast.AST) -> Optional[str]:
 
 
 def _is_effect_free(node: ast.AST) -> bool:
-    """Whether ``node``'s lowering can be dropped from the plan without losing an error.
+    """Whether ``node``'s lowering can be dropped without losing an error.
 
-    Proving an operand non-NULL is NOT a licence to delete it. Several of
-    ``_is_never_null``'s proofs read "this raises rather than yielding NULL" -- an
-    ordering comparison carries a ``raise_error``, and under the ANSI mode the
-    transpiler requires, ``%`` lowers to ``pmod`` and raises on a zero divisor. Those
-    proofs only hold while the raising expression is still in the plan, so anything
-    that folds a branch away has to ask this question separately.
-
-    Only a literal and a bare parameter reference qualify. Both lower to something
-    that cannot raise, so discarding them loses nothing; everything else keeps its
-    full lowering even where a branch is statically decided. Conservative in the
-    direction that costs plan size rather than correctness.
+    Proving an operand non-NULL is not a licence to delete it: some of
+    ``_is_never_null``'s proofs hold only BECAUSE the expression raises (an ordering
+    comparison's ``raise_error``, an ANSI ``pmod`` on a zero divisor), so folding it
+    away deletes the error too. Only a literal or a bare parameter qualifies.
     """
     return isinstance(node, (ast.Constant, ast.Name))
 
@@ -294,47 +279,30 @@ def _or3(left: Optional[bool], right: Optional[bool]) -> Optional[bool]:
 
 
 def _null_facts(node: ast.AST) -> Tuple[frozenset, frozenset]:
-    """What ``node`` being true -- and being false -- proves about NULL-ness.
+    """The parameters ``node`` proves non-NULL, as ``(when_true, when_false)``.
 
-    Returns ``(when_true, when_false)``: the parameter names that cannot be NULL
-    on each outcome. This is the flow-sensitive half of SPARK-58628 -- it is what
-    lets ``if x is not None: x > 0`` lower without the raising NULL check that
-    the enclosing test has already made, so the result stays free of
-    ``RaiseError`` and can still be pushed through a join.
+    * ``x is not None`` / ``x != None`` prove ``x`` when true; ``is None`` / ``==``
+      when false.
+    * ``not A`` swaps ``A``'s outcomes.
+    * ``A and B`` true means both held, so their true-facts combine; false says only
+      that one failed, so it proves nothing. ``A or B`` is the mirror image.
+    * Anything else proves nothing, which is the safe direction -- a fact we miss
+      leaves a check in place, it never drops one we needed.
 
-    The rules follow Python's own short-circuit evaluation:
+    Consumers need more than "true implies the true-facts", since ``And``/``Or`` and
+    ``CASE WHEN`` treat NULL as not-true rather than false. What holds: a node that is
+    not FALSE proves its true-facts, one that is not TRUE proves its false-facts --
+    because every node a fact comes FROM cannot itself be NULL, so "not false"
+    collapses to "true" for it.
 
-    * ``x is not None`` proves ``x`` non-NULL when true; ``x is None`` when false.
-    * ``not A`` swaps ``A``'s two outcomes.
-    * ``A and B`` true means BOTH held, so their true-facts combine. False only
-      says one of them failed, and we cannot tell which -- so nothing.
-    * ``A or B`` is the mirror image: false means both failed.
-
-    Everything else yields nothing, which is the safe direction: a fact we fail
-    to derive leaves a check in place, it never removes one we needed.
-
-    Consumers need slightly more than "true implies the true-facts", since Spark's
-    logic is three-valued: ``And``/``Or`` short-circuiting and ``CASE WHEN`` both
-    treat NULL as not-true rather than as false. What actually holds is that a node
-    which is not FALSE proves its true-facts, and one which is not TRUE proves its
-    false-facts -- because every node a fact is derived FROM cannot itself be NULL
-    (``isNull``/``isNotNull``, or a ``not``/``and``/``or`` over those), so for that
-    operand "not false" collapses to "true". A composite node may still evaluate to
-    NULL through its OTHER operands without weakening this.
-
-    TODO (SPARK-55218): once flow control lands and a function body can hold more
-    than one statement, an ``if x is None: return ...`` whose body always returns
-    should add this node's false-facts to the environment for the statements that
-    follow it. The shape is rejected before lowering today, so there is nothing
-    to narrow yet.
+    TODO (SPARK-55218): with multi-statement bodies, an ``if x is None: return ...``
+    should add its false-facts to the statements after it.
     """
     empty: frozenset = frozenset()
     match node:
-        # ``==``/``!=`` against ``None`` alongside ``is``/``is not``: PEP 8 prefers the
-        # identity form, but the equality spelling is common and ``_lower_eq`` already
-        # reduces it to exactly an isNull/isNotNull. Leaving it out meant the two
-        # spellings of the same guard behaved differently -- ``if x != None:`` kept a
-        # raising check and got told to write the guard it had already written.
+        # ``==``/``!=`` too, or the two spellings of one guard would behave
+        # differently: `if x != None:` would keep a check and be told to add the
+        # guard it already had.
         case ast.Compare(ops=[ast.Is() | ast.IsNot() | ast.Eq() | ast.NotEq()]):
             subject = _none_check_subject(node)
             if subject is None:
@@ -388,36 +356,28 @@ class CatalystTranspiler(AbstractTranspiler):
     variety = "catalyst"
 
     def __init__(self) -> None:
+        # Category inference depends on the per-variant assumptions set in
+        # ``_transpile_from_ast``; both are reset there per variant.
         self._param_categories: dict[int, str] = {}
         self._category_cache: dict[int, str] = {}
-        # Per-instance, NOT class attributes. As class defaults these would be a
-        # landmine: ``self._pending_null_guards |= {label}`` is only a rebind because
-        # ``frozenset`` has no ``__ior__``, so re-annotating either one as ``set``
-        # (which reads like a harmless cleanup) would turn it into an in-place
-        # mutation of the class dict, and every UDF in the process would inherit
-        # every other UDF's state.
-        #
-        # ``_non_null`` holds the parameter names proven non-NULL at the point being
-        # lowered; ``_pending_null_guards`` the raising checks this variant needed.
-        # Both are reset per variant in ``_transpile_from_ast``.
+        # Instance attributes, not class ones: as class defaults, re-annotating
+        # either as ``set`` -- which reads like a cleanup -- would turn the ``|=``
+        # below into an in-place mutation of the class dict, leaking state between
+        # every UDF in the process. Both are reset per variant in
+        # ``_transpile_from_ast``.
         self._non_null: frozenset = frozenset()
         self._pending_null_guards: frozenset = frozenset()
-        #: Guards that made it into an option we actually kept -- read back by
-        #: ``_transpile_func`` to warn the user once per UDF. Guards recorded while
-        #: lowering an option that then got dropped never reach this.
-        #:
-        #: Reports the LAST lowered variant only; ``_transpile_func`` unions it
-        #: across the variants it keeps, into a local. Nothing accumulates here, so
-        #: no label can carry into a later UDF even if ``_get_transpilers`` were
-        #: ever to hand back a cached instance.
+        #: The checks the LAST lowered variant needed. ``_transpile_func`` unions
+        #: this across the variants it keeps, into a local, and warns once per UDF.
+        #: Assigned rather than accumulated, so nothing carries into a later UDF.
         self.null_guards: frozenset = frozenset()
 
     @contextlib.contextmanager
     def _narrowed(self, proven_non_null: frozenset) -> Iterator[None]:
         """Lower the enclosed nodes with ``proven_non_null`` added to what is known.
 
-        A plain save/restore is enough because lowering is a strict walk down the
-        tree: the scope a fact holds in is exactly the subtree we recurse into.
+        Save/restore suffices: lowering walks straight down, so a fact's scope is
+        exactly the subtree we recurse into.
         """
         previous = self._non_null
         self._non_null = previous | proven_non_null
@@ -429,38 +389,25 @@ class CatalystTranspiler(AbstractTranspiler):
     def _is_never_null(self, params: List[str], node: ast.AST) -> bool:
         """Whether ``node`` provably cannot evaluate to NULL here.
 
-        Answers "do we still need a NULL check?" for the lowerings below. It must
-        stay conservative in one direction only: returning ``False`` for something
-        that happens to be non-NULL costs a redundant check, while returning
-        ``True`` for something nullable would drop a check Python semantics need.
-        So every case is an explicit proof and the catch-all is ``False``.
-
-        This does NOT answer "is this safe to delete?". Several proofs below hold
-        because the expression RAISES rather than yielding NULL, which is only true
-        while it is still in the plan -- anything that folds a branch away must ask
-        ``_is_effect_free`` as well.
-
-        Only ever called on expressions, so there are no statement arms.
+        Answers "do we still need a NULL check?", NOT "is this safe to delete?" --
+        some proofs below hold only because the expression raises, so a caller that
+        folds a branch away must also ask ``_is_effect_free``. Every arm is an
+        explicit proof and the catch-all is ``False``: a missed proof costs a
+        redundant check, a wrong one drops a check Python needs. Expressions only.
         """
         match node:
             case ast.Constant(value=value):
-                # Every literal but ``None`` is a non-NULL value of its own type.
                 return value is not None
             case ast.Name(id=name):
                 return name in params and name in self._non_null
             case ast.Compare(ops=[op]):
-                if isinstance(op, (ast.Is, ast.IsNot)):
-                    # Lowered to isNull/isNotNull, which are never NULL.
-                    return True
-                if isinstance(op, (ast.Eq, ast.NotEq)):
-                    # ``_lower_eq`` covers the NULL cases with boolean literals.
-                    return True
-                # An ordering comparison either raises on NULL or returns a
-                # boolean over two non-NULL operands -- see ``_lower_value_compare``.
-                return isinstance(op, (ast.Lt, ast.LtE, ast.Gt, ast.GtE))
+                # is/is not lower to isNull/isNotNull; ==/!= cover NULL with boolean
+                # literals; ordering raises on NULL rather than returning it.
+                return isinstance(
+                    op, (ast.Is, ast.IsNot, ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE)
+                )
             case ast.UnaryOp(op=ast.Not()):
-                # ``not`` either inverts a non-NULL operand or coalesces against a
-                # literal for Python's "None is falsy"; NULL never escapes either way.
+                # Either inverts a non-NULL operand or coalesces against a literal.
                 return True
             case ast.UnaryOp(operand=operand):
                 return self._is_never_null(params, operand)
@@ -481,11 +428,10 @@ class CatalystTranspiler(AbstractTranspiler):
                 return False
 
     def _static_is_null(self, params: List[str], node: ast.AST) -> Optional[bool]:
-        """Whether ``node`` is NULL, as far as that is knowable without the data.
+        """Whether ``node`` is NULL, as far as is knowable without the data.
 
-        ``True`` for the ``None`` literal, ``False`` when ``_is_never_null`` can
-        prove it, and ``None`` when only the runtime value can say -- in which case
-        the caller has to emit an ``isNull`` check.
+        ``True`` for the ``None`` literal, ``False`` when provably not, and ``None``
+        when only the runtime value can say -- then the caller must emit a check.
         """
         if isinstance(node, ast.Constant) and node.value is None:
             return True
@@ -511,26 +457,16 @@ class CatalystTranspiler(AbstractTranspiler):
     ) -> Column:
         """``otherwise``, guarded so that a NULL operand raises ``message`` instead.
 
-        THE only place in this module that emits a ``raise_error``, and therefore the
-        only place a raising NULL check can come from. Any future lowering that has to
-        reproduce a Python ``TypeError`` on NULL -- the arithmetic, unary and concat
-        guards under SPARK-55210 -- must come through here rather than calling
-        ``raise_error`` itself, or its UDFs get a throwable, unpushable plan with no
-        warning to explain why. Routing them here is what makes that structural
-        instead of a convention.
+        The only place that emits a ``raise_error``, so future lowerings needing one
+        (SPARK-55210's arithmetic/unary/concat guards) must come through here or they
+        will silently skip the narrowing and the warning.
 
-        Operands proven non-NULL contribute no check, and when none can be NULL the
-        guard is not emitted at all, so ``otherwise`` is returned untouched and the
-        lowering stays free of ``RaiseError``. That matters beyond plan size:
-        ``RaiseError`` is ``throwable`` (SPARK-58627), and the optimizer will not push
-        a predicate containing one through a join or combine it with an adjacent
-        filter.
+        Operands proven non-NULL contribute no check, and with none left the guard is
+        dropped entirely -- ``RaiseError`` is ``throwable`` (SPARK-58627), so a plan
+        holding one cannot be pushed through a join or merged with a nearby filter.
 
-        ``label`` names the construct for the warning ``UserDefinedFunction`` raises
-        (e.g. ``"comparison `>`"``), with the operands actually checked appended -- a
-        half-narrowed ``a is not None and a > b`` reports ``b`` rather than implying
-        both are unguarded. Kept short because it is deduplicated per UDF; keying on
-        the full error text would repeat a paragraph per operator.
+        ``label`` names the construct (e.g. ``"comparison `>`"``) plus the parameters
+        checked, so a half-narrowed ``a is not None and a > b`` reports just ``b``.
         """
         checked = [(node, c) for node, c in operands if not self._is_never_null(params, node)]
         if not checked:
@@ -699,15 +635,11 @@ class CatalystTranspiler(AbstractTranspiler):
         back to interpreted Python. A ``None`` literal operand stays allowed
         (the four-branch NULL handling above reproduces Python exactly).
 
-        Branches whose condition is statically decided are not emitted, PROVIDED both
-        operands are effect-free (see ``_is_effect_free``): with both proven non-NULL
-        this is just Spark's ``=``, and comparing against a literal ``None`` folds to
-        the constant Python would produce. Folding drops the operand columns, so an
-        operand that could raise keeps the full ladder instead -- ``_lower_eq`` emits
-        no ``raise_error`` of its own, but the columns handed to it may carry one.
-        The win here is plan size rather than pushdown, and the optimizer will not do
-        it for us: it has no branch-local knowledge that an enclosing ``isnotnull``
-        test makes the inner ``isnull`` false.
+        Statically decided branches are dropped, provided both operands are
+        effect-free (see ``_is_effect_free``): two proven-non-NULL operands are just
+        Spark's ``=``, and a literal ``None`` folds to the constant Python gives. The
+        optimizer will not do this for us -- it has no branch-local knowledge that an
+        enclosing ``isnotnull`` makes the inner ``isnull`` false.
 
         One value-level difference remains (needs runtime values, so it is
         documented, not guarded): Spark treats ``NaN = NaN`` as true, while
@@ -731,22 +663,17 @@ class CatalystTranspiler(AbstractTranspiler):
             both_null_val = lit(False)
             one_null_val = lit(True)
             value_cmp = left_col != right_col
-        # Folding a branch away drops the operand columns from the plan (either the
-        # early return below, or a rung whose surviving condition no longer names
-        # them). That is only safe when there is nothing in them to lose: an operand
-        # proven non-NULL *because it raises* -- an ordering comparison's
-        # ``raise_error``, an ANSI ``pmod`` on a zero divisor -- would have its error
-        # deleted, and the UDF would answer a constant where Python raises. So unless
-        # BOTH operands are effect-free, decide nothing statically and emit the full
-        # ladder, which names both columns and keeps their errors reachable.
+        # Folding a branch drops the operand columns -- and any error inside them,
+        # which would answer a constant where Python raises. So unless BOTH operands
+        # are effect-free, decide nothing statically and emit the full ladder, which
+        # names both columns and keeps their errors reachable.
         if _is_effect_free(left_node) and _is_effect_free(right_node):
             left_null = self._static_is_null(params, left_node)
             right_null = self._static_is_null(params, right_node)
         else:
             left_null = right_null = None
-        # Only an operand whose NULL-ness needs the data contributes a check. An
-        # operand we know about has already been folded into the branch's static
-        # value below, so re-testing it would just be noise in the plan.
+        # Only an operand whose NULL-ness needs the data contributes a check; a known
+        # one is already folded into the branch values below.
         undecided = [
             column
             for known, column in ((left_null, left_col), (right_null, right_col))
@@ -755,8 +682,7 @@ class CatalystTranspiler(AbstractTranspiler):
         both_known = _and3(left_null, right_null)
         one_known = _or3(left_null, right_null)
         if not undecided:
-            # Both operands are known without the data, so one outcome simply
-            # applies and no check is emitted at all.
+            # Both known without the data, so one outcome applies and nothing is checked.
             if both_known is True:
                 return both_null_val
             if one_known is True:
@@ -766,9 +692,8 @@ class CatalystTranspiler(AbstractTranspiler):
             (both_known, self._all_null(undecided), both_null_val),
             (one_known, self._any_null(undecided), one_null_val),
         ]
-        # Walk the branches in order, dropping the ones that can never be taken. A
-        # branch we know IS taken ends the ladder: nothing after it is reachable,
-        # so its value becomes the result (or the else arm of whatever came first).
+        # Drop rungs that can never be taken; a rung we know IS taken ends the ladder,
+        # since nothing after it is reachable.
         emitted: List[Tuple[Column, Column]] = []
         otherwise = value_cmp
         for known, condition, value in ladder:
@@ -778,9 +703,8 @@ class CatalystTranspiler(AbstractTranspiler):
                 otherwise = value
                 break
             emitted.append((condition, value))
-        # At least one rung always survives here: an undecided operand makes both
-        # ``_and3`` and ``_or3`` return None for the rung naming it, and no undecided
-        # operand would have taken the early return above.
+        # At least one rung survives: an undecided operand leaves both rungs undecided,
+        # and with none undecided we took the early return above.
         result = when(emitted[0][0], emitted[0][1])
         for condition_col, value in emitted[1:]:
             result = result.when(condition_col, value)
@@ -802,14 +726,11 @@ class CatalystTranspiler(AbstractTranspiler):
         comparison: if either operand is ``NULL`` we raise via
         ``raise_error``, otherwise we evaluate ``left op right`` as usual.
 
-        Operands already proven non-NULL contribute no check, and when neither
-        can be NULL -- ``if x is not None: x > 0``, or two literals -- the guard
-        disappears entirely rather than sitting in the plan as a branch that can
-        never be taken. (A literal operand only removes its OWN check: ``x > 0``
-        still guards ``x``.) That is not only plan size: the
-        ``RaiseError`` makes the whole expression ``throwable``, which stops the
-        optimizer from pushing a filter on this UDF through a join or combining
-        it with an adjacent filter (SPARK-58628).
+        Operands already proven non-NULL contribute no check, and with neither
+        nullable -- ``if x is not None: x > 0`` -- the guard goes entirely rather than
+        sitting in the plan unreachable. (A literal removes only its OWN check;
+        ``x > 0`` still guards ``x``.) See ``_raise_on_null`` for why that matters
+        beyond plan size.
 
         Python also forbids ordering across types (``1 < "a"`` -> TypeError),
         whereas Spark would coerce the operands and return a (wrong) boolean.
@@ -1038,12 +959,10 @@ class CatalystTranspiler(AbstractTranspiler):
                     )
                 if not isinstance(op, (ast.And, ast.Or)):
                     raise UnsupportedOperationException(f"BoolOp operator {op} is not supported")
-                # Python only reaches operand `i` when every operand before it was
-                # truthy (`and`) or falsy (`or`), so each one is lowered knowing
-                # what its predecessors established -- this is what makes the
-                # idiomatic `x is not None and x > 0` lower without a NULL check.
-                # Catalyst's `And` / `Or` short-circuit the same way, so the facts
-                # hold at evaluation time too.
+                # Python reaches operand `i` only if every earlier one was truthy
+                # (`and`) or falsy (`or`), so each is lowered knowing what its
+                # predecessors proved -- what lets `x is not None and x > 0` lower
+                # with no check. Catalyst's `And`/`Or` short-circuit to match.
                 conjunction = isinstance(op, ast.And)
                 outcome = 0 if conjunction else 1
                 cols: List[Column] = []
@@ -1258,15 +1177,12 @@ class CatalystTranspiler(AbstractTranspiler):
         # Per-variant input-type assumption ({public_param_index -> category}),
         # read by ``_category`` to choose str vs numeric operators.
         self._param_categories = param_categories or {}
-        # Nothing is known non-NULL at the top of a body: a parameter's column may
-        # or may not be nullable, and only the JVM can tell (where a non-nullable
-        # column collapses any check we do emit -- NullPropagation rewrites
-        # ``IsNull`` over a non-nullable child to false, and SimplifyConditionals
-        # then drops the branch). Facts are added as tests prove them.
+        # Nothing is known non-NULL at the top of a body -- only the JVM knows whether
+        # a bound column is nullable, and there a non-nullable one collapses whatever
+        # check we emit. Facts are added as tests prove them.
         self._non_null = frozenset()
-        # Guards emitted for THIS variant. Kept separate from ``null_guards`` so a
-        # variant that raises partway through and gets dropped does not make us
-        # warn about a check the user's plan will never contain.
+        # Separate from ``null_guards`` so a variant dropped partway through does not
+        # make us warn about a check the user's plan will never contain.
         self._pending_null_guards = frozenset()
         # Category inference depends on the per-variant assumptions above. Cache
         # each AST node only for this lowering so recursive conversion stays linear.
@@ -1324,11 +1240,9 @@ class CatalystTranspiler(AbstractTranspiler):
                     "interpreted Python"
                 )
         converted = self._convert_chunk(params, function_body[0])
-        # This variant survived, so the checks it needed will be in someone's plan;
-        # publish them for the warning in ``_transpile_func``. ASSIGN rather than
-        # accumulate: this reports THIS variant only, and the caller unions across
-        # the variants it keeps. Accumulating here instead would carry a label
-        # forward into every later UDF sharing the instance.
+        # This variant survived, so publish what it needed. ASSIGN, not accumulate:
+        # the caller unions across kept variants, and accumulating here would carry a
+        # label into every later UDF sharing the instance.
         self.null_guards = self._pending_null_guards
         # Cast to the declared return type so the rewritten plan reports a
         # known data type to the optimizer's plan validator (otherwise it
@@ -1810,8 +1724,7 @@ def _transpile_func(
         transpiled: list[Column] = []
         input_categories: list[list[str]] = []
         errors = []
-        # Collected per KEPT variant, into a local, so nothing can leak between
-        # UDFs however the transpiler instances are managed.
+        # Per KEPT variant, into a local, so nothing leaks between UDFs.
         null_guards: set = set()
         # One transpiled option per (backend x input-type variant). Untyped
         # params are tried as both numeric and string so the JVM can pick the
@@ -1830,11 +1743,9 @@ def _transpile_func(
                         input_categories.append(
                             [combo.get(i, "numeric") for i in range(len(public_params))]
                         )
-                        # Read off the instance, only for a variant we KEPT, and after
-                        # the appends. ``_transpile_from_ast``'s signature is the
-                        # documented override point, so this goes through ``getattr``
-                        # and ``str`` -- a third-party transpiler that reports nothing,
-                        # or something odd, must not cost us the options we just built.
+                        # Only for a KEPT variant, and after the appends: guarded by
+                        # ``getattr``/``str`` so a third-party transpiler reporting
+                        # nothing (or something odd) cannot cost us these options.
                         null_guards |= set(map(str, getattr(transpiler, "null_guards", ())))
                 except Exception as e:
                     errors.append(str(e))

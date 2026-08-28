@@ -2832,13 +2832,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         self.assertEqual([False], self._vals(one_guarded, BooleanType(), schema, [(None, None)]))
         self.assertEqual([False], self._vals(one_guarded, BooleanType(), schema, [(None, 1)]))
 
-        # The UNSOUND direction, end to end. A true `or` says only that ONE operand
-        # held, and a false `and` only that one failed, so neither narrows anything --
-        # these must KEEP their check and raise like Python. Covered here and not only
+        # The UNSOUND direction, end to end: a true `or` says only that ONE operand
+        # held, so it narrows nothing and the check must stay. Covered here as well as
         # in `test_null_facts_narrow_by_outcome`, because a plausible "symmetry" edit
-        # to `_null_facts` (unioning `or`'s true-facts the way `and`'s are unioned)
-        # would delete a needed raise, and a unit test on the fact table sits one
-        # remove from the plan that would go wrong.
+        # to `_null_facts` would delete a needed raise, and the fact-table unit test
+        # sits one remove from the plan that would go wrong.
         def or_test(a, b):
             if a is not None or b is not None:
                 return a > 0
@@ -2953,13 +2951,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self._vals(eq_none, BooleanType(), "a long", rows),
         )
 
-        # When BOTH operands are statically decided the ladder resolves with no
-        # branch at all: a proven-non-NULL column against a literal None is just
-        # Python's False, and two literals fold outright. Both reach the early return
-        # in `_lower_eq`, which is a PRECONDITION of building the ladder rather than
-        # an optimization -- the ladder's conditions are built eagerly from the
-        # undecided operands, and with none left `_all_null([])` has nothing to
-        # return. Break the three-way decision itself and the answers go wrong.
+        # With BOTH operands statically decided the ladder resolves to no branch at
+        # all. Both reach `_lower_eq`'s early return, which is a PRECONDITION of
+        # building the ladder rather than an optimization: the conditions are built
+        # eagerly from the undecided operands, and with none left there is nothing to
+        # build from. Break the three-way decision and the answers go wrong.
         guarded_eq_none = lambda x: (x == None) if x is not None else None  # noqa: E711,E731
         literals_eq = lambda x: 5 == None  # noqa: E731
         with self.sql_conf(_TRANSPILE_ON):
@@ -2977,12 +2973,10 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 )
 
     def test_udf_transpile_never_folds_away_an_operand_that_can_raise(self):
-        # Proving an operand non-NULL is not a licence to DELETE it. `_lower_eq` folds
-        # statically-decided branches, and an operand it folds away takes its errors
-        # with it: an ordering comparison's `raise_error`, or an ANSI `pmod` on a zero
-        # divisor. Each UDF below returned a constant where Python raises until
-        # `_is_effect_free` gated the folding, and none of them is a contrived shape --
-        # `(x > 0) == None` is a plain, if odd, comparison.
+        # Proving an operand non-NULL is not a licence to DELETE it: an operand folded
+        # away takes its errors with it (an ordering comparison's `raise_error`, an
+        # ANSI `pmod` on a zero divisor). Each of these returned a constant where
+        # Python raises until `_is_effect_free` gated the folding.
         gt_eq_none = lambda x: (x > 0) == None  # noqa: E711,E731
         mod_zero = lambda x: ((x % 0) == None) if x is not None else None  # noqa: E711,E731
         mod_by_col = lambda a, b: (  # noqa: E731
@@ -3114,13 +3108,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     self.assertEqual(pushed, plan.index("Filter") > plan.index("Join"), plan)
 
     def test_udf_transpile_non_nullable_column_drops_the_null_check(self):
-        # The other half of SPARK-58628, and the half Catalyst already does for us:
-        # bound to a non-nullable column the check folds away entirely, because
-        # NullPropagation rewrites isnull over a non-nullable child to false and
-        # SimplifyConditionals then drops the branch. Pinned here so a reordering
-        # of Optimizer.defaultBatches -- ConvertToCatalyst has to run before the
-        # operator-optimization batches for this to happen -- cannot quietly
-        # regress it.
+        # The half Catalyst already does for us: on a non-nullable column the check
+        # folds away entirely (NullPropagation turns isnull over a non-nullable child
+        # into false, SimplifyConditionals drops the branch). Pinned because it needs
+        # ConvertToCatalyst to run before the operator-optimization batches, so a
+        # reordering of Optimizer.defaultBatches would quietly regress it.
         unguarded = lambda x: x > 0  # noqa: E731
         with self.sql_conf(_TRANSPILE_ON):
             u = self._transpiled_udf(unguarded, BooleanType())
