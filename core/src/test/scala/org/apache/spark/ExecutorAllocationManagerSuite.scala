@@ -2071,8 +2071,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val manager = createManager(conf)
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 0)
 
-    // Submit stage with 4 tasks
-    post(SparkListenerStageSubmitted(createStageInfo(0, 4)))
+    // Submit stage with 3 tasks
+    post(SparkListenerStageSubmitted(createStageInfo(0, 3)))
     post(SparkListenerExecutorAdded(0, "executor-1", new ExecutorInfo("host1", 2, Map.empty)))
     post(SparkListenerExecutorAdded(0, "executor-2", new ExecutorInfo("host2", 2, Map.empty)))
 
@@ -2087,10 +2087,12 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     // 3 tasks running, 2 active 2-core executors. maxNeeded = ceil(3/2) = 2
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 2)
 
-    // Task 0 is submitted as speculatable (3 running + 1 speculative = 4 tasks -> ceil(4/2) = 2)
+    // Task 0 is submitted as speculatable
+    // 3 running + 0 pending + 1 speculative = 4 tasks -> ceil(4/2) = 2
     post(SparkListenerSpeculativeTaskSubmitted(0, 0))
 
-    // With pendingSpeculative > 0 and maxNeeded == activeExecutors (2), offset allocates 1 more -> 3
+    // With pendingSpeculative > 0 and maxNeeded == activeExecutors (2),
+    // offset allocates 1 more -> 3
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 3)
   }
 }
