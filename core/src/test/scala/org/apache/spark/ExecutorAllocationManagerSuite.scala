@@ -2067,27 +2067,30 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   }
 
   test("SPARK-49485: request additional executor when speculative tasks equal maxNeeded") {
-    val manager = createManager(createConf(1, 5, 2))
+    val conf = createConf(1, 5, 2).set(config.EXECUTOR_CORES, 2)
+    val manager = createManager(conf)
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 0)
 
-    // Submit stage with 2 tasks
-    post(SparkListenerStageSubmitted(createStageInfo(0, 2)))
-    post(SparkListenerExecutorAdded(0, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
-    post(SparkListenerExecutorAdded(0, "executor-2", new ExecutorInfo("host1", 1, Map.empty)))
+    // Submit stage with 4 tasks
+    post(SparkListenerStageSubmitted(createStageInfo(0, 4)))
+    post(SparkListenerExecutorAdded(0, "executor-1", new ExecutorInfo("host1", 2, Map.empty)))
+    post(SparkListenerExecutorAdded(0, "executor-2", new ExecutorInfo("host2", 2, Map.empty)))
 
-    // Task 0 and Task 1 start on executor-1 and executor-2
+    // 3 tasks running across 2 active 2-core executors
     val taskInfo0 = createTaskInfo(0, 0, "executor-1")
-    val taskInfo1 = createTaskInfo(1, 1, "executor-2")
+    val taskInfo1 = createTaskInfo(1, 1, "executor-1")
+    val taskInfo2 = createTaskInfo(2, 2, "executor-2")
     post(SparkListenerTaskStart(0, 0, taskInfo0))
     post(SparkListenerTaskStart(0, 0, taskInfo1))
+    post(SparkListenerTaskStart(0, 0, taskInfo2))
 
-    // 2 tasks running, 2 active executors. maxNeeded = 2
+    // 3 tasks running, 2 active 2-core executors. maxNeeded = ceil(3/2) = 2
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 2)
 
-    // Task 0 is submitted as speculatable
+    // Task 0 is submitted as speculatable (3 running + 1 speculative = 4 tasks -> ceil(4/2) = 2)
     post(SparkListenerSpeculativeTaskSubmitted(0, 0))
 
-    // With pendingSpeculative > 0 and maxNeeded == activeExecutors (2), offset allocates 1 more
+    // With pendingSpeculative > 0 and maxNeeded == activeExecutors (2), offset allocates 1 more -> 3
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 3)
   }
 }
