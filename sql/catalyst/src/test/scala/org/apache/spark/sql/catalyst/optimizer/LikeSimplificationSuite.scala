@@ -69,7 +69,7 @@ class LikeSimplificationSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .where(($"a" like "abc\\%def") ||
-        (Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))))
+        (OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))))
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -142,7 +142,7 @@ class LikeSimplificationSuite extends PlanTest {
     val optimized3 = Optimize.execute(originalQuery3.analyze)
     val correctAnswer3 = testRelation
       .where(($"a" like ("@bc%def", '@')) ||
-        (Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))))
+        (OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))))
       .analyze
     comparePlans(optimized3, correctAnswer3)
 
@@ -190,7 +190,7 @@ class LikeSimplificationSuite extends PlanTest {
     val optimized3 = Optimize.execute(originalQuery3.analyze)
     val correctAnswer3 = testRelation
       .where(
-        (Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))))
+        (OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))))
       .analyze
     comparePlans(optimized3, correctAnswer3)
 
@@ -222,7 +222,7 @@ class LikeSimplificationSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .where((((((StartsWith($"a", "abc") && EndsWith($"a", "xyz")) &&
-        (Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")))) &&
+        (OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")))) &&
         Contains($"a", "mn")) && ($"a" === "")) && ($"a" === "abc")) &&
         ($"a" likeAll("abc\\%", "abc\\%def", "%mn\\%")))
       .analyze
@@ -239,7 +239,7 @@ class LikeSimplificationSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .where((((((Not(StartsWith($"a", "abc")) && Not(EndsWith($"a", "xyz"))) &&
-        Not(Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")))) &&
+        Not(OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")))) &&
         Not(Contains($"a", "mn"))) && Not($"a" === "")) && Not($"a" === "abc")) &&
         ($"a" notLikeAll("abc\\%", "abc\\%def", "%mn\\%")))
       .analyze
@@ -256,7 +256,7 @@ class LikeSimplificationSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .where(((StartsWith($"a", "abc") || EndsWith($"a", "xyz")) ||
-        (Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")) ||
+        (OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")) ||
           Contains($"a", "mn")) || (($"a" === "") || ($"a" === "abc")) ||
         ($"a" likeAny("abc\\%", "abc\\%def", "%mn\\%"))))
       .analyze
@@ -273,7 +273,7 @@ class LikeSimplificationSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .where((((Not(StartsWith($"a", "abc")) || Not(EndsWith($"a", "xyz"))) ||
-        (Not(Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))) ||
+        (Not(OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))) ||
           Not(Contains($"a", "mn")))) || (Not($"a" === "") || Not($"a" === "abc"))) ||
         ($"a" notLikeAny("abc\\%", "abc\\%def", "%mn\\%")))
       .analyze
@@ -311,7 +311,7 @@ class LikeSimplificationSuite extends PlanTest {
   }
 
   // scalastyle:off nonascii
-  test("LikeSimplification with emojis") {
+  test("SPARK-59063: use a byte-length guard for prefix and suffix") {
     val originalQuery =
       testRelation
         .where($"a" like "😀%🥑")
@@ -319,7 +319,7 @@ class LikeSimplificationSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = testRelation
-      .where(Length($"a") >= 2 && (StartsWith($"a", "😀") && EndsWith($"a", "🥑")))
+      .where(OctetLength($"a") >= 8 && (StartsWith($"a", "😀") && EndsWith($"a", "🥑")))
       .analyze
     comparePlans(optimized, correctAnswer)
   }
