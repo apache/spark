@@ -20,7 +20,7 @@ import java.util.Locale
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config.UI
-import org.apache.spark.sql.SparkSessionExtensions
+import org.apache.spark.sql.{SparkSession => SqlSession, SparkSessionExtensions}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, UnresolvedHint}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -36,6 +36,9 @@ import org.apache.spark.util.Utils
  * on a new builder is required.
  */
 class HiveSparkSessionExtensionSuite extends SparkFunSuite {
+
+  // Isolated sessions leave a SparkContext running; do not treat that as a leak.
+  override protected val enableAutoThreadAudit = false
 
   private def withHiveSession(
       builders: Seq[SparkSessionExtensions => Unit])(f: SparkSession => Unit): Unit = {
@@ -67,7 +70,7 @@ class HiveSparkSessionExtensionSuite extends SparkFunSuite {
     }
   }
 
-  case class MyHintRule(spark: SparkSession) extends Rule[LogicalPlan] {
+  case class MyHintRule(spark: SqlSession) extends Rule[LogicalPlan] {
     val myHintName = Set("CONVERT_TO_EMPTY")
 
     override def apply(plan: LogicalPlan): LogicalPlan =
@@ -91,7 +94,7 @@ class HiveSparkSessionExtensionSuite extends SparkFunSuite {
     var hintSawUnresolved = false
     var resolutionSawUnresolved = false
 
-    case class PathSqlHintRule(spark: SparkSession) extends Rule[LogicalPlan] {
+    case class PathSqlHintRule(spark: SqlSession) extends Rule[LogicalPlan] {
       override def apply(plan: LogicalPlan): LogicalPlan = {
         plan.foreach {
           case r: UnresolvedRelation
@@ -104,7 +107,7 @@ class HiveSparkSessionExtensionSuite extends SparkFunSuite {
       }
     }
 
-    case class PathSqlResolutionRule(spark: SparkSession) extends Rule[LogicalPlan] {
+    case class PathSqlResolutionRule(spark: SqlSession) extends Rule[LogicalPlan] {
       override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
         case r: UnresolvedRelation
             if r.multipartIdentifier.size == 2 &&
@@ -119,8 +122,9 @@ class HiveSparkSessionExtensionSuite extends SparkFunSuite {
         _.injectResolutionRule(PathSqlResolutionRule))) { session =>
       val dir = Utils.createTempDir()
       try {
-        session.range(1).write.parquet(dir.getCanonicalPath)
-        val df = session.sql(s"SELECT * FROM parquet.`${dir.getCanonicalPath}`")
+        val path = new java.io.File(dir, "data").getCanonicalPath
+        session.range(1).write.parquet(path)
+        val df = session.sql(s"SELECT * FROM parquet.`$path`")
         df.queryExecution.analyzed
         assert(hintSawUnresolved,
           "injectHintResolutionRule must run before ResolveSQLOnFile")
