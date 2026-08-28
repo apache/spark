@@ -180,12 +180,8 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       }
       val resolved = KubernetesUtils.uploadAndTransformFileUris(value, Some(conf.sparkConf))
       if (resolved.nonEmpty) {
-        val resolvedValue = if (key == ARCHIVES) {
-          localUris.zip(resolved).map { case (uri, r) =>
-            Utils.getUriBuilder(r).fragment(new java.net.URI(uri).getFragment).build().toString
-          }
-        } else {
-          resolved
+        val resolvedValue = localUris.zip(resolved).map { case (uri, r) =>
+          Utils.getUriBuilder(r).fragment(new java.net.URI(uri).getFragment).build().toString
         }
         additionalProps.put(key.key, (resolvedValue ++ remoteUris).mkString(","))
       }
