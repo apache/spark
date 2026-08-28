@@ -85,6 +85,18 @@ svg path {
   word-wrap: break-word;
 }
 
+.physical-plan-text {
+  font-family: monospace;
+}
+
+.plan-description-line {
+  white-space: pre;
+}
+
+.plan-description-line.selected {
+  background-color: var(--spark-sql-linked-fill);
+}
+
 svg g.node rect.selected {
   fill: var(--spark-sql-selected-fill);
   stroke: var(--spark-sql-selected-stroke);

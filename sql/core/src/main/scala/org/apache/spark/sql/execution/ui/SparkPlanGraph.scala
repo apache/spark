@@ -144,7 +144,8 @@ object SparkPlanGraph {
           planInfo.nodeName,
           planInfo.simpleString,
           mutable.ArrayBuffer[SparkPlanGraphNode](),
-          metrics)
+          metrics,
+          planInfo.operatorId)
         nodes += cluster
 
         buildSparkPlanGraphNode(
@@ -189,7 +190,7 @@ object SparkPlanGraph {
         }
         val node = new SparkPlanGraphNode(
           nodeIdGenerator.getAndIncrement(), planInfo.nodeName,
-          planInfo.simpleString, metrics)
+          planInfo.simpleString, metrics, planInfo.operatorId)
         if (subgraph == null) {
           nodes += node
         } else {
@@ -219,7 +220,8 @@ class SparkPlanGraphNode(
     val id: Long,
     val name: String,
     val desc: String,
-    val metrics: collection.Seq[SQLPlanMetric]) {
+    val metrics: collection.Seq[SQLPlanMetric],
+    val planNodeId: Option[Long] = None) {
 
   def makeDotNode(metricsValue: Map[Long, String]): String = {
     val nodeId = s"node$id"
@@ -238,8 +240,11 @@ class SparkPlanGraphCluster(
     name: String,
     desc: String,
     val nodes: mutable.ArrayBuffer[SparkPlanGraphNode],
-    metrics: collection.Seq[SQLPlanMetric])
-  extends SparkPlanGraphNode(id, name, desc, metrics) {
+    metrics: collection.Seq[SQLPlanMetric],
+    planNodeId: Option[Long] = None)
+  extends SparkPlanGraphNode(id, name, desc, metrics, planNodeId) {
+
+  def subPlanNodeIds: Seq[Long] = nodes.flatMap(_.planNodeId).toSeq
 
   override def makeDotNode(metricsValue: Map[Long, String]): String = {
     val duration = metrics.filter(m =>

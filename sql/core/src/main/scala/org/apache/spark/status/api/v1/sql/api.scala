@@ -27,7 +27,9 @@ case class Node private[spark] (
     nodeName: String,
     wholeStageCodegenId: Option[Long] = None,
     metrics: collection.Seq[Metric],
-    desc: String = null)
+    desc: String = null,
+    planNodeId: Option[Long] = None,
+    subPlanNodeIds: collection.Seq[Long] = Nil)
 
 class ExecutionData private[spark] (
     val id: Long,

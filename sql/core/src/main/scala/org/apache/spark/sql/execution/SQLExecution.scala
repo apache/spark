@@ -211,9 +211,11 @@ object SQLExecution extends Logging {
                 case Right(f) =>
                   val planDescriptionMode =
                     ExplainMode.fromString(sparkSession.sessionState.conf.uiExplainMode)
+                  val executedPlan = queryExecution.executedPlan
+                  ExplainUtils.tagOperatorIds(executedPlan)
                   val planDesc = queryExecution.explainString(planDescriptionMode)
                   val planInfo = try {
-                    SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan)
+                    SparkPlanInfo.fromSparkPlan(executedPlan)
                   } catch {
                     case NonFatal(e) =>
                       logDebug("Failed to generate SparkPlanInfo", e)
