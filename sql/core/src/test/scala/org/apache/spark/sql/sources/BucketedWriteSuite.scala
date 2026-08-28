@@ -267,6 +267,20 @@ abstract class BucketedWriteSuite extends QueryTest {
       parameters = Map("sortCol" -> "`i`", "partitionColumns" -> "`i`, `j`"))
   }
 
+  test("SPARK-59040: overlapping column names are quoted as single identifiers") {
+    // A name is already resolved here, so it must not be parsed: "x.y" is one column rather than
+    // a qualified reference, and a name holding a backtick has it escaped rather than rejected.
+    val df = Seq((1, "a", 2)).toDF("x.y", "z`w", "k")
+    checkError(
+      exception = intercept[AnalysisException](df.write
+        .partitionBy("x.y", "z`w")
+        .bucketBy(8, "x.y")
+        .saveAsTable("bucketed_table")),
+      condition = "BUCKET_COLUMN_IN_PARTITION_COLUMNS",
+      sqlState = "42713",
+      parameters = Map("bucketCol" -> "`x.y`", "partitionColumns" -> "`x.y`, `z``w`"))
+  }
+
   test("write bucketed data without partitionBy") {
     for (source <- fileFormatsToTest) {
       withTable("bucketed_table") {
