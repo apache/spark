@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{TranspiledPythonUDF, Transpile
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPILED_PYTHON_UDF
-import org.apache.spark.sql.types.{BinaryType, BooleanType, DataType, DecimalType, NumericType, StringType}
+import org.apache.spark.sql.types.{BinaryType, BooleanType, DataType, DecimalType, FractionalType, IntegralType, NumericType, StringType}
 
 /**
  * Prunes the per-input-type options carried by a [[TranspiledPythonUDF]] down to those whose
@@ -83,11 +83,19 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   // (e.g. `repeat`) never see it. Empty categories means "no restriction", so the
   // option is kept.
   //
+  // "integral" and "fractional" split "numeric" for a transpiler that has to name one
+  // concrete Java type per parameter and so cannot be polymorphic over the two the way a
+  // Catalyst `Add` is (see `pyspark.sql.transpile_java`). Both are lossless within their
+  // half -- every IntegralType fits in a long, both FractionalTypes fit in a double -- so
+  // the option upcasts its arguments and the split costs only extra options, never
+  // precision. A transpiler is free to use either granularity; "numeric" still matches
+  // both halves for the Catalyst target.
+  //
   // Two deliberate exclusions keep the transpiled semantics faithful to Python:
-  // - DecimalType is NOT "numeric": Python receives decimal.Decimal objects,
-  //   which raise TypeError when mixed with float literals and carry different
-  //   precision semantics than Spark's decimal arithmetic, so decimal columns
-  //   fall back to interpreted Python.
+  // - DecimalType is NOT "numeric" (nor "fractional", which it extends): Python receives
+  //   decimal.Decimal objects, which raise TypeError when mixed with float literals and
+  //   carry different precision semantics than Spark's decimal arithmetic, so decimal
+  //   columns fall back to interpreted Python.
   // - "string" requires the default UTF8_BINARY collation: under a non-binary
   //   collation (e.g. UTF8_LCASE) Spark's `=`/`<`/`concat` follow collation
   //   rules while Python compares codepoints, so `'abc' == 'ABC'` would return
@@ -100,6 +108,9 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
     } else {
       categories.zip(argTypes).forall {
         case ("numeric", dt) => dt.isInstanceOf[NumericType] && !dt.isInstanceOf[DecimalType]
+        // No DecimalType exclusion needed: it is a FractionalType, never an IntegralType.
+        case ("integral", dt) => dt.isInstanceOf[IntegralType]
+        case ("fractional", dt) => dt.isInstanceOf[FractionalType] && !dt.isInstanceOf[DecimalType]
         case ("string", st: StringType) => st.isUTF8BinaryCollation
         case ("bool", dt) => dt.isInstanceOf[BooleanType]
         case ("binary", dt) => dt.isInstanceOf[BinaryType]

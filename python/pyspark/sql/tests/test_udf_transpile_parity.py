@@ -67,9 +67,11 @@ _TRANSPILE_CONF = {
 _NON_CONNECT_ONLY = "UDF transpilation is only supported in regular (non-Connect) Spark."
 
 
-def _enable_transpilation(cls):
+def _enable_transpilation(cls, transpilers=None):
     for key, value in _TRANSPILE_CONF.items():
         cls.spark.conf.set(key, value)
+    if transpilers is not None:
+        cls.spark.conf.set("spark.sql.experimental.optimizer.pyTranspilers", transpilers)
 
 
 @unittest.skipIf(is_remote_only(), _NON_CONNECT_ONLY)
@@ -100,6 +102,24 @@ class TranspiledUnifiedUDFParityTests(UnifiedUDFTestsMixin, ReusedSQLTestCase):
     def setUpClass(cls):
         ReusedSQLTestCase.setUpClass()
         _enable_transpilation(cls)
+
+
+@unittest.skipIf(is_remote_only(), _NON_CONNECT_ONLY)
+class TranspiledJavaUDFParityTests(BaseUDFTestsMixin, ReusedSQLTestCase):
+    """The same mixin again with the `java` target enabled behind `catalyst`.
+
+    Adding a second target must not change any result. Catalyst still wins wherever it can
+    lower, so what this run actually exercises is every UDF in the mixin that Catalyst
+    declines: each one now takes the Java path instead of interpreted Python, and has to
+    produce the same answer it did before. The dedicated tests live in
+    ``test_udf_transpile_java_unit.py``.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        ReusedSQLTestCase.setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
+        _enable_transpilation(cls, transpilers="catalyst,java")
 
 
 if __name__ == "__main__":

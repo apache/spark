@@ -144,6 +144,20 @@ class AbstractTranspiler(object):
     def register(cls) -> None:
         AbstractTranspiler.varieties[cls.variety] = cls
 
+    def _param_category_combos(
+        self, function_ast: ast.FunctionDef, public_params: List[str]
+    ) -> List[dict]:
+        """The input-type variants to offer ``_transpile_from_ast``, one dict per variant.
+
+        An override point because the right granularity is a property of the target, not of
+        the UDF: a Catalyst lowering is polymorphic over the numeric types and wants the one
+        coarse ``"numeric"`` category, while a target that has to name a concrete machine
+        type per parameter needs the finer ``"integral"``/``"fractional"`` split. Whatever a
+        transpiler returns here is what it is handed and what its options are tagged with,
+        so ``ResolveTranspiledPythonUDFOptions`` has to understand the categories used.
+        """
+        return _param_category_combos(function_ast, public_params)
+
     def _transpile_from_ast(
         self,
         src: Optional[str],
@@ -923,11 +937,36 @@ CatalystTranspiler.register()
 
 
 def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
-    """Get the transpilers we should try."""
+    """Get the transpilers we should try, in the order the conf names them."""
+    # Imported for its registration side effect, and imported here rather than at the top of
+    # the module because it imports from this one. Without this, naming ``java`` in the conf
+    # would silently find nothing in ``varieties`` and be skipped.
+    from pyspark.sql import transpile_java  # noqa: F401
+
     configured_transpilers = session.conf.get("spark.sql.experimental.optimizer.pyTranspilers")
     if not configured_transpilers:
         return []
-    transpiler_names = configured_transpilers.split(",")
+    # Stripped, and unknown names warned about rather than dropped in silence. The conf is a
+    # comma-separated list a human types, so ``"catalyst, java"`` is the natural way to write it --
+    # and without the strip the second entry never matches a registered variety, leaving the user
+    # with transpilation apparently on and one target quietly missing.
+    transpiler_names = [name.strip() for name in configured_transpilers.split(",") if name.strip()]
+    unknown = [name for name in transpiler_names if name not in AbstractTranspiler.varieties]
+    if unknown:
+        try:
+            warnings.warn(
+                f"Ignoring unknown Python UDF transpiler(s) {unknown} in "
+                "spark.sql.experimental.optimizer.pyTranspilers; known transpilers are "
+                f"{sorted(AbstractTranspiler.varieties)}."
+            )
+        except Exception:
+            # Swallowed on purpose. This runs inside ``_transpile_func``'s blanket handler,
+            # whose meaning is "no transpilation at all", so under warnings-as-errors
+            # (``python -W error``, a pytest ``filterwarnings = error``) a single mistyped name
+            # would raise here and take the working transpilers down with it -- turning a
+            # diagnostic into the outage it was meant to prevent. The module guards warnings
+            # elsewhere for the same reason; see ``_syntax_warnings_suppressed``.
+            pass
     return [
         AbstractTranspiler.varieties[name]()
         for name in transpiler_names
@@ -1370,23 +1409,41 @@ def _transpile_func(
         transpiled: list[Column] = []
         input_categories: list[list[str]] = []
         errors = []
-        # One transpiled option per (backend x input-type variant). Untyped
-        # params are tried as both numeric and string so the JVM can pick the
-        # option matching the actual column types (or fall back if none match).
-        combos = _param_category_combos(function_ast, public_params)
         # Maybe multiple transpilers (think CUDA, etc.).
         transpilers = _get_transpilers(session)
         for transpiler in transpilers:
-            for combo in combos:
+            # One transpiled option per (backend x input-type variant). Untyped params are
+            # tried as more than one category so the JVM can pick the option matching the
+            # actual column types (or fall back if none match). Which categories, and so how
+            # many variants, is the backend's to decide -- see
+            # ``AbstractTranspiler._param_category_combos``.
+            for combo in transpiler._param_category_combos(function_ast, public_params):
                 try:
                     transpiled_column = transpiler._transpile_from_ast(
                         src, ast_info, function_ast, public_params, returnType, combo
                     )
                     if transpiled_column is not None:
+                        # No default for a missing index. Substituting one would have to guess a
+                        # category, and this is shared code: it cannot know the transpiler's
+                        # vocabulary, so any guess is wrong for someone. Tagging a java option
+                        # lowered over `Long` as ``"numeric"``, say, makes the JVM keep it for a
+                        # DoubleType column, whose cast child then fails CheckAnalysis -- the exact
+                        # hazard the pruning rule exists to prevent. A combo that does not cover
+                        # every parameter is a bug in the transpiler, so raise and let this option
+                        # be skipped like any other failure.
+                        missing = [i for i in range(len(public_params)) if i not in combo]
+                        if missing:
+                            raise UnsupportedOperationException(
+                                f"transpiler {transpiler.variety!r} returned a combo missing "
+                                f"categories for parameter(s) {missing}; every public parameter "
+                                "needs one so the JVM can prune the option by argument type"
+                            )
+                        # Both appends together, after everything that can raise. The two lists
+                        # must stay parallel -- the JVM builder requires one categories entry per
+                        # option and skips transpilation altogether when they do not line up --
+                        # so a raise between them would silently disable this UDF's rewrite.
                         transpiled.append(transpiled_column)
-                        input_categories.append(
-                            [combo.get(i, "numeric") for i in range(len(public_params))]
-                        )
+                        input_categories.append([combo[i] for i in range(len(public_params))])
                 except Exception as e:
                     errors.append(str(e))
         return (

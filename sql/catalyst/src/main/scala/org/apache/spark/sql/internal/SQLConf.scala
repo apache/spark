@@ -693,7 +693,14 @@ object SQLConf {
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .doc("Comma-separated list of Python transpilers to attempt, in order. " +
       "The first transpiler that successfully produces a Catalyst expression " +
-      "is used. Default: catalyst.")
+      "is used. Default: catalyst. " +
+      "`catalyst` lowers a UDF to ordinary Catalyst expressions. `java` lowers it to " +
+      "generated Java source instead, which reaches bodies `catalyst` refuses -- several " +
+      "statements, local variables, early returns -- at the cost of being opaque to the " +
+      "optimizer, which can neither push it into a data source nor fold constants inside " +
+      "it. Order accordingly: with `catalyst,java` a UDF `catalyst` can lower is lowered " +
+      "by it and `java` only sees what it declined. `java` is off by default; see the " +
+      "pyspark.sql.transpile_java module documentation for what it lowers.")
     .version("4.3.0")
     .stringConf
     .createWithDefault("catalyst")
