@@ -141,8 +141,8 @@ class RpcDeadlines:
     Note on ``reattachable_execute_plan`` and ``reattach_execute``: these timeouts apply to each
     individual gRPC stream segment, not to the overall query execution lifetime. When a deadline
     fires, the server-side operation continues running; the client opens a new ReattachExecute
-    stream to resume receiving results. Non-reattachable ExecutePlan has no deadline because a
-    timeout there would kill the execution with no recovery path.
+    stream to resume receiving results. Non-reattachable query ExecutePlan calls have no deadline
+    because a timeout there would kill the execution with no recovery path.
 
     Note on ``release_relation``: the RemoveRemoteCachedRelation cleanup command is sent over a
     blocking, non-reattachable ExecutePlan call issued from
@@ -160,11 +160,11 @@ class RpcDeadlines:
     config: Optional[float] = 10 * 60  # 10 min
     interrupt: Optional[float] = 10 * 60  # 10 min
     release_session: Optional[float] = 10 * 60  # 10 min
-    release_relation: Optional[float] = 60  # 1 min; short: per-batch finalizer
     artifact_status: Optional[float] = 10 * 60  # 10 min
     clone_session: Optional[float] = 10 * 60  # 10 min
     get_status: Optional[float] = 10 * 60  # 10 min
     fetch_error_details: Optional[float] = 10 * 60  # 10 min
+    release_relation: Optional[float] = 60  # 1 min; short: per-batch finalizer
 
     def __post_init__(self) -> None:
         for field in fields(self):
@@ -191,11 +191,11 @@ class RpcDeadlines:
             config=None,
             interrupt=None,
             release_session=None,
-            release_relation=None,
             artifact_status=None,
             clone_session=None,
             get_status=None,
             fetch_error_details=None,
+            release_relation=None,
         )
 
 
