@@ -371,6 +371,9 @@ object StaticSQLConf {
   // prefix. These are static so that a session cannot raise its own limits. Their keys are
   // deliberately not under that prefix: every SparkConf entry is copied into a new session's
   // SQLConf, so a limit named under the prefix would be read back as an environment variable.
+  // Their binding policy is NOT_APPLICABLE: a static limit cannot differ between the session
+  // that created a view or a UDF and one that calls it, and it never changes what a body
+  // resolves to, only whether a write to the environment is accepted.
   val PYTHON_WORKER_ENV_MAX_VARIABLES =
     buildStaticConf("spark.sql.pythonWorkerEnv.maxVariables")
       .doc(
@@ -379,6 +382,7 @@ object StaticSQLConf {
           "user-provided environment at all.")
       .version("4.4.0")
       .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .checkValue(_ >= 0, "The maximum number of variables must not be negative.")
       .createWithDefault(100)
@@ -389,6 +393,7 @@ object StaticSQLConf {
         "set for its Python workers. Zero accepts no user-provided environment at all.")
       .version("4.4.0")
       .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .checkValue(_ >= 0, "The maximum name length must not be negative.")
       .createWithDefault(512)
@@ -400,6 +405,7 @@ object StaticSQLConf {
           "measured as the sum of the UTF-8 lengths of every variable name and value.")
       .version("4.4.0")
       .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ >= 0, "The maximum total size must not be negative.")
       .createWithDefault(128 * 1024) // 128 KiB
