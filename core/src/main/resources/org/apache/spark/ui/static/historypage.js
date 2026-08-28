@@ -223,7 +223,8 @@ $(document).ready(function() {
           {
             name: 'eventLog',
             data: 'log',
-            render: (log, _ignored_type, _ignored_row) => `<a href="${log}" class="btn btn-info btn-mini">Download</a>`
+            render: (log, _ignored_type, _ignored_row) =>
+              `<a href="${log}" class="btn btn-sm btn-outline-secondary">Download</a>`
           },
         ],
         "aoColumnDefs": [
