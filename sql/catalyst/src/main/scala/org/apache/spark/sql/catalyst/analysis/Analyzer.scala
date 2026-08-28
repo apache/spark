@@ -360,6 +360,36 @@ class Analyzer(
 
   def getRelationResolution: RelationResolution = relationResolution
 
+  private def toUnresolvedRelation(target: UnresolvedInsertTarget): UnresolvedRelation = {
+    val relation = withOrigin(target.origin) {
+      UnresolvedRelation(target.multipartIdentifier, target.options)
+        .requireWritePrivileges(target.writePrivileges)
+    }
+    relation.copyTagsFrom(target)
+    relation
+  }
+
+  /** Resolves only the dynamic identifier of an INSERT so transaction detection can inspect it. */
+  private[sql] def resolveUnresolvedInsert(insert: UnresolvedInsert): LogicalPlan = {
+    runWithSessionConf {
+      val identifierResolvedTarget = insert.table match {
+        case p: PlanWithUnresolvedIdentifier => execute(p)
+        case other => other
+      }
+      withOrigin(insert.origin) {
+        identifierResolvedTarget match {
+          case target: UnresolvedInsertTarget =>
+            insert.toInsertPlan(toUnresolvedRelation(target))
+          case target if !target.fastEquals(insert.table) =>
+            val updated = insert.copy(table = target)
+            updated.copyTagsFrom(insert)
+            updated
+          case _ => insert
+        }
+      }
+    }
+  }
+
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
     if (plan.analyzed) {
       plan
@@ -537,6 +567,7 @@ class Analyzer(
 
   override def batches: Seq[Batch] = earlyBatches ++ Seq(
     Batch("Resolution", fixedPoint,
+      ResolveUnresolvedInsert ::
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
       ResolveRelations ::
@@ -1313,6 +1344,15 @@ class Analyzer(
     }
   }
 
+  /** Lower an INSERT as soon as its target identifier expression has been evaluated. */
+  object ResolveUnresolvedInsert extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsPattern(UNRESOLVED_INSERT), ruleId) {
+      case insert @ UnresolvedInsert(target: UnresolvedInsertTarget, _, _, _, _, _, _, _, _) =>
+        insert.toInsertPlan(toUnresolvedRelation(target))
+    }
+  }
+
   /** Handle INSERT INTO for DSv2 */
   object ResolveInsertInto extends ResolveInsertionBase {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
@@ -1575,29 +1615,8 @@ class Analyzer(
     }
 
     def doApply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      // `InsertIntoStatement.table` and `V2WriteCommand.table` are non-child `LogicalPlan`
-      // slots (`child = query`), so the default `resolveOperatorsUp` + `mapExpressions`
-      // traversal never resolves expressions placed inside them. For a
-      // `PlanWithUnresolvedIdentifier`, `identifierExpr` (e.g. an `UnresolvedAttribute`
-      // referring to a SQL variable in `INSERT INTO IDENTIFIER(target_table) ...`) must
-      // be resolved here before `ResolveIdentifierClause` can materialize the relation.
-      // Mirror the structural recursion into the non-child `.table` slot that
-      // `BindParameters` and `ResolveIdentifierClause` already do for the same shape
-      // (SPARK-46625); unlike those rules, this one performs attribute resolution rather
-      // than parameter binding or placeholder materialization. Resolve against `p` (whose
-      // `children` are `Nil` on the INSERT / `OverwriteByExpression` path built by
-      // `buildWriteTableSlot`) so the IDENTIFIER expression cannot see query output
-      // columns -- only the last-resort variable resolution path fires. The
-      // `!identifierExpr.resolved` guard makes the case idempotent under bottom-up
-      // traversal.
-      case i: InsertIntoStatement
-          if i.table.isInstanceOf[PlanWithUnresolvedIdentifier] &&
-             !i.table.asInstanceOf[PlanWithUnresolvedIdentifier].identifierExpr.resolved =>
-        val p = i.table.asInstanceOf[PlanWithUnresolvedIdentifier]
-        val resolvedExpr = resolveExpressionByPlanChildren(
-          p.identifierExpr, p, includeLastResort = true)
-        i.copy(table = p.copy(identifierExpr = resolvedExpr))
-
+      // V2WriteCommand.table is a non-child LogicalPlan slot, so recurse explicitly when it
+      // contains an identifier expression that may refer to a SQL variable.
       case w: V2WriteCommand
           if w.table.isInstanceOf[PlanWithUnresolvedIdentifier] &&
              !w.table.asInstanceOf[PlanWithUnresolvedIdentifier].identifierExpr.resolved =>
