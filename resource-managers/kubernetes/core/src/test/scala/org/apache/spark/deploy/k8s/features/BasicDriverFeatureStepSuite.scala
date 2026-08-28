@@ -143,7 +143,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(featureStep.getAdditionalPodSystemProperties() === expectedSparkConf)
   }
 
-  test("SPARK_USER reflects --proxy-user when set") {
+  test("SPARK-58926: SPARK_USER reflects --proxy-user when set") {
     val sparkConf = new SparkConf().set(CONTAINER_IMAGE, "spark-driver:latest")
     val conf = KubernetesTestConf.createDriverConf(
       sparkConf = sparkConf, proxyUser = Some("alice"))
