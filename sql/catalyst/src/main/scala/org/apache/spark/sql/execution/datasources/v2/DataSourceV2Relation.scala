@@ -223,6 +223,21 @@ case class DataSourceV2ScanRelation(
       case s: SupportsRuntimeCatalystFiltering => s.fullyPushedFilterAttributes()
       case _ => Array.empty[NamedReference]
     }
+    resolveTopLevelFilterAttrs(filterAttrs)
+  }
+
+  /**
+   * Resolves fully pushed runtime-filter references against this relation's output. Nested
+   * references are rejected because [[AttributeSet]] keeps only their root attribute, which could
+   * make a predicate on a sibling field appear fully pushed and remove its post-scan evaluation.
+   */
+  private def resolveTopLevelFilterAttrs(filterAttrs: Array[NamedReference]): AttributeSet = {
+    filterAttrs.find(_.fieldNames.length > 1).foreach { ref =>
+      throw SparkException.internalError(
+        s"Fully pushed runtime filter attribute '${ref.fieldNames.mkString(".")}' declared by " +
+        s"${scan.getClass.getName} must be a top-level attribute of the scan read schema, " +
+        "but it is a nested reference.")
+    }
     resolveFilterAttrs(filterAttrs)
   }
 

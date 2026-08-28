@@ -59,6 +59,10 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * an ANSI cast or overflow error, or on a nested access that the scan matches differently
    * against its partition layout. Declare an attribute only when the scan can evaluate every
    * predicate over it.
+   *
+   * Each reference must be a top-level attribute present in [[Scan.readSchema]]. Nested
+   * references are rejected, and attributes pruned out of the read schema fail to resolve, when
+   * Spark builds the scan relation.
    */
   def fullyPushedFilterAttributes(): Array[NamedReference] = Array.empty
 

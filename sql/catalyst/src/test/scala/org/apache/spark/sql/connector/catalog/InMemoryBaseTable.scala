@@ -827,9 +827,8 @@ abstract class InMemoryBaseTable(
     var pushedFilters: Array[Filter] = Array.empty
 
     override def filterAttributes(): Array[NamedReference] = {
-      val scanFields = readSchema.fields.map(_.name).toSet
       partitioning.flatMap(_.references)
-        .filter(ref => scanFields.contains(ref.fieldNames.mkString(".")))
+        .filter(ref => readSchema.findNestedField(ref.fieldNames.toImmutableArraySeq).isDefined)
     }
 
     override def filter(filters: Array[Filter]): Unit = {
