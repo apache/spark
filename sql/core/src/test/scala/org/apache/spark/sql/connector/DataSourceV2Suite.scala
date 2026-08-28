@@ -1831,6 +1831,18 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
   }
 
+  test("advisory filters are ignored for a non-deterministic-only Catalyst filter") {
+    val query = spark.read
+      .format(classOf[CatalystFilterDataSourceV2].getName)
+      .option(CatalystFilterScanBuilder.ADVISORY_DERIVATION,
+        CatalystFilterScanBuilder.CONSTANT_J_LT_100)
+      .load()
+      .filter(rand(0) > 0.5)
+    assert(getScanRelation(query).advisoryFilters.isEmpty,
+      s"advisory filters must be ignored for a non-deterministic-only filter:\n" +
+        query.queryExecution.optimizedPlan)
+  }
+
   test("SPARK-58207: V2 filter pushdown skips non-deterministic filters") {
     val df = spark.read.format(classOf[AdvancedDataSourceV2WithV2Filter].getName).load()
     // i > 3 is deterministic and pushable; rand() > 0.5 is non-deterministic. rand() translates

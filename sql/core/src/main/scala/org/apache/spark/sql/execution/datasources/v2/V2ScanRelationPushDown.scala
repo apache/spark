@@ -144,8 +144,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // Advisory filters are only meaningful when the Catalyst `pushFilters` callback actually ran
       // with an eligible filter list. `PushDownUtils.pushFilters` prefers `SupportsPushDownFilters`
       // and `SupportsPushDownV2Filters`, so a builder mixing those with the Catalyst trait never
-      // receives the callback; and a subquery-only filter leaves no eligible Catalyst predicate.
-      val catalystFiltersPushed = normalizedFiltersWithoutSubquery.nonEmpty &&
+      // receives the callback; and subquery-only or non-deterministic-only filters leave no
+      // eligible Catalyst predicate.
+      val catalystFiltersPushed = normalizedFiltersWithoutSubquery.exists(_.deterministic) &&
         PushDownUtils.dispatchesToCatalystFilters(sHolder.builder)
       sHolder.advisoryFilterExpressions = if (catalystFiltersPushed) {
         getAdvisoryFilters(sHolder).filterNot(fullyPushedFilterSet.contains)

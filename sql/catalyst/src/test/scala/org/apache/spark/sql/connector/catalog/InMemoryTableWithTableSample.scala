@@ -411,7 +411,7 @@ class InMemoryTableWithTableSampleAndAdvisoryFilters(
         sampleMethod: SampleMethod): Boolean =
       inner.pushTableSample(lowerBound, upperBound, withReplacement, seed, sampleMethod)
 
-    override def pushFilters(filters: Seq[Expression]): Seq[Expression] = Nil
+    override def pushFilters(filters: Seq[Expression]): Seq[Expression] = filters
 
     override def pushedFilters: Array[Predicate] = Array.empty
 
