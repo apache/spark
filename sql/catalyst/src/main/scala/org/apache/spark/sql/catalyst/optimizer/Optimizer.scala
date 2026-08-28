@@ -2263,7 +2263,12 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     //    resulting in double evaluation, but only of inexpensive items -- worth it to filter
     //    records sooner.
     // (Case 1 & 2 are treated as "cheap" predicates)
-    // 3) When an a filter references expensive to compute references we do not push it.
+    // 3) When an a filter references expensive to compute references we do not push it. Instead we
+    //    try to split the projection into a stack of projections with the filter in between, so
+    //    that the expensive references the filter does _not_ need are only computed for the rows
+    //    which survived it (see `splitProjectForExpensiveConditions`). Whatever is left over after
+    //    splitting stays above the projection, which is where all of case 3 lands when there is
+    //    nothing worth splitting.
     // Note that a given filter may contain parts (sepereated by logical ands) from all cases.
     // We handle each part separately according to the logic above.
     // Additional restriction:
@@ -2306,26 +2311,45 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
               false
             }
           }
-        // Short circuit if we do not have any cheap filters return the original filter as is.
-        if (cheapWithUsed.isEmpty) {
-          f
-        } else {
-          val cheap: Seq[Expression] = cheapWithUsed.map(_._3)
-          // Make a base instance which has all of the cheap filters pushed down.
+        // Make a base plan which has all of the cheap filters (cases 1 & 2) pushed down.
+        val baseChild: LogicalPlan = if (cheapWithUsed.nonEmpty) {
           // For all filter which do not reference any expensive aliases then
           // just push the filter while resolving the non-expensive aliases.
-          val combinedCheapFilter = cheap.reduce(And)
-          val baseChild = Filter(combinedCheapFilter, child = grandChild)
-          // Take our projection and place it on top of the pushed filters.
-          val topProjection = project.copy(child = baseChild)
+          val combinedCheapFilter = cheapWithUsed.map(_._3).reduce(And)
+          Filter(combinedCheapFilter, child = grandChild)
+        } else {
+          // If we don't have any inexpensive filters to push it's "just" the grandchild.
+          grandChild
+        }
+        // Case 3: try to split the projection around the expensive conditions so the expensive
+        // expressions a condition does not need are only evaluated on the rows it kept.
+        val (splitChild, splitAliases, stayUp) =
+          if (expensiveWithUsed.nonEmpty && SQLConf.get.splitProjectionForExpensiveFilters) {
+            splitProjectForExpensiveConditions(project, aliasMap, baseChild,
+              expensiveWithUsed.map { case (cond, used, _) => (cond, used) })
+          } else {
+            (baseChild, AttributeSet.empty, expensiveWithUsed.map(_._1))
+          }
+        // Short circuit if we neither pushed nor split anything and return the filter as is.
+        if (cheapWithUsed.isEmpty && splitAliases.isEmpty) {
+          f
+        } else {
+          // Take our projection and place it on top of the pushed filters, referencing the
+          // aliases the split projections already computed instead of computing them twice.
+          // Only the aliases change, so the column ordering (and with it the schema) is kept.
+          val topProjectList = if (splitAliases.isEmpty) {
+            fields
+          } else {
+            fields.map(field => if (splitAliases.contains(field)) field.toAttribute else field)
+          }
+          val topProjection = project.copy(projectList = topProjectList, child = splitChild)
 
-          // If we pushed all the filters we can return the projection
-          if (expensiveWithUsed.isEmpty) {
+          // If we pushed or split all the filters we can return the projection
+          if (stayUp.isEmpty) {
             topProjection
           } else {
-            // Finally add any filters which could not be pushed
-            val remainingConditions = expensiveWithUsed.map(_._1)
-            Filter(remainingConditions.reduce(And), topProjection)
+            // Finally add any filters which could neither be pushed nor split
+            Filter(stayUp.reduce(And), topProjection)
           }
         }
       }
@@ -2482,6 +2506,146 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     } else {
       filter
     }
+  }
+
+  /**
+   * Splits `project` into a stack of [[Project]]s with the expensive conditions in
+   * `expensiveConds` in between them, so that an expensive expression in the projection is only
+   * evaluated on the rows which survived the conditions placed below it (SPARK-55014).
+   *
+   * For example, with both regexes considered expensive and a child producing `a` and `e`:
+   * {{{
+   *   Filter f AND g
+   *     Project a, rlike(e, 'magic') AS f, rlike(e, 'other') AS g
+   *       child
+   * }}}
+   * becomes
+   * {{{
+   *   Filter g
+   *     Project a, f, rlike(e, 'other') AS g
+   *       Filter f
+   *         Project a, e, rlike(e, 'magic') AS f
+   *           child
+   * }}}
+   * so `rlike(e, 'other')` only runs on the rows where `rlike(e, 'magic')` was true.
+   *
+   * The conditions are first grouped by the aliases they reference, since conditions over the same
+   * aliases can only ever be evaluated at the same point of the stack. We then repeatedly pick the
+   * group needing the fewest not-yet-computed aliases -- preferring, on a tie, the group which
+   * makes the most conditions evaluable -- and add a [[Project]] computing exactly those aliases
+   * followed by a [[Filter]] with every condition which has become evaluable. Doing the least
+   * demanding conditions first keeps the expensive expressions as high in the stack, and so over
+   * as few rows, as we can manage.
+   *
+   * Ties are broken towards the group whose first condition came first in the original filter. We
+   * have no selectivity estimates here, so the order the conditions were written in is the only
+   * signal we have, and it is the order they would have been evaluated in anyway: with whole stage
+   * codegen the unsplit plan already defers a projected expression past a filter which does not
+   * need it, in that order (see `CodegenSupport.evaluateRequiredVariables`). What this rule buys
+   * is therefore the same saving on the paths codegen does not cover -- interpreted projections,
+   * operators it bails out of, Python UDF evaluation.
+   *
+   * Two restrictions keep us from splitting where it would cost more than it saves:
+   *  - We only split a [[Project]] off while doing so leaves at least one expensive alias for a
+   *    later layer. An extra operator has a per-row cost of its own, so it has to buy us the
+   *    deferral of an expensive expression to be worth adding.
+   *  - Aliases which share an expensive sub-expression are treated as one indivisible unit.
+   *    Subexpression elimination happens within a single projection and cannot reach across a
+   *    [[Filter]], so evaluating such aliases in different layers would evaluate the shared part
+   *    once for every row below the filter and then again for every row which survived it. A
+   *    struct-returning UDF read field by field is the common shape here.
+   *
+   * The most demanding group of conditions is therefore always left un-placed and handed back to
+   * the caller, which puts it above the projection -- exactly where the expensive conditions go
+   * when there is nothing worth splitting at all.
+   *
+   * Returns the new plan, the alias attributes that plan has already computed, and the conditions
+   * which were not placed (in their original, alias referencing, form).
+   */
+  private def splitProjectForExpensiveConditions(
+      project: Project,
+      aliasMap: AttributeMap[Alias],
+      baseChild: LogicalPlan,
+      expensiveConds: Seq[(Expression, AttributeMap[Alias])])
+    : (LogicalPlan, AttributeSet, Seq[Expression]) = {
+    // The aliases we would rather not evaluate on the rows a condition is going to drop.
+    val expensiveAliases = AttributeSet(
+      aliasMap.collect { case (attr, alias) if alias.child.expensive => attr })
+    // The expensive sub-expressions behind each expensive alias, so that we can tell when two
+    // aliases are really the same piece of work. A cheap alias has none by definition, so we do
+    // not walk (and canonicalize) the rest of what can be a very wide projection.
+    val expensivePartsOf = AttributeMap(expensiveAliases.toSeq.map { attr =>
+      attr -> aliasMap(attr).child.collect { case e if e.expensive => e.canonicalized }.toSet
+    })
+    def expensiveParts(attr: Attribute): Set[Expression] =
+      expensivePartsOf.getOrElse(attr, Set.empty)
+    // ... and which aliases each of those sub-expressions turns up in.
+    val aliasesSharing = expensivePartsOf.toSeq
+      .flatMap { case (attr, parts) => parts.map(part => part -> attr) }
+      .groupBy(_._1)
+      .map { case (part, pairs) => part -> AttributeSet(pairs.map(_._2)) }
+    // Aliases sharing an expensive sub-expression have to be evaluated by the same [[Project]]:
+    // subexpression elimination happens within one projection and cannot reach across the
+    // [[Filter]] we would put between them, so splitting them apart would evaluate the shared
+    // part once for every row below the filter and then again for every row which survived it.
+    // Grow a set of aliases into the whole unit of work it belongs to, transitively.
+    def unitOf(aliases: AttributeSet): AttributeSet = {
+      var unit = aliases
+      var grew = true
+      while (grew) {
+        val next = unit.flatMap(expensiveParts).foldLeft(unit) {
+          case (acc, part) => acc ++ aliasesSharing(part)
+        }
+        grew = next.size > unit.size
+        unit = next
+      }
+      unit
+    }
+    // Each condition with the unit of aliases it needs and its position in the original filter.
+    val indexed = expensiveConds.zipWithIndex.map {
+      case ((cond, used), idx) => (unitOf(AttributeSet(used.keys)), idx, cond)
+    }
+    // Conditions over the same aliases can only ever be evaluated at the same point of the stack,
+    // so group them and treat each group as one unit. We group on the sorted expression ids rather
+    // than on the [[AttributeSet]] so that grouping does not depend on how the latter hashes, and
+    // order the groups by their first condition to keep the plans we build stable and to keep the
+    // order the conditions were written in.
+    var pending: Seq[(AttributeSet, Seq[(Int, Expression)])] = indexed
+      .groupBy { case (used, _, _) => used.toSeq.map(_.exprId.id).sorted }
+      .toSeq
+      .map { case (_, group) => (group.head._1, group.map { case (_, idx, cond) => (idx, cond) }) }
+      .sortBy { case (_, conds) => conds.head._1 }
+    def conditionsOf(groups: Seq[(AttributeSet, Seq[(Int, Expression)])]): Seq[Expression] =
+      groups.flatMap(_._2).sortBy(_._1).map(_._2)
+
+    // The aliases in projection order, which is stable, unlike the alias map's iteration order.
+    val orderedAliases = project.projectList.collect { case a: Alias => a }
+
+    var plan = baseChild
+    var computed = AttributeSet.empty
+    var searching = true
+    while (searching) {
+      // Splitting around a group only pays off while it leaves an expensive alias for a later
+      // layer to compute.
+      val stillToCompute = expensiveAliases -- computed
+      val candidates = pending.filter { case (used, _) => !stillToCompute.subsetOf(used) }
+      if (candidates.isEmpty) {
+        searching = false
+      } else {
+        val (bestUsed, _) = candidates.minBy {
+          case (used, conds) => ((used -- computed).size, -conds.size)
+        }
+        val newAliases = orderedAliases.filter(a => bestUsed.contains(a) && !computed.contains(a))
+        computed ++= AttributeSet(newAliases.map(_.toAttribute))
+        // Everything the plan below already produces stays available, since a later projection in
+        // the stack (or the final one) may still need it. Column pruning drops the extras.
+        val newProject = project.copy(projectList = plan.output ++ newAliases, child = plan)
+        val (evaluable, rest) = pending.partition { case (used, _) => used.subsetOf(computed) }
+        plan = Filter(conditionsOf(evaluable).reduce(And), newProject)
+        pending = rest
+      }
+    }
+    (plan, computed, conditionsOf(pending))
   }
 
   /**

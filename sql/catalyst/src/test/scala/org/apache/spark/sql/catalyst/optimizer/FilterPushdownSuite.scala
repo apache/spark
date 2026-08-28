@@ -61,6 +61,8 @@ class FilterPushdownSuite extends PlanTest {
 
   val testStringRelation = LocalRelation(attrA, attrB, attrE)
 
+  val testArrayStringRelation = LocalRelation($"a".int, $"s_arr".array(StringType))
+
   val simpleDisjunctivePredicate =
     ("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11)
   val expectedPredicatePushDownResult = {
@@ -269,6 +271,253 @@ class FilterPushdownSuite extends PlanTest {
       .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-55014: split the projection so a second expensive element sees fewer rows") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+      .where($"f" && $"g")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Both regexes are expensive, and neither condition needs both of them, so we compute f
+    // first and only run the 'other' regex on the rows where the 'magic' one matched.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
+      .where($"f")
+      .select($"a", $"f", $"e".rlike("other") as "g", $"b")
+      .where($"g")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-55014: split the projection even for a single expensive condition") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+      .where($"f")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // g is never filtered on, but it is still expensive, so it is worth deferring it until
+    // after the filter on f.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
+      .where($"f")
+      .select($"a", $"f", $"e".rlike("other") as "g", $"b")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-55014: split the projection once per group of expensive elements") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"e".rlike("third") as
+        "j")
+      .where($"f" && $"g" && $"j")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Every condition needs a different alias, so we get a projection per condition, minus the
+    // last one -- there is nothing left to defer past it so it goes above the final projection.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
+      .where($"f")
+      .select($"a", $"b", $"e", $"f", $"e".rlike("other") as "g")
+      .where($"g")
+      .select($"a", $"f", $"g", $"e".rlike("third") as "j")
+      .where($"j")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-55014: a condition needing every expensive element can not be split off") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+      .where($"f" || $"g")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Splitting here would have to compute both regexes below the filter, which is the plan we
+    // already have plus a redundant projection.
+    val correctAnswer = originalQuery
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-55014: a condition over several expensive elements can still be split off") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"e".rlike("third") as
+        "j")
+      .where($"f" || $"g")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Same condition as the test above, but this time there is a third expensive element to
+    // defer past it, so one projection computes both f and g and j waits until after the filter.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", $"e".rlike("magic") as "f", $"e".rlike("other") as "g")
+      .where($"f" || $"g")
+      .select($"a", $"f", $"g", $"e".rlike("third") as "j")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-55014: the least demanding condition goes lowest") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"e".rlike("third") as
+        "j")
+      .where(($"f" || $"g") && $"j")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // j needs one alias and (f || g) needs two, so j is evaluated first even though it comes
+    // last in the projection: that leaves two expensive elements to run on its survivors.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", $"e".rlike("third") as "j")
+      .where($"j")
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"j")
+      .where($"f" || $"g")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-55014: split the projection while also pushing the cheap conditions") {
+    val originalQuery = testStringRelation
+      .select($"a" + $"b" as "sum", $"e".rlike("magic") as "f", $"e".rlike("other") as "g")
+      .where($"sum" > 10 && $"f")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // sum is cheap so its condition is pushed all the way down (case 2), f is expensive so we
+    // split the projection around it, and g is deferred to the projection on top.
+    val correctAnswer = testStringRelation
+      .where($"a" + $"b" > 10)
+      .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
+      .where($"f")
+      .select($"a" + $"b" as "sum", $"f", $"e".rlike("other") as "g")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-55014: no split when the only elements left to defer are cheap") {
+    val originalQuery = testStringRelation
+      .select($"a" + $"b" as "sum", $"e".rlike("magic") as "f")
+      .where($"f")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // A projection is not free, so we only split when it defers something expensive. Recomputing
+    // sum a row later is not worth an extra operator.
+    val correctAnswer = originalQuery
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-55014: the projection on top keeps the original column ordering") {
+    val originalQuery = testStringRelation
+      .select($"b", $"e".rlike("magic") as "f", $"a", $"e".rlike("other") as "g")
+      .where($"f" && $"g")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // f is computed below but still has to come back out in its original position.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
+      .where($"f")
+      .select($"b", $"f", $"a", $"e".rlike("other") as "g")
+      .where($"g")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+    assert(optimized.schema === originalQuery.schema)
+  }
+
+  test("SPARK-55014: all the conditions over the same elements are applied together") {
+    val joined = ArrayJoin($"s_arr", Literal(","), None)
+    val otherJoined = ArrayJoin($"s_arr", Literal("-"), None)
+    val originalQuery = testArrayStringRelation
+      .select($"a", joined as "j", otherJoined as "k")
+      .where($"j" > "a" && $"j" < "z")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Conditions over the same aliases can only run at the same point of the stack, so both
+    // conditions on j end up in the same filter, and k is deferred past them.
+    val correctAnswer = testArrayStringRelation
+      .select($"a", $"s_arr", joined as "j")
+      .where($"j" > "a" && $"j" < "z")
+      .select($"a", $"j", otherJoined as "k")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-55014: no split when the expensive work is shared between elements") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", Not($"e".rlike("magic")) as "g")
+      .where($"f" && $"g")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // f and g are the same regex. Subexpression elimination evaluates it once for a single
+    // projection but cannot reach across a filter, so splitting f and g apart would run it for
+    // every row below the filter and then again for every row which survived -- more work than
+    // leaving the projection alone.
+    val correctAnswer = originalQuery
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-55014: elements sharing expensive work are split off together") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", Not($"e".rlike("magic")) as "g",
+        $"e".rlike("other") as "j")
+      .where($"f" && $"j")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // j is its own piece of work and needs one alias, while f drags g along with it, so j is
+    // split off first and f and g stay together in the projection on top.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", $"e".rlike("other") as "j")
+      .where($"j")
+      .select($"a", $"e".rlike("magic") as "f", Not($"e".rlike("magic")) as "g", $"j")
+      .where($"f")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-55014: do not split the projection when configured") {
+    withSQLConf(SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> "false") {
+      val originalQuery = testStringRelation
+        .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+        .where($"f" && $"g")
+        .analyze
+
+      val optimized = Optimize.execute(originalQuery)
+
+      val correctAnswer = originalQuery
+
+      comparePlans(optimized, correctAnswer)
+    }
   }
 
   test("nondeterministic: can always push down filter through project with deterministic field") {
