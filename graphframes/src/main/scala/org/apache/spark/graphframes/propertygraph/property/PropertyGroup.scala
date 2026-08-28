@@ -15,22 +15,33 @@
  * limitations under the License.
  */
 
-package org.apache.spark.graphframes
+package org.apache.spark.graphframes.propertygraph.property
 
-import org.apache.spark.graphframes.examples.Graphs
-import org.apache.spark.graphframes.lib.AggregateMessages
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions.lit
 
-private[graphframes] class GraphFramePythonAPI {
+trait PropertyGroup {
+  val name: String
+  val data: DataFrame
+  protected def validate(): this.type
 
-  def createGraph(v: DataFrame, e: DataFrame): GraphFrame = GraphFrame(v, e)
+  /**
+   * Returns a view of the data for the property group without applying any filter.
+   *
+   * @return
+   *   A DataFrame containing the raw data.
+   */
+  protected[graphframes] def getData(): DataFrame = getData(lit(true))
 
-  val ID: String = GraphFrame.ID
-  val SRC: String = GraphFrame.SRC
-  val DST: String = GraphFrame.DST
-  val EDGE: String = GraphFrame.EDGE
-  val ATTR: String = GraphFrame.ATTR
-
-  lazy val aggregateMessages: AggregateMessages.type = AggregateMessages
-  lazy val examples: Graphs = Graphs
+  /**
+   * Returns a filtered view of the data for the property group, with an optional mask applied to
+   * IDs.
+   *
+   * @param filter
+   *   A condition (Column) used to filter the data.
+   * @return
+   *   A DataFrame containing the filtered and optionally transformed data.
+   */
+  protected[graphframes] def getData(filter: Column): DataFrame
 }

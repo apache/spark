@@ -17,15 +17,15 @@
 
 package org.apache.spark.graphframes.examples
 
+import scala.reflect.runtime.universe.TypeTag
+
+import org.apache.spark.graphframes.GraphFrame
+import org.apache.spark.graphframes.GraphFrame._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.functions.randn
 import org.apache.spark.sql.functions.udf
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.GraphFrame._
-
-import scala.reflect.runtime.universe.TypeTag
 
 class Graphs private[graphframes] () {
   // Note: this cannot be values: we are creating and destroying spark contexts during the tests,

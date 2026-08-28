@@ -106,14 +106,15 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     ['root']
     >>> [x.name for x in determine_modules_to_test([modules.graphx])]
     ... # doctest: +NORMALIZE_WHITESPACE
-    ['graphx', 'examples', 'graphframes', 'connect', 'pyspark-connect', 'pyspark-graphframes',
-     'pyspark-ml-connect', 'pyspark-pandas-connect', 'pyspark-pandas-slow-connect',
+    ['graphx', 'examples', 'graphframes', 'connect', 'pyspark-graphframes', 'pyspark-connect',
+     'pyspark-graphframes-connect', 'pyspark-ml-connect', 'pyspark-pandas-connect',
+     'pyspark-pandas-slow-connect',
      'pyspark-pipelines', 'pyspark-structured-streaming-connect']
     >>> sorted([x.name for x in determine_modules_to_test([modules.sql])])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'connect', 'docker-integration-tests', 'examples', 'graphframes', 'hive',
      'hive-thriftserver', 'mllib', 'pipelines', 'protobuf', 'pyspark-connect',
-     'pyspark-graphframes', 'pyspark-ml', 'pyspark-ml-connect',
+     'pyspark-graphframes', 'pyspark-graphframes-connect', 'pyspark-ml', 'pyspark-ml-connect',
      'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',
      'pyspark-pandas-slow-connect', 'pyspark-pipelines', 'pyspark-sql',
      'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',
@@ -123,7 +124,7 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'connect', 'docker-integration-tests', 'examples', 'graphframes', 'hive',
      'hive-thriftserver', 'mllib', 'pipelines', 'protobuf', 'pyspark-connect',
-     'pyspark-graphframes', 'pyspark-ml', 'pyspark-ml-connect',
+     'pyspark-graphframes', 'pyspark-graphframes-connect', 'pyspark-ml', 'pyspark-ml-connect',
      'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',
      'pyspark-pandas-slow-connect', 'pyspark-pipelines', 'pyspark-sql',
      'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',
@@ -134,8 +135,8 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     ['avro', 'catalyst', 'connect', 'core', 'credential-aws', 'docker-integration-tests',
      'examples', 'graphframes', 'graphx',
      'hive', 'hive-thriftserver', 'mllib', 'mllib-local', 'pipelines', 'protobuf',
-     'pyspark-connect', 'pyspark-core', 'pyspark-errors', 'pyspark-graphframes', 'pyspark-ml',
-     'pyspark-ml-connect',
+     'pyspark-connect', 'pyspark-core', 'pyspark-errors', 'pyspark-graphframes',
+     'pyspark-graphframes-connect', 'pyspark-ml', 'pyspark-ml-connect',
      'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',
      'pyspark-pandas-slow-connect', 'pyspark-pipelines', 'pyspark-resource', 'pyspark-sql',
      'pyspark-streaming', 'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',

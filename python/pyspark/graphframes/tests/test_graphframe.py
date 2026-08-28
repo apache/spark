@@ -16,6 +16,7 @@
 #
 
 from pyspark.graphframes import GraphFrame
+from pyspark.graphframes.lib import Pregel
 from pyspark.sql import Row
 from pyspark.sql import functions as F
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -108,6 +109,11 @@ class GraphFrameTests(ReusedSQLTestCase):
         edges = self.spark.createDataFrame([], "src long, dst long")
         with self.assertRaisesRegex(ValueError, "duplicate vertices"):
             GraphFrame(vertices, edges).validate()
+
+    def test_direct_pregel_construction(self) -> None:
+        pregel = Pregel(self.graph)
+        self.assertIs(pregel.setMaxIter(1), pregel)
+        self.assertIsInstance(pregel, Pregel)
 
 
 if __name__ == "__main__":

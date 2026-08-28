@@ -21,9 +21,9 @@ from typing import cast, final
 from py4j.java_gateway import JavaObject
 
 from pyspark import SparkContext
+from pyspark.graphframes.classic.pregel import Pregel
 from pyspark.graphframes.classic.utils import storage_level_to_jvm
 from pyspark.graphframes.internal.utils import _RandomWalksEmbeddingsParameters
-from pyspark.graphframes.lib import Pregel
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.classic.column import Column, _to_seq

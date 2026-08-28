@@ -1370,14 +1370,30 @@ pyspark_connect = Module(
 
 pyspark_graphframes = Module(
     name="pyspark-graphframes",
-    dependencies=[pyspark_connect, graphframes],
+    dependencies=[pyspark_sql, graphframes],
     source_file_regexes=[
         "python/pyspark/graphframes",
     ],
     python_test_goals=[
         "pyspark.graphframes.tests.test_graphframe",
+        "pyspark.graphframes.tests.test_graphframes",
+        "pyspark.graphframes.tests.pg.test_property_graphframe",
+    ],
+)
+
+pyspark_graphframes_connect = Module(
+    name="pyspark-graphframes-connect",
+    dependencies=[pyspark_connect, pyspark_graphframes],
+    source_file_regexes=[
+        "python/pyspark/graphframes/connect",
+        "python/pyspark/graphframes/tests/connect",
+    ],
+    python_test_goals=[
+        "pyspark.graphframes.tests.connect.test_client_imports",
         "pyspark.graphframes.tests.connect.test_parity_graphframe",
         "pyspark.graphframes.tests.connect.test_all_algorithms",
+        "pyspark.graphframes.tests.connect.test_upstream_graphframes",
+        "pyspark.graphframes.tests.connect.test_property_graphframe",
     ],
 )
 

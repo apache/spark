@@ -17,7 +17,7 @@
 
 from pyspark.graphframes import GraphFrame
 from pyspark.graphframes.graphframe import AggregateNeighbors, RandomWalkEmbeddings
-from pyspark.graphframes.lib import AggregateMessages
+from pyspark.graphframes.lib import AggregateMessages, Pregel
 from pyspark.sql import functions as F
 from pyspark.storagelevel import StorageLevel
 from pyspark.testing.connectutils import ReusedConnectTestCase
@@ -81,6 +81,11 @@ class GraphFrameConnectAlgorithmTests(ReusedConnectTestCase):
         self.assertEqual(result.count(), 4)
         self.assertIn("value", result.columns)
         result.unpersist()
+
+    def test_direct_pregel_construction(self) -> None:
+        pregel = Pregel(self.graph)
+        self.assertIs(pregel.setMaxIter(1), pregel)
+        self.assertIsInstance(pregel, Pregel)
 
     def test_component_and_community_algorithms(self) -> None:
         components = self.graph.connectedComponents(

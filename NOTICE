@@ -39,3 +39,12 @@ LongAdder), which was released with the following comments:
     Written by Doug Lea with assistance from members of JCP JSR-166
     Expert Group and released to the public domain, as explained at
     http://creativecommons.org/publicdomain/zero/1.0/
+
+
+LDBC datasets
+-------------
+
+The LDBC datasets used by GraphFrames integration tests are licensed under the Apache
+Software License, Version 2.0. They are used for testing and evaluation purposes only.
+Per the LDBC fair-use policy, results must not be described using the words "LDBC benchmark"
+or any equivalent phrase.
