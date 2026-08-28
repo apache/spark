@@ -38,10 +38,6 @@ public interface SupportsRuntimeFiltering extends SupportsRuntimeV2Filtering {
    * <p>
    * Spark will call {@link #filter(Filter[])} if it can derive a runtime
    * predicate for any of the filter attributes.
-   * <p>
-   * Each reference must be a top-level attribute present in {@link Scan#readSchema()}.
-   * Nested references and attributes pruned out of the read schema fail to resolve when
-   * Spark builds the scan relation.
    */
   NamedReference[] filterAttributes();
 

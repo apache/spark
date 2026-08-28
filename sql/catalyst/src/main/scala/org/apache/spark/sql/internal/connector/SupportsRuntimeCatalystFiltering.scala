@@ -41,9 +41,6 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * Returns attributes this scan can be filtered by at runtime.
    *
    * Spark will call [[filter]] if it can derive a runtime filter for any of these attributes.
-   * Each reference must be a top-level attribute present in [[Scan.readSchema]]. Nested
-   * references are rejected, and attributes pruned out of the read schema fail to resolve, when
-   * Spark builds the scan relation.
    */
   def filterAttributes(): Array[NamedReference]
 
@@ -62,10 +59,6 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * an ANSI cast or overflow error, or on a nested access that the scan matches differently
    * against its partition layout. Declare an attribute only when the scan can evaluate every
    * predicate over it.
-   *
-   * Each reference must be a top-level attribute present in [[Scan.readSchema]]. Nested
-   * references are rejected, and attributes pruned out of the read schema fail to resolve, when
-   * Spark builds the scan relation.
    */
   def fullyPushedFilterAttributes(): Array[NamedReference] = Array.empty
 
@@ -76,9 +69,8 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * Implementations may use the expressions to prune initially planned
    * [[org.apache.spark.sql.connector.read.InputPartition]]s.
    *
-   * An expression may access nested fields of an attribute returned by [[filterAttributes]], as
-   * that attribute is required to be top-level. The scan is responsible for matching such
-   * accesses against its own partition layout.
+   * An expression may access nested fields. The scan is responsible for matching such accesses
+   * against its own partition layout.
    *
    * Spark may call this method more than once for the same scan instance: a plan can hold several
    * scan nodes sharing one scan (e.g. the two branches of a group-based UPDATE), and each pushes

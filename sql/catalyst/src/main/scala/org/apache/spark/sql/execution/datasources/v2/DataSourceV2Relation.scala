@@ -210,7 +210,7 @@ case class DataSourceV2ScanRelation(
       case s: SupportsRuntimeCatalystFiltering => s.filterAttributes()
       case _ => Array.empty[NamedReference]
     }
-    resolveTopLevelFilterAttrs(filterAttrs)
+    resolveFilterAttrs(filterAttrs)
   }
 
   /**
@@ -223,21 +223,11 @@ case class DataSourceV2ScanRelation(
       case s: SupportsRuntimeCatalystFiltering => s.fullyPushedFilterAttributes()
       case _ => Array.empty[NamedReference]
     }
-    resolveTopLevelFilterAttrs(filterAttrs)
+    resolveFilterAttrs(filterAttrs)
   }
 
-  /**
-   * Resolves the given runtime-filter references against this relation's output. Both runtime
-   * filtering interfaces require each reference to be a top-level attribute of the read schema,
-   * so a nested reference is rejected.
-   */
-  private def resolveTopLevelFilterAttrs(filterAttrs: Array[NamedReference]): AttributeSet = {
-    filterAttrs.find(_.fieldNames.length > 1).foreach { ref =>
-      throw SparkException.internalError(
-        s"Runtime filter attribute '${ref.fieldNames.mkString(".")}' declared by " +
-        s"${scan.getClass.getName} must be a top-level attribute of the scan read schema, " +
-        "but it is a nested reference.")
-    }
+  /** Resolves the given runtime-filter references against this relation's output. */
+  private def resolveFilterAttrs(filterAttrs: Array[NamedReference]): AttributeSet = {
     AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](
       filterAttrs.toImmutableArraySeq, this))
   }
