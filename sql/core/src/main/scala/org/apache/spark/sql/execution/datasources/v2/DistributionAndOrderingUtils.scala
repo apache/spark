@@ -66,11 +66,11 @@ object DistributionAndOrderingUtils {
         } else {
           RebalancePartitions(distribution, query, optNumPartitions, optPartitionSize)
         }
-      } else if (numPartitions > 0) {
-        throw QueryCompilationErrors.numberOfPartitionsNotAllowedWithUnspecifiedDistributionError()
-      } else if (partitionSize > 0) {
-        throw QueryCompilationErrors.partitionSizeNotAllowedWithUnspecifiedDistributionError()
+      } else if (numPartitions > 0 && partitionSize > 0) {
+        // Only reject if both numPartitions and partitionSize are specified
+        throw QueryCompilationErrors.numberAndSizeOfPartitionsNotAllowedTogether()
       } else {
+        // Allow unspecified distribution with just numPartitions or just partitionSize
         query
       }
 
