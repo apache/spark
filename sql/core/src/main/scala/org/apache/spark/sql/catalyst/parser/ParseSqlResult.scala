@@ -180,7 +180,6 @@ object ParseSqlResult {
   private sealed trait TableRefRole
   private object TableRefRole {
     case object Target extends TableRefRole
-    case object InsertTarget extends TableRefRole
     case object Source extends TableRefRole
   }
 
@@ -225,9 +224,7 @@ object ParseSqlResult {
         visitPlan(m.targetTable, scope, TableRefRole.Target)(f)
         visitPlan(m.sourceTable, scope, TableRefRole.Source)(f)
       case i: UnresolvedInsert =>
-        visitPlan(i.table, scope, TableRefRole.InsertTarget)(f)
-        visitPlan(i.query, nextScope, TableRefRole.Source)(f)
-      case i: InsertIntoStatement =>
+        visitPlan(i.table, scope, TableRefRole.Target)(f)
         visitPlan(i.query, nextScope, TableRefRole.Source)(f)
       case c: CreateTableAsSelect =>
         visitPlan(c.name, scope, TableRefRole.Target)(f)
@@ -272,8 +269,6 @@ object ParseSqlResult {
           visitPlan(ctePlan, bodyScope, TableRefRole.Source)(f)
           definitionScope += normalized
         }
-      case i: InsertIntoStatement =>
-        visitPlan(i.table, scope, TableRefRole.InsertTarget)(f)
       case c: CacheTable if c.multipartIdentifier.isEmpty =>
         visitPlan(c.table, scope, TableRefRole.Target)(f)
       case c: CompoundBody =>
@@ -319,9 +314,9 @@ object ParseSqlResult {
     }
 
     def addTable(parts: Seq[String], scope: CteScope, role: TableRefRole): Unit = {
-      if (parts.nonEmpty && (role == TableRefRole.InsertTarget || !isCteName(parts, scope))) {
+      if (parts.nonEmpty && !isCteName(parts, scope)) {
         role match {
-          case TableRefRole.Target | TableRefRole.InsertTarget => targetTables += parts
+          case TableRefRole.Target => targetTables += parts
           case TableRefRole.Source => sourceTables += parts
         }
       }
@@ -346,12 +341,12 @@ object ParseSqlResult {
       foreachExpressionDeep(p)(visitExpr)
       def add(parts: Seq[String]): Unit = addTable(parts, scope, role)
       p match {
-        case u: UnresolvedInsertTarget => add(u.multipartIdentifier)
+        case u: UnresolvedInsertTarget => addTarget(u.multipartIdentifier)
         case u: UnresolvedRelation => add(u.multipartIdentifier)
         case u: UnresolvedTable => add(u.multipartIdentifier)
         case u: UnresolvedView => add(u.multipartIdentifier)
         case u: UnresolvedTableOrView => add(u.multipartIdentifier)
-        case u: UnresolvedIdentifier if role != TableRefRole.Source => add(u.nameParts)
+        case u: UnresolvedIdentifier if role == TableRefRole.Target => add(u.nameParts)
         case c: CreateViewCommand => addTarget(tableIdentifierParts(c.name))
         case c: CreateTempViewUsing => addTarget(tableIdentifierParts(c.tableIdent))
         case c: CacheTable if c.multipartIdentifier.nonEmpty =>
@@ -392,8 +387,6 @@ object ParseSqlResult {
   private def primaryQueryPlan(plan: LogicalPlan): LogicalPlan = plan match {
     case UnresolvedWith(child, _, _) => primaryQueryPlan(child)
     case UnresolvedInsert(_, _, _, query, _, _, _, _, _) =>
-      primaryQueryPlan(query)
-    case InsertIntoStatement(_, _, _, query, _, _, _, _, _) =>
       primaryQueryPlan(query)
     case c: CreateTableAsSelect => primaryQueryPlan(c.query)
     case r: ReplaceTableAsSelect => primaryQueryPlan(r.query)
