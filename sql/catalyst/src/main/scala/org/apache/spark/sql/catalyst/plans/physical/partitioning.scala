@@ -478,15 +478,23 @@ case class CoalescedNullAwareHashPartitioning(
  *   unique partition keys, or (2) `GroupPartitionsExec` coalesces partitions with duplicate keys.
  *
  * == Distribution Satisfaction and Grouping ==
- * Besides the default `satisfies()`, `KeyedPartitioning` exposes two additional methods used by
- * `EnsureRequirements` to handle grouped and non-grouped KPs separately:
+ * Besides the default `satisfies()`, `KeyedPartitioning` exposes two additional methods:
  *
- * - `nonGroupedSatisfies()`: called on non-grouped KPs to check as-is satisfaction (without
- *   inserting `GroupPartitionsExec`).
- * - `groupedSatisfies()`: called on non-grouped KPs to check whether inserting
- *   `GroupPartitionsExec` would satisfy the distribution. When it returns true, the distribution
- *   is NOT yet satisfied -- `EnsureRequirements` will insert `GroupPartitionsExec` to coalesce
- *   duplicate partition keys.
+ * - `nonGroupedSatisfies()`: as-is satisfaction (without inserting `GroupPartitionsExec`). It is
+ *   the default `Partitioning` implementation, so for a `ClusteredDistribution` it is always false.
+ * - `groupedSatisfies()`: whether the distribution would be satisfied once the duplicate partition
+ *   keys are coalesced. It has two callers, and they ask different questions:
+ *   - `EnsureRequirements` calls it on non-grouped KPs to ask whether inserting a
+ *     `GroupPartitionsExec` would help. When it returns true, the distribution is NOT yet
+ *     satisfied -- `EnsureRequirements` will insert one to coalesce the duplicate keys.
+ *   - `satisfies0()` calls it on grouped KPs. Since `nonGroupedSatisfies()` is false for a
+ *     `ClusteredDistribution`, this is the only route by which a grouped KP satisfies one, and no
+ *     grouping is involved: the keys are already unique.
+ *
+ * That second caller is why the narrowing guard in `groupedSatisfies()` is a conjunction with
+ * `!isGrouped`. A narrowed KP whose projected keys stayed distinct is grouped, and dropping the
+ * `!isGrouped` term would stop it from satisfying a `ClusteredDistribution` and cost it a shuffle,
+ * even though grouping it would merge nothing.
  *
  * For `OrderedDistribution`, `GroupPartitionsExec` must also sort the partition keys to meet the
  * ordering requirement.
@@ -521,11 +529,15 @@ case class CoalescedNullAwareHashPartitioning(
  * @param isGrouped Whether partition keys are unique (no duplicates). Computed on first
  *                  creation, then preserved through copy operations to avoid recomputation.
  * @param isNarrowed Whether this partitioning was derived from a finer-grained one by dropping key
- *                   positions (e.g. via `PartitioningPreservingUnaryExecNode`). When true,
- *                   `GroupPartitionsExec` will merge partitions that shared distinct keys in the
- *                   original partitioning, carrying the same skew risk as
- *                   `allowKeysSubsetOfPartitionKeys`. Such a partitioning will not satisfy
- *                   `ClusteredDistribution` unless that config is enabled.
+ *                   positions (e.g. via `PartitioningPreservingUnaryExecNode`). When true and the
+ *                   keys are no longer unique, `GroupPartitionsExec` may merge partitions that held
+ *                   distinct keys in the original partitioning, carrying the same skew risk as
+ *                   `allowKeysSubsetOfPartitionKeys`. "May", because the condition is a proxy: the
+ *                   duplicate keys can also come from a source that reports several splits per
+ *                   partition key, in which case grouping merges only same-key partitions. Such a
+ *                   partitioning can only satisfy `ClusteredDistribution` by being grouped, and
+ *                   `groupedSatisfies` refuses that unless the config is enabled, regardless of
+ *                   `requireAllClusterKeysForDistribution`.
  */
 case class KeyedPartitioning(
     expressions: Seq[Expression],
@@ -579,7 +591,24 @@ case class KeyedPartitioning(
   def groupedSatisfies(required: Distribution): Boolean = {
     required match {
       case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
-        if (requireAllClusterKeys) {
+        // Both branches below are gated by the same switch, so read it once.
+        val allowKeysSubsetOfPartitionKeys =
+          SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys
+
+        if (isNarrowed && !isGrouped && !allowKeysSubsetOfPartitionKeys) {
+          // A narrowed, non-grouped partitioning carries the same skew risk as using a subset of
+          // partition keys for a join: GroupPartitionsExec may merge partitions that held distinct
+          // keys in the original finer-grained partitioning. Require the same config to opt in.
+          //
+          // Checked before the `requireAllClusterKeys` branch, because the risk is independent of
+          // which key sets count as matching (SPARK-58974).
+          //
+          // The `!isGrouped` term is required, not redundant: a narrowing projection whose
+          // projected keys stayed distinct is grouped, and `satisfies0` routes such a partitioning
+          // through here (`nonGroupedSatisfies` is false for a `ClusteredDistribution`). Grouping
+          // it would merge nothing, so refusing it would only cost a shuffle.
+          false
+        } else if (requireAllClusterKeys) {
           // Checks whether this partitioning is partitioned on exactly same clustering keys of
           // `ClusteredDistribution`.
           c.areAllClusterKeysMatched(expressions)
@@ -587,17 +616,11 @@ case class KeyedPartitioning(
           // We'll need to find leaf attributes from the partition expressions first.
           lazy val attributes = AttributeSet.fromAttributeSets(expressions.map(_.references))
 
-          if (SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys) {
+          if (allowKeysSubsetOfPartitionKeys) {
             // check that operation keys (required clustering keys)
             // overlap with partition keys (KeyedPartitioning attributes)
             requiredClustering.exists(x => attributes.exists(_.semanticEquals(x))) &&
               expressions.forall(_.references.size == 1)
-          } else if (isNarrowed && !isGrouped) {
-            // A narrowed, non-grouped partitioning carries the same skew risk as using a subset of
-            // partition keys for a join: GroupPartitionsExec will merge partitions that held
-            // distinct keys in the original finer-grained partitioning. Require the same config to
-            // opt in.
-            false
           } else {
             attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
           }
