@@ -326,21 +326,10 @@ object TranspiledUDFParameter {
    * Every argument index an option reads, in tree order, one entry per read. Callers want both the
    * set and the counts: a parameter read once is evaluated once wherever it sits, so how often it
    * shows up is what decides whether a column buys anything.
-   *
-   * A nested call's own options are skipped: those indexes count against *its* arguments, and
-   * reading them as ours reports positions we may not have. Its arguments are ours, though -- they
-   * are expressions in our index space and may hold our references -- so the walk carries on
-   * through [[TranspiledPythonUDF.pythonUDFExpr]].
    */
   def referencedIndexes(option: Expression): Seq[Int] = {
     val indexes = mutable.ArrayBuffer.empty[Int]
-    def walk(e: Expression): Unit = e match {
-      case _ if !e.containsPattern(TRANSPILED_UDF_PARAMETER) => // nothing below here
-      case p: TranspiledUDFParameter => indexes += p.index
-      case nested: TranspiledPythonUDF => walk(nested.pythonUDFExpr)
-      case other => other.children.foreach(walk)
-    }
-    walk(option)
+    mapRefs(option) { p => indexes += p.index; p }
     indexes.toSeq
   }
 
@@ -349,14 +338,9 @@ object TranspiledUDFParameter {
    *
    * Never looks at what it splices in: an argument can hold an *enclosing* call's reference, and
    * walking back into the replacement would find it, splice again, and run out of stack.
-   *
-   * A nested call's own options are skipped, for the reason [[referencedIndexes]] skips them --
-   * those indexes count against *its* arguments, and only that call can substitute them. Its
-   * arguments are ours, so the walk carries on through [[TranspiledPythonUDF.pythonUDFExpr]].
    */
-  def substitute(option: Expression, replacement: Int => Expression): Expression = option match {
-    case _ if !option.containsPattern(TRANSPILED_UDF_PARAMETER) => option
-    case p: TranspiledUDFParameter =>
+  def substitute(option: Expression, replacement: Int => Expression): Expression =
+    mapRefs(option) { p =>
       val substituted = replacement(p.index)
       // We read a reference's type off its argument once, in analysis, and never look again, so a
       // later rule retyping the argument would leave this stale with the body already coerced
@@ -370,32 +354,39 @@ object TranspiledUDFParameter {
             s"${substituted.dataType}")
       }
       substituted
-    case nested: TranspiledPythonUDF =>
-      nested.withNewChildren(
-        substitute(nested.pythonUDFExpr, replacement) +: nested.transpiledOptions)
-    case other => other.mapChildren(substitute(_, replacement))
-  }
+    }
 
   /**
-   * Fills in each reference's type from the bound arguments, once those are resolved. Skips a
-   * nested call's options for the same reason [[referencedIndexes]] does: typing those from our
-   * arguments would type them from the wrong call's.
+   * Fills in each reference's type from the bound arguments, once those are resolved.
    */
-  def resolveTypes(option: Expression, arguments: Seq[Expression]): Expression = option match {
+  def resolveTypes(option: Expression, arguments: Seq[Expression]): Expression =
+    mapRefs(option) {
+      case p if p.paramType.isEmpty =>
+        // Only a hand-built option gets here out of range; the builder bounds-checks what it emits.
+        // Left untyped the node never resolves and CheckAnalysis blames an internal error, which
+        // tells nobody anything.
+        if (p.index < 0 || p.index >= arguments.length) {
+          throw QueryCompilationErrors.invalidUDFParameterPlaceholderIndex(
+            p.index, arguments.length)
+        }
+        val arg = arguments(p.index)
+        p.copy(paramType = Some(arg.dataType), paramNullable = arg.nullable)
+      case p => p
+    }
+
+  /**
+   * Walks this call's references. A nested call's options are skipped -- those indexes count
+   * against *its* arguments -- and the walk continues through
+   * [[TranspiledPythonUDF.pythonUDFExpr]], whose children are in our index space and may hold
+   * our references.
+   */
+  private def mapRefs(
+      option: Expression)(f: TranspiledUDFParameter => Expression): Expression = option match {
     case _ if !option.containsPattern(TRANSPILED_UDF_PARAMETER) => option
-    case p: TranspiledUDFParameter if p.paramType.isEmpty =>
-      // Only a hand-built option gets here out of range; the builder bounds-checks what it emits.
-      // Left untyped the node never resolves and CheckAnalysis blames an internal error, which
-      // tells nobody anything.
-      if (p.index < 0 || p.index >= arguments.length) {
-        throw QueryCompilationErrors.invalidUDFParameterPlaceholderIndex(p.index, arguments.length)
-      }
-      val arg = arguments(p.index)
-      p.copy(paramType = Some(arg.dataType), paramNullable = arg.nullable)
+    case p: TranspiledUDFParameter => f(p)
     case nested: TranspiledPythonUDF =>
-      nested.withNewChildren(
-        resolveTypes(nested.pythonUDFExpr, arguments) +: nested.transpiledOptions)
-    case other => other.mapChildren(resolveTypes(_, arguments))
+      nested.withNewChildren(mapRefs(nested.pythonUDFExpr)(f) +: nested.transpiledOptions)
+    case other => other.mapChildren(mapRefs(_)(f))
   }
 }
 

@@ -1105,73 +1105,23 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
           !p.isInstanceOf[Aggregate]) {
         val child = p.children.head
         // Once per operator, not once per call: an operator can hold several, and this walks the
-        // whole child plan. See `canPlace`, which is the only reader.
+        // whole child plan. See `canPlaceColumn`, which is the only reader.
         lazy val joinBelow = child.exists(_.isInstanceOf[Join])
         Some((call, args, option) => {
-          // What shares a column with what. One key per distinct deterministic argument in the
-          // operator, so `f(a + 1, a + 1)` computes `a + 1` once and two calls that each read it
-          // more than once share a column -- the read count is per call, only the column is per
-          // operator, so a call reading it once keeps its own copy and that is still one
-          // evaluation. A nondeterministic argument shares with nothing, not even
-          // an equal one: `f(rand(), rand())` owes the body two draws, and so do two calls that
-          // each pass their own `rand()`. Hence the call id -- keying on the index alone would
-          // have `f(rand())` and `g(rand())` in one operator collide on one column.
-          //
-          // Nullability rides along because `canonicalized` drops it: an AttributeReference
-          // canonicalizes to `AttributeReference("none", dataType)(exprId)`, so `a#5` nullable and
-          // `a#5` not would otherwise share one column, and a body coerced against the nullable
-          // one would read a column declared without nulls -- enough for NullPropagation to fold
-          // an `IsNull` to false and drop a branch.
-          // (scala.util qualified because `expressions._` has its own Left and Right.)
           val callId = callIds.computeIfAbsent(call, _ => { nextCallId += 1; nextCallId })
-          def shareKey(index: Int): ShareKey =
-            if (args(index).deterministic) {
-              scala.util.Left((args(index).canonicalized, args(index).nullable))
-            } else {
-              scala.util.Right((callId, index))
-            }
+          def keyOf(index: Int): ShareKey = shareKey(args(index), callId, index)
           val reads = TranspiledUDFParameter.referencedIndexes(option)
-          val readsPerKey = reads.groupBy(shareKey).map { case (k, is) => k -> is.length }
-          // Four ways an argument can't go in the Project:
-          //
-          //  - It reads something the child doesn't output. `f(g(x))` is the one you hit: `f`'s
-          //    argument is `g`'s column, which this Project is still defining.
-          //  - It's an aggregate, window function or generator. Only PlanHelper can say, and
-          //    only about a Project, so this one is asked with a throwaway alias.
-          //  - It has an OuterReference and decorrelation is off, where the fallback rewrites
-          //    Filters only and would strand it. Both confs, since EXISTS and IN switch on
-          //    their own even while the global one is on.
-          //  - It still holds an enclosing call's reference, which only that call can
-          //    substitute, and only while the reference is in the option body.
-          // A nondeterministic column anywhere above a Join takes the join's condition down with
-          // it: PushPredicateThroughNonJoin pushes nothing through a Project holding a
-          // nondeterministic field, so a Filter above it never reaches the Join and
-          // `where t1.a = t2.a and udf(rand()) < 2` plans as a cartesian product. Below anywhere,
-          // not just at the child -- one `select` in between is enough, and the Filter can sit
-          // above whatever we are rewriting. Keep the Python UDF instead; it computes its input
-          // once anyway.
-          def canPlace(arg: Expression): Boolean =
-            (arg.deterministic || !joinBelow) &&
-              arg.references.subsetOf(child.outputSet) &&
-              PlanHelper.specialExpressionsInUnsupportedOperator(
-                // A fixed id, not `newExprId`: this alias is thrown away with the Project and
-                // PlanHelper never reads it, so minting one would bump the global counter and
-                // shift the ExprIds in every later plan string by however many arguments we
-                // merely considered.
-                Project(Seq(Alias(arg, "_udf_param")(ExprId(0))), child)).isEmpty &&
-              ((conf.decorrelateInnerQueryEnabled &&
-                  conf.decorrelateInnerQueryEnabledForExistsIn) ||
-                !arg.containsPattern(OUTER_REFERENCE)) &&
-              !arg.containsPattern(TRANSPILED_UDF_PARAMETER)
+          val readsPerKey = reads.groupBy(keyOf).map { case (k, is) => k -> is.length }
+          val owed = mustPreEvaluate(args, option)
           // Read more than once under one key and not cheap to repeat. That covers everything we
           // owe (`owed` counts reads of one index; a key only ever merges indexes together, so its
           // count is at least as high) plus what is merely worth sharing: two parameters holding
           // equal arguments, each read once. Not every repeat earns a column -- a pointless Project
           // sticks around under anything CollapseProject can't merge through, and stops
           // SpecialLimits matching `Project(_, Sort(...))` for TakeOrderedAndProjectExec.
-          val owed = mustPreEvaluate(args, option)
           val shared = reads.distinct.filter { index =>
-            readsPerKey(shareKey(index)) > 1 && !cheapToRepeat(args(index)) && canPlace(args(index))
+            readsPerKey(keyOf(index)) > 1 && !cheapToRepeat(args(index)) &&
+              canPlaceColumn(args(index), child, joinBelow)
           }
           if (!owed.forall(shared.contains)) {
             // Something we owe one evaluation has nowhere to go, so hand the call back to Python,
@@ -1184,8 +1134,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
               // The ExprId goes in the name: numbering per operator would give two operators
               // each a `_udf_param_0`, which makes a plan string ambiguous. Same reason
               // RewriteWithExpression has USE_COMMON_EXPR_ID_FOR_ALIAS.
-              val key = shareKey(index)
-              index -> columnByKey.getOrElseUpdate(key, {
+              index -> columnByKey.getOrElseUpdate(keyOf(index), {
                 val exprId = NamedExpression.newExprId
                 val alias = Alias(args(index), s"_udf_param_${exprId.id}")(exprId)
                 extraColumns += alias
@@ -1235,7 +1184,59 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
    * What decides whether two parameters share a column: an equal argument of equal nullability, or
    * nothing -- a nondeterministic argument keys on the call it belongs to and its position in it.
    */
-  private type ShareKey = Either[(Expression, Boolean), (Long, Int)]
+  private sealed trait ShareKey
+  // Nullability rides along because `canonicalized` drops it: an AttributeReference canonicalizes
+  // to `AttributeReference("none", dataType)(exprId)`, so `a#5` nullable and `a#5` not would
+  // otherwise share one column, and a body coerced against the nullable one would read a column
+  // declared without nulls -- enough for NullPropagation to fold an `IsNull` to false.
+  private case class DeterministicKey(canonical: Expression, nullable: Boolean) extends ShareKey
+  // A call id, not just the parameter index: `f(rand())` and `g(rand())` in one operator would
+  // otherwise collide on one column. `f(rand(), rand())` owes two draws, and so do two calls that
+  // each pass their own `rand()`.
+  private case class NondeterministicKey(callId: Long, index: Int) extends ShareKey
+
+  // One key per distinct deterministic argument in the operator: `f(a + 1, a + 1)` computes
+  // `a + 1` once, and two calls that each read it more than once share the column. The read
+  // count is still per call -- a call reading it once keeps its own copy, one evaluation.
+  private def shareKey(arg: Expression, callId: Long, index: Int): ShareKey =
+    if (arg.deterministic) DeterministicKey(arg.canonicalized, arg.nullable)
+    else NondeterministicKey(callId, index)
+
+  /**
+   * Whether `arg` can sit in a Project on `child`. Four ways it can't:
+   *
+   *  - It reads something the child doesn't output. `f(g(x))` is the one you hit: `f`'s
+   *    argument is `g`'s column, which this Project is still defining.
+   *  - It's an aggregate, window function or generator. Only PlanHelper can say, and
+   *    only about a Project, so this one is asked with a throwaway alias.
+   *  - It has an OuterReference and decorrelation is off, where the fallback rewrites
+   *    Filters only and would strand it. Both confs, since EXISTS and IN switch on
+   *    their own even while the global one is on.
+   *  - It still holds an enclosing call's reference, which only that call can
+   *    substitute, and only while the reference is in the option body.
+   *
+   * A nondeterministic column anywhere above a Join takes the join's condition down with
+   * it: PushPredicateThroughNonJoin pushes nothing through a Project holding a
+   * nondeterministic field, so a Filter above it never reaches the Join and
+   * `where t1.a = t2.a and udf(rand()) < 2` plans as a cartesian product. Below anywhere,
+   * not just at the child -- one `select` in between is enough, and the Filter can sit
+   * above whatever we are rewriting.
+   *
+   * `joinBelow` is by name so a deterministic argument never pays for the walk behind it.
+   */
+  private def canPlaceColumn(arg: Expression, child: LogicalPlan, joinBelow: => Boolean): Boolean =
+    (arg.deterministic || !joinBelow) &&
+      arg.references.subsetOf(child.outputSet) &&
+      PlanHelper.specialExpressionsInUnsupportedOperator(
+        // A fixed id, not `newExprId`: this alias is thrown away with the Project and
+        // PlanHelper never reads it, so minting one would bump the global counter and
+        // shift the ExprIds in every later plan string by however many arguments we
+        // merely considered.
+        Project(Seq(Alias(arg, "_udf_param")(ExprId(0))), child)).isEmpty &&
+      ((conf.decorrelateInnerQueryEnabled &&
+          conf.decorrelateInnerQueryEnabledForExistsIn) ||
+        !arg.containsPattern(OUTER_REFERENCE)) &&
+      !arg.containsPattern(TRANSPILED_UDF_PARAMETER)
 
   /**
    * Notes the columns to add to the operator's child, and points the option's refs at them. None
