@@ -343,9 +343,9 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
       s"TBLPROPERTIES ('$prop' = '$advisory')")
     try {
       sql(s"INSERT INTO $table VALUES (1, 'a'), (2, 'b'), (3, 'c'), (4, 'd'), (5, 'e')")
-      val df = sql(s"SELECT * FROM $table TABLESAMPLE SYSTEM (100 PERCENT) WHERE id >= 1")
+      val df = sql(s"SELECT * FROM $table TABLESAMPLE SYSTEM (100 PERCENT) WHERE id >= 3")
       checkSamplePushed(df, pushed = true)
-      checkAnswer(df, Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c"), Row(4L, "d"), Row(5L, "e")))
+      checkAnswer(df, Seq(Row(3L, "c"), Row(4L, "d"), Row(5L, "e")))
       assertAdvisoryOnLogicalPlan(df, advisory)
       assertAdvisoryNotInFilterExec(df, advisory)
     } finally {
