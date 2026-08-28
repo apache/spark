@@ -85,10 +85,9 @@ private[scheduler] abstract class Stage(
   private[scheduler] var maxChecksumMismatchedId: Int = nextAttemptId
 
   /**
-   * The max attempt id we should ignore results for this stage, indicating there are ancestor
-   * stages having been detected with checksum mismatches. This stage is probably also
-   * indeterminate, so we need to avoid completing the stage and the job with incorrect result
-   * by ignoring the task output from previous attempts which might consume inconsistent data
+   * The maximum attempt ID whose results should be ignored after this stage is invalidated.
+   * This includes attempts that may have consumed inconsistent parent output and failed barrier
+   * attempts, whose tasks must all be retried.
    */
   private[scheduler] var maxAttemptIdToIgnore: Option[Int] = None
 
