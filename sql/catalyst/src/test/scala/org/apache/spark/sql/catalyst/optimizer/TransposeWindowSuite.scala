@@ -232,6 +232,8 @@ class TransposeWindowSuite extends PlanTest {
 
   test("already optimally ordered window stack is unchanged") {
     // Distinct order specs so that CollapseWindow cannot merge the same-spec windows.
+    // All windows contain (k1), so they share one exchange; within the group the leader
+    // (k1) pays it and the members keep smaller specs first, which is the original order.
     val query = wideRelation
       .window(Seq(sum(v).as("s1")), Seq(k1), order)
       .window(Seq(sum(v).as("s2a")), specF, order)
@@ -425,6 +427,66 @@ class TransposeWindowSuite extends PlanTest {
     RowNumber(),
     WindowSpecDefinition(specP, order,
       SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))).as("rn")
+
+  private def rankAliasOnK1 = WindowExpression(
+    RowNumber(),
+    WindowSpecDefinition(Seq(k1), order,
+      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))).as("rn")
+
+  test("duplicate partition keys do not break the exchange-minimal order") {
+    // HashPartitioning(k1, k1) satisfies the relaxed ClusteredDistribution(k1, k2), so
+    // once the (k1, k1) window is placed below the (k1, k2) window, its exchange serves
+    // both windows. The two specs have the same length, so spec length alone cannot
+    // order them: (k1, k1) must normalize to (k1) to sort first.
+    val query = wideRelation
+      .window(Seq(sum(v).as("s_ab")), Seq(k1, k2), order)
+      .window(Seq(sum(v).as("s_aa")), Seq(k1, k1), Seq(k2.asc))
+
+    val analyzed = query.analyze
+
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("s_aa")), Seq(k1, k1), Seq(k2.asc))
+      .window(Seq(sum(v).as("s_ab")), Seq(k1, k2), order)
+      .select(k1, k2, k3, k4, v, u, $"s_ab", $"s_aa")
+
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(analyzed), correctAnswer.analyze)
+    }
+
+    // Under `requireAllClusterKeysForDistribution` a partitioning matches only the exact
+    // same keys in the same order, so the two specs are incomparable: neither window can
+    // ride the other's exchange and the stack is left unchanged.
+    withSQLConf(
+      SQLConf.WINDOW_REORDER_ENABLED.key -> "true",
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key -> "true") {
+      comparePlans(Optimize.execute(analyzed), analyzed)
+    }
+  }
+
+  test("a rank-pinned top window constrains the order of the windows below") {
+    // The pinned window rides the exchange of the group scheduled last below it, so the
+    // (k2) window must go below the (k1) window: (k2) -> (k1) -> pinned (k1) needs two
+    // exchanges, while the original order needs three because the pinned window cannot
+    // ride the (k2)-keyed exchange.
+    val query = wideRelation
+      .window(Seq(sum(v).as("s_k1")), Seq(k1), order)
+      .window(Seq(sum(v).as("s_k2")), Seq(k2), order)
+      .window(Seq(rankAliasOnK1), Seq(k1), order)
+      .where($"rn" <= 1)
+
+    val analyzed = query.analyze
+
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("s_k2")), Seq(k2), order)
+      .window(Seq(sum(v).as("s_k1")), Seq(k1), order)
+      .select(k1, k2, k3, k4, v, u, $"s_k1", $"s_k2")
+      .window(Seq(rankAliasOnK1), Seq(k1), order)
+      .where($"rn" <= 1)
+
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(analyzed), correctAnswer.analyze)
+    }
+  }
 
   test("rank filter on the top window pins it and reorders the windows below") {
     val query = wideRelation

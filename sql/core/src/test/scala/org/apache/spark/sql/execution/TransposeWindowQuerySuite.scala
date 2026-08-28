@@ -109,6 +109,122 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("duplicate partition keys ride the same exchange") {
+    // HashPartitioning(k1, k1) satisfies the relaxed ClusteredDistribution(k1, k2), so
+    // one exchange keyed (k1, k1) serves both windows once the (k1, k1) window is placed
+    // below the (k1, k2) one. The two specs have the same length, so spec-length
+    // ordering alone would keep the original order and pay two exchanges.
+    val query =
+      """
+        |SELECT k1, k2, v,
+        |  sum(v) OVER (PARTITION BY k1, k2 ORDER BY v) AS ab,
+        |  sum(v) OVER (PARTITION BY k1, k1 ORDER BY k2) AS aa
+        |FROM t
+      """.stripMargin
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withInput {
+        val actual = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+          val df = sql(query)
+          assert(numWindows(df) == 2)
+          assert(numExchanges(df) == 1)
+          df.collect().toSeq
+        }
+        val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          val df = sql(query)
+          // With the reorder off, the fallback transposition skips the pair (the two specs
+          // have the same length), so the (k1, k1) window cannot ride the (k1, k2)-keyed
+          // exchange and pays one of its own.
+          assert(numWindows(df) == 2)
+          assert(numExchanges(df) == 2)
+          df.collect().toSeq
+        }
+        assert(actual == expected)
+      }
+    }
+  }
+
+  test("the pinned rank window rides the last scheduled group below it") {
+    // The (k2) window must be scheduled below the (k1) window so that the exchange the
+    // pinned rank window sees is keyed (k1): (k2) -> (k1) -> pinned (k1) needs two
+    // exchanges, while the original order needs three. The rank window orders by v DESC
+    // (not by v like the (k1) sum window below it) so that `CollapseWindow` cannot merge
+    // the two windows, which would hide the sum behind a `RangeFrame` and block
+    // `InferWindowGroupLimit`.
+    val query =
+      """
+        |SELECT * FROM (
+        |  SELECT k1, k2, k3, k4, v,
+        |    sum(v) OVER (PARTITION BY k1 ORDER BY v) AS s1,
+        |    sum(v) OVER (PARTITION BY k2 ORDER BY v) AS s2,
+        |    row_number() OVER (PARTITION BY k1 ORDER BY v DESC) AS rn
+        |  FROM t
+        |) WHERE rn <= 1
+      """.stripMargin
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withInput {
+        val actual = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+          val df = sql(query)
+          assert(df.queryExecution.executedPlan.collect {
+            case _: WindowGroupLimitExec => ()
+          }.nonEmpty)
+          assert(numExchanges(df) == 2)
+          df.collect().toSeq
+        }
+        val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          val df = sql(query)
+          // With the reorder off, the stack keeps its original order: the (k2) window
+          // cannot ride the (k1)-keyed exchange, and the pinned rank window cannot ride
+          // the (k2)-keyed one below it, so each window pays its own exchange.
+          assert(numWindows(df) == 3)
+          assert(numExchanges(df) == 3)
+          df.collect().toSeq
+        }
+        assert(actual == expected)
+      }
+    }
+  }
+
+  test("reordering empty-order windows keeps them on one exchange and one sort") {
+    // Whole-partition windows (empty ORDER BY) only need their input ordered by the
+    // partition keys, and the physical planner widens the bottom local sort to serve the
+    // wider requirements of the windows above (`PushDownLocalSort`), so the whole stack
+    // costs one exchange and one sort no matter which member order is chosen. This guards
+    // that the reorder never turns that into extra sorts or exchanges.
+    val query =
+      """
+        |SELECT k1, k2, k3, v,
+        |  sum(v) OVER (PARTITION BY k1) AS s1,
+        |  sum(v) OVER (PARTITION BY k1, k2, k3) AS s3,
+        |  sum(v) OVER (PARTITION BY k1, k2) AS s2
+        |FROM t
+      """.stripMargin
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withInput {
+        val actual = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+          val df = sql(query)
+          assert(numWindows(df) == 3)
+          assert(numExchanges(df) == 1)
+          assert(numSorts(df) == 1)
+          df.collect().toSeq
+        }
+        val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          val df = sql(query)
+          // The same counts hold with the reorder off: the fallback transposition may
+          // still reorder the pair, and either way every window rides the (k1)-keyed
+          // exchange and the single widened sort.
+          assert(numWindows(df) == 3)
+          assert(numExchanges(df) == 1)
+          assert(numSorts(df) == 1)
+          df.collect().toSeq
+        }
+        assert(actual == expected)
+      }
+    }
+  }
+
   test("rank filter over a reordered chain still gets a window group limit") {
     // The row_number window is pinned on top for InferWindowGroupLimit; the two windows
     // below are reordered so that the whole chain rides a single exchange.

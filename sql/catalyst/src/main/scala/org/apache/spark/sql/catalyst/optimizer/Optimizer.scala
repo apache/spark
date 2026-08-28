@@ -1842,10 +1842,13 @@ object CollapseWindow extends Rule[LogicalPlan] {
  * set is a subset of the window's partition spec (`HashPartitioning` satisfying
  * `ClusteredDistribution`), and `EnsureRequirements` only creates exchanges keyed on exactly
  * some window's partition spec. The minimum exchange count for a stack therefore equals the
- * number of its minimal partition specs (under semantic subset), and it is achieved by
- * grouping the windows by the minimal partition spec their own partition spec contains,
- * smaller specs first within a group. This subsumes the previous adjacent-pair transposition.
- * Under `requireAllClusterKeysForDistribution`, a partitioning only satisfies a window's
+ * number of its minimal partition specs (under semantic subset, with duplicate keys
+ * normalized away, see `normalizeSpec`), and it is achieved by grouping the windows by the
+ * minimal partition spec their own partition spec contains and leading each group with a
+ * window whose spec keys are exactly the minimal spec's, with smaller specs first within a
+ * group. If a rank filter pins the top window (the `InferWindowGroupLimit` pattern, see
+ * below), the group whose exchange the pinned window can ride is scheduled last. Under
+ * `requireAllClusterKeysForDistribution`, a partitioning only satisfies a window's
  * `ClusteredDistribution` with the exact same keys in the same order, so the subset relation
  * degenerates to exact spec equality: the minimum equals the number of distinct exact
  * partition specs, achieved by grouping identical specs adjacently.
@@ -1965,6 +1968,25 @@ object TransposeWindow extends Rule[LogicalPlan] {
     subsetOf(spec1, spec2) && subsetOf(spec2, spec1)
 
   /**
+   * The partition spec with semantically duplicate keys removed (first occurrence kept).
+   * Duplicate keys do not change which `ClusteredDistribution`s a `HashPartitioning`
+   * satisfies under the relaxed subset semantics -- `HashPartitioning(a, a)` satisfies
+   * exactly the same distributions as `HashPartitioning(a)` -- so duplicates must not
+   * count toward spec length or subset reasoning. Under
+   * `requireAllClusterKeysForDistribution` the partitioning keys must match the required
+   * clustering keys exactly and in order, so duplicates do matter there and the spec is
+   * kept as is.
+   */
+  private def normalizeSpec(spec: Seq[Expression]): Seq[Expression] =
+    if (conf.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION)) {
+      spec
+    } else {
+      spec.foldLeft(Seq.empty[Expression]) { (deduped, e) =>
+        if (deduped.exists(_.semanticEquals(e))) deduped else deduped :+ e
+      }
+    }
+
+  /**
    * The chain is reorderable if all windows are deterministic and have a non-empty partition
    * spec (an empty one requires `AllTuples` and must not move), no window references another
    * window's output, and no window references the aliased output of a link below it (such a
@@ -1996,15 +2018,20 @@ object TransposeWindow extends Rule[LogicalPlan] {
 
   /**
    * The exchange-minimal window order, as indices into `windows` (bottom-to-top): group the
-   * windows by the minimal partition spec their own partition spec contains, groups ordered
-   * by first appearance, smaller specs first within a group; the sort is stable, so windows
-   * with equal keys keep their original relative order. Each group leader pays for its
-   * exchange and every other member rides it, because a riding window never changes the
-   * partitioning seen by the windows above it, so the result needs one exchange per minimal
-   * partition spec.
+   * windows by the minimal (normalized) partition spec their own partition spec contains,
+   * groups ordered by first appearance; each group is led by a window whose spec keys are
+   * exactly the minimal spec's, so the exchange it pays for is keyed on the minimal spec
+   * and every member rides it, and the remaining members keep smaller specs first (the sort
+   * is stable, so windows with equal keys keep their original relative order). If `tailSpec`
+   * is defined (the partition spec of a chain-top window pinned by a rank filter), the
+   * pinned window rides the exchange of the group scheduled last, so a group whose keys
+   * `tailSpec` contains is moved to the end. All ties are broken by plan position, so
+   * re-running the rule is idempotent.
    */
-  private def optimalOrder(windows: Seq[Window]): Seq[Int] = {
-    val specs = windows.map(_.partitionSpec)
+  private def optimalOrder(
+      windows: Seq[Window],
+      tailSpec: Option[Seq[Expression]]): Seq[Int] = {
+    val specs = windows.map(w => normalizeSpec(w.partitionSpec))
     val minimal = specs.indices.map { i =>
       !specs.indices.exists { j =>
         j != i && subsetOf(specs(j), specs(i)) && !equivalent(specs(j), specs(i))
@@ -2020,7 +2047,22 @@ object TransposeWindow extends Rule[LogicalPlan] {
     val classOf = specs.indices.map { i =>
       minimalSpecs.indices.filter(j => subsetOf(minimalSpecs(j), specs(i))).min
     }
-    specs.indices.sortBy(i => (classOf(i), specs(i).length))
+    val groupSeq = minimalSpecs.indices
+    val orderedGroups = tailSpec.map(normalizeSpec) match {
+      case Some(tail) =>
+        groupSeq.find(g => subsetOf(minimalSpecs(g), tail)) match {
+          case Some(g) => groupSeq.filter(_ != g) :+ g
+          case None => groupSeq
+        }
+      case None => groupSeq
+    }
+    orderedGroups.flatMap { g =>
+      val members = specs.indices.filter(classOf(_) == g)
+      // The leader's spec keys are exactly the minimal spec's, so the exchange it pays
+      // for is keyed on the minimal spec and every member rides it.
+      val leader = members.find(i => equivalent(specs(i), minimalSpecs(g))).get
+      leader +: members.filter(_ != leader).sortBy(i => (specs(i).length, i))
+    }.toSeq
   }
 
   /**
@@ -2063,14 +2105,17 @@ object TransposeWindow extends Rule[LogicalPlan] {
    * place if `pinTopWindow` (see `isRankFilterOnTopWindow`): only the windows below it are
    * reordered then and the order-restoring `Project` is placed below the pinned window, so
    * that the strict `Filter`-over-`Window` match of `InferWindowGroupLimit` survives. The
-   * stripped links are re-applied above the reordered windows (below the pinned window if
-   * pinned), each additionally passing through the attributes that anything above it still
-   * references. Returns `None` if the chain is already in an optimal order.
+   * pinned window's partition spec is passed to `optimalOrder` as `tailSpec`, so the group
+   * whose exchange the pinned window can ride is scheduled last. The stripped links are
+   * re-applied above the reordered windows (below the pinned window if pinned), each
+   * additionally passing through the attributes that anything above it still references.
+   * Returns `None` if the chain is already in an optimal order.
    */
   private def reorderChain(chain: WindowChain, pinTopWindow: Boolean): Option[LogicalPlan] = {
     val windows = chain.windows
     val toPermute = if (pinTopWindow) windows.dropRight(1) else windows
-    val order = optimalOrder(toPermute)
+    val tailSpec = if (pinTopWindow) Some(windows.last.partitionSpec) else None
+    val order = optimalOrder(toPermute, tailSpec)
     if (order == toPermute.indices) {
       return None
     }
