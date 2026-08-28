@@ -1979,8 +1979,8 @@ See the below table for the full list of pod specifications that will be overwri
 <tr>
   <td>serviceAccount</td>
   <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code>; for executor
-  pods, of <code>spark.kubernetes.authenticate.executor.serviceAccountName</code> when set, and of
-  <code>spark.kubernetes.authenticate.driver.serviceAccountName</code> otherwise</td>
+  pods, of <code>spark.kubernetes.authenticate.executor.serviceAccountName</code>, falling back to
+  the driver's</td>
   <td>
     For driver pods Spark will override <code>serviceAccount</code> with the value of
     <code>spark.kubernetes.authenticate.driver.serviceAccountName</code>, but only if that
@@ -1988,14 +1988,16 @@ See the below table for the full list of pod specifications that will be overwri
     For executor pods Spark writes both fields only when the template leaves both of them empty,
     and writes the same value into each; see
     <code>spark.kubernetes.authenticate.executor.serviceAccountName</code> for which account that
-    is. When an executor pod template names an account in either field, Spark overwrites neither.
+    is. When an executor pod template names an account in either field, Spark overwrites
+    neither, and warns if <code>spark.kubernetes.authenticate.executor.serviceAccountName</code>
+    named a different one.
   </td>
 </tr>
 <tr>
   <td>serviceAccountName</td>
   <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code>; for executor
-  pods, of <code>spark.kubernetes.authenticate.executor.serviceAccountName</code> when set, and of
-  <code>spark.kubernetes.authenticate.driver.serviceAccountName</code> otherwise</td>
+  pods, of <code>spark.kubernetes.authenticate.executor.serviceAccountName</code>, falling back to
+  the driver's</td>
   <td>
     For driver pods Spark will override <code>serviceAccountName</code> with the value of
     <code>spark.kubernetes.authenticate.driver.serviceAccountName</code>, but only if that
@@ -2003,7 +2005,9 @@ See the below table for the full list of pod specifications that will be overwri
     For executor pods Spark writes both fields only when the template leaves both of them empty,
     and writes the same value into each; see
     <code>spark.kubernetes.authenticate.executor.serviceAccountName</code> for which account that
-    is. When an executor pod template names an account in either field, Spark overwrites neither.
+    is. When an executor pod template names an account in either field, Spark overwrites
+    neither, and warns if <code>spark.kubernetes.authenticate.executor.serviceAccountName</code>
+    named a different one.
   </td>
 </tr>
 <tr>
