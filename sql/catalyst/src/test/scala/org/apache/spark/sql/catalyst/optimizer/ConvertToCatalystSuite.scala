@@ -427,11 +427,22 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("keeps the Python UDF under an Aggregate, where no column can go") {
+  test("keeps the Python UDF for a draw under an Aggregate, where no column can go") {
     transpileOn {
       // An Aggregate holds no Project of its own -- a result expression no aggregate function wraps
-      // has to be built from the grouping expressions -- so a call owed an evaluation goes back to
-      // Python. Both shapes: inside an aggregate function and beside one.
+      // has to be built from the grouping expressions -- so a draw read twice goes back to Python.
+      // Beside an aggregate function only: inside one, analysis rejects a draw outright with
+      // AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION, whoever put it there.
+      val drawn = makeTPUDF(makePyUDF(draw()), Add(pref(0), pref(0)))
+      val fellBack = convert(Aggregate(Seq(attrA),
+        Seq(Alias(attrA, "a")(), Alias(drawn, "v")()), LocalRelation(attrA)))
+      assert(paramColumns(fellBack).isEmpty, s"Expected no column: $fellBack")
+      assert(fellBack.expressions.exists(_.exists(_.isInstanceOf[PythonUDF])),
+        s"Expected the Python UDF kept: $fellBack")
+
+      // A deterministic argument is read at each use site instead, both shapes. `a + 1` twice costs
+      // less than a Python round trip a row, and PhysicalAggregation folds the repeat back into the
+      // grouping expression it came from.
       val call = makeTPUDF(makePyUDF(Add(attrA, Literal(1L))), Add(pref(0), pref(0)))
       val insideSum = Aggregate(Seq(attrA),
         Seq(Alias(attrA, "a")(), Alias(Sum(call).toAggregateExpression(), "s")()),
@@ -441,24 +452,28 @@ class ConvertToCatalystSuite extends PlanTest {
       Seq(insideSum, beside).foreach { agg =>
         val converted = convert(agg)
         assert(paramColumns(converted).isEmpty, s"Expected no column: $converted")
-        assert(converted.expressions.exists(_.exists(_.isInstanceOf[PythonUDF])),
-          s"Expected the Python UDF kept: $converted")
+        assert(!converted.expressions.exists(_.exists(_.isInstanceOf[PythonUDF])),
+          s"Expected the call lowered: $converted")
       }
     }
   }
 
-  test("keeps the Python UDF in a HAVING, where a column would hide the Aggregate") {
+  test("puts no column in a HAVING, where one would hide the Aggregate") {
     transpileOn {
       // A Filter on an Aggregate could host the Project perfectly well, and that is the trap:
       // `splitSubquery` finds a correlated subquery's Aggregate by matching `Filter(_, Aggregate)`,
       // so a Project between them hides it and the COUNT bug goes unhandled. Measured end to end in
-      // test_udf_transpile_puts_no_column_directly_above_an_aggregate.
+      // test_udf_transpile_reads_a_repeated_argument_twice_under_a_having.
+      //
+      // A deterministic argument is the one that would get a column here, so it is the one to pin:
+      // read at each use site instead, which leaves the Filter on the Aggregate where it was.
       val call = makeTPUDF(makePyUDF(Add(attrA, Literal(1L))), Add(pref(0), pref(0)))
       val agg = Aggregate(Seq(attrA), Seq(attrA), LocalRelation(attrA))
       val converted = convert(Filter(GreaterThan(call, Literal(0L)), agg))
       assert(paramColumns(converted).isEmpty, s"Expected no column: $converted")
-      assert(converted.expressions.exists(_.exists(_.isInstanceOf[PythonUDF])),
-        s"Expected the Python UDF kept: $converted")
+      assert(!converted.expressions.exists(_.exists(_.isInstanceOf[PythonUDF])),
+        s"Expected the call lowered in place: $converted")
+      assert(converted.children.head == agg, s"Expected the Aggregate still the child: $converted")
     }
   }
 
@@ -478,22 +493,30 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("keeps the Python UDF in a Join condition, where no column can go") {
+  test("keeps the Python UDF for a draw in a Join condition, where no column can go") {
     transpileOn {
-      // A join has no side to compute on, so an argument owed one evaluation goes back to Python --
-      // which is what a UDF predicate in a join condition gets without transpilation anyway.
-      // Repeating it instead would make it lazy again and swallow an ANSI error the interpreted UDF
-      // raises.
-      val arg = Add(attrA, Literal(1L))
+      // A join has no side to compute on, so a draw read twice goes back to Python -- which is what
+      // a UDF predicate in a join condition gets without transpilation anyway.
       val attrB = AttributeReference("b", LongType)()
-      val call = makeTPUDF(makePyUDF(arg), Multiply(pref(0), pref(0)))
-      val converted = convert(Join(LocalRelation(attrA), LocalRelation(attrB), Inner,
-        Some(GreaterThan(call, Literal(0L))), JoinHint.NONE))
+      def joinOn(call: Expression): LogicalPlan = Join(LocalRelation(attrA), LocalRelation(attrB),
+        Inner, Some(GreaterThan(call, Literal(0L))), JoinHint.NONE)
+      val drawn = draw()
+      val converted = convert(joinOn(makeTPUDF(makePyUDF(drawn), Multiply(pref(0), pref(0)))))
       assert(paramColumns(converted).isEmpty, s"Expected no column under a join: $converted")
       assert(converted.expressions.exists(_.exists(_.isInstanceOf[PythonUDF])),
         s"Expected the Python UDF kept: $converted")
-      assert(converted.expressions.head.collect { case e if e == arg => e }.length == 1,
-        s"Expected the one evaluation the Python UDF makes: $converted")
+      assert(converted.expressions.head.collect { case e if e == drawn => e }.length == 1,
+        s"Expected the one draw the Python UDF makes: $converted")
+
+      // A deterministic argument reads twice and lowers, which master did too. `a + 1` costs less
+      // repeated than a Python predicate costs the join.
+      val arg = Add(attrA, Literal(1L))
+      val lowered = convert(joinOn(makeTPUDF(makePyUDF(arg), Multiply(pref(0), pref(0)))))
+      assert(paramColumns(lowered).isEmpty, s"Expected no column under a join: $lowered")
+      assert(!lowered.expressions.exists(_.exists(_.isInstanceOf[PythonUDF])),
+        s"Expected the call lowered: $lowered")
+      assert(lowered.expressions.head.collect { case e if e == arg => e }.length == 2,
+        s"Expected the argument at both use sites: $lowered")
     }
   }
 
@@ -526,12 +549,16 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("keeps the Python UDF for an argument carrying an outer reference, decorrelation off") {
+  test("puts no column on an outer reference with decorrelation off") {
     // A column holding an OuterReference lands inside the subquery. Decorrelation carries it out;
     // the fallback rewrites Filters only and would strand it, so with that off we turn it down.
     val arg = Add(OuterReference(attrA), Literal(1L))
     val tpudf = makeTPUDF(makePyUDF(arg), Multiply(pref(0), pref(0)))
     val plan = Project(Seq(Alias(tpudf, "v")()), LocalRelation(attrA))
+    val drawn = Add(OuterReference(attrA), draw())
+    val drawnPlan = Project(
+      Seq(Alias(makeTPUDF(makePyUDF(drawn), Multiply(pref(0), pref(0))), "v")()),
+      LocalRelation(attrA))
     transpileOn {
       assert(paramColumns(convert(plan)).map(_.child) == Seq(arg),
         "Expected a column when decorrelation is on")
@@ -540,21 +567,25 @@ class ConvertToCatalystSuite extends PlanTest {
         SQLConf.ANSI_ENABLED.key -> "true",
         SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key -> "true",
         SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
+      // Deterministic, so with nowhere to put a column it is read at each use site.
       val converted = convert(plan)
       assert(paramColumns(converted).isEmpty, s"Expected no column: $converted")
-      // And with nowhere to put it, the call is left to Python rather than evaluating `a + 1`
-      // twice per row.
-      assert(converted.expressions.head.exists(_.isInstanceOf[PythonUDF]),
-        s"Expected the Python UDF kept: $converted")
+      assert(!converted.expressions.exists(_.exists(_.isInstanceOf[PythonUDF])),
+        s"Expected the call lowered: $converted")
+      // A draw there cannot be read twice at all, so that call keeps the Python UDF.
+      val fellBack = convert(drawnPlan)
+      assert(paramColumns(fellBack).isEmpty, s"Expected no column: $fellBack")
+      assert(fellBack.expressions.head.exists(_.isInstanceOf[PythonUDF]),
+        s"Expected the Python UDF kept: $fellBack")
     }
   }
 
-  test("keeps the Python UDF for an argument that is itself an aggregate") {
+  test("keeps the Python UDF for a nondeterministic argument that is itself an aggregate") {
     transpileOn {
-      // `udf(sum(a))` read twice: no Project can hold an aggregate, and running it at each use site
-      // is not the answer either, so the call keeps the Python UDF. Under a real Aggregate the
-      // operator itself is on the deny list, so the same call never gets this far.
-      val arg = Sum(attrA).toAggregateExpression()
+      // `udf(sum(rand()))` read twice: no Project can hold an aggregate, and a draw cannot be read
+      // twice, so the call keeps the Python UDF. Under a real Aggregate the operator itself is on
+      // the deny list, so the same call never gets this far.
+      val arg = Sum(draw()).toAggregateExpression()
       val tpudf = makeTPUDF(makePyUDF(arg), Multiply(pref(0), pref(0)))
       val converted = convert(Project(Seq(Alias(tpudf, "v")()), LocalRelation(attrA)))
       assert(paramColumns(converted).isEmpty, s"Expected no column: $converted")
@@ -565,24 +596,28 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("leaves a Command's cheap arguments at each use site") {
+  test("leaves a Command's deterministic arguments at each use site") {
     transpileOn {
       // No column under a Command: the Project would land between DeleteFromTable and its relation,
-      // hiding what DataSourceV2Strategy matches on. A bare column costs nothing to read twice, so
-      // the call still lowers; anything more keeps the Python UDF.
-      val arg = attrA
+      // hiding what DataSourceV2Strategy matches on. Both a bare column and `a + 1` are read twice
+      // instead, which is what `DELETE FROM t WHERE udf(a + 1) > 0` needs to keep planning at
+      // all --
+      // the Python UDF the fallback leaves is no more welcome under a Command than the Project is.
       val relation = LocalRelation(attrA)
       val option = Multiply(pref(0), pref(0))
-      val tpudf = makeTPUDF(makePyUDF(arg), option)
-      val converted = ConvertToCatalyst(DeleteFromTable(relation, GreaterThan(tpudf, Literal(0L))))
-      assert(converted == DeleteFromTable(relation, GreaterThan(Multiply(arg, arg), Literal(0L))),
-        s"Expected the argument left at both use sites: $converted")
+      def deleteWhere(call: Expression): LogicalPlan =
+        ConvertToCatalyst(DeleteFromTable(relation, GreaterThan(call, Literal(0L))))
+      Seq[Expression](attrA, Add(attrA, Literal(1L))).foreach { arg =>
+        val converted = deleteWhere(makeTPUDF(makePyUDF(arg), option))
+        assert(converted == DeleteFromTable(relation, GreaterThan(Multiply(arg, arg), Literal(0L))),
+          s"Expected $arg left at both use sites: $converted")
+      }
 
-      val costly = makeTPUDF(makePyUDF(Add(attrA, Literal(1L))), option)
-      val fellBack =
-        ConvertToCatalyst(DeleteFromTable(relation, GreaterThan(costly, Literal(0L))))
+      // A draw is the one that cannot be repeated, so there the Python UDF stays.
+      val drawn = makeTPUDF(makePyUDF(draw()), option)
+      val fellBack = deleteWhere(drawn)
       assert(fellBack.expressions.exists(_.exists(_.isInstanceOf[PythonUDF])),
-        s"Expected the Python UDF kept for `a + 1`: $fellBack")
+        s"Expected the Python UDF kept for a draw: $fellBack")
     }
   }
 

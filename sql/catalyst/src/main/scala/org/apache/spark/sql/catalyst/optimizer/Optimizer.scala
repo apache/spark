@@ -1065,8 +1065,10 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
   /**
    * Converts the calls in one operator, putting an argument the body reads more than once in a
    * column on the operator's child so we compute it once a row instead of once a read
-   * (SPARK-58626). Three operators can't hold that Project, and a call under one of them that owes
-   * an evaluation keeps the interpreted Python UDF instead:
+   * (SPARK-58626). Some operators can't hold that Project. A deterministic argument is then just
+   * repeated at its use sites, the way the option body used to carry it; a nondeterministic one
+   * would be a second draw, so that call keeps the interpreted Python UDF, which computes its
+   * inputs once in the projection feeding the worker. The operators:
    *
    *  - More than one child: we'd have to pick a side.
    *  - A Command: the Project hides the relation DataSourceV2Strategy looks for, and
@@ -1092,7 +1094,8 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
     // A column widens the operator's child, and we only learn whether this operator's output is a
     // widening of its child's after building it. When it isn't, convert again without columns
     // rather than fail the query: `preEvaluate` says yes to every single-child operator that is not
-    // a Command or an Aggregate, a longer list than anyone has thought about -- Window, Generate,
+    // a Command, an Aggregate or sitting on one, a longer list than anyone has thought about --
+    // Window, Generate,
     // Expand, CollectMetrics, ScriptTransformation, whatever an extension adds.
     convertOperator(p, withColumns = true).getOrElse(convertOperator(p, withColumns = false).get)
 
@@ -1257,21 +1260,31 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
     (TranspiledPythonUDF, Seq[Expression], Expression) => Option[Expression]
 
   /**
-   * The parameters this call owes one evaluation: read more than once, with an argument that isn't
-   * cheap to repeat. Where no column can hold one we don't transpile at all. Per parameter:
+   * The parameters a column has to hold or we don't transpile: read more than once, with a
+   * nondeterministic argument. Two copies of `rand()` are two draws, so the body would see two
+   * values for one parameter -- a wrong answer, not merely a slow one. Per parameter:
    * `f(rand(), rand())` owes two draws, `f(rand())` owes one however often it is read.
+   *
+   * A deterministic argument is not on this list even when it is expensive. It still gets a column
+   * wherever one fits -- see `cheapToRepeat`, which is what decides that -- but where none does,
+   * repeating it beats handing the call back to Python: same value, same raise, and a round trip a
+   * row is dearer than the arithmetic. `groupBy(a + 1).agg(udf(a + 1))` is the shape that settles
+   * it, since an Aggregate offers no column at all and `PhysicalAggregation` folds the repeat back
+   * into the grouping expression anyway.
    */
   private def mustPreEvaluate(args: Seq[Expression], option: Expression): Set[Int] =
     TranspiledUDFParameter.referencedIndexes(option).groupBy(identity).collect {
-      case (index, reads) if reads.length > 1 && !cheapToRepeat(args(index)) => index
+      case (index, reads) if reads.length > 1 && !args(index).deterministic => index
     }.toSet
 
   /**
-   * Whether reading an argument twice is as good as reading a column that holds it once.
+   * Whether reading an argument twice is as good as reading a column that holds it once -- what
+   * decides whether a column is worth placing, not whether one is required (`mustPreEvaluate`).
    *
    * A nondeterministic one never is, whatever `isCheap` says of it: two copies of `rand()` are two
    * draws, so the body sees two values for one parameter. A deterministic one is only work, but
-   * work counts, so anything `isCheap` won't vouch for -- a regex, `a + 1` -- is owed one too.
+   * work counts, so anything `isCheap` won't vouch for -- a regex, `a + 1` -- gets one where it
+   * can.
    */
   private def cheapToRepeat(arg: Expression): Boolean = arg match {
     // An enclosing call's reference computes nothing of its own. What it stands for may well be
