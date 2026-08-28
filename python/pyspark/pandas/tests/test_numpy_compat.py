@@ -365,6 +365,15 @@ class NumPyCompatTestsMixin:
     def test_floor_divide_func(self):
         from pyspark.pandas.numpy_compat import _floor_divide_func
 
+        def floor_divided(pdf):
+            psdf = ps.from_pandas(pdf)
+            return (
+                psdf.spark.frame()
+                .select(_floor_divide_func(F.col("x1"), F.col("x2")).alias("result"))
+                .toPandas()["result"]
+                .rename(None)
+            )
+
         for pdf in (
             pd.DataFrame(
                 {
@@ -419,14 +428,39 @@ class NumPyCompatTestsMixin:
                 }
             ),
         ):
-            psdf = ps.from_pandas(pdf)
-            result = (
-                psdf.spark.frame()
-                .select(_floor_divide_func(F.col("x1"), F.col("x2")).alias("result"))
-                .toPandas()["result"]
-                .rename(None)
-            )
-            self.assert_eq(result, np.floor_divide(pdf.x1, pdf.x2), almost=True)
+            self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2), almost=True)
+
+        # Divisors binary cannot represent exactly, where the quotient rounds up across an
+        # integer: 1.0 / 0.1 rounds to 10.0, so flooring it gives 10 instead of 9. Compared
+        # exactly, since almost=True would accept an off-by-one on the large values below.
+        pdf = pd.DataFrame(
+            {
+                "x1": [1.0, 10.0, 2.0, 0.5, 7.0, -1.0, -10.0, 3.0],
+                "x2": [0.1, 0.1, 0.2, 0.1, 0.7, 0.1, 0.1, 7.0],
+            }
+        )
+        self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2))
+
+        # Integral operands above 2**53, where casting an operand to double would drop its
+        # low bits: -9007199254740993 // 2 is -4503599627370497, not -4503599627370496.
+        pdf = pd.DataFrame(
+            {
+                "x1": [9007199254740993, -9007199254740993, 4611686018427387905, 7, -7],
+                "x2": [1, 2, 3, 3, 3],
+            }
+        )
+        self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2).astype("float64"))
+
+        # The most negative long divided by -1, whose quotient a long cannot hold. NumPy wraps
+        # around, while Spark's integer division raises.
+        pdf = pd.DataFrame({"x1": [-(2**63), -(2**63)], "x2": [-1, 2]})
+        self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2).astype("float64"))
+
+        # Finite operands whose quotient overflows to an infinity, which is its own floor.
+        pdf = pd.DataFrame(
+            {"x1": [1e300, -1e300, 1e300, -1e300], "x2": [1e-300, 1e-300, -1e-300, -1e-300]}
+        )
+        self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2))
 
     def test_np_logaddexp(self):
         for pdf in (
