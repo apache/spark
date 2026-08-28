@@ -289,8 +289,8 @@ case class CachedRDDBuilder(
   // late updates from making a rebuilt cache appear complete.
   private var partitionStats = newPartitionStats()
 
-  // Resolved on first access, which happens at cache materialization; for adaptive plans the
-  // name therefore reflects the final plan.
+  // Resolved on first access (cache materialization for anonymous caches). For adaptive plans,
+  // the name reflects the final plan.
   lazy val cachedName: String = tableName.map(n => s"In-memory table $n").getOrElse {
     if (cachedPlan.conf.getConf(SQLConf.DATAFRAME_CACHE_PLAN_ID_NAME_ENABLED)) {
       s"CachedRDD (plan_id=${cachedPlan.id})"

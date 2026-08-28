@@ -61,7 +61,7 @@ class InMemoryRelationSuite extends SparkFunSuite
     val d = spark.range(1)
     withSQLConf(SQLConf.DATAFRAME_CACHE_PLAN_ID_NAME_ENABLED.key -> "true") {
       val r1 = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, None)
-      // Caches of the same plan share the plan id.
+      // Caches of the same physical plan instance share the plan id.
       val r1Again = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, None)
       val r2 = InMemoryRelation(StorageLevel.MEMORY_ONLY, spark.range(2).queryExecution, None)
       assert(r1.cacheBuilder.cachedName.matches("CachedRDD \\(plan_id=\\d+\\)"))
@@ -81,9 +81,12 @@ class InMemoryRelationSuite extends SparkFunSuite
 
   test("SPARK-59024: anonymous cached name is not rendered before materialization") {
     val plan = ToStringCountingPlan()
-    InMemoryRelation(new DefaultCachedBatchSerializer, StorageLevel.MEMORY_ONLY, plan, None,
-      spark.range(1).queryExecution.optimizedPlan)
+    val relation = InMemoryRelation(new DefaultCachedBatchSerializer, StorageLevel.MEMORY_ONLY,
+      plan, None, spark.range(1).queryExecution.optimizedPlan)
     assert(plan.toStringCount == 0)
+    // Forcing the name renders the tree string exactly once.
+    relation.cacheBuilder.cachedName
+    assert(plan.toStringCount == 1)
   }
 
   test("SPARK-47177: Cached SQL plan do not display final AQE plan in explain string") {
