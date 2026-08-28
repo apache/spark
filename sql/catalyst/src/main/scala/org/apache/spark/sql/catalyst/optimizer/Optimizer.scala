@@ -2267,7 +2267,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     //    split the projection around it (see `splitProjectForExpensiveConditions`); whatever is
     //    left over stays above the projection, which is where all of case 3 lands when nothing
     //    is worth splitting.
-    // Note that a given filter may contain parts (sepereated by logical ands) from all cases.
+    // Note that a given filter may contain parts (separated by logical ands) from all cases.
     // We handle each part separately according to the logic above.
     // Additional restriction:
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
