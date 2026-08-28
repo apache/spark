@@ -355,7 +355,7 @@ object functions {
    *   Returns a column that evaluates to a numeric.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def avg(e: Column): Column = Column.fn("avg", e)
@@ -371,7 +371,7 @@ object functions {
    *   Returns a column that evaluates to a numeric.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def avg(columnName: String): Column = avg(Column(columnName))
@@ -1722,7 +1722,7 @@ object functions {
    *   Returns a column that evaluates to a numeric or interval.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def sum(e: Column): Column = Column.fn("sum", e)
@@ -1738,7 +1738,7 @@ object functions {
    *   Returns a column that evaluates to a numeric or interval.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def sum(columnName: String): Column = sum(Column(columnName))
@@ -3708,7 +3708,7 @@ object functions {
    * @since 4.1.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def current_time(): Column = {
@@ -3727,7 +3727,7 @@ object functions {
    * @since 4.1.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def current_time(precision: Int): Column = {
@@ -4312,7 +4312,7 @@ object functions {
    *   Returns a column that evaluates to a map.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.mapKeyDedupPolicy`
    */
   @scala.annotation.varargs
@@ -4347,7 +4347,7 @@ object functions {
    *   Returns a column that evaluates to a map.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.mapKeyDedupPolicy`
    */
   def map_from_arrays(keys: Column, values: Column): Column =
@@ -4371,7 +4371,7 @@ object functions {
    *   Returns a column that evaluates to a map.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.mapKeyDedupPolicy`
    */
   def str_to_map(text: Column, pairDelim: Column, keyValueDelim: Column): Column =
@@ -4392,7 +4392,7 @@ object functions {
    *   Returns a column that evaluates to a map.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.mapKeyDedupPolicy`
    */
   def str_to_map(text: Column, pairDelim: Column): Column =
@@ -4409,7 +4409,7 @@ object functions {
    *   Returns a column that evaluates to a map.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.mapKeyDedupPolicy`
    */
   def str_to_map(text: Column): Column = Column.fn("str_to_map", text)
@@ -4968,7 +4968,7 @@ object functions {
    *   Returns a column of the same type as the input.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def abs(e: Column): Column = Column.fn("abs", e)
@@ -5283,7 +5283,7 @@ object functions {
    *   Returns a column that evaluates to a long or decimal.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def ceil(e: Column, scale: Column): Column = Column.fn("ceil", e, scale)
@@ -5299,7 +5299,7 @@ object functions {
    *   Returns a column that evaluates to a long or decimal.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def ceil(e: Column): Column = Column.fn("ceil", e)
@@ -5315,7 +5315,7 @@ object functions {
    *   Returns a column that evaluates to a long or decimal.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def ceil(columnName: String): Column = ceil(Column(columnName))
@@ -5334,7 +5334,7 @@ object functions {
    *   Returns a column that evaluates to a long or decimal.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def ceiling(e: Column, scale: Column): Column = Column.fn("ceiling", e, scale)
@@ -5350,7 +5350,7 @@ object functions {
    *   Returns a column that evaluates to a long or decimal.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def ceiling(e: Column): Column = Column.fn("ceiling", e)
@@ -5370,7 +5370,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def conv(num: Column, fromBase: Int, toBase: Int): Column =
@@ -5528,7 +5528,7 @@ object functions {
    *   Returns a column that evaluates to a long or decimal.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def floor(e: Column, scale: Column): Column = Column.fn("floor", e, scale)
@@ -5544,7 +5544,7 @@ object functions {
    *   Returns a column that evaluates to a long or decimal.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def floor(e: Column): Column = Column.fn("floor", e)
@@ -5560,7 +5560,7 @@ object functions {
    *   Returns a column that evaluates to a long or decimal.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def floor(columnName: String): Column = floor(Column(columnName))
@@ -6120,7 +6120,7 @@ object functions {
    *   Returns a column of the same type as the input.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def round(e: Column): Column = round(e, 0)
@@ -6140,7 +6140,7 @@ object functions {
    *   Returns a column of the same type as the input.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def round(e: Column, scale: Int): Column = Column.fn("round", e, lit(scale))
@@ -6160,7 +6160,7 @@ object functions {
    *   Returns a column of the same type as the input.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def round(e: Column, scale: Column): Column = Column.fn("round", e, scale)
@@ -6223,7 +6223,7 @@ object functions {
    *   Returns a column of the same type as the input.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def bround(e: Column): Column = bround(e, 0)
@@ -6243,7 +6243,7 @@ object functions {
    *   Returns a column of the same type as the input.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def bround(e: Column, scale: Int): Column = Column.fn("bround", e, lit(scale))
@@ -6263,7 +6263,7 @@ object functions {
    *   Returns a column of the same type as the input.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def bround(e: Column, scale: Column): Column = Column.fn("bround", e, scale)
@@ -7266,7 +7266,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.reflect.allowList`
    */
   @scala.annotation.varargs
@@ -7281,7 +7281,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.reflect.allowList`
    */
   @scala.annotation.varargs
@@ -7610,7 +7610,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.chunkBase64String.enabled`
    */
   def base64(e: Column): Column = Column.fn("base64", e)
@@ -7829,7 +7829,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.icu.caseMappings.enabled`
    */
   def initcap(e: Column): Column = Column.fn("initcap", e)
@@ -8022,7 +8022,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.icu.caseMappings.enabled`
    */
   def lower(e: Column): Column = Column.fn("lower", e)
@@ -8921,7 +8921,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.icu.caseMappings.enabled`
    */
   def upper(e: Column): Column = Column.fn("upper", e)
@@ -9198,7 +9198,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def parse_url(url: Column, partToExtract: Column, key: Column): Column =
@@ -9217,7 +9217,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def parse_url(url: Column, partToExtract: Column): Column =
@@ -9501,7 +9501,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   @scala.annotation.varargs
@@ -9600,7 +9600,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.icu.caseMappings.enabled`
    */
   def lcase(str: Column): Column = Column.fn("lcase", str)
@@ -9616,7 +9616,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.icu.caseMappings.enabled`
    */
   def ucase(str: Column): Column = Column.fn("ucase", str)
@@ -11719,7 +11719,7 @@ object functions {
    *   Returns a column that evaluates to a date.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def curdate(): Column = Column.fn("curdate")
@@ -11734,7 +11734,7 @@ object functions {
    *   Returns a column that evaluates to a date.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def current_date(): Column = Column.fn("current_date")
@@ -11748,7 +11748,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def current_timezone(): Column = Column.fn("current_timezone")
@@ -11785,7 +11785,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def localtimestamp(): Column = Column.fn("localtimestamp")
@@ -11816,7 +11816,7 @@ object functions {
    * @since 1.5.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def date_format(dateExpr: Column, format: String): Column =
@@ -12081,7 +12081,7 @@ object functions {
    * @since 1.5.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def hour(e: Column): Column = Column.fn("hour", e)
@@ -12169,7 +12169,7 @@ object functions {
    * @since 1.5.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def minute(e: Column): Column = Column.fn("minute", e)
@@ -12200,7 +12200,7 @@ object functions {
    * @since 3.3.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def make_date(year: Column, month: Column, day: Column): Column =
@@ -12236,7 +12236,7 @@ object functions {
    * @since 1.5.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def months_between(end: Column, start: Column): Column =
@@ -12262,7 +12262,7 @@ object functions {
    *   Returns a column that evaluates to a double.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def months_between(end: Column, start: Column, roundOff: Boolean): Column =
@@ -12289,7 +12289,7 @@ object functions {
    * @since 1.5.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def next_day(date: Column, dayOfWeek: String): Column = next_day(date, lit(dayOfWeek))
@@ -12315,7 +12315,7 @@ object functions {
    * @since 3.2.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def next_day(date: Column, dayOfWeek: Column): Column =
@@ -12335,7 +12335,7 @@ object functions {
    * @since 1.5.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def second(e: Column): Column = Column.fn("second", e)
@@ -12372,7 +12372,7 @@ object functions {
    * @since 1.5.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def from_unixtime(ut: Column): Column = Column.fn("from_unixtime", ut)
@@ -12397,7 +12397,7 @@ object functions {
    * @since 1.5.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def from_unixtime(ut: Column, f: String): Column =
@@ -12416,7 +12416,7 @@ object functions {
    *   Returns a column that evaluates to a long.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    */
@@ -12436,7 +12436,7 @@ object functions {
    * @since 1.5.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    */
@@ -12462,7 +12462,7 @@ object functions {
    * @since 1.5.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    */
@@ -12519,7 +12519,7 @@ object functions {
    * @since 2.2.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
@@ -12546,7 +12546,7 @@ object functions {
    * @since 2.2.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
@@ -12602,7 +12602,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
@@ -12622,7 +12622,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
@@ -12639,7 +12639,7 @@ object functions {
    *   Returns a column that evaluates to a date.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    */
@@ -12665,7 +12665,7 @@ object functions {
    * @since 2.2.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    */
@@ -12806,7 +12806,7 @@ object functions {
    * @since 2.3.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def date_trunc(format: String, timestamp: Column): Column =
@@ -13198,7 +13198,7 @@ object functions {
    *   Returns a column that evaluates to a long.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def timestamp_diff(unit: String, start: Column, end: Column): Column =
@@ -13220,7 +13220,7 @@ object functions {
    *   Returns a column of the same type as the input.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def timestamp_add(unit: String, quantity: Column, ts: Column): Column =
@@ -13242,7 +13242,7 @@ object functions {
    *   Returns a column of the same type as the input.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def time_bucket(bucketSize: Column, ts: Column): Column =
@@ -13266,7 +13266,7 @@ object functions {
    *   Returns a column of the same type as the input.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def time_bucket(bucketSize: Column, ts: Column, origin: Column): Column =
@@ -13405,7 +13405,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def to_timestamp_ltz(timestamp: Column, format: Column): Column =
@@ -13424,7 +13424,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def to_timestamp_ltz(timestamp: Column): Column =
@@ -13473,7 +13473,7 @@ object functions {
    *   Returns a column that evaluates to a long.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    */
@@ -13491,7 +13491,7 @@ object functions {
    *   Returns a column that evaluates to a long.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    */
@@ -13733,7 +13733,7 @@ object functions {
    *   map.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def element_at(column: Column, value: Any): Column = Column.fn("element_at", column, lit(value))
@@ -14216,7 +14216,7 @@ object functions {
    *   Returns a column that evaluates to a map.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.mapKeyDedupPolicy`
    */
   def transform_keys(expr: Column, f: (Column, Column) => Column): Column =
@@ -14424,7 +14424,7 @@ object functions {
    *   Returns a column that evaluates to a struct.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    */
@@ -14455,7 +14455,7 @@ object functions {
    *   Returns a column of the type given by the schema (a struct, array, or map).
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    */
@@ -14486,7 +14486,7 @@ object functions {
    *   Returns a column that evaluates to a struct.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    */
@@ -14517,7 +14517,7 @@ object functions {
    *   Returns a column of the type given by the schema (a struct, array, or map).
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    */
@@ -14542,7 +14542,7 @@ object functions {
    *   Returns a column that evaluates to a struct.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    */
@@ -14566,7 +14566,7 @@ object functions {
    *   Returns a column of the type given by the schema (a struct, array, or map).
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    */
@@ -14595,7 +14595,7 @@ object functions {
    *   Returns a column of the type given by the schema (a struct, array, or map).
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    */
@@ -14626,7 +14626,7 @@ object functions {
    *   Returns a column of the type given by the schema (a struct, array, or map).
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    */
@@ -14651,7 +14651,7 @@ object functions {
    *   Returns a column of the type given by the schema (a struct, array, or map).
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    */
@@ -14681,7 +14681,7 @@ object functions {
    *   Returns a column of the type given by the schema (a struct, array, or map).
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    */
@@ -15312,7 +15312,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
@@ -15330,7 +15330,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
@@ -15355,7 +15355,7 @@ object functions {
    * @since 3.0.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
@@ -15425,7 +15425,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.jsonGenerator.ignoreNullFields`
    *   - `spark.sql.session.timeZone`
    */
@@ -15455,7 +15455,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.jsonGenerator.ignoreNullFields`
    *   - `spark.sql.session.timeZone`
    */
@@ -15477,7 +15477,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.jsonGenerator.ignoreNullFields`
    *   - `spark.sql.session.timeZone`
    */
@@ -15617,7 +15617,7 @@ object functions {
    *   Returns a column that evaluates to an integer.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def size(e: Column): Column = Column.fn("size", e)
@@ -15637,7 +15637,7 @@ object functions {
    *   Returns a column that evaluates to an integer.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def cardinality(e: Column): Column = Column.fn("cardinality", e)
@@ -15909,7 +15909,7 @@ object functions {
    *   Returns a column that evaluates to a map.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.mapKeyDedupPolicy`
    */
   def map_from_entries(e: Column): Column = Column.fn("map_from_entries", e)
@@ -15937,7 +15937,7 @@ object functions {
    *   Returns a column that evaluates to a map.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.mapKeyDedupPolicy`
    */
   @scala.annotation.varargs
@@ -15965,7 +15965,7 @@ object functions {
    *   Returns a column that evaluates to a struct.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    */
@@ -15994,7 +15994,7 @@ object functions {
    *   Returns a column that evaluates to a struct.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    */
@@ -16017,7 +16017,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
@@ -16035,7 +16035,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
@@ -16059,7 +16059,7 @@ object functions {
    * @since 3.0.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
@@ -16086,7 +16086,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   // scalastyle:on line.size.limit
@@ -16106,7 +16106,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def to_csv(e: Column): Column = to_csv(e, Map.empty[String, String].asJava)
@@ -16132,7 +16132,7 @@ object functions {
    *   Returns a column that evaluates to a struct.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.xml.variant.respectInferSchema`
@@ -16161,7 +16161,7 @@ object functions {
    *   Returns a column that evaluates to a struct.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.xml.variant.respectInferSchema`
@@ -16186,7 +16186,7 @@ object functions {
    *   Returns a column that evaluates to a struct.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.xml.variant.respectInferSchema`
@@ -16216,7 +16216,7 @@ object functions {
    *   Returns a column that evaluates to a struct.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.xml.variant.respectInferSchema`
@@ -16241,7 +16241,7 @@ object functions {
    *   Returns a column that evaluates to a struct.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.xml.variant.respectInferSchema`
@@ -16264,7 +16264,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
@@ -16281,7 +16281,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
@@ -16306,7 +16306,7 @@ object functions {
    * @since 4.0.0
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
@@ -16333,7 +16333,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   // scalastyle:on line.size.limit
@@ -16352,7 +16352,7 @@ object functions {
    *   Returns a column that evaluates to a string.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def to_xml(e: Column): Column = to_xml(e, Map.empty[String, String].asJava)
@@ -16556,7 +16556,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def convert_timezone(sourceTz: Column, targetTz: Column, sourceTs: Column): Column =
@@ -16576,7 +16576,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def convert_timezone(targetTz: Column, sourceTs: Column): Column =
@@ -16716,7 +16716,7 @@ object functions {
    *   Returns a column that evaluates to an interval.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def make_interval(
@@ -16780,7 +16780,7 @@ object functions {
    *   Returns a column that evaluates to an interval.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def make_interval(
@@ -16838,7 +16838,7 @@ object functions {
    *   Returns a column that evaluates to an interval.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def make_interval(
@@ -16886,7 +16886,7 @@ object functions {
    *   Returns a column that evaluates to an interval.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def make_interval(years: Column, months: Column, weeks: Column, days: Column): Column =
@@ -16925,7 +16925,7 @@ object functions {
    *   Returns a column that evaluates to an interval.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def make_interval(years: Column, months: Column, weeks: Column): Column =
@@ -16960,7 +16960,7 @@ object functions {
    *   Returns a column that evaluates to an interval.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def make_interval(years: Column, months: Column): Column =
@@ -16991,7 +16991,7 @@ object functions {
    *   Returns a column that evaluates to an interval.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def make_interval(years: Column): Column =
@@ -17006,7 +17006,7 @@ object functions {
    *   Returns a column that evaluates to an interval.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def make_interval(): Column =
@@ -17039,7 +17039,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
@@ -17079,7 +17079,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
@@ -17108,7 +17108,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
@@ -17129,7 +17129,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
@@ -17163,7 +17163,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
@@ -17201,7 +17201,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
@@ -17229,7 +17229,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
@@ -17249,7 +17249,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
@@ -17282,7 +17282,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    */
@@ -17321,7 +17321,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    */
@@ -17360,7 +17360,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def try_make_timestamp_ltz(
@@ -17397,7 +17397,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
    */
   def try_make_timestamp_ltz(
@@ -17434,7 +17434,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def make_timestamp_ntz(
@@ -17459,7 +17459,7 @@ object functions {
    *   Returns a column that evaluates to a timestamp.
    *
    * @note
-   *   This function's behavior is affected by these public SQL configurations:
+   *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
    */
   def make_timestamp_ntz(date: Column, time: Column): Column =
