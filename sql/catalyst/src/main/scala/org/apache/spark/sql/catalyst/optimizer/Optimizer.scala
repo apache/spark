@@ -321,7 +321,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // execution, so it must never be excludable.
       ConvertToCatalyst.ruleName,
       FinishAnalysis.ruleName,
-      // With is Unevaluable and must be rewritten before physical planning.
+      // ReplaceExpressions (in FinishAnalysis) turns Between/NullIf into the Unevaluable
+      // With expression; excluding this rule leaks it into codegen and fails with INTERNAL_ERROR.
       RewriteWithExpression.ruleName,
       RewriteDistinctAggregates.ruleName,
       ReplaceDeduplicateWithAggregate.ruleName,
