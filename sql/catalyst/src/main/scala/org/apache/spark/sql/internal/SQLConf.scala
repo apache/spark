@@ -2512,10 +2512,12 @@ object SQLConf {
       .withAlternative("spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled")
       .doc("Whether to allow storage-partitioned operations (joins, aggregates, and windows) in " +
         "the case where the operation's keys are a subset of the partition keys of the source " +
-        "tables. At  planning time, Spark will group the partitions by only those keys that are " +
-        "in the operation's keys. " +
-        s"This is currently enabled only if ${REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key} " +
-        "is false."
+        "tables. At planning time, Spark will group the partitions by only those keys that are " +
+        "in the operation's keys. That is currently enabled only if " +
+        s"${REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key} is false. This config also gates " +
+        "grouping a partitioning that was narrowed to a subset of its keys and whose keys are no " +
+        "longer distinct, which carries the same risk of skew; that applies regardless of " +
+        s"${REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key}."
       )
       .version("4.0.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)

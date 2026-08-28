@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.expressions.Expressions._
 import org.apache.spark.sql.execution.{
   ExtendedMode,
   FormattedMode,
+  ProjectExec,
   RDDScanExec,
   SimpleMode,
   SortExec,
@@ -4866,6 +4867,84 @@ class KeyGroupedPartitioningSuite
     val shuffles = collectShuffles(df.queryExecution.executedPlan)
     assert(shuffles.isEmpty, "should not contain any shuffle")
     checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(2, "bb", 10.0, 19.5)))
+  }
+
+  test("SPARK-58974: the narrowing skew guard applies regardless of requireAllClusterKeys") {
+    // Same shape as "SPARK-46367: narrowing projection requires allowKeysSubsetOfPartitionKeys":
+    // items is partitioned by (id, name) and id=1 maps to two of its partitions, so projecting
+    // `name` away narrows [id, name] to [id] and collapses the keys to [1, 1, 2].
+    //
+    // The narrowing guard describes a skew risk that does not depend on which key sets count as
+    // matching, so it must apply for either value of `requireAllClusterKeys`. It used to sit inside
+    // the `requireAllClusterKeys = false` arm of `groupedSatisfies`, so with that setting enabled
+    // such a partitioning was grouped anyway -- taking exactly the exposure
+    // `allowKeysSubsetOfPartitionKeys` exists to gate, with nobody opting in.
+    createTable(items, itemsColumns, Array(identity("id"), identity("name")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      s"(1, 'bb', 41.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'cc', 10.0, cast('2020-01-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array(identity("item_id")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 11.0, cast('2020-01-01' as timestamp))")
+
+    val query =
+      s"""
+         |${selectWithMergeJoinHint("sub", "p")}
+         |sub.id, p.price AS purchase_price
+         |FROM (SELECT id FROM testcat.ns.$items WHERE name >= 'aa') sub
+         |JOIN testcat.ns.$purchases p
+         |ON sub.id = p.item_id
+         |""".stripMargin
+    val expected = Seq(Row(1, 42.0), Row(1, 42.0), Row(2, 11.0))
+
+    for {
+      requireAll <- Seq(true, false)
+      allowSubset <- Seq(true, false)
+      keyedShuffle <- Seq(true, false)
+    } {
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key -> requireAll.toString,
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> keyedShuffle.toString,
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
+            allowSubset.toString) {
+        val settings = s"requireAllClusterKeys=$requireAll, v2BucketingShuffle=$keyedShuffle"
+        val df = sql(query)
+        val plan = df.queryExecution.executedPlan
+
+        val narrowed = collect(plan) { case p: ProjectExec => p }
+          .map(_.outputPartitioning)
+          .collect { case kp: physical.KeyedPartitioning if kp.isNarrowed => kp }
+        assert(narrowed.exists(!_.isGrouped),
+          "this test needs a narrowed, ungrouped partitioning to be meaningful")
+
+        // Count over the whole plan, so a shuffle or a grouping anywhere in it is caught, not
+        // only the ones inside the join subtree.
+        val groupPartitions = collectAllGroupPartitions(plan)
+        val shuffles = collectAllShuffles(plan)
+        if (allowSubset) {
+          // The opt-in is the only way to keep the coalescing, and it must work for either value
+          // of `requireAllClusterKeys` -- before the fix it was reachable only for `false`.
+          assert(groupPartitions.nonEmpty, s"$settings: the opt-in must restore the coalescing")
+          assert(shuffles.isEmpty, s"$settings: the opt-in must avoid the shuffles")
+        } else {
+          // `requireAllClusterKeys` says which key sets count as matching; it does not authorise
+          // coalescing a narrowed partitioning, so the guard behaves the same either way.
+          assert(groupPartitions.isEmpty,
+            s"$settings must not coalesce a narrowed partitioning without " +
+              "allowKeysSubsetOfPartitionKeys")
+          // Both sides are shuffled, unless `v2BucketingShuffleEnabled` lets the refused side be
+          // laid out on the other side's declared partition keys.
+          val expectedShuffles = if (keyedShuffle) 1 else 2
+          assert(shuffles.size == expectedShuffles,
+            s"$settings must shuffle instead, on $expectedShuffles side(s)")
+        }
+        checkAnswer(df, expected)
+      }
+    }
   }
 }
 
