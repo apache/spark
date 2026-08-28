@@ -1575,6 +1575,8 @@ class StringFunctionsSuite extends SharedSparkSession {
       }
 
       withSQLConf(confModifier.toSeq: _*) {
+        // scalastyle:off
+        // non ascii characters are not allowed in the code, so we disable the scalastyle here.
         // 1. Turkish dotless i (U+0131 LATIN SMALL LETTER DOTLESS I)
         checkAnswer(
           sql("SELECT lower(upper('ı')) AS result"),
@@ -1585,7 +1587,10 @@ class StringFunctionsSuite extends SharedSparkSession {
           Row("i") :: Nil
         )
         checkAnswer(
-          sql("SELECT lower(upper(s2)) AS result FROM (VALUES ('ı')) AS t(s) LATERAL VIEW explode(array(s)) e AS s2"),
+          sql(
+            """SELECT lower(upper(s2)) AS result
+              |FROM (VALUES ('ı')) AS t(s)
+              |LATERAL VIEW explode(array(s)) e AS s2""".stripMargin),
           Row("i") :: Nil
         )
 
@@ -1606,6 +1611,7 @@ class StringFunctionsSuite extends SharedSparkSession {
           sql("SELECT upper(lower('K')) AS result"),
           Row("K") :: Nil
         )
+        // scalastyle:on
 
         // 5. Verify same-case idempotent operations still simplify
         checkAnswer(

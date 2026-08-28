@@ -1187,9 +1187,9 @@ object SimplifyCasts extends Rule[LogicalPlan] {
  * Removes redundant same-case conversion expressions (e.g. UPPER(UPPER(x)) or LOWER(LOWER(x)))
  * that are unnecessary because the case conversion operation is idempotent.
  *
- * Note: Cross-case conversions (UPPER(LOWER(x)) or LOWER(UPPER(x))) are NOT simplified
- * because they are not semantics-preserving for non-ASCII Unicode characters (e.g. Turkish
- * dotless 'ı' where LOWER(UPPER('ı')) = 'i' != LOWER('ı')).
+ * Note: Cross-case conversions (UPPER(LOWER(x)) or LOWER(UPPER(x))) are NOT simplified because they
+ * are not semantics-preserving for some Unicode characters (e.g. U+0131 LATIN SMALL LETTER DOTLESS I,
+ * where LOWER(UPPER(U+0131)) yields 'i' while LOWER(U+0131) leaves the character unchanged).
  */
 object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
