@@ -62,6 +62,10 @@ a:not([href]):not([class]):hover {
   text-decoration:underline
 }
 
+/* An anchor styled as a button must not pick up the link underline above. */
+a.btn:hover {
+  text-decoration: none;
+}
 
 
 .form-inline label {
