@@ -24,6 +24,7 @@ description: >-
   JDK. Callers that use a local composite action must add a bare
   'actions/checkout' step first so the latest action definition is present
   (same bootstrap pattern as checkout-and-sync).
+  There is a default cache limit of 10 GB.
 inputs:
   java-version:
     description: >-
@@ -52,13 +53,11 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    # Skip caches on macOS (SPARK-54466 / runner-images#13341).
     # Key families are shared across workflows:
     #   SBT:      build-<os>-<hash(build files)>
     #   Coursier: coursier-<os>-<hash(**/pom.xml, **/plugins.sbt)>
     #   Maven:    maven-<os>-java<ver>-<hash(**/pom.xml)>
     - name: Cache SBT and Maven
-      if: runner.os != 'macOS'
       uses: actions/cache@v5
       with:
         path: |
@@ -78,7 +77,7 @@ runs:
           build-${{ runner.os }}-
 
     - name: Cache Coursier local repository
-      if: inputs.coursier == 'cache' && runner.os != 'macOS'
+      if: inputs.coursier == 'cache'
       uses: actions/cache@v5
       with:
         path: ~/.cache/coursier
@@ -91,7 +90,7 @@ runs:
           coursier-${{ runner.os }}-
 
     - name: Restore Coursier local repository
-      if: inputs.coursier == 'restore' && runner.os != 'macOS'
+      if: inputs.coursier == 'restore'
       uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
@@ -104,7 +103,7 @@ runs:
           coursier-${{ runner.os }}-
 
     - name: Cache Maven local repository
-      if: inputs.cache-maven-local == 'true' && runner.os != 'macOS'
+      if: inputs.cache-maven-local == 'true'
       uses: actions/cache@v5
       with:
         path: ~/.m2/repository

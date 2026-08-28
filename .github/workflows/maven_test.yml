@@ -120,8 +120,6 @@ jobs:
     needs: precompile-maven
     if: (!cancelled())
     runs-on: ${{ inputs.os }}
-    # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
-    # timeout-minutes: 150
     strategy:
       fail-fast: false
       max-parallel: 20
