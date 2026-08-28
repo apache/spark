@@ -319,6 +319,10 @@ case class ResultQueryStageExec(
     override val _canonicalized: SparkPlan,
     resultHandler: SparkPlan => Any) extends QueryStageExec {
 
+  override def doCanonicalize(): SparkPlan = {
+    ResultQueryStageExec(-1, _canonicalized, _canonicalized, resultHandler)
+  }
+  
   override def resetMetrics(): Unit = {
     plan.resetMetrics()
   }
