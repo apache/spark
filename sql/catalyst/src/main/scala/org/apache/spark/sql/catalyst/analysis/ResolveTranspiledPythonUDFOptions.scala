@@ -89,6 +89,14 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   //   "bool"    -> BooleanType
   //   "binary"  -> BinaryType
   //
+  // "integral" and "fractional" split "numeric" for a transpiler that has to name one
+  // concrete Java type per parameter and so cannot be polymorphic over the two the way a
+  // Catalyst `Add` is (see `pyspark.sql.transpile_java`). Both are lossless within their
+  // half -- every IntegralType fits in a long, both FractionalTypes fit in a double -- so
+  // the option upcasts its arguments and the split costs only extra options, never
+  // precision. A transpiler is free to use either granularity; "numeric" still matches
+  // both halves for the Catalyst target.
+  //
   // Two deliberate exclusions keep the transpiled semantics faithful to Python:
   // - DecimalType is NOT matched by any numeric category: Python receives
   //   decimal.Decimal objects, which raise TypeError when mixed with float
@@ -109,6 +117,9 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
         case ("float", dt) =>
           dt.isInstanceOf[FractionalType] && !dt.isInstanceOf[DecimalType]
         case ("numeric", dt) => dt.isInstanceOf[NumericType] && !dt.isInstanceOf[DecimalType]
+        // No DecimalType exclusion needed: it is a FractionalType, never an IntegralType.
+        case ("integral", dt) => dt.isInstanceOf[IntegralType]
+        case ("fractional", dt) => dt.isInstanceOf[FractionalType] && !dt.isInstanceOf[DecimalType]
         case ("string", st: StringType) => st.isUTF8BinaryCollation
         case ("bool", dt) => dt.isInstanceOf[BooleanType]
         case ("binary", dt) => dt.isInstanceOf[BinaryType]
