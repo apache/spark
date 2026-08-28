@@ -20,14 +20,11 @@ package org.apache.spark.ml.classification
 import org.scalatest.Assertions._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.MLTest
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{Column, Dataset, Row}
-import org.apache.spark.sql.functions.{array, lit}
+import org.apache.spark.sql.{Dataset, Row}
 
 final class TestProbabilisticClassificationModel(
     override val uid: String,
@@ -45,41 +42,13 @@ final class TestProbabilisticClassificationModel(
     rawPrediction
   }
 
-  override protected def predictRawColumn(features: Column): Column = {
-    MLFunctions.array_to_vector(array(lit(9.0), lit(1.0)))
-  }
-
-  override protected def raw2predictionColumn(rawPrediction: Column): Column = lit(7.0)
-
-  override protected def predictionColumn(features: Column): Column = lit(8.0)
-
   def friendlyPredict(values: Double*): Double = {
     predict(Vectors.dense(values.toArray))
   }
 }
 
 
-class ProbabilisticClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
-
-  import testImplicits._
-
-  test("transform uses overridden prediction column hooks") {
-    val model = new TestProbabilisticClassificationModel("myuid", 2, 2)
-      .setProbabilityCol("")
-    val dataset = Seq(Tuple1(Vectors.dense(1.0, 2.0))).toDF("features")
-
-    val rawAndPrediction = model.transform(dataset)
-      .select("rawPrediction", "prediction")
-      .head()
-    assert(rawAndPrediction.getAs[Vector](0) === Vectors.dense(9.0, 1.0))
-    assert(rawAndPrediction.getDouble(1) === 7.0)
-
-    val predictionOnly = model.setRawPredictionCol("")
-      .transform(dataset)
-      .select("prediction")
-      .head()
-    assert(predictionOnly.getDouble(0) === 8.0)
-  }
+class ProbabilisticClassifierSuite extends SparkFunSuite {
 
   test("test thresholding") {
     val testModel = new TestProbabilisticClassificationModel("myuid", 2, 2)
