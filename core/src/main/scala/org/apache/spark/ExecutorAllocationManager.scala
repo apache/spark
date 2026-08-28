@@ -945,11 +945,12 @@ private[spark] class ExecutorAllocationManager(
             stageAttemptToPendingSpeculativeTasks.get(stageAttempt).foreach(_.remove(taskIndex))
           case _: TaskKilled =>
           case _ =>
-            if (!hasPendingTasks) {
+            if (stageAttemptToNumTasks.contains(stageAttempt) && !hasPendingTasks) {
               // If the task failed (not intentionally killed), we expect it to be resubmitted
               // later. To ensure we have enough resources to run the resubmitted task, we need to
               // mark the scheduler as backlogged again if it's not already marked as such
-              // (SPARK-8366)
+              // (SPARK-8366). Skip this for completed stage attempts: the task will not be
+              // resubmitted and an armed timer would let a later stage bypass the backlog timeout.
               allocationManager.onSchedulerBacklogged()
             }
             if (!taskEnd.taskInfo.speculative) {

@@ -1003,6 +1003,23 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(addTime(manager) === NOT_SET)
   }
 
+  test("ignore late failed task end events from completed stages") {
+    val manager = createManager(createConf(0, 10, 0))
+    val stage = createStageInfo(0, 1)
+    post(SparkListenerStageSubmitted(stage))
+
+    val task = createTaskInfo(0, 0, "executor-1")
+    post(SparkListenerTaskStart(0, 0, task))
+    post(SparkListenerStageCompleted(stage))
+    assert(addTime(manager) === NOT_SET)
+
+    val failure = ExceptionFailure(null, null, null, null, None)
+    post(SparkListenerTaskEnd(0, 0, null, failure, task, new ExecutorMetrics, null))
+
+    assert(numStageAttemptsForDefaultProfile(manager) === 0)
+    assert(addTime(manager) === NOT_SET)
+  }
+
   testRetry("cancel pending executors when no longer needed") {
     val manager = createManager(createConf(0, 10, 0))
     post(SparkListenerStageSubmitted(createStageInfo(2, 5)))
