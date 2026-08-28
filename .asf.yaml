@@ -30,9 +30,9 @@ github:
     - sql
     - spark
   enabled_merge_buttons:
+    merge: false
     squash: true
     squash_commit_message: PR_TITLE_AND_DESC
-    merge: false
     rebase: false
   ghp_branch: master
   ghp_path: /docs
