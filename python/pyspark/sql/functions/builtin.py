@@ -1045,6 +1045,10 @@ def abs(col: "ColumnOrName") -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
@@ -1676,6 +1680,10 @@ def sum(col: "ColumnOrName") -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
@@ -1740,6 +1748,10 @@ def avg(col: "ColumnOrName") -> Column:
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Parameters
     ----------
@@ -2735,6 +2747,10 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
@@ -2795,6 +2811,10 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Parameters
     ----------
@@ -3217,6 +3237,10 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Parameters
     ----------
@@ -8282,6 +8306,10 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
@@ -8401,6 +8429,10 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Parameters
     ----------
@@ -9131,6 +9163,10 @@ def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -9827,6 +9863,10 @@ def curdate() -> Column:
 
     .. versionadded:: 3.5.0
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Returns
     -------
     :class:`~pyspark.sql.Column`
@@ -9863,6 +9903,10 @@ def current_date() -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Returns
     -------
     :class:`~pyspark.sql.Column`
@@ -9894,6 +9938,10 @@ def current_timezone() -> Column:
     Returns the current session local timezone.
 
     .. versionadded:: 3.5.0
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Returns
     -------
@@ -9946,6 +9994,10 @@ def current_time(precision: Optional[int] = None) -> Column:
     calls of current_time within the same query return the same value.
 
     .. versionadded:: 4.1.0
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Parameters
     ----------
@@ -10071,6 +10123,10 @@ def localtimestamp() -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Returns
     -------
     :class:`~pyspark.sql.Column`
@@ -10115,6 +10171,10 @@ def date_format(date: "ColumnOrName", format: str) -> Column:
     Notes
     -----
     Whenever possible, use specialized functions like `year`.
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Parameters
     ----------
@@ -10855,6 +10915,10 @@ def hour(col: "ColumnOrName") -> Column:
     .. versionchanged:: 4.1.0
         Added support for time type.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
@@ -10939,6 +11003,10 @@ def minute(col: "ColumnOrName") -> Column:
     .. versionchanged:: 4.1.0
         Added support for time type.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
@@ -11022,6 +11090,10 @@ def second(col: "ColumnOrName") -> Column:
 
     .. versionchanged:: 4.1.0
         Added support for time type.
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Parameters
     ----------
@@ -11616,6 +11688,10 @@ def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Parameters
     ----------
     year : :class:`~pyspark.sql.Column` or column name
@@ -12069,6 +12145,10 @@ def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Parameters
     ----------
     date1 : :class:`~pyspark.sql.Column` or column name
@@ -12132,6 +12212,11 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Parameters
     ----------
@@ -12577,6 +12662,12 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
@@ -12722,6 +12813,11 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
     consistent with the value of configuration `spark.sql.timestampType`.
 
     .. versionadded:: 3.5.0
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
 
     Parameters
     ----------
@@ -13175,6 +13271,10 @@ def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Parameters
     ----------
     format : literal string
@@ -13232,6 +13332,10 @@ def next_day(date: "ColumnOrName", dayOfWeek: str) -> Column:
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Parameters
     ----------
@@ -13329,6 +13433,10 @@ def from_unixtime(timestamp: "ColumnOrName", format: str = "yyyy-MM-dd HH:mm:ss"
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Parameters
     ----------
     timestamp : :class:`~pyspark.sql.Column` or column name
@@ -13392,6 +13500,11 @@ def unix_timestamp(
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Parameters
     ----------
@@ -13886,6 +13999,10 @@ def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Col
 
     .. versionadded:: 4.0.0
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Parameters
     ----------
     unit : literal string
@@ -13952,6 +14069,10 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
     Adds the specified number of units to the given timestamp
 
     .. versionadded:: 4.0.0
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Parameters
     ----------
@@ -14030,6 +14151,10 @@ def time_bucket(
     calendar-day components of day-time interval buckets align to the session time zone.
 
     .. versionadded:: 4.2.0
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Parameters
     ----------
@@ -14341,6 +14466,11 @@ def to_unix_timestamp(
 
     .. versionadded:: 3.5.0
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Parameters
     ----------
     timestamp : :class:`~pyspark.sql.Column` or column name
@@ -14415,6 +14545,10 @@ def to_timestamp_ltz(
     Returns null with invalid input.
 
     .. versionadded:: 3.5.0
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Parameters
     ----------
@@ -15250,6 +15384,10 @@ def upper(col: "ColumnOrName") -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.icu.caseMappings.enabled``
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
@@ -15292,6 +15430,10 @@ def lower(col: "ColumnOrName") -> Column:
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.icu.caseMappings.enabled``
 
     Parameters
     ----------
@@ -15373,6 +15515,10 @@ def base64(col: "ColumnOrName") -> Column:
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.chunkBase64String.enabled``
 
     Parameters
     ----------
@@ -17829,6 +17975,10 @@ def initcap(col: "ColumnOrName") -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.icu.caseMappings.enabled``
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
@@ -18715,6 +18865,10 @@ def parse_url(
 
     .. versionadded:: 3.5.0
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Parameters
     ----------
     url : :class:`~pyspark.sql.Column` or str
@@ -19509,6 +19663,10 @@ def elt(*inputs: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.5.0
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Parameters
     ----------
     inputs : :class:`~pyspark.sql.Column` or str
@@ -19680,6 +19838,10 @@ def lcase(str: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.5.0
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.icu.caseMappings.enabled``
+
     Parameters
     ----------
     str : :class:`~pyspark.sql.Column` or str
@@ -19711,6 +19873,10 @@ def ucase(str: "ColumnOrName") -> Column:
     Returns `str` with all characters changed to uppercase.
 
     .. versionadded:: 3.5.0
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.icu.caseMappings.enabled``
 
     Parameters
     ----------
@@ -19966,6 +20132,10 @@ def create_map(
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.mapKeyDedupPolicy``
+
     Parameters
     ----------
     cols : :class:`~pyspark.sql.Column` or str
@@ -20046,6 +20216,10 @@ def map_from_arrays(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.mapKeyDedupPolicy``
 
     Parameters
     ----------
@@ -20860,6 +21034,10 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Parameters
     ----------
@@ -22699,6 +22877,11 @@ def from_json(
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.columnNameOfCorruptRecord``
+    * ``spark.sql.session.timeZone``
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -23718,6 +23901,11 @@ def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) ->
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.jsonGenerator.ignoreNullFields``
+    * ``spark.sql.session.timeZone``
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -23838,6 +24026,11 @@ def schema_of_json(json: Union[Column, str], options: Optional[Mapping[str, str]
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
 
     Parameters
     ----------
@@ -23998,6 +24191,12 @@ def from_xml(
 
     .. versionadded:: 4.0.0
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.columnNameOfCorruptRecord``
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.xml.variant.respectInferSchema``
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -24110,6 +24309,11 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Mapping[str, str]] 
 
     .. versionadded:: 4.0.0
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
+
     Parameters
     ----------
     xml : :class:`~pyspark.sql.Column` or str
@@ -24209,6 +24413,10 @@ def to_xml(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> 
 
     .. versionadded:: 4.0.0
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -24264,6 +24472,11 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Mapping[str, str]] 
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
 
     Parameters
     ----------
@@ -24357,6 +24570,10 @@ def to_csv(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -24448,6 +24665,10 @@ def size(col: "ColumnOrName") -> Column:
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Parameters
     ----------
@@ -24752,6 +24973,10 @@ def cardinality(col: "ColumnOrName") -> Column:
     Collection function: returns the length of the array or map stored in the column.
 
     .. versionadded:: 3.5.0
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Parameters
     ----------
@@ -25455,6 +25680,10 @@ def map_from_entries(col: "ColumnOrName") -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.mapKeyDedupPolicy``
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -25705,6 +25934,10 @@ def map_concat(
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.mapKeyDedupPolicy``
+
     Parameters
     ----------
     cols : :class:`~pyspark.sql.Column` or str
@@ -25874,6 +26107,11 @@ def from_csv(
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.columnNameOfCorruptRecord``
+    * ``spark.sql.session.timeZone``
 
     Parameters
     ----------
@@ -26535,6 +26773,10 @@ def transform_keys(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.mapKeyDedupPolicy``
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -26759,6 +27001,10 @@ def str_to_map(
     using delimiters. Both `pairDelim` and `keyValueDelim` are treated as regular expressions.
 
     .. versionadded:: 3.5.0
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.mapKeyDedupPolicy``
 
     Parameters
     ----------
@@ -27036,6 +27282,10 @@ def convert_timezone(
     from the `sourceTz` time zone to `targetTz`.
 
     .. versionadded:: 3.5.0
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Parameters
     ----------
@@ -27392,6 +27642,10 @@ def make_interval(
     Make interval from years, months, weeks, days, hours, mins and secs.
 
     .. versionadded:: 3.5.0
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Parameters
     ----------
@@ -27811,6 +28065,12 @@ def make_timestamp(
     .. versionchanged:: 4.1.0
         Added support for creating timestamps from date and time.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
+
     Parameters
     ----------
     years : :class:`~pyspark.sql.Column` or column name, optional
@@ -28046,6 +28306,11 @@ def try_make_timestamp(
     .. versionchanged:: 4.1.0
         Added support for creating timestamps from date and time.
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
+
     Parameters
     ----------
     years : :class:`~pyspark.sql.Column` or column name, optional
@@ -28256,6 +28521,11 @@ def make_timestamp_ltz(
 
     .. versionadded:: 3.5.0
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Parameters
     ----------
     years : :class:`~pyspark.sql.Column` or str
@@ -28360,6 +28630,10 @@ def try_make_timestamp_ltz(
     The function returns NULL on invalid inputs.
 
     .. versionadded:: 4.0.0
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Parameters
     ----------
@@ -28502,6 +28776,10 @@ def make_timestamp_ntz(
 
     .. versionchanged:: 4.1.0
         Added support for creating timestamps from date and time.
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Parameters
     ----------
@@ -32795,6 +33073,10 @@ def reflect(*cols: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.5.0
 
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.reflect.allowList``
+
     Parameters
     ----------
     cols : :class:`~pyspark.sql.Column` or column name
@@ -32829,6 +33111,10 @@ def java_method(*cols: "ColumnOrName") -> Column:
     Calls a method with reflection.
 
     .. versionadded:: 3.5.0
+
+    The behavior of this function is affected by these public SQL configurations:
+
+    * ``spark.sql.reflect.allowList``
 
     Parameters
     ----------
