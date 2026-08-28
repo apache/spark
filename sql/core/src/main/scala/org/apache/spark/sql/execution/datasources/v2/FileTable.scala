@@ -40,10 +40,11 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * A [[Table]] backed by files.
  *
- * Subclasses inherit the `SCAN_MERGING` capability, which holds them to this: with the scan options
- * held constant, what a scan reads is determined by the filters pushed and the columns pruned on
- * its builder. A subclass whose `newScanBuilder` does not meet that has to override
- * [[capabilities]] to drop `SCAN_MERGING`, or Spark may fuse two of its scans into one.
+ * A subclass opts in to the `SCAN_MERGING` capability by overriding [[supportsScanMerging]], which
+ * holds it to this: with the scan options held constant, the rows and columns a scan reads are
+ * determined by the filters pushed and the columns pruned on its builder. A format whose parser
+ * decides what counts as a malformed record from the set of columns it was asked for does not meet
+ * that, because widening the column set can drop or rewrite rows that the narrower scan returned.
  */
 abstract class FileTable(
     sparkSession: SparkSession,
@@ -119,7 +120,15 @@ abstract class FileTable(
 
   override def properties: util.Map[String, String] = options.asCaseSensitiveMap
 
-  override def capabilities: java.util.Set[TableCapability] = FileTable.CAPABILITIES
+  override def capabilities: java.util.Set[TableCapability] =
+    if (supportsScanMerging) FileTable.CAPABILITIES_WITH_SCAN_MERGING else FileTable.CAPABILITIES
+
+  /**
+   * Whether this table meets the `SCAN_MERGING` contract described on this class. Defaults to
+   * false: a format that does not merge only misses an optimization, while a format that merges
+   * when its parser is projection-sensitive returns wrong rows.
+   */
+  protected def supportsScanMerging: Boolean = false
 
   /**
    * When possible, this method should return the schema of the given `files`.  When the format
@@ -189,8 +198,11 @@ abstract class FileTable(
 }
 
 object FileTable {
-  // The built-in file tables meet the SCAN_MERGING contract documented on FileTable: `fileIndex` is
-  // a lazy val, so every scan built from one table lists the same files, and `newScanBuilder`
-  // returns a fresh builder over `mergedOptions(options)`.
-  private val CAPABILITIES = util.EnumSet.of(BATCH_READ, BATCH_WRITE, SCAN_MERGING)
+  private val CAPABILITIES = util.EnumSet.of(BATCH_READ, BATCH_WRITE)
+
+  // For the formats that override supportsScanMerging. `fileIndex` is a lazy val, so every scan
+  // built from one table lists the same files, and `newScanBuilder` returns a fresh builder over
+  // `mergedOptions(options)`.
+  private val CAPABILITIES_WITH_SCAN_MERGING =
+    util.EnumSet.of(BATCH_READ, BATCH_WRITE, SCAN_MERGING)
 }

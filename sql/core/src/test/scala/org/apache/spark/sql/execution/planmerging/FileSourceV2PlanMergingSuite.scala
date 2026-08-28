@@ -30,21 +30,27 @@ import org.apache.spark.sql.test.SharedSparkSession
 /**
  * Scan merging for the built-in file sources on their DSv2 read path (SPARK-57205).
  *
- * [[FileTable]] declares the `SCAN_MERGING` table capability, so [[PlanMerger]] may fuse two file
- * scans of the same table that differ only in their projected columns and/or pushed filters. For a
- * file source the strictly enforced filters are the partition filters and the best-effort ones are
- * the data filters.
+ * Parquet, ORC, text and Avro override [[FileTable.supportsScanMerging]], so [[PlanMerger]] may
+ * fuse two of their scans of the same table that differ only in their projected columns and/or
+ * pushed filters. For a file source the strictly enforced filters are the partition filters and the
+ * best-effort ones are the data filters. CSV and JSON do not override it, because their parsers are
+ * handed the columns the scan asked for and decide from that set what counts as a malformed record.
  *
  * SQL-on-file and catalog tables resolve to the V1 `FileFormat` regardless of
- * `spark.sql.sources.useV1SourceList`, so every test goes through `DataFrameReader` and asserts the
- * plan is V2 before asserting anything about merging.
+ * `spark.sql.sources.useV1SourceList`, so every test goes through `DataFrameReader` and asserts
+ * which read path the plan took before asserting anything about merging.
  */
 class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
   with AdaptiveSparkPlanHelper with V2ScanMergingTestHelper {
   import testImplicits._
 
-  // The multi-column formats in sql/core; text is single-column and Avro lives in connector/avro.
-  private val multiColumnFormats = Seq("parquet", "orc", "json", "csv")
+  // The formats in sql/core that declare SCAN_MERGING and have more than one column. Avro also
+  // declares it but lives in connector/avro; text declares it but has only `value`.
+  private val mergingFormats = Seq("parquet", "orc")
+
+  // These do not declare it: the parser is handed the columns the scan asked for, so widening the
+  // column set changes which records it treats as malformed.
+  private val projectionSensitiveFormats = Seq("csv", "json")
 
   private val flatSchema = "a long, b long, c long, d long"
 
@@ -90,6 +96,13 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  private def assertUsesFileSourceV1(df: DataFrame): Unit = {
+    val plan = df.queryExecution.optimizedPlan
+    assert(plan.collectWithSubqueries { case r: LogicalRelation => r }.nonEmpty,
+      s"expected the V1 file source path, but the plan has no V1 relation:\n$plan")
+    assert(v2Scans(df).isEmpty, s"expected no DSv2 file scan on the V1 path:\n$plan")
+  }
+
   /** `(SubqueryExec, ReusedSubqueryExec)` counts, the same measure `PlanMergingSuite` uses. */
   private def subqueryCounts(df: DataFrame): (Int, Int) = {
     val plan = df.queryExecution.executedPlan
@@ -115,34 +128,38 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
           SQLConf.MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true") {
         val df = sql(query)
         checkAnswer(df, expected)
+        if (useV1) assertUsesFileSourceV1(df) else assertUsesFileSourceV2(df)
         subqueryCounts(df)
       }
     }
   }
 
-  test("SPARK-57205: every built-in file table declares SCAN_MERGING") {
-    Seq("parquet", "orc", "json", "csv", "text").foreach { format =>
-      withClue(s"format=$format: ") {
-        withTempPath { dir =>
-          val path = dir.getCanonicalPath
-          spark.range(0, 5).selectExpr("cast(id AS string) AS value")
-            .write.format(format).save(path)
-          withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
-            val relations = spark.read.format(format).load(path)
-              .queryExecution.analyzed.collect { case r: DataSourceV2Relation => r }
-            assert(relations.size == 1, s"expected a single DSv2 relation, got $relations")
-            val table = relations.head.table
-            assert(table.isInstanceOf[FileTable], s"expected a FileTable, got $table")
-            assert(table.capabilities().contains(TableCapability.SCAN_MERGING),
-              s"${table.getClass.getSimpleName} should declare SCAN_MERGING")
+  test("SPARK-57205: which built-in file tables declare SCAN_MERGING") {
+    // Avro is covered in AvroV2Suite, the module that has AvroTable on the classpath.
+    Seq("parquet" -> true, "orc" -> true, "text" -> true, "csv" -> false, "json" -> false)
+      .foreach { case (format, declares) =>
+        withClue(s"format=$format: ") {
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            spark.range(0, 5).selectExpr("cast(id AS string) AS value")
+              .write.format(format).save(path)
+            withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+              val relations = spark.read.format(format).load(path)
+                .queryExecution.analyzed.collect { case r: DataSourceV2Relation => r }
+              assert(relations.size == 1, s"expected a single DSv2 relation, got $relations")
+              val table = relations.head.table
+              assert(table.isInstanceOf[FileTable], s"expected a FileTable, got $table")
+              assert(table.capabilities().contains(TableCapability.SCAN_MERGING) == declares,
+                s"${table.getClass.getSimpleName}.capabilities() should " +
+                  s"${if (declares) "declare" else "not declare"} SCAN_MERGING")
+            }
           }
         }
       }
-    }
   }
 
   test("SPARK-57205: merge two file scans that differ only in their projected columns") {
-    multiColumnFormats.foreach { format =>
+    mergingFormats.foreach { format =>
       withClue(s"format=$format: ") {
         withTempPath { dir =>
           val path = dir.getCanonicalPath
@@ -162,9 +179,39 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
               s"the two scans should be fused into one:\n${df.queryExecution.optimizedPlan}")
             // Both sides carry the same data filter, so no widening is needed and this merges
             // under the default configuration. c is read because the filter stays above the scan.
-            assert(v2Scans(df).head.output.map(_.name).toSet == Set("a", "b", "c"),
-              s"the merged scan should read the union of both columns; " +
-                s"got ${v2Scans(df).head.output}")
+            val mergedOutput = v2Scans(df).head.output
+            assert(mergedOutput.map(_.name).toSet == Set("a", "b", "c"),
+              s"the merged scan should read the union of both columns; got $mergedOutput")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57205: do not merge CSV or JSON scans that differ in their projected columns") {
+    projectionSensitiveFormats.foreach { format =>
+      withClue(s"format=$format: ") {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          writeFlat(format, path)
+          withFileView(format, path, schema = Some(flatSchema)) {
+            val df = sql(
+              """
+                |SELECT
+                |  (SELECT sum(a) FROM t WHERE c = 1),
+                |  (SELECT sum(b) FROM t WHERE c = 1)
+                |""".stripMargin)
+
+            checkAnswer(df, Row(70, 140))
+            assertUsesFileSourceV2(df)
+            // Same shape as the test above, which merges for parquet and orc. These two decline
+            // because neither table declares SCAN_MERGING, which is what keeps the union of the
+            // columns out of the parser. Both measures are meaningful here: the two scans read
+            // different columns, so they do not canonicalize equal either.
+            assert(distinctScans(df) == 2,
+              s"the two scans should stay separate:\n${df.queryExecution.optimizedPlan}")
+            assert(subqueryCounts(df) == ((2, 0)),
+              s"unexpected subquery counts:\n${df.queryExecution.executedPlan}")
           }
         }
       }
@@ -217,8 +264,9 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
         assertUsesFileSourceV2(df)
         assert(distinctScans(df) == 1,
           s"the three scans should be fused into one:\n${df.queryExecution.optimizedPlan}")
-        assert(v2Scans(df).head.output.map(_.name).toSet == Set("a", "b", "c", "d"),
-          s"the merged scan should read the union of all three; got ${v2Scans(df).head.output}")
+        val mergedOutput = v2Scans(df).head.output
+        assert(mergedOutput.map(_.name).toSet == Set("a", "b", "c", "d"),
+          s"the merged scan should read the union of all three; got $mergedOutput")
       }
     }
   }
@@ -435,59 +483,96 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("SPARK-57205: merging widens the columns a text-based scan parses, as it does on V1") {
-    // A record malformed only in the column the other scan reads. The parsers are handed just the
-    // requested columns (spark.sql.csv.parser.columnPruning.enabled for CSV), so which columns a
-    // scan reads decides which malformed values it notices.
-    val cases = Seq(
-      "csv" -> Seq("0,0", "1,10", "2,BAD", "3,30", "4,40"),
-      "json" -> Seq(
-        """{"a":0,"b":0}""",
-        """{"a":1,"b":10}""",
-        """{"a":2,"b":"BAD"}""",
-        """{"a":3,"b":30}""",
-        """{"a":4,"b":40}"""))
-    val query =
+  test("SPARK-57205: CSV and JSON decline to merge, so their parsing stays per subquery") {
+    // The parsers are handed just the columns the scan asked for (for CSV under
+    // spark.sql.csv.parser.columnPruning.enabled), so which columns a scan reads decides which
+    // records it treats as malformed. V1 merges these shapes and parses the union; V2 declines,
+    // because neither table declares SCAN_MERGING. Each shape below is a case where that decision
+    // is visible in the result, so adding the capability back to either table fails this test.
+    val typeErrorCsv = Seq("0,0", "1,10", "2,BAD", "3,30", "4,40")
+    val typeErrorJson = Seq(
+      """{"a":0,"b":0}""",
+      """{"a":1,"b":10}""",
+      """{"a":2,"b":"BAD"}""",
+      """{"a":3,"b":30}""",
+      """{"a":4,"b":40}""")
+    // One token where the schema has two columns. Neither narrow scan is malformed: with column
+    // pruning the parsed schema is the projection, so a one-column scan matches a one-token row.
+    val shortRowCsv = Seq("0,0", "1,10", "2", "3,30", "4,40")
+    val sumQuery =
       """
         |SELECT
         |  (SELECT sum(a) FROM t),
         |  (SELECT sum(b) FROM t)
         |""".stripMargin
+    val corruptQuery =
+      """
+        |SELECT
+        |  (SELECT count(_corrupt_record) FROM t WHERE a >= 0),
+        |  (SELECT sum(b) FROM t WHERE a >= 0)
+        |""".stripMargin
 
-    cases.foreach { case (format, lines) =>
-      withClue(s"format=$format: ") {
-        withTempPath { dir =>
-          val path = dir.getCanonicalPath
-          lines.toDS().write.text(path)
+    def withData(lines: Seq[String])(f: String => Unit): Unit =
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        lines.toDS().write.text(path)
+        f(path)
+      }
 
-          def rows(mode: String, useV1: Boolean): Seq[Row] =
-            withFileView(format, path, useV1 = useV1, schema = Some("a long, b long"),
-              options = Map("mode" -> mode)) {
-              sql(query).collect().toSeq
-            }
-
-          // Merging makes one scan parse both a and b, so DROPMALFORMED drops the record malformed
-          // in b for both aggregates and sum(a) is 8, not the 10 two separate scans produce. The
-          // merged scan therefore reads fewer rows than the a-only scan did, which SCAN_MERGING's
-          // "superset of their rows" premise does not allow. V1 already read the union after
-          // merging, so the V2 path now matches it.
-          val droppedV2 = rows("DROPMALFORMED", useV1 = false)
-          assert(droppedV2 == Seq(Row(8, 80)))
-          assert(rows("DROPMALFORMED", useV1 = true) == droppedV2)
-
-          // PERMISSIVE keeps the fields it did parse, so widening the parsed columns leaves both
-          // aggregates on all five records.
-          val permissiveV2 = rows("PERMISSIVE", useV1 = false)
-          assert(permissiveV2 == Seq(Row(10, 80)))
-          assert(rows("PERMISSIVE", useV1 = true) == permissiveV2)
-
-          // FAILFAST throws whether or not the scans merged: the merged scan reads the union of the
-          // two column sets, so the scan that reads b already throws on its own.
-          Seq(true, false).foreach { useV1 =>
-            intercept[SparkException](rows("FAILFAST", useV1 = useV1))
-          }
+    def rows(
+        format: String,
+        path: String,
+        schema: String,
+        mode: String,
+        query: String,
+        useV1: Boolean): Seq[Row] =
+      // Pin CSV column pruning rather than rely on its default: with it off the parser is handed
+      // the full data schema and every expectation below changes.
+      withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "true") {
+        withFileView(format, path, useV1 = useV1, schema = Some(schema),
+          options = Map("mode" -> mode, "columnNameOfCorruptRecord" -> "_corrupt_record")) {
+          val df = sql(query)
+          if (useV1) assertUsesFileSourceV1(df) else assertUsesFileSourceV2(df)
+          val result = df.collect().toSeq
+          // V1 merges the two subqueries into one; V2 declines. Asserted after collect() so that
+          // AQE has finalized and the reuse of the merged subquery is visible in the plan. Pinning
+          // this alongside the rows attributes the difference to the merge decision itself.
+          assert(subqueryCounts(df) == (if (useV1) ((1, 1)) else ((2, 0))),
+            s"unexpected subquery counts on ${if (useV1) "V1" else "V2"}:\n" +
+              df.queryExecution.executedPlan)
+          result
         }
       }
+
+    Seq("csv" -> typeErrorCsv, "json" -> typeErrorJson).foreach { case (format, lines) =>
+      withClue(s"format=$format: ") {
+        withData(lines) { path =>
+          // DROPMALFORMED. The a-only scan never parses b, so V2 keeps the record for sum(a). V1's
+          // merged scan parses the union and drops it for both, giving 8.
+          assert(rows(format, path, "a long, b long", "DROPMALFORMED", sumQuery,
+            useV1 = false) == Seq(Row(10, 80)))
+          assert(rows(format, path, "a long, b long", "DROPMALFORMED", sumQuery,
+            useV1 = true) == Seq(Row(8, 80)))
+
+          // PERMISSIVE, the default mode, with the corrupt-record column in the schema. V2 does not
+          // flag the record for the subquery that reads a and the corrupt column; V1's merged scan
+          // parses b, so the column is populated for a row the first subquery counted as clean.
+          assert(rows(format, path, "a long, b long, _corrupt_record string", "PERMISSIVE",
+            corruptQuery, useV1 = false) == Seq(Row(0, 80)))
+          assert(rows(format, path, "a long, b long, _corrupt_record string", "PERMISSIVE",
+            corruptQuery, useV1 = true) == Seq(Row(1, 80)))
+        }
+      }
+    }
+
+    // FAILFAST, CSV only: JSON has no arity check, so a missing field is null, not malformed. V2
+    // returns rows; V1's merged scan parses two columns against a one-token row and throws, which
+    // is a working query turning into an error.
+    withData(shortRowCsv) { path =>
+      assert(rows("csv", path, "a long, b long", "FAILFAST", sumQuery,
+        useV1 = false) == Seq(Row(10, 80)))
+      intercept[SparkException](
+        rows("csv", path, "a long, b long", "FAILFAST", sumQuery, useV1 = true))
     }
   }
 }

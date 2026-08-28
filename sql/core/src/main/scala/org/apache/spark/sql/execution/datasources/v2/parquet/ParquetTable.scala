@@ -70,4 +70,8 @@ case class ParquetTable(
   }
 
   override def formatName: String = "Parquet"
+
+  // A row is decoded from the column chunks the scan asked for, so reading more columns can only
+  // surface an error, never silently change which rows come back.
+  override def supportsScanMerging: Boolean = true
 }

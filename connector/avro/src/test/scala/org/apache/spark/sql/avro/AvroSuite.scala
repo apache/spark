@@ -3938,7 +3938,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       s"V2 formatName '${v2Table.formatName}' != V1 toString '${v1Format.toString}'")
   }
 
-  test("SPARK-57205: Avro V2 inherits SCAN_MERGING and merges scans differing only in columns") {
+  test("SPARK-57205: Avro V2 declares SCAN_MERGING and merges scans differing only in columns") {
     val v2Provider = DataSource.lookupDataSourceV2("avro", spark.sessionState.conf)
     assert(v2Provider.isDefined)
     val v2Table = v2Provider.get.asInstanceOf[FileDataSourceV2].getTable(

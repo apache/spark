@@ -52,4 +52,9 @@ case class AvroTable(
   override def supportsDataType(dataType: DataType): Boolean = AvroUtils.supportsDataType(dataType)
 
   override def formatName: String = "Avro"
+
+  // Every record is decoded against the full schema before the projection is applied to the decoded
+  // record, so reading more columns can only surface an error, never silently change which rows
+  // come back. The `mode` option in AvroOptions is read by the from_avro expression, not this scan.
+  override def supportsScanMerging: Boolean = true
 }

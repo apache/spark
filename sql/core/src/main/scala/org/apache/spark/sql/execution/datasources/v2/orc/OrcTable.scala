@@ -68,4 +68,8 @@ case class OrcTable(
   }
 
   override def formatName: String = "ORC"
+
+  // A row is decoded from the columns the scan asked for, so reading more columns can only surface
+  // an error, never silently change which rows come back.
+  override def supportsScanMerging: Boolean = true
 }

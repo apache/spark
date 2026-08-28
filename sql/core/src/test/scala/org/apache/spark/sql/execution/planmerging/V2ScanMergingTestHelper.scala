@@ -33,8 +33,9 @@ private[planmerging] trait V2ScanMergingTestHelper {
 
   /**
    * A merged subquery is referenced once per original subquery, so the logical plan duplicates it
-   * (physical planning reuses it). Dedupe by canonical form: one distinct scan means the merge
-   * happened, two means it was declined.
+   * (physical planning reuses it). Dedupe by canonical form: one distinct scan is consistent with a
+   * merge and two means it was declined. Two scans that read the same columns canonicalize equal
+   * either way, so use subquery counts instead when the two column sets match.
    */
   protected def distinctScans(df: DataFrame): Int = v2Scans(df).map(_.canonicalized).distinct.length
 }
