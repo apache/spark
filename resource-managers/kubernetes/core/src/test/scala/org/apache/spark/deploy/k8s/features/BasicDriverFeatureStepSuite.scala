@@ -16,6 +16,9 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import java.net.URI
+
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{ContainerPort, ContainerPortBuilder, LocalObjectReferenceBuilder, Quantity}
@@ -29,6 +32,7 @@ import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.TestReso
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.resource.ResourceID
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.util.Utils
@@ -38,6 +42,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   private val CUSTOM_DRIVER_LABELS = Map(
     "labelkey" -> "labelvalue",
     "customAppIdLabelKey" -> "{{APP_ID}}")
+  private val FILE_UPLOAD_PATH = "s3a://some-bucket/upload-path"
+  private val DEPENDENCY_CONFIGS = Seq(JARS, FILES, ARCHIVES, SUBMIT_PYTHON_FILES)
   private val CONTAINER_IMAGE_PULL_POLICY = "IfNotPresent"
   private val DRIVER_ANNOTATIONS = Map(
     "customAnnotation" -> "customAnnotationValue",
@@ -50,6 +56,35 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     TEST_IMAGE_PULL_SECRETS.map { secret =>
       new LocalObjectReferenceBuilder().withName(secret).build()
     }
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    TestFileSystem.reset()
+  }
+
+  private def additionalProperties(
+      key: ConfigEntry[Seq[String]],
+      uris: Seq[String]): Map[String, String] = {
+    val sparkConf = new SparkConf()
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(KUBERNETES_FILE_UPLOAD_PATH, FILE_UPLOAD_PATH)
+      .set("spark.hadoop.fs.s3a.impl", classOf[TestFileSystem].getCanonicalName)
+      .set("spark.hadoop.fs.s3a.impl.disable.cache", "true")
+      .set(key, uris)
+    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+    new BasicDriverFeatureStep(kubernetesConf).getAdditionalPodSystemProperties()
+  }
+
+  private def uploadedUris(key: ConfigEntry[Seq[String]], uris: Seq[String]): Seq[String] = {
+    Utils.stringToSeq(additionalProperties(key, uris)(key.key))
+  }
+
+  private def dependencySuffix(key: ConfigEntry[Seq[String]]): String = key match {
+    case JARS => ".jar"
+    case SUBMIT_PYTHON_FILES => ".py"
+    case ARCHIVES => ".tgz"
+    case _ => ".txt"
+  }
 
   test("Check the pod respects all configurations from the user.") {
     val resourceID = new ResourceID(SPARK_DRIVER_PREFIX, GPU)
@@ -378,7 +413,6 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   }
 
   test("SPARK-40817: Check that remote JARs do not get discarded in spark.jars") {
-    val FILE_UPLOAD_PATH = "s3a://some-bucket/upload-path"
     val REMOTE_JAR_URI = "s3a://some-bucket/my-application.jar"
     val LOCAL_JAR_URI = "/tmp/some-local-jar.jar"
 
@@ -402,6 +436,97 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(!sparkJars.contains(LOCAL_JAR_URI))
     assert(sparkJars.exists(path =>
       path.startsWith(FILE_UPLOAD_PATH) && path.endsWith("some-local-jar.jar")))
+  }
+
+  DEPENDENCY_CONFIGS.foreach { key =>
+    test(s"SPARK-58969: Kubernetes upload preserves local aliases for ${key.key}") {
+      val suffix = dependencySuffix(key)
+      val physicalA = s"/tmp/physical-a$suffix"
+      val physicalB = s"/tmp/physical-b$suffix"
+      val physicalC = s"/tmp/physical-c$suffix"
+      val aliasA = s"alias-a$suffix"
+      val aliasC = s"alias-c$suffix"
+      val original = Seq(
+        s"$physicalA#$aliasA",
+        physicalB,
+        s"$physicalC#$aliasC")
+
+      val transformed = uploadedUris(key, original).map(new URI(_))
+
+      assert(transformed.size === original.size)
+      assert(transformed.map(uri => new Path(uri.getPath).getName) === Seq(
+        new Path(physicalA).getName,
+        new Path(physicalB).getName,
+        new Path(physicalC).getName))
+      assert(transformed.map(_.getFragment) === Seq(aliasA, null, aliasC))
+      assert(transformed.forall(_.toString.startsWith(FILE_UPLOAD_PATH)))
+
+      val copies = TestFileSystem.copies
+      assert(copies.map(_._1.getName) === Seq(
+        new Path(physicalA).getName,
+        new Path(physicalB).getName,
+        new Path(physicalC).getName))
+      assert(copies.map(_._2.getName) === copies.map(_._1.getName))
+      assert(copies.forall { case (source, destination) =>
+        source.toUri.getFragment == null && destination.toUri.getFragment == null
+      })
+    }
+
+    test(s"SPARK-58969: mixed local and remote ${key.key} entries preserve order") {
+      val suffix = dependencySuffix(key)
+      val remoteA = s"s3a://remote-bucket/remote-a$suffix"
+      val localA = s"/tmp/local-a$suffix#alias-a$suffix"
+      val remoteB = s"s3a://remote-bucket/remote-b$suffix#alias-b$suffix"
+      val localB = s"/tmp/local-b$suffix"
+      val original = Seq(remoteA, localA, remoteB, localB)
+
+      val transformed = uploadedUris(key, original)
+
+      assert(transformed.size === original.size)
+      assert(transformed.head === remoteA)
+      assert(new URI(transformed(1)).getFragment === s"alias-a$suffix")
+      assert(SparkPath.fromUrlString(transformed(1)).toPath.getName === s"local-a$suffix")
+      assert(transformed(2) === remoteB)
+      assert(new URI(transformed(3)).getFragment === null)
+      assert(SparkPath.fromUrlString(transformed(3)).toPath.getName === s"local-b$suffix")
+      assert(TestFileSystem.copies.map(_._1.getName) === Seq(
+        s"local-a$suffix", s"local-b$suffix"))
+    }
+
+    test(s"SPARK-58969: duplicate local ${key.key} entries remain positional") {
+      val suffix = dependencySuffix(key)
+      val duplicate = s"/tmp/duplicate$suffix#shared-alias$suffix"
+
+      val transformed = uploadedUris(key, Seq(duplicate, duplicate)).map(new URI(_))
+
+      assert(transformed.size === 2)
+      assert(transformed.map(uri => new Path(uri.getPath).getName) === Seq(
+        s"duplicate$suffix", s"duplicate$suffix"))
+      assert(transformed.map(_.getFragment) === Seq(
+        s"shared-alias$suffix", s"shared-alias$suffix"))
+      assert(TestFileSystem.copies.size === 2)
+    }
+
+    test(s"SPARK-58969: remote-only ${key.key} entries remain unchanged") {
+      val suffix = dependencySuffix(key)
+      val original = Seq(
+        s"s3a://remote-bucket/without-fragment$suffix",
+        s"s3a://remote-bucket/with-fragment$suffix#remote-alias$suffix")
+
+      assert(uploadedUris(key, original) === original)
+      assert(TestFileSystem.copies.isEmpty)
+    }
+  }
+
+  test("SPARK-58969: empty or unset dependencies do not add properties") {
+    val sparkConf = new SparkConf().set(CONTAINER_IMAGE, "spark-driver:latest")
+    val unsetProperties = new BasicDriverFeatureStep(
+      KubernetesTestConf.createDriverConf(sparkConf)).getAdditionalPodSystemProperties()
+
+    DEPENDENCY_CONFIGS.foreach { key =>
+      assert(!unsetProperties.contains(key.key))
+      assert(!additionalProperties(key, Seq.empty).contains(key.key))
+    }
   }
 
   test("SPARK-47208: User can override the minimum memory overhead of the driver") {
@@ -524,15 +649,29 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   private def amountAndFormat(quantity: Quantity): String = quantity.getAmount + quantity.getFormat
 }
 
-/**
- * No-op Hadoop FileSystem
- */
+private object TestFileSystem {
+  private val recordedCopies = mutable.ArrayBuffer.empty[(Path, Path)]
+
+  def record(source: Path, destination: Path): Unit = recordedCopies.synchronized {
+    recordedCopies += source -> destination
+  }
+
+  def copies: Seq[(Path, Path)] = recordedCopies.synchronized {
+    recordedCopies.toSeq
+  }
+
+  def reset(): Unit = recordedCopies.synchronized {
+    recordedCopies.clear()
+  }
+}
+
+/** No-op Hadoop FileSystem that records uploads for assertions. */
 private class TestFileSystem extends LocalFileSystem {
   override def copyFromLocalFile(
     delSrc: Boolean,
     overwrite: Boolean,
     src: Path,
-    dst: Path): Unit = {}
+    dst: Path): Unit = TestFileSystem.record(src, dst)
 
   override def mkdirs(path: Path): Boolean = true
 }

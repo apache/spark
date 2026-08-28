@@ -169,25 +169,24 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       MEMORY_OVERHEAD_FACTOR.key -> defaultOverheadFactor.toString)
     // try upload local, resolvable files to a hadoop compatible file system
     Seq(JARS, FILES, ARCHIVES, SUBMIT_PYTHON_FILES).foreach { key =>
-      val (localUris, remoteUris) =
-        conf.get(key).partition(uri => KubernetesUtils.isLocalAndResolvable(uri))
-      val value = {
-        if (key == ARCHIVES) {
-          localUris.map(Utils.getUriBuilder(_).fragment(null).build()).map(_.toString)
-        } else {
-          localUris
+      val originalUris = conf.get(key)
+      if (originalUris.nonEmpty) {
+        val localFlags = originalUris.map(KubernetesUtils.isLocalAndResolvable)
+        val localUris = originalUris.zip(localFlags).collect { case (uri, true) => uri }
+        val uploadUris = localUris.map { uri =>
+          Utils.getUriBuilder(uri).fragment(null).build().toString
         }
-      }
-      val resolved = KubernetesUtils.uploadAndTransformFileUris(value, Some(conf.sparkConf))
-      if (resolved.nonEmpty) {
-        val resolvedValue = if (key == ARCHIVES) {
-          localUris.zip(resolved).map { case (uri, r) =>
-            Utils.getUriBuilder(r).fragment(new java.net.URI(uri).getFragment).build().toString
-          }
-        } else {
-          resolved
+        val uploadedUris = KubernetesUtils.uploadAndTransformFileUris(
+          uploadUris, Some(conf.sparkConf)).iterator
+        val transformedUris = originalUris.zip(localFlags).map {
+          case (uri, true) =>
+            Utils.getUriBuilder(uploadedUris.next())
+              .fragment(new java.net.URI(uri).getFragment)
+              .build()
+              .toString
+          case (uri, false) => uri
         }
-        additionalProps.put(key.key, (resolvedValue ++ remoteUris).mkString(","))
+        additionalProps.put(key.key, transformedUris.mkString(","))
       }
     }
     additionalProps.toMap
