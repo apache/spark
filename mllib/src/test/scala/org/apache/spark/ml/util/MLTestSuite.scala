@@ -17,12 +17,31 @@
 
 package org.apache.spark.ml.util
 
+import org.apache.spark.SparkException
 import org.apache.spark.ml.feature.StringIndexer
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.functions.udf
 
 class MLTestSuite extends MLTest {
 
   import testImplicits._
+
+  test("UDF with vector input containing null") {
+    val data = Seq(
+      Tuple1(Vectors.dense(1.0, 2.0)),
+      Tuple1(null.asInstanceOf[Vector])).toDF("vec")
+    val constantUDF = udf { vec: Vector => 1.0 }
+    val sizeUDF = udf { vec: Vector => vec.size }
+
+    checkAnswer(data.select(constantUDF($"vec")), Seq(Row(1.0), Row(1.0)))
+
+    val exception = intercept[SparkException] {
+      data.select(sizeUDF($"vec")).collect()
+    }
+    assert(exception.getCondition === "FAILED_EXECUTE_UDF")
+    assert(exception.getCause.isInstanceOf[NullPointerException])
+  }
 
   test("test transformer on stream data") {
 
