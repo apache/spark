@@ -299,20 +299,16 @@ def _null_facts(node: ast.AST) -> Tuple[frozenset, frozenset]:
     should add its false-facts to the statements after it.
     """
     empty: frozenset = frozenset()
+    # ``_none_check_subject`` takes ``==``/``!=`` too, or `if x != None:` would keep
+    # a check and then be told to add the guard it already had.
+    if isinstance(node, ast.Compare) and (subject := _none_check_subject(node)) is not None:
+        proven = frozenset({subject})
+        # `x is None` / `x == None` prove nothing when true and non-NULL-ness
+        # when false; `is not` / `!=` are the other way round.
+        if isinstance(node.ops[0], (ast.Is, ast.Eq)):
+            return empty, proven
+        return proven, empty
     match node:
-        # ``==``/``!=`` too, or the two spellings of one guard would behave
-        # differently: `if x != None:` would keep a check and be told to add the
-        # guard it already had.
-        case ast.Compare(ops=[ast.Is() | ast.IsNot() | ast.Eq() | ast.NotEq()]):
-            subject = _none_check_subject(node)
-            if subject is None:
-                return empty, empty
-            proven = frozenset({subject})
-            # `x is None` / `x == None` prove nothing when true and non-NULL-ness
-            # when false; `is not` / `!=` are the other way round.
-            if isinstance(node.ops[0], (ast.Is, ast.Eq)):
-                return empty, proven
-            return proven, empty
         case ast.UnaryOp(op=ast.Not(), operand=operand):
             when_true, when_false = _null_facts(operand)
             return when_false, when_true
@@ -1028,21 +1024,13 @@ class CatalystTranspiler(AbstractTranspiler):
                     case ast.NotEq():
                         return self._lower_eq(params, left, comp, equal=False)
                     case ast.Lt():
-                        return self._lower_value_compare(
-                            params, left, comp, lambda l, r: l < r, "<"
-                        )
+                        return self._lower_value_compare(params, left, comp, operator.lt, "<")
                     case ast.LtE():
-                        return self._lower_value_compare(
-                            params, left, comp, lambda l, r: l <= r, "<="
-                        )
+                        return self._lower_value_compare(params, left, comp, operator.le, "<=")
                     case ast.Gt():
-                        return self._lower_value_compare(
-                            params, left, comp, lambda l, r: l > r, ">"
-                        )
+                        return self._lower_value_compare(params, left, comp, operator.gt, ">")
                     case ast.GtE():
-                        return self._lower_value_compare(
-                            params, left, comp, lambda l, r: l >= r, ">="
-                        )
+                        return self._lower_value_compare(params, left, comp, operator.ge, ">=")
                     case _:
                         raise UnsupportedOperationException(
                             f"comparison operator {type(ops[0]).__name__} "
