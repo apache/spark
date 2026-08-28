@@ -17,15 +17,15 @@
 
 package org.apache.spark.graphframes.lib
 
+import org.apache.spark.graphframes.GraphFrame
+import org.apache.spark.graphframes.GraphFrameTestSparkContext
+import org.apache.spark.graphframes.SparkFunSuite
+import org.apache.spark.graphframes.TestUtils
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.functions.hll_sketch_estimate
 import org.apache.spark.sql.types.DataTypes
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.GraphFrameTestSparkContext
-import org.apache.spark.graphframes.SparkFunSuite
-import org.apache.spark.graphframes.TestUtils
 
 class HyperANFSuite extends SparkFunSuite with GraphFrameTestSparkContext {
 
@@ -99,8 +99,8 @@ class HyperANFSuite extends SparkFunSuite with GraphFrameTestSparkContext {
     result.unpersist()
   }
 
-  test(
-    "HyperANF starting vertices expression limits output to selected vertices with outgoing edges") {
+  test("HyperANF starting vertices expression limits output to selected vertices " +
+    "with outgoing edges") {
     val graph = diamondCycleGraph
     val result = new HyperANF(graph)
       .setEdgesFilterExpression(expr("src IN (1, 3, 42)"))

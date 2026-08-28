@@ -17,15 +17,15 @@
 
 package org.apache.spark.graphframes.lib
 
-import org.apache.spark.graphx
 import org.apache.spark.graphframes.GraphFrame
 import org.apache.spark.graphframes.Logging
 import org.apache.spark.graphframes.WithMaxIter
+import org.apache.spark.graphx
 
 /**
  * Parallel Personalized PageRank algorithm implementation.
  *
- * This implementation uses the standalone [[GraphFrame]] interface and runs personalized PageRank
+ * This implementation uses the standalone `GraphFrame` interface and runs personalized PageRank
  * in parallel for a fixed number of iterations. This can be run by setting `maxIter`. The source
  * vertex Ids are set in `sourceIds`. A simple local implementation of this algorithm is as
  * follows.

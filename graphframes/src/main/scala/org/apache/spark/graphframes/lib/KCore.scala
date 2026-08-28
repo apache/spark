@@ -17,6 +17,11 @@
 
 package org.apache.spark.graphframes.lib
 
+import org.apache.spark.graphframes.GraphFrame
+import org.apache.spark.graphframes.Logging
+import org.apache.spark.graphframes.WithCheckpointInterval
+import org.apache.spark.graphframes.WithIntermediateStorageLevel
+import org.apache.spark.graphframes.WithLocalCheckpoints
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -28,11 +33,6 @@ import org.apache.spark.sql.functions.when
 import org.apache.spark.sql.graphframes.expressions.KCoreMerge
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.Logging
-import org.apache.spark.graphframes.WithCheckpointInterval
-import org.apache.spark.graphframes.WithIntermediateStorageLevel
-import org.apache.spark.graphframes.WithLocalCheckpoints
 
 /**
  * K-Core decomposition algorithm implementation for GraphFrames.
@@ -48,7 +48,7 @@ import org.apache.spark.graphframes.WithLocalCheckpoints
  *
  * '''Edge representation''': K-core decomposition is defined for undirected graphs. Since
  * GraphFrames represents edges as directed, each undirected edge `{u, v}` should be supplied as a
- * single directed edge in either direction — the algorithm symmetrizes internally. Supplying both
+ * single directed edge in either direction; the algorithm symmetrizes internally. Supplying both
  * `(u, v)` and `(v, u)` will double-count the edge and produce incorrect results.
  */
 class KCore private[graphframes] (private val graph: GraphFrame)
@@ -119,7 +119,8 @@ object KCore extends Serializable with Logging {
         new FunctionIdentifier("_kcoreMerge", Some("builtin"), Some("system")))
       if (!dereg) {
         logWarn(
-          "graphframes faced an internal error and was not able to de-register function _kcoreMerge; Spark' functionRegistry is in a bad state")
+          "GraphFrames faced an internal error and could not de-register function _kcoreMerge; " +
+            "Spark's function registry is in a bad state")
       }
     }
   }

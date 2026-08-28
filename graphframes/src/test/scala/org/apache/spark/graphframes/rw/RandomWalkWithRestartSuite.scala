@@ -17,14 +17,16 @@
 
 package org.apache.spark.graphframes.rw
 
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.graphframes.GraphFrameTestSparkContext
+import org.apache.spark.graphframes.SparkFunSuite
+import org.apache.spark.graphframes.examples.Graphs
 import org.apache.spark.sql.functions.array_size
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types.ArrayType
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.graphframes.GraphFrameTestSparkContext
-import org.apache.spark.graphframes.SparkFunSuite
-import org.apache.spark.graphframes.examples.Graphs
 
 class RandomWalkWithRestartSuite extends SparkFunSuite with GraphFrameTestSparkContext {
   test("test RW base") {
@@ -65,12 +67,14 @@ class RandomWalkWithRestartSuite extends SparkFunSuite with GraphFrameTestSparkC
       rwRunner.cleanUp()
 
       // Verify that all temporary files have been deleted
+      // scalastyle:off hadoopconfiguration
       val hadoopConf = spark.sparkContext.hadoopConfiguration
-      val fs = org.apache.hadoop.fs.FileSystem.get(hadoopConf)
+      // scalastyle:on hadoopconfiguration
       val basePath = "/tmp"
+      val fs = new Path(basePath).getFileSystem(hadoopConf)
       val runPath = s"$basePath/${runId}_batch_"
       (1 to numBatches).foreach { i =>
-        val path = new org.apache.hadoop.fs.Path(s"${runPath}${i}")
+        val path = new Path(s"${runPath}${i}")
         assert(!fs.exists(path), s"Temporary file not deleted: $path")
       }
     }
@@ -94,7 +98,7 @@ class RandomWalkWithRestartSuite extends SparkFunSuite with GraphFrameTestSparkC
       .setTemporaryPrefix("/tmp")
 
     val runId = rwRunner1.getRunId()
-    println(s"Using runId: $runId")
+    logInfo(s"Using runId: $runId")
 
     // Run and persist the result
     val walks1 = rwRunner1.run()
@@ -162,12 +166,14 @@ class RandomWalkWithRestartSuite extends SparkFunSuite with GraphFrameTestSparkC
     rwRunner2.cleanUp()
 
     // Verify cleanup
+    // scalastyle:off hadoopconfiguration
     val hadoopConf = spark.sparkContext.hadoopConfiguration
-    val fs = org.apache.hadoop.fs.FileSystem.get(hadoopConf)
+    // scalastyle:on hadoopconfiguration
     val basePath = "/tmp"
+    val fs = new Path(basePath).getFileSystem(hadoopConf)
     val runPath = s"$basePath/${runId}_batch_"
     (1 to numBatches).foreach { i =>
-      val path = new org.apache.hadoop.fs.Path(s"${runPath}${i}")
+      val path = new Path(s"${runPath}${i}")
       assert(!fs.exists(path), s"Temporary file not deleted: $path")
     }
 

@@ -17,14 +17,14 @@
 
 package org.apache.spark.graphframes.lib
 
-import org.apache.spark.sql.Column
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions._
 import org.apache.spark.graphframes.GraphFrame
 import org.apache.spark.graphframes.Logging
 import org.apache.spark.graphframes.WithCheckpointInterval
 import org.apache.spark.graphframes.WithIntermediateStorageLevel
 import org.apache.spark.graphframes.WithLocalCheckpoints
+import org.apache.spark.sql.Column
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
 
 /**
  * A class for performing multi-hop neighbor aggregation on a graph.
@@ -33,7 +33,7 @@ import org.apache.spark.graphframes.WithLocalCheckpoints
  * accumulating values along paths using customizable accumulator expressions. It supports both
  * stopping conditions (when to stop exploring) and target conditions (when to collect a result).
  * If no target condition is provided, collect all traversals that reached stopping condition. The
- * algorithm processes the graph in a breadth‑first manner.
+ * algorithm processes the graph in a breadth-first manner.
  *
  * Use the builder pattern to configure parameters, then call `run()` to execute.
  *
@@ -238,10 +238,10 @@ class AggregateNeighbors private[graphframes] (graph: GraphFrame)
   }
 
   /**
-   * Controls whether self‑loops (edges where src == dst) are excluded.
+   * Controls whether self-loops (edges where src == dst) are excluded.
    *
    * @param value
-   *   if true, self‑loop edges are filtered out
+   *   if true, self-loop edges are filtered out
    * @return
    *   this AggregateNeighbors instance for method chaining
    */
@@ -264,8 +264,9 @@ class AggregateNeighbors private[graphframes] (graph: GraphFrame)
    */
   def run(): DataFrame = {
     require(maxHops > 0, "maxHops must be greater than 0")
-    if (maxHops > 10)
+    if (maxHops > 10) {
       logWarn(s"maxHops is very large ($maxHops). This might be performance-intensive.")
+    }
     require(accumulatorsNames.nonEmpty, "At least one accumulator must be added")
     require(
       stoppingCondition.orElse(targetCondition).isDefined,

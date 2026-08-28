@@ -17,12 +17,12 @@
 
 package org.apache.spark.graphframes.lib
 
-import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.graphframes.GraphFrameTestSparkContext
 import org.apache.spark.graphframes.SparkFunSuite
 import org.apache.spark.graphframes.TestUtils
 import org.apache.spark.graphframes.examples.Graphs
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.types.DataTypes
 
 class PageRankSuite extends SparkFunSuite with GraphFrameTestSparkContext {
 

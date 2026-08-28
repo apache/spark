@@ -17,13 +17,6 @@
 
 package org.apache.spark.graphframes.lib
 
-import org.apache.spark.graphx
-import org.apache.spark.sql.Column
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.IntegerType
-import org.apache.spark.sql.types.MapType
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.graphframes.GraphFrame
 import org.apache.spark.graphframes.Logging
 import org.apache.spark.graphframes.WithAlgorithmChoice
@@ -31,6 +24,13 @@ import org.apache.spark.graphframes.WithCheckpointInterval
 import org.apache.spark.graphframes.WithIntermediateStorageLevel
 import org.apache.spark.graphframes.WithLocalCheckpoints
 import org.apache.spark.graphframes.WithMaxIter
+import org.apache.spark.graphx
+import org.apache.spark.sql.Column
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.MapType
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Run static Label Propagation for detecting communities in networks.
@@ -84,8 +84,9 @@ private object LabelPropagation {
 
   private def keyWithMaxValue(column: Column): Column = {
     // Get the key with the highest value, using the key to break a tie. To do this, simply get
-    // map entries, swap the value and key columns to create the natural ordering, multiply key by -1 and then
-    // take the key from the max entry (multiply it by -1 again to get the original key).
+    // map entries, swap the value and key columns to create the natural ordering, multiply key by
+    // -1 and then take the key from the max entry (multiply it by -1 again to get the original
+    // key).
     array_max(
       transform(
         map_entries(column),

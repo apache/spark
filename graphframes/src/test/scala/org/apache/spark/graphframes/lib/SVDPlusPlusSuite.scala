@@ -17,15 +17,15 @@
 
 package org.apache.spark.graphframes.lib
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.GraphFrameTestSparkContext
 import org.apache.spark.graphframes.GraphFramesUnreachableException
+import org.apache.spark.graphframes.GraphFrameTestSparkContext
 import org.apache.spark.graphframes.SparkFunSuite
 import org.apache.spark.graphframes.TestUtils
 import org.apache.spark.graphframes.examples.Graphs
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.types.DataTypes
 
 class SVDPlusPlusSuite extends SparkFunSuite with GraphFrameTestSparkContext {
 

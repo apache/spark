@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.graphframes
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
@@ -27,13 +29,10 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.GetStructField
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.{DataFrame => ClassicDataFrame}
-import org.apache.spark.sql.classic.Dataset
-import org.apache.spark.sql.classic.ExpressionUtils
+import org.apache.spark.sql.classic.{Dataset, ExpressionUtils}
 import org.apache.spark.sql.classic.{SparkSession => ClassicSparkSession}
-
-import scala.collection.mutable
+import org.apache.spark.sql.classic.ClassicConversions._
 
 object GraphFrameInternals {
 

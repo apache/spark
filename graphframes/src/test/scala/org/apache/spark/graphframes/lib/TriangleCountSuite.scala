@@ -17,14 +17,14 @@
 
 package org.apache.spark.graphframes.lib
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.graphframes.GraphFrame
 import org.apache.spark.graphframes.GraphFrame.quote
-import org.apache.spark.graphframes.GraphFrameTestSparkContext
 import org.apache.spark.graphframes.GraphFramesUnreachableException
+import org.apache.spark.graphframes.GraphFrameTestSparkContext
 import org.apache.spark.graphframes.SparkFunSuite
 import org.apache.spark.graphframes.TestUtils
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.types.DataTypes
 
 class TriangleCountSuite extends SparkFunSuite with GraphFrameTestSparkContext {
 

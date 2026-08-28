@@ -17,10 +17,8 @@
 
 package org.apache.spark.graphframes.lib
 
-import org.apache.spark.graphx
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.graphframes.GraphFramesConf
-import org.apache.spark.storage.StorageLevel
+import java.util.Locale
+
 import org.apache.spark.graphframes.GraphFrame
 import org.apache.spark.graphframes.GraphFramesUnreachableException
 import org.apache.spark.graphframes.Logging
@@ -30,6 +28,10 @@ import org.apache.spark.graphframes.WithIntermediateStorageLevel
 import org.apache.spark.graphframes.WithLocalCheckpoints
 import org.apache.spark.graphframes.WithMaxIter
 import org.apache.spark.graphframes.WithUseLabelsAsComponents
+import org.apache.spark.graphx
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.graphframes.GraphFramesConf
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Connected Components algorithm.
@@ -69,16 +71,15 @@ class ConnectedComponents private[graphframes] (private val graph: GraphFrame)
 
   /**
    * Sets the algorithm to use for computing connected components. Supported values:
-   *   - [[ConnectedComponents.ALGO_GRAPHX]]: use the GraphX implementation
-   *   - [[ConnectedComponents.ALGO_GRAPHFRAMES]]: deprecated alias for
-   *     [[ConnectedComponents.ALGO_TWO_PHASE]]
-   *   - [[ConnectedComponents.ALGO_TWO_PHASE]]: use the two-phase label propagation
+   *   - `graphx`: use the GraphX implementation
+   *   - `graphframes`: deprecated alias for `two_phase`
+   *   - `two_phase`: use the two-phase label propagation
    *     implementation
-   *   - [[ConnectedComponents.ALGO_RANDOMIZED_CONTRACTION]]: use the randomized contraction
+   *   - `randomized_contraction`: use the randomized contraction
    *     implementation
    */
   def setAlgorithm(value: String): this.type = {
-    val normalized = value.toLowerCase
+    val normalized = value.toLowerCase(Locale.ROOT)
     normalized match {
       case ALGO_GRAPHX | ALGO_TWO_PHASE | ALGO_RANDOMIZED_CONTRACTION =>
         algorithm = normalized
@@ -102,7 +103,7 @@ class ConnectedComponents private[graphframes] (private val graph: GraphFrame)
   def getAlgorithm: String = algorithm
 
   /**
-   * !! WARNING: INTERNAL API — FOR VERY EXPERIENCED USERS ONLY !!
+   * !! WARNING: INTERNAL API - FOR VERY EXPERIENCED USERS ONLY !!
    *
    * Sets whether the graph has already been prepared before being passed to the algorithm,
    * skipping the internal graph preparation step. The default is `false`, meaning the algorithm

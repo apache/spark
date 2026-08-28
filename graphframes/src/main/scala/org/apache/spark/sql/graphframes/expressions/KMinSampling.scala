@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql.graphframes.expressions
 
+import scala.annotation.nowarn
+import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
+
+import org.apache.spark.graphframes.GraphFramesUnsupportedVertexTypeException
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.Row
@@ -26,12 +31,6 @@ import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions.udaf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.DataType
-import org.apache.spark.graphframes.GraphFramesUnsupportedVertexTypeException
-
-import scala.annotation.nowarn
-import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.TypeTag
 
 case class KMinAccum[T](values: Array[T], weights: Array[Long], var cnt: Int) extends Serializable
 

@@ -48,15 +48,18 @@ import org.apache.spark.sql.functions.when
  *  P(X) = (1/Z) * exp[ \sum_i a_i x_i + \sum_{ij} b_{ij} x_i x_j ]
  * }}}
  * where Z is the normalization constant (partition function). See
- * [[https://en.wikipedia.org/wiki/Ising_model Wikipedia]] for more information on Ising models.
+ * See <a href="https://en.wikipedia.org/wiki/Ising_model">Wikipedia</a> for more information on
+ * Ising models.
  *
  * Belief Propagation (BP) provides marginal probabilities of the values of the variables x,,i,,,
  * i.e., P(x,,i,,) for each i. This allows a user to understand likely values of variables. See
- * [[https://en.wikipedia.org/wiki/Belief_propagation Wikipedia]] for more information on BP.
+ * See <a href="https://en.wikipedia.org/wiki/Belief_propagation">Wikipedia</a> for more
+ * information on BP.
  *
  * We use a batch synchronous BP algorithm, where batches of vertices are updated synchronously.
  * We follow the mean field update algorithm in Slide 13 of the
- * [[http://www.eecs.berkeley.edu/~wainwrig/Talks/A_GraphModel_Tutorial talk slides]] from:
+ * See the <a href="http://www.eecs.berkeley.edu/~wainwrig/Talks/A_GraphModel_Tutorial">graphical
+ * model tutorial slides</a> from:
  * Wainwright. "Graphical models, message-passing algorithms, and convex optimization."
  *
  * The batches are chosen according to a coloring. For background on graph colorings for
@@ -131,7 +134,7 @@ object BeliefPropagation {
    *   Number of iterations of BP to run. One iteration includes updating each vertex's belief
    *   once.
    * @return
-   *   Same graphical model, but with [[GraphFrame.vertices]] augmented with a new column "belief"
+   *   Same graphical model, but with its vertices DataFrame augmented with a new column "belief"
    *   containing P(x,,i,, = +1), the marginal probability of vertex i taking value +1 instead of
    *   -1.
    */
@@ -211,7 +214,7 @@ object BeliefPropagation {
    *   Number of iterations of BP to run. One iteration includes updating each vertex's belief
    *   once.
    * @return
-   *   Same graphical model, but with [[GraphFrame.vertices]] augmented with a new column "belief"
+   *   Same graphical model, but with its vertices DataFrame augmented with a new column "belief"
    *   containing P(x,,i,, = +1), the marginal probability of vertex i taking value +1 instead of
    *   -1.
    */

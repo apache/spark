@@ -17,25 +17,20 @@
 
 package org.apache.spark.graphframes.lib
 
+import java.io.IOException
+import java.math.BigDecimal
+import java.util.UUID
+
 import org.apache.hadoop.fs.Path
+
+import org.apache.spark.graphframes.GraphFrame
+import org.apache.spark.graphframes.GraphFrame.{ATTR, DST, ID, LONG_DST, LONG_ID, LONG_SRC, SRC}
+import org.apache.spark.graphframes.Logging
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DecimalType
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.GraphFrame.ATTR
-import org.apache.spark.graphframes.GraphFrame.DST
-import org.apache.spark.graphframes.GraphFrame.ID
-import org.apache.spark.graphframes.GraphFrame.LONG_DST
-import org.apache.spark.graphframes.GraphFrame.LONG_ID
-import org.apache.spark.graphframes.GraphFrame.LONG_SRC
-import org.apache.spark.graphframes.GraphFrame.SRC
-import org.apache.spark.graphframes.Logging
-
-import java.io.IOException
-import java.math.BigDecimal
-import java.util.UUID
 
 /**
  * Two-phase label propagation implementation of connected components.
@@ -279,8 +274,8 @@ private[graphframes] object TwoPhase extends Logging {
               case Some(d) => new Path(d, s"$CHECKPOINT_NAME_PREFIX-$runId").toString
               case None =>
                 throw new IOException(
-                  "Checkpoint directory is not set. Please set it first using sc.setCheckpointDir()" +
-                    "or by specifying the conf 'spark.checkpoint.dir'.")
+                  "Checkpoint directory is not set. Please set it first using " +
+                    "sc.setCheckpointDir() or by specifying the conf 'spark.checkpoint.dir'.")
             }
           }
         logInfo(s"$logPrefix Using $dir for checkpointing with interval $checkpointInterval.")

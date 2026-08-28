@@ -17,8 +17,12 @@
 
 package org.apache.spark.graphframes
 
-import org.apache.commons.io.FileUtils
+import java.io.File
+import java.nio.file.Files
+
 import org.apache.hadoop.fs.Path
+
+import org.apache.spark.graphframes.examples.Graphs
 import org.apache.spark.graphx.Edge
 import org.apache.spark.graphx.Graph
 import org.apache.spark.rdd.RDD
@@ -31,10 +35,7 @@ import org.apache.spark.sql.types.StringType
 import org.apache.spark.sql.types.StructField
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.graphframes.examples.Graphs
-
-import java.io.File
-import java.nio.file.Files
+import org.apache.spark.util.SparkFileUtils
 
 class GraphFrameSuite extends SparkFunSuite with GraphFrameTestSparkContext {
 
@@ -59,7 +60,7 @@ class GraphFrameSuite extends SparkFunSuite with GraphFrameTestSparkContext {
   }
 
   override def afterAll(): Unit = {
-    FileUtils.deleteQuietly(tempDir)
+    SparkFileUtils.deleteQuietly(tempDir)
     super.afterAll()
   }
 

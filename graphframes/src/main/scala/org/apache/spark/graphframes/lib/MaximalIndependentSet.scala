@@ -17,17 +17,17 @@
 
 package org.apache.spark.graphframes.lib
 
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.DoubleType
-import org.apache.spark.storage.StorageLevel
+import java.io.IOException
+
 import org.apache.spark.graphframes.GraphFrame
 import org.apache.spark.graphframes.Logging
 import org.apache.spark.graphframes.WithCheckpointInterval
 import org.apache.spark.graphframes.WithIntermediateStorageLevel
 import org.apache.spark.graphframes.WithLocalCheckpoints
-
-import java.io.IOException
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.storage.StorageLevel
 
 /**
  * This class implements a distributed algorithm for finding a Maximal Independent Set (MIS) in a

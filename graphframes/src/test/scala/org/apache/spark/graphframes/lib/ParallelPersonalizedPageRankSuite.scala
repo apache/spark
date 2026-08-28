@@ -16,15 +16,16 @@
  */
 
 package org.apache.spark.graphframes.lib
-import org.apache.spark.ml.linalg.SQLDataTypes
-import org.apache.spark.ml.linalg.SparseVector
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.types.DataTypes
+
 import org.apache.spark.graphframes.GraphFrameTestSparkContext
 import org.apache.spark.graphframes.SparkFunSuite
 import org.apache.spark.graphframes.TestUtils
 import org.apache.spark.graphframes.examples.Graphs
+import org.apache.spark.ml.linalg.SparseVector
+import org.apache.spark.ml.linalg.SQLDataTypes
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.types.DataTypes
 
 class ParallelPersonalizedPageRankSuite extends SparkFunSuite with GraphFrameTestSparkContext {
 
@@ -87,7 +88,8 @@ class ParallelPersonalizedPageRankSuite extends SparkFunSuite with GraphFrameTes
       }
     assert(
       prInvalid.size === 0,
-      s"found ${prInvalid.size} entries with invalid number of returned personalized pagerank vector")
+      s"found ${prInvalid.size} entries with invalid number of returned personalized " +
+        "pagerank vector")
 
     val gRank = pr.vertices
       .filter(col("id") === "g")
@@ -96,7 +98,8 @@ class ParallelPersonalizedPageRankSuite extends SparkFunSuite with GraphFrameTes
       .getAs[SparseVector](0)
     assert(
       gRank.numNonzeros === 0,
-      s"User g (Gabby) doesn't connect with a. So its pagerank should be 0 but we got ${gRank.numNonzeros}.")
+      "User g (Gabby) doesn't connect with a. So its pagerank should be 0 but we got " +
+        s"${gRank.numNonzeros}.")
     pr.unpersist()
   }
 }

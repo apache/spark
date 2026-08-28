@@ -17,12 +17,12 @@
 
 package org.apache.spark.graphframes.lib
 
+import org.apache.spark.graphframes._
+import org.apache.spark.graphframes.GraphFrame.quote
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.DataTypes
-import org.apache.spark.graphframes._
-import org.apache.spark.graphframes.GraphFrame.quote
 
 class ShortestPathsSuite extends SparkFunSuite with GraphFrameTestSparkContext {
 

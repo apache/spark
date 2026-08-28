@@ -17,9 +17,9 @@
 
 package org.apache.spark.graphframes
 
+import org.apache.spark.graphframes.lib.Pregel
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.graphframes.GraphFrameInternals
-import org.apache.spark.graphframes.lib.Pregel
 
 /**
  * Unit tests for GraphFrameInternals.extractColumnReferences.

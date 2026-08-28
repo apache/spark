@@ -17,17 +17,17 @@
 
 package org.apache.spark.graphframes.lib
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types._
+import scala.collection.mutable
+
 import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.GraphFrameTestSparkContext
 import org.apache.spark.graphframes.GraphFramesUnreachableException
+import org.apache.spark.graphframes.GraphFrameTestSparkContext
 import org.apache.spark.graphframes.SparkFunSuite
 import org.apache.spark.graphframes.TestUtils
 import org.apache.spark.graphframes.examples.Graphs
-
-import scala.collection.mutable
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
 
 class AggregateMessagesSuite extends SparkFunSuite with GraphFrameTestSparkContext {
 

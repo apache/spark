@@ -174,7 +174,8 @@ class Graphs private[graphframes] () {
    *  P(X) = (1/Z) * exp[ \sum_i a_i x_i + \sum_{ij} b_{ij} x_i x_j ]
    * }}}
    * where Z is the normalization constant (partition function). See
-   * [[https://en.wikipedia.org/wiki/Ising_model Wikipedia]] for more information on Ising models.
+   * See <a href="https://en.wikipedia.org/wiki/Ising_model">Wikipedia</a> for more information on
+   * Ising models.
    *
    * Each vertex is parameterized by a single scalar a,,i,,. Each edge is parameterized by a
    * single scalar b,,ij,,.

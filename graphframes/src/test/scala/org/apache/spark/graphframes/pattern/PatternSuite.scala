@@ -199,7 +199,8 @@ class PatternSuite extends SparkFunSuite {
       }
     }
     withClue(
-      "Failed to catch parse error with completely anonymous negated and undirected edge !()-[]-()") {
+      "Failed to catch parse error with completely anonymous negated and undirected " +
+        "edge !()-[]-()") {
       intercept[InvalidParseException] {
         Pattern.parse("!()-[]-()")
       }

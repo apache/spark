@@ -17,13 +17,12 @@
 
 package org.apache.spark.graphframes.convolutions
 
+import org.apache.spark.graphframes.{GraphFrame, Logging}
 import org.apache.spark.ml.functions._
 import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.graphframes.expressions.KMinSampling
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.Logging
 
 /**
  * A convolution operation on graph data that aggregates features from sampled neighbors using

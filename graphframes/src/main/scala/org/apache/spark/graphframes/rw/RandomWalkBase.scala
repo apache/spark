@@ -17,6 +17,11 @@
 
 package org.apache.spark.graphframes.rw
 
+import scala.util.Random
+
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.graphframes.{GraphFrame, Logging, WithIntermediateStorageLevel}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.array
@@ -32,11 +37,6 @@ import org.apache.spark.sql.functions.xxhash64
 import org.apache.spark.sql.graphframes.expressions.KMinSampling
 import org.apache.spark.sql.types.ArrayType
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.Logging
-import org.apache.spark.graphframes.WithIntermediateStorageLevel
-
-import scala.util.Random
 
 /**
  * Base trait for implementing random walk algorithms on graph data. Provides common functionality
@@ -416,16 +416,16 @@ object RandomWalkBase extends Serializable {
       spark: org.apache.spark.sql.SparkSession): Unit = {
     val sc = spark.sparkContext
     val hadoopConf = sc.hadoopConfiguration
-    val fs = org.apache.hadoop.fs.FileSystem.get(hadoopConf)
     val basePath = temporaryPrefix
     val runPath = if (basePath.endsWith("/")) {
       s"${basePath}${runID}_batch_"
     } else {
       s"${basePath}/${runID}_batch_"
     }
+    val fs = new Path(runPath).getFileSystem(hadoopConf)
     // Delete all batch directories (1 to numBatches)
     for (i <- 1 to numBatches) {
-      val path = new org.apache.hadoop.fs.Path(s"${runPath}${i}")
+      val path = new Path(s"${runPath}${i}")
       if (fs.exists(path)) {
         fs.delete(path, true) // recursive delete
       }

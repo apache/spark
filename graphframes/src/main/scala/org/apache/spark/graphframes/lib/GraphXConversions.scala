@@ -17,16 +17,15 @@
 
 package org.apache.spark.graphframes.lib
 
+import scala.reflect.runtime.universe._
+
+import org.apache.spark.graphframes.{GraphFrame, NoSuchVertexException}
 import org.apache.spark.graphx.Graph
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructField
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.NoSuchVertexException
-
-import scala.reflect.runtime.universe._
 
 /**
  * Convenience functions to map GraphX graphs to GraphFrames, checking for the types expected by
@@ -45,7 +44,8 @@ private[graphframes] object GraphXConversions {
   /** Indicates if T is a Product type */
   private def isProductType[T: TypeTag]: Boolean = {
     val t = typeOf[T]
-    // See http://stackoverflow.com/questions/21209006/how-to-check-if-reflected-type-represents-a-tuple
+    // See https://stackoverflow.com/questions/21209006/
+    // how-to-check-if-reflected-type-represents-a-tuple
     t.typeSymbol.fullName.startsWith("scala.Tuple")
   }
 

@@ -71,12 +71,14 @@ class PatternMatchSuite extends SparkFunSuite with GraphFrameTestSparkContext {
 
   private def compareResultToExpected[A](result: Set[A], expected: Set[A]): Unit = {
     if (result !== expected) {
+      // scalastyle:off throwerror
       throw new AssertionError(
         "result !== expected.\n" +
           s"Result contained additional values: ${result.diff(expected)}\n" +
           s"Expected contained additional values: ${expected.diff(result)}\n" +
           s"Result: $result\n" +
           s"Expected: $expected")
+      // scalastyle:on throwerror
     }
   }
 

@@ -17,13 +17,13 @@
 
 package org.apache.spark.graphframes.lib
 
-import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.graphframes.GraphFrame
 import org.apache.spark.graphframes.GraphFrameTestSparkContext
 import org.apache.spark.graphframes.SparkFunSuite
 import org.apache.spark.graphframes.TestUtils
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.types.DataTypes
 
 class StructureAwareLabelPropagationSuite extends SparkFunSuite with GraphFrameTestSparkContext {
 
@@ -56,8 +56,8 @@ class StructureAwareLabelPropagationSuite extends SparkFunSuite with GraphFrameT
     result.unpersist()
   }
 
-  test(
-    "different structuralSimilarityMultiplier values can change winner between direct-link mass and common-neighbor overlap") {
+  test("different structuralSimilarityMultiplier values can change winner between direct-link " +
+    "mass and common-neighbor overlap") {
     assume(TestUtils.requireSparkVersionGE(4, 1, spark.version))
 
     val vertices = spark

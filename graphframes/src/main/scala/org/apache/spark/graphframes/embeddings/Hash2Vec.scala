@@ -17,7 +17,13 @@
 
 package org.apache.spark.graphframes.embeddings
 
+import scala.reflect.ClassTag
+import scala.util.hashing.MurmurHash3
+
 import dev.ludovic.netlib.blas.BLAS
+
+import org.apache.spark.graphframes.GraphFramesUnsupportedVertexTypeException
+import org.apache.spark.graphframes.rw.RandomWalkBase
 import org.apache.spark.ml.linalg
 import org.apache.spark.ml.linalg.SQLDataTypes.VectorType
 import org.apache.spark.ml.linalg.Vectors
@@ -41,15 +47,10 @@ import org.apache.spark.sql.types.StringType
 import org.apache.spark.sql.types.StructField
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.hash.Murmur3_x86_32._
-import org.apache.spark.graphframes.GraphFramesUnsupportedVertexTypeException
-import org.apache.spark.graphframes.rw.RandomWalkBase
-
-import scala.reflect.ClassTag
-import scala.util.hashing.MurmurHash3
 
 /**
  * Implementation of Hash2Vec, an efficient word embedding technique using feature hashing. Based
- * on: Argerich, Luis, Joaquín Torré Zaffaroni, and Matías J. Cano. "Hash2vec, feature hashing for
+ * on: Argerich, Luis, Joaquin Torre Zaffaroni, and Matias J. Cano. "Hash2vec, feature hashing for
  * word embeddings." arXiv preprint arXiv:1608.08940 (2016).
  *
  * Produces embeddings for elements in sequences using a hash-based approach to avoid storing a
@@ -81,11 +82,11 @@ class Hash2Vec extends Serializable {
   private var maxVectorsPerPartition: Int = 100000
 
   /**
-   * Sets whether final vectors are L2‑normalized after aggregation across partitions. When
+   * Sets whether final vectors are L2-normalized after aggregation across partitions. When
    * normalization is enabled, each vector is scaled to unit length (L2 norm = 1).
    *
    * When `safeNorm` is true (default), the method adds an extra channel to the vector equal to
-   * `log(L2‑norm + 1) / sqrt(dim)`. This preserves some information about the original magnitude
+   * `log(L2-norm + 1) / sqrt(dim)`. This preserves some information about the original magnitude
    * while still making vectors comparable via cosine similarity.
    *
    * When `safeNorm` is false, normalizes without adding an extra channel, discarding magnitude
@@ -97,7 +98,7 @@ class Hash2Vec extends Serializable {
    *   If true, output vectors are normalized.
    * @param safeNorm
    *   If true (and doNorm is true), retains magnitude information in an extra dimension. If
-   *   false, performs standard L2‑normalization.
+   *   false, performs standard L2-normalization.
    * @return
    *   This Hash2Vec instance for method chaining.
    */
@@ -131,11 +132,11 @@ class Hash2Vec extends Serializable {
   }
 
   /**
-   * Convenience overload for `setDoNormalization(doNorm, safeNorm)` that uses safe‑mode (extra
+   * Convenience overload for `setDoNormalization(doNorm, safeNorm)` that uses safe-mode (extra
    * channel) by default. Equivalent to `setDoNormalization(value, true)`.
    *
    * @param value
-   *   If true, output vectors are L2‑normalized with safe (extra‑channel) semantics.
+   *   If true, output vectors are L2-normalized with safe (extra-channel) semantics.
    * @return
    *   This Hash2Vec instance for method chaining.
    */
@@ -295,7 +296,8 @@ class Hash2Vec extends Serializable {
           StructType(Seq(StructField("id", LongType), StructField("vector", VectorType))))
       case _ =>
         throw new GraphFramesUnsupportedVertexTypeException(
-          s"Hash2vec supports only string or numeric types of elements but got ${elDataType.toString()}")
+          "Hash2vec supports only string or numeric types of elements but got " +
+            elDataType.toString)
     }
 
     val embeddings = spark
@@ -510,22 +512,22 @@ object Hash2Vec {
 
   /**
    * A paged matrix of double-precision vectors that stores vectors contiguously in large
-   * fixed‑sized pages, each holding PAGE_SIZE (4096) vectors of dimension `dim`.
+   * fixed-sized pages, each holding PAGE_SIZE (4096) vectors of dimension `dim`.
    *
    * This layout replaces a HashMap[T, Array[Double]] with two separate structures:
    *   1. A mapping from element identifier (T) to a vector ID (Int), maintained by the caller.
    *   2. The actual vector data stored in a few large arrays (pages) instead of many small
-   *      per‑element arrays.
+   *      per-element arrays.
    *
    * Advantages over a HashMap-of-arrays:
-   *   1. Eliminates per‑vector Array object overhead (object
+   *   1. Eliminates per-vector Array object overhead (object
    * header, reference, GC metadata).
-   *   2. Reduces GC pressure because the backing store is a small number of large long‑lived
-   *      arrays, not many short‑lived small arrays that become garbage as the map is updated.
+   *   2. Reduces GC pressure because the backing store is a small number of large long-lived
+   *      arrays, not many short-lived small arrays that become garbage as the map is updated.
    *   3. Better memory locality: vectors of the same dimension are stored consecutively,
    *      improving cache line utilisation during sequential access (e.g., inside a page).
    *   4. Predictable memory growth: pages are allocated only when the current page is full,
-   *      avoiding repeated resizing of a hash‑map and associated re‑hashing / copying.
+   *      avoiding repeated resizing of a hash-map and associated re-hashing / copying.
    *
    * The cost is an extra indirection to compute the page index and offset, which is cheap (bit
    * shifts and masks) compared to the GC and memory overhead it saves.
@@ -534,8 +536,8 @@ object Hash2Vec {
    *   1. PAGE_BITS = 12, PAGE_SIZE = 4096 (2^12). This keeps pageIdx =
    * vectorId >>> PAGE_BITS and localRow = vectorId & PAGE_MASK cheap, while limiting page memory
    * to PAGE_SIZE * dim doubles.
-   *   2. The first page is pre‑allocated in the constructor; subsequent
-   * pages are added on‑demand when allocateVector() crosses a page boundary.
+   *   2. The first page is pre-allocated in the constructor; subsequent
+   * pages are added on-demand when allocateVector() crosses a page boundary.
    *   3. allocateVector()
    * returns a monotonically increasing integer ID, which is the index of the vector across all
    * pages. The caller stores this ID in a HashMap[T, Int] instead of storing the whole array.
@@ -561,7 +563,7 @@ object Hash2Vec {
       pages += new Array[Double](size.toInt)
     }
 
-    /** Allocate a new zero‑initialized vector and return its unique integer ID. */
+    /** Allocate a new zero-initialized vector and return its unique integer ID. */
     def allocateVector(): Int = {
       val id = vectorCount
       val localIdx = id & PAGE_MASK // ~id % 4096
@@ -574,7 +576,7 @@ object Hash2Vec {
       id
     }
 
-    /** Accumulate `value` into the component `offset` (0‑based) of vector `vectorId`. */
+    /** Accumulate `value` into the component `offset` (0-based) of vector `vectorId`. */
     @inline
     def add(vectorId: Int, offset: Int, value: Double): Unit = {
       // vectorId / PAGE_SIZE using unsigned shift (page index)

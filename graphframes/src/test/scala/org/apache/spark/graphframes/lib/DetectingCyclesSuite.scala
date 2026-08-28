@@ -17,12 +17,12 @@
 
 package org.apache.spark.graphframes.lib
 
+import scala.annotation.nowarn
+import scala.collection.mutable
+
 import org.apache.spark.graphframes.GraphFrame
 import org.apache.spark.graphframes.GraphFrameTestSparkContext
 import org.apache.spark.graphframes.SparkFunSuite
-
-import scala.annotation.nowarn
-import scala.collection.mutable
 
 class DetectingCyclesSuite extends SparkFunSuite with GraphFrameTestSparkContext {
   test("test detecting cycles") {

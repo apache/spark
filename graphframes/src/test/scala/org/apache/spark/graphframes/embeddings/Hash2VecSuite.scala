@@ -17,17 +17,18 @@
 
 package org.apache.spark.graphframes.embeddings
 
+import scala.util.Random
+
+import org.scalatest.BeforeAndAfterAll
+
+import org.apache.spark.graphframes.GraphFrameTestSparkContext
+import org.apache.spark.graphframes.SparkFunSuite
 import org.apache.spark.ml.linalg.DenseVector
 import org.apache.spark.ml.linalg.SQLDataTypes.VectorType
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.graphframes.GraphFrameTestSparkContext
-import org.apache.spark.graphframes.SparkFunSuite
-import org.scalatest.BeforeAndAfterAll
-
-import scala.util.Random
 
 class Hash2VecSuite extends SparkFunSuite with GraphFrameTestSparkContext with BeforeAndAfterAll {
   private var longSequences: DataFrame = _
@@ -232,8 +233,8 @@ class Hash2VecSuite extends SparkFunSuite with GraphFrameTestSparkContext with B
     }
   }
 
-  test("Hash2Vec - cosine distances reflect co‑occurrence patterns") {
-    // Create a tiny dataset where some words co‑occur often, others rarely.
+  test("Hash2Vec - cosine distances reflect co-occurrence patterns") {
+    // Create a tiny dataset where some words co-occur often, others rarely.
     // We'll use string sequences for simplicity.
     val sequences = Seq(
       Seq("apple", "banana", "apple", "cherry", "banana"),
@@ -284,46 +285,46 @@ class Hash2VecSuite extends SparkFunSuite with GraphFrameTestSparkContext with B
       dot / (math.sqrt(norm1) * math.sqrt(norm2))
     }
 
-    // apple and banana co‑occur very frequently → high similarity
+    // apple and banana co-occur very frequently -> high similarity
     val appleBananaSim = cosineSimilarity(embMap("apple"), embMap("banana"))
-    // cherry and date also co‑occur frequently (in the fourth sequence)
+    // cherry and date also co-occur frequently (in the fourth sequence)
     val cherryDateSim = cosineSimilarity(embMap("cherry"), embMap("date"))
-    // apple and fig almost never appear together → low similarity
+    // apple and fig almost never appear together -> low similarity
     val appleFigSim = cosineSimilarity(embMap("apple"), embMap("fig"))
     // banana and fig also rarely together
     val bananaFigSim = cosineSimilarity(embMap("banana"), embMap("fig"))
-    // elderberry and fig co‑occur (sixth sequence)
+    // elderberry and fig co-occur (sixth sequence)
     val elderberryFigSim = cosineSimilarity(embMap("elderberry"), embMap("fig"))
 
-    // Assert ordering of similarities matches expected co‑occurrence patterns
-    // apple‑banana should be among the highest similarities
-    assert(appleBananaSim > 0.3, s"apple‑banana similarity $appleBananaSim should be > 0.3")
-    // apple‑fig should be low (close to zero or negative)
+    // Assert ordering of similarities matches expected co-occurrence patterns
+    // apple-banana should be among the highest similarities
+    assert(appleBananaSim > 0.3, s"apple-banana similarity $appleBananaSim should be > 0.3")
+    // apple-fig should be low (close to zero or negative)
     assert(
       appleFigSim < appleBananaSim,
-      s"apple‑fig ($appleFigSim) should be < apple‑banana ($appleBananaSim)")
+      s"apple-fig ($appleFigSim) should be < apple-banana ($appleBananaSim)")
     assert(
       bananaFigSim < appleBananaSim,
-      s"banana‑fig ($bananaFigSim) should be < apple‑banana ($appleBananaSim)")
-    // cherry‑date similarity should be relatively high (they co‑occur exclusively)
-    assert(cherryDateSim > 0.2, s"cherry‑date similarity $cherryDateSim should be > 0.2")
-    // elderberry‑fig should be higher than apple‑fig (because they co‑occur)
+      s"banana-fig ($bananaFigSim) should be < apple-banana ($appleBananaSim)")
+    // cherry-date similarity should be relatively high (they co-occur exclusively)
+    assert(cherryDateSim > 0.2, s"cherry-date similarity $cherryDateSim should be > 0.2")
+    // elderberry-fig should be higher than apple-fig (because they co-occur)
     assert(
       elderberryFigSim > appleFigSim,
-      s"elderberry‑fig ($elderberryFigSim) should be > apple‑fig ($appleFigSim)")
+      s"elderberry-fig ($elderberryFigSim) should be > apple-fig ($appleFigSim)")
 
-    // Self‑similarity should be 1.0 (or close after normalization)
+    // Self-similarity should be 1.0 (or close after normalization)
     val appleSelf = cosineSimilarity(embMap("apple"), embMap("apple"))
-    assert(math.abs(appleSelf - 1.0) < 1e-6, s"self‑similarity should be ~1.0, got $appleSelf")
+    assert(math.abs(appleSelf - 1.0) < 1e-6, s"self-similarity should be ~1.0, got $appleSelf")
   }
 
-  test("Hash2Vec - long‑typed co‑occurrence") {
+  test("Hash2Vec - long-typed co-occurrence") {
     // Use numeric ids to test long sequences.
     val sequences = Seq(
-      Seq(1L, 2L, 1L, 3L, 2L), // 1‑2 frequent, 3 appears with 2
+      Seq(1L, 2L, 1L, 3L, 2L), // 1-2 frequent, 3 appears with 2
       Seq(1L, 2L, 3L, 2L),
       Seq(1L, 2L, 1L, 2L, 2L),
-      Seq(3L, 4L, 3L, 4L), // 3‑4 frequent pair
+      Seq(3L, 4L, 3L, 4L), // 3-4 frequent pair
       Seq(4L, 5L, 4L),
       Seq(5L, 6L, 5L),
       Seq(6L, 6L, 6L))
@@ -370,19 +371,19 @@ class Hash2VecSuite extends SparkFunSuite with GraphFrameTestSparkContext with B
     val sim16 = cosineSimilarity(embMap(1L), embMap(6L))
     val sim56 = cosineSimilarity(embMap(5L), embMap(6L))
 
-    // 1‑2 co‑occur very often
-    assert(sim12 > 0.3, s"1‑2 similarity $sim12 should be > 0.3")
-    // 1‑3 appear together less often than 1‑2
-    assert(sim13 < sim12, s"1‑3 ($sim13) should be < 1‑2 ($sim12)")
-    // 3‑4 are exclusive pair
-    assert(sim34 > 0.2, s"3‑4 similarity $sim34 should be > 0.2")
+    // 1-2 co-occur very often
+    assert(sim12 > 0.3, s"1-2 similarity $sim12 should be > 0.3")
+    // 1-3 appear together less often than 1-2
+    assert(sim13 < sim12, s"1-3 ($sim13) should be < 1-2 ($sim12)")
+    // 3-4 are exclusive pair
+    assert(sim34 > 0.2, s"3-4 similarity $sim34 should be > 0.2")
     // 1 and 6 almost never together
-    assert(sim16 < 0.1, s"1‑6 similarity $sim16 should be near zero")
-    // 5‑6 co‑occur in a sequence
-    assert(sim56 > sim16, s"5‑6 ($sim56) should be > 1‑6 ($sim16)")
+    assert(sim16 < 0.1, s"1-6 similarity $sim16 should be near zero")
+    // 5-6 co-occur in a sequence
+    assert(sim56 > sim16, s"5-6 ($sim56) should be > 1-6 ($sim16)")
 
     // Self similarity
     val self = cosineSimilarity(embMap(1L), embMap(1L))
-    assert(math.abs(self - 1.0) < 1e-6, s"self‑similarity should be ~1.0, got $self")
+    assert(math.abs(self - 1.0) < 1e-6, s"self-similarity should be ~1.0, got $self")
   }
 }

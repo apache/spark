@@ -17,10 +17,6 @@
 
 package org.apache.spark.graphframes.lib
 
-import org.apache.spark.sql.Column
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types._
 import org.apache.spark.graphframes.GraphFrame
 import org.apache.spark.graphframes.GraphFrame._
 import org.apache.spark.graphframes.GraphFramesSparkVersionException
@@ -31,6 +27,10 @@ import org.apache.spark.graphframes.WithIntermediateStorageLevel
 import org.apache.spark.graphframes.WithLgNomEntries
 import org.apache.spark.graphframes.WithLocalCheckpoints
 import org.apache.spark.graphframes.WithMaxIter
+import org.apache.spark.sql.Column
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
 
 /**
  * Neighborhood-aware community detection via weighted label propagation.
@@ -132,7 +132,8 @@ class StructureAwareLabelPropagation private[graphframes] (private val graph: Gr
   def setInitialLabelCol(col: String): this.type = {
     require(
       graph.vertices.columns.contains(col),
-      s"Initial label column '$col' does not exist in vertex columns: ${graph.vertices.columns.mkString(", ")}")
+      s"Initial label column '$col' does not exist in vertex columns: " +
+        graph.vertices.columns.mkString(", "))
     initialLabelCol = Some(col)
     this
   }

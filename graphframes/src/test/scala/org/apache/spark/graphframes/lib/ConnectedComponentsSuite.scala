@@ -17,6 +17,12 @@
 
 package org.apache.spark.graphframes.lib
 
+import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
+
+import org.apache.spark.graphframes._
+import org.apache.spark.graphframes.GraphFrame._
+import org.apache.spark.graphframes.examples.Graphs
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
@@ -24,12 +30,6 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.graphframes._
-import org.apache.spark.graphframes.GraphFrame._
-import org.apache.spark.graphframes.examples.Graphs
-
-import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.TypeTag
 
 class ConnectedComponentsSuite extends SparkFunSuite with GraphFrameTestSparkContext {
 

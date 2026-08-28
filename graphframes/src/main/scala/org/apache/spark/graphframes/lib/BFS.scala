@@ -17,15 +17,15 @@
 
 package org.apache.spark.graphframes.lib
 
+import org.apache.spark.graphframes.GraphFrame
+import org.apache.spark.graphframes.GraphFrame.nestAsCol
+import org.apache.spark.graphframes.Logging
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.graphframes.GraphFrameInternals
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.GraphFrame.nestAsCol
-import org.apache.spark.graphframes.Logging
 
 /**
  * Breadth-first search (BFS)
@@ -43,7 +43,7 @@ import org.apache.spark.graphframes.Logging
  *   - `v[i]` intermediate vertex i in the path, indexed from 1
  *   - `to` end vertex of path
  * Each of these columns is a StructType whose fields are the same as the columns of
- * [[GraphFrame.vertices]] or [[GraphFrame.edges]].
+ * the vertices or edges DataFrame.
  *
  * For example, suppose we have a graph g. Say the vertices DataFrame of g has columns "id" and
  * "job", and the edges DataFrame of g has columns "src", "dst", and "relation".
@@ -61,7 +61,7 @@ import org.apache.spark.graphframes.Logging
  * If one or more vertices match both the from and to conditions, then there is a 0-hop path. The
  * returned DataFrame will have the "from" and "to" columns (as above); however, the "from" and
  * "to" columns will be exactly the same. There will be one row for each vertex in
- * [[GraphFrame.vertices]] matching both `fromExpr` and `toExpr`.
+ * the vertices DataFrame matching both `fromExpr` and `toExpr`.
  *
  * Parameters:
  *

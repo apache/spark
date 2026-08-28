@@ -17,10 +17,10 @@
 
 package org.apache.spark.graphframes
 
+import org.apache.spark.graphframes.GraphFrame._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.graphframes.GraphFrame._
 
 object TestUtils {
 

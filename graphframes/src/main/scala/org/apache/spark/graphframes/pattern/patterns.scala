@@ -17,11 +17,11 @@
 
 package org.apache.spark.graphframes.pattern
 
-import org.apache.spark.graphframes.GraphFramesUnreachableException
-import org.apache.spark.graphframes.InvalidParseException
-
 import scala.collection.mutable
 import scala.util.parsing.combinator._
+
+import org.apache.spark.graphframes.GraphFramesUnreachableException
+import org.apache.spark.graphframes.InvalidParseException
 
 /**
  * Parser for graph patterns for motif finding. Copied from GraphFrames with minor modification.
@@ -195,8 +195,8 @@ private[graphframes] object Pattern {
               case AnonymousEdge(AnonymousVertex, AnonymousVertex) =>
                 throw new InvalidParseException(
                   "Motif finding does not support completely " +
-                    "anonymous negated edges !()-[]-().  Users can check for the existence of edges in the " +
-                    "graph using the edges DataFrame.")
+                    "anonymous negated edges !()-[]-().  Users can check for the existence of " +
+                    "edges in the graph using the edges DataFrame.")
               case _ => addEdge(e)
             }
           case e @ AnonymousEdge(_, _) =>

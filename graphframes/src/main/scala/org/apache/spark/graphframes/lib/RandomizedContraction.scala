@@ -17,7 +17,17 @@
 
 package org.apache.spark.graphframes.lib
 
+import java.io.IOException
+import java.util.UUID
+
+import scala.collection.mutable.Stack
+import scala.util.Random
+
 import org.apache.hadoop.fs.Path
+
+import org.apache.spark.graphframes.GraphFrame
+import org.apache.spark.graphframes.GraphFrame.{DST, ID, LONG_DST, LONG_ID, LONG_SRC, SRC}
+import org.apache.spark.graphframes.Logging
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.FunctionIdentifier
@@ -25,23 +35,10 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.graphframes.expressions.FiniteAXPlusB
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.GraphFrame.DST
-import org.apache.spark.graphframes.GraphFrame.ID
-import org.apache.spark.graphframes.GraphFrame.LONG_DST
-import org.apache.spark.graphframes.GraphFrame.LONG_ID
-import org.apache.spark.graphframes.GraphFrame.LONG_SRC
-import org.apache.spark.graphframes.GraphFrame.SRC
-import org.apache.spark.graphframes.Logging
-
-import java.io.IOException
-import java.util.UUID
-import scala.collection.mutable.Stack
-import scala.util.Random
 
 /**
  * Implementation of parallel connected components algorithm using randomized contraction, based
- * on Bögeholz, Harald, Michael Brand, and Radu-Alexandru Todor. "In-database connected component
+ * on Boegeholz, Harald, Michael Brand, and Radu-Alexandru Todor. "In-database connected component
  * analysis." 2020 IEEE 36th International Conference on Data Engineering (ICDE). IEEE, 2020.
  *
  * The algorithm contracts the graph iteratively using random linear functions, until no edges
@@ -284,7 +281,8 @@ private[graphframes] object RandomizedContraction extends Logging with Serializa
         new FunctionIdentifier("_axpb", Some("builtin"), Some("system")))
       if (!dereg) {
         logWarn(
-          "graphframes faced an internal error and was not able to de-register function _axpb; Spark' functionRegistry is in a bad state")
+          "GraphFrames faced an internal error and could not de-register function _axpb; " +
+            "Spark's function registry is in a bad state")
       }
     }
   }

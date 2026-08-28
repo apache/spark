@@ -17,14 +17,14 @@
 
 package org.apache.spark.graphframes.lib
 
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions._
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.graphframes.GraphFrame
 import org.apache.spark.graphframes.GraphFramesSparkVersionException
 import org.apache.spark.graphframes.Logging
 import org.apache.spark.graphframes.WithIntermediateStorageLevel
 import org.apache.spark.graphframes.WithLgNomEntries
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Triangle count implementation.

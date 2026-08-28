@@ -17,15 +17,15 @@
 
 package org.apache.spark.graphframes.lib
 
+import org.apache.spark.graphframes.GraphFrame
+import org.apache.spark.graphframes.GraphFrameTestSparkContext
+import org.apache.spark.graphframes.SparkFunSuite
+import org.apache.spark.graphframes.examples.Graphs
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.GraphFrameTestSparkContext
-import org.apache.spark.graphframes.SparkFunSuite
-import org.apache.spark.graphframes.examples.Graphs
 
 class RandomizedContractionSuite extends SparkFunSuite with GraphFrameTestSparkContext {
 
@@ -273,9 +273,9 @@ class RandomizedContractionSuite extends SparkFunSuite with GraphFrameTestSparkC
   }
 
   private def listParquetFiles(): Set[String] = {
-    val hadoopConf = spark.sparkContext.hadoopConfiguration
-    val fs = org.apache.hadoop.fs.FileSystem.get(hadoopConf)
+    val hadoopConf = spark.sessionState.newHadoopConf()
     val rootPath = new org.apache.hadoop.fs.Path(spark.conf.get("spark.sql.warehouse.dir"))
+    val fs = rootPath.getFileSystem(hadoopConf)
 
     def listFiles(path: org.apache.hadoop.fs.Path): Set[String] = {
       if (fs.exists(path)) {

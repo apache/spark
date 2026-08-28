@@ -17,10 +17,10 @@
 
 package org.apache.spark.graphframes.lib
 
-import org.apache.spark.sql.functions._
 import org.apache.spark.graphframes.GraphFrame
 import org.apache.spark.graphframes.GraphFrameTestSparkContext
 import org.apache.spark.graphframes.SparkFunSuite
+import org.apache.spark.sql.functions._
 
 class AggregateNeighborsSuite extends SparkFunSuite with GraphFrameTestSparkContext {
 

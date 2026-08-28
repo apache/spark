@@ -17,35 +17,35 @@
 
 package org.apache.spark.graphframes.lib
 
+import org.apache.spark.graphframes.GraphFrame
+import org.apache.spark.graphframes.Logging
+import org.apache.spark.graphframes.WithIntermediateStorageLevel
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.functions.struct
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.Logging
-import org.apache.spark.graphframes.WithIntermediateStorageLevel
 
 /**
  * This is a primitive for implementing graph algorithms. This method aggregates messages from the
  * neighboring edges and vertices of each vertex.
  *
- * For each triplet (source vertex, edge, destination vertex) in [[GraphFrame.triplets]], this can
+ * For each triplet (source vertex, edge, destination vertex) in the triplets DataFrame, this can
  * send a message to the source and/or destination vertices.
  *   - `AggregateMessages.sendToSrc()` sends a message to the source vertex of each triplet
  *   - `AggregateMessages.sendToDst()` sends a message to the destination vertex of each triplet
  *   - `AggregateMessages.agg` specifies an aggregation function for aggregating the messages sent
  *     to each vertex. It also runs the aggregation, computing a DataFrame with one row for each
  *     vertex which receives > 0 messages. The DataFrame has 2 columns:
- *     - vertex column ID (named [[GraphFrame.ID]])
+ *     - vertex column ID (named `id`)
  *     - aggregate from messages sent to vertex (with the name given to the `Column` specified in
  *       `AggregateMessages.agg()`)
  *
  * When specifying the messages and aggregation function, the user may reference columns using:
- *   - [[AggregateMessages.src]]: column for source vertex of edge
- *   - [[AggregateMessages.edge]]: column for edge
- *   - [[AggregateMessages.dst]]: column for destination vertex of edge
- *   - [[AggregateMessages.msg]]: message sent to vertex (for aggregation function)
+ *   - `AggregateMessages.src`: column for source vertex of edge
+ *   - `AggregateMessages.edge`: column for edge
+ *   - `AggregateMessages.dst`: column for destination vertex of edge
+ *   - `AggregateMessages.msg`: message sent to vertex (for aggregation function)
  *
  * Note: If you use this operation to write an iterative algorithm, you may want to use
  * `checkpoint()` (`localCheckpoint()`) as a workaround for caching issues.
@@ -120,7 +120,7 @@ class AggregateMessages private[graphframes] (private val g: GraphFrame)
    *   - column "id": vertex ID
    *   - aggCol: aggregate result
    *   - aggCols: one column with the result of each additional defined aggregation
-   * If you need to join this with the original [[GraphFrame.vertices]], you can run an inner join
+   * If you need to join this with the original vertices DataFrame, you can run an inner join
    * of the form:
    * {{{
    *   val g: GraphFrame = ...
@@ -190,7 +190,7 @@ class AggregateMessages private[graphframes] (private val g: GraphFrame)
 
 object AggregateMessages extends Logging with Serializable {
 
-  /** Column name for aggregated messages, used in [[AggregateMessages.msg]] */
+  /** Column name for aggregated messages, used in `AggregateMessages.msg` */
   val MSG_COL_NAME: String = "MSG"
 
   /** Reference for source column, used for specifying messages */

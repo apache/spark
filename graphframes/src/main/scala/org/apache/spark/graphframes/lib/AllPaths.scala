@@ -17,6 +17,11 @@
 
 package org.apache.spark.graphframes.lib
 
+import org.apache.spark.graphframes.GraphFrame
+import org.apache.spark.graphframes.WithCheckpointInterval
+import org.apache.spark.graphframes.WithDirection
+import org.apache.spark.graphframes.WithIntermediateStorageLevel
+import org.apache.spark.graphframes.WithLocalCheckpoints
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.array
@@ -25,11 +30,6 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.concat
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.graphframes.GraphFrameInternals
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.WithCheckpointInterval
-import org.apache.spark.graphframes.WithDirection
-import org.apache.spark.graphframes.WithIntermediateStorageLevel
-import org.apache.spark.graphframes.WithLocalCheckpoints
 
 /**
  * Computes all simple paths between source and destination vertices.

@@ -17,14 +17,14 @@
 
 package org.apache.spark.graphframes.lib
 
-import org.apache.spark.graphx.Edge
-import org.apache.spark.graphx.{lib => graphxlib}
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions.col
 import org.apache.spark.graphframes.GraphFrame
 import org.apache.spark.graphframes.InvalidGraphException
 import org.apache.spark.graphframes.Logging
 import org.apache.spark.graphframes.WithMaxIter
+import org.apache.spark.graphx.{lib => graphxlib}
+import org.apache.spark.graphx.Edge
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions.col
 
 /**
  * Arguments for SVD++ algorithm.
@@ -32,9 +32,9 @@ import org.apache.spark.graphframes.WithMaxIter
  * This class implements the SVD++ algorithm for Collaborative Filtering, primarily used for
  * Recommender Systems (Link Prediction).
  *
- * Based on the paper "Factorization Meets the Neighborhood: a Multifaceted Collaborative
- * Filtering Model" by Yehuda Koren (2008), available at
- * [[https://dl.acm.org/citation.cfm?id=1401944]].
+ * Based on Yehuda Koren's paper
+ * <a href="https://dl.acm.org/citation.cfm?id=1401944">"Factorization Meets the Neighborhood: a
+ * Multifaceted Collaborative Filtering Model"</a> (2008).
  *
  * ==Problem Definition==
  * The algorithm predicts unknown ratings in a user-item system. It accounts for:
@@ -44,7 +44,7 @@ import org.apache.spark.graphframes.WithMaxIter
  *
  * The prediction rule for a rating `r_ui` (user `u`, item `i`) is:
  * {{{
- * r_ui = µ + b_u + b_i + q_i^T * (p_u + |N(u)|^-0.5 * sum(y_j for j in N(u)))
+ * r_ui = mu + b_u + b_i + q_i^T * (p_u + |N(u)|^-0.5 * sum(y_j for j in N(u)))
  * }}}
  * Where `N(u)` is the set of items user `u` has interacted with (implicit feedback).
  *

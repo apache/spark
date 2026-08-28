@@ -17,20 +17,17 @@
 
 package org.apache.spark.graphframes.embeddings
 
+import org.apache.spark.graphframes.{GraphFrame, GraphFramesW2VException, Logging}
+import org.apache.spark.graphframes.WithIntermediateStorageLevel
+import org.apache.spark.graphframes.convolutions.SamplingConvolution
+import org.apache.spark.graphframes.embeddings.RandomWalkEmbeddings.rwModels
+import org.apache.spark.graphframes.rw.{RandomWalkBase, RandomWalkWithRestart}
 import org.apache.spark.ml.feature.Word2Vec
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.transform
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.GraphFramesW2VException
-import org.apache.spark.graphframes.Logging
-import org.apache.spark.graphframes.WithIntermediateStorageLevel
-import org.apache.spark.graphframes.convolutions.SamplingConvolution
-import org.apache.spark.graphframes.embeddings.RandomWalkEmbeddings.rwModels
-import org.apache.spark.graphframes.rw.RandomWalkBase
-import org.apache.spark.graphframes.rw.RandomWalkWithRestart
 
 /**
  * RandomWalkEmbeddings is a class for generating node embeddings in a graph using random walks
@@ -206,7 +203,7 @@ class RandomWalkEmbeddings private[graphframes] (private val graph: GraphFrame)
     }
 
     val embeddings = sequenceModel match {
-      case Left(w2v) => {
+      case Left(w2v) =>
         val model = w2v.setInputCol(RandomWalkBase.rwColName)
         val preProcessedSequences =
           if (graph.vertices.schema(GraphFrame.ID).dataType != StringType) {
@@ -220,10 +217,8 @@ class RandomWalkEmbeddings private[graphframes] (private val graph: GraphFrame)
         val fittedW2V = model.fit(preProcessedSequences)
         fittedW2V.getVectors.withColumnsRenamed(
           Map("word" -> GraphFrame.ID, "vector" -> RandomWalkEmbeddings.embeddingColName))
-      }
-      case Right(h2v) => {
+      case Right(h2v) =>
         h2v.run(walks).withColumnRenamed("vector", RandomWalkEmbeddings.embeddingColName)
-      }
     }
 
     val persistedEmbeddings = if (aggregateNeighbors) {
@@ -288,6 +283,8 @@ object RandomWalkEmbeddings extends Serializable {
    *
    * Instead of this API it is recommended to use new + setters of the class!
    */
+  // This compatibility entry point mirrors the flat Python API.
+  // scalastyle:off argcount
   def pythonAPI(
       graph: GraphFrame,
       useEdgeDirection: Boolean,
@@ -381,4 +378,5 @@ object RandomWalkEmbeddings extends Serializable {
       embeddingsGenerator.useCachedRandomWalks(rwCachedWalks).run()
     }
   }
+  // scalastyle:on argcount
 }

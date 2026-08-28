@@ -17,12 +17,10 @@
 
 package org.apache.spark.graphframes.lib
 
+import org.apache.spark.graphframes.{GraphFrame, Logging, WithMaxIter}
 import org.apache.spark.graphx.{lib => graphxlib}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.Logging
-import org.apache.spark.graphframes.WithMaxIter
 
 /**
  * Compute the strongly connected component (SCC) of each vertex and return a DataFrame with each

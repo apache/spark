@@ -17,9 +17,9 @@
 
 package org.apache.spark.graphframes.lib
 
-import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.graphframes._
 import org.apache.spark.graphframes.examples.Graphs
+import org.apache.spark.sql.types.DataTypes
 
 class KCoreSuite extends SparkFunSuite with GraphFrameTestSparkContext {
   test("empty graph") {
@@ -310,8 +310,8 @@ class KCoreSuite extends SparkFunSuite with GraphFrameTestSparkContext {
 
   test("triangle with tail - exact kcore values") {
     // This graph has vertices where degree != kcore, which is important to test correctness:
-    // it would catch a buggy implementation that converges too early (e.g. after one superstep), which
-    // would return kcore = degree for all vertices and pass simpler tests.
+    // it would catch a buggy implementation that converges too early (e.g. after one superstep),
+    // which would return kcore = degree for all vertices and pass simpler tests.
     //
     // Undirected graph:
     //

@@ -17,13 +17,13 @@
 
 package org.apache.spark.graphframes.lib
 
+import org.apache.spark.graphframes.GraphFrame
+import org.apache.spark.graphframes.GraphFrameTestSparkContext
+import org.apache.spark.graphframes.SparkFunSuite
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.ArrayType
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.types.LongType
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.GraphFrameTestSparkContext
-import org.apache.spark.graphframes.SparkFunSuite
 
 class AllPathsSuite extends SparkFunSuite with GraphFrameTestSparkContext {
 

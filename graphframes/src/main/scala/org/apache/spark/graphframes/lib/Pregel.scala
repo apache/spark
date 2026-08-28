@@ -17,6 +17,16 @@
 
 package org.apache.spark.graphframes.lib
 
+import java.io.IOException
+
+import scala.util.control.Breaks.break
+import scala.util.control.Breaks.breakable
+
+import org.apache.spark.graphframes.GraphFrame
+import org.apache.spark.graphframes.GraphFrame._
+import org.apache.spark.graphframes.Logging
+import org.apache.spark.graphframes.WithIntermediateStorageLevel
+import org.apache.spark.graphframes.WithLocalCheckpoints
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.array
@@ -25,15 +35,6 @@ import org.apache.spark.sql.functions.explode
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.functions.struct
 import org.apache.spark.sql.graphframes.GraphFrameInternals
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.GraphFrame._
-import org.apache.spark.graphframes.Logging
-import org.apache.spark.graphframes.WithIntermediateStorageLevel
-import org.apache.spark.graphframes.WithLocalCheckpoints
-
-import java.io.IOException
-import scala.util.control.Breaks.break
-import scala.util.control.Breaks.breakable
 
 /**
  * Implements a Pregel-like bulk-synchronous message-passing API based on DataFrame operations.
@@ -42,9 +43,8 @@ import scala.util.control.Breaks.breakable
  * large-scale graph processing</a> for a detailed description of the Pregel algorithm.
  *
  * You can construct a Pregel instance using either this constructor or
- * [[org.apache.spark.graphframes.GraphFrame#pregel]], then use builder pattern to describe the
- * operations, and then call [[run]] to start a run. It returns a DataFrame of vertices from the
- * last iteration.
+ * `GraphFrame.pregel`, then use builder pattern to describe the operations, and then call [[run]]
+ * to start a run. It returns a DataFrame of vertices from the last iteration.
  *
  * When a run starts, it expands the vertices DataFrame using column expressions defined by
  * [[withVertexColumn]]. Those additional vertex properties can be changed during Pregel
@@ -83,13 +83,12 @@ import scala.util.control.Breaks.breakable
  * `StructType`). That behavior is considered as bug and starting from 0.12 edge columns are not
  * kept by default.
  *
+ * See `GraphFrame.pregel` and
+ * <a href="https://doi.org/10.1145/1807167.1807184">Malewicz et al., Pregel: a system for
+ * large-scale graph processing</a>.
+ *
  * @param graph
  *   The graph that Pregel will run on.
- * @see
- *   [[org.apache.spark.graphframes.GraphFrame#pregel]]
- * @see
- *   <a href="https://doi.org/10.1145/1807167.1807184"> Malewicz et al., Pregel: a system for
- *   large-scale graph processing. </a>
  */
 class Pregel(val graph: GraphFrame)
     extends Logging
@@ -250,7 +249,7 @@ class Pregel(val graph: GraphFrame)
    * @param updateAfterAggMsgsExpr
    *   the expression to update the additional vertex column after messages aggregation. You can
    *   reference all original vertex columns, additional vertex columns, and the aggregated
-   *   message column using [[Pregel$#msg]]. If the vertex received no messages, the message
+   *   message column using `Pregel.msg`. If the vertex received no messages, the message
    *   column would be null.
    */
   def withVertexColumn(
@@ -279,11 +278,9 @@ class Pregel(val graph: GraphFrame)
    * @param msgExpr
    *   the expression of the message to send to the source vertex given a (src, edge, dst)
    *   triplet. Source/destination vertex properties and edge properties are nested under columns
-   *   `src`, `dst`, and `edge`, respectively. You can reference them using [[Pregel$#src]],
-   *   [[Pregel$#dst]], and [[Pregel$#edge]]. Null messages are not included in message
+   *   `src`, `dst`, and `edge`, respectively. You can reference them using `Pregel.src`,
+   *   `Pregel.dst`, and `Pregel.edge`. Null messages are not included in message
    *   aggregation.
-   * @see
-   *   [[sendMsgToDst]]
    */
   def sendMsgToSrc(msgExpr: Column): this.type = {
     sendMsgs += Tuple2(Pregel.src(ID), msgExpr)
@@ -298,11 +295,9 @@ class Pregel(val graph: GraphFrame)
    * @param msgExpr
    *   the message expression to send to the destination vertex given a (`src`, `edge`, `dst`)
    *   triplet. Source/destination vertex properties and edge properties are nested under columns
-   *   `src`, `dst`, and `edge`, respectively. You can reference them using [[Pregel$#src]],
-   *   [[Pregel$#dst]], and [[Pregel$#edge]]. Null messages are not included in message
+   *   `src`, `dst`, and `edge`, respectively. You can reference them using `Pregel.src`,
+   *   `Pregel.dst`, and `Pregel.edge`. Null messages are not included in message
    *   aggregation.
-   * @see
-   *   [[sendMsgToSrc]]
    */
   def sendMsgToDst(msgExpr: Column): this.type = {
     sendMsgs += Tuple2(Pregel.dst(ID), msgExpr)
@@ -323,8 +318,6 @@ class Pregel(val graph: GraphFrame)
    *   the first required source vertex column name
    * @param colNames
    *   additional required source vertex column names
-   * @see
-   *   [[requiredDstColumns]]
    */
   def requiredSrcColumns(colName: String, colNames: String*): this.type = {
     requiredSrcColumnsList.clear()
@@ -347,8 +340,6 @@ class Pregel(val graph: GraphFrame)
    *   the first required destination vertex column name
    * @param colNames
    *   additional required destination vertex column names
-   * @see
-   *   [[requiredSrcColumns]]
    */
   def requiredDstColumns(colName: String, colNames: String*): this.type = {
     requiredDstColumnsList.clear()
@@ -368,8 +359,6 @@ class Pregel(val graph: GraphFrame)
    *   the first required edge column name
    * @param colNames
    *   additional required edge column names
-   * @see
-   *   [[requiredSrcColumns]] and [[requiredDstColumns]]
    */
   def requiredEdgeColumns(colName: String, colNames: String*): this.type = {
     requiredEdgeColumnsList.clear()
@@ -383,8 +372,8 @@ class Pregel(val graph: GraphFrame)
    *
    * @param aggExpr
    *   the message aggregation expression, such as `sum(Pregel.msg)`. You can reference the
-   *   message column by [[Pregel$#msg]] and the vertex ID by [[GraphFrame$#ID]], while the latter
-   *   is usually not used.
+   *   message column by `Pregel.msg` and the vertex ID by `GraphFrame.ID`, while the latter is
+   *   usually not used.
    */
   def aggMsgs(aggExpr: Column): this.type = {
     aggMsgsCol = aggExpr
@@ -469,7 +458,10 @@ class Pregel(val graph: GraphFrame)
 
     val shouldCheckpoint = checkpointInterval > 0
 
-    if (shouldCheckpoint && graph.spark.sparkContext.getCheckpointDir.isEmpty && !useLocalCheckpoints) {
+    if (
+      shouldCheckpoint &&
+      graph.spark.sparkContext.getCheckpointDir.isEmpty &&
+      !useLocalCheckpoints) {
       // Spark Connect workaround
       graph.spark.conf.getOption("spark.checkpoint.dir") match {
         case Some(d) => graph.spark.sparkContext.setCheckpointDir(d)
@@ -497,9 +489,11 @@ class Pregel(val graph: GraphFrame)
         // Prune non-active vertices early if skipMessagesFromNonActiveVertices
         // is enabled and we don't need the dst state.
         val srcVertices =
-          if (!needsDstState && skipMessagesFromNonActiveVertices)
+          if (!needsDstState && skipMessagesFromNonActiveVertices) {
             currentVertices.filter(col(Pregel.ACTIVE_FLAG_COL))
-          else currentVertices
+          } else {
+            currentVertices
+          }
 
         // Build triplets: start with src vertex state joined with edges
         val srcWithEdges = srcVertices
@@ -621,8 +615,6 @@ object Pregel extends Serializable {
   /**
    * References the message column in aggregating messages and updating additional vertex columns.
    *
-   * @see
-   *   [[Pregel.aggMsgs]] and [[Pregel.withVertexColumn]]
    */
   val msg: Column = col(MSG_COL_NAME)
 
@@ -631,8 +623,6 @@ object Pregel extends Serializable {
    *
    * @param colName
    *   the vertex column name.
-   * @see
-   *   [[Pregel.sendMsgToSrc]] and [[Pregel.sendMsgToDst]]
    */
   def src(colName: String): Column = col(GraphFrame.SRC + "." + colName)
 
@@ -641,8 +631,6 @@ object Pregel extends Serializable {
    *
    * @param colName
    *   the vertex column name.
-   * @see
-   *   [[Pregel.sendMsgToSrc]] and [[Pregel.sendMsgToDst]]
    */
   def dst(colName: String): Column = col(GraphFrame.DST + "." + colName)
 
@@ -651,8 +639,6 @@ object Pregel extends Serializable {
    *
    * @param colName
    *   the edge column name.
-   * @see
-   *   [[Pregel.sendMsgToSrc]] and [[Pregel.sendMsgToDst]]
    */
   def edge(colName: String): Column = col(GraphFrame.EDGE + "." + colName)
 }

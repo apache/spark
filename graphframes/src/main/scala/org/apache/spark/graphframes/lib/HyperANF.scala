@@ -17,6 +17,12 @@
 
 package org.apache.spark.graphframes.lib
 
+import org.apache.spark.graphframes.GraphFrame
+import org.apache.spark.graphframes.GraphFramesUnsupportedVertexTypeException
+import org.apache.spark.graphframes.Logging
+import org.apache.spark.graphframes.WithCheckpointInterval
+import org.apache.spark.graphframes.WithIntermediateStorageLevel
+import org.apache.spark.graphframes.WithLocalCheckpoints
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.col
@@ -29,18 +35,13 @@ import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.sql.types.ShortType
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.GraphFramesUnsupportedVertexTypeException
-import org.apache.spark.graphframes.Logging
-import org.apache.spark.graphframes.WithCheckpointInterval
-import org.apache.spark.graphframes.WithIntermediateStorageLevel
-import org.apache.spark.graphframes.WithLocalCheckpoints
 
 /**
  * HyperANF-style approximation of the neighbourhood function on top of GraphFrames.
  *
- * This implementation is inspired by
- * [[https://arxiv.org/pdf/1011.5599 Vigna, Paolo; Boldi, Marco; Rosa, Sebastiano. "HyperANF: Approximating the Neighbourhood Function of Very Large Graphs on a Budget." arXiv preprint arXiv:1011.5599 (2010)]].
+ * This implementation is inspired by Vigna, Boldi, and Rosa,
+ * <a href="https://arxiv.org/pdf/1011.5599">"HyperANF: Approximating the Neighbourhood Function of
+ * Very Large Graphs on a Budget"</a> (2010).
  *
  * The input graph is treated as directed: for each vertex, reachability is computed by following
  * outgoing edges from `src` to `dst`.

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.graphframes
 
+import java.util.Locale
+
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.SQLConf
@@ -26,8 +28,9 @@ object GraphFramesConf {
   private val USE_LOCAL_CHECKPOINTS =
     SQLConf
       .buildConf("spark.graphframes.useLocalCheckpoints")
-      .doc(""" Tells the connected components algorithm to use local checkpoints (default: "false").
-          | If set to "true", iterative algorithm will use the checkpointing mechanism to the persistent storage.
+      .doc(""" Tells the connected components algorithm to use local checkpoints
+          | (default: "false"). If set to "true", iterative algorithms will use the
+          | checkpointing mechanism to persistent storage.
           | Local checkpoints are faster but can make the whole job less prone to errors.
           | @note This option may become default "true" in the future.
           |""".stripMargin)
@@ -38,8 +41,9 @@ object GraphFramesConf {
   private val USE_LABELS_AS_COMPONENTS =
     SQLConf
       .buildConf("spark.graphframes.useLabelsAsComponents")
-      .doc(""" Tells the connected components algorithm to use (default: "true") labels as components in the output
-          | DataFrame. If set to "false", randomly generated labels with the data type LONG will returned.
+      .doc(""" Tells the connected components algorithm to use labels as components in the
+          | output DataFrame (default: "true"). If set to "false", randomly generated labels
+          | with the data type LONG will be returned.
           |""".stripMargin)
       .version("0.9.0")
       .booleanConf
@@ -48,15 +52,19 @@ object GraphFramesConf {
   private val CONNECTED_COMPONENTS_ALGORITHM =
     SQLConf
       .buildConf("spark.graphframes.connectedComponents.algorithm")
-      .doc(""" Sets the connected components algorithm to use (default: "graphframes"). Supported algorithms
+      .doc(""" Sets the connected components algorithm to use (default: "graphframes").
+          | Supported algorithms:
           |   - "two_phase": Uses alternating large star and small star iterations proposed in
-          |     [[http://dx.doi.org/10.1145/2670979.2670997 Connected Components in MapReduce and Beyond]]
+          |     "Connected Components in MapReduce and Beyond"
+          |     (http://dx.doi.org/10.1145/2670979.2670997).
           |   - "randomized_contraction": Uses randomized algorithm proposed in
-          |     [[https://arxiv.org/pdf/1802.09478 In-database connected component analysis]]
+          |     "In-database connected component analysis"
+          |     (https://arxiv.org/pdf/1802.09478).
           |   - "graphframes": Deprecated alias for "two_phase"
-          |   - "graphx": Converts the graph to a GraphX graph and then uses the connected components
-          |     implementation in GraphX.
-          | @see org.apache.spark.graphframes.lib.ConnectedComponents.supportedAlgorithms""".stripMargin)
+          |   - "graphx": Converts the graph to a GraphX graph and then uses the connected
+          |     components implementation in GraphX.
+          | @see org.apache.spark.graphframes.lib.ConnectedComponents.supportedAlgorithms
+          |""".stripMargin)
       .version("0.9.0")
       .stringConf
       .createOptional
@@ -64,11 +72,13 @@ object GraphFramesConf {
   private val CONNECTED_COMPONENTS_BROADCAST_THRESHOLD =
     SQLConf
       .buildConf("spark.graphframes.connectedComponents.broadcastthreshold")
-      .doc(""" Sets broadcast threshold in propagating component assignments (default: 1000000). If a node
-          | degree is greater than this threshold at some iteration, its component assignment will be
-          | collected and then broadcasted back to propagate the assignment to its neighbors. Otherwise,
-          | the assignment propagation is done by a normal Spark join. This parameter is only used when
-          | the algorithm is set to "graphframes".""".stripMargin)
+      .doc(""" Sets broadcast threshold in propagating component assignments
+          | (default: 1000000). If a node degree is greater than this threshold at some
+          | iteration, its component assignment will be collected and then broadcast back to
+          | propagate the assignment to its neighbors. Otherwise, the assignment propagation
+          | is done by a normal Spark join. This parameter is only used when the algorithm is
+          | set to "graphframes".
+          |""".stripMargin)
       .version("0.9.0")
       .intConf
       .createOptional
@@ -79,14 +89,15 @@ object GraphFramesConf {
       .doc(""" Sets checkpoint interval in terms of number of iterations (default: 2). Checkpointing
           | regularly helps recover from failures, clean shuffle files, shorten the lineage of the
           | computation graph, and reduce the complexity of plan optimization. As of Spark 2.0, the
-          | complexity of plan optimization would grow exponentially without checkpointing. Hence,
-          | disabling or setting longer-than-default checkpoint intervals are not recommended. Checkpoint
-          | data is saved under `org.apache.spark.SparkContext.getCheckpointDir` with prefix
-          | "connected-components". If the checkpoint directory is not set, this throws a
-          | `java.io.IOException`. Set a nonpositive value to disable checkpointing. This parameter is
-          | only used when the algorithm is set to "graphframes". Its default value might change in the
-          | future.
-          | @see `org.apache.spark.SparkContext.setCheckpointDir` in Spark API doc""".stripMargin)
+          | complexity of plan optimization would grow exponentially without checkpointing.
+          | Hence, disabling or setting longer-than-default checkpoint intervals are not
+          | recommended. Checkpoint data is saved under
+          | `org.apache.spark.SparkContext.getCheckpointDir` with prefix "connected-components".
+          | If the checkpoint directory is not set, this throws a `java.io.IOException`. Set a
+          | nonpositive value to disable checkpointing. This parameter is only used when the
+          | algorithm is set to "graphframes". Its default value might change in the future.
+          | @see `org.apache.spark.SparkContext.setCheckpointDir` in Spark API doc
+          |""".stripMargin)
       .version("0.9.0")
       .intConf
       .createOptional
@@ -94,7 +105,9 @@ object GraphFramesConf {
   private val CONNECTED_COMPONENTS_INTERMEDIATE_STORAGE_LEVEL =
     SQLConf
       .buildConf("spark.graphframes.connectedComponents.intermediatestoragelevel")
-      .doc("Sets storage level for intermediate datasets that require multiple passes (default: ``MEMORY_AND_DISK``).")
+      .doc(
+        "Sets storage level for intermediate datasets that require multiple passes " +
+          "(default: ``MEMORY_AND_DISK``).")
       .version("0.9.0")
       .stringConf
       .createOptional
@@ -109,7 +122,7 @@ object GraphFramesConf {
 
   def getConnectedComponentsAlgorithm: Option[String] = {
     get(CONNECTED_COMPONENTS_ALGORITHM) match {
-      case Some(threshold) => Some(threshold.toLowerCase)
+      case Some(threshold) => Some(threshold.toLowerCase(Locale.ROOT))
       case _ => None
     }
   }
@@ -130,7 +143,7 @@ object GraphFramesConf {
 
   def getConnectedComponentsStorageLevel: Option[StorageLevel] = {
     get(CONNECTED_COMPONENTS_INTERMEDIATE_STORAGE_LEVEL) match {
-      case Some(level) => Some(StorageLevel.fromString(level.toUpperCase))
+      case Some(level) => Some(StorageLevel.fromString(level.toUpperCase(Locale.ROOT)))
       case _ => None
     }
   }

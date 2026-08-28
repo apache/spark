@@ -17,16 +17,17 @@
 
 package org.apache.spark.graphframes
 
-import org.apache.commons.io.FileUtils
-import org.apache.spark.SparkContext
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.SQLImplicits
-import org.apache.spark.sql.SparkSession
+import java.io.File
+import java.nio.file.Files
+
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.Suite
 
-import java.io.File
-import java.nio.file.Files
+import org.apache.spark.SparkContext
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SQLImplicits
+import org.apache.spark.util.SparkFileUtils
 
 trait GraphFrameTestSparkContext extends BeforeAndAfterAll { self: Suite =>
   @transient var spark: SparkSession = _
@@ -79,7 +80,7 @@ trait GraphFrameTestSparkContext extends BeforeAndAfterAll { self: Suite =>
     sc = null
 
     checkpointDir.foreach { dir =>
-      FileUtils.deleteQuietly(new File(dir))
+      SparkFileUtils.deleteQuietly(new File(dir))
     }
     super.afterAll()
   }

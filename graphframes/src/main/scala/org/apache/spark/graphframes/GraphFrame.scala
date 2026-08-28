@@ -17,6 +17,13 @@
 
 package org.apache.spark.graphframes
 
+import java.util.Random
+
+import scala.reflect.runtime.universe.TypeTag
+
+import org.apache.spark.graphframes.embeddings.RandomWalkEmbeddings
+import org.apache.spark.graphframes.lib._
+import org.apache.spark.graphframes.pattern._
 import org.apache.spark.graphx.Edge
 import org.apache.spark.graphx.Graph
 import org.apache.spark.ml.clustering.PowerIterationClustering
@@ -33,12 +40,6 @@ import org.apache.spark.sql.functions.monotonically_increasing_id
 import org.apache.spark.sql.functions.struct
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.graphframes.embeddings.RandomWalkEmbeddings
-import org.apache.spark.graphframes.lib._
-import org.apache.spark.graphframes.pattern._
-
-import java.util.Random
-import scala.reflect.runtime.universe.TypeTag
 
 /**
  * A representation of a graph using `DataFrame`s.
@@ -148,12 +149,9 @@ class GraphFrame private (
    * Validates the consistency and integrity of a graph by performing checks on the vertices and
    * edges.
    *
-   * @return
-   *   Unit, as the method, performs validation checks and throws an exception if validation
-   *   fails.
-   * @throws InvalidGraphException
-   *   if there are any inconsistencies in the graph, such as duplicate vertices, mismatched
-   *   vertices between edges and vertex DataFrames or missing connections.
+   * This method returns `Unit`. It throws `InvalidGraphException` if there are any inconsistencies
+   * in the graph, such as duplicate vertices, mismatched vertices between edges and vertex
+   * DataFrames, or missing connections.
    *
    * @group utils
    */
@@ -171,12 +169,9 @@ class GraphFrame private (
    * @param intermediateStorageLevel
    *   the storage level to be used when persisting intermediate DataFrame computations during the
    *   validation process.
-   * @return
-   *   Unit, as the method, performs validation checks and throws an exception if validation
-   *   fails.
-   * @throws InvalidGraphException
-   *   if there are any inconsistencies in the graph, such as duplicate vertices, mismatched
-   *   vertices between edges and vertex DataFrames or missing connections.
+   * This method returns `Unit`. It throws `InvalidGraphException` if there are any inconsistencies
+   * in the graph, such as duplicate vertices, mismatched vertices between edges and vertex
+   * DataFrames, or missing connections.
    *
    * @group utils
    */
@@ -261,7 +256,7 @@ class GraphFrame private (
   /**
    * The dataframe representation of the vertices of the graph.
    *
-   * It contains a column called [[GraphFrame.ID]] with the id of the vertex, and various other
+   * It contains a column called `id` with the id of the vertex, and various other
    * user-defined attributes with other attributes.
    *
    * The order of the columns is available in [[vertexColumns]].
@@ -278,7 +273,7 @@ class GraphFrame private (
   /**
    * The dataframe representation of the edges of the graph.
    *
-   * It contains two columns called [[GraphFrame.SRC]] and [[GraphFrame.DST]] that contain the ids
+   * It contains two columns called `src` and `dst` that contain the ids
    * of the source vertex and the destination vertex of each edge, respectively. It may also
    * contain various other columns with user-defined attributes for each edge.
    *
@@ -299,9 +294,9 @@ class GraphFrame private (
 
   /**
    * Returns triplets: (source vertex)-[edge]->(destination vertex) for all edges in the graph.
-   * The DataFrame returned has 3 columns, with names: [[GraphFrame.SRC]], [[GraphFrame.EDGE]],
-   * and [[GraphFrame.DST]]. Each column is a struct. The 2 vertex columns have schema matching
-   * [[GraphFrame.vertices]], and the edge column has a schema matching [[GraphFrame.edges]]. For
+   * The DataFrame returned has 3 columns, with names: `src`, `edge`, and `dst`. Each column is a
+   * struct. The 2 vertex columns have schema matching the vertices DataFrame, and the edge column
+   * has a schema matching the edges DataFrame. For
    * example, `triplets.select(col(SRC)(ID))` selects ID of the source column.
    *
    * @group structure
@@ -409,7 +404,7 @@ class GraphFrame private (
 
   /**
    * The out-degree of each vertex in the graph, returned as a DataFrame with two columns:
-   *   - [[GraphFrame.ID]] the ID of the vertex
+   *   - `id` the ID of the vertex
    *   - "outDegree" (integer) storing the out-degree of the vertex Note that vertices with 0
    *     out-edges are not returned in the result.
    *
@@ -421,7 +416,7 @@ class GraphFrame private (
 
   /**
    * The in-degree of each vertex in the graph, returned as a DataFame with two columns:
-   *   - [[GraphFrame.ID]] the ID of the vertex "- "inDegree" (int) storing the in-degree of the
+   *   - `id` the ID of the vertex "- "inDegree" (int) storing the in-degree of the
    *     vertex Note that vertices with 0 in-edges are not returned in the result.
    *
    * @group degree
@@ -432,7 +427,7 @@ class GraphFrame private (
 
   /**
    * The degree of each vertex in the graph, returned as a DataFrame with two columns:
-   *   - [[GraphFrame.ID]] the ID of the vertex
+   *   - `id` the ID of the vertex
    *   - 'degree' (integer) the degree of the vertex Note that vertices with 0 edges are not
    *     returned in the result.
    *
@@ -447,7 +442,7 @@ class GraphFrame private (
 
   /**
    * The out-degree of each vertex per edge type, returned as a DataFrame with two columns:
-   *   - [[GraphFrame.ID]] the ID of the vertex
+   *   - `id` the ID of the vertex
    *   - "outDegrees" a struct with a field for each edge type, storing the out-degree count
    *
    * @param edgeTypeCol
@@ -476,7 +471,7 @@ class GraphFrame private (
 
   /**
    * The in-degree of each vertex per edge type, returned as a DataFrame with two columns:
-   *   - [[GraphFrame.ID]] the ID of the vertex
+   *   - `id` the ID of the vertex
    *   - "inDegrees" a struct with a field for each edge type, storing the in-degree count
    *
    * @param edgeTypeCol
@@ -506,7 +501,7 @@ class GraphFrame private (
   /**
    * The total degree of each vertex per edge type (both in and out), returned as a DataFrame with
    * two columns:
-   *   - [[GraphFrame.ID]] the ID of the vertex
+   *   - `id` the ID of the vertex
    *   - "degrees" a struct with a field for each edge type, storing the total degree count
    *
    * @param edgeTypeCol
@@ -562,9 +557,9 @@ class GraphFrame private (
    *     - The names are used as column names in the result `DataFrame`. If a motif contains named
    *       vertex `a`, then the result `DataFrame` will contain a column "a" which is a
    *       `StructType` with sub-fields equivalent to the schema (columns) of
-   *       [[GraphFrame.vertices]]. Similarly, an edge `e` in a motif will produce a column "e" in
+   *       the vertices DataFrame. Similarly, an edge `e` in a motif will produce a column "e" in
    *       the result `DataFrame` with sub-fields equivalent to the schema (columns) of
-   *       [[GraphFrame.edges]].
+   *       the edges DataFrame.
    *     - Be aware that names do *not* identify *distinct* elements: two elements with different
    *       names may refer to the same graph element. For example, in the motif `"(a)-[e]->(b);
    *       (b)-[e2]->(c)"`, the names `a` and `c` could refer to the same vertex. To restrict
@@ -606,7 +601,7 @@ class GraphFrame private (
    * {{{
    * spark.conf.set("spark.sql.cbo.joinReorder.dp.threshold", "20")
    * }}}
-   * CBO relies on table statistics, so run `ANALYZE TABLE <tableName> COMPUTE STATISTICS` on the
+   * CBO relies on table statistics, so run `ANALYZE TABLE table_name COMPUTE STATISTICS` on the
    * vertices and edges tables to ensure accurate statistics are available.
    *
    * @param pattern
@@ -754,8 +749,7 @@ class GraphFrame private (
    * graphs or large maxHops values. Consider using appropriate storage levels and checkpoint
    * intervals for stability.
    *
-   * @see
-   *   [[org.apache.spark.graphframes.lib.AggregateNeighbors]] for implementation details
+   * See `AggregateNeighbors` for implementation details.
    * @return
    *   an [[org.apache.spark.graphframes.lib.AggregateNeighbors]] instance for configuration
    * @group stdlib
@@ -871,11 +865,10 @@ class GraphFrame private (
   /**
    * Pregel algorithm.
    *
-   * @see
-   *   [[org.apache.spark.graphframes.lib.Pregel]]
+   * See `Pregel` for more details.
    * @group stdlib
    */
-  def pregel = new Pregel(this)
+  def pregel: Pregel = new Pregel(this)
 
   /**
    * Shortest paths algorithm.
@@ -977,12 +970,12 @@ class GraphFrame private (
   def kCore: KCore = new KCore(this)
 
   /**
-   * Find all cycles in the graph. An implementation of the Rocha–Thatte cycle detection
+   * Find all cycles in the graph. An implementation of the Rocha-Thatte cycle detection
    * algorithm.
    *
    * Rocha, Rodrigo Caetano, and Bhalchandra D. Thatte. "Distributed cycle detection in
-   * large-scale sparse graphs." Proceedings of Simpósio Brasileiro de Pesquisa Operacional
-   * (SBPO’15) (2015): 1-11.
+   * large-scale sparse graphs." Proceedings of Simposio Brasileiro de Pesquisa Operacional
+   * (SBPO '15) (2015): 1-11.
    *
    * Returns a DataFrame with unique cycles.
    *
@@ -1173,7 +1166,7 @@ object GraphFrame extends Serializable with Logging {
   }
 
   /**
-   * Column name for vertex IDs in [[GraphFrame.vertices]] Note that GraphFrame assigns a unique
+   * Column name for vertex IDs in the vertices DataFrame. Note that GraphFrame assigns a unique
    * long ID to each vertex, If the vertex ID type is one of byte / int / long / short type,
    * GraphFrame casts the original IDs to long as the unique long ID, otherwise GraphFrame
    * generates the unique long ID by Spark function ``monotonically_increasing_id`` which is less
@@ -1183,23 +1176,23 @@ object GraphFrame extends Serializable with Logging {
 
   /**
    * Column name for source vertices of edges.
-   *   - In [[GraphFrame.edges]], this is a column of vertex IDs.
-   *   - In [[GraphFrame.triplets]], this is a column of vertices with schema matching
-   *     [[GraphFrame.vertices]].
+   *   - In the edges DataFrame, this is a column of vertex IDs.
+   *   - In the triplets DataFrame, this is a column of vertices with schema matching the vertices
+   *     DataFrame.
    */
   val SRC: String = "src"
 
   /**
    * Column name for destination vertices of edges.
-   *   - In [[GraphFrame.edges]], this is a column of vertex IDs.
-   *   - In [[GraphFrame.triplets]], this is a column of vertices with schema matching
-   *     [[GraphFrame.vertices]].
+   *   - In the edges DataFrame, this is a column of vertex IDs.
+   *   - In the triplets DataFrame, this is a column of vertices with schema matching the vertices
+   *     DataFrame.
    */
   val DST: String = "dst"
 
   /**
-   * Column name for edge in [[GraphFrame.triplets]]. In [[GraphFrame.triplets]], this is a column
-   * of edges with schema matching [[GraphFrame.edges]].
+   * Column name for edge in the triplets DataFrame. In the triplets DataFrame, this is a column of
+   * edges with schema matching the edges DataFrame.
    */
   val EDGE: String = "edge"
 
@@ -1244,10 +1237,10 @@ object GraphFrame extends Serializable with Logging {
   }
 
   /**
-   * Create a new [[GraphFrame]] from an edge `DataFrame`. The resulting [[GraphFrame]] will have
-   * [[GraphFrame.vertices]] with a single "id" column.
+   * Create a new [[GraphFrame]] from an edge `DataFrame`. The resulting [[GraphFrame]] will have a
+   * vertices DataFrame with a single "id" column.
    *
-   * Note: The [[GraphFrame.vertices]] DataFrame will be persisted at level
+   * Note: The vertices DataFrame will be persisted at level
    * `StorageLevel.MEMORY_AND_DISK`.
    * @param e
    *   Edge DataFrame. This must include columns "src" and "dst" containing source and destination
@@ -1262,10 +1255,10 @@ object GraphFrame extends Serializable with Logging {
   }
 
   /**
-   * Create a new [[GraphFrame]] from an edge `DataFrame`. The resulting [[GraphFrame]] will have
-   * [[GraphFrame.vertices]] with a single "id" column.
+   * Create a new [[GraphFrame]] from an edge `DataFrame`. The resulting [[GraphFrame]] will have a
+   * vertices DataFrame with a single "id" column.
    *
-   * Note: The [[GraphFrame.vertices]] DataFrame will be persisted at level
+   * Note: The vertices DataFrame will be persisted at level
    * `StorageLevel.MEMORY_AND_DISK`.
    * @param e
    *   Edge DataFrame. This must include columns "src" and "dst" containing source and destination
@@ -1279,7 +1272,8 @@ object GraphFrame extends Serializable with Logging {
    */
   def fromEdges(e: DataFrame, storageLevel: StorageLevel): GraphFrame = {
     logWarn(
-      s"this method persists graph vertices with storage level ${storageLevel.toString()}, users should manually unpersist it when the graph is not needed!")
+      s"this method persists graph vertices with storage level ${storageLevel.toString()}, " +
+        "users should manually unpersist it when the graph is not needed!")
     val srcs = e.select(e("src").as("id"))
     val dsts = e.select(e("dst").as("id"))
     val v = srcs.unionAll(dsts).distinct().persist(storageLevel)
@@ -1307,7 +1301,7 @@ object GraphFrame extends Serializable with Logging {
   /**
    * Given:
    *   - a GraphFrame `originalGraph`
-   *   - a GraphX graph derived from the GraphFrame using [[GraphFrame.toGraphX]] this method
+   *   - a GraphX graph derived from the GraphFrame using `toGraphX`; this method
    *     merges attributes from the GraphX graph into the original GraphFrame.
    *
    * This method is useful for doing computations using the GraphX API and then merging the
@@ -1317,7 +1311,7 @@ object GraphFrame extends Serializable with Logging {
    *     "category" and an Int edge attribute we want to call "count" We can call
    *     `fromGraphX(originalGraph, graph, Seq("category"), Seq("count"))` to produce a new
    *     GraphFrame. The new GraphFrame will be an augmented version of `originalGraph`, with new
-   *     [[GraphFrame.vertices]] column "category" and new [[GraphFrame.edges]] column "count"
+   *     vertices column "category" and new edges column "count"
    *     added.
    *
    * See [[org.apache.spark.graphframes.examples.BeliefPropagation]] for example usage.

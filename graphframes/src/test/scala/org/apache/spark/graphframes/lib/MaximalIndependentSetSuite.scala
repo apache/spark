@@ -17,10 +17,10 @@
 
 package org.apache.spark.graphframes.lib
 
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions.col
 import org.apache.spark.graphframes._
 import org.apache.spark.graphframes.examples.Graphs
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions.col
 
 class MaximalIndependentSetSuite extends SparkFunSuite with GraphFrameTestSparkContext {
   test("isolated vertices should be included in MIS") {

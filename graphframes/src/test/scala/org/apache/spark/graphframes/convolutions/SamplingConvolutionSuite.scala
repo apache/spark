@@ -17,15 +17,16 @@
 
 package org.apache.spark.graphframes.convolutions
 
+import org.scalatest.BeforeAndAfterAll
+
+import org.apache.spark.graphframes.GraphFrame
+import org.apache.spark.graphframes.GraphFrameTestSparkContext
+import org.apache.spark.graphframes.SparkFunSuite
 import org.apache.spark.ml.linalg.DenseVector
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.GraphFrameTestSparkContext
-import org.apache.spark.graphframes.SparkFunSuite
-import org.scalatest.BeforeAndAfterAll
 
 class SamplingConvolutionSuite
     extends SparkFunSuite

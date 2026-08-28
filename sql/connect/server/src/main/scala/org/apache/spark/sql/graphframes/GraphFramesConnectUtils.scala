@@ -19,19 +19,20 @@
 // Same about a Column helper object.
 package org.apache.spark.sql.graphframes
 
+import scala.jdk.CollectionConverters._
+
 import com.google.protobuf.ByteString
+
+import org.apache.spark.connect.proto.{graphframes => proto}
+import org.apache.spark.graphframes.GraphFrame
+import org.apache.spark.graphframes.GraphFramesUnreachableException
+import org.apache.spark.graphframes.embeddings.RandomWalkEmbeddings
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.GraphFramesUnreachableException
-import org.apache.spark.connect.proto.{graphframes => proto}
-import org.apache.spark.graphframes.embeddings.RandomWalkEmbeddings
-
-import scala.jdk.CollectionConverters._
 
 /**
  * Utility object providing helper methods for parsing and transforming data structures related to
@@ -173,7 +174,7 @@ object GraphFramesConnectUtils {
     val graphFrame = extractGraphFrame(apiMessage, planner)
 
     apiMessage.getMethodCase match {
-      case proto.GraphFramesAPI.MethodCase.AGGREGATE_MESSAGES => {
+      case proto.GraphFramesAPI.MethodCase.AGGREGATE_MESSAGES =>
         val aggregateMessagesProto = apiMessage.getAggregateMessages
         var aggregateMessages = graphFrame.aggregateMessages
         if (aggregateMessagesProto.getSendToDstList.size() == 1) {
@@ -209,8 +210,8 @@ object GraphFramesConnectUtils {
         } else {
           aggregateMessages.agg(aggCols.head, aggCols.tail.toSeq: _*)
         }
-      }
-      case proto.GraphFramesAPI.MethodCase.BFS => {
+
+      case proto.GraphFramesAPI.MethodCase.BFS =>
         val bfsProto = apiMessage.getBfs
         graphFrame.bfs
           .toExpr(parseColumnOrExpression(bfsProto.getToExpr, planner))
@@ -218,8 +219,8 @@ object GraphFramesConnectUtils {
           .edgeFilter(parseColumnOrExpression(bfsProto.getEdgeFilter, planner))
           .maxPathLength(bfsProto.getMaxPathLength)
           .run()
-      }
-      case proto.GraphFramesAPI.MethodCase.ALL_PATHS => {
+
+      case proto.GraphFramesAPI.MethodCase.ALL_PATHS =>
         val allPathsProto = apiMessage.getAllPaths
         var allPaths = graphFrame.allPaths
           .toExpr(parseColumnOrExpression(allPathsProto.getToExpr, planner))
@@ -234,8 +235,8 @@ object GraphFramesConnectUtils {
             allPaths.setIntermediateStorageLevel(parseStorageLevel(allPathsProto.getStorageLevel))
         }
         allPaths.run()
-      }
-      case proto.GraphFramesAPI.MethodCase.CONNECTED_COMPONENTS => {
+
+      case proto.GraphFramesAPI.MethodCase.CONNECTED_COMPONENTS =>
         val cc = apiMessage.getConnectedComponents
         val ccBuilder = graphFrame.connectedComponents
           .maxIter(cc.getMaxIter)
@@ -250,9 +251,8 @@ object GraphFramesConnectUtils {
         } else {
           ccBuilder.run()
         }
-      }
 
-      case proto.GraphFramesAPI.MethodCase.DETECTING_CYCLES => {
+      case proto.GraphFramesAPI.MethodCase.DETECTING_CYCLES =>
         val dc = apiMessage.getDetectingCycles
         val dcBuilder = graphFrame.detectingCycles
           .setCheckpointInterval(dc.getCheckpointInterval)
@@ -262,24 +262,23 @@ object GraphFramesConnectUtils {
         } else {
           dcBuilder.run()
         }
-      }
 
-      case proto.GraphFramesAPI.MethodCase.DROP_ISOLATED_VERTICES => {
+      case proto.GraphFramesAPI.MethodCase.DROP_ISOLATED_VERTICES =>
         graphFrame.dropIsolatedVertices().vertices
-      }
-      case proto.GraphFramesAPI.MethodCase.FILTER_EDGES => {
+
+      case proto.GraphFramesAPI.MethodCase.FILTER_EDGES =>
         val condition = parseColumnOrExpression(apiMessage.getFilterEdges.getCondition, planner)
         graphFrame.filterEdges(condition).edges
-      }
-      case proto.GraphFramesAPI.MethodCase.FILTER_VERTICES => {
+
+      case proto.GraphFramesAPI.MethodCase.FILTER_VERTICES =>
         val condition =
           parseColumnOrExpression(apiMessage.getFilterVertices.getCondition, planner)
         graphFrame.filterVertices(condition).vertices
-      }
-      case proto.GraphFramesAPI.MethodCase.FIND => {
+
+      case proto.GraphFramesAPI.MethodCase.FIND =>
         graphFrame.find(apiMessage.getFind.getPattern)
-      }
-      case proto.GraphFramesAPI.MethodCase.LABEL_PROPAGATION => {
+
+      case proto.GraphFramesAPI.MethodCase.LABEL_PROPAGATION =>
         val lp = apiMessage.getLabelPropagation
         val lpBuilder = graphFrame.labelPropagation
           .maxIter(lp.getMaxIter)
@@ -292,8 +291,8 @@ object GraphFramesConnectUtils {
         } else {
           lpBuilder.run()
         }
-      }
-      case proto.GraphFramesAPI.MethodCase.NEIGHBORHOOD_AWARE_CDLP => {
+
+      case proto.GraphFramesAPI.MethodCase.NEIGHBORHOOD_AWARE_CDLP =>
         val nc = apiMessage.getNeighborhoodAwareCdlp
         val ncBuilder = graphFrame.structureAwareLabelPropagation
           .maxIter(nc.getMaxIter)
@@ -313,8 +312,8 @@ object GraphFramesConnectUtils {
         } else {
           ncBuilder.run()
         }
-      }
-      case proto.GraphFramesAPI.MethodCase.PAGE_RANK => {
+
+      case proto.GraphFramesAPI.MethodCase.PAGE_RANK =>
         val pageRankProto = apiMessage.getPageRank
         val pageRank = graphFrame.pageRank.resetProbability(pageRankProto.getResetProbability)
 
@@ -332,8 +331,8 @@ object GraphFramesConnectUtils {
         // TODO: do we really need an edge weights in that case?
         // see comments in the Python API
         pageRank.run().vertices
-      }
-      case proto.GraphFramesAPI.MethodCase.PARALLEL_PERSONALIZED_PAGE_RANK => {
+
+      case proto.GraphFramesAPI.MethodCase.PARALLEL_PERSONALIZED_PAGE_RANK =>
         val pPageRankProto = apiMessage.getParallelPersonalizedPageRank
         val sourceIds = pPageRankProto.getSourceIdsList.asScala
           .map(parseLongOrStringID)
@@ -345,16 +344,16 @@ object GraphFramesConnectUtils {
           .sourceIds(sourceIds)
           .run()
           .vertices // See comment in the PageRank
-      }
-      case proto.GraphFramesAPI.MethodCase.POWER_ITERATION_CLUSTERING => {
+
+      case proto.GraphFramesAPI.MethodCase.POWER_ITERATION_CLUSTERING =>
         val pic = apiMessage.getPowerIterationClustering
         if (pic.hasWeightCol) {
           graphFrame.powerIterationClustering(pic.getK, pic.getMaxIter, Some(pic.getWeightCol))
         } else {
           graphFrame.powerIterationClustering(pic.getK, pic.getMaxIter, None)
         }
-      }
-      case proto.GraphFramesAPI.MethodCase.PREGEL => {
+
+      case proto.GraphFramesAPI.MethodCase.PREGEL =>
         val pregelProto = apiMessage.getPregel
         var pregel = graphFrame.pregel
           .aggMsgs(parseColumnOrExpression(pregelProto.getAggMsgs, planner))
@@ -421,8 +420,8 @@ object GraphFramesConnectUtils {
         }
 
         pregel.run()
-      }
-      case proto.GraphFramesAPI.MethodCase.SHORTEST_PATHS => {
+
+      case proto.GraphFramesAPI.MethodCase.SHORTEST_PATHS =>
         val isDirected = if (apiMessage.getShortestPaths.hasIsDirected) {
           apiMessage.getShortestPaths.getIsDirected
         } else {
@@ -445,13 +444,13 @@ object GraphFramesConnectUtils {
         } else {
           spBuilder.run()
         }
-      }
-      case proto.GraphFramesAPI.MethodCase.STRONGLY_CONNECTED_COMPONENTS => {
+
+      case proto.GraphFramesAPI.MethodCase.STRONGLY_CONNECTED_COMPONENTS =>
         graphFrame.stronglyConnectedComponents
           .maxIter(apiMessage.getStronglyConnectedComponents.getMaxIter)
           .run()
-      }
-      case proto.GraphFramesAPI.MethodCase.SVD_PLUS_PLUS => {
+
+      case proto.GraphFramesAPI.MethodCase.SVD_PLUS_PLUS =>
         val svdPPProto = apiMessage.getSvdPlusPlus
         val svd = graphFrame.svdPlusPlus
           .maxIter(svdPPProto.getMaxIter)
@@ -464,8 +463,8 @@ object GraphFramesConnectUtils {
           .maxValue(svdPPProto.getMaxValue)
         val svdResult = svd.run()
         svdResult.withColumn("loss", lit(svd.loss))
-      }
-      case proto.GraphFramesAPI.MethodCase.TRIANGLE_COUNT => {
+
+      case proto.GraphFramesAPI.MethodCase.TRIANGLE_COUNT =>
         val message = apiMessage.getTriangleCount()
         var trCounter =
           graphFrame.triangleCount
@@ -485,11 +484,11 @@ object GraphFramesConnectUtils {
         } else {
           trCounter.run()
         }
-      }
-      case proto.GraphFramesAPI.MethodCase.TRIPLETS => {
+
+      case proto.GraphFramesAPI.MethodCase.TRIPLETS =>
         graphFrame.triplets
-      }
-      case proto.GraphFramesAPI.MethodCase.MIS => {
+
+      case proto.GraphFramesAPI.MethodCase.MIS =>
         val mis = graphFrame.maximalIndependentSet
           .setCheckpointInterval(apiMessage.getMis.getCheckpointInterval)
           .setUseLocalCheckpoints(apiMessage.getMis.getUseLocalCheckpoints)
@@ -501,8 +500,8 @@ object GraphFramesConnectUtils {
         } else {
           mis.run(apiMessage.getMis.getSeed)
         }
-      }
-      case proto.GraphFramesAPI.MethodCase.KCORE => {
+
+      case proto.GraphFramesAPI.MethodCase.KCORE =>
         var kCoreBuilder =
           graphFrame.kCore
             .setCheckpointInterval(apiMessage.getKcore.getCheckpointInterval)
@@ -514,8 +513,8 @@ object GraphFramesConnectUtils {
         }
 
         kCoreBuilder.run()
-      }
-      case proto.GraphFramesAPI.MethodCase.AGGREGATE_NEIGHBORS => {
+
+      case proto.GraphFramesAPI.MethodCase.AGGREGATE_NEIGHBORS =>
         val anProto = apiMessage.getAggregateNeighbors
         var anBuilder = graphFrame.aggregateNeighbors
           .setStartingVertices(parseColumnOrExpression(anProto.getStartingVertices, planner))
@@ -574,9 +573,8 @@ object GraphFramesConnectUtils {
         }
 
         anBuilder.run()
-      }
 
-      case proto.GraphFramesAPI.MethodCase.RW_EMBEDDINGS => {
+      case proto.GraphFramesAPI.MethodCase.RW_EMBEDDINGS =>
         val message = apiMessage.getRwEmbeddings()
 
         RandomWalkEmbeddings.pythonAPI(
@@ -613,8 +611,8 @@ object GraphFramesConnectUtils {
           aggregateNeighborsMaxNbrs = message.getAggregateNeighborsMaxNbrs(),
           aggregateNeighborsSeed = message.getAggregateNeighborsSeed(),
           cleanUpAfterRun = message.getCleanUpAfterRun())
-      }
-      case proto.GraphFramesAPI.MethodCase.HYPER_ANF => {
+
+      case proto.GraphFramesAPI.MethodCase.HYPER_ANF =>
         val haProto = apiMessage.getHyperAnf
         val haBuilder = graphFrame.hyperANF
           .setNHops(haProto.getNHops)
@@ -632,7 +630,6 @@ object GraphFramesConnectUtils {
         } else {
           haBuilder.run()
         }
-      }
       case _ => throw new GraphFramesUnreachableException() // Unreachable
     }
   }

@@ -17,6 +17,19 @@
 
 package org.apache.spark.graphframes.lib
 
+import java.util
+
+import scala.jdk.CollectionConverters._
+
+import org.apache.spark.graphframes.GraphFrame
+import org.apache.spark.graphframes.GraphFrame.quote
+import org.apache.spark.graphframes.GraphFramesUnreachableException
+import org.apache.spark.graphframes.Logging
+import org.apache.spark.graphframes.WithAlgorithmChoice
+import org.apache.spark.graphframes.WithCheckpointInterval
+import org.apache.spark.graphframes.WithDirection
+import org.apache.spark.graphframes.WithIntermediateStorageLevel
+import org.apache.spark.graphframes.WithLocalCheckpoints
 import org.apache.spark.graphx
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
@@ -33,18 +46,6 @@ import org.apache.spark.sql.functions.when
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.types.MapType
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.graphframes.GraphFrame
-import org.apache.spark.graphframes.GraphFrame.quote
-import org.apache.spark.graphframes.GraphFramesUnreachableException
-import org.apache.spark.graphframes.Logging
-import org.apache.spark.graphframes.WithAlgorithmChoice
-import org.apache.spark.graphframes.WithCheckpointInterval
-import org.apache.spark.graphframes.WithDirection
-import org.apache.spark.graphframes.WithIntermediateStorageLevel
-import org.apache.spark.graphframes.WithLocalCheckpoints
-
-import java.util
-import scala.jdk.CollectionConverters._
 
 /**
  * Computes shortest paths from every vertex to the given set of landmark vertices. Note that this

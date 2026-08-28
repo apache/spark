@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.IntegerType
  * @param right
  *   core of the vertex
  */
-case class KCoreMerge(left: Expression, right: Expression)
+private[spark] case class KCoreMerge(left: Expression, right: Expression)
     extends BinaryExpression
     with CodegenFallback {
   override protected def withNewChildrenInternal(
@@ -47,7 +47,7 @@ case class KCoreMerge(left: Expression, right: Expression)
 
   /**
    * Each node initializes its core value with the degree of itself. Each node (say u) then sends
-   * messages to its neighbors v ∈ N (u) with the current estimate of its (u’s) core value. For an
+   * messages to its neighbors v in N(u) with the current estimate of its (u's) core value. For an
    * undirected graph with m edges, there can be at most a total of 2m messages that have been
    * sent during a message passing session. Upon receiving all the messages from its neighbors,
    * the vertex u computes the largest value l such that the number of neighbors of u whose
