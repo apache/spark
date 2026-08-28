@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.execution.planmerging
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SubqueryExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileScan, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -31,10 +32,15 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Scan merging for the built-in file sources on their DSv2 read path (SPARK-57205).
  *
  * Parquet, ORC, text and Avro override [[FileTable.supportsScanMerging]], so [[PlanMerger]] may
- * fuse two of their scans of the same table that differ only in their projected columns and/or
- * pushed filters. For a file source the strictly enforced filters are the partition filters and the
- * best-effort ones are the data filters. CSV and JSON do not override it, because their parsers are
- * handed the columns the scan asked for and decide from that set what counts as a malformed record.
+ * fuse two of their scans of the same table. Scans that differ only in their projected columns
+ * merge under the default configuration; scans whose data filters differ need one of the symmetric
+ * filter propagation configurations, and scans whose partition filters differ never merge, because
+ * for a file source the partition filters are the strictly enforced ones and the data filters are
+ * best-effort. The capability is also withheld from a table whose reads are not strict.
+ *
+ * CSV and JSON do not override it. Their parsers are handed the columns the scan asked for, at
+ * least while `spark.sql.csv.parser.columnPruning.enabled` is on for CSV, and decide from that set
+ * what counts as a malformed record.
  *
  * SQL-on-file and catalog tables resolve to the V1 `FileFormat` regardless of
  * `spark.sql.sources.useV1SourceList`, so every test goes through `DataFrameReader` and asserts
@@ -43,6 +49,15 @@ import org.apache.spark.sql.test.SharedSparkSession
 class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
   with AdaptiveSparkPlanHelper with V2ScanMergingTestHelper {
   import testImplicits._
+
+  // Pin what the merge decision now depends on, and what the subquery-count measure depends on, so
+  // a changed default fails in one legible place rather than inverting every assertion below. Tests
+  // that vary one of these set it themselves.
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set(SQLConf.IGNORE_CORRUPT_FILES, false)
+    .set(SQLConf.IGNORE_MISSING_FILES, false)
+    .set(SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED, true)
+    .set(SQLConf.SUBQUERY_REUSE_ENABLED, true)
 
   // The formats in sql/core that declare SCAN_MERGING and have more than one column. Avro also
   // declares it but lives in connector/avro; text declares it but has only `value`.
@@ -54,8 +69,8 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
 
   private val flatSchema = "a long, b long, c long, d long"
 
-  private def writeFlat(format: String, path: String): Unit =
-    spark.range(0, 20)
+  private def writeFlat(format: String, path: String, start: Long = 0): Unit =
+    spark.range(start, start + 20)
       .selectExpr("id AS a", "id * 2 AS b", "id % 3 AS c", "id * 3 AS d")
       .write.format(format).save(path)
 
@@ -65,9 +80,12 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
       .write.partitionBy("p").format("parquet").save(path)
 
   /**
-   * Registers `path` as a temp view read through the V2 path, or the V1 path if `useV1`. Not named
-   * `withView`: that name is taken by a varargs helper in `QueryCleanupHelper`, which a call with
-   * only positional String arguments would silently bind to instead.
+   * Registers `path` as a temp view read through the V2 path, or the V1 path if `useV1`. The view
+   * is created inside the `USE_V1_SOURCE_LIST` scope on purpose: a temp view stores its analyzed
+   * plan, so which read path it takes is fixed when the view is created, not when it is queried.
+   *
+   * Not named `withView`: that name is taken by a varargs helper in `QueryCleanupHelper`, which a
+   * call with only positional String arguments would silently bind to instead.
    */
   private def withFileView[T](
       format: String,
@@ -112,8 +130,9 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
   }
 
   /**
-   * Runs `query` over the parquet data at `path` on the V1 or V2 read path with both symmetric
-   * filter propagation configurations on, checks the rows and returns the subquery counts.
+   * Runs `query` over the parquet data at `path` on the V1 or V2 read path, with AQE as given and
+   * both symmetric filter propagation configurations on, checks the rows and returns the subquery
+   * counts.
    */
   private def mergedCounts(
       path: String,
@@ -158,6 +177,47 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
       }
   }
 
+  test("SPARK-57205: withhold SCAN_MERGING from a table whose reads are not strict") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      // b is written as a string and read as a long, so the reader fails only once it reads b.
+      spark.range(0, 10).selectExpr("id AS a", "cast(id AS string) AS b").write.parquet(path)
+      // The table is built outside the strictness scope on purpose: the gate is evaluated per call,
+      // so it has to answer for the read that is running rather than for the read that built it.
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+        val relations = spark.read.schema("a long, b long").parquet(path)
+          .queryExecution.analyzed.collect { case r: DataSourceV2Relation => r }
+        assert(relations.size == 1, s"expected a single DSv2 relation, got $relations")
+        val table = relations.head.table
+        assert(table.capabilities().contains(TableCapability.SCAN_MERGING),
+          "a strict read should declare SCAN_MERGING")
+        // Both halves of the strictness predicate, on the table that was built while both were off.
+        Seq(SQLConf.IGNORE_CORRUPT_FILES.key, SQLConf.IGNORE_MISSING_FILES.key).foreach { conf =>
+          withClue(s"$conf=true: ") {
+            withSQLConf(conf -> "true") {
+              assert(!table.capabilities().contains(TableCapability.SCAN_MERGING),
+                s"$conf should withhold SCAN_MERGING")
+            }
+          }
+        }
+      }
+      // The scans stay separate, so the a-only scan never reads b and sum(a) is still exact. If
+      // they merged, reading b would fail, ignoreCorruptFiles would swallow it and drop the rest of
+      // the file, and sum(a) would come back null over rows nothing above the scan removed. The
+      // view is registered before the conf is set, so a cached gate would answer from the strict
+      // read.
+      withFileView("parquet", path, schema = Some("a long, b long")) {
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+          val df = sql("SELECT (SELECT sum(a) FROM t), (SELECT count(b) FROM t)")
+          checkAnswer(df, Row(45, 0))
+          assertUsesFileSourceV2(df)
+          assert(distinctScans(df) == 2,
+            s"the two scans should stay separate:\n${df.queryExecution.optimizedPlan}")
+        }
+      }
+    }
+  }
+
   test("SPARK-57205: merge two file scans that differ only in their projected columns") {
     mergingFormats.foreach { format =>
       withClue(s"format=$format: ") {
@@ -184,6 +244,27 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
               s"the merged scan should read the union of both columns; got $mergedOutput")
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-57205: merge two text scans that differ only in their projected columns") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      Seq("a", "bb", "ccc").toDS().write.text(path)
+      withFileView("text", path) {
+        // A text table has the single column `value`, so the only projection difference reachable
+        // is an empty read set against `[value]`. Both aggregates have to be hash-aggregatable or
+        // PlanMerger's supportedAggregateMerge declines above the scans, before the capability is
+        // reached: max(value) over a string is neither hash nor object-hash, sum(length(value)) is.
+        val df = sql("SELECT (SELECT count(*) FROM t), (SELECT sum(length(value)) FROM t)")
+        checkAnswer(df, Row(3, 6))
+        assertUsesFileSourceV2(df)
+        assert(distinctScans(df) == 1,
+          s"the two scans should be fused into one:\n${df.queryExecution.optimizedPlan}")
+        val mergedOutput = v2Scans(df).head.output
+        assert(mergedOutput.map(_.name) == Seq("value"),
+          s"the merged scan should read value; got $mergedOutput")
       }
     }
   }
@@ -237,12 +318,17 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
           s"the two scans should be fused into one:\n${df.queryExecution.optimizedPlan}")
         val scan = v2Scans(df).head
         // A partition filter is fully enforced by the scan and nothing above it re-checks, so p is
-        // not read; the rebuilt scan has to push the filter again or it would read all partitions.
+        // not read.
         assert(scan.output.map(_.name).toSet == Set("a", "b"),
           s"the merged scan should read the union of both columns; got ${scan.output}")
-        assert(scan.pushedFilters.exists(_.references.exists(_.name == "p")),
-          s"the partition filter should be re-pushed strict onto the merged scan; " +
-            s"got pushedFilters=${scan.pushedFilters.mkString("[", ", ", "]")}")
+        // The rebuilt scan has to carry the filter or it would read all four partitions. Read it
+        // off the FileScan rather than off `pushedFilters`, which each unmerged scan records too.
+        val partitionFilters = scan.scan match {
+          case f: FileScan => f.partitionFilters
+          case other => fail(s"expected a FileScan, got ${other.getClass.getSimpleName}")
+        }
+        assert(partitionFilters.exists(_.references.exists(_.name == "p")),
+          s"the merged scan should still enforce the partition filter; got $partitionFilters")
       }
     }
   }
@@ -276,11 +362,15 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       writeFlat("parquet", path)
-      Seq(true, false).foreach { dsv2Symmetric =>
-        withClue(s"dsv2SymmetricFilterPropagation=$dsv2Symmetric: ") {
-          withFileView("parquet", path) {
-            withSQLConf(SQLConf.MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key ->
-                dsv2Symmetric.toString) {
+      withFileView("parquet", path) {
+        Seq(true, false).foreach { dsv2Symmetric =>
+          withClue(s"dsv2SymmetricFilterPropagation=$dsv2Symmetric: ") {
+            // The generic symmetric propagation would enable this merge on its own, so pin it off:
+            // the point of the test is that the dsv2 configuration alone decides.
+            withSQLConf(
+                SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "false",
+                SQLConf.MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key ->
+                  dsv2Symmetric.toString) {
               val df = sql(
                 """
                   |SELECT
@@ -296,6 +386,18 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
               // merge. The enclosing Filter keeps each aggregate exact either way.
               assert(distinctScans(df) == (if (dsv2Symmetric) 1 else 2),
                 s"unexpected scan count:\n${df.queryExecution.optimizedPlan}")
+              if (dsv2Symmetric) {
+                // The widened predicate has to reach the rebuilt scan, or the merge would keep the
+                // answer right through the enclosing Filter while losing the row-group pruning that
+                // is the whole point. checkAnswer and the scan count both stay green in that case.
+                val dataFilters = v2Scans(df).head.scan match {
+                  case f: FileScan => f.dataFilters
+                  case other => fail(s"expected a FileScan, got ${other.getClass.getSimpleName}")
+                }
+                val referenced = dataFilters.flatMap(_.references.map(_.name)).toSet
+                assert(referenced == Set("a", "b"),
+                  s"the merged scan should carry the widened predicate; got $dataFilters")
+              }
             }
           }
         }
@@ -337,9 +439,9 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
       val path = dir.getCanonicalPath
       spark.range(0, 20).selectExpr("id AS a", "named_struct('x', id, 'y', id * 2) AS s")
         .write.format("parquet").save(path)
-      Seq(true, false).foreach { nestedPruning =>
-        withClue(s"nestedSchemaPruning=$nestedPruning: ") {
-          withFileView("parquet", path) {
+      withFileView("parquet", path) {
+        Seq(true, false).foreach { nestedPruning =>
+          withClue(s"nestedSchemaPruning=$nestedPruning: ") {
             withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> nestedPruning.toString) {
               val df = sql(
                 """
@@ -385,6 +487,14 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
 
           checkAnswer(df, Row(19, 38))
           assertUsesFileSourceV2(df)
+          // Observe the aggregate itself, not just `!mergeableScan`, which several other pushdowns
+          // also clear: a decline for one of those reasons must not pass as this one.
+          assert(v2Scans(df).forall(_.scan match {
+              case p: ParquetScan => p.pushedAggregate.isDefined
+              case _ => false
+            }),
+            s"the aggregate should have been pushed into both scans:\n" +
+              df.queryExecution.optimizedPlan)
           // A pushed aggregate is built on a branch of V2ScanRelationPushDown that never marks the
           // scan mergeable, so the merge is declined before the capability is consulted.
           assert(distinctScans(df) == 2,
@@ -399,7 +509,9 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
     withTempPath { dir1 =>
       withTempPath { dir2 =>
         writeFlat("parquet", dir1.getCanonicalPath)
-        writeFlat("parquet", dir2.getCanonicalPath)
+        // Different rows in the second table, so a merge across the two would change the answer and
+        // not just the plan shape.
+        writeFlat("parquet", dir2.getCanonicalPath, start = 100)
         withFileView("parquet", dir1.getCanonicalPath, viewName = "t1") {
           withFileView("parquet", dir2.getCanonicalPath, viewName = "t2") {
             val df = sql(
@@ -409,7 +521,8 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
                 |  (SELECT sum(b) FROM t2 WHERE c = 1)
                 |""".stripMargin)
 
-            checkAnswer(df, Row(70, 140))
+            // c = 1 selects ids 1, 4, ..., 19 in t1 and 100, 103, ..., 118 in t2.
+            checkAnswer(df, Row(70, 1526))
             assertUsesFileSourceV2(df)
             assert(distinctScans(df) == 2,
               s"scans of different tables must remain separate:\n" +
@@ -476,8 +589,10 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
           // propagation can widen it; on the V2 path V2ScanRelationPushDown has already pushed it
           // into the scan as a strict filter by the time MergeSubplans runs, and strict filters
           // have to be equal to merge. Both paths return the same rows.
-          assert(mergedCounts(path, query, Row(45, 100), useV1 = true, enableAQE) == ((1, 1)))
-          assert(mergedCounts(path, query, Row(45, 100), useV1 = false, enableAQE) == ((2, 0)))
+          assert(mergedCounts(path, query, Row(45, 100), useV1 = true, enableAQE) == ((1, 1)),
+            "V1 should merge the two partition filters into one subquery")
+          assert(mergedCounts(path, query, Row(45, 100), useV1 = false, enableAQE) == ((2, 0)),
+            "V2 should leave the two differing partition filters unmerged")
         }
       }
     }
@@ -526,9 +641,12 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
         mode: String,
         query: String,
         useV1: Boolean): Seq[Row] =
-      // Pin CSV column pruning rather than rely on its default: with it off the parser is handed
-      // the full data schema and every expectation below changes.
-      withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "true") {
+      // Pin what the expectations below depend on rather than rely on the defaults: with CSV column
+      // pruning off the parser is handed the full data schema, and with JSON partial results off
+      // the malformed record yields an all-null row, which the WHERE then drops.
+      withSQLConf(
+          SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "true",
+          SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
         withFileView(format, path, useV1 = useV1, schema = Some(schema),
           options = Map("mode" -> mode, "columnNameOfCorruptRecord" -> "_corrupt_record")) {
           val df = sql(query)
@@ -571,8 +689,15 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
     withData(shortRowCsv) { path =>
       assert(rows("csv", path, "a long, b long", "FAILFAST", sumQuery,
         useV1 = false) == Seq(Row(10, 80)))
-      intercept[SparkException](
+      // Pin why V1 threw, not just that it did: a bare intercept would keep passing if this read
+      // started failing for an unrelated reason, and the subquery-count assertion inside `rows`
+      // sits after collect(), so it never runs on the throwing path.
+      val thrown = intercept[SparkException](
         rows("csv", path, "a long, b long", "FAILFAST", sumQuery, useV1 = true))
+      val chain =
+        Iterator.iterate[Throwable](thrown)(_.getCause).takeWhile(_ != null).toList
+      assert(chain.exists(t => Option(t.getMessage).exists(_.contains("MALFORMED_RECORD"))),
+        s"expected a malformed-record parse failure, got:\n$thrown")
     }
   }
 }

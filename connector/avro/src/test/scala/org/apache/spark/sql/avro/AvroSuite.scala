@@ -3939,33 +3939,45 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
   }
 
   test("SPARK-57205: Avro V2 declares SCAN_MERGING and merges scans differing only in columns") {
-    val v2Provider = DataSource.lookupDataSourceV2("avro", spark.sessionState.conf)
-    assert(v2Provider.isDefined)
-    val v2Table = v2Provider.get.asInstanceOf[FileDataSourceV2].getTable(
-      new StructType(), Array.empty, JCollections.emptyMap[String, String]())
-    assert(v2Table.capabilities().contains(TableCapability.SCAN_MERGING))
+    // AvroTable withholds the capability under positionalFieldMatching, because the deserializer is
+    // built from the pruned read schema while the Avro side stays unpruned, so catalyst field i of
+    // the projection takes Avro field i of that schema and widening the projection shifts values.
+    // FileTable also withholds it when the reads are not strict, so pin that rather than inherit.
+    withSQLConf(
+        SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
+        SQLConf.IGNORE_MISSING_FILES.key -> "false") {
+      val v2Provider = DataSource.lookupDataSourceV2("avro", spark.sessionState.conf)
+      assert(v2Provider.isDefined)
+      val dsV2 = v2Provider.get.asInstanceOf[FileDataSourceV2]
+      val v2Table = dsV2.getTable(
+        new StructType(), Array.empty, JCollections.emptyMap[String, String]())
+      assert(v2Table.capabilities().contains(TableCapability.SCAN_MERGING))
+      val positional = dsV2.getTable(new StructType(), Array.empty,
+        JCollections.singletonMap("positionalFieldMatching", "true"))
+      assert(!positional.capabilities().contains(TableCapability.SCAN_MERGING))
 
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      spark.range(0, 20).selectExpr("id AS a", "id * 2 AS b", "id % 3 AS c")
-        .write.format("avro").save(path)
-      withTempView("avro_scan_merging") {
-        spark.read.format("avro").load(path).createOrReplaceTempView("avro_scan_merging")
-        val df = sql(
-          """
-            |SELECT
-            |  (SELECT sum(a) FROM avro_scan_merging WHERE c = 1),
-            |  (SELECT sum(b) FROM avro_scan_merging WHERE c = 1)
-            |""".stripMargin)
-        checkAnswer(df, Row(70, 140))
-        val scans = df.queryExecution.optimizedPlan.collectWithSubqueries {
-          case s: DataSourceV2ScanRelation => s
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(0, 20).selectExpr("id AS a", "id * 2 AS b", "id % 3 AS c")
+          .write.format("avro").save(path)
+        withTempView("avro_scan_merging") {
+          spark.read.format("avro").load(path).createOrReplaceTempView("avro_scan_merging")
+          val df = sql(
+            """
+              |SELECT
+              |  (SELECT sum(a) FROM avro_scan_merging WHERE c = 1),
+              |  (SELECT sum(b) FROM avro_scan_merging WHERE c = 1)
+              |""".stripMargin)
+          checkAnswer(df, Row(70, 140))
+          val scans = df.queryExecution.optimizedPlan.collectWithSubqueries {
+            case s: DataSourceV2ScanRelation => s
+          }
+          assert(scans.map(_.canonicalized).distinct.length == 1,
+            s"the two Avro scans should be fused into one:\n${df.queryExecution.optimizedPlan}")
+          // c is read because the filter stays above the merged scan.
+          assert(scans.head.output.map(_.name).toSet == Set("a", "b", "c"),
+            s"the merged scan should read the union of both columns; got ${scans.head.output}")
         }
-        assert(scans.map(_.canonicalized).distinct.length == 1,
-          s"the two Avro scans should be fused into one:\n${df.queryExecution.optimizedPlan}")
-        // c is read because the filter stays above the merged scan.
-        assert(scans.head.output.map(_.name).toSet == Set("a", "b", "c"),
-          s"the merged scan should read the union of both columns; got ${scans.head.output}")
       }
     }
   }

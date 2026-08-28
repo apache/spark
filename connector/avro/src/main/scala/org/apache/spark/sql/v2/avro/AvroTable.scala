@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.avro.AvroUtils
+import org.apache.spark.sql.avro.{AvroOptions, AvroUtils}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, Write, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileTable
@@ -53,8 +53,16 @@ case class AvroTable(
 
   override def formatName: String = "Avro"
 
-  // Every record is decoded against the full schema before the projection is applied to the decoded
-  // record, so reading more columns can only surface an error, never silently change which rows
-  // come back. The `mode` option in AvroOptions is read by the from_avro expression, not this scan.
-  override def supportsScanMerging: Boolean = true
+  // Avro has no record-level parse verdict: a record is either decodable or the read fails, and
+  // there is no mode that drops or rewrites a record based on the columns asked for. The `mode`
+  // option in AvroOptions is read by from_avro and schema_of_avro, not by this scan.
+  //
+  // `positionalFieldMatching` is the exception. AvroPartitionReaderFactory builds the deserializer
+  // from the pruned read schema while the Avro side stays the full Avro schema, so under that
+  // option catalyst field i of the projection takes Avro field i of that schema, and widening the
+  // projection changes the values a column comes back with. Read the option off the map rather than
+  // through AvroOptions, whose constructor resolves `avroSchemaUrl` and would do I/O here, and read
+  // it leniently so a malformed value still fails where Avro reports it rather than here.
+  override protected def supportsScanMerging: Boolean =
+    !"true".equalsIgnoreCase(options.get(AvroOptions.POSITIONAL_FIELD_MATCHING))
 }

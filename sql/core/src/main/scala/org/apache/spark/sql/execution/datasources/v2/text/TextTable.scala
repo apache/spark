@@ -52,5 +52,5 @@ case class TextTable(
 
   // The schema is a single `value` column, and every line -- or every file under `wholetext` --
   // becomes a row, so there is no parse step whose outcome a wider column set could change.
-  override def supportsScanMerging: Boolean = true
+  override protected def supportsScanMerging: Boolean = true
 }

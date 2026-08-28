@@ -41,10 +41,13 @@ import org.apache.spark.util.ArrayImplicits._
  * A [[Table]] backed by files.
  *
  * A subclass opts in to the `SCAN_MERGING` capability by overriding [[supportsScanMerging]], which
- * holds it to this: with the scan options held constant, the rows and columns a scan reads are
- * determined by the filters pushed and the columns pruned on its builder. A format whose parser
- * decides what counts as a malformed record from the set of columns it was asked for does not meet
- * that, because widening the column set can drop or rewrite rows that the narrower scan returned.
+ * holds it to this: with the scan options and the pushed filters held constant, widening the set of
+ * columns pruned on its builder must not change which rows the scan returns, nor the values it
+ * returns for the columns it was already asked for. It may at most surface a read error. A format
+ * whose parser decides what counts as a malformed record from the set of columns it was asked for
+ * does not meet that, and neither does one that resolves a column by its position in the
+ * projection. The capability is also withheld from a table whose reads are not strict, see
+ * `hasStrictFileReads`.
  */
 abstract class FileTable(
     sparkSession: SparkSession,
@@ -121,7 +124,11 @@ abstract class FileTable(
   override def properties: util.Map[String, String] = options.asCaseSensitiveMap
 
   override def capabilities: java.util.Set[TableCapability] =
-    if (supportsScanMerging) FileTable.CAPABILITIES_WITH_SCAN_MERGING else FileTable.CAPABILITIES
+    if (supportsScanMerging && hasStrictFileReads) {
+      FileTable.CAPABILITIES_WITH_SCAN_MERGING
+    } else {
+      FileTable.CAPABILITIES
+    }
 
   /**
    * Whether this table meets the `SCAN_MERGING` contract described on this class. Defaults to
@@ -129,6 +136,19 @@ abstract class FileTable(
    * when its parser is projection-sensitive returns wrong rows.
    */
   protected def supportsScanMerging: Boolean = false
+
+  /**
+   * Whether a read of this table is strict. Under `ignoreCorruptFiles`, a read failure in a column
+   * that only the other scan projects is swallowed and the remaining rows of that file are dropped,
+   * so the merged scan would not read a superset of either input's rows. `ignoreMissingFiles` drops
+   * the same rows whatever is projected, and is included to match `FileScanRDD.hasStrictFileReads`,
+   * the same predicate on the physical side. Evaluated per call rather than cached, so a table
+   * built before either configuration was set still answers for the read that is running.
+   */
+  private def hasStrictFileReads: Boolean = {
+    val fileSourceOptions = new FileSourceOptions(options.asCaseSensitiveMap.asScala.toMap)
+    !fileSourceOptions.ignoreCorruptFiles && !fileSourceOptions.ignoreMissingFiles
+  }
 
   /**
    * When possible, this method should return the schema of the given `files`.  When the format
