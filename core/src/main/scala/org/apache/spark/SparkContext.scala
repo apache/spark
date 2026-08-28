@@ -729,7 +729,10 @@ class SparkContext(config: SparkConf) extends Logging {
             Some(new ExecutorAllocationManager(
               schedulerBackend.asInstanceOf[ExecutorAllocationClient], listenerBus, _conf,
               cleaner = cleaner, resourceProfileManager = resourceProfileManager,
-              reliableShuffleStorage = _shuffleDriverComponents.supportsReliableStorage()))
+              reliableShuffleStorage = _shuffleDriverComponents.supportsReliableStorage(),
+              // SPARK-58935: wire up the real AppStatusStore so this manager can reconcile
+              // its bookkeeping against ground-truth stage state.
+              statusStoreProvider = () => Option(_statusStore)))
           case _ =>
             None
         }
