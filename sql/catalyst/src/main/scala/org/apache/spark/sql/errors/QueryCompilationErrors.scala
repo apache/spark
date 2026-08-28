@@ -2232,8 +2232,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "BUCKET_COLUMN_IN_PARTITION_COLUMNS",
       messageParameters = Map(
-        "bucketCol" -> bucketCol,
-        "normalizedPartCols" -> normalizedPartCols.mkString(", ")))
+        "bucketCol" -> toSQLId(bucketCol),
+        "partitionColumns" -> normalizedPartCols.map(toSQLId).mkString(", ")))
   }
 
   def bucketSortingColumnCannotBePartOfPartitionColumnsError(
@@ -2241,8 +2241,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "BUCKET_SORT_COLUMN_IN_PARTITION_COLUMNS",
       messageParameters = Map(
-        "sortCol" -> sortCol,
-        "normalizedPartCols" -> normalizedPartCols.mkString(", ")))
+        "sortCol" -> toSQLId(sortCol),
+        "partitionColumns" -> normalizedPartCols.map(toSQLId).mkString(", ")))
   }
 
   def invalidBucketColumnDataTypeError(dataType: DataType): Throwable = {

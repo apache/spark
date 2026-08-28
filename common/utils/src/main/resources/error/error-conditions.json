@@ -497,15 +497,15 @@
   },
   "BUCKET_COLUMN_IN_PARTITION_COLUMNS" : {
     "message" : [
-      "Bucketing column '<bucketCol>' should not be part of partition columns '<normalizedPartCols>'."
+      "Bucketing column <bucketCol> should not be part of partition columns <partitionColumns>."
     ],
-    "sqlState" : "42601"
+    "sqlState" : "42713"
   },
   "BUCKET_SORT_COLUMN_IN_PARTITION_COLUMNS" : {
     "message" : [
-      "Bucket sorting column '<sortCol>' should not be part of partition columns '<normalizedPartCols>'."
+      "Bucket sorting column <sortCol> should not be part of partition columns <partitionColumns>."
     ],
-    "sqlState" : "42601"
+    "sqlState" : "42713"
   },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
