@@ -70,6 +70,7 @@ abstract class ProbabilisticClassifier[
  * `transform` selects column-producing methods based on which output columns are set:
  *
  * <table>
+ *   <caption>Column-producing methods by requested output columns</caption>
  *   <tr>
  *     <th>Raw prediction</th>
  *     <th>Probability</th>

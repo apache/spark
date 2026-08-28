@@ -30,7 +30,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.{COUNT, RANGE}
-import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.linalg._
@@ -45,7 +44,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.{get => arrayGet, _}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util._
@@ -1187,8 +1186,8 @@ class LogisticRegressionModel private[spark] (
     }
   } else {
     val localRawThreshold = LogisticRegressionModel.rawThreshold(getThreshold)
-    val rawScore = MLFunctions.vector_get(rawPrediction, lit(1))
-    when(!isnan(rawScore) && rawScore > localRawThreshold, 1.0).otherwise(0.0)
+    val rawScore = arrayGet(unwrap_udt(rawPrediction).getField("values"), lit(1))
+    when(rawScore > localRawThreshold && !isnan(rawScore), 1.0).otherwise(0.0)
   }
 
   override protected def probability2predictionColumn(
@@ -1201,8 +1200,8 @@ class LogisticRegressionModel private[spark] (
     }
   } else {
     val localProbabilityThreshold = getThreshold
-    val probabilityScore = MLFunctions.vector_get(probability, lit(1))
-    when(!isnan(probabilityScore) && probabilityScore > localProbabilityThreshold, 1.0)
+    val probabilityScore = arrayGet(unwrap_udt(probability).getField("values"), lit(1))
+    when(probabilityScore > localProbabilityThreshold && !isnan(probabilityScore), 1.0)
       .otherwise(0.0)
   }
 
