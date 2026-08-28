@@ -502,6 +502,60 @@ class NumPyCompatTestsMixin:
                 )
                 self.assert_eq(np.signbit(result.to_pandas()), expected_signbit)
 
+    def test_np_fmax_fmin_integer_precision(self):
+        # The result keeps the operands' type, so an integral pair stays exact past 2^53,
+        # where a double result rounds to the nearest even value. The last row also pins the
+        # tie branch, which returns an operand rather than a comparison; it is an equal
+        # non-zero pair, so no signed-zero tie arises and the test needs no skip.
+        pdf = pd.DataFrame(
+            {
+                "x1": [2**53 + 1, -(2**53 + 1), 2**53 + 1],
+                "x2": [2, -2, 2**53 + 1],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        for np_func in (np.fmax, np.fmin):
+            self.assert_eq(np_func(psdf.x1, psdf.x2), np_func(pdf.x1, pdf.x2))
+
+    def test_np_fmax_fmin_non_default_dtypes(self):
+        # Both helpers select an operand, so the result keeps the operands' type for every
+        # dtype NumPy also preserves. Tie rows are equal non-zero pairs, since the signed-zero
+        # tie is the one case where NumPy's own answer varies; keep them that way so this test
+        # needs no skip either.
+        for dtype in ("int8", "int16", "int32", "float32"):
+            with self.subTest(dtype=dtype):
+                pdf = pd.DataFrame(
+                    {
+                        "x1": np.array([-2, 1, 3], dtype=dtype),
+                        "x2": np.array([2, -1, 3], dtype=dtype),
+                    }
+                )
+                psdf = ps.from_pandas(pdf)
+
+                for np_func in (np.fmax, np.fmin):
+                    self.assert_eq(np_func(psdf.x1, psdf.x2), np_func(pdf.x1, pdf.x2))
+
+        for pdf in (
+            pd.DataFrame({"x1": [True, False, True], "x2": [False, False, True]}),
+            pd.DataFrame(
+                {
+                    "x1": [Decimal("7.5"), Decimal("-2.5"), Decimal("3.0")],
+                    "x2": [Decimal("2.0"), Decimal("-9.0"), Decimal("3.0")],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "x1": pd.to_datetime(["2020-01-01", "2021-06-01"]),
+                    "x2": pd.to_datetime(["2020-06-01", "2021-01-01"]),
+                }
+            ),
+        ):
+            psdf = ps.from_pandas(pdf)
+
+            for np_func in (np.fmax, np.fmin):
+                self.assert_eq(np_func(psdf.x1, psdf.x2), np_func(pdf.x1, pdf.x2))
+
     def test_np_copysign(self):
         for pdf in (
             pd.DataFrame(
