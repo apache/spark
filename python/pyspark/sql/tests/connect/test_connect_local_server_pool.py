@@ -23,6 +23,7 @@ import sys
 import tempfile
 import time
 import unittest
+from typing import Tuple
 from unittest import mock
 
 from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
@@ -32,6 +33,7 @@ if should_test_connect:
     from pyspark.sql.connect.local_server import _SERVER_CLASS, _pid_alive
     from pyspark.sql.connect.local_server_pool import (
         _JVM_ENV_VARS,
+        PendingState,
         PoolDirectory,
         PoolMember,
         RetiredState,
@@ -105,6 +107,15 @@ def _wait_proc_dead(proc: "subprocess.Popen", timeout: float = 30.0) -> bool:
         return False
 
 
+def _wait_pid_dead(pid: int, timeout: float = 30.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not _pid_alive(pid):
+            return True
+        time.sleep(0.05)
+    return False
+
+
 _SAVED_ENV_KEYS = (
     "SPARK_LOCAL_CONNECT_POOL_DIR",
     "SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT",
@@ -159,6 +170,56 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         proc = _spawn_stubborn_process()
         self._procs.append(proc)
         return proc
+
+    def _attendant(self, uid: str) -> "subprocess.Popen":
+        proc = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                "import sys; sys.stdin.buffer.read()",
+                "-m",
+                "pyspark.sql.connect.local_server_pool",
+                "--attend",
+                "--pool-dir",
+                self._directory.path,
+                "--uid",
+                uid,
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        self._procs.append(proc)
+        return proc
+
+    def _attendant_with_launch_child(self, uid: str) -> Tuple["subprocess.Popen", int]:
+        proc = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                "import subprocess, sys\n"
+                "child = subprocess.Popen([sys.executable, '-c', "
+                "'import time; time.sleep(300)'])\n"
+                "print(child.pid, flush=True)\n"
+                "sys.stdin.buffer.read()",
+                "-m",
+                "pyspark.sql.connect.local_server_pool",
+                "--attend",
+                "--pool-dir",
+                self._directory.path,
+                "--uid",
+                uid,
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            start_new_session=True,
+        )
+        self._procs.append(proc)
+        assert proc.stdout is not None
+        return proc, int(proc.stdout.readline())
 
     def _server_data(self, port: int, pid: int, fingerprint: str = "fp", **overrides) -> dict:
         process_start_id = None
@@ -628,7 +689,16 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertIsNone(PoolMember.from_data(data))
 
-    def test_retired_state_fields_and_validation(self) -> None:
+    def test_lifecycle_state_fields_and_validation(self) -> None:
+        pending = PendingState.from_data({"attendant_pid": 123, "created": 1, "fingerprint": "fp"})
+        assert pending is not None
+        self.assertEqual(pending.attendant_pid, 123)
+        self.assertEqual(pending.created, 1.0)
+        self.assertEqual(pending.fingerprint, "fp")
+        self.assertIsNone(
+            PendingState.from_data({"attendant_pid": "123", "created": 1, "fingerprint": "fp"})
+        )
+
         retired = RetiredState.from_data(
             {"pid": 456, "process_start_id": "process-1", "retired": 2}
         )
@@ -869,6 +939,146 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertEqual(member.token, "valid-token")
         for uid in records:
             self.assertEqual(set(self._states(uid)), {"server"})
+
+    def test_reap_pending_of_dead_attendant(self) -> None:
+        # The attendant died mid-boot: its pending marker and conf seed are withdrawn, and
+        # the half-started server whose pid spark-daemon.sh recorded remains tracked. A daemon
+        # pid has no process-generation identity, so it cannot safely authorize a signal.
+        half_started = self._stubborn_process()
+        self._write_daemon_pid("b007", half_started.pid)
+        self._write_state(
+            self._directory.pending_path("b007"),
+            {"attendant_pid": 2**31 - 1, "created": time.time(), "fingerprint": "fp"},
+        )
+        self._write_state(self._directory.conf_path("b007"), {"spark.foo": "bar"})
+
+        with self._directory:
+            self._pool.reap("b007")
+
+        states = self._states("b007")
+        self.assertNotIn("pending", states)
+        self.assertNotIn("conf", states)
+        self.assertEqual(set(states), {"member", "retired"})
+        with self._directory as directory:
+            retired = directory.read_json(states["retired"])
+            assert retired is not None
+            self.assertEqual(retired["pid"], half_started.pid)
+            self.assertNotIn("process_start_id", retired)
+        self.assertIsNone(half_started.poll())
+
+        half_started.kill()
+        self.assertTrue(_wait_proc_dead(half_started))
+        with self._directory:
+            self.assertTrue(self._pool.reap("b007"))
+
+    def test_reap_malformed_pending(self) -> None:
+        attendant = self._attendant("bad3")
+        self._write_state(
+            self._directory.pending_path("bad3"),
+            {"attendant_pid": attendant.pid, "created": "not-a-time"},
+        )
+        self._write_state(self._directory.conf_path("bad3"), {"spark.foo": "bar"})
+
+        with self._directory:
+            self.assertTrue(self._pool.reap("bad3"))
+
+        self.assertTrue(_wait_proc_dead(attendant))
+
+    def test_reap_does_not_signal_reused_attendant_pid(self) -> None:
+        unrelated = self._live_process()
+        self._write_state(
+            self._directory.pending_path("bad8"),
+            {
+                "attendant_pid": unrelated.pid,
+                "created": time.time() - 181,
+                "fingerprint": "fp",
+            },
+        )
+        self._write_state(self._directory.conf_path("bad8"), {"spark.foo": "bar"})
+
+        with mock.patch.object(local_server_pool, "_process_command", return_value=None):
+            with self._directory:
+                self.assertFalse(self._pool.reap("bad8"))
+        self.assertEqual(set(self._states("bad8")), {"conf", "pending"})
+
+        with self._directory:
+            self.assertTrue(self._pool.reap("bad8"))
+
+        self.assertIsNone(unrelated.poll())
+
+    def test_reap_timed_out_attendant_kills_its_launch_group(self) -> None:
+        attendant, launch_child_pid = self._attendant_with_launch_child("bad0")
+        self._write_state(
+            self._directory.pending_path("bad0"),
+            {
+                "attendant_pid": attendant.pid,
+                "created": time.time() - 181,
+                "fingerprint": "fp",
+            },
+        )
+        self._write_state(self._directory.conf_path("bad0"), {"spark.foo": "bar"})
+
+        with self._directory:
+            self.assertTrue(self._pool.reap("bad0"))
+
+        self.assertTrue(_wait_proc_dead(attendant))
+        self.assertTrue(_wait_pid_dead(launch_child_pid))
+
+    def test_reap_pending_with_published_server_retires_server(self) -> None:
+        # Publishing writes server-* before removing pending-*. If the attendant dies between
+        # those operations, the janitor must not leave that server available to claim.
+        server = self._stubborn_process()
+        self._write_daemon_pid("bad7", server.pid)
+        with _non_listening_socket() as port:
+            self._write_state(
+                self._directory.server_path("bad7"), self._server_data(port, server.pid)
+            )
+            self._write_state(
+                self._directory.pending_path("bad7"),
+                {"attendant_pid": 2**31 - 1, "created": time.time(), "fingerprint": "fp"},
+            )
+            self._write_state(self._directory.conf_path("bad7"), {"spark.foo": "bar"})
+            with self._directory:
+                self._pool.reap("bad7")
+                self.assertIsNone(self._pool.claim("fp"))
+
+        self.assertEqual(set(self._states("bad7")), {"member", "retired"})
+        self.assertIsNone(server.poll())
+
+    def test_reap_removes_conf_left_after_publication(self) -> None:
+        server = self._live_process()
+        with _listening_socket() as port:
+            self._write_state(
+                self._directory.server_path("c0f1"), self._server_data(port, server.pid)
+            )
+            self._write_state(self._directory.conf_path("c0f1"), {"spark.foo": "bar"})
+
+            with self._directory:
+                self._pool.reap("c0f1")
+
+        self.assertEqual(set(self._states("c0f1")), {"server"})
+        self.assertIsNone(server.poll())
+
+    def test_reap_removes_stale_conf_without_an_attendant(self) -> None:
+        conf_path = self._write_state(self._directory.conf_path("c0f2"), {"spark.foo": "bar"})
+        old = time.time() - 181
+        os.utime(conf_path, (old, old))
+
+        with self._directory:
+            self.assertTrue(self._pool.reap("c0f2"))
+
+        self.assertFalse(os.path.exists(conf_path))
+
+    def test_reap_keeps_live_pending(self) -> None:
+        attendant = self._live_process()
+        self._write_state(
+            self._directory.pending_path("11ce"),
+            {"attendant_pid": attendant.pid, "created": time.time(), "fingerprint": "fp"},
+        )
+        with self._directory:
+            self._pool.reap("11ce")
+        self.assertIn("pending", self._states("11ce"))
+        self.assertIsNone(attendant.poll())
 
     def test_reap_server_unreachable_and_idle(self) -> None:
         with self.subTest("unreachable member is retired"):
@@ -1185,6 +1395,21 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             self.assertTrue(self._pool.reap("bad8"))
 
         self.assertIsNone(other_server.poll())
+
+    def test_reap_garbage_collects_old_unreferenced_member_directory(self) -> None:
+        old_dir = self._directory.member_dir("01d0")
+        fresh_dir = self._directory.member_dir("f2e5")
+        os.makedirs(old_dir)
+        os.makedirs(fresh_dir)
+        old = time.time() - 24 * 3600 - 1
+        os.utime(old_dir, (old, old))
+
+        with self._directory:
+            self.assertTrue(self._pool.reap("01d0"))
+            self.assertFalse(self._pool.reap("f2e5"))
+
+        self.assertFalse(os.path.exists(old_dir))
+        self.assertTrue(os.path.isdir(fresh_dir))
 
     def test_retire_survives_interrupted_state_rewrite(self) -> None:
         server = self._stubborn_process()
