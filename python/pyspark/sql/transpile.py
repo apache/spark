@@ -1352,8 +1352,8 @@ class CatalystTranspiler(AbstractTranspiler):
         Spark orders ``NaN`` as greater than every value, whereas Python's
         ``NaN`` comparisons are all ``False``, so a numeric variant that could
         hold a double returns false when either operand is NaN -- see
-        ``_nan_guard``. The NULL raise comes first, matching Python, which
-        raises TypeError on ``None > 0`` regardless of the other operand.
+        ``_nan_guard``. The NULL raise comes first, matching Python, which throws
+        TypeError on ``None > 0`` regardless of the other operand.
         """
         lc = self._category(params, left_node)
         rc = self._category(params, right_node)
