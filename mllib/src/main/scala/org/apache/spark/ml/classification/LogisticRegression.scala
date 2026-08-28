@@ -44,7 +44,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions.{get => arrayGet, _}
+import org.apache.spark.sql.functions.{get => fget, _}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util._
@@ -1186,7 +1186,7 @@ class LogisticRegressionModel private[spark] (
     }
   } else {
     val localRawThreshold = LogisticRegressionModel.rawThreshold(getThreshold)
-    val rawScore = arrayGet(unwrap_udt(rawPrediction).getField("values"), lit(1))
+    val rawScore = fget(unwrap_udt(rawPrediction).getField("values"), lit(1))
     when(rawScore > localRawThreshold && !isnan(rawScore), 1.0).otherwise(0.0)
   }
 
@@ -1200,7 +1200,7 @@ class LogisticRegressionModel private[spark] (
     }
   } else {
     val localProbabilityThreshold = getThreshold
-    val probabilityScore = arrayGet(unwrap_udt(probability).getField("values"), lit(1))
+    val probabilityScore = fget(unwrap_udt(probability).getField("values"), lit(1))
     when(probabilityScore > localProbabilityThreshold && !isnan(probabilityScore), 1.0)
       .otherwise(0.0)
   }
@@ -1235,10 +1235,10 @@ class LogisticRegressionModel private[spark] (
   } else {
     val localCoefficients = coefficients
     val localIntercept = interceptVector(0)
-    val localProbabilityThreshold = getThreshold
+    val localRawThreshold = LogisticRegressionModel.rawThreshold(getThreshold)
     udf((features: Vector) => {
       val margin = BLAS.dot(features, localCoefficients) + localIntercept
-      if (1.0 / (1.0 + math.exp(-margin)) > localProbabilityThreshold) {
+      if (margin > localRawThreshold) {
         1.0
       } else {
         0.0
@@ -1419,6 +1419,11 @@ class LogisticRegressionModel private[spark] (
 
 @Since("1.6.0")
 object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
+  /**
+   * Converts a binary probability threshold to the equivalent raw margin threshold.
+   * Probability thresholds 0 and 1 map to negative and positive infinity, respectively,
+   * where the log-odds formula is undefined.
+   */
   private def rawThreshold(threshold: Double): Double = {
     if (threshold == 0.0) {
       Double.NegativeInfinity
