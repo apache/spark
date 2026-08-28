@@ -1238,11 +1238,7 @@ class LogisticRegressionModel private[spark] (
     val localRawThreshold = LogisticRegressionModel.rawThreshold(getThreshold)
     udf((features: Vector) => {
       val margin = BLAS.dot(features, localCoefficients) + localIntercept
-      if (margin > localRawThreshold) {
-        1.0
-      } else {
-        0.0
-      }
+      if (margin > localRawThreshold) 1.0 else 0.0
     }).apply(features)
   }
 
@@ -1295,8 +1291,9 @@ class LogisticRegressionModel private[spark] (
     super.predict(features)
   } else {
     // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.
+    val localRawThreshold = LogisticRegressionModel.rawThreshold(getThreshold)
     val margin = BLAS.dot(features, coefficients) + interceptVector(0)
-    if (1.0 / (1.0 + math.exp(-margin)) > getThreshold) 1 else 0
+    if (margin > localRawThreshold) 1 else 0
   }
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
