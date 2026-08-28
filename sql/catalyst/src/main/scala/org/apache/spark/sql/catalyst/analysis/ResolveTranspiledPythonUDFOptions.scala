@@ -83,13 +83,8 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   // (e.g. `repeat`) never see it. Empty categories means "no restriction", so the
   // option is kept.
   //
-  // "integral" and "fractional" split "numeric" for a transpiler that has to name one
-  // concrete Java type per parameter and so cannot be polymorphic over the two the way a
-  // Catalyst `Add` is (see `pyspark.sql.transpile_java`). Both are lossless within their
-  // half -- every IntegralType fits in a long, both FractionalTypes fit in a double -- so
-  // the option upcasts its arguments and the split costs only extra options, never
-  // precision. A transpiler is free to use either granularity; "numeric" still matches
-  // both halves for the Catalyst target.
+  // "integral" / "fractional" split "numeric" for a target that names one Java
+  // type per parameter. Both halves are lossless; "numeric" still matches both.
   //
   // Two deliberate exclusions keep the transpiled semantics faithful to Python:
   // - DecimalType is NOT "numeric" (nor "fractional", which it extends): Python receives

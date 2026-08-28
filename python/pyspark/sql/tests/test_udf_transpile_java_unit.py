@@ -90,11 +90,7 @@ def _lower(source: str, return_type, categories: dict) -> str:
     function_ast, error = _get_function_from_ast(tree, None)
     assert function_ast is not None, error
     transpiler = JavaTranspiler()
-    transpiler._param_categories = dict(categories)
-    transpiler._params = [arg.arg for arg in function_ast.args.args]
-    transpiler._arg_names = [f"_udf_arg_{i}" for i in range(len(transpiler._params))]
-    transpiler._locals = {}
-    transpiler._local_java_names = {}
+    transpiler._bind([arg.arg for arg in function_ast.args.args], categories)
     return "\n".join(transpiler._lower_body(function_ast.body, _return_category(return_type)))
 
 
@@ -618,6 +614,7 @@ class JavaTranspileEndToEndTests(ReusedSQLTestCase):
             messages = " ".join(str(w.message) for w in caught)
             self.assertIn("bare None", messages)
             self.assertNotIn("no Java type for category", messages)
+            self.assertNotIn("no ABI for category", messages)
 
     def test_both_eval_paths_agree(self):
         # `eval` and `doGenCode` come off one source string; this is what says so from the
@@ -914,9 +911,9 @@ class GetTranspilersTests(unittest.TestCase):
     class _StubSession:
         def __init__(self, value):
             self.conf = self
+            self._value = value
 
         def get(self, key, default=None):
-            # Signature matches RuntimeConfig.get, which is all _get_transpilers uses.
             return self._value
 
     def _transpilers(self, conf_value):
@@ -925,7 +922,6 @@ class GetTranspilersTests(unittest.TestCase):
         from pyspark.sql.transpile import _get_transpilers
 
         session = self._StubSession(conf_value)
-        session._value = conf_value
         with _w.catch_warnings(record=True) as caught:
             _w.simplefilter("always")
             names = [t.variety for t in _get_transpilers(session)]
@@ -953,7 +949,6 @@ class GetTranspilersTests(unittest.TestCase):
         from pyspark.sql.transpile import _get_transpilers
 
         session = self._StubSession("catalyst,jvaa")
-        session._value = "catalyst,jvaa"
         with _w.catch_warnings():
             _w.simplefilter("error")
             names = [t.variety for t in _get_transpilers(session)]
