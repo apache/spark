@@ -1043,13 +1043,13 @@ class CatalystTranspiler(AbstractTranspiler):
                 "`round()`'s scale does not fit in an int, which Spark's `bround` "
                 "requires; the transpiler falls back to interpreted Python"
             )
-        # TODO (SPARK-55210): a negative scale still overflows a narrow column. `bround`
-        # keeps its child's type and multiplies the magnitude by 10**|scale|, so
-        # `round(x, -1)` on a tinyint holding 127 raises where Python answers 130 -- the
-        # same shape as `abs` before promotion, and equally fixable, since the worst case
-        # is `magnitude(input) * 10**|scale|`. It needs a widening cast the transpiler
-        # cannot size (only the JVM knows the column width), so it wants a promoting
-        # expression of its own rather than a Python-side hack.
+        # TODO: a negative scale still overflows a narrow column, and this is left for a
+        # follow-up. `bround` keeps its child's type and multiplies the magnitude by
+        # 10**|scale|, so `round(x, -1)` on a tinyint holding 127 raises where Python
+        # answers 130 -- the same shape as `abs` before promotion, and equally fixable,
+        # since the worst case is `magnitude(input) * 10**|scale|`. It needs a widening
+        # cast the transpiler cannot size (only the JVM knows the column width), so it
+        # wants a promoting expression of its own rather than a Python-side hack.
         return bround(self._convert_chunk(params, args[0]), scale)
 
     def _safe_category(self, params: List[str], node: Optional[ast.AST]) -> Optional[str]:
@@ -1856,8 +1856,7 @@ class CatalystTranspiler(AbstractTranspiler):
                             # bearing: a promoted operand is at worst a bigint, which
                             # `bitwiseAND` coerces against an int happily. Kept because
                             # Python's bitwise operators are int-only and normalising is
-                            # honest about that, but they could go with a test run -- see
-                            # NUMERICS.md.
+                            # honest about that, but they could go with a test run.
                             left_bits = left_col.cast("long")
                             right_bits = right_col.cast("long")
                             if isinstance(op, ast.BitAnd):
