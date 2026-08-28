@@ -1095,16 +1095,24 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
     val columnByKey = mutable.HashMap.empty[ShareKey, Alias]
     // Per call *node*, by identity: an operator can hold one node in two expression slots -- Window
     // copies its spec into every WindowSpecDefinition, MergeRows has five -- and each slot is
-    // visited on its own. Minting an id per visit gave one call two columns, so two draws.
+    // visited on its own. Minting an id per visit gave one call two columns, so two draws. A plain
+    // counter, not an ExprId: nothing outside the sharing key ever reads it, and `newExprId` would
+    // bump the global counter for every call we merely looked at.
+    var nextCallId = 0L
     val callIds = new java.util.IdentityHashMap[TranspiledPythonUDF, java.lang.Long]()
     val preEvaluate: Option[PreEvaluate] =
       if (withColumns && p.children.length == 1 && !p.isInstanceOf[Command] &&
           !p.isInstanceOf[Aggregate]) {
         val child = p.children.head
+        // Once per operator, not once per call: an operator can hold several, and this walks the
+        // whole child plan. See `canPlace`, which is the only reader.
+        lazy val joinBelow = child.exists(_.isInstanceOf[Join])
         Some((call, args, option) => {
           // What shares a column with what. One key per distinct deterministic argument in the
-          // operator, so `f(a + 1, a + 1)` computes `a + 1` once and two calls sharing an
-          // argument share a column. A nondeterministic argument shares with nothing, not even
+          // operator, so `f(a + 1, a + 1)` computes `a + 1` once and two calls that each read it
+          // more than once share a column -- the read count is per call, only the column is per
+          // operator, so a call reading it once keeps its own copy and that is still one
+          // evaluation. A nondeterministic argument shares with nothing, not even
           // an equal one: `f(rand(), rand())` owes the body two draws, and so do two calls that
           // each pass their own `rand()`. Hence the call id -- keying on the index alone would
           // have `f(rand())` and `g(rand())` in one operator collide on one column.
@@ -1115,7 +1123,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
           // one would read a column declared without nulls -- enough for NullPropagation to fold
           // an `IsNull` to false and drop a branch.
           // (scala.util qualified because `expressions._` has its own Left and Right.)
-          val callId = callIds.computeIfAbsent(call, _ => NamedExpression.newExprId.id)
+          val callId = callIds.computeIfAbsent(call, _ => { nextCallId += 1; nextCallId })
           def shareKey(index: Int): ShareKey =
             if (args(index).deterministic) {
               scala.util.Left((args(index).canonicalized, args(index).nullable))
@@ -1142,7 +1150,6 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
           // not just at the child -- one `select` in between is enough, and the Filter can sit
           // above whatever we are rewriting. Keep the Python UDF instead; it computes its input
           // once anyway.
-          lazy val joinBelow = child.exists(_.isInstanceOf[Join])
           def canPlace(arg: Expression): Boolean =
             (arg.deterministic || !joinBelow) &&
               arg.references.subsetOf(child.outputSet) &&

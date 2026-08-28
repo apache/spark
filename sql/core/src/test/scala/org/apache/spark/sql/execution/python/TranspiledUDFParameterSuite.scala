@@ -154,8 +154,12 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
       val left = spark.range(0, 3).select(col("id").as("a"))
       val right = spark.range(0, 3).select(col("id").as("c"))
       val straddles = square(col("a") + 1, col("c")) > 0
-      val e = intercept[AnalysisException](left.join(right, straddles, "left_outer").collect())
-      assert(e.getCondition.startsWith("UNSUPPORTED_FEATURE"), s"Unexpected: ${e.getCondition}")
+      val joined = left.join(right, straddles, "left_outer")
+      checkError(
+        exception = intercept[AnalysisException](joined.collect()),
+        condition = "UNSUPPORTED_FEATURE.PYTHON_UDF_IN_ON_CLAUSE",
+        parameters = Map("joinType" -> "LEFT OUTER"),
+        sqlState = Some("0A000"))
 
       // Read once, the same call lowers and the join runs.
       val once = udfWith(Add(param(0), param(1)), arity = 2)

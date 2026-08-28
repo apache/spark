@@ -68,9 +68,13 @@ class ConvertToCatalystSuite extends PlanTest {
   // because Rand is: an expression is only deterministic if all of its children are.
   private def draw(seed: Long = 1L): Expression = Cast(Rand(Literal(seed)), LongType)
 
-  /** The pre-evaluated argument columns ConvertToCatalyst added anywhere in `plan`. */
+  /**
+   * The pre-evaluated argument columns ConvertToCatalyst added anywhere in `plan`, subquery plans
+   * included -- the rule converts those too (`transformDownWithSubqueriesAndPruning`), while a
+   * plain `collect` stops at the outer plan and would call a column placed inside one absent.
+   */
   private def paramColumns(plan: LogicalPlan): Seq[Alias] =
-    plan.collect { case Project(list, _) => list }.flatten.collect {
+    plan.collectWithSubqueries { case Project(list, _) => list }.flatten.collect {
       case a: Alias if a.name.startsWith("_udf_param_") => a
     }
 
@@ -104,11 +108,16 @@ class ConvertToCatalystSuite extends PlanTest {
         .foreach(failure => fail(s"$failure\n$converted"))
     }
     // A leftover reference is Unevaluable and throws at execution. Check it here so no test has to
-    // remember to.
-    assert(!converted.exists(_.expressions.exists(_.exists {
-      case _: TranspiledPythonUDF | _: TranspiledUDFParameter => true
-      case _ => false
-    })), s"A transpiled node survived conversion: $converted")
+    // remember to -- with subqueries, since the rule converts those and a plain `exists` would let
+    // one stranded inside a subquery pass.
+    val survivors = converted.collectWithSubqueries {
+      case operator if operator.expressions.exists(_.exists {
+        case _: TranspiledPythonUDF | _: TranspiledUDFParameter => true
+        case _ => false
+      }) => operator.nodeName
+    }
+    assert(survivors.isEmpty,
+      s"A transpiled node survived conversion in ${survivors.mkString(", ")}:\n$converted")
     converted
   }
 
