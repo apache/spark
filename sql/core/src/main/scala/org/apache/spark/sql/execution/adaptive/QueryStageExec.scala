@@ -322,7 +322,7 @@ case class ResultQueryStageExec(
   override def doCanonicalize(): SparkPlan = {
     ResultQueryStageExec(-1, _canonicalized, _canonicalized, resultHandler)
   }
-  
+
   override def resetMetrics(): Unit = {
     plan.resetMetrics()
   }
