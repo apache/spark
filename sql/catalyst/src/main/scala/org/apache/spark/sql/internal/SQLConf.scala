@@ -613,10 +613,9 @@ object SQLConf {
   val SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS =
     buildConf("spark.sql.optimizer.splitProjectionForExpensiveFilters")
     .doc("When true, split a projection into several projections with the filters which " +
-      "reference its expensive (UDF, etc.) elements in between, so that an expensive element " +
-      "is only evaluated for the rows which survived the filters below it. This costs an extra " +
-      "operator per split, and only applies when " +
-      s"${AVOID_DOUBLE_FILTER_EVAL.key} is also enabled.")
+      "reference its expensive (UDF, etc.) elements in between, so an expensive element is only " +
+      "evaluated for the rows which survived the filters below it. Costs an extra operator per " +
+      s"split, and only applies when ${AVOID_DOUBLE_FILTER_EVAL.key} is also enabled.")
     .version("4.4.0")
     .booleanConf
     .createWithDefault(true)
