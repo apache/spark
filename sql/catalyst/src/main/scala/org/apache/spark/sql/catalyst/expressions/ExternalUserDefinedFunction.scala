@@ -18,8 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckSuccess
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_UDF, TreePattern}
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.udf.worker.UDFWorkerSpecification
 
 /**
  * :: Experimental ::
@@ -37,6 +40,7 @@ import org.apache.spark.sql.types.DataType
  * to execute.
  *
  * @param name             Optional name of the UDF.
+ * @param workerSpec       Specification of the worker that executes this UDF.
  * @param payload          Opaque serialized function definition.
  * @param dataType         Return type of the UDF.
  * @param children         Input argument expressions.
@@ -48,6 +52,7 @@ import org.apache.spark.sql.types.DataType
 @Experimental
 case class ExternalUserDefinedFunction(
     name: Option[String],
+    workerSpec: UDFWorkerSpecification,
     payload: Array[Byte],
     dataType: DataType,
     children: Seq[Expression],
@@ -60,6 +65,13 @@ case class ExternalUserDefinedFunction(
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
   override def nullable: Boolean = udfNullable
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    inputTypes match {
+      case Some(types) => ExpectsInputTypes.checkInputDataTypes(children, types)
+      case None => TypeCheckSuccess
+    }
+  }
 
   override lazy val canonicalized: Expression = {
     val canonicalizedChildren = children.map(_.canonicalized)

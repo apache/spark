@@ -105,12 +105,13 @@ class UnifiedExternalUDFPlanner(
         pythonUdf.func, conf)
     val udf = ExternalUserDefinedFunction(
       name = Some(pythonUdf.name),
+      workerSpec = workerSpec,
       payload = pythonUdf.func.command.toArray,
       dataType = pythonUdf.dataType,
       children = Seq.empty,
       udfDeterministic = pythonUdf.udfDeterministic,
       udfNullable = true)
-    MapPartitionsExternalUDF(workerSpec, udf, isBarrier, profile, child)
+    MapPartitionsExternalUDF(udf, isBarrier, profile, child)
   }
 
   override def planPythonMapInArrow(

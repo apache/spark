@@ -8943,6 +8943,21 @@
           "Drop the namespace <namespace>."
         ]
       },
+      "EXTERNAL_UDF" : {
+        "message" : [
+          "External UDF expressions. Set <config> to true to enable them."
+        ]
+      },
+      "EXTERNAL_UDF_IN_ON_CLAUSE" : {
+        "message" : [
+          "External UDF in the ON clause of a <joinType> JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
+        ]
+      },
+      "EXTERNAL_UDF_WITH_MULTIPLE_CHILDREN" : {
+        "message" : [
+          "External UDF whose arguments reference more than one child operator. Rewrite the query so the UDF is evaluated after the inputs are combined."
+        ]
+      },
       "GEOSPATIAL_DISABLED" : {
         "message" : [
           "Geospatial feature is disabled."
@@ -8966,6 +8981,12 @@
       "INTERRUPT_TYPE" : {
         "message" : [
           "Unsupported interrupt type: <interruptType>."
+        ]
+      },
+      "LAMBDA_FUNCTION_WITH_EXTERNAL_UDF" : {
+        "message" : [
+          "Cannot evaluate the external UDF <funcName> inside the lambda of a higher-order function.",
+          "This placement is not supported. Rewrite the query so the UDF is applied outside the lambda."
         ]
       },
       "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
