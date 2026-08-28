@@ -70,11 +70,11 @@ The information displayed at the top of the page includes:
 The current user, application start time, and total uptime are shown in the footer at the
 bottom of every page.
 
-When the application can be held, the summary shows an **Application** line with a **(hold)**
-link; clicking it stops requesting new executors and gracefully decommissions the running ones,
+When the application can be held, the summary shows an **Application** line with a **Hold**
+button; clicking it stops requesting new executors and gracefully decommissions the running ones,
 so each finishes its tasks and then exits (unless `spark.executor.decommission.forceKillTimeout`
 is set, which kills a still-busy executor after that timeout). The line then reads `Held` with a
-**(resume)** link that restores the executor requirement. Shuffle output written before the hold
+**Resume** button that restores the executor requirement. Shuffle output written before the hold
 stays available, but cached blocks are recomputed after resuming, and an RDD created while held
 is sized against a default parallelism of 2 (no executors are alive) and keeps that partition
 count afterwards. Pipelined-shuffle jobs and workloads with long-running tasks (streaming
@@ -117,7 +117,7 @@ completed, skipped, and failed). In [Fair scheduling mode](job-scheduling.html#s
 a table of [pool properties](job-scheduling.html#configuring-pool-properties) is also shown.
 
 Below the summary are the stages, grouped by status (active, pending, completed, skipped, failed).
-An active stage shows a small **(kill)** link next to its description; clicking it asks Spark
+An active stage shows a small **Kill** button next to its description; clicking it asks Spark
 to cancel that stage. Only failed stages show the failure reason. Click a stage's description
 to open its [Stage detail](#stage-detail) page.
 

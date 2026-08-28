@@ -776,13 +776,13 @@ once no executor is left. The Master's `/json/` endpoint reports the same in the
 Only applications whose driver reports that it can be held are annotated, per the preconditions
 described in [Web UI](web-ui.html#jobs-tab).
 
-Such an application also gets a **(hold)** link next to its **(kill)** link, and a **(resume)**
-link while it is held. Holding stops requesting new executors for the application and gracefully
+Such an application also gets a **Hold** button next to its **Kill** button, and a **Resume**
+button while it is held. Holding stops requesting new executors for the application and gracefully
 decommissions the running ones; the application keeps its driver and the shuffle output already
 written, while cached blocks are lost and recomputed after resuming. Holding and resuming require
-modify permissions, like killing. The links are gated by `spark.ui.holdEnabled` twice: on the
+modify permissions, like killing. The buttons are gated by `spark.ui.holdEnabled` twice: on the
 Master, where setting it to false hides them for every application, and on each application,
-whose own setting travels with its registration -- an application that disabled it gets no links
+whose own setting travels with its registration -- an application that disabled it gets no buttons
 and its hold requests are rejected, while its hold status stays visible. The same controls remain
 available on the driver web UI.
 
