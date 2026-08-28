@@ -698,8 +698,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case CreateFunction(ResolvedIdentifier(catalog, _), _, _, _, _) =>
       throw QueryCompilationErrors.missingCatalogCreateFunctionAbilityError(catalog)
 
-    case c @ CreateUserDefinedFunction(
-        CreateFunctionInSessionCatalog(ident), _, _, _, _, _, _, _, _, _, _, _, _, _) =>
+    case c @ CreateUserDefinedFunction(child, _, _, _, _, _, _, _, _, _, _, _, _, _)
+        if c.isTemp || (child match {
+          case CreateFunctionInSessionCatalog(_) => true
+          case _ => false
+        }) =>
       CreateUserDefinedFunctionCommand(
         child = c.child,
         inputParamText = c.inputParamText,
