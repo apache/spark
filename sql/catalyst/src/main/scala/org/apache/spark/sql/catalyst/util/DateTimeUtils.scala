@@ -41,6 +41,8 @@ import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8S
 object DateTimeUtils extends SparkDateTimeUtils {
 
   private val microsPerSecondBD = java.math.BigDecimal.valueOf(MICROS_PER_SECOND)
+  private val microsPerSecondDigits = microsPerSecondBD.precision().toLong - 1L
+  private val maxLongDigits = Long.MaxValue.toString.length.toLong
 
   // See http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
   // It's 2440587.5, rounding up to be compatible with Hive.
@@ -87,7 +89,21 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * does not fit in a Long.
    */
   def decimalToTimestamp(d: Decimal): Long = {
-    d.toJavaBigDecimal.multiply(microsPerSecondBD).toBigInteger.longValueExact()
+    if (d.isZero) {
+      0L
+    } else {
+      val value = d.toJavaBigDecimal
+      val microsDigits = value.precision().toLong - value.scale().toLong + microsPerSecondDigits
+      if (microsDigits <= 0) {
+        0L
+      } else if (microsDigits < maxLongDigits) {
+        value.multiply(microsPerSecondBD).longValue()
+      } else if (microsDigits > maxLongDigits) {
+        throw new ArithmeticException("overflow")
+      } else {
+        value.multiply(microsPerSecondBD).toBigInteger.longValueExact()
+      }
+    }
   }
 
   /**

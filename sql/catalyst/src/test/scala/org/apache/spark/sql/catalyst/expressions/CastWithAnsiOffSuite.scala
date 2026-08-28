@@ -979,8 +979,21 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
       cast(decimal("1.0000009", 8, 7), TimestampType, UTC_OPT), MICROS_PER_SECOND)
     checkEvaluation(
       cast(decimal("-1.0000009", 8, 7), TimestampType, UTC_OPT), -MICROS_PER_SECOND)
+    checkEvaluation(cast(decimal("0.0000009", 7, 7), TimestampType, UTC_OPT), 0L)
+    checkEvaluation(cast(decimal("-0.0000009", 7, 7), TimestampType, UTC_OPT), 0L)
     checkEvaluation(cast(decimal("-1", 10, 0), TimestampType, UTC_OPT), -MICROS_PER_SECOND)
     checkEvaluation(cast(decimal("0", 10, 0), TimestampType, UTC_OPT), 0L)
+
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      val extremeScale = -500000000
+      val extremeType = DecimalType(1, extremeScale)
+      Seq(1L, -1L).foreach { unscaled =>
+        val extremeDecimal = Literal(Decimal(unscaled, 1, extremeScale), extremeType)
+        checkEvaluation(cast(extremeDecimal, TimestampType, UTC_OPT), null)
+      }
+      val zero = Literal(Decimal(0L, 1, extremeScale), extremeType)
+      checkEvaluation(cast(zero, TimestampType, UTC_OPT), 0L)
+    }
 
     assert(!cast(decimal("1", 10, 0), TimestampType, UTC_OPT).nullable)
     assert(cast(decimal("1", 20, 0), TimestampType, UTC_OPT).nullable)

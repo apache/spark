@@ -557,6 +557,24 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       val boundaryDecimal = Literal(Decimal(new java.math.BigDecimal(value), 20, 7))
       checkEvaluation(cast(boundaryDecimal, TimestampType), expected)
     }
+
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      val extremeScale = -500000000
+      val extremeType = DecimalType(1, extremeScale)
+      val extremeDecimal = Literal(Decimal(1L, 1, extremeScale), extremeType)
+      checkErrorInExpression[SparkArithmeticException](
+        cast(extremeDecimal, TimestampType),
+        "CAST_OVERFLOW",
+        Map(
+          "value" -> "1E+500000000BD",
+          "sourceType" -> "\"DECIMAL(1,-500000000)\"",
+          "targetType" -> "\"TIMESTAMP\"",
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+        ))
+
+      val zero = Literal(Decimal(0L, 1, extremeScale), extremeType)
+      checkEvaluation(cast(zero, TimestampType), 0L)
+    }
   }
 
   private def castOverflowErrMsg(v: Any, from: DataType, to: DataType): String = {
