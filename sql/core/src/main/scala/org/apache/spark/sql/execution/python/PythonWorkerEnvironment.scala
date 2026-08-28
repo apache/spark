@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.service
+package org.apache.spark.sql.execution.python
 
 import java.nio.charset.StandardCharsets
 
 import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.api.python.{PythonFunction, SimplePythonFunction}
 import org.apache.spark.sql.RuntimeConfig
-import org.apache.spark.sql.connect.config.Connect
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 /**
  * The environment variables that Python worker processes launched for a session's Python
@@ -33,19 +33,17 @@ import org.apache.spark.sql.internal.SQLConf
  * inside a Python UDF. The configurations are the authoritative session state -- no second copy
  * of the environment is maintained as session state -- so the environment follows the session
  * wherever ordinary session configurations follow it, including into a session created by
- * `cloneSession`. A request's snapshot is also held in the plan cache keys of the plans it
- * caches, since a cached plan is only reusable by a request carrying the same environment.
+ * `cloneSession`.
+ *
+ * This is shared by every front end that builds Python functions, so that the prefix, the
+ * accepted names, the limits and the merge precedence are defined in exactly one place rather
+ * than once per front end.
  *
  * Names are preserved case-sensitively by Spark. On a case-sensitive operating system `FOO` and
  * `foo` are therefore distinct variables; Windows process environments are case-insensitive, so
  * what a worker observes there is the platform's business rather than Spark's.
- *
- * A request reads the environment once and uses that one snapshot for everything it does, because
- * the configurations can change underneath it: another request may set them while this one is
- * still planning. Re-reading would let a plan be built with one environment and cached under
- * another.
  */
-private[connect] object PythonWorkerEnvironment {
+private[sql] object PythonWorkerEnvironment {
 
   /** Prefix of the session configurations that carry the environment. */
   val confPrefix: String = "spark.pythonWorkerEnv."
@@ -70,11 +68,19 @@ private[connect] object PythonWorkerEnvironment {
   /**
    * The environment carried by `conf`, without validation.
    *
-   * Callers take one snapshot per request and pass it around. Validation is separate so that the
-   * plan cache can tell two environments apart without rejecting an invalid one: an invalid entry
-   * has to fail the queries that would install it in a worker, not every query in the session.
+   * Callers that need one stable snapshot for a whole request read once and pass the result
+   * around. Validation is separate so that a caller can tell two environments apart without
+   * rejecting an invalid one: an invalid entry has to fail the queries that would install it in a
+   * worker, not every query in the session.
    */
   def read(conf: SQLConf): Map[String, String] = extract(conf.getAllConfs)
+
+  /** The environment carried by `conf`, rejected if it is malformed or oversized. */
+  def readValidated(conf: SQLConf): Map[String, String] = {
+    val variables = read(conf)
+    validate(variables)
+    variables
+  }
 
   /** The environment carried by the configurations in `allConfs`. */
   private def extract(allConfs: Map[String, String]): Map[String, String] = {
@@ -88,10 +94,11 @@ private[connect] object PythonWorkerEnvironment {
    * Rejects a malformed or oversized environment.
    *
    * This runs when a Python function is built, which is the one point that every way of writing a
-   * configuration reaches: the Spark Connect config RPC, SQL `SET`, and the application-level
-   * configurations merged into a new session all arrive here. [[validateConfigChange]] rejects a
-   * write through the config RPC earlier and more helpfully, but it cannot see the other two, so
-   * this is the check that makes an invalid environment unable to reach a worker at all.
+   * configuration reaches: a front end's own configuration API, SQL `SET`, and the
+   * application-level configurations merged into a new session all arrive here.
+   * [[validateConfigChange]] rejects a write earlier and more helpfully where a front end can
+   * intercept one, but it cannot see the other paths, so this is the check that makes an invalid
+   * environment unable to reach a worker at all.
    *
    * A message may name a variable but never carries its value, so a rejection cannot copy a value
    * into a log or a stack trace. Note that the name is chosen by the user, so a name is only as
@@ -102,10 +109,12 @@ private[connect] object PythonWorkerEnvironment {
    *   the collection exceeds a limit.
    */
   def validate(variables: Map[String, String]): Unit = {
+    // Read from the `SparkConf`, not the session configurations: these are cluster-level bounds,
+    // and a session must not be able to raise its own.
     val conf = SparkEnv.get.conf
-    val maxCount = conf.get(Connect.CONNECT_PYTHON_WORKER_ENV_MAX_VARIABLES)
-    val maxNameLength = conf.get(Connect.CONNECT_PYTHON_WORKER_ENV_MAX_NAME_LENGTH)
-    val maxTotalSizeBytes = conf.get(Connect.CONNECT_PYTHON_WORKER_ENV_MAX_TOTAL_SIZE_BYTES)
+    val maxCount = conf.get(StaticSQLConf.PYTHON_WORKER_ENV_MAX_VARIABLES)
+    val maxNameLength = conf.get(StaticSQLConf.PYTHON_WORKER_ENV_MAX_NAME_LENGTH)
+    val maxTotalSizeBytes = conf.get(StaticSQLConf.PYTHON_WORKER_ENV_MAX_TOTAL_SIZE_BYTES)
 
     if (variables.size > maxCount) {
       throw new SparkException(
@@ -161,11 +170,11 @@ private[connect] object PythonWorkerEnvironment {
    * would produce is validated before the write happens, so an invalid environment never enters
    * the session at all and the failure points at the call that caused it.
    *
-   * This covers the Spark Connect config RPC, which is both how a client sets a configuration
-   * explicitly and how `SparkSession.builder.config` applies one. It does not cover SQL `SET` or
-   * the application-level configurations merged into a new session: both reach the session
-   * configurations without passing through the RPC, which is why [[validate]] at build time stays
-   * as the check that no invalid environment can reach a worker.
+   * This is for a front end that can intercept a configuration write, such as the Spark Connect
+   * config RPC. It does not cover SQL `SET` or the application-level configurations merged into a
+   * new session, which reach the session configurations without passing through any such
+   * interception, and that is why [[validate]] at build time stays as the check that no invalid
+   * environment can reach a worker.
    *
    * Removing a variable is deliberately not validated. A removal can only shrink the environment,
    * and it is how a session recovers from an environment that one of those unchecked paths left
@@ -185,15 +194,46 @@ private[connect] object PythonWorkerEnvironment {
   }
 
   /**
-   * A fresh mutable copy of `variables` for a single Python function.
+   * `original` with the session's environment installed in it.
    *
-   * A copy is required rather than a shared map: the Python runners add their own entries to the
-   * map they are given before launching a worker, so sharing one map across functions would leak
-   * those entries between functions, and an immutable map would fail the same assignment.
+   * @throws SparkException
+   *   if `original` is not an implementation this can rewrite.
    */
-  def toMutableJavaMap(variables: Map[String, String]): java.util.HashMap[String, String] = {
-    val result = new java.util.HashMap[String, String](variables.size)
-    variables.foreach { case (name, value) => result.put(name, value) }
+  def merge(original: PythonFunction, sessionEnv: Map[String, String]): PythonFunction = {
+    original match {
+      case function: SimplePythonFunction =>
+        function.copy(envVars = mergeToJavaMap(function.envVars, sessionEnv))
+      case other =>
+        // Returning `other` unchanged would drop the environment silently, which is the failure
+        // mode this feature has to avoid: a UDF would run without a variable it was told to have.
+        throw SparkException.internalError(
+          s"Cannot install a Python worker environment in a ${other.getClass.getName}.")
+    }
+  }
+
+  /**
+   * A fresh mutable map holding `originalEnv` with `sessionEnv` applied over it, for a single
+   * Python function.
+   *
+   * The session's environment wins a conflict. A variable in `originalEnv` comes from a broader
+   * scope -- for a classic session, from the application-wide `spark.executorEnv.*` -- and the
+   * session's own configuration is the more specific statement of intent. This also matches what
+   * a worker observes anyway: `PythonWorkerFactory` starts from the executor process environment
+   * and applies this map over it.
+   *
+   * A fresh map is required rather than a shared one: the Python runners add their own entries to
+   * the map they are given before launching a worker, so sharing one map across functions would
+   * leak those entries between functions, and an immutable map would fail the same assignment.
+   */
+  def mergeToJavaMap(
+      originalEnv: java.util.Map[String, String],
+      sessionEnv: Map[String, String]): java.util.HashMap[String, String] = {
+    val result = if (originalEnv == null) {
+      new java.util.HashMap[String, String](sessionEnv.size)
+    } else {
+      new java.util.HashMap[String, String](originalEnv)
+    }
+    sessionEnv.foreach { case (name, value) => result.put(name, value) }
     result
   }
 
