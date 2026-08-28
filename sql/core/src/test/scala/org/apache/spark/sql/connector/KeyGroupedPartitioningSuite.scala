@@ -1745,6 +1745,134 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59054: shuffle one side: partition keys with binary type") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, Array(
+      Column.create("id", BinaryType),
+      Column.create("name", StringType),
+      Column.create("price", DoubleType)), items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(X'0101', 'aa', 40.0), " +
+      "(X'0202', 'bb', 10.0), " +
+      "(X'0303', 'cc', 15.5), " +
+      "(X'0404', 'dd', 20.0)")
+
+    createTable(purchases, Array(
+      Column.create("item_id", BinaryType),
+      Column.create("price", DoubleType)), Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(X'0101', 42.0), (X'0101', 44.0), (X'0202', 11.0), (X'0202', 19.5), " +
+      "(X'0303', 26.0), (X'0303', 30.0), (X'0404', 50.0), (X'0404', 60.0)")
+
+    Seq(true, false).foreach { shuffle =>
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> shuffle.toString) {
+        val df = createJoinTestDF(Seq("id" -> "item_id"))
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        if (shuffle) {
+          assert(shuffles.size == 1, "only shuffle one side not report partitioning")
+        } else {
+          assert(shuffles.size == 2, "should add two side shuffle when bucketing shuffle one " +
+            "side is not enabled")
+        }
+
+        checkAnswer(df, Seq(
+          Row(Array[Byte](1, 1), "aa", 40.0, 42.0),
+          Row(Array[Byte](1, 1), "aa", 40.0, 44.0),
+          Row(Array[Byte](2, 2), "bb", 10.0, 11.0),
+          Row(Array[Byte](2, 2), "bb", 10.0, 19.5),
+          Row(Array[Byte](3, 3), "cc", 15.5, 26.0),
+          Row(Array[Byte](3, 3), "cc", 15.5, 30.0),
+          Row(Array[Byte](4, 4), "dd", 20.0, 50.0),
+          Row(Array[Byte](4, 4), "dd", 20.0, 60.0)))
+      }
+    }
+  }
+
+  test("SPARK-59054: shuffle one side: struct partition keys with different field names") {
+    // Struct equality ignores field names, so joining STRUCT<a:INT> with STRUCT<b:INT> is legal
+    // and SPJ stays eligible. The shuffled side's lookup keys carry its own schema while the
+    // partitioner's map keys come from the keyed side, so key comparison must not depend on
+    // the field names.
+    val items_partitions = Array(identity("id"))
+    createTable(items, Array(
+      Column.create("id", new StructType().add("a", IntegerType)),
+      Column.create("name", StringType),
+      Column.create("price", DoubleType)), items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(named_struct('a', 1), 'aa', 40.0), " +
+      "(named_struct('a', 2), 'bb', 10.0), " +
+      "(named_struct('a', 3), 'cc', 15.5), " +
+      "(named_struct('a', 4), 'dd', 20.0)")
+
+    createTable(purchases, Array(
+      Column.create("item_id", new StructType().add("b", IntegerType)),
+      Column.create("price", DoubleType)), Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(named_struct('b', 1), 42.0), (named_struct('b', 2), 19.5), " +
+      "(named_struct('b', 3), 26.0), (named_struct('b', 4), 50.0)")
+
+    Seq(true, false).foreach { shuffle =>
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> shuffle.toString) {
+        val df = createJoinTestDF(Seq("id" -> "item_id"))
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        if (shuffle) {
+          assert(shuffles.size == 1, "only shuffle one side not report partitioning")
+        } else {
+          assert(shuffles.size == 2, "should add two side shuffle when bucketing shuffle one " +
+            "side is not enabled")
+        }
+
+        checkAnswer(df, Seq(
+          Row(Row(1), "aa", 40.0, 42.0),
+          Row(Row(2), "bb", 10.0, 19.5),
+          Row(Row(3), "cc", 15.5, 26.0),
+          Row(Row(4), "dd", 20.0, 50.0)))
+      }
+    }
+  }
+
+  test("SPARK-59054: shuffle one side: partition transform collapsing -0.0 and 0.0") {
+    withFunction(UnboundSignedZerosFunction) {
+      // `signed_zeros` maps id 1 to -0.0 and id 2 to 0.0: two partition keys that are equal
+      // under SQL semantics but distinct bitwise, which the grouped side collapses into one
+      // partition. Rows of both forms on the shuffled side must land in that partition.
+      val items_partitions = Array(
+        Expressions.apply("signed_zeros", Expressions.column("id")))
+      createTable(items, itemsColumns, items_partitions)
+
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+      createTable(purchases, purchasesColumns, Array.empty)
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 19.5, cast('2020-02-01' as timestamp)), " +
+        "(3, 26.0, cast('2023-01-01' as timestamp))")
+
+      Seq(true, false).foreach { shuffle =>
+        withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> shuffle.toString) {
+          val df = createJoinTestDF(Seq("id" -> "item_id"))
+          val shuffles = collectShuffles(df.queryExecution.executedPlan)
+          if (shuffle) {
+            assert(shuffles.size == 1, "only shuffle one side not report partitioning")
+          } else {
+            assert(shuffles.size == 2, "should add two side shuffle when bucketing shuffle one " +
+              "side is not enabled")
+          }
+
+          checkAnswer(df, Seq(
+            Row(1, "aa", 40.0, 42.0),
+            Row(2, "bb", 10.0, 19.5),
+            Row(3, "cc", 15.5, 26.0)))
+        }
+      }
+    }
+  }
+
   test("SPARK-44641: duplicated records when SPJ is not triggered") {
     val items_partitions = Array(bucket(8, "id"))
     createTable(items, itemsColumns, items_partitions)
