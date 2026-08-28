@@ -497,13 +497,13 @@
   },
   "BUCKET_COLUMN_IN_PARTITION_COLUMNS" : {
     "message" : [
-      "Bucketing column <bucketCol> should not be part of partition columns <partitionColumns>."
+      "Bucketing column <bucketColumn> should not be part of partition columns <partitionColumns>."
     ],
     "sqlState" : "42713"
   },
   "BUCKET_SORT_COLUMN_IN_PARTITION_COLUMNS" : {
     "message" : [
-      "Bucket sorting column <sortCol> should not be part of partition columns <partitionColumns>."
+      "Bucket sorting column <sortColumn> should not be part of partition columns <partitionColumns>."
     ],
     "sqlState" : "42713"
   },

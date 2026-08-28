@@ -2232,7 +2232,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "BUCKET_COLUMN_IN_PARTITION_COLUMNS",
       messageParameters = Map(
-        "bucketCol" -> toSQLId(Seq(bucketCol)),
+        "bucketColumn" -> toSQLId(Seq(bucketCol)),
         "partitionColumns" -> normalizedPartCols.map(c => toSQLId(Seq(c))).mkString(", ")))
   }
 
@@ -2241,7 +2241,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "BUCKET_SORT_COLUMN_IN_PARTITION_COLUMNS",
       messageParameters = Map(
-        "sortCol" -> toSQLId(Seq(sortCol)),
+        "sortColumn" -> toSQLId(Seq(sortCol)),
         "partitionColumns" -> normalizedPartCols.map(c => toSQLId(Seq(c))).mkString(", ")))
   }
 

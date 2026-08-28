@@ -254,7 +254,7 @@ abstract class BucketedWriteSuite extends QueryTest {
         .saveAsTable("bucketed_table")),
       condition = "BUCKET_COLUMN_IN_PARTITION_COLUMNS",
       sqlState = "42713",
-      parameters = Map("bucketCol" -> "`j`", "partitionColumns" -> "`i`, `j`"))
+      parameters = Map("bucketColumn" -> "`j`", "partitionColumns" -> "`i`, `j`"))
 
     checkError(
       exception = intercept[AnalysisException](df.write
@@ -264,7 +264,7 @@ abstract class BucketedWriteSuite extends QueryTest {
         .saveAsTable("bucketed_table")),
       condition = "BUCKET_SORT_COLUMN_IN_PARTITION_COLUMNS",
       sqlState = "42713",
-      parameters = Map("sortCol" -> "`i`", "partitionColumns" -> "`i`, `j`"))
+      parameters = Map("sortColumn" -> "`i`", "partitionColumns" -> "`i`, `j`"))
   }
 
   test("SPARK-59040: overlapping column names are quoted as single identifiers") {
@@ -278,7 +278,7 @@ abstract class BucketedWriteSuite extends QueryTest {
         .saveAsTable("bucketed_table")),
       condition = "BUCKET_COLUMN_IN_PARTITION_COLUMNS",
       sqlState = "42713",
-      parameters = Map("bucketCol" -> "`x.y`", "partitionColumns" -> "`x.y`, `z``w`"))
+      parameters = Map("bucketColumn" -> "`x.y`", "partitionColumns" -> "`x.y`, `z``w`"))
   }
 
   test("write bucketed data without partitionBy") {
