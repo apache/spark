@@ -870,6 +870,15 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         for uid in records:
             self.assertEqual(set(self._states(uid)), {"server"})
 
+    def test_idle_timeout_configuration(self) -> None:
+        for value in ("0", "-1"):
+            with self.subTest(value=value):
+                os.environ["SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT"] = value
+                self.assertEqual(self._pool._idle_timeout(), int(value))
+
+        os.environ["SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT"] = "not-an-integer"
+        self.assertEqual(self._pool._idle_timeout(), ServerPool._DEFAULT_IDLE_TIMEOUT_SECONDS)
+
     def test_reap_server_unreachable_and_idle(self) -> None:
         with self.subTest("unreachable member is retired"):
             gone = self._live_process()
@@ -889,16 +898,41 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
                     self._directory.server_path("1d1e"),
                     self._server_data(port, idle.pid, created=time.time() - 60),
                 )
-                fresh = self._live_process()
-                self._write_state(
-                    self._directory.server_path("f2e5"), self._server_data(port, fresh.pid)
-                )
                 with self._directory:
                     self._pool.janitor()
                 self.assertEqual(set(self._states("1d1e")), {"retired"})
-                self.assertEqual(set(self._states("f2e5")), {"server"})
                 self.assertTrue(_wait_proc_dead(idle))
-                self.assertIsNone(fresh.poll())
+
+    def test_reap_server_does_not_expire_when_idle_retirement_is_disabled(self) -> None:
+        with _listening_socket() as port:
+            for uid, value in (("d150", "0"), ("d151", "-1")):
+                with self.subTest(value=value):
+                    os.environ["SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT"] = value
+                    server = self._live_process()
+                    self._write_state(
+                        self._directory.server_path(uid),
+                        self._server_data(port, server.pid, created=0),
+                    )
+
+                    with self._directory:
+                        self.assertFalse(self._pool.reap(uid))
+
+                    self.assertEqual(set(self._states(uid)), {"server"})
+                    self.assertIsNone(server.poll())
+
+    def test_janitor_preserves_healthy_non_idle_server(self) -> None:
+        os.environ["SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT"] = "10"
+        server = self._live_process()
+        with _listening_socket() as port:
+            self._write_state(
+                self._directory.server_path("f2e5"), self._server_data(port, server.pid)
+            )
+
+            with self._directory:
+                self._pool.janitor()
+
+        self.assertEqual(set(self._states("f2e5")), {"server"})
+        self.assertIsNone(server.poll())
 
     def test_reap_does_not_signal_reused_server_pid(self) -> None:
         unrelated = subprocess.Popen(
