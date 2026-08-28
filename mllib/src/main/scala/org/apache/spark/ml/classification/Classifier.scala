@@ -97,10 +97,6 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    * The default wraps [[predictRaw]] in a UDF. Models may override this with a native expression or
    * a UDF that snapshots prediction state.
    *
-   * [[ClassificationModel.transform]] uses this when [[rawPredictionCol]] is set. When
-   * [[predictionCol]] is also set, it is used together with [[raw2predictionColumn]].
-   * Subclasses may use it together with additional output-column conversion methods.
-   *
    * @param features input features column
    * @return raw-prediction column of type `Vector`
    */
@@ -111,9 +107,6 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
   /**
    * Returns an expression that produces a predicted label from a raw-prediction vector column.
    *
-   * [[ClassificationModel.transform]] uses this when both [[rawPredictionCol]] and
-   * [[predictionCol]] are set. It consumes the output of [[predictRawColumn]].
-   *
    * @param rawPrediction input raw-prediction column
    * @return prediction column of type `Double`
    */
@@ -123,10 +116,6 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
 
   /**
    * Returns an expression that produces a predicted label directly from a features column.
-   *
-   * [[ClassificationModel.transform]] uses this when [[predictionCol]] is set and
-   * [[rawPredictionCol]] is not set. It is used without another prediction conversion method.
-   * Subclasses with additional output columns may further restrict when this method is used.
    *
    * @param features input features column
    * @return prediction column of type `Double`

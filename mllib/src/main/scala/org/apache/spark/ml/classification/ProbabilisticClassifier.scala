@@ -67,6 +67,67 @@ abstract class ProbabilisticClassifier[
  * Model produced by a [[ProbabilisticClassifier]].
  * Classes are indexed {0, 1, ..., numClasses - 1}.
  *
+ * `transform` selects column-producing methods based on which output columns are set:
+ *
+ * <table>
+ *   <tr>
+ *     <th>Raw prediction</th>
+ *     <th>Probability</th>
+ *     <th>Prediction</th>
+ *     <th>Column-producing methods</th>
+ *   </tr>
+ *   <tr>
+ *     <td>Not set</td>
+ *     <td>Not set</td>
+ *     <td>Not set</td>
+ *     <td>None</td>
+ *   </tr>
+ *   <tr>
+ *     <td>Set</td>
+ *     <td>Not set</td>
+ *     <td>Not set</td>
+ *     <td><code>predictRawColumn</code></td>
+ *   </tr>
+ *   <tr>
+ *     <td>Not set</td>
+ *     <td>Set</td>
+ *     <td>Not set</td>
+ *     <td><code>predictProbabilityColumn</code></td>
+ *   </tr>
+ *   <tr>
+ *     <td>Not set</td>
+ *     <td>Not set</td>
+ *     <td>Set</td>
+ *     <td><code>predictionColumn</code></td>
+ *   </tr>
+ *   <tr>
+ *     <td>Set</td>
+ *     <td>Set</td>
+ *     <td>Not set</td>
+ *     <td><code>predictRawColumn</code> => <code>raw2probabilityColumn</code></td>
+ *   </tr>
+ *   <tr>
+ *     <td>Set</td>
+ *     <td>Not set</td>
+ *     <td>Set</td>
+ *     <td><code>predictRawColumn</code> => <code>raw2predictionColumn</code></td>
+ *   </tr>
+ *   <tr>
+ *     <td>Not set</td>
+ *     <td>Set</td>
+ *     <td>Set</td>
+ *     <td><code>predictProbabilityColumn</code> =>
+ *       <code>probability2predictionColumn</code></td>
+ *   </tr>
+ *   <tr>
+ *     <td>Set</td>
+ *     <td>Set</td>
+ *     <td>Set</td>
+ *     <td><code>predictRawColumn</code> => <code>raw2probabilityColumn</code> and
+ *       <code>raw2predictionColumn</code></td>
+ *   </tr>
+ * </table>
+ *
  * @tparam FeaturesType  Type of input features.  E.g., `Vector`
  * @tparam M  Concrete Model type
  */
@@ -78,8 +139,9 @@ abstract class ProbabilisticClassificationModel[
   /**
    * Returns an expression that converts a raw-prediction vector column to a probability vector.
    *
-   * [[ProbabilisticClassificationModel.transform]] uses this when both [[rawPredictionCol]] and
+   * `transform` uses this when both [[rawPredictionCol]] and
    * [[probabilityCol]] are set. It consumes the output of [[predictRawColumn]].
+   * Thresholds do not affect this conversion; they are applied only when producing a prediction.
    *
    * @param rawPrediction input raw-prediction column
    * @return probability column of type `Vector`
@@ -91,7 +153,7 @@ abstract class ProbabilisticClassificationModel[
   /**
    * Returns an expression that produces a probability vector directly from a features column.
    *
-   * [[ProbabilisticClassificationModel.transform]] uses this when [[probabilityCol]] is set and
+   * `transform` uses this when [[probabilityCol]] is set and
    * [[rawPredictionCol]] is not set. When [[predictionCol]] is also set, it is used
    * together with [[probability2predictionColumn]].
    *
@@ -105,8 +167,10 @@ abstract class ProbabilisticClassificationModel[
   /**
    * Returns an expression that produces a predicted label from a raw-prediction vector column.
    *
-   * [[ProbabilisticClassificationModel.transform]] uses this when both [[rawPredictionCol]] and
+   * `transform` uses this when both [[rawPredictionCol]] and
    * [[predictionCol]] are set. It consumes the output of [[predictRawColumn]].
+   * Unlike the default classification behavior, probabilistic classification honors
+   * [[thresholds]] by converting raw predictions to probabilities before selecting a prediction.
    *
    * @param rawPrediction input raw-prediction column
    * @return prediction column of type `Double`
@@ -118,7 +182,7 @@ abstract class ProbabilisticClassificationModel[
   /**
    * Returns an expression that produces a predicted label from a probability vector column.
    *
-   * [[ProbabilisticClassificationModel.transform]] uses this when [[predictionCol]] and
+   * `transform` uses this when [[predictionCol]] and
    * [[probabilityCol]] are set and [[rawPredictionCol]] is not set. It consumes the output of
    * [[predictProbabilityColumn]].
    *
