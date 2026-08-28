@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.exchange
 
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{CollectLimitExec, CollectTailExec, CoalesceExec, SparkPlan, TakeOrderedAndProjectExec}
+import org.apache.spark.sql.execution.{CoalesceExec, CollectLimitExec, CollectTailExec, SparkPlan, TakeOrderedAndProjectExec}
 import org.apache.spark.sql.execution.joins.CartesianProductExec
 
 /**
