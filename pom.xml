@@ -345,7 +345,7 @@
       --enable-native-access=ALL-UNNAMED
       -XX:+EnableDynamicAgentLoading
     </extraJavaTestArgs>
-    <mariadb.java.client.version>3.5.7</mariadb.java.client.version>
+    <mariadb.java.client.version>3.5.9</mariadb.java.client.version>
     <mysql.connector.version>9.6.0</mysql.connector.version>
     <postgresql.version>42.7.13</postgresql.version>
     <db2.jcc.version>12.1.4.0</db2.jcc.version>
