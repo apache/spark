@@ -692,9 +692,16 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertEqual(os.path.basename(member.claim_path), claim_name)
         states = self._states("bbb")
         self.assertEqual(set(states), {"claimed"})
+        with self._directory as directory:
+            claimed = directory.read_json(states["claimed"])
+        assert claimed is not None
+        self.assertEqual(
+            claimed["client_process_start_id"], ServerPool._process_start_id(os.getpid())
+        )
         # The mismatched member is untouched, and a second claim finds nothing.
         self.assertEqual(set(self._states("aaa")), {"server"})
         with self._directory:
+            self.assertFalse(self._pool.reap("bbb"))
             self.assertIsNone(self._pool.claim("my-fp"))
 
     def test_claim_prefers_the_oldest_member(self) -> None:
@@ -984,6 +991,18 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertEqual(set(self._states("0b0b")), {"claimed"})
         self.assertIsNone(ours.poll())
         self.assertEqual(set(self._states("0c0c")), {"retired"})
+
+    def test_reap_claimed_detects_a_reused_client_pid(self) -> None:
+        server = self._live_process()
+        data = self._server_data(12345, server.pid)
+        data["client_process_start_id"] = "a-different-process-generation"
+        self._write_state(self._directory.claimed_path(os.getpid(), "bad5"), data)
+
+        with self._directory:
+            self.assertFalse(self._pool.reap("bad5"))
+
+        self.assertEqual(set(self._states("bad5")), {"retired"})
+        self.assertTrue(_wait_proc_dead(server), "the orphaned server was not stopped")
 
     def test_reap_claimed_detects_a_reused_server_pid(self) -> None:
         unrelated = self._stubborn_process()

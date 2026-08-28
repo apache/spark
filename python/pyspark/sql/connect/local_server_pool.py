@@ -250,6 +250,12 @@ class PoolMember(_PoolStateRecord):
         value = data.get("process_start_id") if data is not None else None
         return value if isinstance(value, str) and value else None
 
+    @staticmethod
+    def client_process_start_id_from_data(data: Optional[Dict[str, Any]]) -> Optional[str]:
+        """Recover the claiming client's process generation from a claimed record."""
+        value = data.get("client_process_start_id") if data is not None else None
+        return value if isinstance(value, str) and value else None
+
     @property
     def url(self) -> str:
         return f"sc://{self.host}:{self.port}"
@@ -637,11 +643,19 @@ class ServerPool:
             data = self._directory.read_json(path)
             member = PoolMember.from_data(data) if data is not None else None
             if member is not None and member.fingerprint == fingerprint:
-                candidates.append((member, uid, path))
+                assert data is not None
+                candidates.append((member, uid, path, data))
         candidates.sort(key=lambda c: c[0].created)
-        for member, uid, path in candidates:
+        for member, uid, path, data in candidates:
             if not member.is_usable():
                 continue  # left for the reaping rules to retire
+            client_process_start_id = self._process_start_id(os.getpid())
+            if client_process_start_id is not None:
+                claimed_data = dict(data)
+                claimed_data["client_process_start_id"] = client_process_start_id
+                # Persist ownership before the atomic rename. If this process dies between the
+                # write and rename, the extra field is harmless on the still-unclaimed record.
+                self._directory.write_json(path, claimed_data)
             claim_path = self._directory.claimed_path(os.getpid(), uid)
             self._directory.rename(path, claim_path)
             member.claim_path = claim_path
@@ -686,7 +700,15 @@ class ServerPool:
         data = self._directory.read_json(path)
         server_pid, process_start_id = self._recover_server_handle(uid, data)
         client_pid = self._directory.claiming_pid(path)
-        client_alive = client_pid == os.getpid() or _pid_alive(client_pid)
+        client_process_start_id = PoolMember.client_process_start_id_from_data(data)
+        if client_process_start_id is None:
+            # Records written by older clients have no process generation. Preserve their
+            # liveness-only behavior rather than risking retirement of a live claim.
+            client_alive = client_pid == os.getpid() or _pid_alive(client_pid)
+        else:
+            client_alive = (
+                self._same_process_generation(client_pid, client_process_start_id) is not False
+            )
         if not client_alive or self._same_process_generation(server_pid, process_start_id) is False:
             self._retire(path, server_pid, process_start_id)
 
