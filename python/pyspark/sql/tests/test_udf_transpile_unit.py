@@ -1650,8 +1650,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
     def test_udf_transpile_udf_as_a_predicate(self):
         # A predicate is transpiled like anything else in a `where`: no Python worker, same answers.
-        # In a join condition too, since SPARK-58626 reads a deterministic argument at each use site
-        # where no column fits rather than handing the call back to Python.
+        # In a join condition it is not, since no column can go there -- see below.
         from pyspark.sql.functions import col
 
         used_twice = lambda a, b: (a + a) if b > 0 else 0.0  # noqa: E731
@@ -1666,11 +1665,10 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual(0, self._eval_python_count(filtered))
             self.assertEqual([(4.0, 2.0)], [(r[0], r[1]) for r in filtered.collect()])
 
-            # A join has no side to hold the column, so `a / b` is read at both use sites and the
-            # call still lowers. No column either -- the plan is the option body twice over.
+            # A join has no side to hold the column, so the call goes back to Python -- the same
+            # path the predicate takes with transpilation off.
             joined = df.join(other, predicate)
-            self.assertEqual(0, self._eval_python_count(joined), self._optimized_plan(joined))
-            self.assertNotIn(self._SHARED_ARG_ALIAS, self._optimized_plan(joined))
+            self.assertGreater(self._eval_python_count(joined), 0, self._optimized_plan(joined))
             self.assertEqual([(4.0, 2.0, 2.0)], [tuple(r) for r in joined.collect()])
 
     def test_udf_transpile_survives_an_argument_the_analyzer_moved(self):
@@ -1748,17 +1746,18 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 )
                 self.assertEqual([0, 1], sorted(r[0] for r in outer_arg.collect()))
 
-    def test_udf_transpile_reads_a_repeated_argument_twice_under_a_having(self):
+    def test_udf_transpile_puts_no_column_directly_above_an_aggregate(self):
         # SPARK-58626: `splitSubquery` finds the Aggregate a correlated scalar subquery is built on
         # by matching `Filter(_, Aggregate)` -- adjacency, not a search -- in an earlier batch than
         # the pushdown that would collapse a Project away. A column between a HAVING and its
         # Aggregate hid it, `mayHaveCountBug` read false, and the outer rows matching nothing were
-        # dropped instead of counted 0: measured as [] where the plan without the column gives
-        # [3, 4]. So no column goes directly above an Aggregate, and `count(*) + 1` is read at both
-        # use sites instead -- which is the plan that answers correctly, and the one the interpreted
-        # UDF cannot give here at all: it lands a Python eval node in the same place and gets NULL.
+        # dropped instead of counted 0: measured as [] where the same plan without the column
+        # returns [3, 4]. So nothing goes directly above an Aggregate. The call keeps the Python UDF
+        # and raises here exactly as transpilation-off does, because a Python eval node lands
+        # between the Filter and the Aggregate just the same -- that half is not ours.
         square_fn = lambda x: x * x  # noqa: E731
         legacy = {**_TRANSPILE_ON, "spark.sql.legacy.scalarSubqueryCountBugBehavior": True}
+        # `count(*) + 1` is read twice and is not cheap, so it is what would be owed a column.
         query = (
             "SELECT o.a FROM t_out_58626 o WHERE "
             "(SELECT count(*) FROM t_in_58626 i WHERE i.a = o.a "
@@ -1778,9 +1777,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 df = self.spark.sql(query)
                 plan = self._optimized_plan(df)
                 self.assertNotIn(self._SHARED_ARG_ALIAS, plan, plan)
-                self.assertEqual(0, self._eval_python_count(df), plan)
-                # 3 and 4 match no inner row, so their count is 0, not NULL.
-                self.assertEqual([3, 4], sorted(r[0] for r in df.collect()))
+                self.assertEqual(1, self._eval_python_count(df), plan)
 
     def test_udf_transpile_unused_argument_diverges_under_ansi(self):
         # SPARK-58626: an argument the body never uses never reaches the option, so nothing

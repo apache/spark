@@ -51,16 +51,12 @@ same deterministic argument share the column, so ``f(a + 1, a + 1)`` computes
 A call inside a higher-order function's lambda is never lowered: Spark already
 applies a Python UDF over the whole array there, and that path is left to it.
 Otherwise a few positions have nowhere to put the column -- under a ``groupBy``,
-directly above one, in a join condition, or in a command such as ``DELETE FROM``.
-A deterministic argument is then simply read at each use site: the same value and
-the same error either way, and cheaper than a round trip to Python for every row.
-
-A nondeterministic one is a different matter, because reading it twice draws
-twice, so there the call stays an interpreted Python UDF -- which computes its
-inputs once in the projection feeding the worker. One evaluation per
-nondeterministic parameter per row, wherever the call sits. A draw anywhere above
-a join is refused a column for a second reason: it would cost the join its
-condition. ``f(rand(), rand())`` is two parameters and so still two draws::
+in a join condition, in a command such as ``DELETE FROM``, or a draw anywhere
+above a join, where the column would cost the join its condition -- and there a
+body reading the parameter more than once stays an interpreted Python UDF, which
+computes its inputs once, rather than being lowered into an argument evaluated
+per read. One evaluation per parameter per row either way; ``f(rand(), rand())``
+is two parameters and so still two draws::
 
     body = lambda x: x if x > 0.5 else 0.0
     clamp = udf(body, "double")
@@ -77,13 +73,13 @@ lazy once more.
 
 Two arguments no projection can hold count as those positions too: one that is
 itself an aggregate (``f(sum(a))``), and one reading an outer query's column when
-correlated-subquery decorrelation is disabled. Both are read at each use site when
-deterministic, on the same terms as anything else.
+correlated-subquery decorrelation is disabled.
 
 An argument read once gets no column, since one read is one evaluation anyway,
 and neither does one as cheap to repeat as to read -- a bare column or a literal.
-Anything more, arithmetic included, gets a column where one fits: a repeated
-``a + 1`` is computed once there, and read twice where no column fits.
+Anything more, arithmetic included, is either computed once or left to
+interpreted Python; a repeated ``a + 1`` gets a column where one fits and stops
+the UDF being lowered where one does not.
 
 That column is what we emit, not what necessarily runs: later optimizer rules may
 inline a deterministic one again where that is faster, as they may for any other

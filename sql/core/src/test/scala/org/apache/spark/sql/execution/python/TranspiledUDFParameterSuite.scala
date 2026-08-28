@@ -38,14 +38,14 @@ import org.apache.spark.sql.types.LongType
  * place that still sees the placeholders.
  *
  * Plus the operator shapes that decide whether an argument gets pre-evaluated: a Project and a
- * MergeRows host the column, while an Aggregate, a join condition and a lambda cannot.
+ * MergeRows host the column, while an Aggregate, a join condition and a lambda cannot, so a call
+ * that needs one there keeps the Python UDF.
  * Asserted on the plan where a deterministic argument gives the same answer either way, and on a
  * raised error under MERGE, where an argument that mods by zero only blows up if the column is
  * really there.
  *
- * A nondeterministic argument is the case where the column is not an optimization but the whole
- * point: with no column to read, a body reading the parameter twice would draw twice, so there --
- * and only there -- the call keeps the Python UDF. A deterministic one is read at each use site.
+ * A nondeterministic argument is the case where the column is not an optimization: with no column
+ * to read, a body reading the parameter twice would draw twice, so we leave the Python UDF.
  */
 class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
 
@@ -116,23 +116,18 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("keeps the Python UDF for a draw under an Aggregate") {
+  test("keeps the Python UDF under an Aggregate") {
     transpileOn {
-      // No Project can go under an Aggregate, so a draw read twice stays Python. A deterministic
-      // argument is read at each use site there instead, and lowers. `func` is null here, so the
-      // plan is the only thing to assert on; the answers are pinned in test_udf_transpile_unit.py,
-      // where the UDF is real.
+      // No Project can go under an Aggregate, so a call owed an evaluation stays Python. `func` is
+      // null here, so the plan is the only thing to assert on; the answers are pinned in
+      // test_udf_transpile_unit.py, where the UDF is real.
       val square = udfWith(Multiply(param(0), param(0)), arity = 1)
-      val fellBack = spark.range(0, 6).groupBy(col("id") % 3).agg(square(draw).as("sq"))
-        .queryExecution.optimizedPlan
-      assert(!fellBack.toString.contains("_udf_param_"), s"Expected no column:\n$fellBack")
-      assert(fellBack.exists(_.isInstanceOf[BaseEvalPython]),
-        s"Expected a Python fallback:\n$fellBack")
-
-      val lowered = spark.range(0, 6).groupBy(col("id") % 3).agg(square(col("id") % 3).as("sq"))
-        .queryExecution.optimizedPlan
-      assert(!lowered.toString.contains("_udf_param_"), s"Expected no column:\n$lowered")
-      assert(!lowered.exists(_.isInstanceOf[BaseEvalPython]), s"Expected no Python:\n$lowered")
+      Seq(spark.range(0, 6).groupBy(col("id") % 3).agg(square(col("id") % 3).as("sq")),
+          spark.range(0, 6).groupBy(col("id") % 3).agg(square(draw).as("sq"))).foreach { df =>
+        val plan = df.queryExecution.optimizedPlan
+        assert(!plan.toString.contains("_udf_param_"), s"Expected no column:\n$plan")
+        assert(plan.exists(_.isInstanceOf[BaseEvalPython]), s"Expected a Python fallback:\n$plan")
+      }
     }
   }
 
@@ -150,31 +145,23 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("lowers in a non-inner join condition, where a draw could never have got") {
+  test("a call straddling both sides of a non-inner join fails the way Python does") {
     transpileOn {
+      // No column can go under a join, so a call owed an evaluation keeps the Python UDF, and
+      // ExtractPythonUDFFromJoinCondition turns one down on anything but an inner join. Same error
+      // the query gets with transpilation off. A body reading its parameter once lowers and runs.
       val square = udfWith(Multiply(param(0), param(0)), arity = 2)
       val left = spark.range(0, 3).select(col("id").as("a"))
       val right = spark.range(0, 3).select(col("id").as("c"))
+      val straddles = square(col("a") + 1, col("c")) > 0
+      val joined = left.join(right, straddles, "left_outer")
+      checkError(
+        exception = intercept[AnalysisException](joined.collect()),
+        condition = "UNSUPPORTED_FEATURE.PYTHON_UDF_IN_ON_CLAUSE",
+        parameters = Map("joinType" -> "LEFT OUTER"),
+        sqlState = Some("0A000"))
 
-      // No column can go under a join, so a deterministic argument is read at both use sites and
-      // the call lowers -- reading both sides of the condition included, which is the shape that
-      // used to keep the Python UDF and so get turned down with PYTHON_UDF_IN_ON_CLAUSE.
-      val straddles = left.join(right, square(col("a") + 1, col("c")) > 0, "left_outer")
-      assert(!straddles.queryExecution.optimizedPlan.exists(_.isInstanceOf[BaseEvalPython]),
-        s"Expected no Python:\n${straddles.queryExecution.optimizedPlan}")
-      assert(straddles.collect().length == 9)
-
-      // A draw is the one thing that cannot be read twice -- and a join condition is the one place
-      // it cannot reach us: analysis turns down a nondeterministic condition whatever is in it,
-      // with
-      // or without transpilation. So the fallback has nothing left to do here. Asserted on the
-      // condition alone, since the message carries the draw's seed.
-      val turnedDown = intercept[AnalysisException](
-        left.join(right, square(draw, col("c")) > 0, "left_outer").collect())
-      assert(turnedDown.getCondition == "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
-        s"Expected analysis to turn the draw down, got: ${turnedDown.getCondition}")
-
-      // And a body reading its parameter once was never owed anything.
+      // Read once, the same call lowers and the join runs.
       val once = udfWith(Add(param(0), param(1)), arity = 2)
       val lowered = left.join(right, once(col("a") + 1, col("c")) > 0, "left_outer")
       assert(!lowered.queryExecution.optimizedPlan.exists(_.isInstanceOf[BaseEvalPython]),
