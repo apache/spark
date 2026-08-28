@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.columnar
 
-import java.util.concurrent.atomic.AtomicLong
-
 import com.esotericsoftware.kryo.{DefaultSerializer, Kryo, Serializer => KryoSerializer}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 
@@ -257,11 +255,6 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
   }
 }
 
-private[sql] object CachedRDDBuilder {
-  private val nextCachedRDDId = new AtomicLong(0)
-  def newCachedRDDId(): Long = nextCachedRDDId.getAndIncrement()
-}
-
 private[sql]
 case class CachedRDDBuilder(
     serializer: CachedBatchSerializer,
@@ -296,11 +289,11 @@ case class CachedRDDBuilder(
   // late updates from making a rebuilt cache appear complete.
   private var partitionStats = newPartitionStats()
 
-  // The sequential id is consumed when this lazy val is first forced; a copy of the builder
-  // would draw a new id.
+  // Resolved on first access, which happens at cache materialization; for adaptive plans the
+  // name therefore reflects the final plan.
   lazy val cachedName: String = tableName.map(n => s"In-memory table $n").getOrElse {
-    if (cachedPlan.conf.getConf(SQLConf.DATAFRAME_CACHE_SEQUENTIAL_NAME_ENABLED)) {
-      s"CachedRDD ${CachedRDDBuilder.newCachedRDDId()}"
+    if (cachedPlan.conf.getConf(SQLConf.DATAFRAME_CACHE_PLAN_ID_NAME_ENABLED)) {
+      s"CachedRDD (plan_id=${cachedPlan.id})"
     } else {
       Utils.abbreviate(cachedPlan.toString, 1024)
     }
