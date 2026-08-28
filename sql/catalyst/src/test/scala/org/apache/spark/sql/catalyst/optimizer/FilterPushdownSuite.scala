@@ -343,8 +343,8 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // Both regexes are expensive, and neither condition needs both of them, so we compute f
-    // first and only run the 'other' regex on the rows where the 'magic' one matched.
+    // Both regexes are expensive and neither condition needs both, so f is computed first and
+    // 'other' only runs on the rows 'magic' matched.
     val correctAnswer = testStringRelation
       .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
       .where($"f")
@@ -363,8 +363,7 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // g is never filtered on, but it is still expensive, so it is worth deferring it until
-    // after the filter on f.
+    // g is never filtered on but is still expensive, so it is worth deferring past the filter on f.
     val correctAnswer = testStringRelation
       .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
       .where($"f")
@@ -383,8 +382,7 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // Every condition needs a different alias, so we get a projection per condition, minus the
-    // last one -- there is nothing left to defer past it so it goes above the final projection.
+    // One projection per condition except the last -- nothing left to defer past it.
     val correctAnswer = testStringRelation
       .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
       .where($"f")
@@ -405,8 +403,8 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // Splitting here would have to compute both regexes below the filter, which is the plan we
-    // already have plus a redundant projection.
+    // Splitting here would compute both regexes below the filter -- the plan we already have
+    // plus a redundant projection.
     val correctAnswer = originalQuery
 
     comparePlans(optimized, correctAnswer)
@@ -421,8 +419,8 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // Same condition as the test above, but this time there is a third expensive element to
-    // defer past it, so one projection computes both f and g and j waits until after the filter.
+    // A third expensive element to defer, so f and g compute together below the filter and j
+    // waits above it.
     val correctAnswer = testStringRelation
       .select($"a", $"b", $"e", $"e".rlike("magic") as "f", $"e".rlike("other") as "g")
       .where($"f" || $"g")
@@ -441,8 +439,8 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // j needs one alias and (f || g) needs two, so j is evaluated first even though it comes
-    // last in the projection: that leaves two expensive elements to run on its survivors.
+    // j needs one alias and (f || g) needs two, so j goes first even though it is projected
+    // last -- leaving two expensive elements to run on its survivors.
     val correctAnswer = testStringRelation
       .select($"a", $"b", $"e", $"e".rlike("third") as "j")
       .where($"j")
@@ -461,8 +459,7 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // sum is cheap so its condition is pushed all the way down (case 2), f is expensive so we
-    // split the projection around it, and g is deferred to the projection on top.
+    // sum is cheap (case 2, pushed down); f is expensive (split around); g deferred on top.
     val correctAnswer = testStringRelation
       .where($"a" + $"b" > 10)
       .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
@@ -481,8 +478,7 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // A projection is not free, so we only split when it defers something expensive. Recomputing
-    // sum a row later is not worth an extra operator.
+    // A projection is not free; recomputing a cheap sum later is not worth an extra operator.
     val correctAnswer = originalQuery
 
     comparePlans(optimized, correctAnswer)
@@ -496,7 +492,7 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // f is computed below but still has to come back out in its original position.
+    // f is computed below but must come back out in its original position.
     val correctAnswer = testStringRelation
       .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
       .where($"f")
@@ -518,8 +514,8 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // Conditions over the same aliases can only run at the same point of the stack, so both
-    // conditions on j end up in the same filter, and k is deferred past them.
+    // Conditions over the same aliases run at the same point of the stack, so both on j land in
+    // one filter and k is deferred past them.
     val correctAnswer = testArrayStringRelation
       .select($"a", $"s_arr", joined as "j")
       .where($"j" > "a" && $"j" < "z")
@@ -537,10 +533,9 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // f and g are the same regex. Subexpression elimination evaluates it once for a single
-    // projection but cannot reach across a filter, so splitting f and g apart would run it for
-    // every row below the filter and then again for every row which survived -- more work than
-    // leaving the projection alone.
+    // f and g are the same regex. Subexpression elimination collapses it in one projection but
+    // cannot reach across a filter, so splitting would run it on every row below and again on
+    // every survivor -- more work than leaving the projection alone.
     val correctAnswer = originalQuery
 
     comparePlans(optimized, correctAnswer)
@@ -555,8 +550,8 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // j is its own piece of work and needs one alias, while f drags g along with it, so j is
-    // split off first and f and g stay together in the projection on top.
+    // j is its own work needing one alias; f drags g along, so j splits off first and f and g
+    // stay together on top.
     val correctAnswer = testStringRelation
       .select($"a", $"b", $"e", $"e".rlike("other") as "j")
       .where($"j")

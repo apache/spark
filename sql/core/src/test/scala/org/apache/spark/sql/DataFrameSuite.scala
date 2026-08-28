@@ -2826,20 +2826,20 @@ class DataFrameSuite extends SharedSparkSession
       .where($"m" && $"o")
     val expected = Seq(0L, 6L, 12L, 18L, 24L).map(Row(_, true, true))
 
-    // Whole stage codegen already defers a projected expression past a filter which does not need
-    // it (see CodegenSupport.evaluateRequiredVariables), so splitting the projection is what gets
-    // us the same saving on the paths codegen does not cover -- interpreted projections, operators
-    // it bails out of, Python UDF evaluation. Measure the saving with codegen off.
+    // Codegen already defers a projected expression past a filter that does not need it
+    // (CodegenSupport.evaluateRequiredVariables); splitting buys the same saving on the paths
+    // codegen does not cover -- interpreted projections, operators it bails out of, Python UDFs.
+    // Measure with codegen off.
     Seq(true, false).foreach { split =>
       withSQLConf(
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
         SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString) {
         magicCalls.reset()
         otherCalls.reset()
-        // Collect rather than checkAnswer so that the plan runs exactly once.
+        // Collect, not checkAnswer, so the plan runs exactly once.
         assert(query().collect().toSeq === expected)
         assert(magicCalls.value === 30)
-        // Splitting the projection around the filter on `m` means `other` never sees the odd ids.
+        // Splitting around the filter on `m` means `other` never sees the odd ids.
         assert(otherCalls.value === (if (split) 15 else 30))
       }
     }
@@ -2860,10 +2860,9 @@ class DataFrameSuite extends SharedSparkSession
       calls.add(1)
       i
     })
-    // x and y are one UDF call between them, which subexpression elimination collapses within a
-    // single projection but cannot collapse across a filter. Splitting would evaluate the UDF for
-    // every row below the filter and again for every row which survived it, so we leave the
-    // projection alone and the call count stays at one per input row.
+    // x and y share one UDF call: subexpression elimination collapses it in one projection but
+    // cannot reach across a filter, so splitting would re-run it on every row below and again on
+    // every survivor. Leave the projection alone; the count stays at one per input row.
     def query(): DataFrame = spark.range(0, 30, 1, 1)
       .select($"id", u($"id") as "x", (u($"id") + 1) as "y")
       .where($"x" % 2 === 0 && $"y" % 3 === 0)
@@ -2888,10 +2887,9 @@ class DataFrameSuite extends SharedSparkSession
       lateCalls.add(1)
       i % 2 == 0
     })
-    // `l` is projected before `e` but filtered on after it. Which expensive expression we split
-    // off first has to follow the filter, because the order the conditions were written in is the
-    // only selectivity signal available -- ordering by the projection instead would run `late`
-    // over every row and could end up doing more work than not splitting at all.
+    // `l` is projected before `e` but filtered on after it. Split order must follow the filter:
+    // the condition order is the only selectivity signal we have, and ordering by the projection
+    // would run `late` over every row and could do more work than not splitting at all.
     def query(): DataFrame = spark.range(0, 30, 1, 1)
       .select($"id", late($"id") as "l", early($"id") as "e")
       .where($"e" && $"l")
