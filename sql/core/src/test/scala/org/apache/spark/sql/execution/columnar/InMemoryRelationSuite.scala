@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions.expr
@@ -31,6 +32,22 @@ class InMemoryRelationSuite extends SparkFunSuite
     val d = spark.range(1)
     val r1 = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, None)
     val r2 = r1.withOutput(r1.output.map(_.newInstance()))
+    assert(r1.sameResult(r2))
+  }
+
+  test("SPARK-59009: newInstance() re-maps outputOrdering onto the new attributes") {
+    val d = spark.range(10).selectExpr("id", "id % 3 AS k").orderBy("k", "id")
+    val r1 = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, None)
+    assert(r1.outputOrdering.nonEmpty)
+
+    val r2 = r1.newInstance()
+    assert(r2.output.map(_.exprId) != r1.output.map(_.exprId))
+    // The ordering must be re-mapped onto the new attributes, not left referencing the old ones.
+    assert(r2.outputOrdering.nonEmpty)
+    assert(AttributeSet(r2.outputOrdering.flatMap(_.references)).subsetOf(AttributeSet(r2.output)))
+    // `sameResult` is what CacheManager lookups and exchange reuse rely on. It goes through
+    // `doCanonicalize`, which re-maps `outputOrdering` through `output`, so a stale ordering
+    // throws here rather than merely producing an unequal plan.
     assert(r1.sameResult(r2))
   }
 
