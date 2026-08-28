@@ -185,6 +185,25 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("keeps the Python UDF where a draw's column would strand a join under a projection") {
+    transpileOn {
+      // Same as above with a `select` in between, which is what `FROM t1, t2 WHERE ...` looks like
+      // once anything projects: the Filter's child is a Project, not the Join. The column lands
+      // below that Project and blocks the pushdown just the same, so the check has to look for a
+      // Join anywhere below, not only at the child.
+      val square = udfWith(Multiply(param(0), param(0)), arity = 1)
+      val left = spark.range(0, 4).select(col("id").as("a"))
+      val right = spark.range(0, 4).select(col("id").as("c"))
+      val df = left.join(right).select(col("c"), col("a"))
+        .where(col("a") === col("c") && (square(draw) > 0))
+      val plan = df.queryExecution.optimizedPlan
+      assert(plan.collect { case j: Join => j }.exists(_.condition.isDefined),
+        s"Expected the join to keep its condition:\n$plan")
+      assert(!plan.toString.contains("_udf_param_"), s"Expected no column:\n$plan")
+      assert(plan.exists(_.isInstanceOf[BaseEvalPython]), s"Expected a Python fallback:\n$plan")
+    }
+  }
+
   test("keeps the Python UDF inside a higher-order function's lambda") {
     transpileOn {
       // Lambdas are out of scope for lowering: Spark applies a Python UDF over the whole array

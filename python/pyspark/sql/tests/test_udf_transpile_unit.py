@@ -1518,6 +1518,32 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertTrue(self._shares_an_argument(df), self._optimized_plan(df))
             self.assertEqual([0.0] * 20, [r[0] for r in df.collect()], "One draw, read twice")
 
+    def test_udf_transpile_repeats_a_deterministic_python_udf_argument(self):
+        # SPARK-58626: a deterministic Python UDF argument is cheap to repeat as far as
+        # CollapseProject.isCheap is concerned, so it stays at each use site instead of getting a
+        # column -- and ExtractPythonUDFs then points both copies at one eval node, so the body
+        # still reads one evaluation. What we promise is the evaluation count, not which rule keeps
+        # it, and this is the shape where another rule does. A second argument because a call whose
+        # arguments are all Python UDFs keeps the batch pipeline instead of lowering.
+        def helper(v):
+            return v + 1
+
+        opaque = lambda x: helper(x)  # noqa: E731
+        first_twice = lambda a, b: a - a + b  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            inner = UserDefinedFunction(opaque, LongType())
+            self.assertEqual([], inner.transpiled, "The inner UDF has to stay Python")
+            outer = self._transpiled_udf(first_twice, LongType())
+            df = self.spark.range(5).select(outer(inner("id"), "id"))
+            plan = self._optimized_plan(df)
+            self.assertFalse(self._shares_an_argument(df), plan)
+            self.assertEqual(
+                1,
+                self._eval_python_count(df),
+                df._jdf.queryExecution().executedPlan().toString(),
+            )
+            self.assertEqual(list(range(5)), [r[0] for r in df.collect()])
+
     def test_udf_transpile_declines_inside_a_higher_order_function(self):
         # SPARK-58626: a call inside a lambda is not lowered at all -- Spark applies a Python UDF
         # over the whole array there and we leave that to it -- so the draw stays a single draw per

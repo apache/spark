@@ -1039,9 +1039,12 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
       _.containsPattern(TRANSPILED_PYTHON_UDF), ruleId) {
       // A fast path, not a correctness guard -- `convertOperator` hands back an operator it finds
       // nothing to do in. The pruning above only skips subtrees, so every Filter and Sort between
-      // the root and a call lands here, and so does an operator whose only call sits in a subquery,
-      // since a SubqueryExpression reports its inner plan's tree-pattern bits.
-      case p if !p.expressions.exists(_.exists(_.isInstanceOf[TranspiledPythonUDF])) => p
+      // the root and a call lands here. The bit is the cheap reject, cached per node; the walk then
+      // also rejects an operator whose only call sits in a subquery, since a SubqueryExpression
+      // reports its inner plan's bits while `Expression.exists` does not descend into the plan.
+      case p if !p.expressions.exists { e =>
+        e.containsPattern(TRANSPILED_PYTHON_UDF) && e.exists(_.isInstanceOf[TranspiledPythonUDF])
+      } => p
 
       case p => convertOperator(p)
     }
@@ -1132,17 +1135,23 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
           //    their own even while the global one is on.
           //  - It still holds an enclosing call's reference, which only that call can
           //    substitute, and only while the reference is in the option body.
-          // A nondeterministic column between a Filter and a Join takes the join's condition down
-          // with it: PushPredicateThroughNonJoin pushes nothing through a Project holding a
-          // nondeterministic field, so PushPredicateThroughJoin never sees `Filter(cond, Join)` and
-          // the join plans as a cartesian product: `where t1.a = t2.a and udf(rand()) < 2` loses
-          // its equi-join. Keep the Python UDF there instead; it computes its input once anyway.
-          val filterOverJoin = p.isInstanceOf[Filter] && child.isInstanceOf[Join]
+          // A nondeterministic column anywhere above a Join takes the join's condition down with
+          // it: PushPredicateThroughNonJoin pushes nothing through a Project holding a
+          // nondeterministic field, so a Filter above it never reaches the Join and
+          // `where t1.a = t2.a and udf(rand()) < 2` plans as a cartesian product. Below anywhere,
+          // not just at the child -- one `select` in between is enough, and the Filter can sit
+          // above whatever we are rewriting. Keep the Python UDF instead; it computes its input
+          // once anyway.
+          lazy val joinBelow = child.exists(_.isInstanceOf[Join])
           def canPlace(arg: Expression): Boolean =
-            (arg.deterministic || !filterOverJoin) &&
+            (arg.deterministic || !joinBelow) &&
               arg.references.subsetOf(child.outputSet) &&
               PlanHelper.specialExpressionsInUnsupportedOperator(
-                Project(Seq(Alias(arg, "_udf_param")()), child)).isEmpty &&
+                // A fixed id, not `newExprId`: this alias is thrown away with the Project and
+                // PlanHelper never reads it, so minting one would bump the global counter and
+                // shift the ExprIds in every later plan string by however many arguments we
+                // merely considered.
+                Project(Seq(Alias(arg, "_udf_param")(ExprId(0))), child)).isEmpty &&
               ((conf.decorrelateInnerQueryEnabled &&
                   conf.decorrelateInnerQueryEnabledForExistsIn) ||
                 !arg.containsPattern(OUTER_REFERENCE)) &&

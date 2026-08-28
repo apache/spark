@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count, Sum}
@@ -86,20 +87,21 @@ class ConvertToCatalystSuite extends PlanTest {
     // nullability and schema. Duplicate ExprIds is the one worth naming -- it is what catches a
     // rewrite that mints two aliases with one id.
     //
-    // Resolved plans only: the full check asks every output attribute for its dataType, and a
-    // hand-built plan with an unbound lambda hasn't got one. Those keep the dangling-reference
-    // walk, per operator rather than `validateNoDanglingReferences`, whose `collectFirst` stops at
-    // root -- and the root is never the Project this rule inserts.
+    // Dangling references get their own walk, on every plan and per operator, because
+    // `validateNoDanglingReferences` is no help here: a resolved root matches its last case, so its
+    // `collectFirst` returns there and never visits a child -- and the root is never the Project
+    // this rule inserts.
+    converted.foreach {
+      case n if n.resolved && n.children.nonEmpty =>
+        assert(n.missingInput.isEmpty,
+          s"${n.missingInput.mkString(", ")} dangling in ${n.nodeName}:\n$converted")
+      case _ =>
+    }
+    // The rest of it on resolved plans only: the full check asks every output attribute for its
+    // dataType, and a hand-built plan with an unbound lambda hasn't got one.
     if (plan.resolved) {
       LogicalPlanIntegrity.validateOptimizedPlan(plan, converted, lightweight = false)
         .foreach(failure => fail(s"$failure\n$converted"))
-    } else {
-      converted.foreach {
-        case n if n.resolved && n.children.nonEmpty =>
-          assert(n.missingInput.isEmpty,
-            s"${n.missingInput.mkString(", ")} dangling in ${n.nodeName}:\n$converted")
-        case _ =>
-      }
     }
     // A leftover reference is Unevaluable and throws at execution. Check it here so no test has to
     // remember to.
@@ -646,5 +648,44 @@ class ConvertToCatalystSuite extends PlanTest {
       assert(read.nonEmpty && read.forall(defined.contains),
         s"A read column was never defined: $converted")
     }
+  }
+
+  test("substitute leaves a nested call's own options alone") {
+    // A nested call's references count against *its* arguments, so ours must not touch them.
+    // `referencedIndexes` and `resolveTypes` both stop there; `substitute` used to walk in, and
+    // reading a nested index as ours means an out-of-range argument or, worse, the wrong one.
+    // The rule converts a nested call before substituting so it never hits this, but `substitute`
+    // is what a custom transpiler's own rule calls.
+    val inner = makeTPUDF(makePyUDF(attrA), Add(pref(1), Literal(2L)))
+    val option = Add(pref(0), inner)
+    val substituted = TranspiledUDFParameter.substitute(option, Seq[Expression](attrA))
+    val nested = substituted.collectFirst { case n: TranspiledPythonUDF => n }
+    assert(nested.map(_.transpiledOptions).contains(inner.transpiledOptions),
+      s"A nested call's options were substituted out of our index space: $substituted")
+    assert(substituted.asInstanceOf[Add].left == attrA,
+      s"Our own reference was not substituted: $substituted")
+  }
+
+  test("an option reading an argument the call hasn't got is a classed error") {
+    // Only a hand-built option gets here -- the transpiler bounds-checks what it emits, and a
+    // pre-typed reference slips past the analyzer's check as well. Left to resolve on its own the
+    // node never does, and CheckAnalysis blames an internal error, which tells nobody anything.
+    val readsTooFar = makeTPUDF(makePyUDF(attrA), Add(pref(1), Literal(1L)))
+    transpileOn {
+      checkError(
+        exception = intercept[AnalysisException] {
+          convert(Project(Seq(Alias(readsTooFar, "v")()), LocalRelation(attrA)))
+        },
+        condition = "INVALID_UDF_PARAMETER_PLACEHOLDER_INDEX",
+        parameters = Map("index" -> "1", "numParams" -> "1"))
+    }
+
+    // Same error from the analyzer's side, where the type comes off the argument.
+    checkError(
+      exception = intercept[AnalysisException] {
+        TranspiledUDFParameter.resolveTypes(TranspiledUDFParameter(2, None), Seq(attrA))
+      },
+      condition = "INVALID_UDF_PARAMETER_PLACEHOLDER_INDEX",
+      parameters = Map("index" -> "2", "numParams" -> "1"))
   }
 }

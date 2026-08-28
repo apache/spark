@@ -347,26 +347,34 @@ object TranspiledUDFParameter {
   /**
    * Points every reference in `option` at whatever `replacement` gives for its index.
    *
-   * Bottom-up, and that matters: a spliced-in argument can hold an *enclosing* call's reference,
-   * and top-down would walk back into what it spliced, find it, splice again, and run out of stack.
+   * Never looks at what it splices in: an argument can hold an *enclosing* call's reference, and
+   * walking back into the replacement would find it, splice again, and run out of stack.
+   *
+   * A nested call's own options are skipped, for the reason [[referencedIndexes]] skips them --
+   * those indexes count against *its* arguments, and only that call can substitute them. Its
+   * arguments are ours, so the walk carries on through [[TranspiledPythonUDF.pythonUDFExpr]].
    */
-  def substitute(option: Expression, replacement: Int => Expression): Expression =
-    option.transformUpWithPruning(_.containsPattern(TRANSPILED_UDF_PARAMETER)) {
-      case p: TranspiledUDFParameter =>
-        val substituted = replacement(p.index)
-        // We read a reference's type off its argument once, in analysis, and never look again, so a
-        // later rule retyping the argument would leave this stale with the body already coerced
-        // against the old type. Nothing does that today; shout if that changes. Nullability is NOT
-        // checked -- `sameType` ignores it, and `UpdateAttributeNullability` runs in a later batch
-        // and legitimately does change it. Harmless, since ConvertToCatalyst substitutes the real
-        // argument and the final plan takes its nullability from that.
-        if (Utils.isTesting && p.paramType.isDefined && substituted.resolved) {
-          assert(p.dataType.sameType(substituted.dataType),
-            s"Parameter ${p.index} was typed ${p.dataType} but its argument is " +
-              s"${substituted.dataType}")
-        }
-        substituted
-    }
+  def substitute(option: Expression, replacement: Int => Expression): Expression = option match {
+    case _ if !option.containsPattern(TRANSPILED_UDF_PARAMETER) => option
+    case p: TranspiledUDFParameter =>
+      val substituted = replacement(p.index)
+      // We read a reference's type off its argument once, in analysis, and never look again, so a
+      // later rule retyping the argument would leave this stale with the body already coerced
+      // against the old type. Nothing does that today; shout if that changes. Nullability is NOT
+      // checked -- `sameType` ignores it, and `UpdateAttributeNullability` runs in a later batch
+      // and legitimately does change it. Harmless, since ConvertToCatalyst substitutes the real
+      // argument and the final plan takes its nullability from that.
+      if (Utils.isTesting && p.paramType.isDefined && substituted.resolved) {
+        assert(p.dataType.sameType(substituted.dataType),
+          s"Parameter ${p.index} was typed ${p.dataType} but its argument is " +
+            s"${substituted.dataType}")
+      }
+      substituted
+    case nested: TranspiledPythonUDF =>
+      nested.withNewChildren(
+        substitute(nested.pythonUDFExpr, replacement) +: nested.transpiledOptions)
+    case other => other.mapChildren(substitute(_, replacement))
+  }
 
   /**
    * Fills in each reference's type from the bound arguments, once those are resolved. Skips a

@@ -51,8 +51,9 @@ same deterministic argument share the column, so ``f(a + 1, a + 1)`` computes
 A call inside a higher-order function's lambda is never lowered: Spark already
 applies a Python UDF over the whole array there, and that path is left to it.
 Otherwise a few positions have nowhere to put the column -- under a ``groupBy``,
-in a join condition, in a command such as ``DELETE FROM`` -- and there a body
-reading the parameter more than once stays an interpreted Python UDF, which
+in a join condition, in a command such as ``DELETE FROM``, or a draw anywhere
+above a join, where the column would cost the join its condition -- and there a
+body reading the parameter more than once stays an interpreted Python UDF, which
 computes its inputs once, rather than being lowered into an argument evaluated
 per read. One evaluation per parameter per row either way; ``f(rand(), rand())``
 is two parameters and so still two draws::
