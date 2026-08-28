@@ -27,15 +27,9 @@ import org.apache.spark.sql.classic.{ClassicConversions, ColumnConversions}
 import org.apache.spark.sql.types.DataType
 
 /**
- * Builds a [[TranspiledJavaUDF]] column for the `java` transpiler in `pyspark.sql.transpile_java`.
- *
- * The Python side assembles Java source but has no way to name a Catalyst expression: it can only
- * build columns out of `pyspark.sql.functions`, and there is no function for this node. So it calls
- * here over Py4J, the way it would call any other JVM entry point. Data types cross as JSON, which
- * is what every other Python-to-JVM type hand-off in this package uses.
- *
- * This lives in `sql/core` rather than beside the expression because building a [[Column]] needs
- * the classic conversions, which catalyst cannot see.
+ * Py4J entry for the `java` transpiler. Lives in `sql/core` because building
+ * a [[Column]] needs the classic conversions, which catalyst cannot see.
+ * Types cross as JSON, like every other Python-to-JVM hand-off here.
  */
 object TranspiledJavaUDFBuilder {
 
@@ -61,10 +55,7 @@ object TranspiledJavaUDFBuilder {
       children = children.asScala.map(ColumnConversions.expression).toSeq,
       inputTypes = inputTypesJson.asScala.map(DataType.fromJson).toSeq,
       dataType = DataType.fromJson(returnTypeJson))
-    // Compile before handing the option back. A body that does not compile has to be refused here,
-    // where the caller still has the interpreted UDF to fall back to -- `_transpile_func` turns the
-    // exception into a skipped option. Later there is no fallback left, because the option has
-    // replaced the Python UDF in the plan and both eval paths compile this same source.
+    // Compile now, while a failure can still be a skipped option.
     expr.validate()
     ClassicConversions.column(expr)
   }

@@ -27,26 +27,16 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, BooleanType, DataType, DoubleType, LongType, StringType}
 
-/**
- * The interface generated code implements so [[TranspiledJavaUDF.eval]] can call it. The
- * interpreted path needs a handle on the transpiled body, and a compiled class can only be reached
- * through a type that was on the classpath when it was compiled.
- */
+/** The handle [[TranspiledJavaUDF.eval]] uses; a compiled class can only implement a type
+ * that was on the classpath when it was compiled. */
 abstract class TranspiledJavaUDFInvoker {
   def call(args: Array[Any]): Any
 }
 
-/**
- * Errors the generated body can raise, built here rather than in `TranspiledJavaUDFHelpers` because
- * the constructors take Scala collections that Java cannot supply readably.
- */
+/** Errors the generated body raises. Lives here because the constructors take Scala maps. */
 object TranspiledJavaUDFErrors {
 
-  /**
-   * The same error the Catalyst target raises for the same comparison. That target wraps every
-   * ordering comparison in `raise_error(...)`, which yields `USER_RAISED_EXCEPTION`, so matching
-   * the error class here keeps a NULL comparison from telling you which target lowered the UDF.
-   */
+  /** Same class as Catalyst's `raise_error` so a NULL comparison does not name the target. */
   def nullComparison(op: String): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "USER_RAISED_EXCEPTION",
@@ -57,20 +47,12 @@ object TranspiledJavaUDFErrors {
             "`is not None` guard or filter NULLs upstream.")))
   }
 
-  // The same error classes `QueryExecutionErrors.divideByZeroError` / `remainderByZeroError`
-  // produce, but built with an EMPTY context array rather than theirs, which is `Array(context)`
-  // and so becomes `Array(null)` for a caller with no context to give. A null inside that array
-  // fails later with `NoneType object has no attribute contextType` instead of reporting the
-  // arithmetic error -- the generated body is not a SQL fragment, so it has no QueryContext.
+  // Empty context: `QueryExecutionErrors.divideByZeroError` wraps `Array(context)`,
+  // which is `Array(null)` here and later dies as `NoneType has no attribute contextType`.
   def divideByZero(): ArithmeticException = zeroDivisor("DIVIDE_BY_ZERO")
 
   def remainderByZero(): ArithmeticException = zeroDivisor("REMAINDER_BY_ZERO")
 
-  /**
-   * [[ARITHMETIC_OVERFLOW]] for an overflow the helpers detect themselves rather than catching from
-   * `Math.*Exact`. Unlike the zero-divisor errors above, this one takes a null context by design --
-   * it is its own default -- so it can simply be delegated to.
-   */
   def arithmeticOverflow(message: String): ArithmeticException = {
     QueryExecutionErrors.arithmeticOverflowError(message)
   }
@@ -85,31 +67,16 @@ object TranspiledJavaUDFErrors {
 }
 
 /**
- * A Python UDF lowered to Java source by the `java` transpiler (see `pyspark.sql.transpile_java`).
+ * A Python UDF lowered to Java source (see `pyspark.sql.transpile_java`).
  *
- * `body` is the statements of a single Java method -- the transpiled function -- which reads its
- * arguments through `argNames` and returns the result. It is source, not bytecode: a class compiled
- * on the driver could not be deserialized on an executor, whose class loader never defined it, so
- * what travels with the plan is the text, compiled once per JVM the way the rest of codegen is.
+ * `body` is source, not bytecode: a class compiled on the driver cannot be
+ * deserialized on an executor. [[doGenCode]] splices the same string into
+ * whole-stage codegen; [[eval]] compiles it for the interpreted path. Two
+ * generators would be two chances to disagree.
  *
- * That text is used twice, and deliberately only written once. [[doGenCode]] splices it into
- * whole-stage codegen as a method of the generated class, and [[eval]] compiles it into a small
- * wrapper for the interpreted path -- reached under `NO_CODEGEN`, and whenever a projection is
- * interpreted rather than generated. Not by `ConstantFolding`, which needs `foldable`, deliberately
- * not overridden here (see `deterministic` below for why deriving it from the children is a trap).
- * Two call sites over one string cannot disagree about what the UDF computes; two generators
- * would.
- *
- * The ABI is boxed -- `Long`, `Double`, `UTF8String`, `Boolean`, `byte[]` -- with Java `null`
- * standing for both SQL NULL and Python `None`, which is what makes the null mapping exact rather
- * than a translation. Unboxing the hot path is left for later; the win being claimed here is
- * against a Python worker, not against hand-written codegen.
- *
- * Unlike a Catalyst lowering, every argument is a child and so every argument is evaluated, before
- * the call and whether or not the body reads it. That is what the interpreted UDF does too, which
- * evaluates its arguments in a projection feeding the worker, and it is why a body reading a
- * parameter many times still evaluates it once: the repeats are reads of a Java local, inside
- * `body`, and nothing in the plan sees them.
+ * Boxed ABI (`Long`, `Double`, `UTF8String`, `Boolean`, `byte[]`); Java `null`
+ * is both SQL NULL and Python `None`. Every argument is a child, so unread
+ * arguments are still evaluated -- matching the interpreted UDF.
  *
  * @param name the UDF's name, for display and to seed the generated method's name
  * @param body Java statements ending in a `return`, over the parameters named by `argNames`
@@ -126,56 +93,34 @@ case class TranspiledJavaUDF(
     inputTypes: Seq[DataType],
     dataType: DataType)
   extends Expression with ExpectsInputTypes with NonSQLExpression with UserDefinedExpression {
-  // Both mixins are load-bearing, not decoration. Rules that mean "an opaque user function" test
-  // for these traits rather than for `expensive`, which only `PushPredicateThroughNonJoin` reads:
-  // `PartitionPruning.isScanCostBoundExpression` and `EliminateSorts.isOrderIrrelevantAggs` both
-  // match on `NonSQLExpression | UserDefinedExpression`, and `ConvertToCatalyst` runs in the first
-  // optimizer batch, so by the time those rules look, the PythonUDF they would have matched is gone
-  // and this node is what is there.
+  // Both mixins: `PartitionPruning` / `EliminateSorts` match these traits, not
+  // `expensive`, and by then `ConvertToCatalyst` has already replaced the PythonUDF.
 
   require(
     argNames.length == children.length && inputTypes.length == children.length,
     s"argNames (${argNames.length}), inputTypes (${inputTypes.length}) and children " +
       s"(${children.length}) must be parallel")
 
-  // A transpiled body can compute anything a Python function can, so it is worth no more to the
-  // optimizer than a ScalaUDF is. Rules read this to decide whether duplicating an expression is
-  // free; duplicating this one would also duplicate its arguments, and a second copy of a `rand()`
-  // argument is a second draw the body was never meant to see.
+  // Same as ScalaUDF: duplicating this also duplicates a `rand()` child.
   override def expensive: Boolean = true
 
-  // Deliberately NOT overridden: `deterministic` derives from the children, which is what stops a
-  // rule from copying a call that carries a draw. Pinning it true here would reintroduce exactly
-  // the duplicate-evaluation problem this target avoids by construction.
+  // Not overridden: `deterministic` derives from the children. Pinning it true
+  // would reintroduce the duplicate-draw problem this target avoids.
 
-  // Python can return None from any path, and the boxed ABI has no way to promise otherwise.
   override def nullable: Boolean = true
 
   override def prettyName: String = name
 
   /**
-   * Deliberately not the inherited one, which prints every case-class field. `body` is a
-   * multi-line Java method, and dumping it here puts the whole of it -- newlines included --
-   * into every plan string, which mangles `EXPLAIN`'s line structure and buries the rest of the
-   * plan. The generated source is still reachable when it is what you want, through the codegen
-   * log (`spark.sql.codegen.logLevel`).
-   *
-   * The node name is spelled out rather than left to `prettyName` so a plan says which target
-   * lowered the UDF: a Catalyst lowering shows up as ordinary expressions, and someone reading
-   * `EXPLAIN` after enabling `catalyst,java` wants to see which one they got. `prettyName` stays
-   * the bare UDF name so `sql` and generated column names match the interpreted UDF's.
+   * Not the inherited one: dumping `body` mangles EXPLAIN. Spelled as
+   * `TranspiledJavaUDF` so a plan says which target fired; `prettyName` stays
+   * the UDF name so column names match the interpreted UDF.
    */
   override def toString: String = s"TranspiledJavaUDF($name, ${children.mkString(", ")})"
 
   /**
-   * The boxed Java type for an ABI type, from `CodeGenerator` rather than a mapping of its own.
-   *
-   * Delegating matters because `doGenCode` uses this for the result variable and
-   * `CodeGenerator.javaType` for `ev.value` in the same block, so the two have to agree; and
-   * because Spark does evolve that mapping (`javaType` now answers `BinaryView` for some types),
-   * and a hand-rolled copy would drift silently into generated Java the helpers cannot accept. The
-   * ABI check stays: anything outside the five types the transpiler casts into is a transpiler bug,
-   * and worth an error here rather than a puzzle in the generated source.
+   * `CodeGenerator.boxedType`, not a mapping of our own -- `doGenCode` uses
+   * both in one block. The ABI check is a transpiler-bug tripwire.
    */
   private def boxedType(dt: DataType): String = {
     dt match {
@@ -207,17 +152,10 @@ case class TranspiledJavaUDF(
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evals = children.map(_.genCode(ctx))
-    // A fresh name per call site: `addNewFunction` keys on the name, so two UDFs that happen to
-    // share one would otherwise have the first's body silently replaced by the second's.
+    // Fresh per call site: `addNewFunction` keys on the name.
     val methodName = ctx.freshName(javaSafeName)
-    // The returned string is what to call, and is not always `methodName`: once the generated class
-    // outgrows GENERATED_CLASS_SIZE_THRESHOLD the method is moved to a nested class and this comes
-    // back as `nestedClassInstance.methodName`.
+    // Not always `methodName`: a large class moves the method onto a nested instance.
     val callable = ctx.addNewFunction(methodName, methodSource(methodName))
-
-    // Box each argument, spelled out rather than done with a conditional expression: mixing `null`
-    // and a primitive in a ternary leans on the JLS's boxing rules for its result type, and being
-    // explicit costs nothing here.
     val argTerms = evals.zip(inputTypes).map { case (eval, dt) =>
       val term = ctx.freshName("arg")
       (term,
@@ -244,9 +182,8 @@ case class TranspiledJavaUDF(
   }
 
   /**
-   * The same `body`, compiled for the interpreted path. Per JVM and lazily, so the source is what
-   * crosses the wire; `CodeGenerator.compile` caches on the source, so repeated calls and repeated
-   * copies of this expression share one class.
+   * The same `body`, compiled for the interpreted path. Per JVM; `CodeGenerator.compile`
+   * caches on the source.
    */
   @transient private lazy val invoker: TranspiledJavaUDFInvoker = {
     val methodName = "transpiledUDF"
@@ -283,14 +220,9 @@ case class TranspiledJavaUDF(
   }
 
   /**
-   * Compile the body now, so a body that does not compile is a fallback rather than an outage.
-   *
-   * Called while the option is still being built, which is the last moment a failure can be turned
-   * into "decline this option". Once `ConvertToCatalyst` has substituted the option it discards
-   * `pythonUDFExpr`, and after that a compile failure has nowhere to go: whole-stage codegen falls
-   * back to the interpreted path, which compiles the SAME source through `invoker` and fails
-   * identically. Forcing `invoker` here also warms `CodeGenerator`'s cache, which is keyed on the
-   * source, so the executors' compile is not duplicated work on the driver.
+   * Compile now, while a failure can still be a skipped option. After
+   * `ConvertToCatalyst` both paths compile this same source and there is no
+   * fallback left.
    */
   def validate(): Unit = invoker
 
