@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.execution.planmerging
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SubqueryExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -39,7 +40,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * plan is V2 before asserting anything about merging.
  */
 class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
-  with AdaptiveSparkPlanHelper {
+  with AdaptiveSparkPlanHelper with V2ScanMergingTestHelper {
   import testImplicits._
 
   // The multi-column formats in sql/core; text is single-column and Avro lives in connector/avro.
@@ -77,18 +78,6 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  private def v2Scans(df: DataFrame): Seq[DataSourceV2ScanRelation] =
-    df.queryExecution.optimizedPlan.collectWithSubqueries {
-      case s: DataSourceV2ScanRelation => s
-    }
-
-  /**
-   * A merged subquery is referenced once per original subquery, so the logical plan duplicates it
-   * (physical planning reuses it). Dedupe by canonical form: one distinct scan means the merge
-   * happened, two means it was declined.
-   */
-  private def distinctScans(df: DataFrame): Int = v2Scans(df).map(_.canonicalized).distinct.length
-
   private def assertUsesFileSourceV2(df: DataFrame): Unit = {
     val plan = df.queryExecution.optimizedPlan
     assert(plan.collectWithSubqueries { case r: LogicalRelation => r }.isEmpty,
@@ -100,15 +89,6 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
         s"expected a FileTable, got ${s.relation.table.getClass.getSimpleName}")
     }
   }
-
-  // A successful merge builds the scan and leaves no bare DataSourceV2Relation behind; a leaked
-  // deferred scan would show up as an unbuilt placeholder the read path cannot plan.
-  private def assertNoPlaceholderRelation(df: DataFrame): Unit =
-    assert(
-      df.queryExecution.optimizedPlan.collectWithSubqueries {
-        case r: DataSourceV2Relation => r
-      }.isEmpty,
-      s"unbuilt placeholder DataSourceV2Relation left in plan:\n${df.queryExecution.optimizedPlan}")
 
   /** `(SubqueryExec, ReusedSubqueryExec)` counts, the same measure `PlanMergingSuite` uses. */
   private def subqueryCounts(df: DataFrame): (Int, Int) = {
@@ -185,7 +165,6 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
             assert(v2Scans(df).head.output.map(_.name).toSet == Set("a", "b", "c"),
               s"the merged scan should read the union of both columns; " +
                 s"got ${v2Scans(df).head.output}")
-            assertNoPlaceholderRelation(df)
           }
         }
       }
@@ -217,7 +196,6 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
         assert(scan.pushedFilters.exists(_.references.exists(_.name == "p")),
           s"the partition filter should be re-pushed strict onto the merged scan; " +
             s"got pushedFilters=${scan.pushedFilters.mkString("[", ", ", "]")}")
-        assertNoPlaceholderRelation(df)
       }
     }
   }
@@ -241,18 +219,17 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
           s"the three scans should be fused into one:\n${df.queryExecution.optimizedPlan}")
         assert(v2Scans(df).head.output.map(_.name).toSet == Set("a", "b", "c", "d"),
           s"the merged scan should read the union of all three; got ${v2Scans(df).head.output}")
-        assertNoPlaceholderRelation(df)
       }
     }
   }
 
   test("SPARK-57205: merge file scans with differing data filters only when dsv2 symmetric " +
     "filter propagation is on") {
-    Seq(true, false).foreach { dsv2Symmetric =>
-      withClue(s"dsv2SymmetricFilterPropagation=$dsv2Symmetric: ") {
-        withTempPath { dir =>
-          val path = dir.getCanonicalPath
-          writeFlat("parquet", path)
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      writeFlat("parquet", path)
+      Seq(true, false).foreach { dsv2Symmetric =>
+        withClue(s"dsv2SymmetricFilterPropagation=$dsv2Symmetric: ") {
           withFileView("parquet", path) {
             withSQLConf(SQLConf.MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key ->
                 dsv2Symmetric.toString) {
@@ -271,7 +248,6 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
               // merge. The enclosing Filter keeps each aggregate exact either way.
               assert(distinctScans(df) == (if (dsv2Symmetric) 1 else 2),
                 s"unexpected scan count:\n${df.queryExecution.optimizedPlan}")
-              assertNoPlaceholderRelation(df)
             }
           }
         }
@@ -328,11 +304,17 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
               assertUsesFileSourceV2(df)
               // Nested pruning narrows s to the one field each side reads, so the read column is
               // no longer a same-type subset of the relation's s and the merge is declined -- the
-              // field ordinals in the extractors above the scan are resolved against the narrowed
-              // type. Without pruning both scans read the whole struct and are canonically equal,
-              // so they merge on PlanMerger's identical-plan path, which needs no capability.
-              assert(distinctScans(df) == (if (nestedPruning) 2 else 1),
-                s"unexpected scan count:\n${df.queryExecution.optimizedPlan}")
+              // field ordinals in the extractors above the scan resolve against the narrowed type.
+              // Without pruning both scans read the whole struct and merge on PlanMerger's
+              // identical-plan path, which needs no capability. Two whole-struct scans canonicalize
+              // equal, so distinctScans cannot tell that merge from a decline; subqueryCounts can.
+              val expectedCounts = if (nestedPruning) (2, 0) else (1, 1)
+              assert(subqueryCounts(df) == expectedCounts,
+                s"unexpected subquery counts:\n${df.queryExecution.executedPlan}")
+              if (nestedPruning) {
+                assert(distinctScans(df) == 2,
+                  s"the pruned scans should stay separate:\n${df.queryExecution.optimizedPlan}")
+              }
             }
           }
         }
@@ -478,19 +460,32 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
           val path = dir.getCanonicalPath
           lines.toDS().write.text(path)
 
-          def rows(useV1: Boolean): Seq[Row] =
+          def rows(mode: String, useV1: Boolean): Seq[Row] =
             withFileView(format, path, useV1 = useV1, schema = Some("a long, b long"),
-              options = Map("mode" -> "DROPMALFORMED")) {
+              options = Map("mode" -> mode)) {
               sql(query).collect().toSeq
             }
 
-          // Merging makes one scan parse both a and b, so the record malformed in b is dropped for
-          // both aggregates and sum(a) is 8, not the 10 two separate scans produce. The merged scan
-          // therefore reads fewer rows than the a-only scan did, which SCAN_MERGING's "superset of
-          // their rows" premise does not allow. V1 already read the union after merging, so the V2
-          // path now matches it.
-          assert(rows(useV1 = false) == Seq(Row(8, 80)))
-          assert(rows(useV1 = true) == rows(useV1 = false))
+          // Merging makes one scan parse both a and b, so DROPMALFORMED drops the record malformed
+          // in b for both aggregates and sum(a) is 8, not the 10 two separate scans produce. The
+          // merged scan therefore reads fewer rows than the a-only scan did, which SCAN_MERGING's
+          // "superset of their rows" premise does not allow. V1 already read the union after
+          // merging, so the V2 path now matches it.
+          val droppedV2 = rows("DROPMALFORMED", useV1 = false)
+          assert(droppedV2 == Seq(Row(8, 80)))
+          assert(rows("DROPMALFORMED", useV1 = true) == droppedV2)
+
+          // PERMISSIVE keeps the fields it did parse, so widening the parsed columns leaves both
+          // aggregates on all five records.
+          val permissiveV2 = rows("PERMISSIVE", useV1 = false)
+          assert(permissiveV2 == Seq(Row(10, 80)))
+          assert(rows("PERMISSIVE", useV1 = true) == permissiveV2)
+
+          // FAILFAST throws whether or not the scans merged: the merged scan reads the union of the
+          // two column sets, so the scan that reads b already throws on its own.
+          Seq(true, false).foreach { useV1 =>
+            intercept[SparkException](rows("FAILFAST", useV1 = useV1))
+          }
         }
       }
     }

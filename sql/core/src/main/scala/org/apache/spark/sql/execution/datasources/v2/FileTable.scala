@@ -37,6 +37,14 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
 
+/**
+ * A [[Table]] backed by files.
+ *
+ * Subclasses inherit the `SCAN_MERGING` capability, which holds them to this: with the scan options
+ * held constant, what a scan reads is determined by the filters pushed and the columns pruned on
+ * its builder. A subclass whose `newScanBuilder` does not meet that has to override
+ * [[capabilities]] to drop `SCAN_MERGING`, or Spark may fuse two of its scans into one.
+ */
 abstract class FileTable(
     sparkSession: SparkSession,
     options: CaseInsensitiveStringMap,
@@ -181,9 +189,8 @@ abstract class FileTable(
 }
 
 object FileTable {
-  // A file table meets the determinism contract SCAN_MERGING requires: `fileIndex` is a lazy val,
-  // so every scan built from this table lists the same files, and `newScanBuilder` returns a fresh
-  // builder over `mergedOptions(options)`. The same options, pushed filters and pruned columns
-  // therefore rebuild an equivalent scan.
+  // The built-in file tables meet the SCAN_MERGING contract documented on FileTable: `fileIndex` is
+  // a lazy val, so every scan built from one table lists the same files, and `newScanBuilder`
+  // returns a fresh builder over `mergedOptions(options)`.
   private val CAPABILITIES = util.EnumSet.of(BATCH_READ, BATCH_WRITE, SCAN_MERGING)
 }
