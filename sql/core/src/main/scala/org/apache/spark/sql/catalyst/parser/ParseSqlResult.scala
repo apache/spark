@@ -223,6 +223,9 @@ object ParseSqlResult {
       case m: MergeIntoTable =>
         visitPlan(m.targetTable, scope, TableRefRole.Target)(f)
         visitPlan(m.sourceTable, scope, TableRefRole.Source)(f)
+      case i: UnresolvedInsert =>
+        visitPlan(i.table, scope, TableRefRole.Target)(f)
+        visitPlan(i.query, nextScope, TableRefRole.Source)(f)
       case i: InsertIntoStatement =>
         visitPlan(i.query, nextScope, TableRefRole.Source)(f)
       case c: CreateTableAsSelect =>
@@ -315,7 +318,7 @@ object ParseSqlResult {
     }
 
     def addTable(parts: Seq[String], scope: CteScope, role: TableRefRole): Unit = {
-      if (parts.nonEmpty && !isCteName(parts, scope)) {
+      if (parts.nonEmpty && (role == TableRefRole.Target || !isCteName(parts, scope))) {
         role match {
           case TableRefRole.Target => targetTables += parts
           case TableRefRole.Source => sourceTables += parts
@@ -342,6 +345,7 @@ object ParseSqlResult {
       foreachExpressionDeep(p)(visitExpr)
       def add(parts: Seq[String]): Unit = addTable(parts, scope, role)
       p match {
+        case u: UnresolvedInsertTarget => add(u.multipartIdentifier)
         case u: UnresolvedRelation => add(u.multipartIdentifier)
         case u: UnresolvedTable => add(u.multipartIdentifier)
         case u: UnresolvedView => add(u.multipartIdentifier)
@@ -386,6 +390,8 @@ object ParseSqlResult {
 
   private def primaryQueryPlan(plan: LogicalPlan): LogicalPlan = plan match {
     case UnresolvedWith(child, _, _) => primaryQueryPlan(child)
+    case UnresolvedInsert(_, _, _, query, _, _, _, _, _) =>
+      primaryQueryPlan(query)
     case InsertIntoStatement(_, _, _, query, _, _, _, _, _) =>
       primaryQueryPlan(query)
     case c: CreateTableAsSelect => primaryQueryPlan(c.query)

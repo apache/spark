@@ -939,10 +939,8 @@ class AstBuilder extends DataTypeAstBuilder
       query: LogicalPlan,
       queryAliasCtx: TableAliasContext): LogicalPlan = withOrigin(ctx) {
     ctx match {
-      // For all `InsertIntoStatement`-producing branches, build the `table` slot directly via
-      // `buildWriteTableSlot` so that any `PlanWithUnresolvedIdentifier` lives *inside* the
-      // command's identifier slot. This preserves the `CTEInChildren` shape and lets
-      // `CTESubstitution` place `WithCTE` on the command's children correctly (SPARK-46625).
+      // A dynamic target is exposed only by the temporary UnresolvedInsert plan. Once its
+      // identifier expression has been evaluated, analysis continues with InsertIntoStatement.
       case table: InsertIntoTableContext =>
         val insertParams = visitInsertIntoTable(table)
         val privileges = Set(TableWritePrivilege.INSERT)
@@ -1170,16 +1168,14 @@ class AstBuilder extends DataTypeAstBuilder
       replaceCriteriaOpt = replaceCriteriaOpt)
   }
 
-  /**
-   * Creates an [[InsertIntoStatement]] from [[InsertTableParams]].
-   */
+  /** Creates an INSERT plan from [[InsertTableParams]]. */
   private def createInsertIntoStatement(
       insertParams: InsertTableParams,
       tableSlot: LogicalPlan,
       query: LogicalPlan,
       overwrite: Boolean,
-      withSchemaEvolution: Boolean): InsertIntoStatement = {
-    InsertIntoStatement(
+      withSchemaEvolution: Boolean): LogicalPlan = {
+    val unresolvedInsert = UnresolvedInsert(
       table = tableSlot,
       partitionSpec = insertParams.partitionSpec,
       userSpecifiedCols = insertParams.userSpecifiedCols,
@@ -1189,27 +1185,32 @@ class AstBuilder extends DataTypeAstBuilder
       byName = insertParams.byName,
       replaceCriteriaOpt = insertParams.replaceCriteriaOpt,
       withSchemaEvolution = withSchemaEvolution)
+
+    tableSlot match {
+      case target: UnresolvedInsertTarget =>
+        val relation = CurrentOrigin.withOrigin(target.origin) {
+          new UnresolvedRelation(target.multipartIdentifier, target.options, isStreaming = false)
+            .requireWritePrivileges(target.writePrivileges)
+        }
+        relation.copyTagsFrom(target)
+        unresolvedInsert.toInsertIntoStatement(relation)
+      case _ => unresolvedInsert
+    }
   }
 
   /**
-   * Build the `table` slot of a write command. If the identifier reference is a constant string,
-   * returns an [[UnresolvedRelation]] directly; otherwise returns a
-   * [[PlanWithUnresolvedIdentifier]] that materializes into an [[UnresolvedRelation]] once the
-   * identifier expression is resolved. Both branches produce a [[NamedRelation]], which occupies
-   * the `InsertIntoStatement.table` slot (a general `LogicalPlan` slot, since `NamedRelation`
-   * extends `LogicalPlan`).
-   *
-   * Placing the placeholder in the identifier slot (rather than wrapping the entire write command)
-   * preserves the `CTEInChildren` shape at parse time, so `CTESubstitution` places `WithCTE` on the
-   * command's children correctly. See SPARK-46625.
+   * Build the target of an INSERT. A dynamic IDENTIFIER remains inside `UnresolvedInsert` so its
+   * expression receives normal analyzer traversal. The builder produces `UnresolvedInsertTarget`
+   * rather than `UnresolvedRelation` so CTE substitution cannot interpret the target as a source.
    */
   private def buildWriteTableSlot(
       ctx: IdentifierReferenceContext,
       optionsClause: Option[OptionsClauseContext],
-      writePrivileges: Set[TableWritePrivilege]): NamedRelation = {
-    withIdentClause(ctx, parts =>
-      createUnresolvedRelation(ctx, parts, optionsClause, writePrivileges, isStreaming = false))
-      .asInstanceOf[NamedRelation]
+      writePrivileges: Set[TableWritePrivilege]): LogicalPlan = {
+    val options = withOrigin(ctx) { resolveOptions(optionsClause) }
+    withIdentClause(ctx, parts => withOrigin(ctx) {
+      UnresolvedInsertTarget(parts, options, writePrivileges)
+    })
   }
 
   /**
