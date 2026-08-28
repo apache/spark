@@ -487,39 +487,6 @@ object Connect {
   // The limits below bound the environment a session can install in its Python workers. They are
   // cluster-level rather than session-level so that a client cannot raise the bound on the server
   // memory its own session holds.
-  private[spark] val CONNECT_PYTHON_WORKER_ENV_MAX_VARIABLES =
-    buildStaticConf("spark.connect.session.pythonWorkerEnv.maxVariables")
-      .doc(
-        "The maximum number of environment variables a session may set for its Python " +
-          "workers, across all configurations under the reserved prefix. Zero accepts no " +
-          "user-provided environment at all.")
-      .version("4.4.0")
-      .internal()
-      .intConf
-      .checkValue(_ >= 0, "The maximum number of variables must not be negative.")
-      .createWithDefault(100)
-
-  private[spark] val CONNECT_PYTHON_WORKER_ENV_MAX_NAME_LENGTH =
-    buildStaticConf("spark.connect.session.pythonWorkerEnv.maxNameLength")
-      .doc("The maximum length, in characters, of an environment variable name a session may " +
-        "set for its Python workers. Zero accepts no user-provided environment at all.")
-      .version("4.4.0")
-      .internal()
-      .intConf
-      .checkValue(_ >= 0, "The maximum name length must not be negative.")
-      .createWithDefault(512)
-
-  private[spark] val CONNECT_PYTHON_WORKER_ENV_MAX_TOTAL_SIZE_BYTES =
-    buildStaticConf("spark.connect.session.pythonWorkerEnv.maxTotalSizeBytes")
-      .doc(
-        "The maximum total size of the environment a session may set for its Python workers, " +
-          "measured as the sum of the UTF-8 lengths of every variable name and value.")
-      .version("4.4.0")
-      .internal()
-      .bytesConf(ByteUnit.BYTE)
-      .checkValue(_ >= 0, "The maximum total size must not be negative.")
-      .createWithDefault(128 * 1024) // 128 KiB
-
   val CONNECT_PLAN_COMPRESSION_DEFAULT_ALGORITHM =
     buildConf("spark.connect.session.planCompression.defaultAlgorithm")
       .doc("The default algorithm of proto plan compression.")

@@ -29,8 +29,8 @@ import org.apache.spark.{SparkEnv, SparkException, SparkNoSuchElementException}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.config.{ConfigEntry, SECRET_REDACTION_PATTERN}
 import org.apache.spark.sql.connect.SparkConnectTestUtils
-import org.apache.spark.sql.connect.config.Connect
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.python.PythonWorkerEnvironment
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ThreadUtils
 
@@ -234,7 +234,7 @@ class SparkConnectConfigHandlerSuite extends SharedSparkSession {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     // A limit on the collection cannot be checked against the written entry alone, so the check
     // has to consider the whole environment the session would end up with.
-    withLimit(Connect.CONNECT_PYTHON_WORKER_ENV_MAX_VARIABLES, 1) {
+    withLimit(StaticSQLConf.PYTHON_WORKER_ENV_MAX_VARIABLES, 1) {
       withEnvKeys(envKey("FIRST"), envKey("SECOND")) {
         sendSet(sessionHolder, envKey("FIRST"), "1")
         val ex = intercept[SparkException](sendSet(sessionHolder, envKey("SECOND"), "2"))
@@ -292,7 +292,7 @@ class SparkConnectConfigHandlerSuite extends SharedSparkSession {
 
   test("SPARK-58752: concurrent writes cannot jointly exceed a limit") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
-    withLimit(Connect.CONNECT_PYTHON_WORKER_ENV_MAX_VARIABLES, 1) {
+    withLimit(StaticSQLConf.PYTHON_WORKER_ENV_MAX_VARIABLES, 1) {
       withEnvKeys(envKey("FIRST"), envKey("SECOND")) {
         // Both writers read the environment, validate, and write. Unless the check and the write it
         // validated are one unit, both observe an empty environment, both accept, and the session

@@ -27,6 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SECRET_REDACTION_PATTERN
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.python.PythonWorkerEnvironment
 import org.apache.spark.sql.internal.SQLConf
 
 class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigResponse])

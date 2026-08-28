@@ -28,9 +28,9 @@ import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, PythonUDF}
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
-import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.SparkConnectPlanTest
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.python.PythonWorkerEnvironment
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructField, StructType}
 
 class PythonWorkerEnvironmentSuite extends SparkConnectPlanTest {
@@ -212,7 +212,7 @@ class PythonWorkerEnvironmentSuite extends SparkConnectPlanTest {
   // ---------------------------------------------------------------------------
 
   test("SPARK-58752: the variable limit is configurable") {
-    withLimit(Connect.CONNECT_PYTHON_WORKER_ENV_MAX_VARIABLES, 1) {
+    withLimit(StaticSQLConf.PYTHON_WORKER_ENV_MAX_VARIABLES, 1) {
       withSQLConf(key("FOO") -> "1") {
         assert(readValidated(sessionConf).size === 1)
       }
@@ -224,7 +224,7 @@ class PythonWorkerEnvironmentSuite extends SparkConnectPlanTest {
   }
 
   test("SPARK-58752: a zero variable limit accepts no environment at all") {
-    withLimit(Connect.CONNECT_PYTHON_WORKER_ENV_MAX_VARIABLES, 0) {
+    withLimit(StaticSQLConf.PYTHON_WORKER_ENV_MAX_VARIABLES, 0) {
       assert(readValidated(sessionConf).isEmpty)
       withSQLConf(key("FOO") -> "1") {
         val ex = intercept[SparkException](readValidated(sessionConf))
@@ -234,7 +234,7 @@ class PythonWorkerEnvironmentSuite extends SparkConnectPlanTest {
   }
 
   test("SPARK-58752: the name length limit is configurable") {
-    withLimit(Connect.CONNECT_PYTHON_WORKER_ENV_MAX_NAME_LENGTH, 3) {
+    withLimit(StaticSQLConf.PYTHON_WORKER_ENV_MAX_NAME_LENGTH, 3) {
       withSQLConf(key("FOO") -> "1") {
         assert(readValidated(sessionConf) === Map("FOO" -> "1"))
       }
@@ -246,7 +246,7 @@ class PythonWorkerEnvironmentSuite extends SparkConnectPlanTest {
   }
 
   test("SPARK-58752: the total size limit is configurable") {
-    withLimit(Connect.CONNECT_PYTHON_WORKER_ENV_MAX_TOTAL_SIZE_BYTES, 8L) {
+    withLimit(StaticSQLConf.PYTHON_WORKER_ENV_MAX_TOTAL_SIZE_BYTES, 8L) {
       withSQLConf(key("FOO") -> "12") {
         assert(readValidated(sessionConf) === Map("FOO" -> "12"))
       }
@@ -259,9 +259,9 @@ class PythonWorkerEnvironmentSuite extends SparkConnectPlanTest {
 
   test("SPARK-58752: a negative limit is rejected by the configuration itself") {
     Seq[ConfigEntry[_]](
-      Connect.CONNECT_PYTHON_WORKER_ENV_MAX_VARIABLES,
-      Connect.CONNECT_PYTHON_WORKER_ENV_MAX_NAME_LENGTH,
-      Connect.CONNECT_PYTHON_WORKER_ENV_MAX_TOTAL_SIZE_BYTES).foreach { entry =>
+      StaticSQLConf.PYTHON_WORKER_ENV_MAX_VARIABLES,
+      StaticSQLConf.PYTHON_WORKER_ENV_MAX_NAME_LENGTH,
+      StaticSQLConf.PYTHON_WORKER_ENV_MAX_TOTAL_SIZE_BYTES).foreach { entry =>
       val ex = intercept[IllegalArgumentException] {
         new org.apache.spark.SparkConf().set(entry.key, "-1").get(entry)
       }
@@ -287,14 +287,29 @@ class PythonWorkerEnvironmentSuite extends SparkConnectPlanTest {
   // Copying
   // ---------------------------------------------------------------------------
 
-  test("SPARK-58752: toMutableJavaMap returns an independent mutable copy") {
+  test("SPARK-58752: mergeToJavaMap returns an independent mutable copy") {
+    val empty = java.util.Collections.emptyMap[String, String]()
     val variables = Map("FOO" -> "1")
-    val first = PythonWorkerEnvironment.toMutableJavaMap(variables)
+    val first = PythonWorkerEnvironment.mergeToJavaMap(empty, variables)
     first.put("ADDED_BY_RUNNER", "2")
-    val second = PythonWorkerEnvironment.toMutableJavaMap(variables)
+    val second = PythonWorkerEnvironment.mergeToJavaMap(empty, variables)
     // Entries added to one copy do not reach the environment or a later copy.
     assert(!second.containsKey("ADDED_BY_RUNNER"))
     assert(second.get("FOO") === "1")
+  }
+
+  test("SPARK-58752: mergeToJavaMap lets the session environment win a conflict") {
+    // A name in the original comes from a broader scope, such as the application-wide
+    // spark.executorEnv.*; the session's own configuration is the more specific intent.
+    val original = new java.util.HashMap[String, String]()
+    original.put("SHARED", "from_application")
+    original.put("ONLY_APPLICATION", "kept")
+    val merged =
+      PythonWorkerEnvironment.mergeToJavaMap(original, Map("SHARED" -> "from_session"))
+    assert(merged.get("SHARED") === "from_session")
+    assert(merged.get("ONLY_APPLICATION") === "kept")
+    // The original is not mutated.
+    assert(original.get("SHARED") === "from_application")
   }
 
   // ---------------------------------------------------------------------------
