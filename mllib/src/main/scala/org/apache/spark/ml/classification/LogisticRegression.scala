@@ -1177,7 +1177,11 @@ class LogisticRegressionModel private[spark] (
   override protected def raw2predictionColumn(rawPrediction: Column): Column = if (isMultinomial) {
     if (isDefined(thresholds)) {
       val localThresholds = getThresholds.clone()
-      probability2predictionColumn(raw2probabilityColumn(rawPrediction), localThresholds)
+      udf((rawPrediction: Vector) => {
+        val probability = LogisticRegressionModel.raw2probabilityInPlaceMultinomial(
+          rawPrediction.copy)
+        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+      }).apply(rawPrediction)
     } else {
       udf((rawPrediction: Vector) => rawPrediction.argmax.toDouble).apply(rawPrediction)
     }
