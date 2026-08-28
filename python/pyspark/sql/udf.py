@@ -222,6 +222,7 @@ class UserDefinedFunction:
         # Extract Python UDF details if transpilation is enabled.
         self.transpiled: list = []
         self._transpiled_param_names: list[str] = []
+        # A keyword call naming one of these must retain interpreted Python semantics.
         self._transpiled_positional_only_names: set[str] = set()
         # Per-option input-type categories ("numeric"/"string" per public param),
         # parallel to ``self.transpiled``; the JVM picks the option matching the
