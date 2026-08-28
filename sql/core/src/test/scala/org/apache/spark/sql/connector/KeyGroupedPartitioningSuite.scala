@@ -23,7 +23,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.rdd.SortedMergeCoalescedRDD
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Literal, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, ExprId, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryCatalystRuntimeFilterCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.functions._
@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.expressions.Expressions._
 import org.apache.spark.sql.execution.{
   ExtendedMode,
   FormattedMode,
+  LocalTableScanExec,
   ProjectExec,
   RDDScanExec,
   SimpleMode,
@@ -855,6 +856,22 @@ class KeyGroupedPartitioningSuite
       assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
         "storage-partitioned join should not shuffle")
     }
+  }
+
+  test("SPARK-59045: canonicalization normalizes the reduced expressions") {
+    // `KeyReducer` is a plain case class, not an `Expression`, so plan canonicalization does not
+    // normalize the exprIds inside `reducedExpression`. Two structurally identical
+    // `GroupPartitionsExec`s with value-equal reducers must still compare equal after
+    // canonicalization, or exchange/subquery reuse silently stops deduplicating their subtrees.
+    val a1 = AttributeReference("id", LongType, nullable = true)().withExprId(ExprId(1))
+    val a2 = AttributeReference("id", LongType, nullable = true)().withExprId(ExprId(2))
+    def groupPartitions(attr: AttributeReference): GroupPartitionsExec = {
+      val child = new LocalTableScanExec(Seq(attr), Nil, None, false)
+      val reduced = TransformExpression(BucketFunction, Seq(attr), Some(2))
+      GroupPartitionsExec(child,
+        reducers = Some(Seq(Some(physical.KeyReducer(BucketReducer(2), reduced)))))
+    }
+    assert(groupPartitions(a1).canonicalized == groupPartitions(a2).canonicalized)
   }
 
   test("partitioned join: join with two partition keys and matching & sorted partitions") {

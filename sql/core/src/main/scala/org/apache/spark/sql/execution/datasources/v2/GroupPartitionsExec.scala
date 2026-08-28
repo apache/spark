@@ -25,6 +25,7 @@ import org.apache.spark.rdd.{CoalescedRDD, PartitionCoalescer, PartitionGroup, R
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, KeyReducer, Partitioning}
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.execution.{SafeForKWayMerge, SparkPlan, UnaryExecNode}
@@ -70,10 +71,11 @@ case class GroupPartitionsExec(
         // There can be multiple `KeyedPartitioning`s in an output partitioning of a join, but they
         // can only differ in `expressions`. Their `partitionKeys` reference and `isCollapsed` flag
         // are shared (enforced by `PartitioningCollection`), so the grouping is computed once.
-        // When reducers are applied, the reduced expressions are reported instead of the original
-        // ones. For the identity-vs-transform and single-side-transform reducers their data type
-        // matches the reduced partition keys by construction; for the both-sides-reduce shape no
-        // single transform describes the keys (see `KeyedShuffleSpec.reducers`).
+        // When reducers are applied, the stored reduced expressions are re-targeted at each
+        // `KeyedPartitioning`'s own key attribute and reported instead of the original ones. Their
+        // data types match the reduced partition keys for the identity-vs-transform and
+        // single-side-transform reducers; for the both-sides-reduce shape no single transform
+        // describes the keys (see `KeyedShuffleSpec.reducersBothWays`).
         val partitionKeys = grouping.partitions.map(_._1)
         p.transform {
           case k: KeyedPartitioning =>
@@ -83,11 +85,10 @@ case class GroupPartitionsExec(
                 assert(projectedExpressions.length == exprs.length)
                 projectedExpressions.zip(exprs).map {
                   case (expr, Some(KeyReducer(_, reduced))) =>
-                    // `reduced` was derived from the single spec that `createKeyedShuffleSpec`
+                    // `reduced` was stored from the single spec that `createKeyedShuffleSpec`
                     // picked (`collectFirst`); re-target it at this `KeyedPartitioning`'s own key
                     // attribute so that every `KeyedPartitioning` in a collection keeps its own.
-                    val attr = expr.references.head
-                    reduced.transform { case _: AttributeReference => attr }
+                    reduced.withReference(expr.references.head)
                   case (expr, None) => expr
                 }
               case None => projectedExpressions
@@ -97,6 +98,23 @@ case class GroupPartitionsExec(
         }.asInstanceOf[Partitioning]
       case o => o
     }
+  }
+
+  override def doCanonicalize(): SparkPlan = {
+    // `KeyReducer` is a plain case class, not an `Expression`, so plan canonicalization does not
+    // normalize the exprIds inside `reducedExpression`. Do it here, otherwise structurally
+    // identical SPJ subtrees with value-equal reducers stop comparing equal once reducers are
+    // applied, and exchange/subquery reuse silently stops deduplicating them.
+    val canonicalized = super.doCanonicalize().asInstanceOf[GroupPartitionsExec]
+    canonicalized.copy(reducers = canonicalized.reducers.map { reducerSeqs =>
+      reducerSeqs.map { keyReducerOpt =>
+        keyReducerOpt.map { keyReducer =>
+          keyReducer.copy(reducedExpression =
+            QueryPlan.normalizeExpressions(keyReducer.reducedExpression, child.output)
+              .asInstanceOf[TransformExpression])
+        }
+      }
+    })
   }
 
   /** Aligns partitions based on `expectedPartitionKeys` and clustering mode. */

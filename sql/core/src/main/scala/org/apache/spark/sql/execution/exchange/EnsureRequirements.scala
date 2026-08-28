@@ -553,8 +553,7 @@ case class EnsureRequirements(
 
         // in case of compatible but not identical partition expressions, we apply 'reduce'
         // transforms to group one side's partitions as well as the common partition values
-        val leftReducers = leftSpec.reducers(rightSpec)
-        val rightReducers = rightSpec.reducers(leftSpec)
+        val (leftReducers, rightReducers) = leftSpec.reducersBothWays(rightSpec)
         val (leftReducedDataTypes, leftReducedKeys) = leftReducers.fold(
           (leftPartitioning.keyDataTypes, leftPartitioning.partitionKeys)
         )(leftPartitioning.reduceKeys)

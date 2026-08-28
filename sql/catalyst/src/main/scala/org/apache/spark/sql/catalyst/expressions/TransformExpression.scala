@@ -98,6 +98,14 @@ case class TransformExpression(
     }
   }
 
+  /**
+   * Re-targets this partition transform expression at `attr`. A partition transform expression
+   * has a single leaf attribute (`KeyedPartitioning.supportsExpressions`), so this replaces it
+   * and the result reports the same transform over `attr`.
+   */
+  def withReference(attr: Attribute): TransformExpression =
+    transform { case _: AttributeReference => attr }.asInstanceOf[TransformExpression]
+
   // Return a Reducer for a reducible function on another reducible function
   private def reducer(
       thisFunction: ReducibleFunction[_, _],
