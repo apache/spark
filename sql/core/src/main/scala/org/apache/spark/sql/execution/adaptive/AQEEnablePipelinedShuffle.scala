@@ -19,11 +19,9 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkEnv
-import org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{BinaryExecNode, CoalesceExec, SparkPlan}
-import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.{BinaryExecNode, CoalesceExec, CollectLimitExec, CollectTailExec, SparkPlan, TakeOrderedAndProjectExec}
+import org.apache.spark.sql.execution.exchange.{PipelinedShuffleEligibility, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.ShuffledJoin
 
 /**
@@ -61,19 +59,10 @@ import org.apache.spark.sql.execution.joins.ShuffledJoin
 case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
 
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.pipelinedShuffleEnabled) return plan
-    // Single-executor only: the validated transport (the in-process
-    // channel manager) requires producer and consumer in one JVM.
-    if (plan.session == null || !plan.session.sparkContext.isLocal) return plan
-    // The SQL flag alone does not pick a transport: the pipelined manager is set separately by
-    // spark.shuffle.manager.incremental and defaults to the RPC StreamingShuffleManager. Only the
-    // in-process channel manager is validated here; require it, else leave the plan regular (same
-    // reasoning as the non-AQE EnablePipelinedShuffle rule).
-    if (!SparkEnv.get.pipelinedShuffleManager.isInstanceOf[PipelinedChannelShuffleManager]) {
-      logDebug("AQEEnablePipelinedShuffle: spark.sql.pipelinedShuffle.enabled is on but the " +
-        "incremental shuffle manager is not the in-process channel manager; leaving regular.")
-      return plan
-    }
+    // Shared environment gate (opt-in flag, single-executor local mode, channel manager active),
+    // identical to the non-AQE rule's -- see PipelinedShuffleEligibility for why it is a
+    // correctness gate that must not drift between the two rules.
+    if (!PipelinedShuffleEligibility.enabled(plan, conf)) return plan
 
     flipEligibleExchanges(plan)
   }
@@ -175,19 +164,26 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
   }
 
   /**
-   * Nodes below which a candidate exchange must NOT be flipped. Two reasons a node lands here:
+   * Nodes below which a candidate exchange must NOT be flipped. Reasons a node lands here:
    *   - AQE consumes map output statistics from the stages below it ([[BinaryExecNode]], another
    *     [[ShuffleExchangeExec]]); flipping below it would give up stats a decision needs.
    *   - [[CoalesceExec]] reads its child shuffle multi-partition-per-task (a `CoalescedRDD` over
    *     the `ShuffledRowRDD`), which the channel transport cannot serve; the shuffle it reads
-   *     must stay regular. Blocking here keeps that shuffle -- and everything deeper -- regular,
-   *     so no pipelined exchange ends up below the coalesce's regular boundary (which the
-   *     scheduler would reject). See the non-AQE `EnablePipelinedShuffle` for the full rationale.
+   *     must stay regular.
+   *   - the limit operators [[CollectLimitExec]] / [[CollectTailExec]] /
+   *     [[TakeOrderedAndProjectExec]] each build a hidden regular (`pipelined = false`) shuffle
+   *     inside `doExecute` (via `prepareShuffleDependency`) that no plan walk can see; a flipped
+   *     exchange below one of them would sit under that unmaterialized regular boundary and the
+   *     job would hard-fail at submission (pipelined-below-regular).
+   * Blocking here keeps the shuffle below -- and everything deeper -- regular, so no pipelined
+   * exchange ends up below the operator's regular boundary. See the non-AQE
+   * `EnablePipelinedShuffle` for the full rationale on each operator.
    */
   private def isStatsSensitive(plan: SparkPlan): Boolean = plan match {
     case _: BinaryExecNode => true
     case _: ShuffleExchangeExec => true
     case _: CoalesceExec => true
+    case _: CollectLimitExec | _: CollectTailExec | _: TakeOrderedAndProjectExec => true
     case _ => false
   }
 

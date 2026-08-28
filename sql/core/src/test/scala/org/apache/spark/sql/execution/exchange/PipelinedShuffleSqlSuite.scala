@@ -362,4 +362,105 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite with AdaptiveSparkPlanHelpe
       pool.shutdownNow()
     }
   }
+
+  /**
+   * Run `body` on a fresh pipelined session under a deadline, failing (not hanging the suite) on
+   * timeout. Used by the unsupported-consumer fallback tests, where a regression is a deadlock or
+   * a hard-fail rather than a wrong answer.
+   */
+  private def withDeadline(seconds: Int, onTimeout: String)(
+      body: SparkSession => Unit): Unit = {
+    val pool = Executors.newSingleThreadExecutor()
+    val fut = pool.submit(new Runnable {
+      override def run(): Unit = withPipelinedSession(body)
+    })
+    try {
+      fut.get(seconds.toLong, TimeUnit.SECONDS)
+    } catch {
+      case _: java.util.concurrent.TimeoutException =>
+        fut.cancel(true)
+        fail(onTimeout)
+    } finally {
+      pool.shutdownNow()
+    }
+  }
+
+  private def assertNotPipelined(df: org.apache.spark.sql.DataFrame, why: String): Unit = {
+    val pipelined = collect(df.queryExecution.executedPlan) {
+      case s: ShuffleExchangeExec if s.pipelined => s
+    }
+    require(pipelined.isEmpty, s"$why; found a pipelined exchange in:" +
+      s"\n${df.queryExecution.executedPlan}")
+  }
+
+  test("coalesce over a union of shuffles falls back to regular (binary-child guard)") {
+    // A CoalesceExec above a UnionExec (a BinaryExecNode) whose branches contain shuffles: the
+    // guard walk must descend through the union's children, not only unary ones. With the old
+    // unary-only walk both branch exchanges flip, and CoalescedRDD's task then drains SEVERAL
+    // reduce partitions of the SAME pipelined shuffle in order while the single-threaded writer
+    // parks on a later partition's full queue -- a hang with no timeout escape.
+    //
+    // Two details are load-bearing for this to reproduce the hazard at all (an earlier version of
+    // this test had neither and passed even with the buggy guard):
+    //   - the branches must be STRUCTURALLY DIFFERENT shuffles (groupBy vs repartition). Two
+    //     identical branches canonicalize alike, exchange reuse collapses them, and the rule's
+    //     reuse gate then bails out first -- leaving the plan regular for the wrong reason.
+    //   - each reduce partition needs more rows than a queue holds (queueCapacity 64 batches x
+    //     batchSize 1024 ~= 65K rows), or the writer never parks and nothing deadlocks.
+    withDeadline(90,
+      "coalesce over a union of pipelined shuffles hung: the guard missed the union's shuffle " +
+        "children and the coalesced read deadlocked the writer") { spark =>
+      import spark.implicits._
+      val a = spark.range(0, 2000000L, 1, 4).withColumn("k", ($"id" % 1000))
+        .groupBy($"k").count().select($"k")
+      val b = spark.range(0, 2000000L, 1, 4).withColumn("k2", ($"id" % 1000))
+        .repartition($"k2").select($"k2".as("k"))
+      val df = a.union(b).coalesce(2)
+      val n = df.count()
+      require(n == 1000L + 2000000L, s"expected ${1000L + 2000000L} rows, got $n")
+      assertNotPipelined(df, "coalesce over a union must leave the plan regular")
+    }
+  }
+
+  test("crossJoin over a shuffle falls back to regular (N-to-1 cartesian read)") {
+    // A CartesianProductExec reads its child once PER right partition, so N reduce tasks would mint
+    // N readers on one rendezvous queue -- rows/markers split and the writer is abandoned mid-run.
+    // The guard must leave a shuffle read by a cartesian product regular.
+    withDeadline(90,
+      "crossJoin over a pipelined shuffle hung or corrupted: the shuffle was pipelined and the " +
+        "N-to-1 cartesian read split it across concurrent readers") { spark =>
+      import spark.implicits._
+      spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "-1")
+      val left = spark.range(0, 100000L, 1, 4).withColumn("k", ($"id" % 10)).repartition($"k")
+      val right = spark.range(0, 20L, 1, 2)
+      val df = left.crossJoin(right)
+      val n = df.count()
+      require(n == 100000L * 20L, s"expected ${100000L * 20L} rows, got $n")
+      assertNotPipelined(df, "a shuffle read by a cartesian product must stay regular")
+    }
+  }
+
+  test("a limit operator that builds a hidden shuffle in doExecute stays regular") {
+    // CollectLimitExec/CollectTailExec/TakeOrderedAndProjectExec build a regular (pipelined=false)
+    // shuffle inside doExecute, invisible to the plan walk. A flipped exchange below one of them
+    // would sit under an unmaterialized regular boundary and the job would hard-fail at submission.
+    // .collect() on a limit takes executeTake and dodges doExecute; a non-root position (feeding a
+    // write) forces doExecute. Marking these operators blocking keeps the exchange below regular.
+    withDeadline(90,
+      "a limit operator's hidden shuffle made the job hard-fail: the exchange below it was " +
+        "pipelined and landed under an unmaterialized regular boundary") { spark =>
+      import spark.implicits._
+      withTempDir { dir =>
+        val out = new java.io.File(dir, "limit-out").getAbsolutePath
+        val df = spark.range(0, 1000000L, 1, 4).withColumn("k", ($"id" % 100))
+          .groupBy($"k").count().orderBy($"count").limit(5)
+        // .write forces TakeOrderedAndProjectExec.doExecute (its hidden SinglePartition shuffle),
+        // rather than the executeTake path .collect() would take.
+        df.write.parquet(out)
+        val readBack = spark.read.parquet(out).count()
+        require(readBack == 5L, s"expected 5 rows written, got $readBack")
+        assertNotPipelined(df, "an exchange below a hidden-shuffle limit op must stay regular")
+      }
+    }
+  }
 }

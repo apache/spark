@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.execution.exchange
 
-import org.apache.spark.SparkEnv
-import org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{CoalesceExec, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{CollectLimitExec, CollectTailExec, CoalesceExec, SparkPlan, TakeOrderedAndProjectExec}
+import org.apache.spark.sql.execution.joins.CartesianProductExec
 
 /**
  * Opt-in (SPARK-57399). Rewrites EVERY [[ShuffleExchangeExec]] in a
@@ -40,46 +39,41 @@ import org.apache.spark.sql.execution.{CoalesceExec, SparkPlan, UnaryExecNode}
  * routes by `partitioner.getPartition(key)` and does not care which partitioning produced the
  * id (SinglePartition is the numPartitions == 1 degenerate case).
  *
- * Two shapes make the rule leave the whole plan regular:
+ * These shapes make the rule leave the whole plan regular:
  *   - reuse: a pipelined producer with more than one consumer (fan-out) is rejected, so if any
  *     exchange in the plan is reused the rule bails out.
- *   - coalesce over a shuffle: a `CoalesceExec` (user `.coalesce(n)`, a narrow no-shuffle
- *     partition reduction) reading from a shuffle makes ONE reduce task drain SEVERAL reduce
- *     partitions sequentially (a core `CoalescedRDD` over the `ShuffledRowRDD`). The channel
- *     transport cannot serve that -- the map-side writer interleaves all partitions on one
- *     thread and parks on a full bounded queue, so a reader draining partition `start` to
- *     completion before touching `start + 1` deadlocks with the parked writer, and there is no
- *     "combine adjacent partitions" narrow read the transport could substitute without giving
- *     up the bounded-queue backpressure the transport relies on. `coalesce`'s API contract is a
- *     narrow dependency that merges adjacent partitions, so we cannot honor it by re-hashing to
- *     `n` partitions either. So if any shuffle in the plan is read by a coalesce (directly or
- *     through a narrow chain) the rule leaves the whole plan regular; the query runs correctly,
- *     just not pipelined. (Leaving only that one exchange regular would put a pipelined exchange
- *     below a regular boundary, which the scheduler rejects -- so it must be all-or-nothing.)
+ *   - an UNSUPPORTED CONSUMER reading a shuffle (see [[readsShuffleThroughUnsupportedConsumer]]):
+ *     an operator that would drain a shuffle in a way the channel transport cannot serve, or that
+ *     builds its own hidden regular shuffle. If such an operator sits above any shuffle the rule
+ *     leaves the WHOLE plan regular (leaving only that one exchange regular would put a pipelined
+ *     exchange below a regular boundary, which the scheduler rejects -- so it is all-or-nothing).
+ *     The query runs correctly, just not pipelined. The unsupported consumers are:
+ *       - `CoalesceExec` (user `.coalesce(n)`): its `CoalescedRDD` makes ONE reduce task drain
+ *         SEVERAL reduce partitions sequentially. The single-threaded writer parks on a full
+ *         bounded queue filling a later partition before emitting an earlier one's markers, so a
+ *         reader draining partitions in order deadlocks the writer with no timeout escape;
+ *         `coalesce`'s narrow-merge contract also cannot be honored by re-hashing to `n`.
+ *       - `CartesianProductExec`: its `UnsafeCartesianRDD` reads each left (child) partition once
+ *         per right partition, so N reduce tasks mint N readers on the SAME rendezvous queue for
+ *         one `(shuffleId, epoch, pid)` -- rows and end-of-stream markers split
+ *         nondeterministically (wrong results), a reader short of `numMaps` markers hangs, and
+ *         the first to finish abandons the queue and discards the others' data. The fan-out check
+ *         does not catch it (one consumer RDD, computed many times), nor the width-1 require.
+ *       - `CollectLimitExec` / `CollectTailExec` / `TakeOrderedAndProjectExec`: each builds a
+ *         hidden regular (`pipelined = false`) shuffle inside `doExecute` via
+ *         `prepareShuffleDependency`, invisible to this plan walk. A flipped exchange below one of
+ *         them would sit under that unmaterialized regular boundary and the job would hard-fail at
+ *         submission (`classifyJobShuffleShape`'s pipelined-below-regular rejection). (`.collect()`
+ *         on a limit takes `executeTake` and never hits `doExecute`; `.write` / `.toLocalIterator`
+ *         / a non-root position do.)
  */
 case class EnablePipelinedShuffle() extends Rule[SparkPlan] {
 
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.pipelinedShuffleEnabled) return plan
-    // Single-executor only: the validated transport (the in-process channel
-    // manager) requires producer and consumer in one JVM. (The pipelined machinery itself is
-    // not local-only -- the RPC streaming transport is cross-executor -- but batch queries
-    // over it are unexplored territory, so the rule stays conservative.)
-    if (plan.session == null || !plan.session.sparkContext.isLocal) return plan
-
-    // The SQL flag alone does not pick a transport: the pipelined manager is set separately by
-    // spark.shuffle.manager.incremental, and DEFAULTS to the RPC StreamingShuffleManager. Only
-    // the in-process channel manager is validated for batch queries in local mode; flipping to
-    // pipelined while the incremental manager is still the RPC streaming one would route these
-    // exchanges to an untested transport (and, because that manager reports
-    // requiresDetachedRecords = false, also skip the row copy). So require the channel manager
-    // to be active; otherwise leave the plan regular, mirroring the reuse fallback below.
-    if (!SparkEnv.get.pipelinedShuffleManager.isInstanceOf[PipelinedChannelShuffleManager]) {
-      logDebug("EnablePipelinedShuffle: spark.sql.pipelinedShuffle.enabled is on but the " +
-        "incremental shuffle manager is not the in-process channel manager " +
-        "(spark.shuffle.manager.incremental); leaving the plan regular.")
-      return plan
-    }
+    // Shared environment gate (opt-in flag, single-executor local mode, channel manager active),
+    // identical to the AQE rule's -- see PipelinedShuffleEligibility for why it is a correctness
+    // gate. It also requires AQE off implicitly: under AQE this rule sees no exchanges.
+    if (!PipelinedShuffleEligibility.enabled(plan, conf)) return plan
 
     val shuffles = plan.collect { case s: ShuffleExchangeExec => s }
     if (shuffles.isEmpty) return plan
@@ -104,13 +98,13 @@ case class EnablePipelinedShuffle() extends Rule[SparkPlan] {
       return plan
     }
 
-    // A CoalesceExec reading from a shuffle would make one reduce task drain several reduce
-    // partitions sequentially, which the channel transport cannot serve (see class doc). Leave
-    // the whole plan regular -- like the reuse fallback, this is a normal, expected outcome the
-    // user has nothing to act on, so log at DEBUG rather than WARN.
-    if (readsShuffleByCoalesce(plan)) {
-      logDebug("EnablePipelinedShuffle: a coalesce reads from a shuffle; leaving the plan " +
-        "regular to avoid a coalesced multi-partition read the channel transport cannot serve.")
+    // An operator that would read a shuffle in a way the channel transport cannot serve, or that
+    // builds its own hidden regular shuffle, forces the whole plan regular (see class doc). Like
+    // the reuse fallback this is a normal, expected outcome, so log at DEBUG rather than WARN.
+    if (readsShuffleThroughUnsupportedConsumer(plan)) {
+      logDebug("EnablePipelinedShuffle: a shuffle is read through an operator the channel " +
+        "transport cannot serve (coalesce / cartesian product / a limit operator that builds a " +
+        "hidden shuffle); leaving the plan regular.")
       return plan
     }
 
@@ -120,21 +114,30 @@ case class EnablePipelinedShuffle() extends Rule[SparkPlan] {
   }
 
   /**
-   * True if any [[ShuffleExchangeExec]] in `plan` is read by a [[CoalesceExec]] above it through
-   * a chain of only narrow (unary, non-exchange) operators. Such a shuffle would be drained
-   * multi-partition-per-task by a `CoalescedRDD` and cannot be pipelined (see class doc). A
-   * shuffle underneath that shuffle is NOT affected: its own reader reads one reduce partition
-   * per task, so the walk from a coalesce stops at the FIRST shuffle it reaches.
+   * True if any [[ShuffleExchangeExec]] in `plan` is read by an operator the channel transport
+   * cannot serve. The unsupported operators (see class doc for why each is fatal) are
+   * `CoalesceExec`, `CartesianProductExec`, and the limit operators `CollectLimitExec` /
+   * `CollectTailExec` / `TakeOrderedAndProjectExec`. For each such operator anywhere in the plan,
+   * check whether a shuffle is reachable below it.
+   *
+   * The reachability walk descends through EVERY child of a non-exchange node -- not only unary
+   * children -- so a shuffle behind a `UnionExec`/join (a `BinaryExecNode`) beneath the operator
+   * is still found. It stops at the FIRST [[ShuffleExchangeExec]] on each path: a shuffle deeper
+   * than that first one is not read by this operator (the intervening exchange's own reader reads
+   * one reduce partition per task), so it is not this operator's concern.
    */
-  private def readsShuffleByCoalesce(plan: SparkPlan): Boolean = {
-    // Does a narrow chain from `p` reach a ShuffleExchangeExec before any other exchange?
+  private def readsShuffleThroughUnsupportedConsumer(plan: SparkPlan): Boolean = {
     def reachesShuffle(p: SparkPlan): Boolean = p match {
       case _: ShuffleExchangeExec => true
-      case u: UnaryExecNode => reachesShuffle(u.child)
+      case other => other.children.exists(reachesShuffle)
+    }
+    def isUnsupportedConsumer(p: SparkPlan): Boolean = p match {
+      case _: CoalesceExec | _: CartesianProductExec |
+          _: CollectLimitExec | _: CollectTailExec | _: TakeOrderedAndProjectExec => true
       case _ => false
     }
     plan.exists {
-      case c: CoalesceExec => reachesShuffle(c.child)
+      case p if isUnsupportedConsumer(p) => p.children.exists(reachesShuffle)
       case _ => false
     }
   }

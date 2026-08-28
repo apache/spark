@@ -24,25 +24,26 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 
 /**
- * Acceptance test for the LIMIT early-stop fix (SPARK-57399). An
- * early-stopping reader over a pipelined channel shuffle used to hang the writer: the channel
- * queue is bounded (64 batches), so once a LIMIT's reduce task was satisfied and stopped
- * draining while the map task was still producing, the writer blocked forever on a full
- * queue's put() with no drainer. That is now fixed -- the reader marks its partitions abandoned
- * on task completion, and the writer stops feeding an abandoned partition (see
- * ChannelShuffleWriter.putUnlessAbandoned / ChannelShuffleRendezvous.abandon). regular shuffle
- * never had this: it materializes to disk first, so the writer finishes regardless of whether
- * the reader drains everything.
+ * SQL-level acceptance tests for LIMIT over a plan that CONTAINS a pipelined-eligible shuffle
+ * (SPARK-57399).
  *
- * Each test runs a partial read (LIMIT(10)) over one or more pipelined shuffles on a background
- * thread under a 90s deadline and asserts it both COMPLETES (no hang) and returns the correct row
- * count (rows == 10) in BOTH AQE modes. The shapes cover the narrow chains
- * DAGScheduler.liveReduceSet must map to the producer's live reduce-partition set: a plain
- * repartition (identity), union (two branches with per-branch offsets), and join (fan-in over a
- * ZippedPartitionsRDD, one narrow branch per side). A hang trips the TimeoutException path -> the
- * helper returns false -> the test fails; a wrong count throws out of the future -> the test
- * fails. Each test builds and stops its OWN SparkSession (withSession), so they do not share
- * process state and one test's timeout/cancel cannot affect the other.
+ * IMPORTANT -- what these tests do and do NOT cover. A LIMIT operator
+ * (`CollectLimitExec` / `CollectTailExec` / `TakeOrderedAndProjectExec`) builds a hidden REGULAR
+ * shuffle inside its `doExecute` (`prepareShuffleDependency` with `pipelined = false`) that no plan
+ * walk can see. A pipelined exchange beneath it would sit under an unmaterialized regular boundary
+ * and the job would hard-fail at submission, so `EnablePipelinedShuffle` /
+ * `AQEEnablePipelinedShuffle` refuse to pipeline a plan containing such an operator above a
+ * shuffle. Consequently these LIMIT shapes now run as REGULAR shuffles, and these tests assert
+ * exactly that (fallback + correct results) -- they can no longer exercise the writer/reader
+ * early-stop machinery.
+ *
+ * The early-stop and live-reduce-set machinery (`ChannelShuffleWriter.putUnlessAbandoned` /
+ * `ChannelShuffleRendezvous.abandon` / `DAGScheduler.liveReduceSet`) is covered instead by the
+ * RDD-level partial-read tests in `PipelinedChannelShuffleSuite` ("partial read ... completes"),
+ * which drive a real partial read over a pipelined shuffle without a LIMIT operator in the way.
+ *
+ * Each test builds and stops its OWN SparkSession (withSession), so they do not share process
+ * state and one test's timeout/cancel cannot affect the other.
  */
 class PipelinedLimitHangSuite extends SparkFunSuite with AdaptiveSparkPlanHelper {
 
@@ -72,9 +73,11 @@ class PipelinedLimitHangSuite extends SparkFunSuite with AdaptiveSparkPlanHelper
   /**
    * Runs `query(spark)` on a background thread under a deadline, returning true iff it both
    * COMPLETES (no writer hang) and produces 10 rows. Each query is a partial read (LIMIT) over one
-   * or more pipelined shuffles through a narrow chain the producer must map to its live
-   * reduce-partition set (see DAGScheduler.liveReduceSet); a wrong mapping either hangs the writer
-   * (timeout -> false) or drops rows (the require fails -> the future throws -> false).
+   * Each shape asserts BOTH that the plan fell back to a regular shuffle (no exchange is
+   * pipelined -- a LIMIT operator's hidden shuffle makes pipelining unsafe, see the class doc) and
+   * that the query returns the right rows. The deadline stays so that a regression which DID
+   * pipeline such a plan surfaces as a timeout (the hidden-shuffle hard-fail or a writer hang)
+   * rather than a hung suite.
    */
   private def completesWithin(seconds: Int, aqe: Boolean)(
       query: SparkSession => Int): Boolean = {
@@ -97,11 +100,24 @@ class PipelinedLimitHangSuite extends SparkFunSuite with AdaptiveSparkPlanHelper
     }
   }
 
-  // Many input rows per partition so the writer keeps producing well past the LIMIT.
+  /** Assert no exchange in `df`'s executed plan is pipelined (the LIMIT fallback). */
+  private def requireNotPipelined(df: org.apache.spark.sql.DataFrame): Unit = {
+    val pipelined = collect(df.queryExecution.executedPlan) {
+      case s: ShuffleExchangeExec if s.pipelined => s
+    }
+    require(pipelined.isEmpty,
+      s"a plan with a LIMIT operator above a shuffle must stay regular; plan:" +
+        s"\n${df.queryExecution.executedPlan}")
+  }
+
+  // Many input rows per partition so a regression that pipelined this would really park a writer.
   private def repartitionLimit(spark: SparkSession): Int = {
     import spark.implicits._
-    spark.range(0, 5000000L, 1, 4).withColumn("k", ($"id" % 100))
-      .repartition($"k").limit(10).collect().length
+    val df = spark.range(0, 5000000L, 1, 4).withColumn("k", ($"id" % 100))
+      .repartition($"k").limit(10)
+    val n = df.collect().length
+    requireNotPipelined(df)
+    n
   }
 
   // union() over two pipelined shuffles: the result RDD reaches each shuffle through a
@@ -111,7 +127,10 @@ class PipelinedLimitHangSuite extends SparkFunSuite with AdaptiveSparkPlanHelper
     import spark.implicits._
     val a = spark.range(0, 2500000L, 1, 4).withColumn("k", ($"id" % 100)).repartition($"k")
     val b = spark.range(0, 2500000L, 1, 4).withColumn("k", ($"id" % 100)).repartition($"k")
-    a.union(b).limit(10).collect().length
+    val df = a.union(b).limit(10)
+    val n = df.collect().length
+    requireNotPipelined(df)
+    n
   }
 
   // join() over two pipelined shuffles: the result RDD fans in over a ZippedPartitionsRDD, one
@@ -121,25 +140,28 @@ class PipelinedLimitHangSuite extends SparkFunSuite with AdaptiveSparkPlanHelper
     import spark.implicits._
     val a = spark.range(0, 2500000L, 1, 4).withColumn("k", ($"id" % 100))
     val b = spark.range(0, 2500000L, 1, 4).withColumn("k2", ($"id" % 100))
-    a.join(b, a("k") === b("k2")).limit(10).collect().length
+    val df = a.join(b, a("k") === b("k2")).limit(10)
+    val n = df.collect().length
+    requireNotPipelined(df)
+    n
   }
 
   for (aqe <- Seq(false, true)) {
     val mode = if (aqe) "AQE on" else "AQE off"
 
-    test(s"LIMIT over a pipelined shuffle completes ($mode)") {
+    test(s"LIMIT over a shuffle falls back to regular and is correct ($mode)") {
       assert(completesWithin(90, aqe)(repartitionLimit),
-        "LIMIT over a pipelined shuffle should complete, but the writer hung on a full queue")
+        "LIMIT over a shuffle should fall back to regular and complete correctly")
     }
 
-    test(s"union + LIMIT over pipelined shuffles completes ($mode)") {
+    test(s"union + LIMIT falls back to regular and is correct ($mode)") {
       assert(completesWithin(90, aqe)(unionLimit),
-        "union + LIMIT over pipelined shuffles should complete, but the writer hung")
+        "union + LIMIT should fall back to regular and complete correctly")
     }
 
-    test(s"join + LIMIT over pipelined shuffles completes ($mode)") {
+    test(s"join + LIMIT falls back to regular and is correct ($mode)") {
       assert(completesWithin(90, aqe)(joinLimit),
-        "join + LIMIT over pipelined shuffles should complete, but the writer hung")
+        "join + LIMIT should fall back to regular and complete correctly")
     }
   }
 }
