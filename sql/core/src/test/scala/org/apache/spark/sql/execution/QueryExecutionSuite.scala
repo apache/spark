@@ -542,6 +542,46 @@ class QueryExecutionSuite extends SharedSparkSession {
     mockCallback.assertAnalyzed()
   }
 
+  test("dynamic INSERT target analysis is tracked") {
+    withTable("target_table") {
+      sql("CREATE TABLE target_table (id INT) USING parquet")
+
+      val tracker = new QueryPlanningTracker
+      val plan = spark.sessionState.sqlParser.parsePlan(
+        "INSERT INTO IDENTIFIER(lower('TARGET_TABLE')) VALUES (1)")
+      new QueryExecution(spark, plan, tracker).assertAnalyzed()
+
+      val identifierResolution = tracker.rules.collectFirst {
+        case (name, summary) if name.endsWith("ResolveIdentifierClause") => summary
+      }.getOrElse(fail("ResolveIdentifierClause was not tracked"))
+      assert(identifierResolution.numEffectiveInvocations === 1)
+    }
+  }
+
+  test("dynamic INSERT target analysis failure is reported") {
+    var failedPlan: LogicalPlan = null
+    val callback = new QueryPlanningTrackerCallback {
+      override def analysisFailed(
+          tracker: QueryPlanningTracker,
+          parsedPlan: LogicalPlan): Unit = failedPlan = parsedPlan
+
+      override def analyzed(tracker: QueryPlanningTracker, analyzedPlan: LogicalPlan): Unit =
+        fail("analysis should fail")
+
+      override def readyForExecution(tracker: QueryPlanningTracker): Unit =
+        fail("query should not be ready for execution")
+    }
+    val plan = spark.sessionState.sqlParser.parsePlan(
+      "INSERT INTO IDENTIFIER(1) VALUES (1)")
+    val qe = new QueryExecution(
+      spark,
+      plan,
+      new QueryPlanningTracker(Some(callback)))
+
+    intercept[AnalysisException](qe.assertAnalyzed())
+    assert(failedPlan eq plan)
+  }
+
   test("SPARK-51265: IncrementalExecution should set the command execution code correctly") {
     withTempView("s") {
       val streamDf = spark.readStream.format("rate").load()

@@ -141,6 +141,16 @@ class ParseSqlResultSuite extends SparkFunSuite {
     val insert = "WITH t AS (SELECT * FROM src) INSERT INTO t SELECT * FROM t"
     assert(targetTableRefs(insert) === Set(Seq("t")))
     assert(sourceTableRefs(insert) === Set(Seq("src")))
+
+    val otherDml = Seq(
+      "WITH t AS (SELECT * FROM src) DELETE FROM t WHERE a = 1",
+      "WITH t AS (SELECT * FROM src) UPDATE t SET a = 1",
+      "WITH t AS (SELECT * FROM src) " +
+        "MERGE INTO t USING t AS s ON t.a = s.a WHEN MATCHED THEN DELETE")
+    otherDml.foreach { sql =>
+      assert(targetTableRefs(sql).isEmpty, sql)
+      assert(sourceTableRefs(sql) === Set(Seq("src")), sql)
+    }
   }
 
   test("positional markers inside BEGIN END are counted once") {
