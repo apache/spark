@@ -77,6 +77,16 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
     assert(pruned.optionInputCategories.isEmpty)
   }
 
+  test("drops a matching option that does not resolve (falls back to Python UDF)") {
+    val a = $"a".long
+    val unresolvedOpt = UnresolvedAttribute("missing")
+    val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)),
+      List(unresolvedOpt), List(List("numeric")))
+    val pruned = prune(node, LocalRelation(a))
+    assert(pruned.transpiledOptions.isEmpty)
+    assert(pruned.optionInputCategories.isEmpty)
+  }
+
   test("matches binary columns against neither category (string is StringType only)") {
     val a = $"a".binary
     val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)),

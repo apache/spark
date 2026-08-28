@@ -38,8 +38,9 @@ import org.apache.spark.sql.types.{BinaryType, BooleanType, DataType, DecimalTyp
  * Matching is strict by category (a numeric option only for numeric columns, a string option only
  * for string columns). We deliberately do not lean on implicit type coercion, which would, e.g.,
  * make a numeric `Add` "valid" over a string column and silently diverge from Python's
- * `TypeError`. When no option matches, the list is emptied and `ConvertToCatalyst` falls back to
- * the original Python UDF.
+ * `TypeError`. An option that still does not resolve is dropped for the same reason: otherwise
+ * `CheckAnalysis` rejects the whole query before the fallback can run. When no option remains, the
+ * list is emptied and `ConvertToCatalyst` falls back to the original Python UDF.
  */
 object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -55,7 +56,8 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
                 if t.optionInputCategories.nonEmpty && t.pythonUDFExpr.childrenResolved =>
               val argTypes = t.pythonUDFExpr.children.map(_.dataType)
               val kept = t.transpiledOptions.zip(t.optionInputCategories).collect {
-                case (option, categories) if optionMatchesTypes(categories, argTypes) => option
+                case (option, categories)
+                    if optionMatchesTypes(categories, argTypes) && option.resolved => option
               }
               t.copy(transpiledOptions = kept, optionInputCategories = Nil)
           }
