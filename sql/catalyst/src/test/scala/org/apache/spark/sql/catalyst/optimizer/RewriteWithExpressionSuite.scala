@@ -49,11 +49,12 @@ class RewriteWithExpressionSuite extends PlanTest {
     new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, EmptyTableFunctionRegistry))
 
   /**
-   * Runs the expression-level rewrites that `applyForExpression` requires to have run first, in
-   * the same order as the optimizer's `FinishAnalysis` batch, then inlines the `With`.
+   * Runs the expression-level rewrites in the same order as the optimizer's `FinishAnalysis`
+   * batch, then inlines the `With`.
    */
   private def finishAnalysisAndInline(expr: Expression, instant: Instant): Expression = {
-    val afterCurrentTime = ComputeCurrentTime.applyForExpression(expr, instant)
+    val afterReplace = ReplaceExpressions.replace(expr)
+    val afterCurrentTime = ComputeCurrentTime.applyForExpression(afterReplace, instant)
     val afterCurrentLike = ReplaceCurrentLike(catalogManager).applyForExpression(afterCurrentTime)
     RewriteWithExpression.applyForExpression(
       SpecialDatetimeValues.applyForExpression(afterCurrentLike))
@@ -137,6 +138,19 @@ class RewriteWithExpressionSuite extends PlanTest {
     }
   }
 
+  test("applyForExpression rejects canonicalized common expression ids") {
+    // Canonicalization re-numbers ids per `With`, starting from 1, so these two siblings both get
+    // id 1: the safe (literal) definition would otherwise mark id 1 safe in the flat `safeIds` set
+    // and authorize duplicating the unsafe (per-row attribute) definition with the same id.
+    val a = testRelation.output.head
+    val safe = With(Literal(1)) { case Seq(ref) => ref + ref }
+    val unsafe = With(a) { case Seq(ref) => ref + ref }
+    val expr = (safe + unsafe).canonicalized
+    intercept[SparkException] {
+      RewriteWithExpression.applyForExpression(expr)
+    }
+  }
+
   test("applyForExpression rejects current_time referenced more than once") {
     // CurrentTime is not a leaf and its only leaf is a literal precision, so the structural check
     // alone would accept it.
@@ -157,6 +171,27 @@ class RewriteWithExpressionSuite extends PlanTest {
     intercept[SparkException] {
       RewriteWithExpression.applyForExpression(expr)
     }
+  }
+
+  test("applyForExpression rejects a TIME -> TIMESTAMP_LTZ cast referenced more than once") {
+    // Same TimestampType target as the inlined string cast below; only the TIME source makes it
+    // unsafe, so the node-level check must key on the source type, not the target.
+    val expr = With(Cast(Literal(0L, TimeType(6)), TimestampType, Some("UTC"))) {
+      case Seq(ref) => EqualTo(ref, ref)
+    }
+    intercept[SparkException] {
+      RewriteWithExpression.applyForExpression(expr)
+    }
+  }
+
+  test("applyForExpression inlines a non-TIME timestamp-target cast referenced more than once") {
+    // A string -> TIMESTAMP cast carries the CAST_TO_TIMESTAMP tree pattern (keyed on target type
+    // alone) but is an ordinary deterministic cast, so it must inline rather than be rejected.
+    val cast = Cast(Literal("1970-01-01"), TimestampType, Some("UTC"))
+    val expr = With(cast) { case Seq(ref) =>
+      EqualTo(ref, ref)
+    }
+    assert(RewriteWithExpression.applyForExpression(expr) == EqualTo(cast, cast))
   }
 
   test("applyForExpression inlines an inner def referencing a foldable outer def") {

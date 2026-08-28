@@ -53,7 +53,7 @@ object ReplaceExpressions extends Rule[LogicalPlan] {
     case p => p.mapExpressions(replace)
   }
 
-  def replace(e: Expression): Expression = e match {
+  private[sql] def replace(e: Expression): Expression = e match {
     case r: RuntimeReplaceable => replace(r.replacement)
     case _ => e.mapChildren(replace)
   }

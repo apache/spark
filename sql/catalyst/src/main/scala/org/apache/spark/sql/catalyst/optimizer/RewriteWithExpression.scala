@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, PlanHelper, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CAST_TO_TIMESTAMP, COMMON_EXPR_REF, CURRENT_LIKE, WITH_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, CURRENT_LIKE, WITH_EXPRESSION}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -72,9 +72,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
    *
    * Inlining duplicates a definition at every reference, so a definition referenced more than once
    * must be safe to duplicate (see `isSafeToDuplicate`); anything else throws, as there is no plan
-   * here to pre-evaluate it into. Run [[ComputeCurrentTime]], [[ReplaceCurrentLike]] and
-   * [[SpecialDatetimeValues]] first to fold the current date/time and catalog expressions to
-   * literals.
+   * here to pre-evaluate it into.
    *
    * Does not descend into subquery plans (e.g. `ScalarSubquery`). A caller whose expression
    * may contain a subquery must rewrite those plans separately.
@@ -101,6 +99,13 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
             .groupBy(identity)
             .transform((_, refs) => refs.size)
           defs.foreach { commonExprDef =>
+            // Canonicalization re-numbers ids per `With`, so sibling `With`s reuse ids and break
+            // the global uniqueness `safeIds` relies on. Reject them, as the plan-level rewrite
+            // does.
+            if (commonExprDef.id.canonicalized) {
+              throw SparkException.internalError(
+                "Cannot inline canonicalized common expression definitions")
+            }
             if (refCounts.getOrElse(commonExprDef.id, 0) > 1 &&
               !safeIds.contains(commonExprDef.id)) {
               throw SparkException.internalError(
@@ -110,6 +115,9 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
           }
         }
         val refToExpr = defs.map(commonExprDef => commonExprDef.id -> commonExprDef.child).toMap
+        // The guard skips refs to an enclosing `With`, which are inlined when `transformUp` reaches
+        // it. Without it those refs hit `Map.apply` on a missing key and throw
+        // NoSuchElementException.
         child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
           case ref: CommonExpressionRef if refToExpr.contains(ref.id) => refToExpr(ref.id)
         }
@@ -158,11 +166,18 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       case _: LeafExpression => false
       // Arbitrary Java methods and UDFs can be foldable without being pure.
       case _: NonSQLExpression | _: UserDefinedExpression => false
+      // A TIME -> TIMESTAMP cast has no date of its own; it derives one from the current date at
+      // eval time, so duplicated copies could resolve different dates. Reject it. Scope to exactly
+      // this source/target pair -- other timestamp-target casts (e.g. CAST('1970-01-01' AS
+      // TIMESTAMP)) are ordinary deterministic casts and fall through to the generic check below.
+      case c: Cast
+          if Cast.isTimeToTimestampNTZ(c.child.dataType, c.dataType) ||
+            Cast.isTimeToTimestampLTZ(c.child.dataType, c.dataType) => false
       case _ => e.deterministic && e.children.forall(isLiteralTree)
     }
-    // `current_time()` and a TIME -> TIMESTAMP cast are not leaves and their only leaf is a
-    // literal, so the tree walk accepts them and only these patterns reject them.
-    !e.containsAnyPattern(CURRENT_LIKE, CAST_TO_TIMESTAMP) && isLiteralTree(e)
+    // `current_time()` is a non-leaf whose only leaf is a literal, so the tree walk accepts it;
+    // the CURRENT_LIKE pattern is what rejects it.
+    !e.containsPattern(CURRENT_LIKE) && isLiteralTree(e)
   }
 
   private def applyInternal(p: LogicalPlan): LogicalPlan = {
