@@ -26,6 +26,7 @@ from pyspark.graphframes import GraphFrame
 from pyspark.sql.functions import col, concat, lit, sha2
 from pyspark.sql.types import (
     ByteType,
+    DataType,
     DecimalType,
     DoubleType,
     FloatType,
@@ -322,7 +323,7 @@ class EdgePropertyGroup(PropertyGroup):
                 _msg.format(self._weight_column_name, weight_column_type)
             )
 
-    def _is_numeric_type(self, data_type) -> bool:
+    def _is_numeric_type(self, data_type: DataType) -> bool:
         """Check if a Spark data type is numeric."""
 
         numeric_types = (
