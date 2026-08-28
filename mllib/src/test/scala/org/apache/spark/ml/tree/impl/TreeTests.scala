@@ -148,6 +148,22 @@ private[ml] object TreeTests extends SparkFunSuite {
     }
   }
 
+  /** Check that leaf indices are consecutive and assigned from left to right. */
+  def checkLeafIndices(root: Node): Unit = {
+    var expectedLeafIndex = 0
+
+    def traverse(node: Node): Unit = node match {
+      case internal: InternalNode =>
+        traverse(internal.leftChild)
+        traverse(internal.rightChild)
+      case leaf: LeafNode =>
+        assert(leaf.leafIndex === expectedLeafIndex)
+        expectedLeafIndex += 1
+    }
+
+    traverse(root)
+  }
+
   /**
    * Check if the two models are exactly the same.
    * If the models are not equal, this throws an exception.
