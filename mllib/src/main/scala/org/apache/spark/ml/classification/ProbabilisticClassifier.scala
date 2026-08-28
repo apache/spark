@@ -118,10 +118,8 @@ abstract class ProbabilisticClassificationModel[
     var outputData = dataset
     var numColsOutput = 0
     if ($(rawPredictionCol).nonEmpty) {
-      val predictRawUDF = udf { features: Any =>
-        predictRaw(features.asInstanceOf[FeaturesType])
-      }
-      outputData = outputData.withColumn(getRawPredictionCol, predictRawUDF(col(getFeaturesCol)),
+      outputData = outputData.withColumn($(rawPredictionCol),
+        predictRawColumn(col($(featuresCol))),
         outputSchema($(rawPredictionCol)).metadata)
       numColsOutput += 1
     }
@@ -140,14 +138,11 @@ abstract class ProbabilisticClassificationModel[
     }
     if ($(predictionCol).nonEmpty) {
       val predCol = if ($(rawPredictionCol).nonEmpty) {
-        udf(raw2prediction _).apply(col($(rawPredictionCol)))
+        raw2predictionColumn(col($(rawPredictionCol)))
       } else if ($(probabilityCol).nonEmpty) {
         udf(probability2prediction _).apply(col($(probabilityCol)))
       } else {
-        val predictUDF = udf { features: Any =>
-          predict(features.asInstanceOf[FeaturesType])
-        }
-        predictUDF(col($(featuresCol)))
+        predictionColumn(col($(featuresCol)))
       }
       outputData = outputData.withColumn($(predictionCol), predCol,
         outputSchema($(predictionCol)).metadata)
