@@ -2260,6 +2260,24 @@
     ],
     "sqlState" : "KD010"
   },
+  "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE" : {
+    "message" : [
+      "The runtime filter attribute <attribute> reported by `<method>` in data source scan <scanClass> is invalid for the scan relation output <relationOutput>."
+    ],
+    "subClass" : {
+      "CANNOT_RESOLVE" : {
+        "message" : [
+          "The attribute cannot be resolved."
+        ]
+      },
+      "NOT_TOP_LEVEL" : {
+        "message" : [
+          "The attribute must be top-level, but it is a nested reference."
+        ]
+      }
+    },
+    "sqlState" : "KD000"
+  },
   "DATA_SOURCE_METADATA_SCHEMA_NOT_IMPLEMENTED" : {
     "message" : [
       "<class> does not implement metadataSchema."
