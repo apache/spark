@@ -200,12 +200,12 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     val booleanKeyJoin = Join(
       booleanLeft, booleanRight, LeftAnti, Some(booleanCondition), JoinHint.NONE)
 
-    val unknownRight = UnknownRowCountTestPlan(Seq($"unknownRight".int))
+    val unknownRight = UnknownRowCountTestPlan(Seq($"unknownRight".boolean))
     val unknownCondition = Or(
-      EqualTo(leftKey, unknownRight.output.head),
-      IsNull(EqualTo(leftKey, unknownRight.output.head)))
+      EqualTo(booleanLeft.output.head, unknownRight.output.head),
+      IsNull(EqualTo(booleanLeft.output.head, unknownRight.output.head)))
     val unknownRowCountJoin = Join(
-      left, unknownRight, LeftAnti, Some(unknownCondition), JoinHint.NONE)
+      booleanLeft, unknownRight, LeftAnti, Some(unknownCondition), JoinHint.NONE)
 
     val longLeft = StatsTestPlan(
       Seq($"longLeft".long), 20000000, AttributeMap(Seq()), Some(20000000))
