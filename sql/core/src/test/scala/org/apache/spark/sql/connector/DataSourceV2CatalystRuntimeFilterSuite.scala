@@ -139,13 +139,16 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       val scanRelation = sql(s"SELECT * FROM $tbl").queryExecution.optimizedPlan.collectFirst {
         case r: DataSourceV2ScanRelation => r
       }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
-      val e = intercept[AnalysisException] {
+      val e = intercept[SparkException] {
         scanRelation.copy(scan = new NestedFilterAttributeScan).runtimeFilterAttrs
       }
+      val scanClass = classOf[NestedFilterAttributeScan].getName
       checkError(
         exception = e,
-        condition = "INVALID_EXTRACT_BASE_FIELD_TYPE",
-        parameters = Map("base" -> "\"part\"", "other" -> "\"INT\""))
+        condition = "INTERNAL_ERROR",
+        parameters = Map("message" ->
+          s"Cannot resolve runtime filter attribute 'part.nested' declared by $scanClass."))
+      assert(e.getCause.isInstanceOf[AnalysisException])
     }
   }
 
@@ -157,13 +160,16 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       val scanRelation = sql(s"SELECT * FROM $tbl").queryExecution.optimizedPlan.collectFirst {
         case r: DataSourceV2ScanRelation => r
       }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
-      val e = intercept[AnalysisException] {
+      val e = intercept[SparkException] {
         scanRelation.copy(scan = new MissingFilterAttributeScan).runtimeFilterAttrs
       }
+      val scanClass = classOf[MissingFilterAttributeScan].getName
       checkError(
         exception = e,
-        condition = "_LEGACY_ERROR_TEMP_1137",
-        parameters = Map("name" -> "missing", "outputStr" -> "id,part"))
+        condition = "INTERNAL_ERROR",
+        parameters = Map("message" ->
+          s"Cannot resolve runtime filter attribute 'missing' declared by $scanClass."))
+      assert(e.getCause.isInstanceOf[AnalysisException])
     }
   }
 

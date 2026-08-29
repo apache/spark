@@ -69,7 +69,7 @@ class GroupBasedRowLevelOperationCatalystRuntimeFilterSuite
       expectedFilterAttrs = Seq("dep.name"),
       expectedFilter = GroupFilter(
         scanSchema = "salary INT, dep STRUCT<name: STRING>", groups = Seq("hr")),
-      expectedFilterRefs = Seq("dep"))
+      expectedFilterRefs = Some(Seq("dep")))
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),

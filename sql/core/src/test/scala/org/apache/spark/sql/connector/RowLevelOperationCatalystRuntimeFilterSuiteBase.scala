@@ -21,6 +21,8 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.DynamicPruningExpression
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.{BufferedRows, InMemoryRowLevelOperationTable}
+import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.InSubqueryExec
 import org.apache.spark.sql.execution.ReusedSubqueryExec
 import org.apache.spark.sql.execution.SparkPlan
@@ -121,6 +123,43 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
     }
   }
 
+  test("merge runtime group filtering by a nested attribute") {
+    withTempView("source") {
+      val schema = "pk INT NOT NULL, id INT, salary INT, " +
+        "dep STRUCT<name: STRING, region: STRING>"
+      createTable(schema, Array[Transform](identity(reference(Seq("dep", "name")))))
+      append(schema,
+        """{"pk":1,"id":1,"salary":100,"dep":{"name":"hr","region":"west"}}
+          |{"pk":2,"id":2,"salary":200,"dep":{"name":"hr","region":"east"}}
+          |{"pk":3,"id":3,"salary":300,"dep":{"name":"software","region":"west"}}
+          |""".stripMargin)
+
+      Seq(1, 2).toDF("pk").createOrReplaceTempView("source")
+
+      val executedPlan = executeAndKeepPlan {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET t.salary = t.salary + 1
+             |""".stripMargin)
+      }
+      assertCatalystGroupFilter(
+        executedPlan,
+        expectedFilterAttrs = Seq("dep.name"),
+        expectedFilter = GroupFilter(
+          scanSchema = "pk INT, dep STRUCT<name: STRING>", groups = Seq("hr")),
+        expectedFilterRefs = Some(Seq("dep")))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, 1, 101, Row("hr", "west")) ::
+          Row(2, 2, 201, Row("hr", "east")) ::
+          Row(3, 3, 300, Row("software", "west")) :: Nil)
+    }
+  }
+
   /**
    * Asserts the injected group filter down to its contents: the scan declares
    * `expectedFilterAttrs` in `filterAttributes`, every scan node carries one dynamic pruning
@@ -138,7 +177,7 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
       executedPlan: SparkPlan,
       expectedFilterAttrs: Seq[String],
       expectedFilter: GroupFilter,
-      expectedFilterRefs: Seq[String] = Seq.empty): Unit = {
+      expectedFilterRefs: Option[Seq[String]] = None): Unit = {
     val batchScans = collect(executedPlan) { case s: BatchScanExec => s }
     assert(batchScans.nonEmpty, "expected a batch scan for the row-level operation")
     val scan = catalystScan(batchScans.head)
@@ -148,7 +187,7 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
     val filterAttrs = scan.filterAttributes().map(_.fieldNames.mkString(".")).toSeq
     assert(filterAttrs === expectedFilterAttrs,
       s"expected the scan to declare $expectedFilterAttrs as filter attributes, got $filterAttrs")
-    val filterRefs = if (expectedFilterRefs.nonEmpty) expectedFilterRefs else expectedFilterAttrs
+    val filterRefs = expectedFilterRefs.getOrElse(expectedFilterAttrs)
 
     batchScans.foreach { batchScan =>
       batchScan.runtimeFilters match {

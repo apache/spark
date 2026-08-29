@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.optimizer.RewritePredicateSubquery
 import org.apache.spark.sql.catalyst.planning.{DeltaBasedRowLevelOperation, GroupBasedRowLevelOperation}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project, RowLevelWrite}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, RowLevelWrite}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{REPLACE_DATA, WRITE_DELTA}
 import org.apache.spark.sql.connector.expressions.NamedReference
@@ -148,22 +148,15 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
       pruningKeys: Seq[NamedExpression]): Expression = {
     assert(buildKeys.nonEmpty && pruningKeys.nonEmpty)
 
-    // Nested references resolve to aliases over field-extraction expressions. Materialize those
-    // aliases before aggregation so grouping-expression cleanup preserves the subquery schema.
-    val buildKeyAliases = buildKeys.collect { case alias: Alias => alias }
-    val buildPlan = if (buildKeyAliases.nonEmpty) {
-      Project(matchingRowsPlan.output ++ buildKeyAliases, matchingRowsPlan)
-    } else {
-      matchingRowsPlan
-    }
-    val buildKeyAttrs = buildKeys.map(_.toAttribute)
-    val buildQuery = Aggregate(buildKeyAttrs, buildKeyAttrs, buildPlan)
-    val pruningExprs = pruningKeys.map {
+    def unalias(expr: NamedExpression): Expression = expr match {
       case alias: Alias => alias.child
       case other => other
     }
+
+    val buildQuery = Aggregate(buildKeys.map(unalias), buildKeys, matchingRowsPlan)
     DynamicPruningExpression(
-      InSubquery(pruningExprs, ListQuery(buildQuery, numCols = buildQuery.output.length)))
+      InSubquery(pruningKeys.map(unalias),
+        ListQuery(buildQuery, numCols = buildQuery.output.length)))
   }
 
   private def buildTableToScanAttrMap(
