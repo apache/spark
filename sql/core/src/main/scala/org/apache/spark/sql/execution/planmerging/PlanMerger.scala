@@ -237,10 +237,10 @@ class PlanMerger(
    * Keyed by column name rather than by attribute, because the two plans that get compared were
    * analyzed separately and carry different expression ids for the same column.
    *
-   * This compares columns only. A merge can also widen the set of *files* a scan reads, when
-   * symmetric filter propagation is enabled and the two sides carry different partition filters.
-   * Every row that adds is filtered out above the scan, so the answers do not change, but for a
-   * projection-sensitive read it can surface a parse error from a file neither side selected.
+   * This compares columns only. Symmetric filter propagation, which is off by default, can also
+   * widen the set of *files* a scan reads, by OR-ing the two sides' partition filters. Each side's
+   * own filter above the scan drops the rows that widening adds, so no answer changes, but a
+   * projection-sensitive read can still fail on a file that neither side selected.
    */
   private def collectProjectionSensitiveReads(
       plan: LogicalPlan): Map[LogicalPlan, Seq[Set[String]]] = {
@@ -254,6 +254,10 @@ class PlanMerger(
    * Whether merging a plan whose projection-sensitive reads are `reads` with `cachedPlan` would
    * widen the columns read from a relation the two share. A relation read a different number of
    * times on the two sides counts as widened, because the occurrences no longer correspond.
+   *
+   * Only [[tryMergePlans]] needs this. Reuse of an identical plan cannot widen a read: it requires
+   * the two plans to be canonically equal, and a [[LogicalRelation]]'s canonical form keeps its
+   * relation and the arity and order of its output, so the two reference the same columns.
    */
   private def widensProjectionSensitiveRead(
       reads: Map[LogicalPlan, Seq[Set[String]]],
