@@ -376,10 +376,7 @@ case class CachedRDDBuilder(
         val cachedPlanConf = cachedPlan.conf.clone()
 
         def hasStrictReads(conf: SQLConf): Boolean = SQLConf.withExistingConf(conf) {
-          fileSourceOptions.forall { options =>
-            val effectiveOptions = new FileSourceOptions(options)
-            !effectiveOptions.ignoreMissingFiles && !effectiveOptions.ignoreCorruptFiles
-          }
+          fileSourceOptions.forall(options => new FileSourceOptions(options).hasStrictFileReads)
         }
 
         val (inputRDD, strictPhysicalReads) = SQLConf.withExistingConf(materializationConf) {

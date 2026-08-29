@@ -73,10 +73,12 @@ class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
 
   /**
    * The columns each V1 file scan of `df`'s plan reads, one entry per scan, each sorted and the
-   * entries sorted too, so that an assertion does not depend on plan order. Two entries mean the
-   * two subqueries kept their own scans, and one entry holding the union of their columns means
-   * they shared one. A scan that physical reuse replaced is not among them, since both
-   * `ReusedSubqueryExec` and `ReusedExchangeExec` are leaf nodes.
+   * entries sorted too, so that an assertion does not depend on plan order. Two entries with a
+   * column each mean the two subqueries kept their own scans, and one entry holding both columns
+   * means they shared one, which reuse cannot produce because it only replaces a scan that reads
+   * the same columns. A replaced scan is absent from the list, since both `ReusedSubqueryExec` and
+   * `ReusedExchangeExec` are leaf nodes, which is why the self join below shows three scans of the
+   * four its plan contains.
    */
   private def scanColumns(df: DataFrame): Seq[Seq[String]] =
     df.queryExecution.executedPlan
@@ -227,7 +229,8 @@ class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
       withTempView("t") {
         spark.read.schema("a long, b long").option("mode", "DROPMALFORMED")
           .csv(path).createOrReplaceTempView("t")
-        // Identical plans are reused rather than merged, and reuse cannot widen a read.
+        // End to end this shape runs one scan whatever the merger decides, because subquery reuse
+        // collapses two identical subqueries on its own. Here to pin that it stays that way.
         val df = sql("SELECT (SELECT sum(b) FROM t), (SELECT sum(b) FROM t) + 1")
         checkAnswer(df, Row(80L, 81L))
         assert(scanColumns(df) === Seq(Seq("b")))
