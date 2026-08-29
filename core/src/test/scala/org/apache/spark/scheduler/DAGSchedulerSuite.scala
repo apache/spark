@@ -1704,6 +1704,67 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  for (fetchFailure <- Seq(false, true)) {
+    val failureType = if (fetchFailure) "fetch failure" else "task failure"
+    test(s"SPARK-59094: retry all indeterminate barrier tasks after $failureType and relocation") {
+      val inputRdd = new MyRDD(sc, 2, Nil)
+      val inputDep = new ShuffleDependency(inputRdd, new HashPartitioner(2))
+      val mapRdd = new MyRDD(sc, 2, List(inputDep), tracker = mapOutputTracker,
+        indeterminate = true).barrier().mapPartitions(iter => iter)
+      val outputDep = new ShuffleDependency(mapRdd, new HashPartitioner(2))
+      val resultRdd = new MyRDD(sc, 2, List(outputDep), tracker = mapOutputTracker)
+      submit(resultRdd, Array(0, 1))
+      assert(!scheduler.shuffleIdToMapStage(inputDep.shuffleId).isStaticallyIndeterminate)
+      complete(taskSet(0, 0), Seq(
+        (Success, makeMapStatus("hostA", 2, mapTaskId = 100L)),
+        (Success, makeMapStatus("hostB", 2, mapTaskId = 101L))))
+      val mapStage = scheduler.shuffleIdToMapStage(outputDep.shuffleId)
+      assert(mapStage.isStaticallyIndeterminate)
+      assert(!outputDep.checksumMismatchFullRetryEnabled)
+      val originalAttempt = taskSet(1, 0)
+      val completedStatus = makeMapStatus("hostC", 2, mapTaskId = 200L)
+
+      // Keep the failure and relocation ahead of any queued retry event.
+      scheduler.handleTaskCompletion(makeCompletionEvent(
+        originalAttempt.tasks(0), Success, completedStatus))
+      assert(mapOutputTracker.findMissingPartitions(outputDep.shuffleId) === Some(Seq(1)))
+      val failureReason: TaskFailedReason = if (fetchFailure) {
+        FetchFailed(makeBlockManagerId("hostA"), inputDep.shuffleId, 100L, 0, 1, "ignored")
+      } else {
+        new ExceptionFailure(new RuntimeException("barrier task failed"), Seq.empty)
+      }
+      scheduler.handleTaskCompletion(makeCompletionEvent(
+        originalAttempt.tasks(1), failureReason, null))
+      assert(mapOutputTracker.findMissingPartitions(outputDep.shuffleId) === Some(Seq(0, 1)))
+
+      // A delayed migration report can restore an output cleared by the barrier failure.
+      val relocatedHost = makeBlockManagerId("hostD")
+      mapOutputTracker.updateMapOutput(outputDep.shuffleId, 200L, relocatedHost)
+      assert(completedStatus.location === relocatedHost)
+      assert(mapOutputTracker.findMissingPartitions(outputDep.shuffleId) === Some(Seq(1)))
+      assert(mapStage.latestInfo.attemptNumber() === 0)
+
+      scheduler.resubmitFailedStages()
+      if (fetchFailure) {
+        val parentRetry = taskSet(0, 1)
+        assert(parentRetry.tasks.map(_.partitionId).toSeq === Seq(0))
+        complete(parentRetry, Seq((Success, makeMapStatus("hostE", 2, mapTaskId = 102L))))
+      }
+      val retry = taskSet(1, 1)
+      assert(retry.tasks.map(_.partitionId).toSeq === Seq(0, 1))
+      assert(retry.tasks.forall(task => task.isBarrier && task.numPartitions == 2))
+      assert(mapStage.pendingPartitions.toSet === Set(0, 1))
+      assert(mapOutputTracker.findMissingPartitions(outputDep.shuffleId) === Some(Seq(0, 1)))
+      complete(retry, Seq(
+        (Success, makeMapStatus("hostF", 2, mapTaskId = 201L)),
+        (Success, makeMapStatus("hostG", 2, mapTaskId = 202L))))
+      assert(taskSets.count(_.stageId == 1) === 2)
+      completeNextResultStageWithSuccess(2, 0)
+      assert(results === Map(0 -> 42, 1 -> 42))
+      assertDataStructuresEmpty()
+    }
+  }
+
   test("SPARK-58887: a barrier job can be cancelled while its slot check is being retried") {
     // 3 barrier tasks on the local[2] backend fail the max concurrent tasks check, so the
     // submission enters the retry window during which the job is registered nowhere but

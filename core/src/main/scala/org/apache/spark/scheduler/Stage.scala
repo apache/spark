@@ -85,11 +85,15 @@ private[scheduler] abstract class Stage(
   private[scheduler] var maxChecksumMismatchedId: Int = nextAttemptId
 
   /**
-   * The maximum attempt ID whose results should be ignored after this stage is invalidated.
-   * This includes attempts that may have consumed inconsistent parent output and failed barrier
-   * attempts, whose tasks must all be retried.
+   * The maximum attempt ID whose results should be ignored after an indeterminate stage rollback.
    */
   private[scheduler] var maxAttemptIdToIgnore: Option[Int] = None
+
+  /**
+   * The latest failed barrier attempt. Results from this and older attempts must be ignored.
+   * Keep this separate from maxAttemptIdToIgnore, which also deduplicates rollback cleanup.
+   */
+  private[scheduler] var maxFailedBarrierAttemptId: Option[Int] = None
 
   val name: String = callSite.shortForm
   val details: String = callSite.longForm

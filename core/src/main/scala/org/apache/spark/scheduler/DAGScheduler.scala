@@ -3338,9 +3338,9 @@ private[spark] class DAGScheduler(
         // tasks for the same partition to save resource.
 
         // Ignore task completion from attempts invalidated by rollback or barrier stage failure.
-        // This is tracked via maxAttemptIdToIgnore which is set when a stage is rolled back.
         val ignoreOldTaskAttempts =
-          stage.maxAttemptIdToIgnore.exists(_ >= task.stageAttemptId)
+          stage.maxAttemptIdToIgnore.exists(_ >= task.stageAttemptId) ||
+            stage.maxFailedBarrierAttemptId.exists(_ >= task.stageAttemptId)
 
         if (!ignoreOldTaskAttempts && task.stageAttemptId < stage.latestInfo.attemptNumber()) {
           taskScheduler.notifyPartitionCompletion(stageId, task.partitionId)
@@ -3603,7 +3603,7 @@ private[spark] class DAGScheduler(
                 case failedMapStage: ShuffleMapStage =>
                   // Invalidate this attempt before clearing its outputs, so late completions
                   // cannot skip participants in the replacement barrier stage.
-                  failedMapStage.markAsRollingBack()
+                  failedMapStage.maxFailedBarrierAttemptId = Some(task.stageAttemptId)
                   mapOutputTracker.unregisterAllMapAndMergeOutput(
                     failedMapStage.shuffleDep.shuffleId)
 
@@ -3712,7 +3712,7 @@ private[spark] class DAGScheduler(
               case failedMapStage: ShuffleMapStage =>
                 // Invalidate this attempt before clearing its outputs, so late completions
                 // cannot skip participants in the replacement barrier stage.
-                failedMapStage.markAsRollingBack()
+                failedMapStage.maxFailedBarrierAttemptId = Some(task.stageAttemptId)
                 mapOutputTracker.unregisterAllMapAndMergeOutput(failedMapStage.shuffleDep.shuffleId)
 
               case failedResultStage: ResultStage =>
