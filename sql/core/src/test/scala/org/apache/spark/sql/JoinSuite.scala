@@ -1299,14 +1299,13 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
-  test("SPARK-36082: only use SingleColumn Null Aware Anti Join when right side " +
-      "can broadcast") {
+  test("SPARK-36082: keep SingleColumn Null Aware Anti Join above broadcast threshold") {
     withSQLConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
       val joinExec = assertJoin((
         "select * from testData where key not in (select b from testData3)",
-        classOf[BroadcastNestedLoopJoinExec]))
-      assert(!joinExec.isInstanceOf[BroadcastHashJoinExec])
+        classOf[BroadcastHashJoinExec]))
+      assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
     }
   }
 

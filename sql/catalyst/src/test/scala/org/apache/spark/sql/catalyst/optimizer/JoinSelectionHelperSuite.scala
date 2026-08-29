@@ -156,7 +156,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     }
   }
 
-  test("canPlanAsBroadcastHashJoin should respect size for single-column null-aware anti join") {
+  test("canPlanAsBroadcastHashJoin should detect single-column null-aware anti join") {
     val leftKey = left.output.head
     val rightKey = right.output.head
     val condition = Or(EqualTo(leftKey, rightKey), IsNull(EqualTo(leftKey, rightKey)))
@@ -167,7 +167,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
       assert(canPlanAsBroadcastHashJoin(nullAwareAntiJoin, SQLConf.get))
-      assert(!canPlanAsBroadcastHashJoin(nullAwareAntiJoin.copy(right = largeRight), SQLConf.get))
+      assert(canPlanAsBroadcastHashJoin(nullAwareAntiJoin.copy(right = largeRight), SQLConf.get))
     }
   }
 

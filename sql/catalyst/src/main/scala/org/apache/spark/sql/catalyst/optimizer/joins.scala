@@ -438,9 +438,10 @@ trait JoinSelectionHelper extends Logging {
       getBroadcastBuildSide(join, hintOnly = true, conf).orElse {
         if (noShufflePlannedBefore) getBroadcastBuildSide(join, hintOnly = false, conf) else None
       }
-    // `JoinSelection` always builds from the right for this shape.
-    case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) =>
-      if (canBroadcastBySize(j.right, conf)) Some(BuildRight) else None
+    // `JoinSelection` always builds from the right for this shape. Its generic fallback is a
+    // broadcast nested loop join that also builds from the right, so prefer the hash join even
+    // when the right side exceeds the automatic broadcast threshold.
+    case ExtractSingleColumnNullAwareAntiJoin(_, _) => Some(BuildRight)
     case _ => None
   }
 
