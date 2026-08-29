@@ -3848,7 +3848,8 @@ class AstBuilder extends DataTypeAstBuilder
               throw QueryParsingErrors.emptyQuantifiedPatternError(ctx)
             }
             val expressions = expressionList(ctx.expression)
-            if (expressions.forall(_.foldable) && expressions.forall(_.dataType == StringType)) {
+            if (expressions.forall(_.foldable) &&
+                expressions.forall(_.dataType.isInstanceOf[StringType])) {
               // If there are many pattern expressions, will throw StackOverflowError.
               // So we use LikeAny or NotLikeAny instead.
               val patterns = expressions.map(_.eval(EmptyRow).asInstanceOf[UTF8String])
@@ -3866,7 +3867,8 @@ class AstBuilder extends DataTypeAstBuilder
               throw QueryParsingErrors.emptyQuantifiedPatternError(ctx)
             }
             val expressions = expressionList(ctx.expression)
-            if (expressions.forall(_.foldable) && expressions.forall(_.dataType == StringType)) {
+            if (expressions.forall(_.foldable) &&
+                expressions.forall(_.dataType.isInstanceOf[StringType])) {
               // If there are many pattern expressions, will throw StackOverflowError.
               // So we use LikeAll or NotLikeAll instead.
               val patterns = expressions.map(_.eval(EmptyRow).asInstanceOf[UTF8String])

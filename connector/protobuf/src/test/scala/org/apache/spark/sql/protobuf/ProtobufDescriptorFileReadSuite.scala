@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.ProtobufDescriptorFileReader
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.protobuf.utils.{ProtobufUtils => ConnectorProtobufUtils}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -77,6 +78,26 @@ class ProtobufDescriptorFileReadSuite extends SharedSparkSession with ProtobufTe
       s"SELECT to_protobuf(value, '$messageName', '$fileUri', map()) IS NOT NULL AS r " +
       "FROM t_pb_struct").head().getBoolean(0)
     assert(r)
+  }
+
+  test("SPARK-59112: CHAR/VARCHAR descriptor paths use the three-argument overload") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val fileUri = new File(descPath).getCanonicalFile.toURI.toString
+      spark.range(1).selectExpr("CAST(NULL AS BINARY) AS value").createOrReplaceTempView("t_pb")
+      spark.range(1)
+        .selectExpr("named_struct('id', id) AS value")
+        .createOrReplaceTempView("t_pb_struct")
+
+      Seq("CHAR", "VARCHAR").foreach { typeName =>
+        val descriptorPath = s"CAST('$fileUri' AS $typeName(${fileUri.length}))"
+        assert(spark.sql(
+          s"SELECT from_protobuf(value, '$messageName', $descriptorPath) IS NULL FROM t_pb")
+          .head().getBoolean(0))
+        assert(spark.sql(
+          s"SELECT to_protobuf(value, '$messageName', $descriptorPath) IS NOT NULL " +
+            "FROM t_pb_struct").head().getBoolean(0))
+      }
+    }
   }
 
   test("missing descriptor file raises PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND") {

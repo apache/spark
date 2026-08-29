@@ -25,8 +25,9 @@ import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters}
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{CharType, IntegerType, StructType, VarcharType}
 import org.apache.spark.sql.util.{ProtobufUtils => CommonProtobufUtils}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Tests for [[ProtobufSerializer]] and [[ProtobufDeserializer]] with a more specific focus on
@@ -65,6 +66,22 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
 
       assert(
         serializer.serialize(deserializer.deserialize(dynamicMessage).get) === dynamicMessage)
+    }
+  }
+
+  test("SPARK-59112: serialize CHAR/VARCHAR fields as Protobuf strings") {
+    val descriptor =
+      ProtobufUtils.buildDescriptor("SimpleMessageJavaTypes", Some(testFileDesc)).descriptor
+
+    Seq(CharType(3), VarcharType(3)).foreach { stringType =>
+      val serializer = new ProtobufSerializer(
+        new StructType().add("string_value", stringType),
+        descriptor,
+        nullable = false)
+      val message = serializer.serialize(InternalRow(UTF8String.fromString("abc")))
+        .asInstanceOf[DynamicMessage]
+
+      assert(message.getField(descriptor.findFieldByName("string_value")) === "abc")
     }
   }
 

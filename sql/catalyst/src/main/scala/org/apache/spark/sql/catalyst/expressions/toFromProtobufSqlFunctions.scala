@@ -83,9 +83,9 @@ case class FromProtobuf(
     this(
       data,
       messageName,
-      descFilePathOrOptions match {
-        case lit: Literal
-          if lit.dataType == StringType || lit.dataType == BinaryType => descFilePathOrOptions
+      descFilePathOrOptions.dataType match {
+        case _: StringType | BinaryType =>
+          descFilePathOrOptions
         case _ => Literal(null)
       },
       descFilePathOrOptions.dataType match {
@@ -232,9 +232,9 @@ case class ToProtobuf(
     this(
       data,
       messageName,
-      descFilePathOrOptions match {
-        case lit: Literal
-          if lit.dataType == StringType || lit.dataType == BinaryType => descFilePathOrOptions
+      descFilePathOrOptions.dataType match {
+        case _: StringType | BinaryType =>
+          descFilePathOrOptions
         case _ => Literal(null)
       },
       descFilePathOrOptions.dataType match {
