@@ -1714,6 +1714,27 @@ abstract class AvroSuite
       expectedDf.collect().toSet)
   }
 
+  test("SPARK-34365: support writing with renamed schema using positionalFieldMatching") {
+    withTempDir { tempDir =>
+      val avroSchema = SchemaBuilder.record("renamed").fields()
+        .requiredString("foo")
+        .name("foo_map").`type`(Schema.createMap(Schema.create(Schema.Type.INT))).noDefault()
+        .endRecord()
+      val expectedDf = spark.read.format("avro").load(testAvro).select("string", "simple_map")
+      val savePath = s"$tempDir/save"
+      expectedDf.write
+        .option("avroSchema", avroSchema.toString)
+        .option("positionalFieldMatching", true.toString)
+        .format("avro")
+        .save(savePath)
+      val reloadedDf = spark.read.format("avro").load(savePath)
+      assert(reloadedDf.schema ===
+        new StructType().add("foo", StringType).add("foo_map", MapType(StringType, IntegerType)))
+      assert(reloadedDf.select($"foo".as("string"), $"foo_map".as("simple_map")).collect().toSet ===
+        expectedDf.collect().toSet)
+    }
+  }
+
   test("SPARK-59108: positionalFieldMatching resolves fields against the full schema") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
@@ -1735,8 +1756,8 @@ abstract class AvroSuite
       checkAnswer(df.select("x", "z"), rows.map(r => Row(r.get(0), r.get(2))))
       checkAnswer(df.select("z", "x"), rows.map(r => Row(r.get(2), r.get(0))))
       checkAnswer(df.selectExpr("sum(z)"), Row(100000L))
-      // A pushed filter is evaluated inside the deserializer, so a wrong pairing would drop rows
-      // rather than only return wrong values for them.
+      // With pushdown on the filter runs inside the deserializer, with it off above the scan.
+      // Either way a wrong pairing drops rows rather than only returning wrong values for them.
       Seq("true", "false").foreach { pushDown =>
         withSQLConf(SQLConf.AVRO_FILTER_PUSHDOWN_ENABLED.key -> pushDown) {
           checkAnswer(df.where("z = 20000").select("z"), Row(20000L))
@@ -1843,29 +1864,9 @@ abstract class AvroSuite
 
       // y takes Avro field 1, which is a string, so the read fails instead of returning the values
       // of a neighbouring field.
-      intercept[SparkException](df.select("y").collect())
+      val ex = intercept[SparkException](df.select("y").collect())
+      assert(Utils.exceptionString(ex).contains("Cannot convert Avro"))
       checkAnswer(df.select("z"), (0 until 3).map(i => Row(i * 10L)))
-    }
-  }
-
-  test("SPARK-34365: support writing with renamed schema using positionalFieldMatching") {
-    withTempDir { tempDir =>
-      val avroSchema = SchemaBuilder.record("renamed").fields()
-        .requiredString("foo")
-        .name("foo_map").`type`(Schema.createMap(Schema.create(Schema.Type.INT))).noDefault()
-        .endRecord()
-      val expectedDf = spark.read.format("avro").load(testAvro).select("string", "simple_map")
-      val savePath = s"$tempDir/save"
-      expectedDf.write
-        .option("avroSchema", avroSchema.toString)
-        .option("positionalFieldMatching", true.toString)
-        .format("avro")
-        .save(savePath)
-      val reloadedDf = spark.read.format("avro").load(savePath)
-      assert(reloadedDf.schema ===
-        new StructType().add("foo", StringType).add("foo_map", MapType(StringType, IntegerType)))
-      assert(reloadedDf.select($"foo".as("string"), $"foo_map".as("simple_map")).collect().toSet ===
-        expectedDf.collect().toSet)
     }
   }
 

@@ -62,7 +62,7 @@ private[sql] class AvroDeserializer(
     useStableIdForUnionType: Boolean,
     stableIdPrefixForUnionType: String,
     recursiveFieldMaxDepth: Int,
-    dataSchema: Option[StructType] = None) {
+    dataSchema: Option[StructType]) {
 
   def this(
       rootAvroType: Schema,
@@ -79,7 +79,8 @@ private[sql] class AvroDeserializer(
       new NoopFilters,
       useStableIdForUnionType,
       stableIdPrefixForUnionType,
-      recursiveFieldMaxDepth)
+      recursiveFieldMaxDepth,
+      dataSchema = None)
   }
 
   private lazy val decimalConversions = new DecimalConversion()
@@ -462,9 +463,9 @@ private[sql] class AvroDeserializer(
   }
 
   /**
-   * The position of each `projection` field in `dataSchema`, which is what a positional field
-   * match resolves against. Empty unless this deserializer reads a projection positionally, and
-   * empty for a nested record, which is never projected: neither read path prunes nested fields.
+   * The position of each `projection` field in `dataSchema`, which is what a positional field match
+   * resolves against. Empty when there is no data schema to resolve against, or when field matching
+   * is by name and the positions are unused.
    */
   private def positionsInDataSchema(projection: StructType): Array[Int] = dataSchema match {
     case Some(schema) if positionalFieldMatch =>
@@ -472,6 +473,14 @@ private[sql] class AvroDeserializer(
     case _ => Array.empty
   }
 
+  /**
+   * @param dataSchemaPositions The positions a positional field match resolves `catalystType`'s
+   *                            fields against, empty to use each field's own position. Only the
+   *                            root record passes them: a nested record is never a projection,
+   *                            because V1 nested pruning is limited to Parquet and ORC
+   *                            (`SchemaPruning.canPruneDataSchema`) and V2's
+   *                            `FileScanBuilder.supportsNestedSchemaPruning` is false for Avro.
+   */
   private def getRecordWriter(
       avroType: Schema,
       catalystType: StructType,

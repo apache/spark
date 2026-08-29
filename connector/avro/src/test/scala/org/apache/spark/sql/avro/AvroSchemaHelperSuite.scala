@@ -108,6 +108,8 @@ class AvroSchemaHelperSuite extends SharedSparkSession {
     val ascending = new StructType().add("a", IntegerType).add("c", IntegerType)
     val ascendingHelper = new AvroUtils.AvroSchemaHelper(
       avroSchema, ascending, Seq(""), Seq(""), true, Array(0, 2))
+    assert(ascendingHelper.getAvroField("a", 0) === Some(avroSchema.getFields.get(0)))
+    assert(ascendingHelper.getAvroField("c", 1) === Some(avroSchema.getFields.get(2)))
     assert(ascendingHelper.matchedFields.map(_.avroField.name()) === Seq("a", "c"))
 
     val msg = intercept[IllegalArgumentException] {

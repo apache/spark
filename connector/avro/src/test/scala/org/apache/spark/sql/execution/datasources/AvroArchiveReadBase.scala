@@ -25,8 +25,8 @@ import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.spark.sql.Row
 
 /**
- * Binds [[ArchiveReadSuiteBase]]'s hooks to Avro, adding the streaming-reader regression tests
- * that have no format-agnostic analogue.
+ * Binds [[ArchiveReadSuiteBase]]'s hooks to Avro, adding the Avro-only tests that have no
+ * format-agnostic analogue.
  */
 trait AvroArchiveReadBase extends ArchiveReadSuiteBase {
 
@@ -50,8 +50,9 @@ trait AvroArchiveReadBase extends ArchiveReadSuiteBase {
   // ----- Avro-specific tests -------------------------------------------------
 
   test("Avro: positionalFieldMatching resolves a pruned read against the full schema") {
-    // This read path builds a deserializer per archive entry, so it needs the data schema of its
-    // own (SPARK-59108). The two columns have different types, so a wrong pairing fails the read.
+    // This is a second deserializer construction site, and it is handed a pruned required schema
+    // like the per-file reader is (SPARK-59108). The two columns have different types, so a wrong
+    // pairing fails the read.
     withArchiveFile() { archive =>
       writeArchive(archive, Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice"), (2, "Bob")))))
       val df = read(
