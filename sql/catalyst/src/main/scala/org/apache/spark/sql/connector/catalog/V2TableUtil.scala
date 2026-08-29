@@ -21,7 +21,8 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, quoteIfNeeded, MetadataColumnHelper}
+import org.apache.spark.sql.catalyst.expressions.MetadataAttributeWithLogicalName
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, quoteIfNeeded}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -100,7 +101,9 @@ private[sql] object V2TableUtil extends SQLConfHelper {
    * @return metadata columns captured by the relation
    */
   def extractMetadataColumns(relation: DataSourceV2Relation): Seq[MetadataColumn] = {
-    val metaAttrNames = relation.output.filter(_.isMetadataCol).map(_.name)
+    val metaAttrNames = relation.output.collect {
+      case MetadataAttributeWithLogicalName(_, logicalName) => logicalName
+    }
     if (metaAttrNames.isEmpty) Nil else filter(metaAttrNames, metadataColumns(relation.table))
   }
 

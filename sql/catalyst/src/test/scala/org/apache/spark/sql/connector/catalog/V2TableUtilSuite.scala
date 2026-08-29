@@ -449,6 +449,54 @@ class V2TableUtilSuite extends SparkFunSuite with SQLHelper {
     assert(errors.isEmpty)
   }
 
+  test("validateCapturedMetadataColumns - renamed captured metadata column type changed") {
+    val dataCols = Array(col("index", LongType, nullable = true))
+    val originMetaCols = Array(metaCol("index", IntegerType, nullable = false))
+    val originTable = TestTableWithRenamableMetadata("test", dataCols, originMetaCols)
+    val dataAttrs = dataCols.map(c => AttributeReference(c.name, c.dataType, c.nullable)())
+    val relation = DataSourceV2Relation(
+      originTable,
+      dataAttrs.toImmutableArraySeq,
+      None,
+      None,
+      CaseInsensitiveStringMap.empty()).withMetadataColumns()
+    assert(relation.output.map(_.name) == Seq("index", "_index"))
+    val currentTable = TestTableWithRenamableMetadata(
+      "test",
+      dataCols,
+      Array(metaCol("index", StringType, nullable = false)))
+
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      currentTable,
+      relation,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
+    assert(errors == Seq("`index` type has changed from INT to STRING"))
+  }
+
+  test("validateCapturedMetadataColumns - unchanged renamed captured metadata column") {
+    val dataCols = Array(col("index", LongType, nullable = true))
+    val originMetaCols = Array(metaCol("index", IntegerType, nullable = false))
+    val originTable = TestTableWithRenamableMetadata("test", dataCols, originMetaCols)
+    val attrs = Seq(
+      AttributeReference("index", LongType, nullable = true)(),
+      MetadataAttribute("index", IntegerType, nullable = false).withName("_index"))
+    val relation = DataSourceV2Relation(
+      originTable,
+      attrs,
+      None,
+      None,
+      CaseInsensitiveStringMap.empty())
+    val currentTable = TestTableWithRenamableMetadata("test", dataCols, originMetaCols)
+
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      currentTable,
+      relation,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
+    assert(errors.isEmpty, "renaming a captured metadata column must remain valid")
+  }
+
   test("validateCapturedMetadataColumns - metadata column hidden by a data column is rejected") {
     val originMetaCols = Seq(metaCol("index", IntegerType, nullable = false))
     // The connector still reports the `index` metadata column, but a data column has taken its
