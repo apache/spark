@@ -117,8 +117,17 @@ abstract class RowLevelOperationSuiteBase
     createTable(columns)
   }
 
+  protected def createTable(schemaString: String, transforms: Array[Transform]): Unit = {
+    val columns = CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString))
+    createTable(columns, transforms)
+  }
+
   protected def createTable(columns: Array[Column]): Unit = {
     val transforms = Array[Transform](identity(reference(Seq("dep"))))
+    createTable(columns, transforms)
+  }
+
+  protected def createTable(columns: Array[Column], transforms: Array[Transform]): Unit = {
     val tableInfo = new TableInfo.Builder()
       .withColumns(columns)
       .withPartitions(transforms)
