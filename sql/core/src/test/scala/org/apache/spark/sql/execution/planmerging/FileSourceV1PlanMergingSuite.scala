@@ -202,13 +202,46 @@ class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
         spark.read.schema("a long, b long").option("mode", "DROPMALFORMED")
           .csv(path).createOrReplaceTempView("t")
         // Both subqueries read a alone, and filter propagation, which is on by default, merges
-        // them by rebuilding the projection above the relation. The rebuilt projection is over the
-        // pruned child rather than the relation's own output, so the shared scan still reads only
-        // a and the answers do not change.
+        // them by rebuilding the projection above the relation. That rebuilt projection carries the
+        // relation's full output, but the `ColumnPruning` that runs after this rule narrows it
+        // again, so the shared scan reads only a and the answers do not change.
         val df = sql(
           "SELECT (SELECT sum(x) FROM (SELECT a * 2 AS x FROM t WHERE a > 1)), " +
             "(SELECT sum(a) FROM t)")
         checkAnswer(df, Row(18L, 10L))
+        assert(scanColumns(df) === Seq(Seq("a")))
+      }
+    }
+  }
+
+  test("SPARK-59107: a third subquery is compared against what the merged pair read") {
+    withTempDir { dir =>
+      val path = writeFile(dir, "data.csv", csvRows)
+      withTempView("t") {
+        spark.read.schema("a long, b long").option("mode", "DROPMALFORMED")
+          .csv(path).createOrReplaceTempView("t")
+        // The first two subqueries merge on a, and the merged plan carries the relation's full
+        // output until `ColumnPruning` runs again. The third reads a and b, so it must be compared
+        // against what the first two read rather than against the merged plan, or it would join
+        // them and widen their read.
+        val df = sql(
+          "SELECT (SELECT sum(x) FROM (SELECT a * 2 AS x FROM t WHERE a > 1)), " +
+            "(SELECT sum(a) FROM t), (SELECT sum(a + b) FROM t)")
+        checkAnswer(df, Row(18L, 10L, 88L))
+        assert(scanColumns(df) === Seq(Seq("a"), Seq("a", "b")))
+      }
+    }
+  }
+
+  test("SPARK-59107: a third subquery reading the same columns still shares the scan") {
+    withTempDir { dir =>
+      val path = writeFile(dir, "data.csv", csvRows)
+      withTempView("t") {
+        spark.read.schema("a long, b long").option("mode", "DROPMALFORMED")
+          .csv(path).createOrReplaceTempView("t")
+        val df = sql(
+          "SELECT (SELECT sum(a) FROM t), (SELECT count(a) FROM t), (SELECT max(a) FROM t)")
+        checkAnswer(df, Row(10L, 5L, 4L))
         assert(scanColumns(df) === Seq(Seq("a")))
       }
     }

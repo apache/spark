@@ -53,8 +53,18 @@ case class MergeResult(
  * @param merged Whether this plan is the result of merging two or more plans (true), or
  *               is an original unmerged plan (false). Merged plans typically require special
  *               handling such as wrapping in CTEs.
+ * @param projectionSensitiveReads The columns the plans behind this entry read from each
+ *                                 projection-sensitive relation, recorded when the entry was
+ *                                 first cached. Every plan merged into the entry read those same
+ *                                 columns, which is what merging one in requires, so the record
+ *                                 stays true of the entry. It cannot be re-derived from `plan`,
+ *                                 because a merge leaves projections that a later `ColumnPruning`
+ *                                 narrows again. See `PlanMerger.collectProjectionSensitiveReads`.
  */
-case class MergedPlan(plan: LogicalPlan, merged: Boolean)
+case class MergedPlan(
+    plan: LogicalPlan,
+    merged: Boolean,
+    projectionSensitiveReads: Map[LogicalPlan, Seq[Set[String]]] = Map.empty)
 
 object PlanMerger {
   // Marker tag placed on Filter nodes that were produced by filter propagation. Its presence
@@ -173,19 +183,19 @@ class PlanMerger(
           // `ReusedSubqueryExec` rule can handle them without extracting the plans to CTEs.
           // But, when a non-subquery subplan is identical to a cached plan we need to mark the plan
           // `merged` and so extract it to a CTE later.
-          val newMergedPlan = MergedPlan(mp.plan, mp.merged || !subqueryPlan)
+          val newMergedPlan = mp.copy(merged = mp.merged || !subqueryPlan)
           cache(i) = newMergedPlan
           val outputMap = AttributeMap(plan.output.zipWithIndex)
           MergeResult(newMergedPlan, i, outputMap)
         }.orElse {
-          if (widensProjectionSensitiveRead(projectionSensitiveReads, mp.plan)) {
+          if (widensProjectionSensitiveRead(projectionSensitiveReads, mp)) {
             // Reusing the shared relation would widen a read whose rows depend on the set of
             // columns it is asked for, see `collectProjectionSensitiveReads`.
             None
           } else {
             tryMergePlans(plan, mp.plan, MergeContext(filterPropagationSupported = false)).collect {
               case TryMergeResult(mergedPlan, npMapping, None, None, None, _) =>
-                val newMergedPlan = MergedPlan(mergedPlan, true)
+                val newMergedPlan = mp.copy(plan = mergedPlan, merged = true)
                 cache(i) = newMergedPlan
                 val outputMap = AttributeMap(npMapping.iterator.map { case (origAttr, mergedAttr) =>
                   origAttr -> mergedPlan.output.indexWhere(_.exprId == mergedAttr.exprId)
@@ -196,7 +206,7 @@ class PlanMerger(
         }
       case _ => None
     }).getOrElse {
-      val newMergedPlan = MergedPlan(plan, false)
+      val newMergedPlan = MergedPlan(plan, false, projectionSensitiveReads)
       cache += newMergedPlan
       val outputMap = AttributeMap(plan.output.zipWithIndex)
       MergeResult(newMergedPlan, cache.length - 1, outputMap)
@@ -237,6 +247,11 @@ class PlanMerger(
    * Keyed by column name rather than by attribute, because the two plans that get compared were
    * analyzed separately and carry different expression ids for the same column.
    *
+   * Only ever called on a plan as it arrives, never on a merged one: merging rebuilds projections
+   * from a side's whole output, which for a V1 relation is its full schema, and the `ColumnPruning`
+   * that narrows that again runs after this rule. A merged cache entry therefore carries the record
+   * taken when it was first cached, see [[MergedPlan]].
+   *
    * This compares columns only. Symmetric filter propagation, which is off by default, can also
    * widen the set of *files* a scan reads, by OR-ing the two sides' partition filters. Each side's
    * own filter above the scan drops the rows that widening adds, so no answer changes, but a
@@ -251,7 +266,7 @@ class PlanMerger(
   }
 
   /**
-   * Whether merging a plan whose projection-sensitive reads are `reads` with `cachedPlan` would
+   * Whether merging a plan whose projection-sensitive reads are `reads` into `cachedPlan` would
    * widen the columns read from a relation the two share. A relation read a different number of
    * times on the two sides counts as widened, because the occurrences no longer correspond.
    *
@@ -263,13 +278,9 @@ class PlanMerger(
    */
   private def widensProjectionSensitiveRead(
       reads: Map[LogicalPlan, Seq[Set[String]]],
-      cachedPlan: LogicalPlan): Boolean = {
-    reads.nonEmpty && {
-      val cachedReads = collectProjectionSensitiveReads(cachedPlan)
-      reads.exists { case (relation, columnSets) =>
-        cachedReads.get(relation).exists(_ != columnSets)
-      }
-    }
+      cachedPlan: MergedPlan): Boolean = {
+    (reads.nonEmpty || cachedPlan.projectionSensitiveReads.nonEmpty) &&
+      reads != cachedPlan.projectionSensitiveReads
   }
 
   /**
