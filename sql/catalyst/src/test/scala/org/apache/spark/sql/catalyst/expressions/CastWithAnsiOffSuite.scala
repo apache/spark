@@ -942,4 +942,68 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     checkEvaluation(cast(largeTime1, ShortType), null)
     checkEvaluation(cast(largeTime1, ByteType), null)
   }
+
+  test("SPARK-58235: cast large double to timestamp overflow with ansi off") {
+    checkEvaluation(cast(Literal(1E20), TimestampType, UTC_OPT), null)
+    checkEvaluation(cast(Literal(-1E20), TimestampType, UTC_OPT), null)
+    checkEvaluation(cast(Literal(Double.NaN), TimestampType, UTC_OPT), null)
+    checkEvaluation(cast(Literal(Double.PositiveInfinity), TimestampType, UTC_OPT), null)
+    checkEvaluation(cast(Literal(Double.NegativeInfinity), TimestampType, UTC_OPT), null)
+    checkEvaluation(cast(Literal(1.5), TimestampType, UTC_OPT), 1500000L)
+    checkEvaluation(cast(Literal(-1.5), TimestampType, UTC_OPT), -1500000L)
+    checkEvaluation(cast(Literal(0.0), TimestampType, UTC_OPT), 0L)
+
+    val safePositive = 9223372036854.0
+    checkEvaluation(
+      cast(Literal(safePositive), TimestampType, UTC_OPT),
+      (safePositive * 1000000.0).toLong)
+    checkEvaluation(cast(Literal(9223372036855.0), TimestampType, UTC_OPT), null)
+    val safeNegative = -9223372036854.0
+    checkEvaluation(
+      cast(Literal(safeNegative), TimestampType, UTC_OPT),
+      (safeNegative * 1000000.0).toLong)
+    checkEvaluation(cast(Literal(-9223372036855.0), TimestampType, UTC_OPT), null)
+
+    val maxDoubleSeconds = Long.MaxValue.toDouble / 1000000.0
+    val maxDoubleInRange = Math.nextDown(maxDoubleSeconds)
+    checkEvaluation(
+      cast(Literal(maxDoubleInRange), TimestampType, UTC_OPT),
+      (maxDoubleInRange * 1000000.0).toLong)
+    checkEvaluation(cast(Literal(maxDoubleSeconds), TimestampType, UTC_OPT), null)
+
+    val minDoubleSeconds = Long.MinValue.toDouble / 1000000.0
+    checkEvaluation(cast(Literal(minDoubleSeconds), TimestampType, UTC_OPT), Long.MinValue)
+    checkEvaluation(
+      cast(Literal(Math.nextDown(minDoubleSeconds)), TimestampType, UTC_OPT), null)
+
+    checkEvaluation(cast(Literal(Double.MaxValue), TimestampType, UTC_OPT), null)
+    checkEvaluation(cast(Literal(-Double.MaxValue), TimestampType, UTC_OPT), null)
+  }
+
+  test("SPARK-58235: cast large float to timestamp overflow with ansi off") {
+    checkEvaluation(cast(Literal(1E20f), TimestampType, UTC_OPT), null)
+    checkEvaluation(cast(Literal(-1E20f), TimestampType, UTC_OPT), null)
+    checkEvaluation(cast(Literal(Float.NaN), TimestampType, UTC_OPT), null)
+    checkEvaluation(cast(Literal(Float.PositiveInfinity), TimestampType, UTC_OPT), null)
+    checkEvaluation(cast(Literal(Float.NegativeInfinity), TimestampType, UTC_OPT), null)
+    checkEvaluation(cast(Literal(1.5f), TimestampType, UTC_OPT), 1500000L)
+    checkEvaluation(cast(Literal(-1.5f), TimestampType, UTC_OPT), -1500000L)
+
+    val maxFloatSeconds = (Long.MaxValue.toDouble / 1000000.0).toFloat
+    checkEvaluation(
+      cast(Literal(maxFloatSeconds), TimestampType, UTC_OPT),
+      (maxFloatSeconds.toDouble * 1000000.0).toLong)
+    checkEvaluation(
+      cast(Literal(java.lang.Math.nextUp(maxFloatSeconds)), TimestampType, UTC_OPT), null)
+
+    val minFloatSeconds = (Long.MinValue.toDouble / 1000000.0).toFloat
+    checkEvaluation(
+      cast(Literal(minFloatSeconds), TimestampType, UTC_OPT),
+      (minFloatSeconds.toDouble * 1000000.0).toLong)
+    checkEvaluation(
+      cast(Literal(java.lang.Math.nextDown(minFloatSeconds)), TimestampType, UTC_OPT), null)
+
+    checkEvaluation(cast(Literal(Float.MaxValue), TimestampType, UTC_OPT), null)
+    checkEvaluation(cast(Literal(-Float.MaxValue), TimestampType, UTC_OPT), null)
+  }
 }
