@@ -437,9 +437,11 @@ object OrcUtils extends Logging {
       s"array<${getOrcSchemaString(a.elementType)}>"
     case m: MapType =>
       s"map<${getOrcSchemaString(m.keyType)},${getOrcSchemaString(m.valueType)}>"
-    // Keep Spark responsible for CHAR/VARCHAR assignment and scan checks. Native ORC
-    // CHAR/VARCHAR would truncate or pad before Spark can validate the original value.
-    case _: CharType | _: VarcharType => StringType.catalogString
+    // Under standard semantics, keep Spark responsible for CHAR/VARCHAR assignment and scan
+    // checks. Native ORC would truncate or pad before Spark can validate the original value.
+    // Preserve-only mode retains the native constrained schema and its legacy enforcement.
+    case _: CharType | _: VarcharType if SQLConf.get.charVarcharStandardSemantics =>
+      StringType.catalogString
     case _: DayTimeIntervalType | _: TimestampNTZType => LongType.catalogString
     case _: YearMonthIntervalType => IntegerType.catalogString
     // Framework types (TimeType, nanosecond timestamps) supply their own ORC schema string.
