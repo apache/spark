@@ -95,6 +95,16 @@ case class InlineCTE(
     // escape, so the definition is self-contained and safe to materialize. Walk the whole
     // definition (main tree plus nested subquery plans) once, collect every attribute bound
     // anywhere in the definition, and reject only references that resolve to none of them.
+    //
+    // Matching by exprId is exact for plans produced by a single analysis pass: every
+    // `OuterReference` wraps the very attribute it binds to, exprIds are allocated fresh
+    // per resolution, and `DeduplicateRelations` rewrites duplicated relation instances
+    // (self-join, union, etc.) with fresh exprIds before the optimizer runs. The known
+    // residual gap is a plan stitched together from already-analyzed plans (e.g. a producer
+    // embedding the same analyzed dataset twice): such a tree can carry the same exprId in
+    // multiple places, so an escaping reference could match a duplicated exprId and slip
+    // through. Such a query is ill-formed and fails later during planning or execution
+    // anyway; this check is defense-in-depth that fails fast with a clear error otherwise.
     val allNodes = cteDef.child.collectWithSubqueries { case n: LogicalPlan => n }
     val boundExprIds = allNodes.iterator
       .flatMap(_.output.filter(_.resolved).map(_.exprId))
