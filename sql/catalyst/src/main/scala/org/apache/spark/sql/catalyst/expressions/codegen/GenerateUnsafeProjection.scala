@@ -47,6 +47,35 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     case _ => false
   }
 
+  /** True for the values the writers hold as a reference and must dereference. */
+  private def isNestedRowType(dt: DataType): Boolean =
+    UserDefinedType.sqlType(dt) match {
+      case _: StructType | _: ArrayType | _: MapType => true
+      case _ => false
+    }
+
+  /**
+   * Wraps a nested (struct/array/map) write in a null check. A declared non-null nested value can
+   * still be null at runtime, so match `InterpretedUnsafeProjection` and write null rather than
+   * dereferencing it.
+   */
+  private def nullSafeNestedWrite(
+      ctx: CodegenContext,
+      input: String,
+      index: String,
+      dt: DataType,
+      writer: String)(writeValue: String => String): String = {
+    val nested = ctx.freshName("nestedInput")
+    s"""
+       |final ${CodeGenerator.javaType(UserDefinedType.sqlType(dt))} $nested = $input;
+       |if ($nested == null) {
+       |  $writer.setNull8Bytes($index);
+       |} else {
+       |  ${writeValue(nested).trim}
+       |}
+     """.stripMargin
+  }
+
   private def writeStructToBuffer(
       ctx: CodegenContext,
       input: String,
@@ -122,11 +151,18 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       schemas: Seq[Schema],
       rowWriter: String,
       isTopLevel: Boolean = false): String = {
+    // A guarded nested field can set a null bit, so the mask is not static for such rows.
+    val hasGuardedNestedField =
+      inputs.zip(schemas).exists { case (input, Schema(dataType, nullable)) =>
+        (!nullable || input.isNull == FalseLiteral) &&
+          isNestedRowType(UserDefinedType.sqlType(dataType))
+      }
+
     val resetWriter = if (isTopLevel) {
       // For top level row writer, it always writes to the beginning of the global buffer holder,
       // which means its fixed-size region always in the same position, so we don't need to call
       // `reset` to set up its fixed-size region every time.
-      if (inputs.map(_.isNull).forall(_ == FalseLiteral)) {
+      if (inputs.map(_.isNull).forall(_ == FalseLiteral) && !hasGuardedNestedField) {
         // If all fields are not nullable, which means the null bits never changes, then we don't
         // need to clear it out every time.
         ""
@@ -151,13 +187,18 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           case _ => s"$rowWriter.setNullAt($index);"
         }
 
-        val writeField = writeElement(ctx, input.value, index.toString, dt, rowWriter)
+        // Only built in the branches that use it: `writeElement` registers mutable writer state
+        // on `ctx`, so building it eagerly would leave unused fields on the generated class.
+        def writeField(guardNull: Boolean): String =
+          writeElement(ctx, input.value, index.toString, dt, rowWriter, guardNull)
+
         if (!nullable || input.isNull == FalseLiteral) {
-          // The value is statically known to be non-null, so skip the null check and the
-          // (dead) setNull branch and just write the value.
+          // The value is claimed to be non-null, so skip the null check and the (dead) setNull
+          // branch and just write the value. Nested values still get a null guard, see
+          // `nullSafeNestedWrite`.
           s"""
              |${input.code}
-             |${writeField.trim}
+             |${writeField(guardNull = true).trim}
            """.stripMargin
         } else if (input.isNull == TrueLiteral) {
           // The value is statically known to be null, so only set the null bit.
@@ -178,7 +219,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
                  |if (${input.isNull}) {
                  |  ${setNull.trim}
                  |} else {
-                 |  ${writeField.trim}
+                 |  ${writeField(guardNull = false).trim}
                  |}
                """.stripMargin
           }
@@ -246,7 +287,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
          |}
        """.stripMargin
     } else {
-      writeElement(ctx, element, index, et, arrayWriter)
+      // `containsNull = false` can be wrong, see `nullSafeNestedWrite`.
+      writeElement(ctx, element, index, et, arrayWriter, guardNull = true)
     }
 
     s"""
@@ -314,6 +356,21 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   }
 
   private def writeElement(
+      ctx: CodegenContext,
+      input: String,
+      index: String,
+      dt: DataType,
+      writer: String,
+      guardNull: Boolean = false): String = {
+    if (guardNull && isNestedRowType(dt)) {
+      nullSafeNestedWrite(ctx, input, index, dt, writer)(
+        writeElementDefault(ctx, _, index, dt, writer))
+    } else {
+      writeElementDefault(ctx, input, index, dt, writer)
+    }
+  }
+
+  private def writeElementDefault(
       ctx: CodegenContext,
       input: String,
       index: String,
