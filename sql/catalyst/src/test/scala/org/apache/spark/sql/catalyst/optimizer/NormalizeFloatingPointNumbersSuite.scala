@@ -19,10 +19,11 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{CaseWhen, If, IsNull, KnownFloatingPointNormalized}
+import org.apache.spark.sql.catalyst.expressions.{ArrayDistinct, ArrayExcept, ArrayIntersect, ArraysOverlap, ArrayTransform, ArrayUnion, CaseWhen, Expression, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, NamedLambdaVariable}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.DoubleType
 
 class NormalizeFloatingPointNumbersSuite extends PlanTest {
 
@@ -34,6 +35,18 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
   val a = testRelation1.output(0)
   val testRelation2 = LocalRelation($"a".double)
   val b = testRelation2.output(0)
+  val arrayRelation = LocalRelation($"arr1".array(DoubleType), $"arr2".array(DoubleType))
+  val arr1 = arrayRelation.output(0)
+  val arr2 = arrayRelation.output(1)
+
+  private def normalizedArray(e: Expression): KnownFloatingPointNormalized = {
+    val lv = NamedLambdaVariable("arg", DoubleType, nullable = true)
+    KnownFloatingPointNormalized(
+      ArrayTransform(e,
+        LambdaFunction(
+          KnownFloatingPointNormalized(NormalizeNaNAndZero(lv)),
+          Seq(lv))))
+  }
 
   test("normalize floating points in window function expressions") {
     val query = testRelation1.window(Seq(sum(a).as("sum")), Seq(a), Seq(a.asc))
@@ -131,6 +144,109 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
       .as("nestedExpr").toAttribute
     val normalizedExpr = NormalizeFloatingNumbers.normalize(nestedExpr)
     assert(nestedExpr.dataType == normalizedExpr.dataType)
+  }
+
+  test("SPARK-54918: normalize floating points in array_distinct") {
+    val query = arrayRelation.select(ArrayDistinct(arr1).as("result"))
+
+    val optimized = Optimize.execute(query)
+    val correctAnswer = arrayRelation.select(ArrayDistinct(normalizedArray(arr1)).as("result"))
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-54918: normalize floating points in array_distinct - idempotence") {
+    val query = arrayRelation.select(ArrayDistinct(arr1).as("result"))
+
+    val optimized = Optimize.execute(query)
+    val doubleOptimized = Optimize.execute(optimized)
+    val correctAnswer = arrayRelation.select(ArrayDistinct(normalizedArray(arr1)).as("result"))
+
+    comparePlans(doubleOptimized, correctAnswer)
+  }
+
+  test("SPARK-54918: normalize floating points in array_union") {
+    val query = arrayRelation.select(ArrayUnion(arr1, arr2).as("result"))
+
+    val optimized = Optimize.execute(query)
+    val correctAnswer = arrayRelation.select(
+      ArrayUnion(normalizedArray(arr1), normalizedArray(arr2)).as("result"))
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-54918: normalize floating points in array_union - idempotence") {
+    val query = arrayRelation.select(ArrayUnion(arr1, arr2).as("result"))
+
+    val optimized = Optimize.execute(query)
+    val doubleOptimized = Optimize.execute(optimized)
+    val correctAnswer = arrayRelation.select(
+      ArrayUnion(normalizedArray(arr1), normalizedArray(arr2)).as("result"))
+
+    comparePlans(doubleOptimized, correctAnswer)
+  }
+
+  test("SPARK-54918: normalize floating points in array_intersect") {
+    val query = arrayRelation.select(ArrayIntersect(arr1, arr2).as("result"))
+
+    val optimized = Optimize.execute(query)
+    val correctAnswer = arrayRelation.select(
+      ArrayIntersect(normalizedArray(arr1), normalizedArray(arr2)).as("result"))
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-54918: normalize floating points in array_intersect - idempotence") {
+    val query = arrayRelation.select(ArrayIntersect(arr1, arr2).as("result"))
+
+    val optimized = Optimize.execute(query)
+    val doubleOptimized = Optimize.execute(optimized)
+    val correctAnswer = arrayRelation.select(
+      ArrayIntersect(normalizedArray(arr1), normalizedArray(arr2)).as("result"))
+
+    comparePlans(doubleOptimized, correctAnswer)
+  }
+
+  test("SPARK-54918: normalize floating points in array_except") {
+    val query = arrayRelation.select(ArrayExcept(arr1, arr2).as("result"))
+
+    val optimized = Optimize.execute(query)
+    val correctAnswer = arrayRelation.select(
+      ArrayExcept(normalizedArray(arr1), normalizedArray(arr2)).as("result"))
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-54918: normalize floating points in array_except - idempotence") {
+    val query = arrayRelation.select(ArrayExcept(arr1, arr2).as("result"))
+
+    val optimized = Optimize.execute(query)
+    val doubleOptimized = Optimize.execute(optimized)
+    val correctAnswer = arrayRelation.select(
+      ArrayExcept(normalizedArray(arr1), normalizedArray(arr2)).as("result"))
+
+    comparePlans(doubleOptimized, correctAnswer)
+  }
+
+  test("SPARK-54918: normalize floating points in arrays_overlap") {
+    val query = arrayRelation.select(ArraysOverlap(arr1, arr2).as("result"))
+
+    val optimized = Optimize.execute(query)
+    val correctAnswer = arrayRelation.select(
+      ArraysOverlap(normalizedArray(arr1), normalizedArray(arr2)).as("result"))
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-54918: normalize floating points in arrays_overlap - idempotence") {
+    val query = arrayRelation.select(ArraysOverlap(arr1, arr2).as("result"))
+
+    val optimized = Optimize.execute(query)
+    val doubleOptimized = Optimize.execute(optimized)
+    val correctAnswer = arrayRelation.select(
+      ArraysOverlap(normalizedArray(arr1), normalizedArray(arr2)).as("result"))
+
+    comparePlans(doubleOptimized, correctAnswer)
   }
 }
 
