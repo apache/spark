@@ -7433,11 +7433,11 @@ object SQLConf {
 
   val CHAR_VARCHAR_STANDARD_SEMANTICS =
     buildConf("spark.sql.charVarchar.standardSemantics.enabled")
-      .doc("When true, enable SQL standard CHAR/VARCHAR semantics: first-class types in " +
+      .doc("When true, treat CHAR, VARCHAR, and STRING as a character string type family with " +
+        "the precedence CHAR -> VARCHAR -> STRING. CHAR and VARCHAR remain first-class types in " +
         "schemas and CAST targets; least-common-type for COALESCE/CASE/UNION may return " +
-        "CHAR/VARCHAR; transforming string functions and operators return plain STRING. " +
-        "This is a breaking change from the annotated-STRING default and from " +
-        "preserveCharVarcharTypeInfo (which keeps Char/Varchar through transforms).")
+        "CHAR/VARCHAR; transforming string functions and operators return STRING. This differs " +
+        "from preserveCharVarcharTypeInfo, which keeps Char/Varchar through transforms.")
       .version("4.4.0")
       // PERSISTED, like ANSI mode: the flag decides the types a view body resolves to, so a view
       // created under standard semantics must keep computing CHAR/VARCHAR regardless of the
