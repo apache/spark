@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.{Cross, Inner, JoinType, LeftAnti, Le
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.catalog.TableCapability
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -162,6 +163,9 @@ class PlanMerger(
    *         - An attribute mapping for rewriting expressions
    */
   def merge(plan: LogicalPlan, subqueryPlan: Boolean): MergeResult = {
+    // Read once per call rather than once per cache entry, and empty for a plan that reads no
+    // projection-sensitive relation, which is the common case.
+    lazy val projectionSensitiveReads = collectProjectionSensitiveReads(plan)
     cache.zipWithIndex.collectFirst(Function.unlift {
       case (mp, i) =>
         checkIdenticalPlans(plan, mp.plan).map { _ =>
@@ -174,14 +178,20 @@ class PlanMerger(
           val outputMap = AttributeMap(plan.output.zipWithIndex)
           MergeResult(newMergedPlan, i, outputMap)
         }.orElse {
-          tryMergePlans(plan, mp.plan, MergeContext(filterPropagationSupported = false)).collect {
-            case TryMergeResult(mergedPlan, npMapping, None, None, None, _) =>
-              val newMergedPlan = MergedPlan(mergedPlan, true)
-              cache(i) = newMergedPlan
-              val outputMap = AttributeMap(npMapping.iterator.map { case (origAttr, mergedAttr) =>
-                origAttr -> mergedPlan.output.indexWhere(_.exprId == mergedAttr.exprId)
-              }.toSeq)
-              MergeResult(newMergedPlan, i, outputMap)
+          if (widensProjectionSensitiveRead(projectionSensitiveReads, mp.plan)) {
+            // Reusing the shared relation would widen a read whose rows depend on the set of
+            // columns it is asked for, see `collectProjectionSensitiveReads`.
+            None
+          } else {
+            tryMergePlans(plan, mp.plan, MergeContext(filterPropagationSupported = false)).collect {
+              case TryMergeResult(mergedPlan, npMapping, None, None, None, _) =>
+                val newMergedPlan = MergedPlan(mergedPlan, true)
+                cache(i) = newMergedPlan
+                val outputMap = AttributeMap(npMapping.iterator.map { case (origAttr, mergedAttr) =>
+                  origAttr -> mergedPlan.output.indexWhere(_.exprId == mergedAttr.exprId)
+                }.toSeq)
+                MergeResult(newMergedPlan, i, outputMap)
+            }
           }
         }
       case _ => None
@@ -210,6 +220,50 @@ class PlanMerger(
     } else {
       None
     }
+  }
+
+  /**
+   * The columns each projection-sensitive relation in `plan` is read with, keyed by the
+   * canonicalized relation.
+   *
+   * Top-level column pruning for a V1 file source happens in physical planning, from the attributes
+   * referenced above the relation, so two `LogicalRelation`s over the same files canonicalize equal
+   * whatever each side projects, and reusing one of them widens its read to the union of the two
+   * column sets. For most relations that only changes how much is read, but not for the ones
+   * [[DataSourceUtils.isProjectionSensitiveRead]] names, where it can change the rows themselves.
+   *
+   * Keyed by column name rather than by attribute, because the two plans that get compared were
+   * analyzed separately and carry different expression ids for the same column.
+   */
+  private def collectProjectionSensitiveReads(plan: LogicalPlan): Map[LogicalPlan, Set[String]] = {
+    plan.collect {
+      case l: LogicalRelation if DataSourceUtils.isProjectionSensitiveRead(l.relation) =>
+        l.canonicalized -> readColumnNames(plan, l)
+    }.toMap
+  }
+
+  /**
+   * Whether merging a plan whose projection-sensitive reads are `reads` with `cachedPlan` would
+   * widen the columns read from a relation the two share.
+   */
+  private def widensProjectionSensitiveRead(
+      reads: Map[LogicalPlan, Set[String]],
+      cachedPlan: LogicalPlan): Boolean = {
+    reads.nonEmpty && cachedPlan.exists {
+      case l: LogicalRelation =>
+        reads.get(l.canonicalized).exists(_ != readColumnNames(cachedPlan, l))
+      case _ => false
+    }
+  }
+
+  /**
+   * The names of `relation`'s columns that `plan` reads: every attribute referenced in the plan,
+   * plus the plan's own output, since a merged plan is extracted to a CTE and everything the CTE
+   * outputs is read.
+   */
+  private def readColumnNames(plan: LogicalPlan, relation: LogicalRelation): Set[String] = {
+    val referenced = AttributeSet(plan.flatMap(_.references)) ++ AttributeSet(plan.output)
+    referenced.filter(relation.outputSet.contains).map(_.name).toSet
   }
 
   /**
