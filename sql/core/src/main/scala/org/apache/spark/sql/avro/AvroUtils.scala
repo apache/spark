@@ -418,8 +418,9 @@ private[sql] object AvroUtils extends Logging {
         if (getAvroField(sqlField.name, sqlPos).isEmpty &&
           (!ignoreNullable || !sqlField.nullable)) {
           if (positionalFieldMatch) {
-            throw new IncompatibleSchemaException("Cannot find field at position " +
-              s"$sqlPos of ${toFieldStr(avroPath)} from Avro schema (using positional matching)")
+            throw new IncompatibleSchemaException(
+              s"Cannot find field at position ${avroPosition(sqlPos)} of " +
+                s"${toFieldStr(avroPath)} from Avro schema (using positional matching)")
           } else {
             throw new IncompatibleSchemaException(
               s"Cannot find ${toFieldStr(catalystPath :+ sqlField.name)} in Avro schema")

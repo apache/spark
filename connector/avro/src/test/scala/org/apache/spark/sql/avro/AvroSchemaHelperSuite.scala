@@ -104,10 +104,28 @@ class AvroSchemaHelperSuite extends SharedSparkSession {
       new AvroUtils.AvroSchemaHelper(avroSchema, projection, Seq(""), Seq(""), true)
     assert(unprojected.getAvroField("c", 0) === Some(avroSchema.getFields.get(0)))
 
+    // The shape both read paths produce is an ascending subsequence of the data schema.
+    val ascending = new StructType().add("a", IntegerType).add("c", IntegerType)
+    val ascendingHelper = new AvroUtils.AvroSchemaHelper(
+      avroSchema, ascending, Seq(""), Seq(""), true, Array(0, 2))
+    assert(ascendingHelper.matchedFields.map(_.avroField.name()) === Seq("a", "c"))
+
     val msg = intercept[IllegalArgumentException] {
       new AvroUtils.AvroSchemaHelper(avroSchema, projection, Seq(""), Seq(""), true, Array(2))
     }.getMessage
     assert(msg.contains("Got 1 data schema positions for 2 Catalyst fields"))
+
+    // A missing field is reported by the position that was looked for, not by the position the
+    // field happens to have in the projection.
+    val twoFieldAvro = SchemaConverters.toAvroType(
+      new StructType().add("a", IntegerType).add("b", IntegerType))
+    val pastTheEnd = new AvroUtils.AvroSchemaHelper(
+      twoFieldAvro, new StructType().add("c", IntegerType, nullable = false),
+      Seq(""), Seq(""), true, Array(2))
+    val missing = intercept[IncompatibleSchemaException] {
+      pastTheEnd.validateNoExtraCatalystFields(ignoreNullable = false)
+    }.getMessage
+    assert(missing.contains("Cannot find field at position 2"))
   }
 
   test("properly match fields between Avro and Catalyst schemas") {

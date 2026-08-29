@@ -1735,6 +1735,116 @@ abstract class AvroSuite
       checkAnswer(df.select("x", "z"), rows.map(r => Row(r.get(0), r.get(2))))
       checkAnswer(df.select("z", "x"), rows.map(r => Row(r.get(2), r.get(0))))
       checkAnswer(df.selectExpr("sum(z)"), Row(100000L))
+      // A pushed filter is evaluated inside the deserializer, so a wrong pairing would drop rows
+      // rather than only return wrong values for them.
+      Seq("true", "false").foreach { pushDown =>
+        withSQLConf(SQLConf.AVRO_FILTER_PUSHDOWN_ENABLED.key -> pushDown) {
+          checkAnswer(df.where("z = 20000").select("z"), Row(20000L))
+          checkAnswer(df.where("z > 20000").select("x"), Seq(Row(3L), Row(4L)))
+        }
+      }
+      // A projection of no columns at all.
+      checkAnswer(df.selectExpr("count(1)"), Row(5L))
+
+      // The projected schema carries the schema's own spelling whatever casing the query used, so
+      // the name lookup that resolves a position finds the field either way.
+      val mixedCase = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema(new StructType().add("Xx", LongType).add("yY", LongType).add("ZZ", LongType))
+        .load(path)
+      Seq("true", "false").foreach { caseSensitive =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+          checkAnswer(mixedCase.select("ZZ"), rows.map(r => Row(r.get(2))))
+        }
+      }
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        checkAnswer(mixedCase.select("zz"), rows.map(r => Row(r.get(2))))
+      }
+    }
+  }
+
+  test("SPARK-59108: positionalFieldMatching with a partition column in the schema") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 4).selectExpr("id AS a", "id * 100 AS b", "id % 2 AS p")
+        .write.partitionBy("p").format("avro").save(path)
+      // p is a partition column, so the files hold a and b only and the data schema is x and z.
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema("x long, p int, z long")
+        .load(path)
+
+      checkAnswer(df.select("z"), (0 until 4).map(i => Row(i * 100L)))
+      checkAnswer(df.select("x"), (0 until 4).map(i => Row(i.toLong)))
+      checkAnswer(df.select("p", "z"), (0 until 4).map(i => Row(i % 2, i * 100L)))
+      checkAnswer(df.where("p = 1").select("z"), Seq(Row(100L), Row(300L)))
+    }
+  }
+
+  test("SPARK-59108: positionalFieldMatching with a nested record and the avroSchema option") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 3).selectExpr(
+          "id AS a",
+          "named_struct('f1', id * 10, 'f2', cast(id AS string)) AS r",
+          "id * 1000 AS c")
+        .write.format("avro").save(path)
+
+      // Only the top level is a projection, so the nested record keeps resolving by its own
+      // positions. Reading the struct alone would take Avro field 0, a long, and fail.
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema("x long, s struct<g1: long, g2: string>, z long")
+        .load(path)
+      checkAnswer(df.select("s"), (0 until 3).map(i => Row(Row(i * 10L, i.toString))))
+      checkAnswer(df.select("s.g2"), (0 until 3).map(i => Row(i.toString)))
+      checkAnswer(df.select("z"), (0 until 3).map(i => Row(i * 1000L)))
+
+      // The avroSchema option supplies the Avro side, and the data schema is inferred from it, so
+      // the positions are the option's.
+      val avroSubset =
+        """{"type":"record","name":"topLevelRecord","fields":[
+          |{"name":"a","type":"long"},
+          |{"name":"c","type":"long"}]}""".stripMargin
+      val fromOption = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .option("avroSchema", avroSubset)
+        .load(path)
+      checkAnswer(fromOption.select("c"), (0 until 3).map(i => Row(i * 1000L)))
+      checkAnswer(fromOption.select("a"), (0 until 3).map(i => Row(i.toLong)))
+    }
+  }
+
+  test("SPARK-59108: a position past the end of the Avro schema reads null") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 3).selectExpr("id AS a", "id * 100 AS b").write.format("avro").save(path)
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema("x long, y long, z long")
+        .load(path)
+
+      // z is at position 2 of the schema and the file has two fields, so it has no Avro field to
+      // read and comes back null however few columns the query projects.
+      checkAnswer(df.select("z"), Seq(Row(null), Row(null), Row(null)))
+      checkAnswer(df, (0 until 3).map(i => Row(i.toLong, i * 100L, null)))
+    }
+  }
+
+  test("SPARK-59108: positionalFieldMatching fails a mispaired type rather than reading it") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 3).selectExpr("id AS a", "cast(id AS string) AS b", "id * 10 AS c")
+        .write.format("avro").save(path)
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema("x long, y long, z long")
+        .load(path)
+
+      // y takes Avro field 1, which is a string, so the read fails instead of returning the values
+      // of a neighbouring field.
+      intercept[SparkException](df.select("y").collect())
+      checkAnswer(df.select("z"), (0 until 3).map(i => Row(i * 10L)))
     }
   }
 

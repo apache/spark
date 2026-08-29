@@ -22,6 +22,8 @@ import java.io.{ByteArrayInputStream, IOException}
 import org.apache.avro.file.{DataFileConstants, DataFileStream}
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 
+import org.apache.spark.sql.Row
+
 /**
  * Binds [[ArchiveReadSuiteBase]]'s hooks to Avro, adding the streaming-reader regression tests
  * that have no format-agnostic analogue.
@@ -46,6 +48,21 @@ trait AvroArchiveReadBase extends ArchiveReadSuiteBase {
     "archive inference widens a column's type across entries like a directory")
 
   // ----- Avro-specific tests -------------------------------------------------
+
+  test("Avro: positionalFieldMatching resolves a pruned read against the full schema") {
+    // This read path builds a deserializer per archive entry, so it needs the data schema of its
+    // own (SPARK-59108). The two columns have different types, so a wrong pairing fails the read.
+    withArchiveFile() { archive =>
+      writeArchive(archive, Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice"), (2, "Bob")))))
+      val df = read(
+        archive.getCanonicalPath,
+        extraOptions = Map("positionalFieldMatching" -> "true"),
+        schema = "num INT, label STRING")
+      checkAnswer(df.select("label"), Seq(Row("Alice"), Row("Bob")))
+      checkAnswer(df.select("num"), Seq(Row(1), Row(2)))
+      checkAnswer(df, Seq(Row(1, "Alice"), Row(2, "Bob")))
+    }
+  }
 
   test("Avro: a truncated entry fails fast instead of spinning") {
     // A DataFileStream must throw on a truncated entry rather than loop forever. Cut at the header
