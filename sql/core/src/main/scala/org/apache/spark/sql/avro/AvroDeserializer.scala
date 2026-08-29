@@ -466,6 +466,12 @@ private[sql] class AvroDeserializer(
    * The position of each `projection` field in `dataSchema`, which is what a positional field match
    * resolves against. Empty when there is no data schema to resolve against, or when field matching
    * is by name and the positions are unused.
+   *
+   * This takes a data schema position for an Avro field position, which `recursiveFieldMaxDepth`
+   * can break: `SchemaConverters` drops a field it will not recurse into, so the data schema is a
+   * gapped view of the Avro schema and every field after the gap resolves one position early.
+   * Positional matching is already wrong for such a schema without this method, since the two
+   * schemas have different lengths.
    */
   private def positionsInDataSchema(projection: StructType): Array[Int] = dataSchema match {
     case Some(schema) if positionalFieldMatch =>
@@ -474,6 +480,8 @@ private[sql] class AvroDeserializer(
   }
 
   /**
+   * Creates a writer that reads a record's fields into `catalystType`'s fields.
+   *
    * @param dataSchemaPositions The positions a positional field match resolves `catalystType`'s
    *                            fields against, empty to use each field's own position. Only the
    *                            root record passes them: a nested record is never a projection,
