@@ -87,6 +87,29 @@ class AvroSchemaHelperSuite extends SharedSparkSession {
     assert(nameHelper.getAvroField("nonexist", 1).isEmpty)
   }
 
+  test("SPARK-59108: positional field match resolves against the data schema positions") {
+    val dataSchema = new StructType()
+      .add("a", IntegerType).add("b", IntegerType).add("c", IntegerType)
+    val avroSchema = SchemaConverters.toAvroType(dataSchema)
+    val projection = new StructType().add("c", IntegerType).add("a", IntegerType)
+
+    val helper = new AvroUtils.AvroSchemaHelper(
+      avroSchema, projection, Seq(""), Seq(""), true, Array(2, 0))
+    assert(helper.getAvroField("c", 0) === Some(avroSchema.getFields.get(2)))
+    assert(helper.getAvroField("a", 1) === Some(avroSchema.getFields.get(0)))
+    assert(helper.matchedFields.map(_.avroField.name()) === Seq("c", "a"))
+
+    // With no positions a field's own position is used, which is what an unprojected match needs.
+    val unprojected =
+      new AvroUtils.AvroSchemaHelper(avroSchema, projection, Seq(""), Seq(""), true)
+    assert(unprojected.getAvroField("c", 0) === Some(avroSchema.getFields.get(0)))
+
+    val msg = intercept[IllegalArgumentException] {
+      new AvroUtils.AvroSchemaHelper(avroSchema, projection, Seq(""), Seq(""), true, Array(2))
+    }.getMessage
+    assert(msg.contains("Got 1 data schema positions for 2 Catalyst fields"))
+  }
+
   test("properly match fields between Avro and Catalyst schemas") {
     val catalystSchema = StructType(
       Seq("catalyst1", "catalyst2", "shared1", "shared2").map(StructField(_, IntegerType))

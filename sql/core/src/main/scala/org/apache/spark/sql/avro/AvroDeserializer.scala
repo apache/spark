@@ -45,6 +45,13 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A deserializer to deserialize data in avro format to data in catalyst format.
+ *
+ * @param dataSchema The schema `rootCatalystType` was projected from, for a read that prunes
+ *                   columns. A positional field match pairs a Catalyst field with the Avro field
+ *                   at the same position, and the position that means is the one in the full
+ *                   schema rather than in the projection: without this, reading only the third
+ *                   column would take the first Avro field. `None` when the Catalyst type is not
+ *                   a projection; unused when field matching is by name.
  */
 private[sql] class AvroDeserializer(
     rootAvroType: Schema,
@@ -54,7 +61,8 @@ private[sql] class AvroDeserializer(
     filters: StructFilters,
     useStableIdForUnionType: Boolean,
     stableIdPrefixForUnionType: String,
-    recursiveFieldMaxDepth: Int) {
+    recursiveFieldMaxDepth: Int,
+    dataSchema: Option[StructType] = None) {
 
   def this(
       rootAvroType: Schema,
@@ -92,7 +100,8 @@ private[sql] class AvroDeserializer(
         val resultRow = new SpecificInternalRow(st.map(_.dataType))
         val fieldUpdater = new RowUpdater(resultRow)
         val applyFilters = filters.skipRow(resultRow, _)
-        val writer = getRecordWriter(rootAvroType, st, Nil, Nil, applyFilters)
+        val writer =
+          getRecordWriter(rootAvroType, st, Nil, Nil, applyFilters, positionsInDataSchema(st))
         (data: Any) => {
           val record = data.asInstanceOf[GenericRecord]
           val skipRow = writer(fieldUpdater, record)
@@ -452,15 +461,28 @@ private[sql] class AvroDeserializer(
     }
   }
 
+  /**
+   * The position of each `projection` field in `dataSchema`, which is what a positional field
+   * match resolves against. Empty unless this deserializer reads a projection positionally, and
+   * empty for a nested record, which is never projected: neither read path prunes nested fields.
+   */
+  private def positionsInDataSchema(projection: StructType): Array[Int] = dataSchema match {
+    case Some(schema) if positionalFieldMatch =>
+      projection.map(field => schema.fieldIndex(field.name)).toArray
+    case _ => Array.empty
+  }
+
   private def getRecordWriter(
       avroType: Schema,
       catalystType: StructType,
       avroPath: Seq[String],
       catalystPath: Seq[String],
-      applyFilters: Int => Boolean): (CatalystDataUpdater, GenericRecord) => Boolean = {
+      applyFilters: Int => Boolean,
+      dataSchemaPositions: Array[Int] = Array.empty)
+      : (CatalystDataUpdater, GenericRecord) => Boolean = {
 
     val avroSchemaHelper = new AvroUtils.AvroSchemaHelper(
-      avroType, catalystType, avroPath, catalystPath, positionalFieldMatch)
+      avroType, catalystType, avroPath, catalystPath, positionalFieldMatch, dataSchemaPositions)
 
     avroSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = true)
     // no need to validateNoExtraAvroFields since extra Avro fields are ignored

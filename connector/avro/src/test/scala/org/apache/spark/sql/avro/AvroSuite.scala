@@ -1714,6 +1714,30 @@ abstract class AvroSuite
       expectedDf.collect().toSet)
   }
 
+  test("SPARK-59108: positionalFieldMatching resolves fields against the full schema") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 5).selectExpr("id AS a", "id * 100 AS b", "id * 10000 AS c")
+        .write.format("avro").save(path)
+      // The names differ from the file's, so only the positions can pair the two schemas.
+      val renamedSchema = new StructType()
+        .add("x", LongType).add("y", LongType).add("z", LongType)
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema(renamedSchema)
+        .load(path)
+
+      val rows = (0 until 5).map(i => Row(i.toLong, i * 100L, i * 10000L))
+      checkAnswer(df, rows)
+      // A column keeps its own Avro field however few of them the query projects.
+      checkAnswer(df.select("z"), rows.map(r => Row(r.get(2))))
+      checkAnswer(df.select("y"), rows.map(r => Row(r.get(1))))
+      checkAnswer(df.select("x", "z"), rows.map(r => Row(r.get(0), r.get(2))))
+      checkAnswer(df.select("z", "x"), rows.map(r => Row(r.get(2), r.get(0))))
+      checkAnswer(df.selectExpr("sum(z)"), Row(100000L))
+    }
+  }
+
   test("SPARK-34365: support writing with renamed schema using positionalFieldMatching") {
     withTempDir { tempDir =>
       val avroSchema = SchemaBuilder.record("renamed").fields()

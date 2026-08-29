@@ -373,17 +373,28 @@ private[sql] object AvroUtils extends Logging {
    * @param positionalFieldMatch If true, perform field matching in a positional fashion
    *                             (structural comparison between schemas, ignoring names);
    *                             otherwise, perform field matching using field names.
+   * @param dataSchemaPositions The position of each `catalystSchema` field in the schema it was
+   *                            projected from, for a positional match against a projection. A
+   *                            positional match pairs a Catalyst field with the Avro field at the
+   *                            same position, and that position is the one in the full schema, so
+   *                            a read of only the third column still takes the third Avro field.
+   *                            Empty when `catalystSchema` is not a projection, in which case a
+   *                            field's own position is used.
    */
   class AvroSchemaHelper(
       avroSchema: Schema,
       catalystSchema: StructType,
       avroPath: Seq[String],
       catalystPath: Seq[String],
-      positionalFieldMatch: Boolean) {
+      positionalFieldMatch: Boolean,
+      dataSchemaPositions: Array[Int] = Array.empty) {
     if (avroSchema.getType != Schema.Type.RECORD) {
       throw new IncompatibleSchemaException(
         s"Attempting to treat ${avroSchema.getName} as a RECORD, but it was: ${avroSchema.getType}")
     }
+    require(dataSchemaPositions.isEmpty || dataSchemaPositions.length == catalystSchema.length,
+      s"Got ${dataSchemaPositions.length} data schema positions for " +
+        s"${catalystSchema.length} Catalyst fields")
 
     private[this] val avroFieldArray = avroSchema.getFields.asScala.toArray
     private[this] val fieldMap = avroSchema.getFields.asScala
@@ -462,11 +473,15 @@ private[sql] object AvroUtils extends Logging {
     /** Get the Avro field corresponding to the provided Catalyst field name/position, if any. */
     def getAvroField(fieldName: String, catalystPos: Int): Option[Schema.Field] = {
       if (positionalFieldMatch) {
-        avroFieldArray.lift(catalystPos)
+        avroFieldArray.lift(avroPosition(catalystPos))
       } else {
         getFieldByName(fieldName)
       }
     }
+
+    /** The Avro field position a positional match pairs the given Catalyst position with. */
+    private def avroPosition(catalystPos: Int): Int =
+      if (dataSchemaPositions.isEmpty) catalystPos else dataSchemaPositions(catalystPos)
   }
 
   /**
