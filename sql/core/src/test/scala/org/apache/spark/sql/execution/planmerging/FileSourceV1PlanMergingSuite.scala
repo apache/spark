@@ -173,6 +173,28 @@ class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-59107: a self join reads the relation twice, and each read counts on its own") {
+    withTempDir { dir =>
+      val path = writeFile(dir, "data.csv", "0,0,0\n1,10,1\n2,BAD,2\n3,30,3\n4,40,4")
+      withTempView("t") {
+        spark.read.schema("a long, b long, k long").option("mode", "DROPMALFORMED")
+          .csv(path).createOrReplaceTempView("t")
+        // Both subqueries read the relation twice. The right side reads the same columns in both,
+        // so only the left side differs, and a check that kept one column set per relation rather
+        // than one per occurrence would compare the right sides and merge.
+        val (rows, scans) = runCountingScans(
+          "SELECT (SELECT count(t1.a) + sum(t2.b) FROM t t1 LEFT JOIN t t2 ON t1.k = t2.k), " +
+            "(SELECT count(t1.b) + sum(t2.b) FROM t t1 LEFT JOIN t t2 ON t1.k = t2.k)")
+        // Merging the left legs would read b for the first subquery too, dropping the row that is
+        // malformed in b and answering 84 for it.
+        assert(rows === Array(Row(85L, 84L)))
+        // Three scans: the first subquery's two legs read different columns, and the second
+        // subquery's two legs read the same columns so they share one.
+        assert(scans === 3, "the two subqueries must not share a scan")
+      }
+    }
+  }
+
   test("SPARK-59107: parquet subqueries that project different columns still share a scan") {
     withTempDir { dir =>
       val path = new File(dir, "data").getCanonicalPath

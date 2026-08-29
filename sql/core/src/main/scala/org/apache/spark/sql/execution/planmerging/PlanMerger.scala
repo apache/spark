@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.{Cross, Inner, JoinType, LeftAnti, Le
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.catalog.TableCapability
-import org.apache.spark.sql.execution.datasources.{DataSourceUtils, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -224,7 +224,9 @@ class PlanMerger(
 
   /**
    * The columns each projection-sensitive relation in `plan` is read with, keyed by the
-   * canonicalized relation.
+   * canonicalized relation. One entry per occurrence, in the order the relations appear, since a
+   * plan can read the same relation more than once (a self join) with a different set of columns
+   * each time, and `tryMergePlans` pairs occurrences in that same order.
    *
    * Top-level column pruning for a V1 file source happens in physical planning, from the attributes
    * referenced above the relation, so two `LogicalRelation`s over the same files canonicalize equal
@@ -234,36 +236,49 @@ class PlanMerger(
    *
    * Keyed by column name rather than by attribute, because the two plans that get compared were
    * analyzed separately and carry different expression ids for the same column.
+   *
+   * This compares columns only. A merge can also widen the set of *files* a scan reads, when
+   * symmetric filter propagation is enabled and the two sides carry different partition filters.
+   * Every row that adds is filtered out above the scan, so the answers do not change, but for a
+   * projection-sensitive read it can surface a parse error from a file neither side selected.
    */
-  private def collectProjectionSensitiveReads(plan: LogicalPlan): Map[LogicalPlan, Set[String]] = {
+  private def collectProjectionSensitiveReads(
+      plan: LogicalPlan): Map[LogicalPlan, Seq[Set[String]]] = {
     plan.collect {
       case l: LogicalRelation if DataSourceUtils.isProjectionSensitiveRead(l.relation) =>
         l.canonicalized -> readColumnNames(plan, l)
-    }.toMap
+    }.groupMap(_._1)(_._2)
   }
 
   /**
    * Whether merging a plan whose projection-sensitive reads are `reads` with `cachedPlan` would
-   * widen the columns read from a relation the two share.
+   * widen the columns read from a relation the two share. A relation read a different number of
+   * times on the two sides counts as widened, because the occurrences no longer correspond.
    */
   private def widensProjectionSensitiveRead(
-      reads: Map[LogicalPlan, Set[String]],
+      reads: Map[LogicalPlan, Seq[Set[String]]],
       cachedPlan: LogicalPlan): Boolean = {
-    reads.nonEmpty && cachedPlan.exists {
-      case l: LogicalRelation =>
-        reads.get(l.canonicalized).exists(_ != readColumnNames(cachedPlan, l))
-      case _ => false
+    reads.nonEmpty && {
+      val cachedReads = collectProjectionSensitiveReads(cachedPlan)
+      reads.exists { case (relation, columnSets) =>
+        cachedReads.get(relation).exists(_ != columnSets)
+      }
     }
   }
 
   /**
    * The names of `relation`'s columns that `plan` reads: every attribute referenced in the plan,
    * plus the plan's own output, since a merged plan is extracted to a CTE and everything the CTE
-   * outputs is read.
+   * outputs is read. Partition columns are left out, because their values come from the path rather
+   * than from the file, so referencing one does not widen what the reader parses.
    */
   private def readColumnNames(plan: LogicalPlan, relation: LogicalRelation): Set[String] = {
     val referenced = AttributeSet(plan.flatMap(_.references)) ++ AttributeSet(plan.output)
-    referenced.filter(relation.outputSet.contains).map(_.name).toSet
+    val partitionColumns = relation.relation match {
+      case hs: HadoopFsRelation => hs.partitionSchema.fieldNames.toSet
+      case _ => Set.empty[String]
+    }
+    referenced.filter(relation.outputSet.contains).map(_.name).toSet -- partitionColumns
   }
 
   /**
