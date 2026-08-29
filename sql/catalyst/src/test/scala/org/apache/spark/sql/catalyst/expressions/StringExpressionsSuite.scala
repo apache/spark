@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
+import java.util.IllegalFormatConversionException
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
@@ -1048,6 +1049,27 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(FormatString(Literal("\"quote"), Literal("\"quote")) :: Nil)
+  }
+
+  test("FormatString with decimal arguments") {
+    checkEvaluation(FormatString(Literal("%f"), Literal(Decimal("1.5"))), "1.500000")
+    checkEvaluation(FormatString(Literal("%.2f"), Literal(Decimal("1234.5"))), "1234.50")
+    checkEvaluation(FormatString(Literal("%,.2f"), Literal(Decimal("1234.5"))), "1,234.50")
+    checkEvaluation(FormatString(Literal("%e"), Literal(Decimal("1.5"))), "1.500000e+00")
+
+    // Not routed through a double, so digits beyond double precision survive.
+    checkEvaluation(
+      FormatString(Literal("%.20f"), Literal(Decimal("0.10000000000000000001"))),
+      "0.10000000000000000001")
+
+    // %s is unchanged, because Decimal.toString already delegates to the same BigDecimal string.
+    checkEvaluation(FormatString(Literal("%s"), Literal(Decimal(12, 18, 10))), "1.2E-9")
+
+    checkEvaluation(
+      FormatString(Literal("%f"), Literal.create(null, DecimalType(10, 2))), "null")
+
+    checkExceptionInExpression[IllegalFormatConversionException](
+      FormatString(Literal("%f"), Literal(1)), "f != java.lang.Integer")
   }
 
   test("SPARK-22603: FormatString should not generate codes beyond 64KB") {
