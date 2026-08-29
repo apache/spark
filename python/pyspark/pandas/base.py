@@ -250,9 +250,7 @@ def column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
                 use_extension_dtypes=any(
                     handle_dtype_as_extension_dtype(col.dtype) for col in [self] + cols
                 ),
-                use_arrow_dtypes=any(
-                    is_pyarrow_backed_dtype(col.dtype) for col in [self] + cols
-                ),
+                use_arrow_dtypes=any(is_pyarrow_backed_dtype(col.dtype) for col in [self] + cols),
             )
 
             if not field.is_extension_dtype:
