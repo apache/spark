@@ -3604,6 +3604,7 @@ private[spark] class DAGScheduler(
                   // Invalidate this attempt before clearing its outputs, so late completions
                   // cannot skip participants in the replacement barrier stage.
                   failedMapStage.maxFailedBarrierAttemptId = Some(task.stageAttemptId)
+                  // Clear every map output so the retry reruns all barrier tasks.
                   mapOutputTracker.unregisterAllMapAndMergeOutput(
                     failedMapStage.shuffleDep.shuffleId)
 
@@ -3713,6 +3714,7 @@ private[spark] class DAGScheduler(
                 // Invalidate this attempt before clearing its outputs, so late completions
                 // cannot skip participants in the replacement barrier stage.
                 failedMapStage.maxFailedBarrierAttemptId = Some(task.stageAttemptId)
+                // Clear every map output so the retry reruns all barrier tasks.
                 mapOutputTracker.unregisterAllMapAndMergeOutput(failedMapStage.shuffleDep.shuffleId)
 
               case failedResultStage: ResultStage =>
