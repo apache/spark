@@ -433,7 +433,7 @@ case class CreateSQLFunctionCommand(
             }
             // Check cyclic reference using qualified function names.
             val newPath = path :+ f.function.name
-            if (f.function.name == name) {
+            if (isSameFunction(f.function.name)) {
               throw UserDefinedFunctionErrors.cyclicFunctionReference(newPath.mkString(" -> "))
             }
             val plan = catalog.makeSQLTableFunctionPlan(f.name, f.function, f.inputs, f.output)
@@ -441,6 +441,14 @@ case class CreateSQLFunctionCommand(
         }
         case p: LogicalPlan =>
           p.expressions.foreach(checkExpression(_, path))
+      }
+    }
+
+    def isSameFunction(fName: FunctionIdentifier): Boolean = {
+      if (isTemp) {
+        fName.funcName == name.funcName
+      } else {
+        fName == name
       }
     }
 
@@ -456,7 +464,7 @@ case class CreateSQLFunctionCommand(
             }
             // Check cyclic reference using qualified function names.
             val newPath = path :+ f.function.name
-            if (f.function.name == name) {
+            if (isSameFunction(f.function.name)) {
               throw UserDefinedFunctionErrors.cyclicFunctionReference(newPath.mkString(" -> "))
             }
             val plan = catalog.makeSQLFunctionPlan(f.name, f.function, f.inputs)
