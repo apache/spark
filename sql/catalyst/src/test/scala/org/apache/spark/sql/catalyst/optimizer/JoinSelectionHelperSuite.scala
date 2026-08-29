@@ -188,8 +188,17 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     val rightKey = right.output.head
     val condition = Or(EqualTo(leftKey, rightKey), IsNull(EqualTo(leftKey, rightKey)))
     val nullAwareAntiJoin = Join(left, right, LeftAnti, Some(condition), JoinHint.NONE)
-    val rightBelowLimit = right.copy(rowCount = maxBroadcastHashRows - 1)
     val rightAtLimit = right.copy(rowCount = maxBroadcastHashRows)
+
+    val booleanLeft = StatsTestPlan(
+      Seq($"booleanLeft".boolean), 20000000, AttributeMap(Seq()), Some(20000000))
+    val booleanRight = StatsTestPlan(
+      Seq($"booleanRight".boolean), maxBroadcastHashRows - 1, AttributeMap(Seq()), Some(1000))
+    val booleanCondition = Or(
+      EqualTo(booleanLeft.output.head, booleanRight.output.head),
+      IsNull(EqualTo(booleanLeft.output.head, booleanRight.output.head)))
+    val booleanKeyJoin = Join(
+      booleanLeft, booleanRight, LeftAnti, Some(booleanCondition), JoinHint.NONE)
 
     val unknownRight = UnknownRowCountTestPlan(Seq($"unknownRight".int))
     val unknownCondition = Or(
@@ -210,9 +219,12 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     withSQLConf(
       SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
-      assert(canPlanAsBroadcastHashJoin(
-        nullAwareAntiJoin.copy(right = rightBelowLimit), SQLConf.get))
+      assert(canPlanAsBroadcastHashJoin(booleanKeyJoin, SQLConf.get))
+      val booleanKeyJoinAtLimit = booleanKeyJoin.copy(
+        right = booleanRight.copy(rowCount = maxBroadcastHashRows))
       assert(!canPlanAsBroadcastHashJoin(
+        booleanKeyJoinAtLimit, SQLConf.get))
+      assert(canPlanAsBroadcastHashJoin(
         nullAwareAntiJoin.copy(right = rightAtLimit), SQLConf.get))
       assert(canPlanAsBroadcastHashJoin(unknownRowCountJoin, SQLConf.get))
       assert(canPlanAsBroadcastHashJoin(longKeyJoin, SQLConf.get))

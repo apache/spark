@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.IntegralType
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.Utils
 
@@ -297,7 +297,8 @@ trait JoinSelectionHelper extends Logging {
   private def canBuildNullAwareAntiJoinHashRelation(
       rightKeys: Seq[Expression],
       right: LogicalPlan): Boolean = {
-    val usesLongHashedRelation = rightKeys.length == 1 && rightKeys.head.dataType == LongType
+    val usesLongHashedRelation =
+      rightKeys.length == 1 && rightKeys.head.dataType.isInstanceOf[IntegralType]
     usesLongHashedRelation || right.stats.rowCount.forall(_ < maxBroadcastHashRows)
   }
 
