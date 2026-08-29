@@ -2260,6 +2260,12 @@
     ],
     "sqlState" : "KD010"
   },
+  "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE" : {
+    "message" : [
+      "The runtime filter attribute <attribute> reported by data source scan <scanClass> cannot be resolved against the scan read schema <readSchema>."
+    ],
+    "sqlState" : "KD000"
+  },
   "DATA_SOURCE_METADATA_SCHEMA_NOT_IMPLEMENTED" : {
     "message" : [
       "<class> does not implement metadataSchema."

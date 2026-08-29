@@ -37,6 +37,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReferenc
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.connector.{SupportsRuntimeCatalystFiltering, V2StatisticsUtils}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -241,10 +242,8 @@ case class DataSourceV2ScanRelation(
         V2ExpressionUtils.resolveRef[NamedExpression](ref, this)
       } catch {
         case e: AnalysisException =>
-          throw SparkException.internalError(
-            s"Cannot resolve runtime filter attribute '${ref.fieldNames.mkString(".")}' " +
-            s"declared by ${scan.getClass.getName}.",
-            e)
+          throw QueryCompilationErrors.invalidDataSourceRuntimeFilterAttributeError(
+            ref.fieldNames, scan.getClass.getName, scan.readSchema(), e)
       }
     }
     AttributeSet(resolvedAttrs)

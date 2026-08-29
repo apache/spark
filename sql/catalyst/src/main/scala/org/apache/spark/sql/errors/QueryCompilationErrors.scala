@@ -4654,6 +4654,20 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def invalidDataSourceRuntimeFilterAttributeError(
+      attribute: Array[String],
+      scanClass: String,
+      readSchema: StructType,
+      cause: AnalysisException): AnalysisException = {
+    new AnalysisException(
+      errorClass = "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE",
+      messageParameters = Map(
+        "attribute" -> toSQLId(attribute.toImmutableArraySeq),
+        "scanClass" -> scanClass,
+        "readSchema" -> toSQLType(readSchema)),
+      cause = Some(cause))
+  }
+
   def foundMultipleXMLDataSourceError(provider: String,
       sourceNames: Seq[String],
       externalSource: String): Throwable = {

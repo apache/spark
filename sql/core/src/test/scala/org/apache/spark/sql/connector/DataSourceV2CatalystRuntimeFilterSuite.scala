@@ -139,16 +139,22 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       val scanRelation = sql(s"SELECT * FROM $tbl").queryExecution.optimizedPlan.collectFirst {
         case r: DataSourceV2ScanRelation => r
       }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
-      val e = intercept[SparkException] {
+      val e = intercept[AnalysisException] {
         scanRelation.copy(scan = new NestedFilterAttributeScan).runtimeFilterAttrs
       }
       val scanClass = classOf[NestedFilterAttributeScan].getName
       checkError(
         exception = e,
-        condition = "INTERNAL_ERROR",
-        parameters = Map("message" ->
-          s"Cannot resolve runtime filter attribute 'part.nested' declared by $scanClass."))
-      assert(e.getCause.isInstanceOf[AnalysisException])
+        condition = "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE",
+        parameters = Map(
+          "attribute" -> "`part`.`nested`",
+          "scanClass" -> scanClass,
+          "readSchema" -> "\"STRUCT<part: INT>\""),
+        sqlState = "KD000")
+      checkError(
+        exception = e.getCause.asInstanceOf[AnalysisException],
+        condition = "INVALID_EXTRACT_BASE_FIELD_TYPE",
+        parameters = Map("base" -> "\"part\"", "other" -> "\"INT\""))
     }
   }
 
@@ -160,16 +166,22 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       val scanRelation = sql(s"SELECT * FROM $tbl").queryExecution.optimizedPlan.collectFirst {
         case r: DataSourceV2ScanRelation => r
       }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
-      val e = intercept[SparkException] {
+      val e = intercept[AnalysisException] {
         scanRelation.copy(scan = new MissingFilterAttributeScan).runtimeFilterAttrs
       }
       val scanClass = classOf[MissingFilterAttributeScan].getName
       checkError(
         exception = e,
-        condition = "INTERNAL_ERROR",
-        parameters = Map("message" ->
-          s"Cannot resolve runtime filter attribute 'missing' declared by $scanClass."))
-      assert(e.getCause.isInstanceOf[AnalysisException])
+        condition = "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE",
+        parameters = Map(
+          "attribute" -> "`missing`",
+          "scanClass" -> scanClass,
+          "readSchema" -> "\"STRUCT<part: INT>\""),
+        sqlState = "KD000")
+      checkError(
+        exception = e.getCause.asInstanceOf[AnalysisException],
+        condition = "_LEGACY_ERROR_TEMP_1137",
+        parameters = Map("name" -> "missing", "outputStr" -> "id,part"))
     }
   }
 
