@@ -384,10 +384,14 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction with BinaryLike[Expr
         |$nullSafeEval
       """)
     } else {
+      // A declared non-null argument can still be null at runtime, so null-check the reference
+      // here too, matching `eval` above.
       ev.copy(code = code"""
         |${argumentGen.code}
         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        |$resultCode
+        |if (${argumentGen.value} != null) {
+        |  $resultCode
+        |}
       """, isNull = FalseLiteral)
     }
   }

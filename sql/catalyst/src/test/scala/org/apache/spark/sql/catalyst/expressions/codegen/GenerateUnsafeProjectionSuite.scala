@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, InterpretedUnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{ArrayTransform, BoundReference, InterpretedUnsafeProjection, LambdaFunction, NamedLambdaVariable}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
@@ -130,6 +130,15 @@ class GenerateUnsafeProjectionSuite extends SparkFunSuite {
     val codegen = GenerateUnsafeProjection.generate(exprs).apply(row).copy()
     val interpreted = InterpretedUnsafeProjection.createProjection(exprs).apply(row).copy()
     assert(codegen == interpreted)
+  }
+
+  test("a higher-order function over a declared-non-null null argument yields null") {
+    // The argument is declared non-nullable but is null at runtime.
+    val lv = NamedLambdaVariable("x", StringType, nullable = true)
+    val child = BoundReference(0, ArrayType(StringType, containsNull = true), nullable = false)
+    val expr = ArrayTransform(child, LambdaFunction(lv, Seq(lv)))
+    val result = GenerateUnsafeProjection.generate(expr :: Nil).apply(InternalRow(null))
+    assert(result.isNullAt(0))
   }
 }
 
