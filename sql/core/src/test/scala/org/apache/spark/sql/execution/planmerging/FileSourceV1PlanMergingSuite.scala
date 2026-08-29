@@ -31,9 +31,10 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Tests that subplan merging does not widen the set of columns a V1 file scan reads when the rows
  * that scan returns depend on that set.
  *
- * Every test asserts the number of `FileSourceScanExec` nodes as well as the rows, so that a
- * decline is attributed to the merge being declined rather than inferred from the values, and
- * finding a `FileSourceScanExec` at all is what pins the read to the V1 path.
+ * Every test asserts the columns each scan in the plan reads, so that a decline is attributed to
+ * the merge being declined rather than inferred from the values, and finding a `FileSourceScanExec`
+ * at all is what pins the read to the V1 path. Most tests assert the rows as well, but a read that
+ * is not strict returns the same rows either way, and there the columns are the only evidence.
  */
 class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
 
@@ -42,7 +43,8 @@ class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
     .set(SQLConf.IGNORE_CORRUPT_FILES, false)
     .set(SQLConf.IGNORE_MISSING_FILES, false)
     .set(SQLConf.SUBQUERY_REUSE_ENABLED, true)
-    // Off so that the scans are in the executed plan rather than behind an AdaptiveSparkPlanExec.
+    // Off because `AdaptiveSparkPlanExec` is a leaf node, so with it on the scans underneath it are
+    // not reachable from the executed plan.
     .set(SQLConf.ADAPTIVE_EXECUTION_ENABLED, false)
 
   private val csvRows = "0,0\n1,10\n2,BAD\n3,30\n4,40"
@@ -70,19 +72,18 @@ class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
   }
 
   /**
-   * Runs `query` and returns its rows together with the number of V1 file scans in the plan, which
-   * is one when the two subqueries share a scan and two when they do not. Collected first, because
-   * the subquery plans are not in the executed plan until the query has run.
+   * The columns each V1 file scan of `df`'s plan reads, one entry per scan, each sorted and the
+   * entries sorted too, so that an assertion does not depend on plan order. Two entries mean the
+   * two subqueries kept their own scans, and one entry holding the union of their columns means
+   * they shared one. A scan that physical reuse replaced is not among them, since both
+   * `ReusedSubqueryExec` and `ReusedExchangeExec` are leaf nodes.
    */
-  private def runCountingScans(query: String): (Array[Row], Int) = {
-    val df = sql(query)
-    val rows = df.collect()
-    (rows, fileScans(df).size)
-  }
-
-  private def fileScans(df: DataFrame): Seq[FileSourceScanExec] =
-    df.queryExecution.executedPlan.collectWithSubqueries { case s: FileSourceScanExec => s }
-
+  private def scanColumns(df: DataFrame): Seq[Seq[String]] =
+    df.queryExecution.executedPlan
+      .collectWithSubqueries { case s: FileSourceScanExec => s }
+      .map(_.requiredSchema.fieldNames.sorted.toSeq)
+      .sortBy(_.mkString(","))
+  // One test per format rather than `gridTest`, so that the format reads in the middle of the name.
   Seq(
     ("csv", "data.csv", csvRows, Map.empty[String, String]),
     ("json", "data.json", jsonRows, Map.empty[String, String]),
@@ -94,15 +95,15 @@ class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
         withTempView("t") {
           spark.read.schema("a long, b long").option("mode", "DROPMALFORMED")
             .options(extraOptions).format(format).load(path).createOrReplaceTempView("t")
-          val (rows, scans) = runCountingScans(
-            "SELECT (SELECT sum(a) FROM t), (SELECT sum(b) FROM t)")
+          val df = sql("SELECT (SELECT sum(a) FROM t), (SELECT sum(b) FROM t)")
           // A scan of a alone parses no b, so the row malformed in b is not dropped for sum(a).
-          assert(rows === Array(Row(10L, 80L)))
-          assert(scans === 2, "the two subqueries must not share a scan")
+          checkAnswer(df, Row(10L, 80L))
+          assert(scanColumns(df) === Seq(Seq("a"), Seq("b")))
         }
       }
     }
   }
+
   test("SPARK-59107: PERMISSIVE does not populate the corrupt-record column of a clean row") {
     withTempDir { dir =>
       val path = writeFile(dir, "data.csv", csvRows)
@@ -110,11 +111,11 @@ class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
         spark.read.schema("a long, b long, _corrupt_record string")
           .option("mode", "PERMISSIVE").option("columnNameOfCorruptRecord", "_corrupt_record")
           .csv(path).createOrReplaceTempView("t")
-        val (rows, scans) = runCountingScans(
+        val df = sql(
           "SELECT (SELECT count(_corrupt_record) FROM t WHERE a >= 0), " +
             "(SELECT sum(b) FROM t WHERE a >= 0)")
-        assert(rows === Array(Row(0L, 80L)))
-        assert(scans === 2, "the two subqueries must not share a scan")
+        checkAnswer(df, Row(0L, 80L))
+        assert(scanColumns(df) === Seq(Seq("_corrupt_record", "a"), Seq("a", "b")))
       }
     }
   }
@@ -127,10 +128,9 @@ class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
       withTempView("t") {
         spark.read.schema("a long, b long").option("mode", "FAILFAST")
           .csv(path).createOrReplaceTempView("t")
-        val (rows, scans) = runCountingScans(
-          "SELECT (SELECT sum(a) FROM t), (SELECT sum(b) FROM t)")
-        assert(rows === Array(Row(10L, 80L)))
-        assert(scans === 2, "the two subqueries must not share a scan")
+        val df = sql("SELECT (SELECT sum(a) FROM t), (SELECT sum(b) FROM t)")
+        checkAnswer(df, Row(10L, 80L))
+        assert(scanColumns(df) === Seq(Seq("a"), Seq("b")))
       }
     }
   }
@@ -144,10 +144,10 @@ class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
         withTempView("t") {
           spark.read.parquet(path).createOrReplaceTempView("t")
           withSQLConf(conf.key -> "true") {
-            val (rows, scans) = runCountingScans(
-              "SELECT (SELECT sum(a) FROM t), (SELECT sum(b) FROM t)")
-            assert(rows === Array(Row(45L, 90L)))
-            assert(scans === 2, "the two subqueries must not share a scan")
+            val df = sql("SELECT (SELECT sum(a) FROM t), (SELECT sum(b) FROM t)")
+            // The rows are the same either way here; the columns are what says it declined.
+            checkAnswer(df, Row(45L, 90L))
+            assert(scanColumns(df) === Seq(Seq("a"), Seq("b")))
           }
         }
       }
@@ -162,12 +162,11 @@ class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
       withTempView("t") {
         spark.read.schema("a long, b long").parquet(path).createOrReplaceTempView("t")
         withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
-          val (rows, scans) = runCountingScans(
-            "SELECT (SELECT sum(a) FROM t), (SELECT count(b) FROM t)")
+          val df = sql("SELECT (SELECT sum(a) FROM t), (SELECT count(b) FROM t)")
           // sum(a) touches only healthy data. A shared scan would fail on b, and that swallowed
           // failure would drop the rest of the file's rows, leaving sum(a) null.
-          assert(rows === Array(Row(45L, 0L)))
-          assert(scans === 2, "the two subqueries must not share a scan")
+          checkAnswer(df, Row(45L, 0L))
+          assert(scanColumns(df) === Seq(Seq("a"), Seq("b")))
         }
       }
     }
@@ -182,29 +181,28 @@ class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
         // Both subqueries read the relation twice. The right side reads the same columns in both,
         // so only the left side differs, and a check that kept one column set per relation rather
         // than one per occurrence would compare the right sides and merge.
-        val (rows, scans) = runCountingScans(
+        val df = sql(
           "SELECT (SELECT count(t1.a) + sum(t2.b) FROM t t1 LEFT JOIN t t2 ON t1.k = t2.k), " +
             "(SELECT count(t1.b) + sum(t2.b) FROM t t1 LEFT JOIN t t2 ON t1.k = t2.k)")
         // Merging the left legs would read b for the first subquery too, dropping the row that is
         // malformed in b and answering 84 for it.
-        assert(rows === Array(Row(85L, 84L)))
-        // Three scans: the first subquery's two legs read different columns, and the second
-        // subquery's two legs read the same columns so they share one.
-        assert(scans === 3, "the two subqueries must not share a scan")
+        checkAnswer(df, Row(85L, 84L))
+        // Three of the four scans are visible: two subqueries reading (a, k) and (b, k), and one
+        // more (b, k), the fourth having been replaced by reuse of an identical scan.
+        assert(scanColumns(df) === Seq(Seq("a", "k"), Seq("b", "k"), Seq("b", "k")))
       }
     }
   }
-
   test("SPARK-59107: parquet subqueries that project different columns still share a scan") {
     withTempDir { dir =>
       val path = new File(dir, "data").getCanonicalPath
       spark.range(0, 10).selectExpr("id AS a", "id * 2 AS b").write.parquet(path)
       withTempView("t") {
         spark.read.parquet(path).createOrReplaceTempView("t")
-        val (rows, scans) = runCountingScans(
-          "SELECT (SELECT sum(a) FROM t), (SELECT sum(b) FROM t)")
-        assert(rows === Array(Row(45L, 90L)))
-        assert(scans === 1, "a format that decodes a row from the columns asked for still merges")
+        val df = sql("SELECT (SELECT sum(a) FROM t), (SELECT sum(b) FROM t)")
+        checkAnswer(df, Row(45L, 90L))
+        assert(scanColumns(df) === Seq(Seq("a", "b")),
+          "a format that decodes a row from the columns asked for still merges")
       }
     }
   }
@@ -214,11 +212,42 @@ class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
       val path = writeFile(dir, "data.csv", "0,0\n1,10\n2,20\n3,30\n4,40")
       withTempView("t") {
         spark.read.schema("a long, b long").csv(path).createOrReplaceTempView("t")
-        val (rows, scans) = runCountingScans(
+        val df = sql(
           "SELECT (SELECT sum(a) FROM t WHERE b > 0), (SELECT count(a) FROM t WHERE b > 0)")
         // Both subqueries read a and b, so sharing one scan reads no more than either did.
-        assert(rows === Array(Row(10L, 4L)))
-        assert(scans === 1, "reads of the same columns are still merged")
+        checkAnswer(df, Row(10L, 4L))
+        assert(scanColumns(df) === Seq(Seq("a", "b")))
+      }
+    }
+  }
+
+  test("SPARK-59107: identical subqueries over such a read still share a scan") {
+    withTempDir { dir =>
+      val path = writeFile(dir, "data.csv", csvRows)
+      withTempView("t") {
+        spark.read.schema("a long, b long").option("mode", "DROPMALFORMED")
+          .csv(path).createOrReplaceTempView("t")
+        // Identical plans are reused rather than merged, and reuse cannot widen a read.
+        val df = sql("SELECT (SELECT sum(b) FROM t), (SELECT sum(b) FROM t) + 1")
+        checkAnswer(df, Row(80L, 81L))
+        assert(scanColumns(df) === Seq(Seq("b")))
+      }
+    }
+  }
+
+  test("SPARK-59107: a partition column reference does not count as a column read") {
+    withTempDir { dir =>
+      val path = new File(dir, "data").getCanonicalPath
+      spark.range(0, 8).selectExpr("id AS a", "id % 2 AS p", "id % 4 AS q")
+        .write.partitionBy("p", "q").csv(path)
+      withTempView("t") {
+        spark.read.schema("a long, p long, q long").csv(path).createOrReplaceTempView("t")
+        // q comes from the path rather than from the file, so the two subqueries read the same
+        // column of it, a, and the merge is allowed even though this is a csv relation.
+        val df = sql(
+          "SELECT (SELECT sum(a) FROM t WHERE p = 1), (SELECT sum(a + q) FROM t WHERE p = 1)")
+        checkAnswer(df, Row(16L, 24L))
+        assert(scanColumns(df) === Seq(Seq("a")))
       }
     }
   }

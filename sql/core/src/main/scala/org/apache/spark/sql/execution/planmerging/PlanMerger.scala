@@ -255,9 +255,11 @@ class PlanMerger(
    * widen the columns read from a relation the two share. A relation read a different number of
    * times on the two sides counts as widened, because the occurrences no longer correspond.
    *
-   * Only [[tryMergePlans]] needs this. Reuse of an identical plan cannot widen a read: it requires
-   * the two plans to be canonically equal, and a [[LogicalRelation]]'s canonical form keeps its
-   * relation and the arity and order of its output, so the two reference the same columns.
+   * Only [[tryMergePlans]] needs this. Reuse of an identical plan cannot widen a read, because the
+   * two whole plans are canonically equal there, so everything above the relation references the
+   * same columns. The relation's own output says nothing about that: on the V1 path it is the full
+   * schema whatever each side projects, which is what makes this check necessary in the first
+   * place.
    */
   private def widensProjectionSensitiveRead(
       reads: Map[LogicalPlan, Seq[Set[String]]],

@@ -173,8 +173,8 @@ object DataSourceUtils extends PredicateHelper {
    * Two things put a V1 file source here. Its parser may decide what counts as a malformed record
    * from the columns it was asked for, which lets a wider read drop or rewrite rows that the
    * narrower one returned: CSV, JSON and XML all build their parser from the required schema and
-   * take `mode` and the corrupt-record column from it. Or the read may not be strict, in which case
-   * a failure in a column that only the wider read touches is swallowed together with the rest of
+   * take `mode` and the corrupt-record column from it. Or the read is not strict, in which case a
+   * failure in a column that only the wider read touches is swallowed together with the rest of
    * that file's rows, whatever the format.
    *
    * Callers that widen a read need this. Subplan merging is one: top-level column pruning for a V1
@@ -184,10 +184,8 @@ object DataSourceUtils extends PredicateHelper {
    */
   private[sql] def isProjectionSensitiveRead(relation: BaseRelation): Boolean = relation match {
     case hs: HadoopFsRelation =>
-      val fileSourceOptions = new FileSourceOptions(hs.options)
-      val strictReads =
-        !fileSourceOptions.ignoreCorruptFiles && !fileSourceOptions.ignoreMissingFiles
-      !strictReads || hasProjectionSensitiveParser(hs.fileFormat)
+      !new FileSourceOptions(hs.options).hasStrictFileReads ||
+        hasProjectionSensitiveParser(hs.fileFormat)
     case _ => false
   }
 
