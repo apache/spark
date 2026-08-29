@@ -269,9 +269,11 @@ class PlanMerger(
   }
 
   /**
-   * Whether merging a plan whose projection-sensitive reads are `reads` into `cachedPlan` would
-   * widen the columns read from a relation the two share. A relation read a different number of
-   * times on the two sides counts as widened, because the occurrences no longer correspond.
+   * Whether merging a plan whose projection-sensitive reads are `reads` into `cachedPlan` could
+   * change what either of them reads. The two records have to match exactly: a relation read a
+   * different number of times, or with a different set of columns, or read by only one of the two,
+   * all count, and a plan that reads a strict subset counts too, because after the merge the entry
+   * would read more than that plan asked for.
    *
    * Only [[tryMergePlans]] needs this. Reuse of an identical plan cannot widen a read, because the
    * two whole plans are canonically equal there, so everything above the relation references the

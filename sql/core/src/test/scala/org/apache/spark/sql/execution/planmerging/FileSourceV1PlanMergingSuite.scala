@@ -33,8 +33,9 @@ import org.apache.spark.sql.test.SharedSparkSession
  *
  * Every test asserts the columns each scan in the plan reads, so that a decline is attributed to
  * the merge being declined rather than inferred from the values, and finding a `FileSourceScanExec`
- * at all is what pins the read to the V1 path. Most tests assert the rows as well, but a read that
- * is not strict returns the same rows either way, and there the columns are the only evidence.
+ * at all is what pins the read to the V1 path. Most tests assert the rows as well; the two that
+ * only flip `ignoreCorruptFiles` or `ignoreMissingFiles` cannot, because those rows come back the
+ * same either way, so for them the columns are the whole evidence.
  */
 class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
 
