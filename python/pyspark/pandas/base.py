@@ -40,7 +40,10 @@ from pyspark.pandas.internal import (
     InternalFrame,
 )
 from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
-from pyspark.pandas.typedef.typehints import handle_dtype_as_extension_dtype
+from pyspark.pandas.typedef.typehints import (
+    handle_dtype_as_extension_dtype,
+    is_pyarrow_backed_dtype,
+)
 from pyspark.pandas.utils import (
     ERROR_MESSAGE_CANNOT_COMBINE,
     ansi_mode_context,
@@ -246,6 +249,9 @@ def column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
                 self._internal.spark_frame.select(scol).schema[0],
                 use_extension_dtypes=any(
                     handle_dtype_as_extension_dtype(col.dtype) for col in [self] + cols
+                ),
+                use_arrow_dtypes=any(
+                    is_pyarrow_backed_dtype(col.dtype) for col in [self] + cols
                 ),
             )
 
