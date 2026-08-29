@@ -1743,25 +1743,37 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
                 "map(cast('k' AS CHAR(2)), cast('v' AS VARCHAR(2))) AS m")
               input.write.mode("overwrite").format(format).save(path)
 
-              val readBack = spark.read.format(format).load(path)
-              assert(DataType.equalsIgnoreNullability(readBack.schema, input.schema),
-                s"$format $sourceVersion lost CHAR/VARCHAR schema")
-              checkAnswer(
-                readBack.selectExpr("concat('<', c, '>')", "v", "concat('<', s.c, '>')"),
-                Row("<ab  >", "xy", "<z >"))
+              val vectorizedReaderModes = if (format == "orc") Seq(true, false) else Seq(true)
+              vectorizedReaderModes.foreach { vectorizedReaderEnabled =>
+                withSQLConf(
+                    SQLConf.ORC_VECTORIZED_READER_ENABLED.key ->
+                      vectorizedReaderEnabled.toString) {
+                  val readBack = spark.read.format(format).load(path)
+                  assert(DataType.equalsIgnoreNullability(readBack.schema, input.schema),
+                    s"$format $sourceVersion lost CHAR/VARCHAR schema")
+                  checkAnswer(
+                    readBack.selectExpr(
+                      "concat('<', c, '>')",
+                      "v",
+                      "concat('<', s.c, '>')",
+                      "a",
+                      "m"),
+                    Row("<ab  >", "xy", "<z >", Seq("q"), Map("k " -> "v")))
 
-              withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
-                val readOff = spark.read.format(format).load(path)
-                assert(DataType.equalsIgnoreNullability(
-                  readOff.schema,
-                  CharVarcharUtils.replaceCharVarcharWithString(input.schema)))
-              }
-              withSQLConf(
-                  SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
-                  SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
-                assert(DataType.equalsIgnoreNullability(
-                  spark.read.format(format).load(path).schema,
-                  input.schema))
+                  withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+                    val readOff = spark.read.format(format).load(path)
+                    assert(DataType.equalsIgnoreNullability(
+                      readOff.schema,
+                      CharVarcharUtils.replaceCharVarcharWithString(input.schema)))
+                  }
+                  withSQLConf(
+                      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+                    assert(DataType.equalsIgnoreNullability(
+                      spark.read.format(format).load(path).schema,
+                      input.schema))
+                  }
+                }
               }
             }
           }
@@ -1808,6 +1820,51 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
                 },
                 condition = "EXCEED_LIMIT_LENGTH",
                 parameters = Map("limit" -> "4"))
+            }
+          }
+        }
+      }
+
+      Seq("v1" -> "orc", "v2" -> "").foreach { case (sourceVersion, useV1List) =>
+        Seq(true, false).foreach { vectorizedReaderEnabled =>
+          withSQLConf(
+              SQLConf.USE_V1_SOURCE_LIST.key -> useV1List,
+              SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorizedReaderEnabled.toString) {
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              spark.range(1).selectExpr(
+                "named_struct('c', 'abcdef') AS s",
+                "array('abcdef') AS a",
+                "map('abcdef', 'ok') AS mk",
+                "map('ok', 'abcdef') AS mv")
+                .write.mode("overwrite").orc(path)
+              val readBack = spark.read.schema(
+                """s STRUCT<c: CHAR(4)>,
+                  |a ARRAY<VARCHAR(4)>,
+                  |mk MAP<CHAR(4), VARCHAR(4)>,
+                  |mv MAP<CHAR(4), VARCHAR(4)>""".stripMargin).orc(path)
+              Seq("s.c", "a", "mk", "mv").foreach { field =>
+                withClue(
+                    s"ORC $sourceVersion vectorized=$vectorizedReaderEnabled $field: ") {
+                  checkError(
+                    exception = intercept[SparkRuntimeException] {
+                      readBack.selectExpr(field).collect()
+                    },
+                    condition = "EXCEED_LIMIT_LENGTH",
+                    parameters = Map("limit" -> "4"))
+                }
+              }
+            }
+            withSQLConf(
+                SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+              withTempPath { dir =>
+                val path = dir.getCanonicalPath
+                Seq("abcdef").toDF("v").write.mode("overwrite").orc(path)
+                val readBack = spark.read.schema("v VARCHAR(4)").orc(path)
+                assert(readBack.schema.head.dataType === VarcharType(4))
+                checkAnswer(readBack, Row("abcd"))
+              }
             }
           }
         }
