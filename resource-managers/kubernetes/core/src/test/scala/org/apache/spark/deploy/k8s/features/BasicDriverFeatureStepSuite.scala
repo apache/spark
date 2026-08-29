@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import java.net.URI
+
 import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{ContainerPort, ContainerPortBuilder, LocalObjectReferenceBuilder, Quantity}
@@ -405,13 +407,14 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   }
 
   test("SPARK-58969: Local dependency uploads preserve URI fragments") {
-    val fileUploadPath = "s3a://some-bucket/upload-path"
+    val FILE_UPLOAD_PATH = "s3a://some-bucket/upload-path"
     val sparkConf = new SparkConf()
       .set(CONTAINER_IMAGE, "spark-driver:latest")
       .set(JARS, Seq("/tmp/library-random.jar#library.jar"))
       .set(FILES, Seq("/tmp/query-random.sql#query.sql"))
+      .set(ARCHIVES, Seq("/tmp/archive-random.zip#archive"))
       .set(SUBMIT_PYTHON_FILES, Seq("/tmp/module-random.py#module.py"))
-      .set(KUBERNETES_FILE_UPLOAD_PATH, fileUploadPath)
+      .set(KUBERNETES_FILE_UPLOAD_PATH, FILE_UPLOAD_PATH)
       .set("spark.hadoop.fs.s3a.impl", classOf[TestFileSystem].getCanonicalName)
       .set("spark.hadoop.fs.s3a.impl.disable.cache", "true")
     val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
@@ -421,9 +424,10 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     Seq(
       (JARS.key, "library-random.jar", "library.jar"),
       (FILES.key, "query-random.sql", "query.sql"),
+      (ARCHIVES.key, "archive-random.zip", "archive"),
       (SUBMIT_PYTHON_FILES.key, "module-random.py", "module.py")
     ).foreach { case (key, physicalName, alias) =>
-      val uploaded = new java.net.URI(properties(key))
+      val uploaded = new URI(properties(key))
       assert(new Path(uploaded.getPath).getName === physicalName)
       assert(uploaded.getFragment === alias)
     }
