@@ -64,7 +64,10 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    *
    * Each reference must be a top-level attribute present in [[Scan.readSchema]]. Nested
    * references are rejected, and attributes pruned out of the read schema fail to resolve, when
-   * Spark builds the scan relation.
+   * Spark builds the scan relation. Spark cannot currently represent an individual fully pushed
+   * nested path. A scan must not return the root struct as a substitute unless it can fully
+   * evaluate predicates over every nested field, since Spark would remove their post-scan
+   * evaluation as well.
    */
   def fullyPushedFilterAttributes(): Array[NamedReference] = Array.empty
 

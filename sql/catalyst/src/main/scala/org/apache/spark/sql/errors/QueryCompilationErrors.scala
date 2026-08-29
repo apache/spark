@@ -4654,18 +4654,44 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def invalidDataSourceRuntimeFilterAttributeError(
+  def cannotResolveDataSourceRuntimeFilterAttributeError(
+      attribute: Array[String],
+      method: String,
+      scanClass: String,
+      relationOutput: StructType,
+      cause: AnalysisException): AnalysisException = {
+    invalidDataSourceRuntimeFilterAttributeError(
+      attribute, method, scanClass, relationOutput, "CANNOT_RESOLVE", Some(cause))
+  }
+
+  def nestedDataSourceFullyPushedRuntimeFilterAttributeError(
       attribute: Array[String],
       scanClass: String,
-      readSchema: StructType,
-      cause: AnalysisException): AnalysisException = {
+      relationOutput: StructType): AnalysisException = {
+    invalidDataSourceRuntimeFilterAttributeError(
+      attribute,
+      "fullyPushedFilterAttributes()",
+      scanClass,
+      relationOutput,
+      "NOT_TOP_LEVEL",
+      None)
+  }
+
+  private def invalidDataSourceRuntimeFilterAttributeError(
+      attribute: Array[String],
+      method: String,
+      scanClass: String,
+      relationOutput: StructType,
+      errorSubClass: String,
+      cause: Option[AnalysisException]): AnalysisException = {
     new AnalysisException(
-      errorClass = "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE",
+      errorClass = s"DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE.$errorSubClass",
       messageParameters = Map(
         "attribute" -> toSQLId(attribute.toImmutableArraySeq),
+        "method" -> method,
         "scanClass" -> scanClass,
-        "readSchema" -> toSQLType(readSchema)),
-      cause = Some(cause))
+        "relationOutput" -> toSQLType(relationOutput)),
+      cause = cause)
   }
 
   def foundMultipleXMLDataSourceError(provider: String,

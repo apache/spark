@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.DynamicPruningExpression
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CreateNamedStruct, DynamicPruningExpression, Expression, GetStructFieldObject}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.{BufferedRows, InMemoryRowLevelOperationTable}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
@@ -150,7 +150,7 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
         expectedFilterAttrs = Seq("dep.name"),
         expectedFilter = GroupFilter(
           scanSchema = "pk INT, dep STRUCT<name: STRING>", groups = Seq("hr")),
-        expectedFilterRefs = Some(Seq("dep")))
+        expectedFilterPaths = Some(Seq(Seq("dep", "name"))))
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -177,7 +177,7 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
       executedPlan: SparkPlan,
       expectedFilterAttrs: Seq[String],
       expectedFilter: GroupFilter,
-      expectedFilterRefs: Option[Seq[String]] = None): Unit = {
+      expectedFilterPaths: Option[Seq[Seq[String]]] = None): Unit = {
     val batchScans = collect(executedPlan) { case s: BatchScanExec => s }
     assert(batchScans.nonEmpty, "expected a batch scan for the row-level operation")
     val scan = catalystScan(batchScans.head)
@@ -187,12 +187,12 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
     val filterAttrs = scan.filterAttributes().map(_.fieldNames.mkString(".")).toSeq
     assert(filterAttrs === expectedFilterAttrs,
       s"expected the scan to declare $expectedFilterAttrs as filter attributes, got $filterAttrs")
-    val filterRefs = expectedFilterRefs.getOrElse(expectedFilterAttrs)
+    val filterPaths = expectedFilterPaths.getOrElse(expectedFilterAttrs.map(Seq(_)))
 
     batchScans.foreach { batchScan =>
       batchScan.runtimeFilters match {
         case Seq(DynamicPruningExpression(inSubquery: InSubqueryExec)) =>
-          assertGroupFilter(inSubquery, filterRefs, expectedFilter)
+          assertGroupFilter(inSubquery, filterPaths, expectedFilter)
         case other => fail(s"expected a single dynamic pruning group filter, got $other")
       }
     }
@@ -204,7 +204,7 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
       s"expected each of the ${batchScans.size} scan node(s) to push the filter once, got $pushed")
     pushed.foreach {
       case inSubquery: InSubqueryExec =>
-        assertGroupFilter(inSubquery, filterRefs, expectedFilter)
+        assertGroupFilter(inSubquery, filterPaths, expectedFilter)
       case other =>
         fail(s"expected the group filter pushed as an InSubqueryExec, got $other")
     }
@@ -222,10 +222,11 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
 
   private def assertGroupFilter(
       filter: InSubqueryExec,
-      expectedFilterAttrs: Seq[String],
+      expectedFilterPaths: Seq[Seq[String]],
       expectedFilter: GroupFilter): Unit = {
-    assert(filter.child.references.toSeq.map(_.name) === expectedFilterAttrs,
-      s"expected the group filter keyed on $expectedFilterAttrs, got ${filter.child}")
+    assert(fieldPaths(filter.child).contains(expectedFilterPaths),
+      s"expected the group filter keyed on ${expectedFilterPaths.map(_.mkString("."))}, " +
+        s"got ${filter.child}")
 
     // the second branch of a group-based UPDATE reuses the first branch's subquery, and
     // ReusedSubqueryExec is a leaf node, so unwrap it to reach the plan underneath
@@ -244,6 +245,19 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
       .map(_.asInstanceOf[UTF8String].toString)
     assert(groups.toSeq.sorted === expectedFilter.groups.sorted,
       s"group filter must select the groups holding matching rows, got ${groups.mkString(", ")}")
+  }
+
+  private def fieldPath(expr: Expression): Option[Seq[String]] = expr match {
+    case attr: Attribute => Some(Seq(attr.name))
+    case GetStructFieldObject(child, field) => fieldPath(child).map(_ :+ field.name)
+    case _ => None
+  }
+
+  private def fieldPaths(expr: Expression): Option[Seq[Seq[String]]] = expr match {
+    case struct: CreateNamedStruct =>
+      val paths = struct.valExprs.map(fieldPath)
+      Option.when(paths.forall(_.isDefined))(paths.flatten)
+    case _ => fieldPath(expr).map(Seq(_))
   }
 
   /** Asserts no group filter was injected, e.g. because the scan does not read the group key. */

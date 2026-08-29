@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataC
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION, DATA_SOURCE_V2_SCAN_RELATION, TreePattern}
-import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.{fromAttributes, toAttributes}
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
@@ -202,7 +202,8 @@ case class DataSourceV2ScanRelation(
    * Resolved attributes that the scan declares for runtime filtering via
    * [[SupportsRuntimeV2Filtering.filterAttributes]] or
    * [[SupportsRuntimeCatalystFiltering.filterAttributes]]. Empty when the scan
-   * implements neither interface or exposes no attributes.
+   * implements neither interface or exposes no attributes. Accessing this value also validates
+   * attributes returned by [[SupportsRuntimeCatalystFiltering.fullyPushedFilterAttributes]].
    */
   lazy val runtimeFilterAttrs: AttributeSet = {
     checkRuntimeFilteringInterfaces()
@@ -212,7 +213,7 @@ case class DataSourceV2ScanRelation(
       case s: SupportsRuntimeCatalystFiltering => s.filterAttributes()
       case _ => Array.empty[NamedReference]
     }
-    resolveFilterAttrs(filterAttrs)
+    resolveFilterAttrs(filterAttrs, "filterAttributes()")
   }
 
   private lazy val declaredFullyPushedRuntimeFilterAttrs: Array[NamedReference] = scan match {
@@ -227,7 +228,8 @@ case class DataSourceV2ScanRelation(
   lazy val fullyPushedRuntimeFilterAttrs: AttributeSet = {
     checkRuntimeFilteringInterfaces()
     checkFullyPushedFilterAttrs()
-    resolveFilterAttrs(declaredFullyPushedRuntimeFilterAttrs)
+    resolveFilterAttrs(
+      declaredFullyPushedRuntimeFilterAttrs, "fullyPushedFilterAttributes()")
   }
 
   /**
@@ -236,14 +238,20 @@ case class DataSourceV2ScanRelation(
    * [[AttributeSet]] reduces nested references to their root attributes. This is sufficient for
    * ordinary runtime-filter eligibility because Spark retains the post-scan predicate.
    */
-  private def resolveFilterAttrs(filterAttrs: Array[NamedReference]): AttributeSet = {
+  private def resolveFilterAttrs(
+      filterAttrs: Array[NamedReference],
+      method: String): AttributeSet = {
     val resolvedAttrs = filterAttrs.map { ref =>
       try {
         V2ExpressionUtils.resolveRef[NamedExpression](ref, this)
       } catch {
         case e: AnalysisException =>
-          throw QueryCompilationErrors.invalidDataSourceRuntimeFilterAttributeError(
-            ref.fieldNames, scan.getClass.getName, scan.readSchema(), e)
+          throw QueryCompilationErrors.cannotResolveDataSourceRuntimeFilterAttributeError(
+            attribute = ref.fieldNames,
+            method = method,
+            scanClass = scan.getClass.getName,
+            relationOutput = fromAttributes(output),
+            cause = e)
       }
     }
     AttributeSet(resolvedAttrs)
@@ -309,11 +317,10 @@ case class DataSourceV2ScanRelation(
 
   private def checkFullyPushedFilterAttrs(): Unit = {
     declaredFullyPushedRuntimeFilterAttrs.find(_.fieldNames.length > 1).foreach { ref =>
-      throw SparkException.internalError(
-        "Fully pushed runtime filter attribute " +
-        s"'${ref.fieldNames.mkString(".")}' declared by " +
-        s"${scan.getClass.getName} must be a top-level attribute of the scan read schema, " +
-        "but it is a nested reference.")
+      throw QueryCompilationErrors.nestedDataSourceFullyPushedRuntimeFilterAttributeError(
+        attribute = ref.fieldNames,
+        scanClass = scan.getClass.getName,
+        relationOutput = fromAttributes(output))
     }
   }
 

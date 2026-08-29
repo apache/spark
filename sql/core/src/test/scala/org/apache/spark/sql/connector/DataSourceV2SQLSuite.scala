@@ -140,12 +140,6 @@ abstract class DataSourceV2SQLSuite
     }
   }
 
-  private def checkExplain(query: String, relationPattern: Regex): Unit = {
-    val explain = spark.sql(s"EXPLAIN EXTENDED $query").head().getString(0)
-    val relations = explain.split("\n").filter(_.contains("RelationV2"))
-    assert(relations.nonEmpty && relations.forall(line => relationPattern.matches(line.trim)))
-  }
-
   test("nested partition source column receives a DPP runtime filter") {
     val fact = s"${catalogAndNamespace}fact_nested_runtime_filter"
     val dim = s"${catalogAndNamespace}dim_nested_runtime_filter"
@@ -182,6 +176,12 @@ abstract class DataSourceV2SQLSuite
           s"expected 1 partition after pruning, got ${batchScan.filteredPartitions.flatten.size}")
       }
     }
+  }
+
+  private def checkExplain(query: String, relationPattern: Regex): Unit = {
+    val explain = spark.sql(s"EXPLAIN EXTENDED $query").head().getString(0)
+    val relations = explain.split("\n").filter(_.contains("RelationV2"))
+    assert(relations.nonEmpty && relations.forall(line => relationPattern.matches(line.trim)))
   }
 }
 
