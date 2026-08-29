@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
@@ -107,6 +108,37 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
       .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("Aggregate: NAAJ no pushdown when the rewritten join would build left") {
+    val leftKey = $"leftKey".int
+    val leftKeyStats = ColumnStat(
+      distinctCount = Some(1000),
+      min = Some(0),
+      max = Some(999),
+      nullCount = Some(0),
+      avgLen = Some(4),
+      maxLen = Some(4))
+    val child = StatsTestPlan(
+      Seq(leftKey), 1000, AttributeMap(Seq(leftKey -> leftKeyStats)), Some(1))
+    val aggregate = Aggregate(Seq(leftKey), Seq(leftKey), child)
+    val right = StatsTestPlan(
+      Seq($"rightKey".int), 1000, AttributeMap(Seq()), Some(1000))
+    val condition = Or(
+      EqualTo(aggregate.output.head, right.output.head),
+      IsNull(EqualTo(aggregate.output.head, right.output.head)))
+    val originalQuery = Join(
+      aggregate, right, LeftAnti, Some(condition), JoinHint.NONE)
+
+    withSQLConf(
+      SQLConf.CBO_ENABLED.key -> "true",
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "100") {
+      assert(aggregate.stats.sizeInBytes > SQLConf.get.autoBroadcastJoinThreshold)
+      assert(child.stats.sizeInBytes <= SQLConf.get.autoBroadcastJoinThreshold)
+      assert(right.stats.sizeInBytes > SQLConf.get.autoBroadcastJoinThreshold)
+      comparePlans(Optimize.execute(originalQuery), originalQuery)
+    }
   }
 
   test("Aggregate: LeftSemi join no pushdown - non-deterministic aggr expressions") {

@@ -341,7 +341,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
       case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
-          if getBroadcastNestedLoopJoinBuildSide(j, conf) == BuildRight =>
+          if canPlanAsBroadcastHashJoin(j, conf) =>
         Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
           None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
 

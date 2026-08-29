@@ -64,8 +64,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
     case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), joinCond, _)
         if agg.aggregateExpressions.forall(_.deterministic) && agg.groupingExpressions.nonEmpty &&
           !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
-          canPushThroughCondition(agg.children, joinCond, rightOp) &&
-          canPlanAsBroadcastHashJoin(join, conf) =>
+          canPushThroughCondition(agg.children, joinCond, rightOp) =>
       val aliasMap = getAliasMap(agg)
       val canPushDownPredicate = (predicate: Expression) => {
         val replaced = replaceAlias(predicate, aliasMap)
@@ -75,7 +74,11 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
       val makeJoinCondition = (predicates: Seq[Expression]) => {
         replaceAlias(predicates.reduce(And), aliasMap)
       }
-      pushDownJoin(join, canPushDownPredicate, makeJoinCondition)
+      pushDownJoin(
+        join,
+        canPushDownPredicate,
+        makeJoinCondition,
+        canPlanAsBroadcastHashJoin(_, conf))
 
     // LeftSemi/LeftAnti over Window
     case join @ Join(w: Window, rightOp, LeftSemiOrAnti(_), _, _)
@@ -133,11 +136,17 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
   private def pushDownJoin(
       join: Join,
       canPushDownPredicate: Expression => Boolean,
-      makeJoinCondition: Seq[Expression] => Expression): LogicalPlan = {
+      makeJoinCondition: Seq[Expression] => Expression,
+      canPushDownJoin: Join => Boolean = _ => true): LogicalPlan = {
     assert(join.left.children.length == 1)
 
     if (join.condition.isEmpty) {
-      join.left.withNewChildren(Seq(join.copy(left = join.left.children.head)))
+      val pushedJoin = join.copy(left = join.left.children.head)
+      if (canPushDownJoin(pushedJoin)) {
+        join.left.withNewChildren(Seq(pushedJoin))
+      } else {
+        join
+      }
     } else {
       val (pushDown, stayUp) = splitConjunctivePredicates(join.condition.get)
         .partition(canPushDownPredicate)
@@ -151,19 +160,25 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
       if (pushDown.isEmpty || referRightSideCols)  {
         join
       } else {
-        val newPlan = join.left.withNewChildren(Seq(join.copy(
-          left = join.left.children.head, condition = Some(makeJoinCondition(pushDown)))))
-        // If there is no more filter to stay up, return the new plan that has join pushed down.
-        if (stayUp.isEmpty) {
-          newPlan
+        val pushedJoin = join.copy(
+          left = join.left.children.head, condition = Some(makeJoinCondition(pushDown)))
+        if (!canPushDownJoin(pushedJoin)) {
+          join
         } else {
-          join.joinType match {
-            // In case of Left semi join, the part of the join condition which does not refer to
-            // to attributes of the grandchild are kept as a Filter above.
-            case LeftSemi => Filter(stayUp.reduce(And), newPlan)
-            // In case of left-anti join, the join is pushed down only when the entire join
-            // condition is eligible to be pushed down to preserve the semantics of left-anti join.
-            case _ => join
+          val newPlan = join.left.withNewChildren(Seq(pushedJoin))
+          // If there is no more filter to stay up, return the new plan that has join pushed down.
+          if (stayUp.isEmpty) {
+            newPlan
+          } else {
+            join.joinType match {
+              // In case of Left semi join, the part of the join condition which does not refer to
+              // to attributes of the grandchild are kept as a Filter above.
+              case LeftSemi => Filter(stayUp.reduce(And), newPlan)
+              // In case of left-anti join, the join is pushed down only when the entire join
+              // condition is eligible to be pushed down to preserve the semantics of left-anti
+              // join.
+              case _ => join
+            }
           }
         }
       }
@@ -273,5 +288,4 @@ object PushLeftSemiLeftAntiThroughJoin extends Rule[LogicalPlan] with PredicateH
       }
   }
 }
-
 

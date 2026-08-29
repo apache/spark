@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, JoinSelectionHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, Join, JoinHint, NO_BROADCAST_AND_REPLICATION}
+import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, IdentityBroadcastMode}
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
@@ -38,6 +39,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.unsafe.map.BytesToBytesMap
 
 @SlowSQLTest
 class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
@@ -1327,6 +1329,40 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
           .queryExecution.sparkPlan.collect { case j: BroadcastNestedLoopJoinExec => j }
         assert(joinExec.size === 1)
         assert(joinExec.head.buildSide === BuildLeft)
+      }
+    }
+  }
+
+  test("SPARK-36082: keep NAAJ identity broadcast at the hashed relation row limit") {
+    val maxBroadcastHashRows = (BytesToBytesMap.MAX_CAPACITY / 1.5).toLong
+
+    withSQLConf(
+      SQLConf.CBO_ENABLED.key -> "true",
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      val left = spark.range(1).selectExpr("CAST(id AS INT) AS key")
+      val right = spark.range(maxBroadcastHashRows)
+        .selectExpr("IF(id = 0, CAST(NULL AS INT), CAST(id AS INT)) AS b")
+
+      withTempView("naajLeft", "naajRightAtHashLimit") {
+        left.createOrReplaceTempView("naajLeft")
+        right.createOrReplaceTempView("naajRightAtHashLimit")
+        val queryExecution = sql(
+          "select * from naajLeft where key not in (select b from naajRightAtHashLimit)")
+          .queryExecution
+        val logicalJoins = queryExecution.optimizedPlan.collect { case join: Join => join }
+        assert(logicalJoins.size === 1)
+        val logicalJoin = logicalJoins.head
+        assert(logicalJoin.right.stats.rowCount.contains(maxBroadcastHashRows))
+        assert(!canPlanAsBroadcastHashJoin(logicalJoin, conf))
+
+        val joinExec = queryExecution.sparkPlan.collect {
+          case join: BroadcastNestedLoopJoinExec => join
+        }
+        assert(joinExec.size === 1)
+        assert(joinExec.head.buildSide === BuildRight)
+        assert(joinExec.head.requiredChildDistribution(1) ===
+          BroadcastDistribution(IdentityBroadcastMode))
       }
     }
   }
