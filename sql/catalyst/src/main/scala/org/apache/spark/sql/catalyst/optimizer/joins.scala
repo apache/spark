@@ -353,6 +353,57 @@ trait JoinSelectionHelper extends Logging {
     }
   }
 
+  def getBroadcastNestedLoopJoinDesiredBuildSide(join: Join): BuildSide = {
+    if (join.joinType.isInstanceOf[InnerLike] || join.joinType == FullOuter) {
+      getSmallerSide(join.left, join.right)
+    } else {
+      // For perf reasons, BroadcastNestedLoopJoinExec prefers to broadcast the left side for a
+      // right join and the right side for a left join. If one side is much smaller, revisiting
+      // that preference may be worthwhile.
+      if (canBuildBroadcastLeft(join.joinType)) BuildLeft else BuildRight
+    }
+  }
+
+  def getBroadcastNestedLoopJoinBuildSide(
+      join: Join,
+      hintOnly: Boolean,
+      conf: SQLConf): Option[BuildSide] = {
+    val buildLeft = if (hintOnly) {
+      hintToBroadcastLeft(join.hint)
+    } else {
+      canBroadcastBySize(join.left, conf) &&
+        !hintToNotBroadcastAndReplicateLeft(join.hint)
+    }
+    val buildRight = if (hintOnly) {
+      hintToBroadcastRight(join.hint)
+    } else {
+      canBroadcastBySize(join.right, conf) &&
+        !hintToNotBroadcastAndReplicateRight(join.hint)
+    }
+
+    if (buildLeft && buildRight) {
+      Some(getBroadcastNestedLoopJoinDesiredBuildSide(join))
+    } else if (buildLeft) {
+      Some(BuildLeft)
+    } else if (buildRight) {
+      Some(BuildRight)
+    } else {
+      None
+    }
+  }
+
+  def getBroadcastNestedLoopJoinBuildSide(join: Join, conf: SQLConf): BuildSide = {
+    val hintedBuildSide = if (join.hint.isEmpty) {
+      None
+    } else {
+      getBroadcastNestedLoopJoinBuildSide(join, hintOnly = true, conf)
+    }
+    hintedBuildSide
+      .orElse(getBroadcastNestedLoopJoinBuildSide(join, hintOnly = false, conf))
+      .orElse(getBroadcastNestedLoopJoinBuildSide(join.hint, join.joinType))
+      .getOrElse(getBroadcastNestedLoopJoinDesiredBuildSide(join))
+  }
+
   def getSmallerSide(left: LogicalPlan, right: LogicalPlan): BuildSide = {
     if (right.stats.sizeInBytes <= left.stats.sizeInBytes) BuildRight else BuildLeft
   }
@@ -438,10 +489,10 @@ trait JoinSelectionHelper extends Logging {
       getBroadcastBuildSide(join, hintOnly = true, conf).orElse {
         if (noShufflePlannedBefore) getBroadcastBuildSide(join, hintOnly = false, conf) else None
       }
-    // `JoinSelection` always builds from the right for this shape. Its generic fallback is a
-    // broadcast nested loop join that also builds from the right, so prefer the hash join even
-    // when the right side exceeds the automatic broadcast threshold.
-    case ExtractSingleColumnNullAwareAntiJoin(_, _) => Some(BuildRight)
+    // The null-aware hash join only supports BuildRight. Preserve a generic BuildLeft fallback.
+    case j @ ExtractSingleColumnNullAwareAntiJoin(_, _)
+        if getBroadcastNestedLoopJoinBuildSide(j, conf) == BuildRight =>
+      Some(BuildRight)
     case _ => None
   }
 

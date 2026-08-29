@@ -1299,13 +1299,35 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
-  test("SPARK-36082: keep SingleColumn Null Aware Anti Join above broadcast threshold") {
+  test("SPARK-36082: keep NAAJ hash join when the fallback builds right") {
     withSQLConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
       val joinExec = assertJoin((
         "select * from testData where key not in (select b from testData3)",
         classOf[BroadcastHashJoinExec]))
       assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+    }
+  }
+
+  test("SPARK-36082: keep NAAJ nested-loop join when the fallback builds left") {
+    val smallLeft = spark.range(1).selectExpr("id AS key")
+    val largeRight = spark.range(100)
+      .selectExpr("IF(id = 0, CAST(NULL AS BIGINT), id) AS b")
+    val threshold = statisticSizeInByte(smallLeft)
+    assert(threshold < statisticSizeInByte(largeRight))
+
+    withTempView("naajSmallLeft", "naajLargeRight") {
+      smallLeft.createOrReplaceTempView("naajSmallLeft")
+      largeRight.createOrReplaceTempView("naajLargeRight")
+      withSQLConf(
+        SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
+        val joinExec = sql(
+          "select * from naajSmallLeft where key not in (select b from naajLargeRight)")
+          .queryExecution.sparkPlan.collect { case j: BroadcastNestedLoopJoinExec => j }
+        assert(joinExec.size === 1)
+        assert(joinExec.head.buildSide === BuildLeft)
+      }
     }
   }
 

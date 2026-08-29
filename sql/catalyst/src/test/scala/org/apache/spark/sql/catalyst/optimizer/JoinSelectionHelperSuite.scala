@@ -156,11 +156,12 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     }
   }
 
-  test("canPlanAsBroadcastHashJoin should detect single-column null-aware anti join") {
+  test("canPlanAsBroadcastHashJoin should respect NAAJ nested-loop build side") {
     val leftKey = left.output.head
     val rightKey = right.output.head
     val condition = Or(EqualTo(leftKey, rightKey), IsNull(EqualTo(leftKey, rightKey)))
     val nullAwareAntiJoin = Join(left, right, LeftAnti, Some(condition), JoinHint.NONE)
+    val smallLeft = left.copy(rowCount = 1000, size = Some(1000))
     val largeRight = right.copy(rowCount = 20000000, size = Some(20000000))
 
     withSQLConf(
@@ -168,6 +169,10 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
       assert(canPlanAsBroadcastHashJoin(nullAwareAntiJoin, SQLConf.get))
       assert(canPlanAsBroadcastHashJoin(nullAwareAntiJoin.copy(right = largeRight), SQLConf.get))
+      assert(!canPlanAsBroadcastHashJoin(
+        nullAwareAntiJoin.copy(left = smallLeft, right = largeRight), SQLConf.get))
+      assert(!canPlanAsBroadcastHashJoin(
+        nullAwareAntiJoin.copy(hint = JoinHint(hintBroadcast, None)), SQLConf.get))
     }
   }
 
