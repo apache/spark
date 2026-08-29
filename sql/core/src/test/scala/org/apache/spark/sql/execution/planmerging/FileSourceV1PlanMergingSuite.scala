@@ -195,6 +195,25 @@ class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+  test("SPARK-59107: a merge that rebuilds a projection does not widen the read either") {
+    withTempDir { dir =>
+      val path = writeFile(dir, "data.csv", csvRows)
+      withTempView("t") {
+        spark.read.schema("a long, b long").option("mode", "DROPMALFORMED")
+          .csv(path).createOrReplaceTempView("t")
+        // Both subqueries read a alone, and filter propagation, which is on by default, merges
+        // them by rebuilding the projection above the relation. The rebuilt projection is over the
+        // pruned child rather than the relation's own output, so the shared scan still reads only
+        // a and the answers do not change.
+        val df = sql(
+          "SELECT (SELECT sum(x) FROM (SELECT a * 2 AS x FROM t WHERE a > 1)), " +
+            "(SELECT sum(a) FROM t)")
+        checkAnswer(df, Row(18L, 10L))
+        assert(scanColumns(df) === Seq(Seq("a")))
+      }
+    }
+  }
+
   test("SPARK-59107: parquet subqueries that project different columns still share a scan") {
     withTempDir { dir =>
       val path = new File(dir, "data").getCanonicalPath
