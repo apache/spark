@@ -296,10 +296,13 @@ trait JoinSelectionHelper extends Logging {
 
   private def canBuildNullAwareAntiJoinHashRelation(
       rightKeys: Seq[Expression],
-      right: LogicalPlan): Boolean = {
+      right: LogicalPlan,
+      conf: SQLConf): Boolean = {
     val usesLongHashedRelation =
       rightKeys.length == 1 && rightKeys.head.dataType.isInstanceOf[IntegralType]
-    usesLongHashedRelation || right.stats.rowCount.forall(_ < maxBroadcastHashRows)
+    usesLongHashedRelation || right.stats.rowCount.fold(canBroadcastBySize(right, conf)) {
+      _ < maxBroadcastHashRows
+    }
   }
 
   def getBroadcastBuildSide(
@@ -381,27 +384,36 @@ trait JoinSelectionHelper extends Logging {
       join: Join,
       hintOnly: Boolean,
       conf: SQLConf): Option[BuildSide] = {
-    val buildLeft = if (hintOnly) {
+    lazy val buildLeft = if (hintOnly) {
       hintToBroadcastLeft(join.hint)
     } else {
       canBroadcastBySize(join.left, conf) &&
         !hintToNotBroadcastAndReplicateLeft(join.hint)
     }
-    val buildRight = if (hintOnly) {
+    lazy val buildRight = if (hintOnly) {
       hintToBroadcastRight(join.hint)
     } else {
       canBroadcastBySize(join.right, conf) &&
         !hintToNotBroadcastAndReplicateRight(join.hint)
     }
 
-    if (buildLeft && buildRight) {
-      Some(getBroadcastNestedLoopJoinDesiredBuildSide(join))
-    } else if (buildLeft) {
-      Some(BuildLeft)
-    } else if (buildRight) {
-      Some(BuildRight)
+    if (join.joinType.isInstanceOf[InnerLike] || join.joinType == FullOuter) {
+      if (buildLeft && buildRight) {
+        Some(getBroadcastNestedLoopJoinDesiredBuildSide(join))
+      } else if (buildLeft) {
+        Some(BuildLeft)
+      } else if (buildRight) {
+        Some(BuildRight)
+      } else {
+        None
+      }
     } else {
-      None
+      getBroadcastNestedLoopJoinDesiredBuildSide(join) match {
+        case BuildLeft =>
+          if (buildLeft) Some(BuildLeft) else if (buildRight) Some(BuildRight) else None
+        case BuildRight =>
+          if (buildRight) Some(BuildRight) else if (buildLeft) Some(BuildLeft) else None
+      }
     }
   }
 
@@ -505,7 +517,7 @@ trait JoinSelectionHelper extends Logging {
     // The null-aware hash join only supports BuildRight. Preserve a generic BuildLeft fallback.
     case j @ ExtractSingleColumnNullAwareAntiJoin(_, rightKeys)
         if getBroadcastNestedLoopJoinBuildSide(j, conf) == BuildRight &&
-          canBuildNullAwareAntiJoinHashRelation(rightKeys, j.right) =>
+          canBuildNullAwareAntiJoinHashRelation(rightKeys, j.right, conf) =>
       Some(BuildRight)
     case _ => None
   }

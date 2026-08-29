@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, EqualTo, IsNull, Or}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, PlanTest}
@@ -27,9 +29,19 @@ import org.apache.spark.unsafe.map.BytesToBytesMap
 
 class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
 
-  private case class UnknownRowCountTestPlan(override val output: Seq[Attribute])
-      extends LeafNode {
-    override def computeStats(): Statistics = Statistics(sizeInBytes = 1000)
+  private case class UnknownRowCountTestPlan(
+      override val output: Seq[Attribute],
+      sizeInBytes: BigInt = 1000) extends LeafNode {
+    override def computeStats(): Statistics = Statistics(sizeInBytes = sizeInBytes)
+  }
+
+  private case class TrackingStatsTestPlan(
+      override val output: Seq[Attribute],
+      statsAccessed: AtomicBoolean) extends LeafNode {
+    override def computeStats(): Statistics = {
+      statsAccessed.set(true)
+      Statistics(sizeInBytes = 20000000)
+    }
   }
 
   private val left = StatsTestPlan(
@@ -155,6 +167,17 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     assert(getSmallerSide(left, right) === BuildRight)
   }
 
+  test("getBroadcastNestedLoopJoinBuildSide checks the fixed desired side first") {
+    val leftStatsAccessed = new AtomicBoolean(false)
+    val uncachedLeft = TrackingStatsTestPlan(Seq($"uncachedLeft".int), leftStatsAccessed)
+    val leftAntiJoin = Join(uncachedLeft, right, LeftAnti, None, JoinHint.NONE)
+
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+      assert(getBroadcastNestedLoopJoinBuildSide(leftAntiJoin, SQLConf.get) === BuildRight)
+      assert(!leftStatsAccessed.get())
+    }
+  }
+
   test("canBroadcastBySize should return true if the plan size is less than 10MB") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
       assert(canBroadcastBySize(left, SQLConf.get) === false)
@@ -206,6 +229,13 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       IsNull(EqualTo(booleanLeft.output.head, unknownRight.output.head)))
     val unknownRowCountJoin = Join(
       booleanLeft, unknownRight, LeftAnti, Some(unknownCondition), JoinHint.NONE)
+    val largeUnknownRight = UnknownRowCountTestPlan(
+      Seq($"largeUnknownRight".boolean), sizeInBytes = 20000000)
+    val largeUnknownCondition = Or(
+      EqualTo(booleanLeft.output.head, largeUnknownRight.output.head),
+      IsNull(EqualTo(booleanLeft.output.head, largeUnknownRight.output.head)))
+    val largeUnknownRowCountJoin = Join(
+      booleanLeft, largeUnknownRight, LeftAnti, Some(largeUnknownCondition), JoinHint.NONE)
 
     val longLeft = StatsTestPlan(
       Seq($"longLeft".long), 20000000, AttributeMap(Seq()), Some(20000000))
@@ -227,6 +257,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       assert(canPlanAsBroadcastHashJoin(
         nullAwareAntiJoin.copy(right = rightAtLimit), SQLConf.get))
       assert(canPlanAsBroadcastHashJoin(unknownRowCountJoin, SQLConf.get))
+      assert(!canPlanAsBroadcastHashJoin(largeUnknownRowCountJoin, SQLConf.get))
       assert(canPlanAsBroadcastHashJoin(longKeyJoin, SQLConf.get))
     }
   }
