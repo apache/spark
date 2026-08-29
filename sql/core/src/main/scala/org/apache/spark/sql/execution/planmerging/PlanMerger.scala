@@ -58,8 +58,9 @@ case class MergeResult(
  *                                 first cached. Every plan merged into the entry read those same
  *                                 columns, which is what merging one in requires, so the record
  *                                 stays true of the entry. It cannot be re-derived from `plan`,
- *                                 because a merge leaves projections that a later `ColumnPruning`
- *                                 narrows again. See `PlanMerger.collectProjectionSensitiveReads`.
+ *                                 because a merge leaves projections that the `ColumnPruning`
+ *                                 rerun after this rule narrows again. See
+ *                                 `PlanMerger.collectProjectionSensitiveReads`.
  */
 case class MergedPlan(
     plan: LogicalPlan,
@@ -248,14 +249,16 @@ class PlanMerger(
    * analyzed separately and carry different expression ids for the same column.
    *
    * Only ever called on a plan as it arrives, never on a merged one: merging rebuilds projections
-   * from a side's whole output, which for a V1 relation is its full schema, and the `ColumnPruning`
-   * that narrows that again runs after this rule. A merged cache entry therefore carries the record
-   * taken when it was first cached, see [[MergedPlan]].
+   * from a side's whole output, which for a V1 relation is its full schema, and what narrows that
+   * again is the `ColumnPruning` that `SparkOptimizer`'s `Extract Python UDFs` batch reruns, after
+   * this rule. A merged cache entry therefore carries the record taken when it was first cached,
+   * see [[MergedPlan]].
    *
    * This compares columns only. Symmetric filter propagation, which is off by default, can also
-   * widen the set of *files* a scan reads, by OR-ing the two sides' partition filters. Each side's
-   * own filter above the scan drops the rows that widening adds, so no answer changes, but a
-   * projection-sensitive read can still fail on a file that neither side selected.
+   * widen the set of *files* a scan reads, by OR-ing the two sides' filters: a disjunct mixing a
+   * partition predicate with a data predicate prunes no partition at all, so the merged scan can
+   * read the whole table. Each side's own filter above the scan drops the rows that adds, so no
+   * answer changes, but a projection-sensitive read can still fail on a file neither side selected.
    */
   private def collectProjectionSensitiveReads(
       plan: LogicalPlan): Map[LogicalPlan, Seq[Set[String]]] = {

@@ -203,8 +203,8 @@ class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
           .csv(path).createOrReplaceTempView("t")
         // Both subqueries read a alone, and filter propagation, which is on by default, merges
         // them by rebuilding the projection above the relation. That rebuilt projection carries the
-        // relation's full output, but the `ColumnPruning` that runs after this rule narrows it
-        // again, so the shared scan reads only a and the answers do not change.
+        // relation's full output, but the `ColumnPruning` rerun after this rule narrows it again,
+        // so the shared scan reads only a and the answers do not change.
         val df = sql(
           "SELECT (SELECT sum(x) FROM (SELECT a * 2 AS x FROM t WHERE a > 1)), " +
             "(SELECT sum(a) FROM t)")
@@ -228,6 +228,23 @@ class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
           "SELECT (SELECT sum(x) FROM (SELECT a * 2 AS x FROM t WHERE a > 1)), " +
             "(SELECT sum(a) FROM t), (SELECT sum(a + b) FROM t)")
         checkAnswer(df, Row(18L, 10L, 88L))
+        assert(scanColumns(df) === Seq(Seq("a"), Seq("a", "b")))
+      }
+    }
+  }
+
+  test("SPARK-59107: a fourth subquery joins the entry the refused third one started") {
+    withTempDir { dir =>
+      val path = writeFile(dir, "data.csv", csvRows)
+      withTempView("t") {
+        spark.read.schema("a long, b long").option("mode", "DROPMALFORMED")
+          .csv(path).createOrReplaceTempView("t")
+        // The third subquery is refused by the entry the first two share, so it opens one of its
+        // own, and the fourth has to find that entry rather than stop at the refusal.
+        val df = sql(
+          "SELECT (SELECT sum(x) FROM (SELECT a * 2 AS x FROM t WHERE a > 1)), " +
+            "(SELECT sum(a) FROM t), (SELECT sum(a + b) FROM t), (SELECT count(a + b) FROM t)")
+        checkAnswer(df, Row(18L, 10L, 88L, 4L))
         assert(scanColumns(df) === Seq(Seq("a"), Seq("a", "b")))
       }
     }
