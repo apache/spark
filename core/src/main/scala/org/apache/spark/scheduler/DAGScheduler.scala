@@ -889,16 +889,17 @@ private[spark] class DAGScheduler(
         val startResourceProfile = stageResourceProfiles.head
         val mergedProfile = stageResourceProfiles.drop(1)
           .foldLeft(startResourceProfile)((a, b) => mergeResourceProfiles(a, b))
-        // compared merged profile with existing ones so we don't add it over and over again
-        // if the user runs the same operation multiple times
-        val resProfile = sc.resourceProfileManager.getEquivalentProfile(mergedProfile)
-        resProfile match {
-          case Some(existingRp) => existingRp
-          case None =>
-            // this ResourceProfile could be different if it was merged so we have to add it to
-            // our ResourceProfileManager
-            sc.resourceProfileManager.addResourceProfile(mergedProfile)
-            mergedProfile
+        val defaultProfile = sc.resourceProfileManager.defaultResourceProfile
+        if (stageResourceProfiles.exists(_ eq defaultProfile) &&
+            defaultProfile.resourcesEqual(mergedProfile)) {
+          // The default profile id has special meaning to cluster managers. Preserve it when the
+          // actual default was an input and the merge did not add any requirements.
+          defaultProfile
+        } else {
+          // Compare the merged profile with existing ones so we don't add it over and over again
+          // if the user runs the same operation multiple times. The merged ResourceProfile could
+          // be different from any existing one, in which case it is registered here.
+          sc.resourceProfileManager.getOrAddEquivalentProfile(mergedProfile)
         }
       } else {
         throw new IllegalArgumentException("Multiple ResourceProfiles specified in the RDDs for " +
