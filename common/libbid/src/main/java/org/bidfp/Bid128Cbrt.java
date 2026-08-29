@@ -1,0 +1,52 @@
+/*
+ * Copyright (c) 2007-2025, Intel Corp.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the conditions in LICENSE-INTEL are met.
+ */
+package org.bidfp;
+
+import org.bidfp.binary128.Binary128;
+import org.bidfp.binary128.Dpml;
+
+/** Intel {@code bid128_cbrt.c}: rebias exponent by 1/3 before the kernel. */
+final class Bid128Cbrt {
+  private Bid128Cbrt() {
+  }
+
+  static void cbrt(
+      long hi, long lo, RoundingMode mode, StatusFlags flags, long[] out) {
+    if (Bid128Libm.canonNan(hi, lo, flags, out)) {
+      return;
+    }
+    Bid128 x = Bid128.fromRawBits(hi, lo);
+    if (x.isInfinite()) {
+      out[0] = (hi & Bid128.MASK_SIGN) | Bid128.MASK_INFINITY;
+      out[1] = 0L;
+      return;
+    }
+    if (x.isZero()) {
+      out[0] = hi;
+      out[1] = lo;
+      return;
+    }
+    int exponent = x.biasedExponent();
+    int iexpon = exponent + 1;
+    int k = (iexpon * 0x5556) >> 16;
+    int j = iexpon - 3 * k;
+    k -= (1 + 6176) / 3;
+    UInt128 coeff = x.coefficient();
+    Bid128 tmp = Bid128.rawFinite(x.isSigned(), j + 6176, coeff.high(), coeff.low());
+    long[] packed = new long[2];
+    BidConvert.toBinary128From128(
+        tmp.highBits(), tmp.lowBits(), mode, flags, packed);
+    Binary128 xq = Binary128.fromRawBits(packed[0], packed[1]);
+    org.bidfp.binary128.RoundingMode binaryMode = BidTranscendental.binaryMode(mode);
+    org.bidfp.binary128.StatusFlags local = new org.bidfp.binary128.StatusFlags();
+    Binary128 rq = Dpml.cbrt(xq, binaryMode, local);
+    flags.raise(local.bits());
+    BidConvert.fromBinary128To128(rq.highBits(), rq.lowBits(), mode, flags, out);
+    out[0] += ((long) k) << 49;
+  }
+}
