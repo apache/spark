@@ -3340,7 +3340,7 @@ private[spark] class DAGScheduler(
         // Ignore task completion from attempts invalidated by rollback or barrier stage failure.
         val ignoreOldTaskAttempts =
           stage.maxAttemptIdToIgnore.exists(_ >= task.stageAttemptId) ||
-            stage.maxFailedBarrierAttemptId.exists(_ >= task.stageAttemptId)
+            stage.latestFailedBarrierAttemptId.exists(_ >= task.stageAttemptId)
 
         if (!ignoreOldTaskAttempts && task.stageAttemptId < stage.latestInfo.attemptNumber()) {
           taskScheduler.notifyPartitionCompletion(stageId, task.partitionId)
@@ -3601,10 +3601,10 @@ private[spark] class DAGScheduler(
             if (failedStage.rdd.isBarrier()) {
               failedStage match {
                 case failedMapStage: ShuffleMapStage =>
-                  // Invalidate this attempt before clearing its outputs, so late completions
-                  // cannot skip participants in the replacement barrier stage.
-                  failedMapStage.maxFailedBarrierAttemptId = Some(task.stageAttemptId)
-                  // Clear every map output so the retry reruns all barrier tasks.
+                  // Ignore late completions so the replacement barrier stage reruns every task.
+                  failedMapStage.latestFailedBarrierAttemptId = Some(task.stageAttemptId)
+                  // Mark all the map as broken in the map stage, to ensure retry all the tasks on
+                  // resubmitted stage attempt.
                   mapOutputTracker.unregisterAllMapAndMergeOutput(
                     failedMapStage.shuffleDep.shuffleId)
 
@@ -3711,10 +3711,10 @@ private[spark] class DAGScheduler(
           } else {
             failedStage match {
               case failedMapStage: ShuffleMapStage =>
-                // Invalidate this attempt before clearing its outputs, so late completions
-                // cannot skip participants in the replacement barrier stage.
-                failedMapStage.maxFailedBarrierAttemptId = Some(task.stageAttemptId)
-                // Clear every map output so the retry reruns all barrier tasks.
+                // Ignore late completions so the replacement barrier stage reruns every task.
+                failedMapStage.latestFailedBarrierAttemptId = Some(task.stageAttemptId)
+                // Mark all the map as broken in the map stage, to ensure retry all the tasks on
+                // resubmitted stage attempt.
                 mapOutputTracker.unregisterAllMapAndMergeOutput(failedMapStage.shuffleDep.shuffleId)
 
               case failedResultStage: ResultStage =>

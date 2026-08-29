@@ -1567,8 +1567,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   for (completeBeforeRetry <- Seq(true, false); failedAttempts <- 1 to 2) {
     val completionTime = if (completeBeforeRetry) "before" else "after"
-    test(s"Ignore successful tasks from $failedAttempts failed barrier attempts " +
-        s"$completionTime resubmission") {
+    test("SPARK-59094: Ignore successful tasks from failed barrier attempts " +
+        s"$completionTime resubmission (failedAttempts=$failedAttempts)") {
       val mapRdd = new MyRDD(sc, 2, Nil).barrier().mapPartitions(iter => iter)
       val shuffleDep = new ShuffleDependency(mapRdd, new HashPartitioner(2))
       val resultRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
@@ -1618,7 +1618,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   for (barrier <- Seq(true, false); completeBeforeRetry <- Seq(true, false)) {
     val completionTime = if (completeBeforeRetry) "before" else "after"
-    test(s"Late success $completionTime resubmission after a shuffle fetch failure " +
+    test(s"SPARK-59094: Late success $completionTime resubmission after a shuffle fetch failure " +
         s"in a barrier=$barrier map stage") {
       // The middle stage reads one shuffle and produces a different shuffle.
       val inputRdd = new MyRDD(sc, 2, Nil)
@@ -1679,7 +1679,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
-  test("A late downstream fetch failure must not discard the running barrier retry's successes") {
+  test("SPARK-59094: accept barrier retry successes after a late consumer fetch failure") {
     val mapRdd = new MyRDD(sc, 2, Nil).barrier().mapPartitions(iter => iter)
     val shuffleDep = new ShuffleDependency(mapRdd, new HashPartitioner(2))
     val resultRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
