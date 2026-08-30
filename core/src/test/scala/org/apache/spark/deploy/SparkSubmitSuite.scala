@@ -648,6 +648,66 @@ class SparkSubmitSuite
     }
   }
 
+  test("SPARK-55077: Avoid archives download for wildcard scheme " +
+    "spark.kubernetes.archives.avoidDownloadSchemes " +
+    "in k8s client mode & driver runs inside a POD") {
+    val hadoopConf = new Configuration()
+    updateConfWithFakeS3Fs(hadoopConf)
+    withTempDir { tmpDir =>
+      val notToDownloadArchive = File.createTempFile("NotToDownloadArchiveWildcard", ".zip", tmpDir)
+      val remoteArchiveFile = s"s3a://${notToDownloadArchive.getAbsolutePath}"
+
+      val clArgs = Seq(
+        "--deploy-mode", "client",
+        "--proxy-user", "test.user",
+        "--master", "k8s://host:port",
+        "--class", "org.SomeClass",
+        "--conf", "spark.kubernetes.submitInDriver=true",
+        "--conf", "spark.kubernetes.archives.avoidDownloadSchemes=*",
+        "--conf", "spark.hadoop.fs.s3a.impl=org.apache.spark.deploy.TestFileSystem",
+        "--conf", "spark.hadoop.fs.s3a.impl.disable.cache=true",
+        "--archives", remoteArchiveFile,
+        "/home/jarToIgnore.jar",
+        "arg1")
+      val appArgs = new SparkSubmitArguments(clArgs)
+      val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))
+      conf.get("spark.master") should be("k8s://https://host:port")
+      conf.get("spark.archives").contains(remoteArchiveFile) shouldBe true
+      Files.exists(Paths.get(notToDownloadArchive.getName)) should be(false)
+    }
+  }
+
+  test("SPARK-55077: Download archives if scheme does not match " +
+    "spark.kubernetes.archives.avoidDownloadSchemes " +
+    "in k8s client mode & driver runs inside a POD") {
+    val hadoopConf = new Configuration()
+    updateConfWithFakeS3Fs(hadoopConf)
+    withTempDir { tmpDir =>
+      val toDownloadArchive = File.createTempFile("ToDownloadArchive", ".properties", tmpDir)
+      Files.write(toDownloadArchive.toPath, Array[Byte](1, 2, 3))
+      val remoteArchiveFile = s"s3a://${toDownloadArchive.getAbsolutePath}"
+
+      val clArgs = Seq(
+        "--deploy-mode", "client",
+        "--proxy-user", "test.user",
+        "--master", "k8s://host:port",
+        "--class", "org.SomeClass",
+        "--conf", "spark.kubernetes.submitInDriver=true",
+        "--conf", "spark.kubernetes.archives.avoidDownloadSchemes=hdfs",
+        "--conf", "spark.hadoop.fs.s3a.impl=org.apache.spark.deploy.TestFileSystem",
+        "--conf", "spark.hadoop.fs.s3a.impl.disable.cache=true",
+        "--archives", remoteArchiveFile,
+        "/home/jarToIgnore.jar",
+        "arg1")
+      val appArgs = new SparkSubmitArguments(clArgs)
+      val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))
+      conf.get("spark.master") should be("k8s://https://host:port")
+      conf.get("spark.archives").contains(remoteArchiveFile) shouldBe false
+      Files.exists(Paths.get(toDownloadArchive.getName)) should be(true)
+      Files.delete(Paths.get(toDownloadArchive.getName))
+    }
+  }
+
   test("SPARK-43014: Set `spark.app.submitTime` if missing ") {
     val clArgs1 = Seq(
       "--deploy-mode", "client",
