@@ -2755,7 +2755,7 @@ class CachedTableSuite extends SharedSparkSession
             // since the cached buffers are lazily initialized, they will be empty
           }
           withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-            val df = spark.table(t1).where($"c1_2" > 10)
+            val df = spark.table(t1).select($"c1_1", $"c1_2").where($"c1_2" > 10)
             df.collect()
           }
         }
