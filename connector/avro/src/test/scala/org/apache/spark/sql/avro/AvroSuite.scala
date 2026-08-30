@@ -1755,6 +1755,7 @@ abstract class AvroSuite
       checkAnswer(df.select("y"), rows.map(r => Row(r.get(1))))
       checkAnswer(df.select("x", "z"), rows.map(r => Row(r.get(0), r.get(2))))
       checkAnswer(df.select("z", "x"), rows.map(r => Row(r.get(2), r.get(0))))
+      checkAnswer(df.select("y", "z"), rows.map(r => Row(r.get(1), r.get(2))))
       checkAnswer(df.selectExpr("sum(z)"), Row(100000L))
       // With pushdown on the filter runs inside the deserializer, with it off above the scan.
       // Either way a wrong pairing drops rows rather than only returning wrong values for them.

@@ -319,8 +319,8 @@ private[sql] class AvroDeserializer(
       case (RECORD, st: StructType) =>
         // Avro datasource doesn't accept filters with nested attributes. See SPARK-32328.
         // We can always return `false` from `applyFilters` for nested records.
-        val writeRecord =
-          getRecordWriter(avroType, st, avroPath, catalystPath, applyFilters = _ => false)
+        val writeRecord = getRecordWriter(
+          avroType, st, avroPath, catalystPath, applyFilters = _ => false, Array.empty)
         (updater, ordinal, value) =>
           val row = new SpecificInternalRow(st)
           writeRecord(new RowUpdater(row), value.asInstanceOf[GenericRecord])
@@ -470,8 +470,8 @@ private[sql] class AvroDeserializer(
    * This takes a data schema position for an Avro field position, which `recursiveFieldMaxDepth`
    * can break: `SchemaConverters` drops a field it will not recurse into, so the data schema is a
    * gapped view of the Avro schema and every field after the gap resolves one position early.
-   * Positional matching is already wrong for such a schema without this method, since the two
-   * schemas have different lengths.
+   * Positional matching is already wrong for such a schema without this method, because the fields
+   * after the gap shift by one whatever the projection is.
    */
   private def positionsInDataSchema(projection: StructType): Array[Int] = dataSchema match {
     case Some(schema) if positionalFieldMatch =>
@@ -495,7 +495,7 @@ private[sql] class AvroDeserializer(
       avroPath: Seq[String],
       catalystPath: Seq[String],
       applyFilters: Int => Boolean,
-      dataSchemaPositions: Array[Int] = Array.empty)
+      dataSchemaPositions: Array[Int])
       : (CatalystDataUpdater, GenericRecord) => Boolean = {
 
     val avroSchemaHelper = new AvroUtils.AvroSchemaHelper(
