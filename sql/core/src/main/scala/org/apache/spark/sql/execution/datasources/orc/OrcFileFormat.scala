@@ -220,7 +220,7 @@ class OrcFileFormat
         val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
         val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
-        if (enableVectorizedReader || strictlyColumnar) {
+        if (enableVectorizedReader) {
           val batchReader = new OrcColumnarBatchReader(capacity, memoryMode)
           // SPARK-23399 Register a task completion listener first to call `close()` in all cases.
           // There is a possibility that `initialize` and `initBatch` hit some errors (like OOM)
