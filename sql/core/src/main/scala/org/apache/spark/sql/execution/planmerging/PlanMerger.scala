@@ -262,9 +262,10 @@ class PlanMerger(
    */
   private def collectProjectionSensitiveReads(
       plan: LogicalPlan): Map[LogicalPlan, Seq[Set[String]]] = {
+    lazy val referenced = AttributeSet(plan.flatMap(_.references)) ++ AttributeSet(plan.output)
     plan.collect {
       case l: LogicalRelation if DataSourceUtils.isProjectionSensitiveRead(l.relation) =>
-        l.canonicalized -> readColumnNames(plan, l)
+        l.canonicalized -> readColumnNames(referenced, l)
     }.groupMap(_._1)(_._2)
   }
 
@@ -283,19 +284,16 @@ class PlanMerger(
    */
   private def widensProjectionSensitiveRead(
       reads: Map[LogicalPlan, Seq[Set[String]]],
-      cachedPlan: MergedPlan): Boolean = {
-    (reads.nonEmpty || cachedPlan.projectionSensitiveReads.nonEmpty) &&
-      reads != cachedPlan.projectionSensitiveReads
-  }
+      cachedPlan: MergedPlan): Boolean = reads != cachedPlan.projectionSensitiveReads
 
   /**
-   * The names of `relation`'s columns that `plan` reads: every attribute referenced in the plan,
-   * plus the plan's own output, since a merged plan is extracted to a CTE and everything the CTE
-   * outputs is read. Partition columns are left out, because their values come from the path rather
-   * than from the file, so referencing one does not widen what the reader parses.
+   * Which of `relation`'s columns `referenced` covers, by name. `referenced` is every attribute the
+   * plan refers to plus its own output, since a merged plan is extracted to a CTE and everything
+   * the CTE outputs is read. Partition columns are left out, because their values come from the
+   * path rather than from the file, so referencing one does not widen what the reader parses.
    */
-  private def readColumnNames(plan: LogicalPlan, relation: LogicalRelation): Set[String] = {
-    val referenced = AttributeSet(plan.flatMap(_.references)) ++ AttributeSet(plan.output)
+  private def readColumnNames(
+      referenced: AttributeSet, relation: LogicalRelation): Set[String] = {
     val partitionColumns = relation.relation match {
       case hs: HadoopFsRelation => hs.partitionSchema.fieldNames.toSet
       case _ => Set.empty[String]

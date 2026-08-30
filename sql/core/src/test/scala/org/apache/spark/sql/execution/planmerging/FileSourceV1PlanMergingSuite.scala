@@ -86,6 +86,7 @@ class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
       .collectWithSubqueries { case s: FileSourceScanExec => s }
       .map(_.requiredSchema.fieldNames.sorted.toSeq)
       .sortBy(_.mkString(","))
+
   // One test per format rather than `gridTest`, so that the format reads in the middle of the name.
   Seq(
     ("csv", "data.csv", csvRows, Map.empty[String, String]),
@@ -137,6 +138,7 @@ class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
   Seq(SQLConf.IGNORE_CORRUPT_FILES, SQLConf.IGNORE_MISSING_FILES).foreach { conf =>
     test(s"SPARK-59107: a read that is not strict does not share a scan (${conf.key})") {
       withTempDir { dir =>
@@ -196,6 +198,7 @@ class FileSourceV1PlanMergingSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
   test("SPARK-59107: a merge that rebuilds a projection does not widen the read either") {
     withTempDir { dir =>
       val path = writeFile(dir, "data.csv", csvRows)

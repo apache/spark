@@ -3732,6 +3732,22 @@ class AvroV1Suite extends AvroSuite {
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
 
+  test("SPARK-59107: positionalFieldMatching makes an avro read projection-sensitive") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 5).selectExpr("id AS a", "id * 10 AS b").write.format("avro").save(path)
+      withTempView("t") {
+        spark.read.option("positionalFieldMatching", "true").format("avro").load(path)
+          .createOrReplaceTempView("t")
+        // Positional matching pairs a column with the Avro field at its position in the projected
+        // schema, so a scan shared between the two subqueries answers 100 for sum(b). Both values
+        // are wrong against the file, which is SPARK-59108; what merging must not do is make one
+        // subquery's values depend on what the other one projects.
+        checkAnswer(sql("SELECT (SELECT sum(a) FROM t), (SELECT sum(b) FROM t)"), Row(10L, 10L))
+      }
+    }
+  }
+
   test("SPARK-36271: V1 insert should check schema field name too") {
     withView("v") {
       spark.range(1).createTempView("v")
