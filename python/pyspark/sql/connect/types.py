@@ -43,6 +43,8 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampLTZNanosType,
+    TimestampNTZNanosType,
     TimestampNTZType,
     TimestampType,
     TimeType,
@@ -159,6 +161,10 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
         ret.timestamp.CopyFrom(pb2.DataType.Timestamp())
     elif isinstance(data_type, TimestampNTZType):
         ret.timestamp_ntz.CopyFrom(pb2.DataType.TimestampNTZ())
+    elif isinstance(data_type, TimestampNTZNanosType):
+        ret.timestamp_ntz_nanos.precision = data_type.precision
+    elif isinstance(data_type, TimestampLTZNanosType):
+        ret.timestamp_ltz_nanos.precision = data_type.precision
     elif isinstance(data_type, DayTimeIntervalType):
         ret.day_time_interval.start_field = data_type.startField
         ret.day_time_interval.end_field = data_type.endField
@@ -251,6 +257,19 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         return TimestampType()
     elif schema.HasField("timestamp_ntz"):
         return TimestampNTZType()
+    elif schema.HasField("timestamp_ntz_nanos"):
+        # `precision` is optional on the wire; per types.proto it defaults to 9 when omitted.
+        return (
+            TimestampNTZNanosType(schema.timestamp_ntz_nanos.precision)
+            if schema.timestamp_ntz_nanos.HasField("precision")
+            else TimestampNTZNanosType()
+        )
+    elif schema.HasField("timestamp_ltz_nanos"):
+        return (
+            TimestampLTZNanosType(schema.timestamp_ltz_nanos.precision)
+            if schema.timestamp_ltz_nanos.HasField("precision")
+            else TimestampLTZNanosType()
+        )
     elif schema.HasField("day_time_interval"):
         start: Optional[int] = (
             schema.day_time_interval.start_field

@@ -320,10 +320,17 @@ class PandasConversionMixin:
 
         assert isinstance(self, DataFrame)
 
-        from pyspark.sql.pandas.types import _create_converter_to_pandas
+        from pyspark.sql.pandas.types import (
+            _create_converter_to_pandas,
+            _reject_timestamp_nanos_conversion,
+        )
         from pyspark.sql.pandas.utils import require_minimum_pandas_version
 
         require_minimum_pandas_version()
+
+        # Arrow/pandas value conversion for the nanosecond timestamp types is a pending follow-up;
+        # fail deterministically here rather than fall back to a lossy / wrong-timezone result.
+        _reject_timestamp_nanos_conversion(self.schema)
 
         import pandas as pd
 
@@ -631,6 +638,16 @@ class SparkConversionMixin:
         arrow_batch_size = int(arrowMaxRecordsPerBatch)
         selfcheck = arrowSafeTypeConversion == "true"
         infer_pandas_dict_as_map = inferPandasDictAsMap == "true"
+
+        # Building a DataFrame from pandas/PyArrow data goes through Arrow, whose nanosecond
+        # timestamp value conversion is a pending follow-up; fail deterministically for an
+        # explicit nanosecond-typed schema rather than silently mis-handle the values. Covers a
+        # bare atomic DataType schema as well as a StructType (a DDL string / list of names cannot
+        # carry these types without an explicit DataType, so is left to the server to gate).
+        if isinstance(schema, DataType):
+            from pyspark.sql.pandas.types import _reject_timestamp_nanos_conversion
+
+            _reject_timestamp_nanos_conversion(schema)
 
         if type(data).__name__ == "Table":
             # `data` is a PyArrow Table

@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional,
 from pyspark.errors import PySparkTypeError, PySparkValueError, UnsupportedOperationException
 from pyspark.loose_version import LooseVersion
 from pyspark.sql.types import (
+    AnyTimestampNanoType,
     ArrayType,
     BinaryType,
     BooleanType,
@@ -75,6 +76,45 @@ if TYPE_CHECKING:
 
 # Should keep in line with org.apache.spark.sql.util.ArrowUtils.metadataKey
 metadata_key = b"SPARK::metadata::json"
+
+
+def _contains_timestamp_nanos(dt: DataType) -> bool:
+    """True if ``dt`` is, or structurally contains, a nanosecond-capable timestamp type.
+
+    The Arrow / pandas value conversion for :class:`TimestampNTZNanosType` /
+    :class:`TimestampLTZNanosType` is not implemented yet (planned follow-up). Rather than let
+    these paths silently mis-handle the value (wrong time zone for LTZ, or a leaked
+    ``pandas.Timestamp``), callers use this to fail deterministically; see
+    :func:`_reject_timestamp_nanos_conversion`.
+    """
+    if isinstance(dt, AnyTimestampNanoType):
+        return True
+    elif isinstance(dt, ArrayType):
+        return _contains_timestamp_nanos(dt.elementType)
+    elif isinstance(dt, MapType):
+        return _contains_timestamp_nanos(dt.keyType) or _contains_timestamp_nanos(dt.valueType)
+    elif isinstance(dt, StructType):
+        return any(_contains_timestamp_nanos(f.dataType) for f in dt.fields)
+    elif isinstance(dt, UserDefinedType):
+        return _contains_timestamp_nanos(dt.sqlType())
+    else:
+        return False
+
+
+def _reject_timestamp_nanos_conversion(schema: DataType) -> None:
+    """Raise if ``schema`` involves a nanosecond timestamp type, for Arrow/pandas value paths.
+
+    Keeps the not-yet-supported Arrow/pandas/Connect data paths failing deterministically instead
+    of silently producing wrong values, consistent with :func:`to_arrow_type`, which already
+    rejects these types with the same error condition.
+    """
+    from pyspark.errors import PySparkTypeError
+
+    if _contains_timestamp_nanos(schema):
+        raise PySparkTypeError(
+            errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+            messageParameters={"data_type": str(schema)},
+        )
 
 
 def to_arrow_metadata(metadata: Optional[Dict[str, Any]] = None) -> Optional[Dict[bytes, bytes]]:

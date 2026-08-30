@@ -22,6 +22,26 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
+    # SPARK-57462: nanosecond timestamp types are not yet supported over Spark Connect, whose
+    # data path goes through Arrow (to_arrow_type / ArrowTableToRowsConversion). These inherited
+    # tests build or collect nanosecond data and are covered by the classic (non-Connect) suite;
+    # pending the Arrow follow-up they are skipped here.
+    @unittest.skip("SPARK-57462: nanosecond timestamp types are pending Connect/Arrow support.")
+    def test_timestamp_nanos_type(self):
+        super().test_timestamp_nanos_type()
+
+    @unittest.skip("SPARK-57462: nanosecond timestamp types are pending Connect/Arrow support.")
+    def test_timestamp_nanos_type_preview_flag_off(self):
+        super().test_timestamp_nanos_type_preview_flag_off()
+
+    @unittest.skip("SPARK-57462: nanosecond timestamp types are pending Connect/Arrow support.")
+    def test_timestamp_nanos_type_python_udf(self):
+        super().test_timestamp_nanos_type_python_udf()
+
+    @unittest.skip("SPARK-57462: nanosecond timestamp types are pending Connect/Arrow support.")
+    def test_timestamp_nanos_type_map_key_collision(self):
+        super().test_timestamp_nanos_type_map_key_collision()
+
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_apply_schema(self):
         super().test_apply_schema()
