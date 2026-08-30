@@ -1222,6 +1222,7 @@ class LocIndexer(LocIndexerLike):
             missing_keys = [r for r in rows_sel if r not in found_keys]
             if len(missing_keys) > 0:
                 raise KeyError(f"{missing_keys} not in index")
+            
             if len(rows_sel) == 1:
                 return (
                     index_column.spark.column == F.lit(rows_sel[0]).cast(index_data_type),
