@@ -854,11 +854,17 @@ object KeyedPartitioning {
     val projectedDataTypes = positions.map(dataTypes)
     val comparableKeyWrapperFactory =
       InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(projectedDataTypes)
-    val positionsWithTypes = positions.zip(projectedDataTypes)
+    // A key list is as long as the number of splits the scan reported, so whatever is allocated per
+    // key is allocated tens of thousands of times.
+    val positionArray = positions.toArray
+    val typeArray = projectedDataTypes.toArray
     val projectedKeys = keys.map { key =>
-      val projectedKey = positionsWithTypes.map {
-        case (position, dataType) => key.row.get(position, dataType)
-      }.toArray[Any]
+      val projectedKey = new Array[Any](positionArray.length)
+      var i = 0
+      while (i < positionArray.length) {
+        projectedKey(i) = key.row.get(positionArray(i), typeArray(i))
+        i += 1
+      }
       comparableKeyWrapperFactory(new GenericInternalRow(projectedKey))
     }
 
@@ -872,18 +878,25 @@ object KeyedPartitioning {
       keys: Seq[InternalRowComparableWrapper],
       dataTypes: Seq[DataType],
       reducers: Seq[Option[KeyReducer]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) = {
-    val reducedDataTypes = dataTypes.zip(reducers).map {
-      case (_, Some(KeyReducer(reducer: Reducer[Any, Any], _))) => reducer.resultType()
-      case (t, _) => t
+    // The `Reducer[Any, Any]` match is erased, so it only ever checks for `Some`. Settling it per
+    // position keeps it out of the key loop below, and gives the result types with it.
+    val reducerArray =
+      reducers.map(_.map(_.reducer.asInstanceOf[Reducer[Any, Any]]).orNull).toArray
+    val reducedDataTypes = dataTypes.zip(reducerArray).map {
+      case (t, reducer) => if (reducer == null) t else reducer.resultType()
     }
     val comparableKeyWrapperFactory =
       InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(reducedDataTypes)
+    val typeArray = dataTypes.toArray
     val reducedKeys = keys.map { key =>
-      val keyValues = key.row.toSeq(dataTypes)
-      val reducedKey = keyValues.zip(reducers).map {
-        case (v, Some(KeyReducer(reducer: Reducer[Any, Any], _))) => reducer.reduce(v)
-        case (v, _) => v
-      }.toArray
+      val reducedKey = new Array[Any](typeArray.length)
+      var i = 0
+      while (i < typeArray.length) {
+        val value = key.row.get(i, typeArray(i))
+        val reducer = reducerArray(i)
+        reducedKey(i) = if (reducer == null) value else reducer.reduce(value)
+        i += 1
+      }
       comparableKeyWrapperFactory(new GenericInternalRow(reducedKey))
     }
 
