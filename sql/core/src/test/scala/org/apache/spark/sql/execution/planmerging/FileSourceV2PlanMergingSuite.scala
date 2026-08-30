@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.planmerging
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SubqueryExec}
@@ -180,7 +180,6 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
   test("SPARK-57205: withhold SCAN_MERGING from a table whose reads are not strict") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      // b is written as a string and read as a long, so the reader fails only once it reads b.
       spark.range(0, 10).selectExpr("id AS a", "cast(id AS string) AS b").write.parquet(path)
       // The table is built outside the strictness scope on purpose: the gate is evaluated per call,
       // so it has to answer for the read that is running rather than for the read that built it.
@@ -201,6 +200,16 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
           }
         }
       }
+    }
+  }
+
+  // Separate from the capability test above so that a change breaking the gate names which half it
+  // broke: an assertion that aborts on the capability never reports on the rows.
+  test("SPARK-57205: a non-strict read keeps its scans separate") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      // b is written as a string and read as a long, so the reader fails only once it reads b.
+      spark.range(0, 10).selectExpr("id AS a", "cast(id AS string) AS b").write.parquet(path)
       // The scans stay separate, so the a-only scan never reads b and sum(a) is still exact. If
       // they merged, reading b would fail, ignoreCorruptFiles would swallow it and drop the rest of
       // the file, and sum(a) would come back null over rows nothing above the scan removed. The
@@ -601,9 +610,10 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
   test("SPARK-57205: CSV and JSON decline to merge, so their parsing stays per subquery") {
     // The parsers are handed just the columns the scan asked for (for CSV under
     // spark.sql.csv.parser.columnPruning.enabled), so which columns a scan reads decides which
-    // records it treats as malformed. V1 merges these shapes and parses the union; V2 declines,
-    // because neither table declares SCAN_MERGING. Each shape below is a case where that decision
-    // is visible in the result, so adding the capability back to either table fails this test.
+    // records it treats as malformed. Neither table declares SCAN_MERGING, so each subquery keeps
+    // its own scan. Every shape below is one where a merged scan would return something else, so
+    // adding the capability back to either table fails this test. The V1 path does merge them
+    // today, and does return something else, which is SPARK-59107.
     val typeErrorCsv = Seq("0,0", "1,10", "2,BAD", "3,30", "4,40")
     val typeErrorJson = Seq(
       """{"a":0,"b":0}""",
@@ -639,25 +649,23 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
         path: String,
         schema: String,
         mode: String,
-        query: String,
-        useV1: Boolean): Seq[Row] =
+        query: String): Seq[Row] =
       // Pin what the expectations below depend on rather than rely on the defaults: with CSV column
       // pruning off the parser is handed the full data schema, and with JSON partial results off
       // the malformed record yields an all-null row, which the WHERE then drops.
       withSQLConf(
           SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "true",
           SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
-        withFileView(format, path, useV1 = useV1, schema = Some(schema),
+        withFileView(format, path, schema = Some(schema),
           options = Map("mode" -> mode, "columnNameOfCorruptRecord" -> "_corrupt_record")) {
           val df = sql(query)
-          if (useV1) assertUsesFileSourceV1(df) else assertUsesFileSourceV2(df)
+          assertUsesFileSourceV2(df)
           val result = df.collect().toSeq
-          // V1 merges the two subqueries into one; V2 declines. Asserted after collect() so that
-          // AQE has finalized and the reuse of the merged subquery is visible in the plan. Pinning
-          // this alongside the rows attributes the difference to the merge decision itself.
-          assert(subqueryCounts(df) == (if (useV1) ((1, 1)) else ((2, 0))),
-            s"unexpected subquery counts on ${if (useV1) "V1" else "V2"}:\n" +
-              df.queryExecution.executedPlan)
+          // Asserted after collect() so that AQE has finalized and a merged subquery's reuse would
+          // be visible in the plan. Pinning this alongside the rows attributes them to the merge
+          // decision itself.
+          assert(subqueryCounts(df) == ((2, 0)),
+            s"the two subqueries should keep their own scans:\n${df.queryExecution.executedPlan}")
           result
         }
       }
@@ -665,39 +673,25 @@ class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
     Seq("csv" -> typeErrorCsv, "json" -> typeErrorJson).foreach { case (format, lines) =>
       withClue(s"format=$format: ") {
         withData(lines) { path =>
-          // DROPMALFORMED. The a-only scan never parses b, so V2 keeps the record for sum(a). V1's
-          // merged scan parses the union and drops it for both, giving 8.
-          assert(rows(format, path, "a long, b long", "DROPMALFORMED", sumQuery,
-            useV1 = false) == Seq(Row(10, 80)))
-          assert(rows(format, path, "a long, b long", "DROPMALFORMED", sumQuery,
-            useV1 = true) == Seq(Row(8, 80)))
+          // DROPMALFORMED. The a-only scan never parses b, so the record survives for sum(a). A
+          // merged scan would parse the union and drop it for both, giving 8.
+          assert(rows(format, path, "a long, b long", "DROPMALFORMED", sumQuery) ==
+            Seq(Row(10, 80)))
 
-          // PERMISSIVE, the default mode, with the corrupt-record column in the schema. V2 does not
-          // flag the record for the subquery that reads a and the corrupt column; V1's merged scan
-          // parses b, so the column is populated for a row the first subquery counted as clean.
+          // PERMISSIVE, the default mode, with the corrupt-record column in the schema. The
+          // subquery that reads a and the corrupt column does not flag the record; a merged scan
+          // would parse b and populate the column for a row that subquery counted as clean.
           assert(rows(format, path, "a long, b long, _corrupt_record string", "PERMISSIVE",
-            corruptQuery, useV1 = false) == Seq(Row(0, 80)))
-          assert(rows(format, path, "a long, b long, _corrupt_record string", "PERMISSIVE",
-            corruptQuery, useV1 = true) == Seq(Row(1, 80)))
+            corruptQuery) == Seq(Row(0, 80)))
         }
       }
     }
 
-    // FAILFAST, CSV only: JSON has no arity check, so a missing field is null, not malformed. V2
-    // returns rows; V1's merged scan parses two columns against a one-token row and throws, which
-    // is a working query turning into an error.
+    // FAILFAST, CSV only: JSON has no arity check, so a missing field is null, not malformed. Each
+    // narrow scan matches the short row, so the query returns rows; a merged scan would parse two
+    // columns against a one-token row and throw, turning a working query into an error.
     withData(shortRowCsv) { path =>
-      assert(rows("csv", path, "a long, b long", "FAILFAST", sumQuery,
-        useV1 = false) == Seq(Row(10, 80)))
-      // Pin why V1 threw, not just that it did: a bare intercept would keep passing if this read
-      // started failing for an unrelated reason, and the subquery-count assertion inside `rows`
-      // sits after collect(), so it never runs on the throwing path.
-      val thrown = intercept[SparkException](
-        rows("csv", path, "a long, b long", "FAILFAST", sumQuery, useV1 = true))
-      val chain =
-        Iterator.iterate[Throwable](thrown)(_.getCause).takeWhile(_ != null).toList
-      assert(chain.exists(t => Option(t.getMessage).exists(_.contains("MALFORMED_RECORD"))),
-        s"expected a malformed-record parse failure, got:\n$thrown")
+      assert(rows("csv", path, "a long, b long", "FAILFAST", sumQuery) == Seq(Row(10, 80)))
     }
   }
 }
