@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, JoinSelectionHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, Join, JoinHint, NO_BROADCAST_AND_REPLICATION}
-import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, IdentityBroadcastMode}
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
@@ -39,7 +38,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.SlowSQLTest
-import org.apache.spark.unsafe.map.BytesToBytesMap
 
 @SlowSQLTest
 class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
@@ -1301,13 +1299,23 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
-  test("SPARK-36082: keep NAAJ hash join when the fallback builds right") {
+  test("SPARK-36082: keep in-threshold NAAJ hash join when the fallback builds right") {
     withSQLConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
       val joinExec = assertJoin((
         "select * from testData where key not in (select b from testData3)",
         classOf[BroadcastHashJoinExec]))
       assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+    }
+  }
+
+  test("SPARK-36082: keep over-threshold NAAJ nested-loop join when fallback builds right") {
+    withSQLConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      val joinExec = assertJoin((
+        "select * from testData where key not in (select b from testData3)",
+        classOf[BroadcastNestedLoopJoinExec]))
+      assert(joinExec.asInstanceOf[BroadcastNestedLoopJoinExec].buildSide === BuildRight)
     }
   }
 
@@ -1333,66 +1341,26 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
-  test("SPARK-36082: keep NAAJ identity broadcast at the non-integral hash row limit") {
-    val maxBroadcastHashRows = (BytesToBytesMap.MAX_CAPACITY / 1.5).toLong
-
+  test("SPARK-36082: threshold-disabled NAAJ preserves floating-point equality") {
     withSQLConf(
-      SQLConf.CBO_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
-      val left = spark.range(1).selectExpr("id = 0 AS key")
-      val right = spark.range(maxBroadcastHashRows)
-        .selectExpr("IF(id = 0, CAST(NULL AS BOOLEAN), id % 2 = 0) AS b")
+      withTempView("naajFloatingLeft", "naajFloatingRight") {
+        Seq[java.lang.Double](-0.0d, 2.0d, null).toDF("key")
+          .createOrReplaceTempView("naajFloatingLeft")
+        Seq[java.lang.Double](0.0d, 1.0d).toDF("key")
+          .createOrReplaceTempView("naajFloatingRight")
 
-      withTempView("naajLeft", "naajRightAtHashLimit") {
-        left.createOrReplaceTempView("naajLeft")
-        right.createOrReplaceTempView("naajRightAtHashLimit")
-        val queryExecution = sql(
-          "select * from naajLeft where key not in (select b from naajRightAtHashLimit)")
-          .queryExecution
-        val logicalJoins = queryExecution.optimizedPlan.collect { case join: Join => join }
-        assert(logicalJoins.size === 1)
-        val logicalJoin = logicalJoins.head
-        assert(logicalJoin.right.stats.rowCount.contains(maxBroadcastHashRows))
-        assert(!canPlanAsBroadcastHashJoin(logicalJoin, conf))
-
-        val joinExec = queryExecution.sparkPlan.collect {
+        val result = sql(
+          "select * from naajFloatingLeft " +
+            "where key not in (select key from naajFloatingRight)")
+        val joinExec = result.queryExecution.sparkPlan.collect {
           case join: BroadcastNestedLoopJoinExec => join
         }
         assert(joinExec.size === 1)
         assert(joinExec.head.buildSide === BuildRight)
-        assert(joinExec.head.requiredChildDistribution(1) ===
-          BroadcastDistribution(IdentityBroadcastMode))
-      }
-    }
-  }
-
-  test("SPARK-36082: keep NAAJ hash join for integral keys at the non-integral row limit") {
-    val maxBroadcastHashRows = (BytesToBytesMap.MAX_CAPACITY / 1.5).toLong
-
-    withSQLConf(
-      SQLConf.CBO_ENABLED.key -> "true",
-      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
-      val left = spark.range(1).selectExpr("CAST(id AS INT) AS key")
-      val right = spark.range(maxBroadcastHashRows)
-        .selectExpr("IF(id = 0, CAST(NULL AS INT), CAST(id AS INT)) AS b")
-
-      withTempView("naajLeft", "naajIntegralRightAtHashLimit") {
-        left.createOrReplaceTempView("naajLeft")
-        right.createOrReplaceTempView("naajIntegralRightAtHashLimit")
-        val queryExecution = sql(
-          "select * from naajLeft " +
-            "where key not in (select b from naajIntegralRightAtHashLimit)").queryExecution
-        val logicalJoins = queryExecution.optimizedPlan.collect { case join: Join => join }
-        assert(logicalJoins.size === 1)
-        val logicalJoin = logicalJoins.head
-        assert(logicalJoin.right.stats.rowCount.contains(maxBroadcastHashRows))
-        assert(canPlanAsBroadcastHashJoin(logicalJoin, conf))
-
-        val joinExec = queryExecution.sparkPlan.collect { case join: BroadcastHashJoinExec => join }
-        assert(joinExec.size === 1)
-        assert(joinExec.head.isNullAwareAntiJoin)
+        checkAnswer(result, Row(2.0d))
       }
     }
   }

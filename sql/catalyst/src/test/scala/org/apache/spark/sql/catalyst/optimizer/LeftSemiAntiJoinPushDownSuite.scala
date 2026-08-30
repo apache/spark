@@ -110,17 +110,17 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Aggregate: NAAJ no pushdown when the rewritten join would build left") {
+  test("Aggregate: NAAJ no pushdown when the original join would build left") {
     val leftKey = $"leftKey".int
     val leftKeyStats = ColumnStat(
-      distinctCount = Some(1000),
+      distinctCount = Some(1),
       min = Some(0),
-      max = Some(999),
+      max = Some(0),
       nullCount = Some(0),
       avgLen = Some(4),
       maxLen = Some(4))
     val child = StatsTestPlan(
-      Seq(leftKey), 1000, AttributeMap(Seq(leftKey -> leftKeyStats)), Some(1))
+      Seq(leftKey), 1000, AttributeMap(Seq(leftKey -> leftKeyStats)), Some(1000))
     val aggregate = Aggregate(Seq(leftKey), Seq(leftKey), child)
     val right = StatsTestPlan(
       Seq($"rightKey".int), 1000, AttributeMap(Seq()), Some(1000))
@@ -134,11 +134,19 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
       SQLConf.CBO_ENABLED.key -> "true",
       SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "100") {
-      assert(aggregate.stats.sizeInBytes > SQLConf.get.autoBroadcastJoinThreshold)
-      assert(child.stats.sizeInBytes <= SQLConf.get.autoBroadcastJoinThreshold)
+      assert(aggregate.stats.sizeInBytes <= SQLConf.get.autoBroadcastJoinThreshold)
+      assert(child.stats.sizeInBytes > SQLConf.get.autoBroadcastJoinThreshold)
       assert(right.stats.sizeInBytes > SQLConf.get.autoBroadcastJoinThreshold)
       comparePlans(Optimize.execute(originalQuery), originalQuery)
     }
+  }
+
+  test("Aggregate: LeftSemi join no pushdown - empty join condition") {
+    val originalQuery = testRelation
+      .groupBy($"b")($"b", sum($"c"))
+      .join(testRelation1, joinType = LeftSemi, condition = None)
+
+    comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
   }
 
   test("Aggregate: LeftSemi join no pushdown - non-deterministic aggr expressions") {

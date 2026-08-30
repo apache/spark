@@ -25,15 +25,8 @@ import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint, LeafNode, NO_BROADCAST_HASH, SHUFFLE_HASH, Statistics}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.unsafe.map.BytesToBytesMap
 
 class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
-
-  private case class UnknownRowCountTestPlan(
-      override val output: Seq[Attribute],
-      sizeInBytes: BigInt = 1000) extends LeafNode {
-    override def computeStats(): Statistics = Statistics(sizeInBytes = sizeInBytes)
-  }
 
   private case class TrackingStatsTestPlan(
       override val output: Seq[Attribute],
@@ -185,7 +178,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     }
   }
 
-  test("canPlanAsBroadcastHashJoin should respect NAAJ nested-loop build side") {
+  test("canPlanAsBroadcastHashJoin should respect NAAJ size and nested-loop build side") {
     val leftKey = left.output.head
     val rightKey = right.output.head
     val condition = Or(EqualTo(leftKey, rightKey), IsNull(EqualTo(leftKey, rightKey)))
@@ -197,68 +190,12 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
       assert(canPlanAsBroadcastHashJoin(nullAwareAntiJoin, SQLConf.get))
-      assert(canPlanAsBroadcastHashJoin(nullAwareAntiJoin.copy(right = largeRight), SQLConf.get))
+      assert(!canPlanAsBroadcastHashJoin(
+        nullAwareAntiJoin.copy(right = largeRight.copy(rowCount = 1)), SQLConf.get))
       assert(!canPlanAsBroadcastHashJoin(
         nullAwareAntiJoin.copy(left = smallLeft, right = largeRight), SQLConf.get))
       assert(!canPlanAsBroadcastHashJoin(
         nullAwareAntiJoin.copy(hint = JoinHint(hintBroadcast, None)), SQLConf.get))
-    }
-  }
-
-  test("canPlanAsBroadcastHashJoin should respect the NAAJ hashed relation row limit") {
-    val maxBroadcastHashRows = (BytesToBytesMap.MAX_CAPACITY / 1.5).toLong
-    val leftKey = left.output.head
-    val rightKey = right.output.head
-    val condition = Or(EqualTo(leftKey, rightKey), IsNull(EqualTo(leftKey, rightKey)))
-    val nullAwareAntiJoin = Join(left, right, LeftAnti, Some(condition), JoinHint.NONE)
-    val rightAtLimit = right.copy(rowCount = maxBroadcastHashRows)
-
-    val booleanLeft = StatsTestPlan(
-      Seq($"booleanLeft".boolean), 20000000, AttributeMap(Seq()), Some(20000000))
-    val booleanRight = StatsTestPlan(
-      Seq($"booleanRight".boolean), maxBroadcastHashRows - 1, AttributeMap(Seq()), Some(1000))
-    val booleanCondition = Or(
-      EqualTo(booleanLeft.output.head, booleanRight.output.head),
-      IsNull(EqualTo(booleanLeft.output.head, booleanRight.output.head)))
-    val booleanKeyJoin = Join(
-      booleanLeft, booleanRight, LeftAnti, Some(booleanCondition), JoinHint.NONE)
-
-    val unknownRight = UnknownRowCountTestPlan(Seq($"unknownRight".boolean))
-    val unknownCondition = Or(
-      EqualTo(booleanLeft.output.head, unknownRight.output.head),
-      IsNull(EqualTo(booleanLeft.output.head, unknownRight.output.head)))
-    val unknownRowCountJoin = Join(
-      booleanLeft, unknownRight, LeftAnti, Some(unknownCondition), JoinHint.NONE)
-    val largeUnknownRight = UnknownRowCountTestPlan(
-      Seq($"largeUnknownRight".boolean), sizeInBytes = 20000000)
-    val largeUnknownCondition = Or(
-      EqualTo(booleanLeft.output.head, largeUnknownRight.output.head),
-      IsNull(EqualTo(booleanLeft.output.head, largeUnknownRight.output.head)))
-    val largeUnknownRowCountJoin = Join(
-      booleanLeft, largeUnknownRight, LeftAnti, Some(largeUnknownCondition), JoinHint.NONE)
-
-    val longLeft = StatsTestPlan(
-      Seq($"longLeft".long), 20000000, AttributeMap(Seq()), Some(20000000))
-    val longRight = StatsTestPlan(
-      Seq($"longRight".long), maxBroadcastHashRows, AttributeMap(Seq()), Some(1000))
-    val longCondition = Or(
-      EqualTo(longLeft.output.head, longRight.output.head),
-      IsNull(EqualTo(longLeft.output.head, longRight.output.head)))
-    val longKeyJoin = Join(longLeft, longRight, LeftAnti, Some(longCondition), JoinHint.NONE)
-
-    withSQLConf(
-      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
-      assert(canPlanAsBroadcastHashJoin(booleanKeyJoin, SQLConf.get))
-      val booleanKeyJoinAtLimit = booleanKeyJoin.copy(
-        right = booleanRight.copy(rowCount = maxBroadcastHashRows))
-      assert(!canPlanAsBroadcastHashJoin(
-        booleanKeyJoinAtLimit, SQLConf.get))
-      assert(canPlanAsBroadcastHashJoin(
-        nullAwareAntiJoin.copy(right = rightAtLimit), SQLConf.get))
-      assert(canPlanAsBroadcastHashJoin(unknownRowCountJoin, SQLConf.get))
-      assert(!canPlanAsBroadcastHashJoin(largeUnknownRowCountJoin, SQLConf.get))
-      assert(canPlanAsBroadcastHashJoin(longKeyJoin, SQLConf.get))
     }
   }
 

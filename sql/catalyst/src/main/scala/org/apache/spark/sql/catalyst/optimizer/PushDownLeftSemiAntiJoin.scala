@@ -64,7 +64,8 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
     case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), joinCond, _)
         if agg.aggregateExpressions.forall(_.deterministic) && agg.groupingExpressions.nonEmpty &&
           !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
-          canPushThroughCondition(agg.children, joinCond, rightOp) =>
+          canPushThroughCondition(agg.children, joinCond, rightOp) &&
+          canPlanAsBroadcastHashJoin(join, conf) =>
       val aliasMap = getAliasMap(agg)
       val canPushDownPredicate = (predicate: Expression) => {
         val replaced = replaceAlias(predicate, aliasMap)
@@ -288,4 +289,3 @@ object PushLeftSemiLeftAntiThroughJoin extends Rule[LogicalPlan] with PredicateH
       }
   }
 }
-

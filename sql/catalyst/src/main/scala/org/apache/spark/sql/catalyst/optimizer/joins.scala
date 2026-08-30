@@ -32,8 +32,6 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.IntegralType
-import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.Utils
 
 /**
@@ -291,20 +289,6 @@ case object BuildLeft extends BuildSide
 
 trait JoinSelectionHelper extends Logging {
 
-  // Keep this synchronized with BroadcastExchangeExec's non-Long hashed relation limit.
-  private val maxBroadcastHashRows = (BytesToBytesMap.MAX_CAPACITY / 1.5).toLong
-
-  private def canBuildNullAwareAntiJoinHashRelation(
-      rightKeys: Seq[Expression],
-      right: LogicalPlan,
-      conf: SQLConf): Boolean = {
-    val usesLongHashedRelation =
-      rightKeys.length == 1 && rightKeys.head.dataType.isInstanceOf[IntegralType]
-    usesLongHashedRelation || right.stats.rowCount.fold(canBroadcastBySize(right, conf)) {
-      _ < maxBroadcastHashRows
-    }
-  }
-
   def getBroadcastBuildSide(
       join: Join,
       hintOnly: Boolean,
@@ -515,9 +499,9 @@ trait JoinSelectionHelper extends Logging {
         if (noShufflePlannedBefore) getBroadcastBuildSide(join, hintOnly = false, conf) else None
       }
     // The null-aware hash join only supports BuildRight. Preserve a generic BuildLeft fallback.
-    case j @ ExtractSingleColumnNullAwareAntiJoin(_, rightKeys)
+    case j @ ExtractSingleColumnNullAwareAntiJoin(_, _)
         if getBroadcastNestedLoopJoinBuildSide(j, conf) == BuildRight &&
-          canBuildNullAwareAntiJoinHashRelation(rightKeys, j.right, conf) =>
+          canBroadcastBySize(j.right, conf) =>
       Some(BuildRight)
     case _ => None
   }
