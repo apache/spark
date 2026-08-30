@@ -502,6 +502,42 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
+  test("nested runtime filters preserve partition transform semantics and key ordinals") {
+    val tbl = s"$catalogName.tbl_nested_transforms"
+    val transformedDim = s"$catalogName.dim_nested_transformed"
+    val identityDim = s"$catalogName.dim_nested_identity"
+    withTable(tbl, transformedDim, identityDim) {
+      sql(s"CREATE TABLE $tbl (id INT, transformed STRUCT<part: STRING>, " +
+        s"identity STRUCT<part: STRING>) USING $v2Source " +
+        "PARTITIONED BY (truncate(transformed.part, 1), identity.part)")
+      sql(s"INSERT INTO $tbl VALUES " +
+        "(1, named_struct('part', 'AB'), named_struct('part', 'X')), " +
+        "(2, named_struct('part', 'CD'), named_struct('part', 'Y'))")
+      sql(s"CREATE TABLE $transformedDim (value STRING) USING $v2Source")
+      sql(s"INSERT INTO $transformedDim VALUES ('AB')")
+      sql(s"CREATE TABLE $identityDim (value STRING) USING $v2Source")
+      sql(s"INSERT INTO $identityDim VALUES ('Y')")
+
+      val transformedDf = sql(s"SELECT id FROM $tbl " +
+        s"WHERE transformed.part = (SELECT max(value) FROM $transformedDim)")
+      checkAnswer(transformedDf, Row(1))
+      assertScalarSubqueryRuntimeFilters(transformedDf)
+      val transformedScan = collectBatchScan(transformedDf)
+      assert(transformedScan.inputPartitions.size === 2)
+      assert(transformedScan.filteredPartitions.flatten.size === 2,
+        "a predicate on a transform source must not be evaluated against its partition key")
+
+      val identityDf = sql(s"SELECT id FROM $tbl " +
+        s"WHERE identity.part = (SELECT max(value) FROM $identityDim)")
+      checkAnswer(identityDf, Row(2))
+      assertScalarSubqueryRuntimeFilters(identityDf)
+      val identityScan = collectBatchScan(identityDf)
+      assert(identityScan.inputPartitions.size === 2)
+      assert(identityScan.filteredPartitions.flatten.size === 1,
+        "an identity partition source must bind to its original partition-key slot")
+    }
+  }
+
   test("no runtime filter -> filter() is never called") {
     val tbl = s"$catalogName.tbl5"
     withTable(tbl) {
