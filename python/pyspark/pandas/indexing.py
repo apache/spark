@@ -1211,6 +1211,17 @@ class LocIndexer(LocIndexerLike):
         elif self._internal.index_level == 1:
             index_column = self._psdf_or_psser.index.to_series()
             index_data_type = index_column.spark.data_type
+            sdf = self._internal.spark_frame
+            index_scol = index_column.spark.column
+            isin_cond = index_scol.isin(
+                [F.lit(r).cast(index_data_type) for r in rows_sel]
+            )
+            found_keys = {
+                row[0] for row in sdf.filter(isin_cond).select(index_scol).distinct().collect()
+            }
+            missing_keys = [r for r in rows_sel if r not in found_keys]
+            if len(missing_keys) > 0:
+                raise KeyError(f"{missing_keys} not in index")
             if len(rows_sel) == 1:
                 return (
                     index_column.spark.column == F.lit(rows_sel[0]).cast(index_data_type),
