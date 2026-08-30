@@ -78,8 +78,14 @@ abstract class FileScanBuilder(
       !SubqueryExpression.hasSubquery(f) && !f.exists(_.isInstanceOf[PythonUDF])
     }
     this.dataFilters = dataFilters
+    // Expand struct equality predicates into field-level predicates for pushdown only.
+    // The original struct predicates stay in `dataFilters` (returned below as post-scan
+    // filters), so the expanded field predicates only need to be a sound over-approximation.
+    val expandedDataFilters =
+      DataSourceStrategy.expandStructPredicatesForPushdown(
+        dataFilters, sparkSession.sessionState.conf)
     val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
-    for (filterExpr <- dataFilters) {
+    for (filterExpr <- expandedDataFilters) {
       val translated = DataSourceStrategy.translateFilter(filterExpr, true)
       if (translated.nonEmpty) {
         translatedFilters += translated.get

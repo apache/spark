@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, Un
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, CurrentOrigin, QuaternaryLike, TernaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -81,13 +82,18 @@ case class NamedLambdaVariable(
     exprId: ExprId = NamedExpression.newExprId,
     value: AtomicReference[Any] = new AtomicReference())
   extends LeafExpression
-  with NamedExpression
-  with CodegenFallback {
+  with NamedExpression {
 
   override def qualifier: Seq[String] = Seq.empty
 
+  override def stateful: Boolean = true
+
   override def newInstance(): NamedExpression =
     copy(exprId = NamedExpression.newExprId, value = new AtomicReference())
+
+  override def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): NamedLambdaVariable =
+    copy(value = new AtomicReference())
 
   override def toAttribute: Attribute = {
     AttributeReference(name, dataType, nullable, Metadata.empty)(exprId, Seq.empty)
@@ -103,6 +109,10 @@ case class NamedLambdaVariable(
   override def simpleString(maxFields: Int): String = {
     s"lambda $name#${exprId.id}: ${dataType.simpleString(maxFields)}"
   }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    ctx.getLambdaVar(exprId.id)
+  }
 }
 
 /**
@@ -114,7 +124,7 @@ case class LambdaFunction(
     function: Expression,
     arguments: Seq[NamedExpression],
     hidden: Boolean = false)
-  extends Expression with CodegenFallback {
+  extends Expression {
 
   override def children: Seq[Expression] = function +: arguments
   override def dataType: DataType = function.dataType
@@ -131,6 +141,10 @@ case class LambdaFunction(
   lazy val bound: Boolean = arguments.forall(_.resolved)
 
   override def eval(input: InternalRow): Any = function.eval(input)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    function.genCode(ctx)
+  }
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): LambdaFunction =
@@ -160,6 +174,11 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
    * Arguments of the higher ordered function.
    */
   def arguments: Seq[Expression]
+
+  /**
+   * Arguments that are always evaluated when the higher order function is evaluated.
+   */
+  def alwaysEvaluatedArguments: Seq[Expression] = arguments
 
   def argumentTypes: Seq[AbstractDataType]
 
@@ -225,8 +244,16 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
 
   override lazy val canonicalized: Expression = {
     var currExprId = -1
+    // Number the lambda variables of this higher-order function, but only those not already
+    // canonicalized. A canonical `NamedLambdaVariable` carries `value = null` (see the rename
+    // below); an original one carries an `AtomicReference`. When this HOF is nested inside another,
+    // the enclosing HOF's `canonicalized` renames every variable in the whole subtree first, then
+    // canonicalizes the children - which re-enters this method on the nested HOF. Re-numbering the
+    // already-renamed variables here would give a reference to an *enclosing* lambda's variable a
+    // different id than its binding, leaking it into `references`; skipping them keeps a variable
+    // and its references in agreement across nesting levels.
     val argumentMap = functions.flatMap(_.collect {
-      case l: NamedLambdaVariable =>
+      case l: NamedLambdaVariable if l.value != null =>
         currExprId += 1
         l.exprId -> currExprId
     }).toMap
@@ -238,6 +265,63 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
     }
     val canonicalizedChildren = cleaned.children.map(_.canonicalized)
     withNewChildren(canonicalizedChildren)
+  }
+
+
+  protected def assignAtomic(
+      atomicRef: String,
+      value: String,
+      isNull: String = FalseLiteral,
+      nullable: Boolean = false) = {
+    if (nullable) {
+      s"""
+        if ($isNull) {
+          $atomicRef.set(null);
+        } else {
+          $atomicRef.set($value);
+        }
+      """
+    } else {
+      s"$atomicRef.set($value);"
+    }
+  }
+
+  protected def assignArrayElement(
+      ctx: CodegenContext,
+      arrayName: String,
+      elementCode: ExprCode,
+      elementVar: NamedLambdaVariable,
+      index: String): String = {
+    val elementType = elementVar.dataType
+    val elementAtomic = ctx.addReferenceObj(elementVar.name, elementVar.value)
+    val extractElement = CodeGenerator.getValue(arrayName, elementType, index)
+    val atomicAssign = assignAtomic(elementAtomic, elementCode.value,
+      elementCode.isNull, elementVar.nullable)
+
+    if (elementVar.nullable) {
+      s"""
+        ${elementCode.value} = $extractElement;
+        ${elementCode.isNull} = $arrayName.isNullAt($index);
+        $atomicAssign
+      """
+    } else {
+      s"""
+        ${elementCode.value} = $extractElement;
+        $atomicAssign
+      """
+    }
+  }
+
+  protected def assignIndex(
+      ctx: CodegenContext,
+      indexCode: ExprCode,
+      indexVar: NamedLambdaVariable,
+      index: String): String = {
+    val indexAtomic = ctx.addReferenceObj(indexVar.name, indexVar.value)
+    s"""
+      ${indexCode.value} = $index;
+      ${assignAtomic(indexAtomic, indexCode.value)}
+    """
   }
 }
 
@@ -284,6 +368,29 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction with BinaryLike[Expr
     }
   }
 
+  protected def nullSafeCodeGen(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      f: String => String): ExprCode = {
+    val argumentGen = argument.genCode(ctx)
+    val resultCode = f(argumentGen.value)
+
+    if (nullable) {
+      val nullSafeEval = ctx.nullSafeExec(argument.nullable, argumentGen.isNull)(resultCode)
+      ev.copy(code = code"""
+        |${argumentGen.code}
+        |boolean ${ev.isNull} = ${argumentGen.isNull};
+        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        |$nullSafeEval
+      """)
+    } else {
+      ev.copy(code = code"""
+        |${argumentGen.code}
+        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        |$resultCode
+      """, isNull = FalseLiteral)
+    }
+  }
 }
 
 trait ArrayBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
@@ -295,11 +402,41 @@ trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
 }
 
 /**
+ * A higher-order function whose result type is its argument's type, because it returns a subset or
+ * reordering of the input rather than the lambda's values. Members: `filter`, `map_filter`,
+ * `array_sort` (e.g. `filter(array<int>, ...) => array<int>`). Provides the shared `dataType`.
+ *
+ * The counterpart is [[ResultTypeFromFunction]]; the split is a real property of the expression,
+ * not of any evaluation: `filter` keeps its input's type, `transform`'s type follows the lambda.
+ */
+trait ResultTypeFromArgument extends SimpleHigherOrderFunction {
+  override def dataType: DataType = argument.dataType
+}
+
+/**
+ * A higher-order function whose result type follows its lambda, not its argument. Members:
+ * `transform`, `transform_keys`, `transform_values`, `zip_with`, `map_zip_with`, `aggregate`, and
+ * the predicates `exists` / `forall` (whose boolean lambda gives a boolean result).
+ *
+ * Each member computes its own `dataType` (array of the element type, a re-keyed/re-valued map, the
+ * fold result, ...), so this is a marker with no shared implementation - the counterpart of
+ * [[ResultTypeFromArgument]].
+ */
+trait ResultTypeFromFunction extends HigherOrderFunction
+
+/**
  * Transform elements in an array using the transform function. This is similar to
  * a `map` in functional programming.
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, func) - Transforms elements in an array using the function.",
+  arguments = """
+    Arguments:
+      * expr - The array whose elements are transformed.
+        An expression that evaluates to an array.
+      * func - The function applied to each element.
+        A lambda function.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), x -> x + 1);
@@ -312,7 +449,7 @@ trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
 case class ArrayTransform(
     argument: Expression,
     function: Expression)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+  extends ArrayBasedSimpleHigherOrderFunction with ResultTypeFromFunction {
 
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 
@@ -354,6 +491,49 @@ case class ArrayTransform(
     result
   }
 
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    ctx.withLambdaVars(Seq(elementVar) ++ indexVar, varCodes => {
+      val elementCode = varCodes.head
+      val indexCode = varCodes.tail.headOption
+
+      nullSafeCodeGen(ctx, ev, arg => {
+        val numElements = ctx.freshName("numElements")
+        val arrayData = ctx.freshName("arrayData")
+        val i = ctx.freshName("i")
+
+        val initialization = CodeGenerator.createArrayData(
+          arrayData, dataType.elementType, numElements, s" $prettyName failed.")
+
+        val functionCode = functionForEval.genCode(ctx)
+
+        val elementAssignment = assignArrayElement(ctx, arg, elementCode, elementVar, i)
+        val indexAssignment = indexCode.map(c => assignIndex(ctx, c, indexVar.get, i))
+        val varAssignments = (Seq(elementAssignment) ++ indexAssignment).mkString("\n")
+
+        // Some expressions return internal buffers that we have to copy
+        val copy = if (CodeGenerator.isPrimitiveType(function.dataType)) {
+          s"${functionCode.value}"
+        } else {
+          s"InternalRow.copyValue(${functionCode.value})"
+        }
+        val resultNull = if (function.nullable) Some(functionCode.isNull.toString) else None
+        val resultAssignment = CodeGenerator.setArrayElement(arrayData, dataType.elementType,
+          i, copy, isNull = resultNull)
+
+        s"""
+            |final int $numElements = $arg.numElements();
+            |$initialization
+            |for (int $i = 0; $i < $numElements; $i++) {
+            |  $varAssignments
+            |  ${functionCode.code}
+            |  $resultAssignment
+            |}
+            |${ev.value} = $arrayData;
+          """.stripMargin
+      })
+    })
+  }
+
   override def nodeName: String = "transform"
 
   override protected def withNewChildrenInternal(
@@ -377,6 +557,13 @@ case class ArrayTransform(
     equal to, or greater than the second element. If the comparator function returns null,
     the function will fail and raise an error.
     """,
+  arguments = """
+    Arguments:
+      * expr - The input array to sort.
+        An expression that evaluates to an array.
+      * func - The comparator function used to determine the sort order.
+        A lambda function returning an integer.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(5, 6, 1), (left, right) -> case when left < right then -1 when left > right then 1 else 0 end);
@@ -393,7 +580,7 @@ case class ArraySort(
     argument: Expression,
     function: Expression,
     allowNullComparisonResult: Boolean)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback with ResultTypeFromArgument {
 
   def this(argument: Expression, function: Expression) = {
     this(
@@ -407,7 +594,6 @@ case class ArraySort(
   @transient lazy val elementType: DataType =
     argument.dataType.asInstanceOf[ArrayType].elementType
 
-  override def dataType: ArrayType = argument.dataType.asInstanceOf[ArrayType]
   override def checkInputDataTypes(): TypeCheckResult = {
     checkArgumentDataTypes() match {
       case TypeCheckResult.TypeCheckSuccess =>
@@ -508,6 +694,12 @@ object ArraySort {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, func) - Filters entries in a map using the function.",
+  arguments = """
+    Arguments:
+      * expr - A map expression.
+      * func - A lambda function `(k, v) -> boolean` that returns whether the entry with
+          key `k` and value `v` should be kept.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 0, 2, 2, 3, -1), (k, v) -> k > v);
@@ -518,7 +710,7 @@ object ArraySort {
 case class MapFilter(
     argument: Expression,
     function: Expression)
-  extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
+  extends MapBasedSimpleHigherOrderFunction with CodegenFallback with ResultTypeFromArgument {
 
   @transient lazy val (keyVar, valueVar) = {
     val args = function.asInstanceOf[LambdaFunction].arguments
@@ -548,8 +740,6 @@ case class MapFilter(
     ArrayBasedMapData(retKeys.toArray, retValues.toArray)
   }
 
-  override def dataType: DataType = argument.dataType
-
   override def functionType: AbstractDataType = BooleanType
 
   override def nodeName: String = "map_filter"
@@ -564,6 +754,13 @@ case class MapFilter(
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, func) - Filters the input array using the given predicate.",
+  arguments = """
+    Arguments:
+      * expr - The array to filter.
+        An expression that evaluates to an array.
+      * func - The predicate used to filter the array.
+        A lambda function returning a boolean.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 1);
@@ -581,9 +778,7 @@ case class MapFilter(
 case class ArrayFilter(
     argument: Expression,
     function: Expression)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
-
-  override def dataType: DataType = argument.dataType
+  extends ArrayBasedSimpleHigherOrderFunction with ResultTypeFromArgument {
 
   override def functionType: AbstractDataType = BooleanType
 
@@ -622,6 +817,74 @@ case class ArrayFilter(
     new GenericArrayData(buffer)
   }
 
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    ctx.withLambdaVars(Seq(elementVar) ++ indexVar, varCodes => {
+      val elementCode = varCodes.head
+      val indexCode = varCodes.tail.headOption
+
+      nullSafeCodeGen(ctx, ev, arg => {
+        val numElements = ctx.freshName("numElements")
+        val count = ctx.freshName("count")
+        val arrayTracker = ctx.freshName("arrayTracker")
+        val arrayData = ctx.freshName("arrayData")
+        val keep = ctx.freshName("keep")
+        val i = ctx.freshName("i")
+        val j = ctx.freshName("j")
+
+        val arrayType = dataType.asInstanceOf[ArrayType]
+
+        val trackerInit = CodeGenerator.createArrayData(
+          arrayTracker, BooleanType, numElements, s" $prettyName failed.")
+        val resultInit = CodeGenerator.createArrayData(
+          arrayData, arrayType.elementType, count, s" $prettyName failed.")
+
+        val functionCode = functionForEval.genCode(ctx)
+
+        val elementAssignment = assignArrayElement(ctx, arg, elementCode, elementVar, i)
+        val indexAssignment = indexCode.map(c => assignIndex(ctx, c, indexVar.get, i))
+        val varAssignments = (Seq(elementAssignment) ++ indexAssignment).mkString("\n")
+
+        val resultAssignment = CodeGenerator.setArrayElement(arrayTracker, BooleanType,
+          i, keep, isNull = None)
+
+        val getTrackerValue = CodeGenerator.getValue(arrayTracker, BooleanType, i)
+        val copy = CodeGenerator.createArrayAssignment(arrayData, arrayType.elementType, arg,
+          j, i, arrayType.containsNull)
+
+        // This takes a two passes to avoid evaluating the predicate multiple times
+        // The first pass evaluates each element in the array, tracks how many elements
+        // returned true, and tracks the result of each element in a boolean array `arrayTracker`.
+        // The second pass copies elements from the original array to the new array created
+        // based on the number of elements matching the first pass.
+
+        s"""
+            |final int $numElements = $arg.numElements();
+            |$trackerInit
+            |int $count = 0;
+            |for (int $i = 0; $i < $numElements; $i++) {
+            |  $varAssignments
+            |  ${functionCode.code}
+            |  boolean $keep = !${functionCode.isNull} && ${functionCode.value};
+            |  $resultAssignment
+            |  if ($keep) {
+            |    $count++;
+            |  }
+            |}
+            |
+            |$resultInit
+            |int $j = 0;
+            |for (int $i = 0; $i < $numElements; $i++) {
+            |  if ($getTrackerValue) {
+            |    $copy
+            |    $j++;
+            |  }
+            |}
+            |${ev.value} = $arrayData;
+          """.stripMargin
+      })
+    })
+  }
+
   override def nodeName: String = "filter"
 
   override protected def withNewChildrenInternal(
@@ -634,6 +897,13 @@ case class ArrayFilter(
  */
 @ExpressionDescription(usage =
   "_FUNC_(expr, pred) - Tests whether a predicate holds for one or more elements in the array.",
+  arguments = """
+    Arguments:
+      * expr - The array to test.
+        An expression that evaluates to an array.
+      * pred - The predicate tested against the array elements.
+        A lambda function returning a boolean.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 0);
@@ -653,7 +923,7 @@ case class ArrayExists(
     argument: Expression,
     function: Expression,
     followThreeValuedLogic: Boolean)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback with Predicate {
+  extends ArrayBasedSimpleHigherOrderFunction with Predicate with ResultTypeFromFunction {
 
   def this(argument: Expression, function: Expression) = {
     this(
@@ -706,6 +976,50 @@ case class ArrayExists(
     }
   }
 
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    ctx.withLambdaVars(Seq(elementVar), { case Seq(elementCode) =>
+      nullSafeCodeGen(ctx, ev, arg => {
+        val numElements = ctx.freshName("numElements")
+        val exists = ctx.freshName("exists")
+        val foundNull = ctx.freshName("foundNull")
+        val i = ctx.freshName("i")
+
+        val functionCode = functionForEval.genCode(ctx)
+        val elementAssignment = assignArrayElement(ctx, arg, elementCode, elementVar, i)
+        val threeWayLogic = if (followThreeValuedLogic) TrueLiteral else FalseLiteral
+
+        val nullCheck = if (nullable) {
+          s"""
+            if ($threeWayLogic && !$exists && $foundNull) {
+              ${ev.isNull} = true;
+            }
+          """
+        } else {
+          ""
+        }
+
+        s"""
+            |final int $numElements = ${arg}.numElements();
+            |boolean $exists = false;
+            |boolean $foundNull = false;
+            |int $i = 0;
+            |while ($i < $numElements && !$exists) {
+            |  $elementAssignment
+            |  ${functionCode.code}
+            |  if (${functionCode.isNull}) {
+            |    $foundNull = true;
+            |  } else if (${functionCode.value}) {
+            |    $exists = true;
+            |  }
+            |  $i++;
+            |}
+            |$nullCheck
+            |${ev.value} = $exists;
+          """.stripMargin
+      })
+    })
+  }
+
   override def nodeName: String = "exists"
 
   override protected def withNewChildrenInternal(
@@ -724,6 +1038,13 @@ object ArrayExists {
  */
 @ExpressionDescription(usage =
   "_FUNC_(expr, pred) - Tests whether a predicate holds for all elements in the array.",
+  arguments = """
+    Arguments:
+      * expr - The array to test.
+        An expression that evaluates to an array.
+      * pred - The predicate tested against the array elements.
+        A lambda function returning a boolean.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 0);
@@ -740,7 +1061,7 @@ object ArrayExists {
 case class ArrayForAll(
     argument: Expression,
     function: Expression)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback with Predicate {
+  extends ArrayBasedSimpleHigherOrderFunction with Predicate with ResultTypeFromFunction {
 
   override def nullable: Boolean =
       super.nullable || function.nullable
@@ -785,6 +1106,49 @@ case class ArrayForAll(
     }
   }
 
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    ctx.withLambdaVars(Seq(elementVar), { case Seq(elementCode) =>
+      nullSafeCodeGen(ctx, ev, arg => {
+        val numElements = ctx.freshName("numElements")
+        val forall = ctx.freshName("forall")
+        val foundNull = ctx.freshName("foundNull")
+        val i = ctx.freshName("i")
+
+        val functionCode = functionForEval.genCode(ctx)
+        val elementAssignment = assignArrayElement(ctx, arg, elementCode, elementVar, i)
+
+        val nullCheck = if (nullable) {
+          s"""
+            if ($forall && $foundNull) {
+              ${ev.isNull} = true;
+            }
+          """
+        } else {
+          ""
+        }
+
+        s"""
+            |final int $numElements = ${arg}.numElements();
+            |boolean $forall = true;
+            |boolean $foundNull = false;
+            |int $i = 0;
+            |while ($i < $numElements && $forall) {
+            |  $elementAssignment
+            |  ${functionCode.code}
+            |  if (${functionCode.isNull}) {
+            |    $foundNull = true;
+            |  } else if (!${functionCode.value}) {
+            |    $forall = false;
+            |  }
+            |  $i++;
+            |}
+            |$nullCheck
+            |${ev.value} = $forall;
+          """.stripMargin
+      })
+    })
+  }
+
   override def nodeName: String = "forall"
 
   override protected def withNewChildrenInternal(
@@ -802,6 +1166,17 @@ case class ArrayForAll(
       elements in the array, and reduces this to a single state. The final state is converted
       into the final result by applying a finish function.
     """,
+  arguments = """
+    Arguments:
+      * expr - The input array to reduce.
+        An expression that evaluates to an array.
+      * start - The initial state to start the reduction from.
+        An expression of any type.
+      * merge - The binary operator applied to the current state and each array element.
+        A lambda function.
+      * finish - The function that converts the final state into the result.
+        A lambda function.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), 0, (acc, x) -> acc + x);
@@ -816,13 +1191,15 @@ case class ArrayAggregate(
     zero: Expression,
     merge: Expression,
     finish: Expression)
-  extends HigherOrderFunction with CodegenFallback with QuaternaryLike[Expression] {
+  extends HigherOrderFunction with QuaternaryLike[Expression] with ResultTypeFromFunction {
 
   def this(argument: Expression, zero: Expression, merge: Expression) = {
     this(argument, zero, merge, LambdaFunction.identity)
   }
 
   override def arguments: Seq[Expression] = argument :: zero :: Nil
+
+  override def alwaysEvaluatedArguments: Seq[Expression] = argument :: Nil
 
   override def argumentTypes: Seq[AbstractDataType] = ArrayType :: AnyDataType :: Nil
 
@@ -858,7 +1235,7 @@ case class ArrayAggregate(
     // Be very conservative with nullable. We cannot be sure that the accumulator does not
     // evaluate to null. So we always set nullable to true here.
     val ArrayType(elementType, containsNull) = argument.dataType
-    val acc = zero.dataType -> true
+    val acc = zero.dataType.asNullable -> true
     val newMerge = f(merge, acc :: (elementType, containsNull) :: Nil)
     val newFinish = f(finish, acc :: Nil)
     copy(merge = newMerge, finish = newFinish)
@@ -886,6 +1263,115 @@ case class ArrayAggregate(
     }
   }
 
+  protected def nullSafeCodeGen(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      f: String => String): ExprCode = {
+    val argumentGen = argument.genCode(ctx)
+    val resultCode = f(argumentGen.value)
+
+    if (nullable) {
+      val nullSafeEval = ctx.nullSafeExec(argument.nullable, argumentGen.isNull)(resultCode)
+      ev.copy(code = code"""
+        |${argumentGen.code}
+        |boolean ${ev.isNull} = ${argumentGen.isNull};
+        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        |$nullSafeEval
+      """)
+    } else {
+      ev.copy(code = code"""
+        |${argumentGen.code}
+        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        |$resultCode
+      """, isNull = FalseLiteral)
+    }
+  }
+
+  protected def assignVar(
+      varCode: ExprCode,
+      atomicVar: String,
+      value: String,
+      isNull: String,
+      nullable: Boolean): String = {
+    val atomicAssign = assignAtomic(atomicVar, value, isNull, nullable)
+    if (nullable) {
+      s"""
+        ${varCode.value} = $value;
+        ${varCode.isNull} = $isNull;
+        $atomicAssign
+      """
+    } else {
+      s"""
+        ${varCode.value} = $value;
+        $atomicAssign
+      """
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    ctx.withLambdaVars(Seq(elementVar, accForMergeVar, accForFinishVar), varCodes => {
+      val Seq(elementCode, accForMergeCode, accForFinishCode) = varCodes
+
+      nullSafeCodeGen(ctx, ev, arg => {
+        val numElements = ctx.freshName("numElements")
+        val i = ctx.freshName("i")
+
+        val zeroCode = zero.genCode(ctx)
+        val Seq(mergeForCodegen, finishForCodegen) = functionsForEval
+        val mergeCode = mergeForCodegen.genCode(ctx)
+        val finishCode = finishForCodegen.genCode(ctx)
+
+        val elementAssignment = assignArrayElement(ctx, arg, elementCode, elementVar, i)
+        val mergeAtomic = ctx.addReferenceObj(accForMergeVar.name,
+          accForMergeVar.value)
+        val finishAtomic = ctx.addReferenceObj(accForFinishVar.name,
+          accForFinishVar.value)
+
+        val mergeJavaType = CodeGenerator.javaType(accForMergeVar.dataType)
+        val finishJavaType = CodeGenerator.javaType(accForFinishVar.dataType)
+
+        // Some expressions return internal buffers that we have to copy
+        val mergeCopy = if (CodeGenerator.isPrimitiveType(merge.dataType)) {
+          s"${mergeCode.value}"
+        } else {
+          s"($mergeJavaType)InternalRow.copyValue(${mergeCode.value})"
+        }
+
+        val nullCheck = if (nullable) {
+          s"${ev.isNull} = ${finishCode.isNull};"
+        } else {
+          ""
+        }
+
+        val initialAssignment = assignVar(accForMergeCode, mergeAtomic, zeroCode.value,
+          zeroCode.isNull, accForMergeVar.nullable)
+
+        val mergeAssignment = assignVar(accForMergeCode, mergeAtomic, mergeCopy,
+          mergeCode.isNull, accForMergeVar.nullable)
+
+        val finishAssignment = assignVar(accForFinishCode, finishAtomic, accForMergeCode.value,
+          accForMergeCode.isNull, accForMergeVar.nullable)
+
+        s"""
+            |final int $numElements = ${arg}.numElements();
+            |${zeroCode.code}
+            |$initialAssignment
+            |
+            |for (int $i = 0; $i < $numElements; $i++) {
+            |  $elementAssignment
+            |  ${mergeCode.code}
+            |  $mergeAssignment
+            |}
+            |
+            |$finishAssignment
+            |${finishCode.code}
+            |${ev.value} = ${finishCode.value};
+            |$nullCheck
+          """.stripMargin
+      })
+    })
+  }
+
   override def nodeName: String = "aggregate"
 
   override def first: Expression = argument
@@ -904,6 +1390,12 @@ case class ArrayAggregate(
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, func) - Transforms elements in a map using the function.",
+  arguments = """
+    Arguments:
+      * expr - A map expression.
+      * func - A lambda function `(k, v) -> newKey` producing the transformed key from the
+          entry with key `k` and value `v`. The values are kept unchanged.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + 1);
@@ -916,7 +1408,7 @@ case class ArrayAggregate(
 case class TransformKeys(
     argument: Expression,
     function: Expression)
-  extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
+  extends MapBasedSimpleHigherOrderFunction with CodegenFallback with ResultTypeFromFunction {
 
   @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
@@ -964,6 +1456,12 @@ case class TransformKeys(
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, func) - Transforms values in the map using the function.",
+  arguments = """
+    Arguments:
+      * expr - A map expression.
+      * func - A lambda function `(k, v) -> newValue` producing the transformed value from
+          the entry with key `k` and value `v`. The keys are kept unchanged.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> v + 1);
@@ -976,7 +1474,7 @@ case class TransformKeys(
 case class TransformValues(
     argument: Expression,
     function: Expression)
-  extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
+  extends MapBasedSimpleHigherOrderFunction with CodegenFallback with ResultTypeFromFunction {
 
   @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
@@ -1024,6 +1522,14 @@ case class TransformValues(
       NULL will be passed as the value for the missing key. If an input map contains duplicated
       keys, only the first entry of the duplicated key is passed into the lambda function.
     """,
+  arguments = """
+    Arguments:
+      * map1 - The first map expression.
+      * map2 - The second map expression.
+      * function - A lambda function `(k, v1, v2) -> newValue` that produces the merged value
+          for key `k`, where `v1` and `v2` are the values from `map1` and `map2` respectively
+          (NULL when the key is missing from that map).
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(1, 'x', 2, 'y'), (k, v1, v2) -> concat(v1, v2));
@@ -1034,7 +1540,8 @@ case class TransformValues(
   since = "3.0.0",
   group = "lambda_funcs")
 case class MapZipWith(left: Expression, right: Expression, function: Expression)
-  extends HigherOrderFunction with CodegenFallback with TernaryLike[Expression] {
+  extends HigherOrderFunction with CodegenFallback with TernaryLike[Expression]
+  with ResultTypeFromFunction {
 
   def functionForEval: Expression = functionsForEval.head
 
@@ -1250,6 +1757,15 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(left, right, func) - Merges the two given arrays, element-wise, into a single array using function. If one array is shorter, nulls are appended at the end to match the length of the longer array, before applying function.",
+  arguments = """
+    Arguments:
+      * left - The first array to merge.
+        An expression that evaluates to an array.
+      * right - The second array to merge.
+        An expression that evaluates to an array.
+      * func - The function applied element-wise to merge the arrays.
+        A lambda function.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array('a', 'b', 'c'), (x, y) -> (y, x));
@@ -1263,7 +1779,8 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   group = "lambda_funcs")
 // scalastyle:on line.size.limit
 case class ZipWith(left: Expression, right: Expression, function: Expression)
-  extends HigherOrderFunction with CodegenFallback with TernaryLike[Expression] {
+  extends HigherOrderFunction with CodegenFallback with TernaryLike[Expression]
+  with ResultTypeFromFunction {
 
   def functionForEval: Expression = functionsForEval.head
 

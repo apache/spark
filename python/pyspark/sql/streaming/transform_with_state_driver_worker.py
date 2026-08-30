@@ -16,22 +16,20 @@
 #
 
 import json
-from typing import Any, Iterator, TYPE_CHECKING
+from typing import IO, TYPE_CHECKING, Any, Iterator
 
-from pyspark.worker_util import get_sock_file_to_executor
-from pyspark.serializers import (
-    write_int,
-    read_int,
-    UTF8Deserializer,
-    CPickleSerializer,
-)
 from pyspark import worker
-from pyspark.util import handle_worker_exception
-from typing import IO
-from pyspark.worker_util import check_python_version
+from pyspark.serializers import (
+    CPickleSerializer,
+    UTF8Deserializer,
+    read_int,
+    write_int,
+)
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 from pyspark.sql.types import StructType
+from pyspark.util import handle_worker_exception
+from pyspark.worker_util import check_python_version, get_sock_file_to_executor
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import (

@@ -173,6 +173,25 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
     assert(sqlConf.settings.get("spark.sql.ansi.enabled") == "false")
   }
 
+  test("SPARK-58400: ANSI value derived from createSparkVersion when not persisted for views") {
+    Seq(
+      "3.5.0" -> false,
+      "4.0.0" -> true,
+      "4.0.0-SNAPSHOT" -> true,
+      "5.0.0" -> true,
+      "" -> false,
+      "bogus" -> false
+    ).foreach { case (version, expected) =>
+      val sqlConf = View.effectiveSQLConf(
+        configs = Map.empty[String, String],
+        isTempView = false,
+        createSparkVersion = version)
+
+      assert(sqlConf.settings.get("spark.sql.ansi.enabled") == expected.toString,
+        s"createSparkVersion='$version'")
+    }
+  }
+
   test("Current schema marker is materialized in persisted view path") {
     withView(testViewName) {
       withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {

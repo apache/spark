@@ -38,10 +38,15 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def decimalPrecisionExceedsMaxPrecisionError(
       precision: Int,
       maxPrecision: Int): SparkArithmeticException = {
+    decimalPrecisionExceedsMaxPrecisionError(precision.toString, maxPrecision)
+  }
+
+  def decimalPrecisionExceedsMaxPrecisionError(
+      precision: String,
+      maxPrecision: Int): SparkArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
-      messageParameters =
-        Map("precision" -> precision.toString, "maxPrecision" -> maxPrecision.toString),
+      messageParameters = Map("precision" -> precision, "maxPrecision" -> maxPrecision.toString),
       context = Array.empty,
       summary = "")
   }
@@ -79,8 +84,23 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
 
   def cannotLoadUserDefinedTypeError(name: String, userClass: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2228",
-      messageParameters = Map("name" -> name, "userClass" -> userClass),
+      errorClass = "UDT_CLASS_NOT_FOUND.FOR_USER_CLASS",
+      messageParameters = Map("udtClass" -> name, "userClass" -> userClass),
+      cause = null)
+  }
+
+  def udtClassLoadingDisabledError(udtClass: String, allowed: Seq[String]): Throwable = {
+    new SparkException(
+      errorClass = "UDT_CLASS_LOADING_DISABLED",
+      messageParameters =
+        Map("udtClass" -> udtClass, "allowed" -> allowed.map(toSQLValue).mkString(", ")),
+      cause = null)
+  }
+
+  def udtClassNotUserDefinedTypeError(udtClass: String): Throwable = {
+    new SparkException(
+      errorClass = "UDT_CLASS_NOT_USER_DEFINED_TYPE",
+      messageParameters = Map("udtClass" -> udtClass),
       cause = null)
   }
 
@@ -119,7 +139,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
 
   def decimalCannotGreaterThanPrecisionError(scale: Int, precision: Int): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1228",
+      errorClass = "DECIMAL_SCALE_EXCEEDS_PRECISION",
       messageParameters = Map("scale" -> scale.toString, "precision" -> precision.toString))
   }
 
@@ -271,10 +291,38 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   }
 
   def unsupportedTimePrecisionError(precision: Int): Throwable = {
+    unsupportedTimePrecisionError(precision.toString)
+  }
+
+  def unsupportedTimePrecisionError(precision: String): Throwable = {
     new SparkException(
       errorClass = "UNSUPPORTED_TIME_PRECISION",
-      messageParameters = Map("precision" -> precision.toString),
+      messageParameters = Map("precision" -> precision),
       cause = null)
+  }
+
+  // Raised when an integer type parameter (CHAR/VARCHAR length or DECIMAL scale) is a well-formed
+  // digit sequence outside the range of a 32-bit integer. The grammar accepts an unbounded run of
+  // digits, so this guards the parameter conversion and surfaces a proper error instead of a raw
+  // `NumberFormatException`. DECIMAL precision and TIME precision reuse their own dedicated errors;
+  // GEOMETRY/GEOGRAPHY SRID reuses `ST_INVALID_SRID_VALUE`.
+  def datatypeParameterValueOutOfRangeError(
+      parameter: String,
+      value: String,
+      typeName: String): Throwable = {
+    new SparkException(
+      errorClass = "DATATYPE_PARAMETER_VALUE_OUT_OF_RANGE",
+      messageParameters = Map("parameter" -> parameter, "value" -> value, "type" -> typeName),
+      cause = null)
+  }
+
+  // Raised when a GEOMETRY/GEOGRAPHY SRID literal is a well-formed digit sequence outside the range
+  // of a 32-bit integer. Reuses `ST_INVALID_SRID_VALUE` so an overflowing SRID surfaces the same
+  // error as an in-range but unsupported SRID, instead of a raw `NumberFormatException`.
+  def stInvalidSridValueError(srid: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "ST_INVALID_SRID_VALUE",
+      messageParameters = Map("srid" -> srid))
   }
 
   def invalidTimestampPrecisionError(precision: String, typeName: String): Throwable = {
@@ -298,11 +346,5 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
         "configKey" -> "spark.sql.timestampNanosTypes.enabled",
         "configValue" -> "true"),
       cause = null)
-  }
-
-  def cannotConvertNanosTimestampToStringError(dataType: DataType): Throwable = {
-    new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING",
-      messageParameters = Map("dataType" -> toSQLType(dataType)))
   }
 }

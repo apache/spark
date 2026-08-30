@@ -1541,6 +1541,7 @@ object HiveExternalCatalog {
   private[spark] def isHiveCompatibleDataType(dt: DataType): Boolean = dt match {
     case _: AnsiIntervalType => false
     case _: TimestampNTZType => false
+    case _: AnyTimestampNanoType => false
     case _: VariantType => false
     case s: StructType =>
       s.forall { f =>

@@ -84,6 +84,21 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     checkErrorTableNotFound(e, "`non_exist_table`")
   }
 
+  test("read: time travel @-syntax is unsupported for streaming") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.readStream.table("t@v1")
+      },
+      condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+      parameters = Map("relationId" -> "`t`"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.readStream.table("t@20190129003758000")
+      },
+      condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+      parameters = Map("relationId" -> "`t`"))
+  }
+
   test("read: stream table API with temp view") {
     val tblName = "my_table"
     val stream = MemoryStream[Int]

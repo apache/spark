@@ -347,7 +347,7 @@ Project [a#x, b#x]
 +- LateralJoin lateral-subquery#x [c1#x && c2#x], Inner
    :  +- SubqueryAlias s
    :     +- Project [c1#x AS a#x, c2#x AS b#x]
-   :        +- Project [outer(c1#x), outer(c2#x)]
+   :        +- Project [outer(c1#x) AS c1#x, outer(c2#x) AS c2#x]
    :           +- OneRowRelation
    +- SubqueryAlias spark_catalog.default.t1
       +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])

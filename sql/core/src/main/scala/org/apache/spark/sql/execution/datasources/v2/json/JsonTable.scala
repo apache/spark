@@ -46,7 +46,7 @@ case class JsonTable(
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     JsonDataSource(parsedOptions).inferSchema(
-      sparkSession, files, parsedOptions)
+      sparkSession, files, parsedOptions, supportsArchiveScan = false)
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
@@ -58,9 +58,6 @@ case class JsonTable(
 
   override def supportsDataType(dataType: DataType): Boolean = dataType match {
     case _: GeometryType | _: GeographyType => false
-
-    // Nanosecond-capable timestamps are not yet supported by this datasource.
-    case _: TimestampNTZNanosType | _: TimestampLTZNanosType => false
 
     case _: AtomicType => true
 

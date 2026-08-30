@@ -31,6 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.TestsV1AndV2Commands {
   override def defaultNamespace: Seq[String] = Seq("default")
+  override def expectedTableTypeInJson: String = "MANAGED"
 
   private def withSourceViews(f: => Unit): Unit = {
     withTable("source", "source2") {
@@ -56,8 +57,8 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.Tests
       exception = intercept[AnalysisException] {
         runShowTablesSql("SHOW TABLES FROM a.b", Seq())
       },
-      condition = "_LEGACY_ERROR_TEMP_1126",
-      parameters = Map("catalog" -> "a.b")
+      condition = "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG",
+      parameters = Map("namespace" -> "`a`.`b`")
     )
   }
 

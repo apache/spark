@@ -19,7 +19,7 @@ import array as pyarray
 
 from numpy import arange, array, array_equal, inf, ones, tile, zeros
 
-from pyspark.serializers import CPickleSerializer
+from pyspark.errors import AnalysisException
 from pyspark.ml.linalg import (
     DenseMatrix,
     DenseVector,
@@ -27,12 +27,14 @@ from pyspark.ml.linalg import (
     SparseMatrix,
     SparseVector,
     Vector,
-    VectorUDT,
     Vectors,
+    VectorUDT,
 )
-from pyspark.testing.mllibutils import MLlibTestCase
+from pyspark.serializers import CPickleSerializer
 from pyspark.sql import Row
-from pyspark.sql.functions import unwrap_udt
+from pyspark.sql.functions import lit, unwrap_udt, wrap_udt
+from pyspark.sql.types import StructField, StructType
+from pyspark.testing.mllibutils import MLlibTestCase
 
 
 class VectorTests(MLlibTestCase):
@@ -146,10 +148,10 @@ class VectorTests(MLlibTestCase):
         # tests for fix of [SPARK-5089]
         v = array([1, 2, 3, 4], dtype="float64")
         dv = DenseVector(v)
-        self.assertTrue(dv.array.dtype == "float64")
+        self.assertEqual(dv.array.dtype, "float64")
         v = array([1, 2, 3, 4], dtype="float32")
         dv = DenseVector(v)
-        self.assertTrue(dv.array.dtype == "float64")
+        self.assertEqual(dv.array.dtype, "float64")
 
     def test_sparse_vector_indexing(self):
         sv = SparseVector(5, {1: 1, 3: 2})
@@ -193,23 +195,23 @@ class VectorTests(MLlibTestCase):
 
     def test_repr_dense_matrix(self):
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
-        self.assertTrue(repr(mat), "DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], False)")
+        self.assertEqual(repr(mat), "DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], False)")
 
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10], True)
-        self.assertTrue(repr(mat), "DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], False)")
+        self.assertEqual(repr(mat), "DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], True)")
 
         mat = DenseMatrix(6, 3, zeros(18))
-        self.assertTrue(
+        self.assertEqual(
             repr(mat),
-            "DenseMatrix(6, 3, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ..., \
-                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], False)",
+            "DenseMatrix(6, 3, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ..., "
+            "0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], False)",
         )
 
     def test_repr_sparse_matrix(self):
         sm1t = SparseMatrix(
             3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0], isTransposed=True
         )
-        self.assertTrue(
+        self.assertEqual(
             repr(sm1t),
             "SparseMatrix(3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0], True)",
         )
@@ -217,27 +219,27 @@ class VectorTests(MLlibTestCase):
         indices = tile(arange(6), 3)
         values = ones(18)
         sm = SparseMatrix(6, 3, [0, 6, 12, 18], indices, values)
-        self.assertTrue(
+        self.assertEqual(
             repr(sm),
-            "SparseMatrix(6, 3, [0, 6, 12, 18], \
-                [0, 1, 2, 3, 4, 5, 0, 1, ..., 4, 5, 0, 1, 2, 3, 4, 5], \
-                [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, ..., \
-                1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], False)",
+            "SparseMatrix(6, 3, [0, 6, 12, 18], "
+            "[0, 1, 2, 3, 4, 5, 0, 1, ..., 4, 5, 0, 1, 2, 3, 4, 5], "
+            "[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, ..., "
+            "1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], False)",
         )
 
-        self.assertTrue(
+        self.assertEqual(
             str(sm),
-            "6 X 3 CSCMatrix\n\
-            (0,0) 1.0\n(1,0) 1.0\n(2,0) 1.0\n(3,0) 1.0\n(4,0) 1.0\n(5,0) 1.0\n\
-            (0,1) 1.0\n(1,1) 1.0\n(2,1) 1.0\n(3,1) 1.0\n(4,1) 1.0\n(5,1) 1.0\n\
-            (0,2) 1.0\n(1,2) 1.0\n(2,2) 1.0\n(3,2) 1.0\n..\n..",
+            "6 X 3 CSCMatrix\n"
+            "(0,0) 1.0\n(1,0) 1.0\n(2,0) 1.0\n(3,0) 1.0\n(4,0) 1.0\n(5,0) 1.0\n"
+            "(0,1) 1.0\n(1,1) 1.0\n(2,1) 1.0\n(3,1) 1.0\n(4,1) 1.0\n(5,1) 1.0\n"
+            "(0,2) 1.0\n(1,2) 1.0\n(2,2) 1.0\n(3,2) 1.0\n..\n..",
         )
 
         sm = SparseMatrix(1, 18, zeros(19), [], [])
-        self.assertTrue(
+        self.assertEqual(
             repr(sm),
-            "SparseMatrix(1, 18, \
-                [0, 0, 0, 0, 0, 0, 0, 0, ..., 0, 0, 0, 0, 0, 0, 0, 0], [], [], False)",
+            "SparseMatrix(1, 18, "
+            "[0, 0, 0, 0, 0, 0, 0, 0, ..., 0, 0, 0, 0, 0, 0, 0, 0], [], [], False)",
         )
 
     def test_sparse_matrix(self):
@@ -248,7 +250,7 @@ class VectorTests(MLlibTestCase):
         self.assertEqual(sm1.colPtrs.tolist(), [0, 2, 2, 4, 4])
         self.assertEqual(sm1.rowIndices.tolist(), [1, 2, 1, 2])
         self.assertEqual(sm1.values.tolist(), [1.0, 2.0, 4.0, 5.0])
-        self.assertTrue(
+        self.assertEqual(
             repr(sm1),
             "SparseMatrix(3, 4, [0, 2, 2, 4, 4], [1, 2, 1, 2], [1.0, 2.0, 4.0, 5.0], False)",
         )
@@ -307,12 +309,12 @@ class VectorTests(MLlibTestCase):
     def test_norms(self):
         a = DenseVector([0, 2, 3, -1])
         self.assertAlmostEqual(a.norm(2), 3.742, 3)
-        self.assertTrue(a.norm(1), 6)
-        self.assertTrue(a.norm(inf), 3)
+        self.assertEqual(a.norm(1), 6)
+        self.assertEqual(a.norm(inf), 3)
         a = SparseVector(4, [0, 2], [3, -4])
         self.assertAlmostEqual(a.norm(2), 5)
-        self.assertTrue(a.norm(1), 7)
-        self.assertTrue(a.norm(inf), 4)
+        self.assertEqual(a.norm(1), 7)
+        self.assertEqual(a.norm(inf), 4)
 
         tmp = SparseVector(4, [0, 2], [3, 0])
         self.assertEqual(tmp.numNonzeros(), 1)
@@ -327,6 +329,10 @@ class VectorUDTTests(MLlibTestCase):
 
     def test_json_schema(self):
         self.assertEqual(VectorUDT.fromJson(self.udt.jsonValue()), self.udt)
+
+    def test_singleton(self):
+        self.assertIs(VectorUDT(), VectorUDT())
+        self.assertIs(VectorUDT.fromJson(self.udt.jsonValue()), self.udt)
 
     def test_serialization(self):
         for v in [self.dv0, self.dv1, self.sv0, self.sv1]:
@@ -363,6 +369,49 @@ class VectorUDTTests(MLlibTestCase):
         ]
         self.assertEqual(results, expected)
 
+    def test_wrap_udt(self):
+        schema = StructType([StructField("vec", VectorUDT.sqlType(), True)])
+        vector_struct = Row("type", "size", "indices", "values")
+        df = self.spark.createDataFrame(
+            [
+                (vector_struct(1, None, None, [1.0, 2.0]),),
+                (vector_struct(0, 2, [1], [2.0]),),
+            ],
+            schema,
+        )
+        wrapped = df.select(wrap_udt("vec", VectorUDT()).alias("vec"))
+
+        self.assertEqual(wrapped.schema["vec"].dataType, VectorUDT())
+        self.assertEqual(wrapped.collect(), [Row(vec=self.dv1), Row(vec=self.sv1)])
+
+    def test_wrap_udt_type_mismatch(self):
+        schema = StructType([StructField("vec", VectorUDT.sqlType(), True)])
+        vector_struct = Row("type", "size", "indices", "values")
+        df = self.spark.createDataFrame(
+            [(vector_struct(1, None, None, [1.0, 2.0]),)],
+            schema,
+        )
+
+        with self.assertRaises(AnalysisException) as context:
+            df.select(wrap_udt("vec", MatrixUDT())).collect()
+        self.assertEqual(
+            context.exception.getCondition(), "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE"
+        )
+
+    def test_wrap_unwrap_udt_round_trip(self):
+        df = self.spark.createDataFrame([(self.dv1,), (self.sv1,)], ["vec"])
+        round_trip = df.select(wrap_udt(unwrap_udt("vec"), VectorUDT()).alias("vec"))
+
+        self.assertEqual(round_trip.schema["vec"].dataType, VectorUDT())
+        self.assertEqual(round_trip.collect(), [Row(vec=self.dv1), Row(vec=self.sv1)])
+
+    def test_wrap_unwrap_udt_round_trip_with_udt_column(self):
+        df = self.spark.createDataFrame([(self.dv1,), (self.sv1,)], ["vec"])
+        round_trip = df.select(wrap_udt(unwrap_udt("vec"), lit(VectorUDT().json())).alias("vec"))
+
+        self.assertEqual(round_trip.schema["vec"].dataType, VectorUDT())
+        self.assertEqual(round_trip.collect(), [Row(vec=self.dv1), Row(vec=self.sv1)])
+
     def test_hashable(self):
         _ = hash(VectorUDT())
 
@@ -377,6 +426,10 @@ class MatrixUDTTests(MLlibTestCase):
     def test_json_schema(self):
         self.assertEqual(MatrixUDT.fromJson(self.udt.jsonValue()), self.udt)
 
+    def test_singleton(self):
+        self.assertIs(MatrixUDT(), MatrixUDT())
+        self.assertIs(MatrixUDT.fromJson(self.udt.jsonValue()), self.udt)
+
     def test_serialization(self):
         for m in [self.dm1, self.dm2, self.sm1, self.sm2]:
             self.assertEqual(m, self.udt.deserialize(self.udt.serialize(m)))
@@ -385,16 +438,75 @@ class MatrixUDTTests(MLlibTestCase):
         rdd = self.sc.parallelize([("dense", self.dm1), ("sparse", self.sm1)])
         df = rdd.toDF()
         schema = df.schema
-        self.assertTrue(schema.fields[1].dataType, self.udt)
+        self.assertEqual(schema.fields[1].dataType, self.udt)
         matrices = df.rdd.map(lambda x: x._2).collect()
         self.assertEqual(len(matrices), 2)
         for m in matrices:
             if isinstance(m, DenseMatrix):
-                self.assertTrue(m, self.dm1)
+                self.assertEqual(m, self.dm1)
             elif isinstance(m, SparseMatrix):
-                self.assertTrue(m, self.sm1)
+                self.assertEqual(m, self.sm1)
             else:
                 raise ValueError("Expected a matrix but got type %r" % type(m))
+
+    def test_wrap_udt(self):
+        schema = StructType([StructField("mat", MatrixUDT.sqlType(), True)])
+        matrix_struct = Row(
+            "type",
+            "numRows",
+            "numCols",
+            "colPtrs",
+            "rowIndices",
+            "values",
+            "isTransposed",
+        )
+        df = self.spark.createDataFrame(
+            [
+                (matrix_struct(1, 3, 2, None, None, [0.0, 1.0, 4.0, 5.0, 9.0, 10.0], False),),
+                (matrix_struct(0, 1, 1, [0, 1], [0], [2.0], False),),
+            ],
+            schema,
+        )
+        wrapped = df.select(wrap_udt("mat", MatrixUDT()).alias("mat"))
+
+        self.assertEqual(wrapped.schema["mat"].dataType, MatrixUDT())
+        self.assertEqual(wrapped.collect(), [Row(mat=self.dm1), Row(mat=self.sm1)])
+
+    def test_wrap_udt_type_mismatch(self):
+        schema = StructType([StructField("mat", MatrixUDT.sqlType(), True)])
+        matrix_struct = Row(
+            "type",
+            "numRows",
+            "numCols",
+            "colPtrs",
+            "rowIndices",
+            "values",
+            "isTransposed",
+        )
+        df = self.spark.createDataFrame(
+            [(matrix_struct(1, 3, 2, None, None, [0.0, 1.0, 4.0, 5.0, 9.0, 10.0], False),)],
+            schema,
+        )
+
+        with self.assertRaises(AnalysisException) as context:
+            df.select(wrap_udt("mat", VectorUDT())).collect()
+        self.assertEqual(
+            context.exception.getCondition(), "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE"
+        )
+
+    def test_wrap_unwrap_udt_round_trip(self):
+        df = self.spark.createDataFrame([(self.dm1,), (self.sm1,)], ["mat"])
+        round_trip = df.select(wrap_udt(unwrap_udt("mat"), MatrixUDT()).alias("mat"))
+
+        self.assertEqual(round_trip.schema["mat"].dataType, MatrixUDT())
+        self.assertEqual(round_trip.collect(), [Row(mat=self.dm1), Row(mat=self.sm1)])
+
+    def test_wrap_unwrap_udt_round_trip_with_udt_column(self):
+        df = self.spark.createDataFrame([(self.dm1,), (self.sm1,)], ["mat"])
+        round_trip = df.select(wrap_udt(unwrap_udt("mat"), lit(MatrixUDT().json())).alias("mat"))
+
+        self.assertEqual(round_trip.schema["mat"].dataType, MatrixUDT())
+        self.assertEqual(round_trip.collect(), [Row(mat=self.dm1), Row(mat=self.sm1)])
 
     def test_hashable(self):
         _ = hash(MatrixUDT())

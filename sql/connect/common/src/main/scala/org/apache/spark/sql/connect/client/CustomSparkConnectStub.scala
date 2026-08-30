@@ -16,7 +16,9 @@
  */
 package org.apache.spark.sql.connect.client
 
-import io.grpc.ManagedChannel
+import java.util.concurrent.TimeUnit
+
+import io.grpc.{Deadline, ManagedChannel}
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, SparkConnectServiceGrpc}
@@ -29,7 +31,15 @@ private[client] class CustomSparkConnectStub(
 
   def addArtifacts(responseObserver: StreamObserver[AddArtifactsResponse])
       : StreamObserver[AddArtifactsRequest] = {
+    // Evaluated on every call (including each RetryStreamObserver retry) so each attempt gets a
+    // fresh Deadline object with a new absolute expiry, not one shared from the first attempt.
+    def freshStub: SparkConnectServiceGrpc.SparkConnectServiceStub =
+      stubState.rpcDeadlines.addArtifacts
+        .map(d => stub.withDeadline(Deadline.after(d.toMillis, TimeUnit.MILLISECONDS)))
+        .getOrElse(stub)
     stubState.responseValidator.wrapStreamObserver(
-      stubState.retryHandler.RetryStreamObserver(responseObserver, stub.addArtifacts))
+      stubState.retryHandler.RetryStreamObserver(
+        responseObserver,
+        (obs: StreamObserver[AddArtifactsResponse]) => freshStub.addArtifacts(obs)))
   }
 }

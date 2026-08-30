@@ -30,6 +30,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.ml._
 import org.apache.spark.sql.catalyst.expressions.st._
 import org.apache.spark.sql.catalyst.expressions.variant._
 import org.apache.spark.sql.catalyst.expressions.xml._
@@ -473,6 +474,7 @@ object FunctionRegistry {
     expression[ToRadians]("radians"),
     expression[Rint]("rint"),
     expression[Round]("round"),
+    expression[Truncate]("truncate"),
     expression[ShiftLeft]("shiftleft"),
     expression[ShiftRight]("shiftright"),
     expression[ShiftRightUnsigned]("shiftrightunsigned"),
@@ -551,6 +553,7 @@ object FunctionRegistry {
     expression[CollectList]("collect_list"),
     expression[CollectList]("array_agg", true, Some("3.3.0")),
     expression[CollectSet]("collect_set"),
+    expression[CollectUnion]("collect_union"),
     expression[ListAgg]("listagg"),
     expression[ListAgg]("string_agg", setAlias = true),
     expressionBuilder("count_min_sketch", CountMinSketchAggExpressionBuilder),
@@ -609,6 +612,7 @@ object FunctionRegistry {
     expressionBuilder("startswith", StartsWithExpressionBuilder),
     expressionBuilder("endswith", EndsWithExpressionBuilder),
     expression[Base64]("base64"),
+    expression[Base32]("to_base32"),
     expression[BitLength]("bit_length"),
     expression[Length]("char_length", true, Some("2.3.0")),
     expression[Length]("character_length", true, Some("2.3.0")),
@@ -625,11 +629,12 @@ object FunctionRegistry {
     expressionBuilder("to_varchar", ToCharacterBuilder, setAlias = true, Some("3.5.0")),
     expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),
-    expression[StringInstr]("instr"),
+    expressionBuilder("instr", StringInstrExpressionBuilder),
     expression[Lower]("lcase", true),
     expression[Length]("length"),
     expression[Length]("len", setAlias = true, Some("3.4.0")),
     expression[Levenshtein]("levenshtein"),
+    expression[JaroWinkler]("jaro_winkler_similarity"),
     expression[Luhncheck]("luhn_check"),
     expression[Like]("like"),
     expression[ILike]("ilike"),
@@ -667,6 +672,7 @@ object FunctionRegistry {
     expression[StringTrimBoth]("btrim"),
     expression[Upper]("ucase", true),
     expression[UnBase64]("unbase64"),
+    expression[UnBase32]("from_base32"),
     expression[Unhex]("unhex"),
     expression[Upper]("upper"),
     expression[XPathList]("xpath"),
@@ -686,6 +692,7 @@ object FunctionRegistry {
     expression[ValidateUTF8]("validate_utf8"),
     expression[TryValidateUTF8]("try_validate_utf8"),
     expression[Quote]("quote"),
+    expression[Normalize]("normalize"),
 
     // url functions
     expression[UrlEncode]("url_encode"),
@@ -697,10 +704,11 @@ object FunctionRegistry {
     expression[AddMonths]("add_months"),
     expression[CurrentDate]("current_date"),
     expressionBuilder("curdate", CurDateExpressionBuilder, setAlias = true),
-    expression[CurrentTimestamp]("current_timestamp"),
+    expressionBuilder("current_timestamp", CurrentTimestampExpressionBuilder),
     expression[CurrentTime]("current_time"),
+    expression[CurrentTime]("localtime", since = Some("4.3.0")),
     expression[CurrentTimeZone]("current_timezone"),
-    expression[LocalTimestamp]("localtimestamp"),
+    expressionBuilder("localtimestamp", LocalTimestampExpressionBuilder),
     expression[DateDiff]("datediff"),
     expression[DateDiff]("date_diff", setAlias = true, Some("3.4.0")),
     expression[DateAdd]("date_add"),
@@ -718,7 +726,7 @@ object FunctionRegistry {
     expression[Month]("month"),
     expression[MonthsBetween]("months_between"),
     expression[NextDay]("next_day"),
-    expression[Now]("now"),
+    expressionBuilder("now", NowExpressionBuilder),
     expression[Quarter]("quarter"),
     expressionBuilder("second", SecondExpressionBuilder),
     expression[ParseToTimestamp]("to_timestamp"),
@@ -773,9 +781,11 @@ object FunctionRegistry {
     expression[SecondsToTimestamp]("timestamp_seconds"),
     expression[MillisToTimestamp]("timestamp_millis"),
     expression[MicrosToTimestamp]("timestamp_micros"),
+    expression[NanosToTimestamp]("timestamp_nanos"),
     expression[UnixSeconds]("unix_seconds"),
     expression[UnixMillis]("unix_millis"),
     expression[UnixMicros]("unix_micros"),
+    expression[UnixNanos]("unix_nanos"),
     expression[ConvertTimezone]("convert_timezone"),
     expressionBuilder("time_bucket", TimeBucketExpressionBuilder),
 
@@ -804,6 +814,7 @@ object FunctionRegistry {
     expression[MapConcat]("map_concat"),
     expression[Size]("size"),
     expression[Slice]("slice"),
+    expression[TrimArray]("trim_array"),
     expression[Size]("cardinality", true, Some("2.4.0")),
     expression[ArraysZip]("arrays_zip"),
     expression[SortArray]("sort_array"),
@@ -842,11 +853,14 @@ object FunctionRegistry {
     expression[Uuid]("uuid"),
     expression[Murmur3Hash]("hash"),
     expression[XxHash64]("xxhash64"),
+    expression[Xxh364]("xxh3_64"),
+    expression[Xxh3128]("xxh3_128"),
     expression[Sha1]("sha", true),
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),
     expression[AesEncrypt]("aes_encrypt"),
     expression[AesDecrypt]("aes_decrypt"),
+    expression[Hmac]("hmac"),
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
     expression[InputFileBlockStart]("input_file_block_start"),
@@ -961,8 +975,13 @@ object FunctionRegistry {
     expression[BitmapBitPosition]("bitmap_bit_position"),
     expression[BitmapConstructAgg]("bitmap_construct_agg"),
     expression[BitmapCount]("bitmap_count"),
+    expression[BitmapAnd]("bitmap_and"),
+    expression[BitmapOr]("bitmap_or"),
+    expression[BitmapAndNot]("bitmap_andnot"),
+    expression[BitmapXor]("bitmap_xor"),
     expression[BitmapOrAgg]("bitmap_or_agg"),
     expression[BitmapAndAgg]("bitmap_and_agg"),
+    expression[BitmapXorAgg]("bitmap_xor_agg"),
 
     // json
     expression[StructsToJson]("to_json"),
@@ -970,6 +989,7 @@ object FunctionRegistry {
     expression[SchemaOfJson]("schema_of_json"),
     expression[LengthOfJsonArray]("json_array_length"),
     expression[JsonObjectKeys]("json_object_keys"),
+    expression[JsonTypeof]("json_typeof"),
 
     // Variant
     expressionBuilder("parse_json", ParseJsonExpressionBuilder),
@@ -980,7 +1000,17 @@ object FunctionRegistry {
     expression[SchemaOfVariant]("schema_of_variant"),
     expression[SchemaOfVariantAgg]("schema_of_variant_agg"),
     expression[ToVariantObject]("to_variant_object"),
+    expression[VariantFromArrays]("variant_from_arrays"),
+    expression[VariantFromEntries]("variant_from_entries"),
     expression[IsValidVariant]("is_valid_variant"),
+    expression[VariantDelete]("variant_delete"),
+    expressionBuilder("variant_insert", VariantInsertExpressionBuilder),
+    expressionBuilder("try_variant_insert", TryVariantInsertExpressionBuilder),
+    expressionBuilder("variant_set", VariantSetExpressionBuilder),
+    expressionBuilder("try_variant_set", TryVariantSetExpressionBuilder),
+    expressionBuilder("variant_array_append", VariantArrayAppendExpressionBuilder),
+    expressionBuilder("try_variant_array_append", TryVariantArrayAppendExpressionBuilder),
+    expressionBuilder("variant_strip_nulls", VariantStripNullsExpressionBuilder),
 
     // Spatial
     expression[ST_AsBinary]("st_asbinary"),
@@ -1039,7 +1069,28 @@ object FunctionRegistry {
     fr
   }
 
-  val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
+  /**
+   * Builtin function identifiers known to SHOW FUNCTIONS / SessionCatalog.
+   * Starts as the catalyst [[builtin]] set; sql/core-only builtins (e.g. parse_sql)
+   * are added later via [[registerExtraBuiltin]].
+   */
+  @volatile private var _functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
+
+  def functionSet: Set[FunctionIdentifier] = _functionSet
+
+  /**
+   * Registers a builtin that cannot live in catalyst (e.g. depends on SparkSqlParser
+   * in sql/core). Updates both [[builtin]] (so session clones / catalog reset see it)
+   * and [[functionSet]] (so SHOW FUNCTIONS classifies it as SYSTEM, not USER).
+   */
+  private[sql] def registerExtraBuiltin(
+      name: String,
+      info: ExpressionInfo,
+      builder: FunctionBuilder): Unit = synchronized {
+    val id = builtinFunctionIdentifier(name)
+    builtin.registerFunction(id, info, builder)
+    _functionSet = _functionSet + id
+  }
 
   /** Registry for internal functions used by Connect and the Column API. */
   private[sql] val internal: SimpleFunctionRegistry =
@@ -1073,6 +1124,7 @@ object FunctionRegistry {
   registerInternalExpression[Days]("days")
   registerInternalExpression[Hours]("hours")
   registerInternalExpression[UnwrapUDT]("unwrap_udt")
+  registerInternalExpression[WrapUDT]("wrap_udt")
   registerInternalExpression[MonotonicallyIncreasingID]("distributed_id", setAlias = true)
   registerInternalExpression[DistributedSequenceID]("distributed_sequence_id")
   registerInternalExpression[PandasProduct]("pandas_product")
@@ -1086,6 +1138,7 @@ object FunctionRegistry {
   registerInternalExpression[NullIndex]("null_index")
   registerInternalExpression[CastTimestampNTZToLong]("timestamp_ntz_to_long")
   registerInternalExpression[ArrayBinarySearch]("array_binary_search")
+  registerInternalExpression[VectorPosExplode]("vector_posexplode")
 
   private def makeExprInfoForVirtualOperator(name: String, usage: String): ExpressionInfo = {
     new ExpressionInfo(

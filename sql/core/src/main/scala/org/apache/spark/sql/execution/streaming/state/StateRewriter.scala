@@ -381,7 +381,8 @@ class StateRewriter(
     // StateRewriter from writing state files in a format that disagrees with the source
     // checkpoint. Using the read batch commit since the latest commit could be a skipped batch.
     readCheckpoint.commitLog.get(readBatchId).foreach { metadata =>
-      val configuredVersion = readCheckpoint.commitLog.defaultVersion
+      val configuredVersion =
+        sparkSession.sessionState.conf.getConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION)
       if (metadata.version != configuredVersion) {
         throw StateRewriterErrors.stateCheckpointFormatVersionMismatchError(
           checkpointLocationForRead,

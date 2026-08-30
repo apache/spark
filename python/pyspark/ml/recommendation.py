@@ -16,21 +16,22 @@
 #
 
 import sys
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from pyspark import since, keyword_only
+from pyspark import keyword_only, since
+from pyspark.ml.common import inherit_doc
+from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import (
-    HasPredictionCol,
     HasBlockSize,
-    HasMaxIter,
-    HasRegParam,
     HasCheckpointInterval,
+    HasIntermediateStorageLevel,
+    HasMaxIter,
+    HasPredictionCol,
+    HasRegParam,
     HasSeed,
 )
+from pyspark.ml.util import JavaMLReadable, JavaMLWritable, try_remote_attribute_relation
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
-from pyspark.ml.common import inherit_doc
-from pyspark.ml.param import Params, TypeConverters, Param
-from pyspark.ml.util import JavaMLWritable, JavaMLReadable, try_remote_attribute_relation
 from pyspark.sql import DataFrame
 
 if TYPE_CHECKING:
@@ -98,7 +99,14 @@ class _ALSModelParams(HasPredictionCol, HasBlockSize):
 
 
 @inherit_doc
-class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval, HasSeed):
+class _ALSParams(
+    _ALSModelParams,
+    HasMaxIter,
+    HasRegParam,
+    HasCheckpointInterval,
+    HasSeed,
+    HasIntermediateStorageLevel,
+):
     """
     Params for :py:class:`ALS`.
 
@@ -145,12 +153,6 @@ class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval
         "whether to use nonnegative constraint for least squares",
         typeConverter=TypeConverters.toBoolean,
     )
-    intermediateStorageLevel: Param[str] = Param(
-        Params._dummy(),
-        "intermediateStorageLevel",
-        "StorageLevel for intermediate datasets. Cannot be 'NONE'.",
-        typeConverter=TypeConverters.toString,
-    )
     finalStorageLevel: Param[str] = Param(
         Params._dummy(),
         "finalStorageLevel",
@@ -173,7 +175,6 @@ class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval
             ratingCol="rating",
             nonnegative=False,
             checkpointInterval=10,
-            intermediateStorageLevel="MEMORY_AND_DISK",
             finalStorageLevel="MEMORY_AND_DISK",
             coldStartStrategy="nan",
         )
@@ -226,13 +227,6 @@ class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval
         Gets the value of nonnegative or its default value.
         """
         return self.getOrDefault(self.nonnegative)
-
-    @since("2.0.0")
-    def getIntermediateStorageLevel(self) -> str:
-        """
-        Gets the value of intermediateStorageLevel or its default value.
-        """
-        return self.getOrDefault(self.intermediateStorageLevel)
 
     @since("2.0.0")
     def getFinalStorageLevel(self) -> str:
@@ -726,6 +720,7 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable["ALSMo
 
 if __name__ == "__main__":
     import doctest
+
     import pyspark.ml.recommendation
     from pyspark.sql import SparkSession
 

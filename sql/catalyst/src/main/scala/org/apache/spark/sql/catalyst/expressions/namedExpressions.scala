@@ -312,7 +312,9 @@ case class AttributeReference(
   override def hashCode: Int = {
     // See http://stackoverflow.com/questions/113511/hash-code-implementation
     var h = 17
-    h = h * 37 + name.hashCode()
+    // Use Objects.hashCode to stay null-safe: an AttributeReference can carry a null name
+    // (e.g. from a StructField built with a null name), and equals already treats name nullably.
+    h = h * 37 + Objects.hashCode(name)
     h = h * 37 + dataType.hashCode()
     h = h * 37 + nullable.hashCode()
     h = h * 37 + metadata.hashCode()

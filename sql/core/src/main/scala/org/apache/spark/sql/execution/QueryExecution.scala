@@ -34,8 +34,8 @@ import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, LazyExpression, NameParameterizedQuery, UnsupportedOperationChecker}
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union, UnresolvedWith, WithCTE}
-import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union, UnresolvedInsert, UnresolvedWith, WithCTE}
+import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.transactions.TransactionUtils
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -99,6 +99,33 @@ class QueryExecution(
     logical.exists(_.expressions.exists(_.exists(_.isInstanceOf[LazyExpression])))
   }
 
+  // Legacy constant-only parameter substitution wraps the plan in a ParameterizedQuery. Its
+  // parameters bind during analysis, after transaction selection, so INSERT IDENTIFIER parameters
+  // are intentionally not handled here and remain a known limitation.
+  private val lazyLogicalWithResolvedInsert = LazyTry {
+    def resolve(insert: UnresolvedInsert): LogicalPlan = {
+      try {
+        executePhase(QueryPlanningTracker.ANALYSIS) {
+          QueryPlanningTracker.withTracker(tracker) {
+            analyzerOpt.getOrElse(sparkSession.sessionState.analyzer)
+              .resolveUnresolvedInsert(insert)
+          }
+        }
+      } catch {
+        case NonFatal(e) =>
+          tracker.setAnalysisFailed(logical)
+          throw e
+      }
+    }
+
+    logical match {
+      case unresolvedWith @ UnresolvedWith(insert: UnresolvedInsert, _, _) =>
+        unresolvedWith.copy(child = resolve(insert))
+      case insert: UnresolvedInsert => resolve(insert)
+      case other => other
+    }
+  }
+  private def logicalWithResolvedInsert: LogicalPlan = lazyLogicalWithResolvedInsert.get
 
   // 1. At the pre-Analyzed plan we look for nodes that implement the TransactionalWrite trait.
   //    When a plan contains such a node we initiate a transaction. Note, we should never start
@@ -116,7 +143,7 @@ class QueryExecution(
     analyzerOpt.flatMap(_.catalogManager.transaction).orElse {
       // Only begin a new transaction for outer QEs that lead to execution.
       if (mode != CommandExecutionMode.SKIP) {
-        val catalog = logical match {
+        val catalog = logicalWithResolvedInsert match {
           case UnresolvedWith(TransactionalWrite(c), _, _) => Some(c)
           case TransactionalWrite(c) => Some(c)
           case _ => None
@@ -181,7 +208,7 @@ class QueryExecution(
         SqlScriptingExecution.executeSqlScript(
           session = sparkSession,
           script = compoundBody)
-      case _ => logical
+      case _ => logicalWithResolvedInsert
     }
   }
 
@@ -291,15 +318,13 @@ class QueryExecution(
       assertAnalyzed()
       assertSupported()
 
-      // During a transaction, skip cache substitution. This is to avoid replacing relations
-      // loaded by the transactional catalog with potentially stale relations cached before
-      // the transaction was active.
-      if (transactionOpt.isDefined) {
-        normalized
-      } else {
-        // Clone the plan to avoid sharing the plan instance between different stages like
-        // analyzing, optimizing and planning.
-        sparkSession.sharedState.cacheManager.useCachedData(normalized.clone())
+      // Clone the plan to avoid sharing the plan instance between different stages like
+      // analyzing, optimizing and planning.
+      val planToRewrite = normalized.clone()
+      val cacheManager = sparkSession.sharedState.cacheManager
+      transactionOpt match {
+        case Some(txn) => cacheManager.useCachedData(planToRewrite, txn)
+        case None => cacheManager.useCachedData(planToRewrite)
       }
     }
   }
@@ -310,6 +335,13 @@ class QueryExecution(
 
   def assertCommandExecuted(): Unit = commandExecuted
 
+  private def cloneWithFreshStatefulExpressions(plan: LogicalPlan): LogicalPlan = {
+    plan.clone().transformDownWithSubqueriesAndReferenceEquality {
+      case node =>
+        node.mapExpressionsWithReferenceEquality(_.freshCopyIfContainsStatefulExpression())
+    }
+  }
+
   private val lazyOptimizedPlan = LazyTry {
     // We need to materialize the commandExecuted here because optimizedPlan is also tracked under
     // the optimizing phase
@@ -317,8 +349,8 @@ class QueryExecution(
     executePhase(QueryPlanningTracker.OPTIMIZATION) {
       // clone the plan to avoid sharing the plan instance between different stages like analyzing,
       // optimizing and planning.
-      val plan =
-        sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
+      val plan = sparkSession.sessionState.optimizer.executeAndTrack(
+        cloneWithFreshStatefulExpressions(withCachedData), tracker)
       // We do not want optimized plans to be re-analyzed as literals that have been constant
       // folded and such can cause issues during analysis. While `clone` should maintain the
       // `analyzed` state of the LogicalPlan, we set the plan as analyzed here as well out of
@@ -359,7 +391,9 @@ class QueryExecution(
     val plan = executePhase(QueryPlanningTracker.PLANNING) {
       // clone the plan to avoid sharing the plan instance between different stages like analyzing,
       // optimizing and planning.
-      QueryExecution.prepareForExecution(preparations, sparkPlan.clone())
+      QueryPlanningTracker.withTracker(tracker) {
+        QueryExecution.prepareForExecution(preparations, sparkPlan.clone())
+      }
     }
     // Note: For eagerly executed command it might have already been called in
     // `eagerlyExecutedCommand` and is a noop here.
@@ -376,7 +410,10 @@ class QueryExecution(
   def assertExecutedPlanPrepared(): Unit = executedPlan
 
   val lazyToRdd = LazyTry {
-    new SQLExecutionRDD(executedPlan.execute(), sparkSession.sessionState.conf)
+    new SQLExecutionRDD(
+      executedPlan.execute(),
+      sparkSession.sessionState.conf,
+      SparkPlanInfo.fromSparkPlan(executedPlan))
   }
 
   /**
@@ -764,15 +801,27 @@ object QueryExecution {
       EnsureRequirements(),
       // This rule must be run after `EnsureRequirements`.
       InsertSortForLimitAndOffset,
+      // `PushDownLocalSort` pushes a wider local sort down onto a narrower one below it, so a
+      // single sort serves several operators' ordering requirements. It must run after
+      // `EnsureRequirements`, which is what inserts the local sorts it pushes down.
+      PushDownLocalSort,
+      // `CombineAdjacentAggregation` must run before `ReplaceHashWithSortAgg`: it combines a pair
+      // of adjacent partial and final aggregate into a single `Complete` mode aggregate, which
+      // `ReplaceHashWithSortAgg` can then replace with a sort aggregate when the ordering allows.
+      CombineAdjacentAggregation,
       // `ReplaceHashWithSortAgg` needs to be added after `EnsureRequirements` to guarantee the
       // sort order of each node is checked to be valid.
       ReplaceHashWithSortAgg,
-      // `RemoveRedundantSorts` and `RemoveRedundantWindowGroupLimits` needs to be added after
-      // `EnsureRequirements` to guarantee the same number of partitions when instantiating
-      // PartitioningCollection.
-      RemoveRedundantSorts,
+      // `RemoveRedundantWindowGroupLimits` needs to be added after `EnsureRequirements` to
+      // guarantee the same number of partitions when instantiating PartitioningCollection.
       RemoveRedundantWindowGroupLimits,
       DisableUnnecessaryBucketedScan,
+      // `RemoveRedundantSorts` also needs to run after `EnsureRequirements` for the same reason.
+      // It must run after `DisableUnnecessaryBucketedScan`: disabling a bucketed scan drops its
+      // output ordering, so running sort-removal first could strip a sort that the scan appeared
+      // to satisfy and then silently lose that ordering. (This also matches the AQE rule order,
+      // see `AdaptiveSparkPlanExec.queryStagePreparationRules`.)
+      RemoveRedundantSorts,
       ApplyColumnarRulesAndInsertTransitions(
         sparkSession.sessionState.columnarRules, outputsColumnar = false),
       CollapseCodegenStages()) ++
@@ -790,14 +839,21 @@ object QueryExecution {
   private[execution] def prepareForExecution(
       preparations: Seq[Rule[SparkPlan]],
       plan: SparkPlan): SparkPlan = {
-    val planChangeLogger = new PlanChangeLogger[SparkPlan]()
-    val preparedPlan = preparations.foldLeft(plan) { case (sp, rule) =>
-      val result = rule.apply(sp)
-      planChangeLogger.logRule(rule.ruleName, sp, result)
-      result
-    }
-    planChangeLogger.logBatch("Preparations", plan, preparedPlan)
-    preparedPlan
+    new PhysicalRuleExecutor("Preparations", preparations).execute(plan)
+  }
+
+  /**
+   * A [[RuleExecutor]] that applies a fixed list of physical-plan rules once each (a single
+   * `FixedPoint(1)` batch). Routing physical preparation and AQE rules through a `RuleExecutor`
+   * reuses its built-in per-rule timing, which records into the active [[QueryPlanningTracker]]
+   * exactly like the analyzer and optimizer, instead of re-implementing the timing loop. A
+   * `FixedPoint(1)` strategy (rather than `Once`) is used so each rule runs exactly once without
+   * triggering the idempotence re-check, as preparation rules are not necessarily idempotent.
+   */
+  private[execution] class PhysicalRuleExecutor(
+      batchName: String,
+      rules: Seq[Rule[SparkPlan]]) extends RuleExecutor[SparkPlan] {
+    override protected def batches: Seq[Batch] = Seq(Batch(batchName, FixedPoint(1), rules: _*))
   }
 
   /**

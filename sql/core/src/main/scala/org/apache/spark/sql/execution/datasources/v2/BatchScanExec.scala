@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
+import org.apache.spark.sql.execution.EmptyRDDWithPartitions
 import org.apache.spark.sql.execution.metric.{SQLLastAttemptMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -90,7 +91,7 @@ case class BatchScanExec(
   override lazy val inputRDD: RDD[InternalRow] = {
     val rdd = if (filteredPartitions.isEmpty && outputPartitioning == SinglePartition) {
       // return an empty RDD with 1 partition if dynamic filtering removed the only split
-      sparkContext.parallelize(Array.empty[InternalRow].toImmutableArraySeq, 1)
+      new EmptyRDDWithPartitions(sparkContext, 1)
     } else {
       new DataSourceRDD(
         sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics)
@@ -105,7 +106,8 @@ case class BatchScanExec(
       runtimeFilters = QueryPlan.normalizePredicates(
         runtimeFilters.filterNot(_ == DynamicPruningExpression(Literal.TrueLiteral)),
         output),
-      keyGroupedPartitioning = keyGroupedPartitioning.map(QueryPlan.normalizePredicates(_, output)))
+      keyGroupedPartitioning = keyGroupedPartitioning.map(_.map(
+        QueryPlan.normalizeExpressions(_, output))))
   }
 
   override def simpleString(maxFields: Int): String = {

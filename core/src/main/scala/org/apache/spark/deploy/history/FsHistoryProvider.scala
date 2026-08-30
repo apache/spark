@@ -412,16 +412,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   override def getLastUpdatedTime(): Long = lastScanTime.get()
 
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
-    val logPath = RollingEventLogFilesWriter.EVENT_LOG_DIR_NAME_PREFIX +
-        EventLogFileWriter.nameForAppAndAttempt(appId, attemptId)
     val app = try {
       load(appId)
      } catch {
-      case _: NoSuchElementException if this.conf.get(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED) =>
-        loadFromFallbackLocation(appId, attemptId, logPath) match {
-          case Some(wrapper) => wrapper
-          case None => return None
-        }
+      case _: NoSuchElementException if isOnDemandLogLoadEnabled =>
+        loadFromFallbackLocations(appId, attemptId).getOrElse(return None)
       case _: NoSuchElementException =>
         return None
     }
@@ -460,6 +455,27 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     Some(loadedUI)
+  }
+
+  private def loadFromFallbackLocations(
+      appId: String,
+      attemptId: Option[String]): Option[ApplicationInfoWrapper] = {
+    val logPaths = mutable.ArrayBuffer.empty[String]
+    if (conf.get(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED)) {
+      logPaths += RollingEventLogFilesWriter.EVENT_LOG_DIR_NAME_PREFIX +
+        EventLogFileWriter.nameForAppAndAttempt(appId, attemptId)
+    }
+    if (conf.get(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED)) {
+      logPaths ++= SingleEventLogFileWriter.getLogFileNames(appId, attemptId)
+    }
+    logPaths.iterator.map(loadFromFallbackLocation(appId, attemptId, _)).collectFirst {
+      case Some(app) => app
+    }
+  }
+
+  private def isOnDemandLogLoadEnabled: Boolean = {
+    conf.get(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED) ||
+      conf.get(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED)
   }
 
   private def loadFromFallbackLocation(appId: String, attemptId: Option[String], logPath: String)
@@ -1118,7 +1134,22 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       case Some(app) if !lookForEndEvent || app.attempts.head.info.completed =>
         // In this case, we either didn't care about the end event, or we found it. So the
         // listing data is good.
-        invalidateUI(app.info.id, app.attempts.head.info.attemptId)
+        val appId = app.info.id
+        val attemptId = app.attempts.head.info.attemptId
+        invalidateUI(appId, attemptId)
+        // If the app has just completed, any existing disk store may have been built from an
+        // in-progress snapshot and is now stale. invalidateUI() above only handles the case
+        // where the UI is still tracked in activeUIs (i.e., still held in the ApplicationCache).
+        // If the ApplicationCache already evicted the UI entry (e.g., due to LRU pressure),
+        // the UI was removed from activeUIs before invalidateUI() was called, so the disk
+        // store was never marked for deletion. Proactively delete it here so that the next
+        // loadDiskStore() call rebuilds from the completed event log.
+        if (app.attempts.head.info.completed) {
+          val hasActiveUI = synchronized { activeUIs.contains((appId, attemptId)) }
+          if (!hasActiveUI) {
+            diskManager.foreach(_.release(appId, attemptId, delete = true))
+          }
+        }
         addListing(app)
         listing.write(LogInfo(logPath.toString(), scanTime, LogType.EventLogs, Some(app.info.id),
           app.attempts.head.info.attemptId, reader.fileSizeForLastIndex, reader.lastIndex,
@@ -1844,6 +1875,7 @@ private[history] class AppListingListener(
     attempt.lastUpdated = new Date(reader.modificationTime)
     attempt.duration = event.time - attempt.startTime.getTime()
     attempt.completed = true
+    attempt.exitCode = event.exitCode
   }
 
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
@@ -1911,6 +1943,7 @@ private[history] class AppListingListener(
     var duration = 0L
     var sparkUser: String = null
     var completed = false
+    var exitCode = Option.empty[Int]
     var appSparkVersion = ""
 
     var adminAcls: Option[String] = None
@@ -1929,6 +1962,7 @@ private[history] class AppListingListener(
         sparkUser,
         completed,
         appSparkVersion,
+        exitCode,
         Some(logSourceName),
         Some(logSourceFullPath))
       new AttemptInfoWrapper(

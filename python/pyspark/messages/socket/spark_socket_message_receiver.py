@@ -17,11 +17,11 @@
 
 from typing import BinaryIO
 
-from pyspark.serializers import read_int, SpecialLengths
-from pyspark.messages.zero_copy_byte_stream import ZeroCopyByteStream
 from pyspark.messages.spark_message_receiver import (
     SparkMessageReceiver,
 )
+from pyspark.messages.zero_copy_byte_stream import ZeroCopyByteStream
+from pyspark.serializers import SpecialLengths, read_int
 
 
 def _assert_message_id(message_id: int, expected: int) -> None:
@@ -43,7 +43,12 @@ class SparkSocketMessageReceiver(SparkMessageReceiver):
         message_length = read_int(self._infile)
         message_content = self._infile.read(message_length)
 
-        return ZeroCopyByteStream(memoryview(message_content))
+        # The init message is fully materialized, so mark the stream finished: a parse that
+        # runs past the declared message length (e.g. a writer/reader protocol mismatch) must
+        # fail fast with EOFError instead of blocking forever on a chunk that will never come.
+        stream = ZeroCopyByteStream(memoryview(message_content))
+        stream.finish()
+        return stream
 
     def _do_get_data_stream(self) -> BinaryIO:
         # For socket communication, we just pass along the underlying socket

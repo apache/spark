@@ -19,11 +19,10 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ProtobufDescriptorFileReader}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{BinaryType, MapType, NullType, StringType, StructType}
-import org.apache.spark.sql.util.ProtobufUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -47,6 +46,18 @@ import org.apache.spark.util.Utils
   usage = """
     _FUNC_(data, messageName, descFilePath, options) - Converts a binary Protobuf value into a Catalyst value.
     """,
+  arguments = """
+    Arguments:
+      * data - The binary Protobuf value to convert.
+      * messageName - A constant string naming the Protobuf message to look for in
+          the descriptor file.
+      * descFilePath - Optional. A constant string or binary value with the
+          Protobuf descriptor file, created by `protoc` with `--descriptor_set_out`
+          and `--include_imports`. If omitted, the message must be resolvable
+          otherwise.
+      * options - Optional. A constant map of string key-value pairs controlling
+          the conversion. By default no options are set.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(s, 'Person', '/path/to/descriptor.desc', map()) IS NULL AS result FROM (SELECT NAMED_STRUCT('name', name, 'id', id) AS s FROM VALUES ('John Doe', 1), (NULL,  2) tab(name, id));
@@ -142,7 +153,8 @@ case class FromProtobuf(
     }
     val descFilePathValue: Option[Array[Byte]] = descFilePath.eval() match {
       case s: UTF8String if s.toString.isEmpty => None
-      case s: UTF8String => Some(ProtobufUtils.readDescriptorFileContent(s.toString))
+      case s: UTF8String =>
+        Some(ProtobufDescriptorFileReader.readDescriptorFileContent(s.toString))
       case bytes: Array[Byte] if bytes.isEmpty => None
       case bytes: Array[Byte] => Some(bytes)
       case null => None
@@ -189,6 +201,17 @@ case class FromProtobuf(
   usage = """
     _FUNC_(child, messageName, descFilePath, options) - Converts a Catalyst binary input value into its corresponding
       Protobuf format result.
+  """,
+  arguments = """
+    Arguments:
+      * child - The Catalyst input value to convert to Protobuf binary.
+      * messageName - A constant string naming the Protobuf message to serialize to.
+      * descFilePath - Optional. A constant string or binary value with the
+          Protobuf descriptor file, created by `protoc` with `--descriptor_set_out`
+          and `--include_imports`. If omitted, the message must be resolvable
+          otherwise.
+      * options - Optional. A constant map of string key-value pairs controlling
+          the conversion. By default no options are set.
   """,
   examples = """
     Examples:
@@ -292,7 +315,8 @@ case class ToProtobuf(
         s.toString
     }
     val descFilePathValue: Option[Array[Byte]] = descFilePath.eval() match {
-      case s: UTF8String => Some(ProtobufUtils.readDescriptorFileContent(s.toString))
+      case s: UTF8String =>
+        Some(ProtobufDescriptorFileReader.readDescriptorFileContent(s.toString))
       case bytes: Array[Byte] => Some(bytes)
       case null => None
     }

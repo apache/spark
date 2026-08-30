@@ -23,15 +23,17 @@ import org.apache.logging.log4j.Level
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType}
 
 /**
  * Test suite for the [[HiveExternalCatalog]].
  */
-class HiveExternalCatalogSuite extends ExternalCatalogSuite {
+class HiveExternalCatalogSuite extends ExternalCatalogSuite with SQLHelper {
 
   private val externalCatalog: HiveExternalCatalog = {
     val catalog = new HiveExternalCatalog(new SparkConf, new Configuration)
@@ -241,6 +243,50 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
     val alteredTable = externalCatalog.getTable("db1", tableName)
     assert(DataTypeUtils.sameType(alteredTable.schema, newSchema))
+  }
+
+  test("SPARK-57835: restore a persisted nanos-typed table when the preview flag is off") {
+    val catalog = newBasicCatalog()
+    val tableName = "nanos_tbl"
+
+    // Nanos types are not Hive-compatible (SPARK-57831), so a datasource table persists an empty
+    // schema in the metastore and the real schema as JSON in the table properties. The table is
+    // created with the preview flag on (the test default via Utils.isTesting).
+    val nanosSchema = StructType(Seq(
+      StructField("id", IntegerType),
+      StructField("ntz", TimestampNTZNanosType(9)),
+      StructField("ltz", TimestampLTZNanosType(7))))
+
+    val tableDDL = CatalogTable(
+      identifier = TableIdentifier(tableName, Some("db1")),
+      tableType = CatalogTableType.MANAGED,
+      storage = storageFormat,
+      schema = nanosSchema,
+      provider = Some("parquet"))
+
+    catalog.createTable(tableDDL, ignoreIfExists = false)
+
+    // Because nanos types are not Hive-compatible, the metastore-visible (raw) schema is the
+    // placeholder EMPTY_DATA_SCHEMA; the true schema lives in the Spark-specific table properties.
+    val rawTable = externalCatalog.getRawTable("db1", tableName)
+    assert(rawTable.schema == HiveExternalCatalog.EMPTY_DATA_SCHEMA)
+
+    // Read-through policy (SPARK-57835): with the preview flag off, catalog restoration must still
+    // reconstruct the persisted nanos schema so the table remains describable and droppable.
+    // Before this change getTable threw FEATURE_NOT_ENABLED here.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      val restored = externalCatalog.getTable("db1", tableName)
+      assert(DataTypeUtils.sameType(restored.schema, nanosSchema))
+      // The restored nanos columns render with their precision (used by DESCRIBE / SHOW CREATE).
+      assert(restored.schema("ntz").dataType === TimestampNTZNanosType(9))
+      assert(restored.schema("ltz").dataType === TimestampLTZNanosType(7))
+    }
+
+    // And it still round-trips with the flag on.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      assert(DataTypeUtils.sameType(
+        externalCatalog.getTable("db1", tableName).schema, nanosSchema))
+    }
   }
 
   test("SPARK-50137: Avoid fallback to Hive-incompatible ways on thrift exception") {

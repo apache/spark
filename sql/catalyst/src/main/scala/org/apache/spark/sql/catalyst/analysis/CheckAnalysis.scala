@@ -307,7 +307,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     // We should inline all CTE relations to restore the original plan shape, as the analysis check
     // may need to match certain plan shapes. For dangling CTE relations, they will still be kept
     // in the original `WithCTE` node, as we need to perform analysis check for them as well.
-    val inlineCTE = InlineCTE(alwaysInline = true, keepDanglingRelations = true)
+    val inlineCTE = InlineCTE(alwaysInline = true, keepDanglingRelations = true, isAnalysis = true)
     val inlinedPlan: LogicalPlan = try {
       inlineCTE(plan)
     } catch {
@@ -363,11 +363,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     plan.foreachUp {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
-      case leaf: LeafNode if !SQLConf.get.preserveCharVarcharTypeInfo &&
-        leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
+      case leaf: LeafNode
+          if !SQLConf.get.charVarcharFirstClassTypes &&
+            leaf.output.exists(attr => CharVarcharUtils.hasCharVarchar(attr.dataType)) =>
         throw SparkException.internalError(
           s"Logical plan should not have output of char/varchar type when " +
-            s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is false: " + leaf)
+            s"${SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key} and " +
+            s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} are both false: " + leaf)
 
       case u: UnresolvedNamespace =>
         u.schemaNotFound(u.multipartIdentifier)
@@ -501,10 +503,27 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 hof.invalidFormat(checkRes)
             }
 
+          // A Python UDF cannot be evaluated inside a lambda, because it needs a separate
+          // physical operator that cannot see the lambda's variables. For some shapes
+          // `ExtractPythonUDFFromLambda` rewrites the plan in the optimizer so the UDF is
+          // applied to the whole array outside the lambda instead; those are allowed through
+          // here. Everything else must still fail, or nothing downstream can evaluate it.
+          //
+          // Judge only at a *nest root* - a HOF that iterates real columns, not a free lambda
+          // variable. `canRewritePythonUDFInLambda` validates the whole nest below the root
+          // (a UDF in a nested lambda is lifted out one level at a time), and a root's
+          // `functions.exists` sees UDFs at every depth, so firing on inner HOFs too would
+          // double-report and reject nests the rule actually handles.
           case hof: HigherOrderFunction
               if hof.resolved && hof.functions
-                .exists(_.exists(_.isInstanceOf[PythonUDF])) =>
-            val u = hof.functions.flatMap(_.find(_.isInstanceOf[PythonUDF])).head
+                .exists(_.exists(_.isInstanceOf[PythonUDF])) &&
+                !PythonUDF.hasFreeLambdaVariable(hof) &&
+                !(conf.pythonUDFInHigherOrderFunctionEnabled &&
+                  PythonUDF.canRewritePythonUDFInLambda(hof)) =>
+            // Name the offending UDF: the first one of an unsupported eval type if any (e.g. a
+            // pandas UDF), otherwise the first Python UDF in the lambdas.
+            val udfs = hof.functions.flatMap(_.collect { case u: PythonUDF => u })
+            val u = udfs.find(!PythonUDF.isElementwiseRewritableUDF(_)).getOrElse(udfs.head)
             hof.failAnalysis(
               errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
               messageParameters = Map("funcName" -> toSQLExpr(u)))
@@ -676,15 +695,15 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "joinCondition" -> toSQLExpr(condition),
                 "conditionType" -> toSQLType(condition.dataType)))
 
-          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _)
+          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _, _, _, _, _, _, _, _)
               if condition.dataType != BooleanType =>
-            throw SparkException.internalError(
-              msg = s"join condition '${toSQLExpr(condition)}' " +
-                s"of type ${toSQLType(condition.dataType)} is not a boolean.",
-              context = j.origin.getQueryContext,
-              summary = j.origin.context.summary)
+            j.failAnalysis(
+              errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
+              messageParameters = Map(
+                "joinCondition" -> toSQLExpr(condition),
+                "conditionType" -> toSQLType(condition.dataType)))
 
-          case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion)) =>
+          case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion), _, _, _, _, _, _, _) =>
             if (!toleranceAssertion.foldable) {
               j.failAnalysis(
                 errorClass = "AS_OF_JOIN.TOLERANCE_IS_UNFOLDABLE",
@@ -974,33 +993,17 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
         operator match {
           case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
-            val missingAttributes = o.missingInput.map(attr => toSQLExpr(attr)).mkString(", ")
-            val input = o.inputSet.map(attr => toSQLExpr(attr)).mkString(", ")
-
             val resolver = plan.conf.resolver
             val attrsWithSameName = o.missingInput.filter { missing =>
               o.inputSet.exists(input => resolver(missing.name, input.name))
             }
 
-            if (attrsWithSameName.nonEmpty) {
-              val sameNames = attrsWithSameName.map(attr => toSQLExpr(attr)).mkString(", ")
-              o.failAnalysis(
-                errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
-                messageParameters = Map(
-                  "missingAttributes" -> missingAttributes,
-                  "input" -> input,
-                  "operator" -> operator.simpleString(SQLConf.get.maxToStringFields),
-                  "operation" -> sameNames
-                ))
-            } else {
-              o.failAnalysis(
-                errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-                messageParameters = Map(
-                  "missingAttributes" -> missingAttributes,
-                  "input" -> input,
-                  "operator" -> operator.simpleString(SQLConf.get.maxToStringFields)
-                ))
-            }
+            throw QueryCompilationErrors.missingAttributesError(
+              operator = o,
+              missingInput = o.missingInput,
+              input = o.inputSet,
+              attributesWithSameName = attrsWithSameName
+            )
 
           case p @ Project(projectList, _) =>
             checkForUnspecifiedWindow(projectList)
@@ -1129,6 +1132,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             other.failAnalysis(
               errorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
               messageParameters = Map(
+                "operator" -> other.nodeName,
                 "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
 
           case j @ LateralJoin(_, right, _, _)
@@ -1254,27 +1258,16 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists("rename", col.path :+ newName, table.schema)
 
-      case AlterColumns(table: ResolvedTable, specs) =>
-        val groupedColumns = specs.groupBy(_.column.name)
-        groupedColumns.collect {
-          case (name, occurrences) if occurrences.length > 1 =>
-            alter.failAnalysis(
-              errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
-              messageParameters = Map(
-                "table" -> toSQLId(table.name),
-                "fieldName" -> toSQLId(name)))
-        }
-        groupedColumns.keys.foreach { name =>
-          if (groupedColumns.keys.exists(child => child != name && child.startsWith(name))) {
-            alter.failAnalysis(
-              errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
-              messageParameters = Map(
-                "table" -> toSQLId(table.name),
-                "fieldName" -> toSQLId(name)))
-          }
+      case AlterColumns(table: ResolvedTable, specs, _) =>
+        AlterColumns.findRepeatedColumn(specs).foreach { name =>
+          alter.failAnalysis(
+            errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
+            messageParameters = Map(
+              "table" -> toSQLId(table.name),
+              "fieldName" -> toSQLId(name)))
         }
         specs.foreach {
-          case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _, _) =>
+          case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _, _, _) =>
             val fieldName = col.name.quoted
             if (dataType.isDefined) {
               val field = CharVarcharUtils.getRawType(col.field.metadata)

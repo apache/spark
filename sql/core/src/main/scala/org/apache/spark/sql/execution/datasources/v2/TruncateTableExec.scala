@@ -21,13 +21,15 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.TruncatableTable
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Physical plan node for table truncation.
  */
 case class TruncateTableExec(
     table: TruncatableTable,
-    refreshCache: () => Unit)
+    refreshCache: () => Unit,
+    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
   extends LeafV2CommandExec
   with SupportsCustomDriverMetrics {
 
@@ -38,7 +40,7 @@ case class TruncateTableExec(
 
   override protected def run(): Seq[InternalRow] = {
     try {
-      if (table.truncateTable()) refreshCache()
+      if (table.truncateTable(options)) refreshCache()
       Seq.empty
     } finally {
       postDriverMetrics(table.reportDriverMetrics())

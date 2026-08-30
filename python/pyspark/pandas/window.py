@@ -19,24 +19,26 @@ from functools import partial
 from typing import Any, Callable, Generic, List, Optional
 
 import numpy as np
+import pandas as pd
 
-from pyspark.sql import Window
-from pyspark.sql import functions as F
-from pyspark.sql.internal import InternalFunction as SF
+from pyspark import pandas as ps  # noqa: F401
+from pyspark.loose_version import LooseVersion
+from pyspark.pandas._typing import FrameLike
+from pyspark.pandas.groupby import DataFrameGroupBy, GroupBy
+from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, SPARK_INDEX_NAME_FORMAT
 from pyspark.pandas.missing.window import (
-    MissingPandasLikeRolling,
-    MissingPandasLikeRollingGroupby,
     MissingPandasLikeExpanding,
     MissingPandasLikeExpandingGroupby,
     MissingPandasLikeExponentialMoving,
     MissingPandasLikeExponentialMovingGroupby,
+    MissingPandasLikeRolling,
+    MissingPandasLikeRollingGroupby,
 )
-from pyspark import pandas as ps  # noqa: F401
-from pyspark.pandas._typing import FrameLike
-from pyspark.pandas.groupby import GroupBy, DataFrameGroupBy
-from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, SPARK_INDEX_NAME_FORMAT
 from pyspark.pandas.utils import scol_for
+from pyspark.sql import Window
+from pyspark.sql import functions as F
 from pyspark.sql.column import Column
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.types import (
     DoubleType,
 )
@@ -137,9 +139,15 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
 
         def sem(scol: Column) -> Column:
             count = F.count(scol).over(self._window)
+            if LooseVersion(pd.__version__) >= "3.0.0":
+                # pandas 3.0 fixed sem to std(ddof) / sqrt(count) (pandas-dev/pandas#63181);
+                # earlier pandas divided by sqrt(count - ddof) instead.
+                sem_scol = SF.stddev(scol, ddof).over(self._window) / F.sqrt(count)
+            else:
+                sem_scol = F.stddev(scol).over(self._window) / F.sqrt(count - ddof)
             return F.when(
                 (F.row_number().over(self._unbounded_window) >= self._min_periods) & (count > ddof),
-                F.stddev(scol).over(self._window) / F.sqrt(count - ddof),
+                sem_scol,
             ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(sem)
@@ -3028,11 +3036,12 @@ class ExponentialMovingGroupby(ExponentialMovingLike[FrameLike]):
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.window
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

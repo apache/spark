@@ -26,7 +26,9 @@ A SQL join is used to combine rows from two relations based on join criteria. Th
 ### Syntax
 
 ```sql
-relation { [ join_type ] JOIN [ LATERAL ] relation [ join_criteria | nearest_by_clause ] | NATURAL join_type JOIN [ LATERAL ] relation }
+relation { [ join_type ] JOIN [ LATERAL ] relation [ join_criteria | nearest_by_clause ]
+         | [ asof_join_type ] ASOF JOIN relation join_criteria
+         | NATURAL join_type JOIN [ LATERAL ] relation }
 ```
 
 ### Parameters
@@ -52,6 +54,14 @@ relation { [ join_type ] JOIN [ LATERAL ] relation [ join_criteria | nearest_by_
     `boolean_expression`
 
     Specifies an expression with a return type of boolean.
+
+* **asof_join_type**
+
+    Specifies the outer form of an [ASOF JOIN](sql-ref-syntax-qry-select-asof-join.html). Only `INNER` (the default) and `LEFT OUTER` are supported.
+
+* **join_criteria** (for `ASOF JOIN`)
+
+    A required `MATCH_CONDITION` clause and an optional `ON` or `USING` clause. See [ASOF JOIN](sql-ref-syntax-qry-select-asof-join.html).
 
 * **nearest_by_clause**
 
@@ -259,5 +269,6 @@ SELECT * FROM employee ANTI JOIN department ON employee.deptno = department.dept
 ### Related Statements
 
 * [SELECT](sql-ref-syntax-qry-select.html)
+* [ASOF JOIN](sql-ref-syntax-qry-select-asof-join.html)
 * [Hints](sql-ref-syntax-qry-select-hints.html)
 * [LATERAL Subquery](sql-ref-syntax-qry-select-lateral-subquery.html)

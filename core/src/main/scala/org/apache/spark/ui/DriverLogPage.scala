@@ -70,9 +70,9 @@ private[ui] class DriverLogPage(
         End of Log
       </div>
 
-    val logParams = "/?logType=%s".format(logType)
-    val jsOnload = "window.onload = " +
-      s"initLogPage('$logParams', $curLogLength, $startByte, $endByte, $logLength, $byteLength);"
+    val logParams = "/?logType=%s".format(UIUtils.encodeLogParam(logType))
+    val jsOnload = UIUtils.logPageOnloadScript(
+      logParams, curLogLength, startByte, endByte, logLength, byteLength)
 
     val content =
       <script type="module" src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++

@@ -81,7 +81,13 @@ class WindowSegmentTreeAllowlistSuite
     ("stddev_pop", (c: org.apache.spark.sql.Column) => stddev_pop(c)),
     ("stddev_samp", (c: org.apache.spark.sql.Column) => stddev_samp(c)),
     ("var_pop", (c: org.apache.spark.sql.Column) => var_pop(c)),
-    ("var_samp", (c: org.apache.spark.sql.Column) => var_samp(c))
+    ("var_samp", (c: org.apache.spark.sql.Column) => var_samp(c)),
+    ("first", (c: org.apache.spark.sql.Column) => first(c)),
+    ("last", (c: org.apache.spark.sql.Column) => last(c)),
+    ("first_ignore_nulls",
+      (c: org.apache.spark.sql.Column) => first(c, ignoreNulls = true)),
+    ("last_ignore_nulls",
+      (c: org.apache.spark.sql.Column) => last(c, ignoreNulls = true))
   ).foreach { case (name, fn) =>
     test(s"$name routes to the segment-tree path") {
       withSQLConf(enableSegTree.toSeq: _*) {
@@ -95,22 +101,6 @@ class WindowSegmentTreeAllowlistSuite
   }
 
   // Negative: non-allowlisted aggregates fall through
-
-  test("first_value falls through (order-dependent aggregate)") {
-    withSQLConf(enableSegTree.toSeq: _*) {
-      val df = baseDF.withColumn("agg", first($"v").over(winSpec))
-      val (seg, _) = segTreeCounters(df)
-      assert(seg == 0, s"first_value should not use segment tree (got $seg frames)")
-    }
-  }
-
-  test("last_value falls through (order-dependent aggregate)") {
-    withSQLConf(enableSegTree.toSeq: _*) {
-      val df = baseDF.withColumn("agg", last($"v").over(winSpec))
-      val (seg, _) = segTreeCounters(df)
-      assert(seg == 0, s"last_value should not use segment tree (got $seg frames)")
-    }
-  }
 
   test("collect_list falls through (unbounded buffer)") {
     withSQLConf(enableSegTree.toSeq: _*) {
@@ -176,10 +166,10 @@ class WindowSegmentTreeAllowlistSuite
     withSQLConf(enableSegTree.toSeq: _*) {
       val df = baseDF
         .withColumn("s", sum($"v").over(winSpec))
-        .withColumn("fv", first($"v").over(winSpec))
+        .withColumn("cl", collect_list($"v").over(winSpec))
       val (seg, _) = segTreeCounters(df)
       // Both aggregates share the same Window node; gating is forall(isEligible),
-      // so `first_value` drops the whole group.
+      // so `collect_list` (unbounded-buffer denylist) drops the whole group.
       assert(seg == 0,
         s"Window group containing a non-allowlisted agg must fall through (got $seg)")
     }

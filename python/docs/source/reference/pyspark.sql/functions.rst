@@ -143,6 +143,7 @@ Mathematical Functions
     sqrt
     tan
     tanh
+    truncate
     try_add
     try_divide
     try_mod
@@ -177,9 +178,11 @@ String Functions
     find_in_set
     format_number
     format_string
+    from_base32
     initcap
     instr
     is_valid_utf8
+    jaro_winkler_similarity
     lcase
     left
     length
@@ -190,6 +193,7 @@ String Functions
     ltrim
     make_valid_utf8
     mask
+    normalize
     octet_length
     overlay
     position
@@ -215,6 +219,7 @@ String Functions
     substr
     substring
     substring_index
+    to_base32
     to_binary
     to_char
     to_number
@@ -298,6 +303,7 @@ Date and Timestamp Functions
     timestamp_diff
     timestamp_micros
     timestamp_millis
+    timestamp_nanos
     timestamp_seconds
     time_bucket
     time_diff
@@ -326,6 +332,7 @@ Date and Timestamp Functions
     unix_date
     unix_micros
     unix_millis
+    unix_nanos
     unix_seconds
     unix_timestamp
     weekday
@@ -346,6 +353,8 @@ Hash Functions
     sha
     sha1
     sha2
+    xxh3_128
+    xxh3_64
     xxhash64
 
 
@@ -404,6 +413,7 @@ Array Functions
     shuffle
     slice
     sort_array
+    trim_array
 
 
 Struct Functions
@@ -446,6 +456,7 @@ Aggregate Functions
     bit_xor
     bitmap_construct_agg
     bitmap_or_agg
+    bitmap_xor_agg
     bool_and
     bool_or
     collect_list
@@ -584,6 +595,7 @@ JSON Functions
     json_array_length
     json_object_keys
     json_tuple
+    json_typeof
     schema_of_json
     to_json
 
@@ -599,7 +611,17 @@ VARIANT Functions
     schema_of_variant
     schema_of_variant_agg
     try_variant_get
+    variant_array_append
+    try_variant_array_append
+    variant_delete
+    variant_from_arrays
+    variant_from_entries
+    variant_strip_nulls
     variant_get
+    variant_insert
+    try_variant_insert
+    variant_set
+    try_variant_set
     try_parse_json
     to_variant_object
 
@@ -643,14 +665,19 @@ Misc Functions
     aes_decrypt
     aes_encrypt
     assert_true
+    bitmap_and
+    bitmap_andnot
     bitmap_bit_position
     bitmap_bucket_number
     bitmap_count
+    bitmap_or
+    bitmap_xor
     current_catalog
     current_database
     current_path
     current_schema
     current_user
+    hmac
     input_file_block_length
     input_file_block_start
     input_file_name
@@ -725,6 +752,20 @@ Geospatial ST Functions
     st_srid
 
 
+Vector Functions
+----------------
+.. autosummary::
+    :toctree: api/
+
+    vector_cosine_similarity
+    vector_inner_product
+    vector_l2_distance
+    vector_norm
+    vector_normalize
+    vector_avg
+    vector_sum
+
+
 UDF, UDTF and UDT
 -----------------
 .. autosummary::
@@ -734,9 +775,11 @@ UDF, UDTF and UDT
     arrow_udtf
     call_udf
     pandas_udf
+    udaf
     udf
     udtf
     unwrap_udt
+    wrap_udt
 
 
 Table-Valued Functions

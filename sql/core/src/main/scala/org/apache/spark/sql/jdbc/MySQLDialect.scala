@@ -99,19 +99,12 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       }
     }
 
-    override def visitStartsWith(l: String, r: String): String = {
-      val value = r.substring(1, r.length() - 1)
-      s"$l LIKE '${escapeSpecialCharsForLikePattern(value)}%' ESCAPE '\\\\'"
-    }
-
-    override def visitEndsWith(l: String, r: String): String = {
-      val value = r.substring(1, r.length() - 1)
-      s"$l LIKE '%${escapeSpecialCharsForLikePattern(value)}' ESCAPE '\\\\'"
-    }
-
-    override def visitContains(l: String, r: String): String = {
-      val value = r.substring(1, r.length() - 1)
-      s"$l LIKE '%${escapeSpecialCharsForLikePattern(value)}%' ESCAPE '\\\\'"
+    // MySQL treats backslash as an escape character inside string literals, so every backslash in
+    // a LIKE pattern (and the ESCAPE character) must be doubled to survive string-literal parsing
+    // before the LIKE engine applies its own escaping. The base STARTS_WITH/ENDS_WITH/CONTAINS
+    // pattern building is otherwise shared, so only this hook is overridden.
+    override def escapeStringLiteralForLikePattern(str: String): String = {
+      str.replace("\\", "\\\\")
     }
 
     override def visitAggregateFunction(
@@ -125,6 +118,16 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
+
+    override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
+      dataType match {
+        case DoubleType =>
+          // The common JDBC mapping is DOUBLE PRECISION, which is not a portable CAST target for
+          // MySQL-compatible databases. In particular, MariaDB rejects it with a syntax error.
+          throw new UnsupportedOperationException("Cannot cast to double type")
+        case _ => super.visitCast(expr, exprDataType, dataType)
+      }
+    }
   }
 
   override def compileExpression(expr: Expression): Option[String] = {
@@ -273,7 +276,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
 
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
   override def getTableCommentQuery(table: String, comment: String): String = {
-    s"ALTER TABLE $table COMMENT = '$comment'"
+    s"ALTER TABLE $table COMMENT = '${escapeSql(comment)}'"
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
@@ -325,7 +328,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       tableIdent: Identifier,
       options: JDBCOptions): Boolean = {
     val sql = s"SHOW INDEXES FROM ${quoteIdentifier(tableIdent.name())} " +
-      s"WHERE key_name = '$indexName'"
+      s"WHERE key_name = '${escapeSql(indexName)}'"
     JdbcUtils.checkIfIndexExists(conn, sql, options)
   }
 
@@ -357,7 +360,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
           } else {
             // The only property we are building here is `COMMENT` because it's the only one
             // we can get from `SHOW INDEXES`.
-            val properties = new util.Properties();
+            val properties = new util.Properties()
             if (indexComment.nonEmpty) properties.put("COMMENT", indexComment)
             val index = new TableIndex(indexName, indexType, Array(FieldReference(colName)),
               new util.HashMap[NamedReference, util.Properties](), properties)

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.PromoteStrings.conf
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
@@ -38,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   ImplicitCastInputTypes,
   In,
   InSubquery,
+  JsonTuple,
   Least,
   ListQuery,
   Literal,
@@ -59,7 +61,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeWithCollation}
+import org.apache.spark.sql.internal.types.{
+  AbstractArrayType,
+  AbstractStringType,
+  StringTypeWithCollation
+}
 import org.apache.spark.sql.types.{
   AbstractDataType,
   AnyDataType,
@@ -79,13 +85,18 @@ import org.apache.spark.sql.types.{
   IntegralType,
   MapType,
   NullType,
+  StringHelper,
   StringType,
   StringTypeExpression,
   StructType,
+  TimestampFamily,
+  TimestampLTZNanosType,
+  TimestampNTZNanosType,
   TimestampNTZType,
   TimestampType,
   TimestampTypeExpression,
-  TimeType
+  TimeType,
+  TypeCollection
 }
 
 abstract class TypeCoercionHelper {
@@ -128,6 +139,69 @@ abstract class TypeCoercionHelper {
    * If the expression has an incompatible type that cannot be implicitly cast, return None.
    */
   def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression]
+
+  /**
+   * Where a plain string is expected, promote CHAR(n)/VARCHAR(n) to unbounded STRING the same way
+   * SHORT promotes to INT, and return the promoted type.
+   *
+   * CharType and VarcharType extend StringType, so an expectation such as
+   * `StringTypeWithCollation` accepts them as-is and the implicit cast rules leave the length
+   * constraint in place. Expressions that then require all their string inputs to share a single
+   * type (`overlay`, `string_agg`, ...) cannot unify CHAR(n) with STRING, and RuntimeReplaceable
+   * ones (`right`) build literals from the constrained type that no longer match their other
+   * branches.
+   *
+   * The expectation must actually mention a string type (or an array of strings). Promoting at an
+   * `AnyDataType` site would strip the length from pass-through expressions such as `max`, `lag`,
+   * and `element_at`, which are required to preserve CHAR/VARCHAR.
+   */
+  protected def charVarcharToPlainString(
+      inType: DataType,
+      expectedType: AbstractDataType): Option[DataType] = {
+    if (!conf.charVarcharStandardSemantics) {
+      return None
+    }
+    inType match {
+      case st: StringType if !StringHelper.isPlainString(st) =>
+        val plain = StringHelper.plainStringType(st)
+        if (expectsStringType(expectedType) && expectedType.acceptsType(plain)) {
+          Some(plain)
+        } else {
+          None
+        }
+      case ArrayType(et, containsNull) =>
+        arrayElementExpectation(expectedType).flatMap { elemExpected =>
+          charVarcharToPlainString(et, elemExpected).map(ArrayType(_, containsNull))
+        }
+      case _ => None
+    }
+  }
+
+  private def expectsStringType(expectedType: AbstractDataType): Boolean = expectedType match {
+    case _: StringType => true
+    case _: AbstractStringType => true
+    case TypeCollection(types) => types.exists(expectsStringType)
+    case _ => false
+  }
+
+  private def arrayElementExpectation(expectedType: AbstractDataType): Option[AbstractDataType] =
+    expectedType match {
+      case AbstractArrayType(elem) => Some(elem)
+      case ArrayType(elem, _) => Some(elem)
+      case TypeCollection(types) => types.view.flatMap(arrayElementExpectation).headOption
+      case _ => None
+    }
+
+  /**
+   * Concat/Elt stringify non-binary inputs. CHAR/VARCHAR go through
+   * [[charVarcharToPlainString]] so a collated constrained type promotes to unbounded STRING
+   * with the same collation. Non-strings still target the default UTF8_BINARY StringType.
+   */
+  protected def implicitCastToString(e: Expression): Expression = {
+    charVarcharToPlainString(e.dataType, StringTypeWithCollation(supportsTrimCollation = true))
+      .map(dt => if (dt == e.dataType) e else Cast(e, dt))
+      .getOrElse(implicitCast(e, StringType).getOrElse(e))
+  }
 
   /**
    * Whether casting `from` as `to` is valid.
@@ -240,19 +314,97 @@ abstract class TypeCoercionHelper {
     }
   }
 
+  // Fractional-seconds precision of the microsecond timestamp family. DATE has no time component
+  // and is treated as this precision when widening (so DATE <-> micro widens to a micro type and
+  // DATE <-> nanos to a nanos type). The nanos types carry their own precision in [7, 9].
+  private final val MicrosPrecision = 6
+
   protected def findWiderDateTimeType(d1: DatetimeType, d2: DatetimeType): Option[DatetimeType] =
     (d1, d2) match {
+      // Two TIME operands of differing fractional-seconds precision widen to the larger precision
+      // (ANSI SQL result type for a set of comparable datetime types). Widening from a smaller to a
+      // larger precision is a lossless up-cast via truncateTimeToPrecision. Cross-family pairs
+      // (TIME vs DATE / TIMESTAMP) remain incomparable and fall through to the None arms below.
+      case (t1: TimeType, t2: TimeType) =>
+        Some(TimeType(math.max(t1.precision, t2.precision)))
       case (_, _: TimeType) => None
       case (_: TimeType, _) => None
-      case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
-        Some(TimestampType)
 
-      case (_: TimestampType, _: TimestampNTZType) | (_: TimestampNTZType, _: TimestampType) =>
-        Some(TimestampType)
-
-      case (_: TimestampNTZType, _: DateType) | (_: DateType, _: TimestampNTZType) =>
-        Some(TimestampNTZType)
+      // The remaining datetime types (DATE and the micro/nanos TIMESTAMP_LTZ / TIMESTAMP_NTZ
+      // families) widen along two independent axes:
+      //   - time-zone family: the result is LTZ if either input is LTZ-family, otherwise NTZ. This
+      //     mirrors the microsecond precedent where TIMESTAMP + TIMESTAMP_NTZ widens to TIMESTAMP.
+      //     DATE is family-neutral and adopts the family of the other side.
+      //   - precision: the maximum of the two precisions, where the micro types and DATE count as 6
+      //     and the nanos types contribute their own precision p in [7, 9].
+      // The (family, precision) pair then maps back to a concrete type: precision 6 yields the
+      // micro type, precision in [7, 9] yields the nanos type.
+      //
+      // Note: common-type resolution here is symmetric and widens to the maximum precision, while
+      // Cast.canUpCast / Cast.canANSIStoreAssign are directional (they block lossy narrowing). Both
+      // now agree on admissibility across the timestamp family -- including the cross-family
+      // LTZ <-> NTZ pairs and DATE <-> nanos (SPARK-57303) -- mirroring the microsecond precedent
+      // so that UNION / CASE / coalesce / IN / comparison resolve a common type the same way they
+      // do for the micro families.
+      case _ =>
+        // Fractional-seconds precision of the timestamp family (micros: 6, nanos: 7-9). DATE has no
+        // time component and is treated as the micro precision (getOrElse) so that DATE <-> micro
+        // widens to the micro type and DATE <-> nanos to the nanos type.
+        def isLtz(d: DatetimeType): Boolean = TimestampFamily.isLtz(d)
+        def isNtz(d: DatetimeType): Boolean = TimestampFamily.isNtz(d)
+        def precisionOf(d: DatetimeType): Int =
+          TimestampFamily.fractionalPrecision(d).getOrElse(MicrosPrecision)
+        // Beyond TimeType (handled above), the only datetime types are DATE and the micro/nanos
+        // timestamp families. Guard so that a future DatetimeType subtype fails fast here instead
+        // of being silently mis-widened (treated as a family-neutral precision-6 type and folded
+        // into DATE) when it should be wired in explicitly.
+        def isWidenable(d: DatetimeType): Boolean =
+          isLtz(d) || isNtz(d) || d.isInstanceOf[DateType]
+        if (!isWidenable(d1) || !isWidenable(d2)) {
+          throw SparkException.internalError(
+            s"Unexpected datetime types in findWiderDateTimeType: $d1, $d2")
+        } else if (!isLtz(d1) && !isNtz(d1) && !isLtz(d2) && !isNtz(d2)) {
+          // Both sides are DATE; callers short-circuit equal types, so this is just defensive.
+          Some(DateType)
+        } else {
+          val p = math.max(precisionOf(d1), precisionOf(d2))
+          if (isLtz(d1) || isLtz(d2)) {
+            Some(if (p <= MicrosPrecision) TimestampType else TimestampLTZNanosType(p))
+          } else {
+            Some(if (p <= MicrosPrecision) TimestampNTZType else TimestampNTZNanosType(p))
+          }
+        }
     }
+
+  /** Whether `dt` is on the LTZ/NTZ timestamp fractional-precision axis (a micro or nanos type). */
+  private def isTimestampFamily(dt: DataType): Boolean =
+    TimestampFamily.fractionalPrecision(dt).isDefined
+
+  /**
+   * Common operand type for [[SubtractTimestamps]] over two differing timestamp-family operands.
+   * The operands are widened to the larger of the two fractional-second precisions (the micro types
+   * count as 6, the nanos types carry their own precision `p` in [7, 9]) and unified in one
+   * time-zone family:
+   *   - a cross-family pair unifies in the no-time-zone (NTZ) family, mirroring the microsecond
+   *     precedent where TIMESTAMP - TIMESTAMP_NTZ coerces both operands to TIMESTAMP_NTZ;
+   *   - a same-family pair keeps that family, so a TIMESTAMP - TIMESTAMP_LTZ(p) style pair still
+   *     subtracts in the session time zone (DST-aware) exactly as a pure LTZ pair does.
+   * The subtraction reads only each operand's epochMicros and always reports the difference on the
+   * microsecond grid (a DayTimeIntervalType in the default mode, a CalendarIntervalType when
+   * spark.sql.legacy.interval.enabled is set), so widening the precision never changes the numeric
+   * result -- it only keeps the two operands the same concrete type. For a pure-micro cross-family
+   * pair this returns TimestampNTZType, identical to the pre-nanos behavior.
+   */
+  private def subtractTimestampsCommonType(dt1: DataType, dt2: DataType): DataType = {
+    val p = math.max(
+      TimestampFamily.fractionalPrecision(dt1).getOrElse(MicrosPrecision),
+      TimestampFamily.fractionalPrecision(dt2).getOrElse(MicrosPrecision))
+    if (TimestampFamily.isLtz(dt1) && TimestampFamily.isLtz(dt2)) {
+      if (p <= MicrosPrecision) TimestampType else TimestampLTZNanosType(p)
+    } else {
+      if (p <= MicrosPrecision) TimestampNTZType else TimestampNTZNanosType(p)
+    }
+  }
 
   /**
    * Type coercion helper that matches agaist [[In]] and [[InSubquery]] expressions in order to
@@ -430,9 +582,7 @@ abstract class TypeCoercionHelper {
       case c @ Concat(children)
           if conf.concatBinaryAsString ||
           !children.map(_.dataType).forall(_ == BinaryType) =>
-        val newChildren = c.children.map { e =>
-          implicitCast(e, StringType).getOrElse(e)
-        }
+        val newChildren = c.children.map(implicitCastToString)
         c.copy(children = newChildren)
       case other => other
     }
@@ -480,9 +630,7 @@ abstract class TypeCoercionHelper {
         val newInputs =
           if (conf.eltOutputAsString ||
             !children.tail.map(_.dataType).forall(_ == BinaryType)) {
-            children.tail.map { e =>
-              implicitCast(e, StringType).getOrElse(e)
-            }
+            children.tail.map(implicitCastToString)
           } else {
             children.tail
           }
@@ -567,16 +715,35 @@ abstract class TypeCoercionHelper {
         }
         e.withNewChildren(children)
 
+      // JsonTuple validates its own input types and rejects non-string children with
+      // NON_STRING_TYPE, so it only takes the CHAR/VARCHAR promotion here. Do not fold this into
+      // the ExpectsInputTypes arm below: that would also apply the NullType rewrite and turn
+      // json_tuple(json, null) from an analysis error into a typed STRING null.
+      case j: JsonTuple =>
+        val expected = StringTypeWithCollation(supportsTrimCollation = true)
+        val children = j.children.map { child =>
+          charVarcharToPlainString(child.dataType, expected)
+            .map(dt => if (dt == child.dataType) child else Cast(child, dt))
+            .getOrElse(child)
+        }
+        j.withNewChildren(children)
+
       case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
         // Convert NullType into some specific target type for ExpectsInputTypes that don't do
-        // general implicit casting.
+        // general implicit casting. Also promote CHAR/VARCHAR to STRING here: these
+        // expressions skip ImplicitCastInputTypes, so without this the length constraint would
+        // remain on the child.
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
           case (in, expected) =>
-            if (in.dataType == NullType && !expected.acceptsType(NullType)) {
-              Literal.create(null, expected.defaultConcreteType)
-            } else {
-              in
-            }
+            charVarcharToPlainString(in.dataType, expected)
+              .map(dt => if (dt == in.dataType) in else Cast(in, dt))
+              .getOrElse {
+                if (in.dataType == NullType && !expected.acceptsType(NullType)) {
+                  Literal.create(null, expected.defaultConcreteType)
+                } else {
+                  in
+                }
+              }
         }
         e.withNewChildren(children)
 
@@ -690,14 +857,18 @@ abstract class TypeCoercionHelper {
         d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateSub(StringTypeExpression(), _) => d.copy(startDate = Cast(d.startDate, DateType))
 
-      case s @ SubtractTimestamps(DateTypeExpression(), AnyTimestampTypeExpression(), _, _) =>
+      case s @ SubtractTimestamps(DateTypeExpression(), r, _, _)
+          if isTimestampFamily(r.dataType) =>
         s.copy(left = Cast(s.left, s.right.dataType))
-      case s @ SubtractTimestamps(AnyTimestampTypeExpression(), DateTypeExpression(), _, _) =>
+      case s @ SubtractTimestamps(l, DateTypeExpression(), _, _)
+          if isTimestampFamily(l.dataType) =>
         s.copy(right = Cast(s.right, s.left.dataType))
-      case s @ SubtractTimestamps(AnyTimestampTypeExpression(), AnyTimestampTypeExpression(), _, _)
-          if s.left.dataType != s.right.dataType =>
-        val newLeft = castIfNotSameType(s.left, TimestampNTZType)
-        val newRight = castIfNotSameType(s.right, TimestampNTZType)
+      case s @ SubtractTimestamps(l, r, _, _)
+          if isTimestampFamily(l.dataType) && isTimestampFamily(r.dataType) &&
+            l.dataType != r.dataType =>
+        val commonType = subtractTimestampsCommonType(l.dataType, r.dataType)
+        val newLeft = castIfNotSameType(s.left, commonType)
+        val newRight = castIfNotSameType(s.right, commonType)
         s.copy(left = newLeft, right = newRight)
 
       case t @ TimestampAddInterval(StringTypeExpression(), _, _) =>
@@ -718,14 +889,18 @@ abstract class TypeCoercionHelper {
       case d @ DateSub(AnyTimestampTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
 
-      case s @ SubtractTimestamps(DateTypeExpression(), AnyTimestampTypeExpression(), _, _) =>
+      case s @ SubtractTimestamps(DateTypeExpression(), r, _, _)
+          if isTimestampFamily(r.dataType) =>
         s.copy(left = Cast(s.left, s.right.dataType))
-      case s @ SubtractTimestamps(AnyTimestampTypeExpression(), DateTypeExpression(), _, _) =>
+      case s @ SubtractTimestamps(l, DateTypeExpression(), _, _)
+          if isTimestampFamily(l.dataType) =>
         s.copy(right = Cast(s.right, s.left.dataType))
-      case s @ SubtractTimestamps(AnyTimestampTypeExpression(), AnyTimestampTypeExpression(), _, _)
-          if s.left.dataType != s.right.dataType =>
-        val newLeft = castIfNotSameType(s.left, TimestampNTZType)
-        val newRight = castIfNotSameType(s.right, TimestampNTZType)
+      case s @ SubtractTimestamps(l, r, _, _)
+          if isTimestampFamily(l.dataType) && isTimestampFamily(r.dataType) &&
+            l.dataType != r.dataType =>
+        val commonType = subtractTimestampsCommonType(l.dataType, r.dataType)
+        val newLeft = castIfNotSameType(s.left, commonType)
+        val newRight = castIfNotSameType(s.right, commonType)
         s.copy(left = newLeft, right = newRight)
 
       case other => other

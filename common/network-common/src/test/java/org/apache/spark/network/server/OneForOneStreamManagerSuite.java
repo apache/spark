@@ -29,6 +29,7 @@ import org.mockito.Mockito;
 
 import org.apache.spark.network.TestManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.client.TransportClient;
 
 public class OneForOneStreamManagerSuite {
 
@@ -161,5 +162,33 @@ public class OneForOneStreamManagerSuite {
     // only buffers1 has been released
     Mockito.verify(mockManagedBuffer, Mockito.times(1)).release();
     Assertions.assertEquals(0, manager.numStreamStates());
+  }
+
+  @Test
+  public void testStreamRequestAuthorization() {
+    OneForOneStreamManager manager = new OneForOneStreamManager();
+    Channel dummyChannel = Mockito.mock(Channel.class, Mockito.RETURNS_SMART_NULLS);
+    long streamId = manager.registerStream(
+      "app1", new ArrayList<ManagedBuffer>().iterator(), dummyChannel);
+    // StreamRequest addresses a registered stream via a "streamId_chunkIndex" string.
+    String streamChunkId = OneForOneStreamManager.genStreamChunkId(streamId, 0);
+
+    // A client authenticated as a different application is rejected, matching the
+    // ChunkFetchRequest path.
+    TransportClient otherApp = Mockito.mock(TransportClient.class);
+    Mockito.when(otherApp.getClientId()).thenReturn("app2");
+    Assertions.assertThrows(SecurityException.class,
+      () -> manager.checkAuthorization(otherApp, streamChunkId));
+
+    // The owning application is allowed.
+    TransportClient owner = Mockito.mock(TransportClient.class);
+    Mockito.when(owner.getClientId()).thenReturn("app1");
+    manager.checkAuthorization(owner, streamChunkId);
+
+    // With authentication disabled the client id is null and the check is a no-op, preserving
+    // the default behavior.
+    TransportClient noAuth = Mockito.mock(TransportClient.class);
+    Mockito.when(noAuth.getClientId()).thenReturn(null);
+    manager.checkAuthorization(noAuth, streamChunkId);
   }
 }

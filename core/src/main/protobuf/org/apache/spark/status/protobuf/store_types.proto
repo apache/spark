@@ -213,6 +213,7 @@ message ApplicationAttemptInfo {
   optional string spark_user = 6;
   bool completed = 7;
   optional string app_spark_version = 8;
+  optional int32 exit_code = 9;
 }
 
 message ApplicationInfo {

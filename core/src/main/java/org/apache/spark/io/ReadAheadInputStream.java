@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
 import java.nio.ByteBuffer;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -260,9 +261,7 @@ public class ReadAheadInputStream extends InputStream {
 
   @Override
   public int read(byte[] b, int offset, int len) throws IOException {
-    if (offset < 0 || len < 0 || len > b.length - offset) {
-      throw new IndexOutOfBoundsException();
-    }
+    Objects.checkFromIndexSize(offset, len, b.length);
     if (len == 0) {
       return 0;
     }

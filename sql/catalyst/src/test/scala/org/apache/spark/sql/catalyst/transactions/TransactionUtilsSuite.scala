@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.transactions
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, TransactionalCatalogPlugin}
 import org.apache.spark.sql.connector.catalog.transactions.{Transaction, TransactionInfo}
+import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class TransactionUtilsSuite extends SparkFunSuite {
@@ -45,6 +46,7 @@ class TransactionUtilsSuite extends SparkFunSuite {
     override def commit(): Unit = { committed = true; onCommit() }
     override def abort(): Unit = { aborted = true; onAbort() }
     override def close(): Unit = { closed = true; onClose() }
+    override def registerScans(scans: Array[Scan]): Boolean = false
   }
 
   private def mockTransactionalCatalog(

@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{INTERVAL, SESSION_HOLD_INFO}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_SESSION_MANAGER_CLOSED_SESSIONS_TOMBSTONES_SIZE, CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT, CONNECT_SESSION_MANAGER_MAINTENANCE_INTERVAL}
+import org.apache.spark.sql.connect.ml.MLCacheStatus
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -282,6 +283,16 @@ class SparkConnectSessionManager extends Logging {
 
   def listClosedSessions: Seq[SessionHolderInfo] = {
     closedSessionsCache.asMap.asScala.values.toSeq
+  }
+
+  // Read live cache state directly without updating the sessions' last-access times.
+  private[connect] def getMLCacheStatuses: Map[SessionKey, Option[MLCacheStatus]] = {
+    sessionStore
+      .entrySet()
+      .asScala
+      .iterator
+      .map(entry => entry.getKey -> entry.getValue.getMLCacheStatus)
+      .toMap
   }
 
   /**

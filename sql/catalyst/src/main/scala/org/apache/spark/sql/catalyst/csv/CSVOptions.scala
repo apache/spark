@@ -107,15 +107,15 @@ class CSVOptions(
   }
 
   private def getBool(paramName: String, default: Boolean = false): Boolean = {
-    val param = parameters.getOrElse(paramName, default.toString)
-    if (param == null) {
-      default
-    } else if (param.toLowerCase(Locale.ROOT) == "true") {
-      true
-    } else if (param.toLowerCase(Locale.ROOT) == "false") {
-      false
-    } else {
-      throw QueryExecutionErrors.paramIsNotBooleanValueError(paramName)
+    val paramValue = parameters.get(paramName)
+    paramValue match {
+      case None => default
+      case Some(null) => default
+      case Some(value) => value.toLowerCase(Locale.ROOT) match {
+        case "true" => true
+        case "false" => false
+        case _ => throw QueryExecutionErrors.paramIsNotBooleanValueError(paramName)
+      }
     }
   }
 
@@ -250,7 +250,7 @@ class CSVOptions(
   /**
    * The max error content length in CSV parser/writer exception message.
    */
-  val maxErrorContentLength = 1000
+  val maxErrorContentLength = CSVOptions.MAX_ERROR_CONTENT_LENGTH
 
   val isCommentSet = parameters.get(COMMENT) match {
     case Some(value) if value.length == 1 => true
@@ -443,4 +443,8 @@ object CSVOptions extends DataSourceOptions {
   newOption(SEP, DELIMITER)
   val COLUMN_PRUNING = newOption("columnPruning")
   val SINGLE_VARIANT_COLUMN = newOption(DataSourceOptions.SINGLE_VARIANT_COLUMN)
+
+  // Max error content length in CSV parser/writer exception messages, and the bound on the bad
+  // record embedded in MALFORMED_CSV_RECORD errors.
+  val MAX_ERROR_CONTENT_LENGTH = 1000
 }

@@ -28,8 +28,9 @@ import org.apache.spark.sql.sources.Filter;
  * filter initially planned {@link InputPartition}s using predicates Spark infers at runtime.
  * This interface is very similar to {@link SupportsRuntimeFiltering} except it uses
  * data source V2 {@link Predicate} instead of data source V1 {@link Filter}.
- * {@link SupportsRuntimeV2Filtering} is preferred over {@link SupportsRuntimeFiltering}
- * and only one of them should be implemented by the data sources.
+ * {@link SupportsRuntimeV2Filtering} is preferred over {@link SupportsRuntimeFiltering}.
+ * A scan must not implement SupportsRuntimeCatalystFiltering together with this interface;
+ * Spark rejects such a scan.
  * <p>
  * <b>Iterative filtering:</b> When {@link #supportsIterativePushdown()} returns true,
  * {@link #filter(Predicate[])} may be called <i>multiple times</i> on the same
@@ -50,6 +51,9 @@ public interface SupportsRuntimeV2Filtering extends Scan {
    * <p>
    * Spark will call {@link #filter(Predicate[])} if it can derive a runtime
    * predicate for any of the filter attributes.
+   * <p>
+   * Each reference must resolve against the scan relation output when Spark builds it. Attributes
+   * pruned out of {@link Scan#readSchema()} fail to resolve.
    */
   NamedReference[] filterAttributes();
 
@@ -58,6 +62,11 @@ public interface SupportsRuntimeV2Filtering extends Scan {
    * <p>
    * The provided expressions must be interpreted as a set of predicates that are ANDed together.
    * Implementations may use the predicates to prune initially planned {@link InputPartition}s.
+   * <p>
+   * Spark tracks runtime-filter eligibility by root attribute. If {@link #filterAttributes()}
+   * returns a nested reference, this method may receive a predicate on another nested field under
+   * the same root. Implementations must inspect each predicate and use only predicates they can
+   * apply.
    * <p>
    * If the scan also implements {@link SupportsReportPartitioning}, it must preserve
    * the originally reported partitioning during runtime filtering. While applying runtime
@@ -72,6 +81,11 @@ public interface SupportsRuntimeV2Filtering extends Scan {
    * The implementation must accumulate state across all calls so that
    * {@link #pushedPredicates()} can return predicates from all of them.
    * <p>
+   * Independently of {@link #supportsIterativePushdown()}, this method may also be called once
+   * per scan node when a plan holds several scan nodes sharing one {@link Scan} instance (e.g.
+   * the two branches of a group-based UPDATE). Implementations must accumulate state across
+   * those calls as well.
+   * <p>
    * Note that Spark will call {@link Scan#toBatch()} again after filtering the scan at runtime.
    *
    * @param predicates data source V2 predicates used to filter the scan at runtime
@@ -81,6 +95,10 @@ public interface SupportsRuntimeV2Filtering extends Scan {
   /**
    * Returns the predicates that are pushed to the data source via
    * {@link #filter(Predicate[])}.
+   * <p>
+   * These are not fully pushed predicates: Spark may still evaluate them after the scan.
+   * They are predicates that fully or partially help the data source prune initially planned
+   * {@link InputPartition}s.
    * <p>
    * When iterative filtering is supported and {@link #filter(Predicate[])} was called
    * multiple times, this method must return predicates from <i>all</i> calls.

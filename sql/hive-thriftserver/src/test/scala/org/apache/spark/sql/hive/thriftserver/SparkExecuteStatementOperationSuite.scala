@@ -32,7 +32,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2EventManager
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{GeographyType, GeometryType, IntegerType, NullType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{GeographyType, GeometryType, IntegerType, NullType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType}
 
 class SparkExecuteStatementOperationSuite extends SharedSparkSession {
 
@@ -74,6 +74,21 @@ class SparkExecuteStatementOperationSuite extends SharedSparkSession {
     assert(geomType === TTypeId.STRING_TYPE)
     val geogType = columns.getColumns.get(1).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
     assert(geogType === TTypeId.STRING_TYPE)
+  }
+
+  test("SPARK-57463 nanosecond-precision timestamp types are mapped to STRING_TYPE " +
+    "in ThriftServer") {
+    for (p <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION) {
+      val tableSchema = StructType(Seq(
+        StructField("ntz", TimestampNTZNanosType(p)),
+        StructField("ltz", TimestampLTZNanosType(p))))
+      val columns = SparkExecuteStatementOperation.toTTableSchema(tableSchema)
+      assert(columns.getColumnsSize == 2)
+      val ntzType = columns.getColumns.get(0).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+      assert(ntzType === TTypeId.STRING_TYPE)
+      val ltzType = columns.getColumns.get(1).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+      assert(ltzType === TTypeId.STRING_TYPE)
+    }
   }
 
   Seq(

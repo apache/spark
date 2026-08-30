@@ -394,19 +394,21 @@ private[spark] object SchemaUtils {
   }
 
   /**
-   * Validates schema compatibility by recursively checking type and nullability changes.
+   * Validates schema compatibility by recursively checking ID, type and nullability changes.
    *
    * @param schema the schema to validate against
    * @param otherSchema the other schema to check for compatibility
    * @param resolver the resolver that controls whether the validation is case sensitive
    * @param mode the validation mode that controls what changes are allowed
+   * @param checkFieldIds whether to validate top-level and nested field IDs
    * @return sequence of error messages describing incompatibilities, empty if fully compatible
    */
   def validateSchemaCompatibility(
       schema: StructType,
       otherSchema: StructType,
       resolver: Resolver,
-      mode: SchemaValidationMode): Seq[String] = {
+      mode: SchemaValidationMode,
+      checkFieldIds: Boolean): Seq[String] = {
     checkSchemaColumnNameDuplication(schema, resolver)
     checkSchemaColumnNameDuplication(otherSchema, resolver)
     val errors = mutable.ArrayBuffer[String]()
@@ -418,6 +420,7 @@ private[spark] object SchemaUtils {
       colPath = Seq.empty,
       resolver,
       mode,
+      checkFieldIds,
       errors)
     errors.toSeq
   }
@@ -430,6 +433,7 @@ private[spark] object SchemaUtils {
       colPath: Seq[String],
       resolver: Resolver,
       mode: SchemaValidationMode,
+      checkFieldIds: Boolean,
       errors: mutable.ArrayBuffer[String]): Unit = {
     if (nullable && !otherNullable) {
       errors += s"${colPath.fullyQuoted} is no longer nullable"
@@ -445,14 +449,21 @@ private[spark] object SchemaUtils {
         fieldsByName.foreach { case (normalizedName, field) =>
           otherFieldsByName.get(normalizedName) match {
             case Some(otherField) =>
+              val nameParts = colPath :+ field.name
+              if (checkFieldIds) {
+                for (id <- field.id; otherId <- otherField.id if id != otherId) {
+                  errors += s"${nameParts.fullyQuoted} field ID has changed from $id to $otherId"
+                }
+              }
               validateTypeCompatibility(
                 field.dataType,
                 otherField.dataType,
                 field.nullable,
                 otherField.nullable,
-                colPath :+ field.name,
+                nameParts,
                 resolver,
                 mode,
+                checkFieldIds,
                 errors)
             case None =>
               errors += s"${formatField(colPath, field)} has been removed"
@@ -476,6 +487,7 @@ private[spark] object SchemaUtils {
           colPath :+ "element",
           resolver,
           mode,
+          checkFieldIds,
           errors)
 
       case (MapType(keyType, valueType, valueContainsNull),
@@ -488,6 +500,7 @@ private[spark] object SchemaUtils {
           colPath :+ "key",
           resolver,
           mode,
+          checkFieldIds,
           errors)
         validateTypeCompatibility(
           valueType,
@@ -497,6 +510,7 @@ private[spark] object SchemaUtils {
           colPath :+ "value",
           resolver,
           mode,
+          checkFieldIds,
           errors)
 
       case _ if dataType != otherDataType =>
@@ -521,6 +535,38 @@ private[spark] object SchemaUtils {
     } else {
       fields.map(field => field.name.toLowerCase(Locale.ROOT) -> field).toMap
     }
+  }
+
+  /**
+   * Recursively clears field IDs from a data type.
+   */
+  def clearFieldIds(dataType: DataType): DataType = dataType match {
+    case s: StructType =>
+      StructType(s.fields.map { field =>
+        val fieldWithoutId = field.clearId()
+        val newDataType = clearFieldIds(field.dataType)
+        if (newDataType ne field.dataType) {
+          fieldWithoutId.copy(dataType = newDataType)
+        } else {
+          fieldWithoutId
+        }
+      })
+
+    case a: ArrayType =>
+      val newElementType = clearFieldIds(a.elementType)
+      if (newElementType ne a.elementType) a.copy(elementType = newElementType) else a
+
+    case m: MapType =>
+      val newKeyType = clearFieldIds(m.keyType)
+      val newValueType = clearFieldIds(m.valueType)
+      if ((newKeyType ne m.keyType) || (newValueType ne m.valueType)) {
+        m.copy(keyType = newKeyType, valueType = newValueType)
+      } else {
+        m
+      }
+
+    case other =>
+      other
   }
 }
 

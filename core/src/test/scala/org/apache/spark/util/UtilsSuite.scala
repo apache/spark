@@ -723,11 +723,16 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     try {
       Utils.setLogLevel(Level.ALL)
       assert(rootLogger.getLevel == Level.ALL)
-      assert(log.isInfoEnabled())
+      // Assert enablement on the root logger that `Utils.setLogLevel` controls directly, rather
+      // than on this suite's own logger. The latter is fragile: if the logging configuration
+      // contains an intermediate `org.apache.spark*` LoggerConfig, the suite logger resolves to
+      // that config instead of root, so its effective level no longer tracks `setLogLevel` even
+      // though the root level is updated correctly (as the `getLevel` assertions confirm).
+      assert(rootLogger.isInfoEnabled())
       Utils.setLogLevel(Level.ERROR)
       assert(rootLogger.getLevel == Level.ERROR)
-      assert(!log.isInfoEnabled())
-      assert(log.isErrorEnabled())
+      assert(!rootLogger.isInfoEnabled())
+      assert(rootLogger.isErrorEnabled())
     } finally {
       // Best effort at undoing changes this test made.
       Utils.setLogLevel(current)
@@ -1481,6 +1486,15 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(Utils.buildLocationMetadata(paths, 18) == "(5 paths)[path0, path1, ...]")
   }
 
+  test("SPARK-58748: wildcard IPv4 and IPv6 bind addresses are not advertised driver addresses") {
+    Seq("0.0.0.0", "::", "[::]", "0:0:0:0:0:0:0:0").foreach { address =>
+      assert(Utils.isAnyLocalAddress(address), s"$address should be a wildcard address")
+    }
+    Seq("10.129.36.37", "::1", "[::1]", "2001:db8::1", "localhost").foreach { address =>
+      assert(!Utils.isAnyLocalAddress(address), s"$address should not be a wildcard address")
+    }
+  }
+
   test("checkHost supports both IPV4 and IPV6") {
     // IPV4 ips
     Utils.checkHost("0.0.0.0")
@@ -1598,7 +1612,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val sparkConf = new SparkConf()
       .set(MEMORY_OFFHEAP_ENABLED, true)
     val expected =
-      s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true"
+      s"${MEMORY_OFFHEAP_SIZE.key} must be at least 1MiB when ${MEMORY_OFFHEAP_ENABLED.key} == true"
     val message = intercept[IllegalArgumentException] {
       Utils.executorOffHeapMemorySizeAsMb(sparkConf)
     }.getMessage

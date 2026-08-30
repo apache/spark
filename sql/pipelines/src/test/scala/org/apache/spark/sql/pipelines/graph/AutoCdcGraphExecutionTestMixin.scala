@@ -29,6 +29,7 @@ import org.apache.spark.sql.pipelines.autocdc.{
   ChangeArgs,
   ColumnSelection,
   Scd1BatchProcessor,
+  Scd2BatchProcessor,
   ScdType,
   UnqualifiedColumnName
 }
@@ -140,17 +141,34 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
   }
 
   /**
-   * DDL fragment for the AutoCDC metadata column appended to every SCD1 target table. Use
+   * DDL fragment for the reserved CDC metadata column appended to every SCD1 target table. Use
    * inside a `CREATE TABLE` statement, for example:
-   *   `CREATE TABLE t (id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)`
+   *   `CREATE TABLE t (id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)`
    *
    * Assumes sequence type is BIGINT (Long).
    */
-  protected val cdcMetadataDdl: String = {
+  protected val scd1MetadataDdl: String = {
     val col = AutoCdcReservedNames.cdcMetadataColName
     val del = Scd1BatchProcessor.cdcDeleteSequenceFieldName
     val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
     s"$col STRUCT<$del:BIGINT,$ups:BIGINT> NOT NULL"
+  }
+
+  /**
+   * DDL fragment for the reserved framework columns appended to every SCD2 target table: the
+   * visible interval bounds `__START_AT` / `__END_AT` plus the CDC metadata column. Encapsulates
+   * the full SCD2 reserved-column set (the analog of [[scd1MetadataDdl]], which for SCD1 is just
+   * the metadata column). Use inside a `CREATE TABLE` statement, for example:
+   *   `CREATE TABLE t (id INT NOT NULL, version BIGINT NOT NULL, $scd2MetadataDdl)`
+   *
+   * Assumes sequence type is BIGINT (Long).
+   */
+  protected val scd2MetadataDdl: String = {
+    val col = AutoCdcReservedNames.cdcMetadataColName
+    val startAt = Scd2BatchProcessor.startAtColName
+    val endAt = Scd2BatchProcessor.endAtColName
+    val recordStartAt = Scd2BatchProcessor.recordStartAtFieldName
+    s"$startAt BIGINT, $endAt BIGINT, $col STRUCT<$recordStartAt:BIGINT> NOT NULL"
   }
 
   /**
@@ -190,7 +208,8 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
       sequencing: Column,
       columnSelection: Option[ColumnSelection] = None,
       deleteCondition: Option[Column] = None,
-      scdType: ScdType = ScdType.Type1
+      scdType: ScdType = ScdType.Type1,
+      trackHistorySelection: Option[ColumnSelection] = None
   ): AutoCdcFlow = AutoCdcFlow(
     identifier = fullyQualifiedIdentifier(name, Some(catalog), Some(namespace)),
     destinationIdentifier = fullyQualifiedIdentifier(target, Some(catalog), Some(namespace)),
@@ -205,7 +224,8 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
       sequencing = sequencing,
       columnSelection = columnSelection,
       deleteCondition = deleteCondition,
-      storedAsScdType = scdType
+      storedAsScdType = scdType,
+      trackHistorySelection = trackHistorySelection
     )
   )
 
@@ -223,7 +243,8 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
       sequencing: Column,
       columnSelection: Option[ColumnSelection] = None,
       deleteCondition: Option[Column] = None,
-      scdType: ScdType = ScdType.Type1): TestGraphRegistrationContext =
+      scdType: ScdType = ScdType.Type1,
+      trackHistorySelection: Option[ColumnSelection] = None): TestGraphRegistrationContext =
     new TestGraphRegistrationContext(spark) {
       registerTable(target, catalog = Some(catalog), database = Some(namespace))
       registerFlow(autoCdcFlow(
@@ -234,7 +255,8 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
         sequencing = sequencing,
         columnSelection = columnSelection,
         deleteCondition = deleteCondition,
-        scdType = scdType
+        scdType = scdType,
+        trackHistorySelection = trackHistorySelection
       ))
     }
 

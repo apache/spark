@@ -18,11 +18,14 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.catalyst.plans.physical.{RangePartitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, SortOrder}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, RangePartitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.ShuffledJoin
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.IntegerType
 
 
 abstract class RemoveRedundantSortsSuiteBase
@@ -135,6 +138,54 @@ abstract class RemoveRedundantSortsSuiteBase
         resorted.collect()
         checkNumSorts(resorted, 1)
         checkAnswer(resorted, result)
+      }
+    }
+  }
+
+  test("SPARK-58099: remove local sort dangling below a shuffle that does not require ordering") {
+    // A local sort directly below a round-robin repartition survives logical optimization
+    // (`EliminateSorts` only recurses through Sort/Join/order-irrelevant-Aggregate parents, and
+    // `CollapseRepartition` removes only a global sort under `RepartitionByExpression` or any sort
+    // under `RebalancePartitions` -- never a sort under a round-robin `Repartition`), so it reaches
+    // the physical plan as `Shuffle(RoundRobin) <- Sort(local)` and is removed by the new branch.
+    // The source must be unsorted so the local sort is not itself elided as redundant.
+    withTempView("t") {
+      Seq(3, 1, 2, 5, 4).toDF("key").createOrReplaceTempView("t")
+      val query = "SELECT /*+ REPARTITION(3) */ * FROM (SELECT key FROM t SORT BY key)"
+      checkSorts(query, 0, 1)
+    }
+
+    // A global sort below such a shuffle must be kept: it carries its own distribution requirement
+    // and is not the dead within-partition sort this rule targets. This shape is not reachable via
+    // SQL/DataFrame, so the rule is applied directly to a physical plan.
+    val attr = AttributeReference("key", IntegerType)()
+    val scan = LocalTableScanExec(Seq(attr), Nil, None)
+    val globalSort = SortExec(SortOrder(attr, Ascending) :: Nil, global = true, scan)
+    withSQLConf(SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED.key -> "true") {
+      val danglingGlobal = ShuffleExchangeExec(HashPartitioning(Seq(attr), 5), globalSort)
+      assert(RemoveRedundantSorts(danglingGlobal).find(_.isInstanceOf[SortExec]).isDefined)
+    }
+  }
+
+  test("SPARK-58099: keep local sort satisfied only by a bucketed scan output ordering") {
+    // With `RemoveRedundantSorts` running before `DisableUnnecessaryBucketedScan`, the local sort
+    // could be stripped based on the bucketed scan's output ordering and then the ordering would
+    // be silently lost once `DisableUnnecessaryBucketedScan` disables the scan. Running
+    // `RemoveRedundantSorts` after `DisableUnnecessaryBucketedScan` closes that hole.
+    withSQLConf(
+      SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED.key -> "true",
+      SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING.key -> "true",
+      SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true") {
+      withTable("t") {
+        // A single file per bucket so the bucketed scan reports an output ordering.
+        spark.range(100).selectExpr("id as i").repartition(1)
+          .write.format("parquet").bucketBy(8, "i").sortBy("i").saveAsTable("t")
+        val df = sql("SELECT * FROM t SORT BY i")
+        val plan = df.queryExecution.executedPlan
+        // The bucketed scan is disabled since there is no interesting-partition operator above it.
+        assert(collect(plan) { case s: FileSourceScanExec if s.bucketedScan => s }.isEmpty)
+        // The local sort must be kept, otherwise the within-partition ordering would be lost.
+        assert(collect(plan) { case s: SortExec => s }.nonEmpty)
       }
     }
   }

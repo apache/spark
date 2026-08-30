@@ -531,16 +531,19 @@ class SparkSession private(
         val parsedPlan = {
           // Always parse with parameter context to detect unbound parameter markers.
           // Even if args is empty, we need to detect and reject parameter markers in the SQL.
-          val (paramMap, resolvedParams) = if (args.nonEmpty) {
+          val resolvedParams = if (args.nonEmpty) {
             val pMap = args.zipWithIndex.map { case (arg, idx) =>
               s"_pos_$idx" -> lit(arg).expr
             }.toMap
-            (pMap, resolveAndValidateParameters(pMap))
+            resolveAndValidateParameters(pMap)
           } else {
-            (Map.empty[String, Expression], Map.empty[String, Expression])
+            Map.empty[String, Expression]
           }
 
-          val paramContext = PositionalParameterContext(resolvedParams.values.toSeq)
+          // Look up by the positional key instead of relying on `resolvedParams.values`:
+          // the map does not preserve insertion order for 5+ entries.
+          val paramContext =
+            PositionalParameterContext(args.indices.map(idx => resolvedParams(s"_pos_$idx")))
           val parsed = sessionState.sqlParser.parsePlanWithParameters(sqlText, paramContext)
 
           // Check for SQL scripting with positional parameters
@@ -760,7 +763,10 @@ class SparkSession private(
   }
 
   /** @inheritdoc */
-  override def removeTag(tag: String): Unit = managedJobTags.get().remove(tag)
+  override def removeTag(tag: String): Unit = {
+    SparkContext.throwIfInvalidTag(tag)
+    managedJobTags.get().remove(tag)
+  }
 
   /** @inheritdoc */
   override def getTags(): Set[String] = managedJobTags.get().keySet.toSet

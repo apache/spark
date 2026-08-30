@@ -15,23 +15,22 @@
 # limitations under the License.
 #
 
-import os
-import sys
-import decimal
-import time
-import math
-import datetime
-import calendar
-import json
-import re
 import base64
-from array import array
+import calendar
 import ctypes
+import datetime
+import decimal
+import json
+import math
+import os
+import re
+import sys
+import time
+from array import array
 from collections.abc import Iterable
 from functools import reduce
 from typing import (
-    cast,
-    overload,
+    TYPE_CHECKING,
     Any,
     Callable,
     ClassVar,
@@ -39,39 +38,42 @@ from typing import (
     Iterator,
     List,
     Optional,
-    Union,
     Tuple,
     Type,
     TypeVar,
-    TYPE_CHECKING,
+    Union,
+    cast,
+    overload,
 )
 
-from pyspark.util import is_remote_only, JVM_INT_MAX
-from pyspark.serializers import CloudPickleSerializer
-from pyspark.sql.utils import (
-    get_active_spark_context,
-    escape_meta_characters,
-    IllegalArgumentException,
-    StringConcat,
-)
-from pyspark.sql.variant_utils import VariantUtils
 from pyspark.errors import (
+    PySparkAttributeError,
+    PySparkIndexError,
+    PySparkKeyError,
     PySparkNotImplementedError,
+    PySparkRuntimeError,
     PySparkTypeError,
     PySparkValueError,
-    PySparkIndexError,
-    PySparkRuntimeError,
-    PySparkAttributeError,
-    PySparkKeyError,
+)
+from pyspark.serializers import CloudPickleSerializer
+from pyspark.sql.geo_utils import (
+    CartesianSpatialReferenceSystemMapper as _CartesianSRSMapper,
 )
 from pyspark.sql.geo_utils import (
     GeographicSpatialReferenceSystemMapper as _GeographicSRSMapper,
-    CartesianSpatialReferenceSystemMapper as _CartesianSRSMapper,
 )
+from pyspark.sql.utils import (
+    IllegalArgumentException,
+    StringConcat,
+    escape_meta_characters,
+    get_active_spark_context,
+)
+from pyspark.sql.variant_utils import VariantUtils
+from pyspark.util import JVM_INT_MAX, is_remote_only
 
 if TYPE_CHECKING:
     import numpy as np
-    from py4j.java_gateway import GatewayClient, JavaGateway, JavaClass
+    from py4j.java_gateway import GatewayClient, JavaClass, JavaGateway
 
 T = TypeVar("T")
 U = TypeVar("U")
@@ -1996,6 +1998,11 @@ class UserDefinedType(DataType):
             )
         else:
             UDT = getattr(m, pyClass)
+            if not (isinstance(UDT, type) and issubclass(UDT, UserDefinedType)):
+                raise PySparkTypeError(
+                    errorClass="FIELD_TYPE_MISMATCH",
+                    messageParameters={"obj": str(UDT), "data_type": "UserDefinedType"},
+                )
         return UDT()
 
 
@@ -2423,37 +2430,30 @@ def _parse_datatype_json_value(  # type: ignore[return]
                 collation_name = collationsMap[fieldPath]
                 return StringType(collation_name)
             return _all_mappable_types[json_value]()
-        elif _FIXED_DECIMAL.match(json_value):
-            m = _FIXED_DECIMAL.match(json_value)
-            return DecimalType(int(m.group(1)), int(m.group(2)))  # type: ignore[union-attr]
-        elif _TIME.match(json_value):
-            m = _TIME.match(json_value)
-            return TimeType(int(m.group(1)))  # type: ignore[union-attr]
-        elif _INTERVAL_DAYTIME.match(json_value):
-            m = _INTERVAL_DAYTIME.match(json_value)
+        elif m := _FIXED_DECIMAL.match(json_value):
+            return DecimalType(int(m.group(1)), int(m.group(2)))
+        elif m := _TIME.match(json_value):
+            return TimeType(int(m.group(1)))
+        elif m := _INTERVAL_DAYTIME.match(json_value):
             inverted_fields = DayTimeIntervalType._inverted_fields
-            first_field = inverted_fields.get(m.group(1))  # type: ignore[union-attr]
-            second_field = inverted_fields.get(m.group(3))  # type: ignore[union-attr]
+            first_field = inverted_fields.get(m.group(1))
+            second_field = inverted_fields.get(m.group(3))
             if first_field is not None and second_field is None:
                 return DayTimeIntervalType(first_field)
             return DayTimeIntervalType(first_field, second_field)
-        elif _INTERVAL_YEARMONTH.match(json_value):
-            m = _INTERVAL_YEARMONTH.match(json_value)
+        elif m := _INTERVAL_YEARMONTH.match(json_value):
             inverted_fields = YearMonthIntervalType._inverted_fields
-            first_field = inverted_fields.get(m.group(1))  # type: ignore[union-attr]
-            second_field = inverted_fields.get(m.group(3))  # type: ignore[union-attr]
+            first_field = inverted_fields.get(m.group(1))
+            second_field = inverted_fields.get(m.group(3))
             if first_field is not None and second_field is None:
                 return YearMonthIntervalType(first_field)
             return YearMonthIntervalType(first_field, second_field)
-        elif _STRING_WITH_COLLATION.match(json_value):
-            m = _STRING_WITH_COLLATION.match(json_value)
-            return StringType(m.group(1))  # type: ignore[union-attr]
-        elif _LENGTH_CHAR.match(json_value):
-            m = _LENGTH_CHAR.match(json_value)
-            return CharType(int(m.group(1)))  # type: ignore[union-attr]
-        elif _LENGTH_VARCHAR.match(json_value):
-            m = _LENGTH_VARCHAR.match(json_value)
-            return VarcharType(int(m.group(1)))  # type: ignore[union-attr]
+        elif m := _STRING_WITH_COLLATION.match(json_value):
+            return StringType(m.group(1))
+        elif m := _LENGTH_CHAR.match(json_value):
+            return CharType(int(m.group(1)))
+        elif m := _LENGTH_VARCHAR.match(json_value):
+            return VarcharType(int(m.group(1)))
         elif _GEOMETRY.match(json_value):
             return GeometryType._from_crs(GeometryType.DEFAULT_CRS)
         elif _GEOMETRY_CRS.match(json_value):
@@ -2877,6 +2877,8 @@ def _has_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
         return _has_type(dt.elementType, dts)
     elif isinstance(dt, MapType):
         return _has_type(dt.keyType, dts) or _has_type(dt.valueType, dts)
+    elif isinstance(dt, UserDefinedType):
+        return _has_type(dt.sqlType(), dts)
     else:
         return False
 
@@ -3849,6 +3851,7 @@ if not is_remote_only():
 
 def _test() -> None:
     import doctest
+
     from pyspark.sql import SparkSession
 
     globs = globals()

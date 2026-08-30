@@ -1,0 +1,1106 @@
+--! name
+__file_metadata__
+--! source
+df_golden/group_by
+!-- end
+
+
+--! name
+create testData view
+--! script
+scripts/group_by/setup_test_data.py
+--! expected_analysis_output
+LocalRelation <empty>
+--! expected_optimized_output
+LocalRelation <empty>
+--! expected_output_schema
+struct<>
+--! expected_result
+printed all 0 rows.
+--! expected_result_hash
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+!-- end
+
+
+--! name
+select non-grouping column without GROUP BY (error)
+--! script
+scripts/group_by/select_non_grouping_column.py
+--! expected_error
+[MISSING_GROUP_BY] The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses. SQLSTATE: 42803
+!-- end
+
+
+--! name
+aggregate with empty GroupBy expressions
+--! script
+scripts/group_by/agg_counts_no_grouping.py
+--! expected_analysis_output
+Aggregate [count(a#x) AS count(a)#xL, count(b#x) AS count(b)#xL]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+--! expected_optimized_output
+Aggregate [count(a#x) AS count(a)#xL, count(b#x) AS count(b)#xL]
++- LocalRelation [a#x, b#x]
+--! expected_output_schema
+struct<count(a):bigint,count(b):bigint>
+--! expected_result
++----------+----------+
+| count(a) | count(b) |
++----------+----------+
+| 7        | 7        |
++----------+----------+
+printed all 1 rows.
+--! expected_result_hash
+f68f701c7611c45f2e32de9394884c63089bd8174e53a863a1b61168442dbaac
+!-- end
+
+
+--! name
+aggregate with non-empty GroupBy expressions
+--! tags
+unordered
+--! script
+scripts/group_by/group_by_count.py
+--! expected_analysis_output
+Aggregate [a#x], [a#x, count(b#x) AS count(b)#xL]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+--! expected_optimized_output
+Aggregate [a#x], [a#x, count(b#x) AS count(b)#xL]
++- LocalRelation [a#x, b#x]
+--! expected_output_schema
+struct<a:int,count(b):bigint>
+--! expected_result
++------+----------+
+| a    | count(b) |
++------+----------+
+| 1    | 2        |
+| 2    | 2        |
+| 3    | 2        |
+| NULL | 1        |
++------+----------+
+printed all 4 rows.
+--! expected_result_hash
+18c7a56d93a03d040c2ccb08307e9d9b38d789a0cd654823cbe7659cb182fcf9
+!-- end
+
+
+--! name
+non-aggregate column not in GROUP BY (error)
+--! script
+scripts/group_by/group_by_missing_aggregation.py
+--! expected_error
+[MISSING_AGGREGATION] The non-aggregating expression "a" is based on columns which are not participating in the GROUP BY clause.
+Add the columns or the expression to the GROUP BY, aggregate the expression, or use "any_value(a)" if you do not care which of the values within a group is returned. SQLSTATE: 42803
+!-- end
+
+
+--! name
+group by with multiple aggregates
+--! tags
+unordered
+--! script
+scripts/group_by/group_by_multiple_counts.py
+--! expected_analysis_output
+Aggregate [a#x], [a#x, count(a#x) AS count(a)#xL, count(b#x) AS count(b)#xL]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+--! expected_optimized_output
+Aggregate [a#x], [a#x, count(a#x) AS count(a)#xL, count(b#x) AS count(b)#xL]
++- LocalRelation [a#x, b#x]
+--! expected_output_schema
+struct<a:int,count(a):bigint,count(b):bigint>
+--! expected_result
++------+----------+----------+
+| a    | count(a) | count(b) |
++------+----------+----------+
+| 1    | 2        | 2        |
+| 2    | 2        | 2        |
+| 3    | 3        | 2        |
+| NULL | 0        | 1        |
++------+----------+----------+
+printed all 4 rows.
+--! expected_result_hash
+978157032220537c5982e8c4ceda91f71f8cc1159b71bf8023c71622b591dc9e
+!-- end
+
+
+--! name
+aggregate grouped by literal
+--! script
+scripts/group_by/group_by_literal.py
+--! expected_analysis_output
+Aggregate [foo], [foo AS foo#x, count(a#x) AS count(a)#xL]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+--! expected_optimized_output
+Aggregate [0], [foo AS foo#x, count(a#x) AS count(a)#xL]
++- LocalRelation [a#x]
+--! expected_output_schema
+struct<foo:string,count(a):bigint>
+--! expected_result
++-----+----------+
+| foo | count(a) |
++-----+----------+
+| foo | 7        |
++-----+----------+
+printed all 1 rows.
+--! expected_result_hash
+56f7c8b96bd39b7def5a4b948f8551ccb63c76b3adbd7b7e2f3ea1e174312343
+!-- end
+
+
+--! name
+aggregate grouped by literal (hash aggregate)
+--! script
+scripts/group_by/group_by_literal_hash_agg.py
+--! expected_analysis_output
+Aggregate [foo], [foo AS foo#x, approx_count_distinct(a#x, 0.05, 0, 0) AS approx_count_distinct(a)#xL]
++- Filter (a#x = 0)
+   +- SubqueryAlias testdata
+      +- View (`testData`, [a#x, b#x])
+         +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+            +- Project [a#x, b#x]
+               +- SubqueryAlias testData
+                  +- LocalRelation [a#x, b#x]
+--! expected_optimized_output
+LocalRelation <empty>, [foo#x, approx_count_distinct(a)#xL]
+--! expected_output_schema
+struct<foo:string,approx_count_distinct(a):bigint>
+--! expected_result
++-----+--------------------------+
+| foo | approx_count_distinct(a) |
++-----+--------------------------+
++-----+--------------------------+
+printed all 0 rows.
+--! expected_result_hash
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+!-- end
+
+
+--! name
+aggregate grouped by literal (sort aggregate)
+--! script
+scripts/group_by/group_by_literal_sort_agg.py
+--! expected_analysis_output
+Aggregate [foo], [foo AS foo#x, max(struct(a, a#x)) AS max(struct(a))#x]
++- Filter (a#x = 0)
+   +- SubqueryAlias testdata
+      +- View (`testData`, [a#x, b#x])
+         +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+            +- Project [a#x, b#x]
+               +- SubqueryAlias testData
+                  +- LocalRelation [a#x, b#x]
+--! expected_optimized_output
+LocalRelation <empty>, [foo#x, max(struct(a))#x]
+--! expected_output_schema
+struct<foo:string,max(struct(a)):struct<a:int>>
+--! expected_result
++-----+----------------+
+| foo | max(struct(a)) |
++-----+----------------+
++-----+----------------+
+printed all 0 rows.
+--! expected_result_hash
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+!-- end
+
+
+--! name
+aggregate with complex GroupBy expression
+--! tags
+unordered
+--! script
+scripts/group_by/group_by_complex_expr.py
+--! expected_analysis_output
+Aggregate [(a#x + b#x)], [(a#x + b#x) AS (a + b)#x, count(b#x) AS count(b)#xL]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+--! expected_optimized_output
+Aggregate [_groupingexpression#x], [_groupingexpression#x AS (a + b)#x, count(b#x) AS count(b)#xL]
++- LocalRelation [b#x, _groupingexpression#x]
+--! expected_output_schema
+struct<(a + b):int,count(b):bigint>
+--! expected_result
++---------+----------+
+| (a + b) | count(b) |
++---------+----------+
+| 2       | 1        |
+| 3       | 2        |
+| 4       | 2        |
+| 5       | 1        |
+| NULL    | 1        |
++---------+----------+
+printed all 5 rows.
+--! expected_result_hash
+e5a84602fefae835a3f9378c2cb5e6c8a653f258181aca8e9e88f1653b75823a
+!-- end
+
+
+--! name
+struct() in group by
+--! tags
+unordered
+--! script
+scripts/group_by/group_by_struct.py
+--! expected_analysis_output
+Aggregate [struct(aa, (cast(a#x as double) + 0.1))], [struct(aa, (cast(a#x as double) + 0.1)) AS struct((a + 0.1) AS aa)#x, count(1) AS count(1)#xL]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+--! expected_optimized_output
+Aggregate [_groupingexpression#x], [_groupingexpression#x AS struct((a + 0.1) AS aa)#x, count(1) AS count(1)#xL]
++- LocalRelation [_groupingexpression#x]
+--! expected_output_schema
+struct<struct((a + 0.1) AS aa):struct<aa:double>,count(1):bigint>
+--! expected_result
++-------------------------+----------+
+| struct((a + 0.1) AS aa) | count(1) |
++-------------------------+----------+
+| {"aa":1.1}              | 2        |
+| {"aa":2.1}              | 2        |
+| {"aa":3.1}              | 3        |
+| {"aa":null}             | 2        |
++-------------------------+----------+
+printed all 4 rows.
+--! expected_result_hash
+109ec364586f8c9f18e50baa49085b25107bad900acfe53183feff0968f4cc33
+!-- end
+
+
+--! name
+aggregate with nulls
+--! script
+scripts/group_by/agg_stats_with_nulls.py
+--! expected_analysis_output
+Aggregate [round(skewness(cast(a#x as double)), 12) AS round(skewness(a), 12)#x, round(kurtosis(cast(a#x as double)), 12) AS round(kurtosis(a), 12)#x, min(a#x) AS min(a)#x, max(a#x) AS max(a)#x, round(avg(a#x), 12) AS round(avg(a), 12)#x, round(variance(cast(a#x as double)), 12) AS round(variance(a), 12)#x, round(stddev(cast(a#x as double)), 12) AS round(stddev(a), 12)#x, sum(a#x) AS sum(a)#xL, count(a#x) AS count(a)#xL]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+--! expected_optimized_output
+Aggregate [round(skewness(cast(a#x as double)), 12) AS round(skewness(a), 12)#x, round(kurtosis(cast(a#x as double)), 12) AS round(kurtosis(a), 12)#x, min(a#x) AS min(a)#x, max(a#x) AS max(a)#x, round(avg(a#x), 12) AS round(avg(a), 12)#x, round(variance(cast(a#x as double)), 12) AS round(variance(a), 12)#x, round(stddev(cast(a#x as double)), 12) AS round(stddev(a), 12)#x, sum(a#x) AS sum(a)#xL, count(a#x) AS count(a)#xL]
++- LocalRelation [a#x]
+--! expected_output_schema
+struct<round(skewness(a), 12):double,round(kurtosis(a), 12):double,min(a):int,max(a):int,round(avg(a), 12):double,round(variance(a), 12):double,round(stddev(a), 12):double,sum(a):bigint,count(a):bigint>
+--! expected_result
++------------------------+------------------------+--------+--------+-------------------+------------------------+----------------------+--------+----------+
+| round(skewness(a), 12) | round(kurtosis(a), 12) | min(a) | max(a) | round(avg(a), 12) | round(variance(a), 12) | round(stddev(a), 12) | sum(a) | count(a) |
++------------------------+------------------------+--------+--------+-------------------+------------------------+----------------------+--------+----------+
+| -0.272380105815        | -1.506920415225        | 1      | 3      | 2.142857142857    | 0.809523809524         | 0.899735410842       | 15     | 7        |
++------------------------+------------------------+--------+--------+-------------------+------------------------+----------------------+--------+----------+
+printed all 1 rows.
+--! expected_result_hash
+5b9fa3c2109f35b123ebd7b633649e02c09e73ed40574556e19a05e532838ab1
+!-- end
+
+
+--! name
+aggregate with empty input and non-empty GroupBy expressions
+--! script
+scripts/group_by/empty_input_group_by.py
+--! expected_analysis_output
+Aggregate [a#x], [a#x, count(1) AS count(1)#xL]
++- Filter false
+   +- SubqueryAlias testdata
+      +- View (`testData`, [a#x, b#x])
+         +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+            +- Project [a#x, b#x]
+               +- SubqueryAlias testData
+                  +- LocalRelation [a#x, b#x]
+--! expected_optimized_output
+LocalRelation <empty>, [a#x, count(1)#xL]
+--! expected_output_schema
+struct<a:int,count(1):bigint>
+--! expected_result
++---+----------+
+| a | count(1) |
++---+----------+
++---+----------+
+printed all 0 rows.
+--! expected_result_hash
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+!-- end
+
+
+--! name
+aggregate with empty input and empty GroupBy expressions
+--! script
+scripts/group_by/empty_input_agg.py
+--! expected_analysis_output
+Aggregate [count(1) AS count(1)#xL]
++- Filter false
+   +- SubqueryAlias testdata
+      +- View (`testData`, [a#x, b#x])
+         +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+            +- Project [a#x, b#x]
+               +- SubqueryAlias testData
+                  +- LocalRelation [a#x, b#x]
+--! expected_optimized_output
+Aggregate [count(1) AS count(1)#xL]
++- LocalRelation <empty>
+--! expected_output_schema
+struct<count(1):bigint>
+--! expected_result
++----------+
+| count(1) |
++----------+
+| 0        |
++----------+
+printed all 1 rows.
+--! expected_result_hash
+5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9
+!-- end
+
+
+--! name
+aggregate with empty input and constant projection
+--! script
+scripts/group_by/empty_input_agg_select.py
+--! expected_analysis_output
+Project [1 AS 1#x]
++- Aggregate [count(1) AS count(1)#xL]
+   +- Filter false
+      +- SubqueryAlias testdata
+         +- View (`testData`, [a#x, b#x])
+            +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+               +- Project [a#x, b#x]
+                  +- SubqueryAlias testData
+                     +- LocalRelation [a#x, b#x]
+--! expected_optimized_output
+Aggregate [1 AS 1#x]
++- LocalRelation <empty>
+--! expected_output_schema
+struct<1:int>
+--! expected_result
++---+
+| 1 |
++---+
+| 1 |
++---+
+printed all 1 rows.
+--! expected_result_hash
+6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b
+!-- end
+
+
+--! name
+create test_agg view
+--! script
+scripts/group_by/setup_test_agg.py
+--! expected_analysis_output
+LocalRelation <empty>
+--! expected_optimized_output
+LocalRelation <empty>
+--! expected_output_schema
+struct<>
+--! expected_result
+printed all 0 rows.
+--! expected_result_hash
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+!-- end
+
+
+--! name
+bool aggregates over empty table
+--! script
+scripts/group_by/bool_agg_empty_table.py
+--! expected_analysis_output
+Aggregate [every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, bool_or(v#x) AS bool_or(v)#x, bool_and(v#x) AS bool_and(v)#x, bool_or(v#x) AS bool_or(v)#x]
++- Filter (1 = 0)
+   +- SubqueryAlias test_agg
+      +- View (`test_agg`, [k#x, v#x])
+         +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
+            +- Project [k#x, v#x]
+               +- SubqueryAlias test_agg
+                  +- LocalRelation [k#x, v#x]
+--! expected_optimized_output
+Aggregate [min(v#x) AS every(v)#x, max(v#x) AS some(v)#x, max(v#x) AS bool_or(v)#x, min(v#x) AS bool_and(v)#x, max(v#x) AS bool_or(v)#x]
++- LocalRelation <empty>, [v#x]
+--! expected_output_schema
+struct<every(v):boolean,some(v):boolean,bool_or(v):boolean,bool_and(v):boolean,bool_or(v):boolean>
+--! expected_result
++----------+---------+------------+-------------+------------+
+| every(v) | some(v) | bool_or(v) | bool_and(v) | bool_or(v) |
++----------+---------+------------+-------------+------------+
+| NULL     | NULL    | NULL       | NULL        | NULL       |
++----------+---------+------------+-------------+------------+
+printed all 1 rows.
+--! expected_result_hash
+ad29e33ee1f3f4cfe263272e81d7c89ea08bdfb7aa45758a6adfc7752d80ab7e
+!-- end
+
+
+--! name
+bool aggregates over all null values
+--! script
+scripts/group_by/bool_agg_all_nulls.py
+--! expected_analysis_output
+Aggregate [every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, bool_or(v#x) AS bool_or(v)#x, bool_and(v#x) AS bool_and(v)#x, bool_or(v#x) AS bool_or(v)#x]
++- Filter (k#x = 4)
+   +- SubqueryAlias test_agg
+      +- View (`test_agg`, [k#x, v#x])
+         +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
+            +- Project [k#x, v#x]
+               +- SubqueryAlias test_agg
+                  +- LocalRelation [k#x, v#x]
+--! expected_optimized_output
+Aggregate [min(v#x) AS every(v)#x, max(v#x) AS some(v)#x, max(v#x) AS bool_or(v)#x, min(v#x) AS bool_and(v)#x, max(v#x) AS bool_or(v)#x]
++- LocalRelation [v#x]
+--! expected_output_schema
+struct<every(v):boolean,some(v):boolean,bool_or(v):boolean,bool_and(v):boolean,bool_or(v):boolean>
+--! expected_result
++----------+---------+------------+-------------+------------+
+| every(v) | some(v) | bool_or(v) | bool_and(v) | bool_or(v) |
++----------+---------+------------+-------------+------------+
+| NULL     | NULL    | NULL       | NULL        | NULL       |
++----------+---------+------------+-------------+------------+
+printed all 1 rows.
+--! expected_result_hash
+ad29e33ee1f3f4cfe263272e81d7c89ea08bdfb7aa45758a6adfc7752d80ab7e
+!-- end
+
+
+--! name
+bool aggregates null filtering
+--! script
+scripts/group_by/bool_agg_null_filtering.py
+--! expected_analysis_output
+Aggregate [every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, bool_or(v#x) AS bool_or(v)#x, bool_and(v#x) AS bool_and(v)#x, bool_or(v#x) AS bool_or(v)#x]
++- Filter (k#x = 5)
+   +- SubqueryAlias test_agg
+      +- View (`test_agg`, [k#x, v#x])
+         +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
+            +- Project [k#x, v#x]
+               +- SubqueryAlias test_agg
+                  +- LocalRelation [k#x, v#x]
+--! expected_optimized_output
+Aggregate [min(v#x) AS every(v)#x, max(v#x) AS some(v)#x, max(v#x) AS bool_or(v)#x, min(v#x) AS bool_and(v)#x, max(v#x) AS bool_or(v)#x]
++- LocalRelation [v#x]
+--! expected_output_schema
+struct<every(v):boolean,some(v):boolean,bool_or(v):boolean,bool_and(v):boolean,bool_or(v):boolean>
+--! expected_result
++----------+---------+------------+-------------+------------+
+| every(v) | some(v) | bool_or(v) | bool_and(v) | bool_or(v) |
++----------+---------+------------+-------------+------------+
+| false    | true    | true       | false       | true       |
++----------+---------+------------+-------------+------------+
+printed all 1 rows.
+--! expected_result_hash
+3b46bd9f792f9e10cf44f4797d0882661bf2ce33e75e52319637876a858c6eab
+!-- end
+
+
+--! name
+bool aggregates with group by
+--! tags
+unordered
+--! script
+scripts/group_by/bool_agg_group_by.py
+--! expected_analysis_output
+Aggregate [k#x], [k#x, every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, bool_or(v#x) AS bool_or(v)#x, bool_and(v#x) AS bool_and(v)#x, bool_or(v#x) AS bool_or(v)#x]
++- SubqueryAlias test_agg
+   +- View (`test_agg`, [k#x, v#x])
+      +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
+         +- Project [k#x, v#x]
+            +- SubqueryAlias test_agg
+               +- LocalRelation [k#x, v#x]
+--! expected_optimized_output
+Aggregate [k#x], [k#x, min(v#x) AS every(v)#x, max(v#x) AS some(v)#x, max(v#x) AS bool_or(v)#x, min(v#x) AS bool_and(v)#x, max(v#x) AS bool_or(v)#x]
++- LocalRelation [k#x, v#x]
+--! expected_output_schema
+struct<k:int,every(v):boolean,some(v):boolean,bool_or(v):boolean,bool_and(v):boolean,bool_or(v):boolean>
+--! expected_result
++---+----------+---------+------------+-------------+------------+
+| k | every(v) | some(v) | bool_or(v) | bool_and(v) | bool_or(v) |
++---+----------+---------+------------+-------------+------------+
+| 1 | false    | true    | true       | false       | true       |
+| 2 | true     | true    | true       | true        | true       |
+| 3 | false    | false   | false      | false       | false      |
+| 4 | NULL     | NULL    | NULL       | NULL        | NULL       |
+| 5 | false    | true    | true       | false       | true       |
++---+----------+---------+------------+-------------+------------+
+printed all 5 rows.
+--! expected_result_hash
+5dc9ed24b5544acb569b58286aec4265e8f921fe147a7ff12e5d456d4d5ec282
+!-- end
+
+
+--! name
+bool aggregates with having false
+--! tags
+unordered
+--! script
+scripts/group_by/bool_agg_having_false.py
+--! expected_analysis_output
+Project [k#x, every_v#x]
++- Filter (every_v#x = false)
+   +- Aggregate [k#x], [k#x, every(v#x) AS every_v#x]
+      +- SubqueryAlias test_agg
+         +- View (`test_agg`, [k#x, v#x])
+            +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias test_agg
+                     +- LocalRelation [k#x, v#x]
+--! expected_optimized_output
+Filter (isnotnull(every_v#x) AND NOT every_v#x)
++- Aggregate [k#x], [k#x, min(v#x) AS every_v#x]
+   +- LocalRelation [k#x, v#x]
+--! expected_output_schema
+struct<k:int,every_v:boolean>
+--! expected_result
++---+---------+
+| k | every_v |
++---+---------+
+| 1 | false   |
+| 3 | false   |
+| 5 | false   |
++---+---------+
+printed all 3 rows.
+--! expected_result_hash
+b38b91ef7aec43d0957f73891494f8c09519ffe4731fb729a0569c7c2d970118
+!-- end
+
+
+--! name
+bool aggregates with having null
+--! script
+scripts/group_by/bool_agg_having_null.py
+--! expected_analysis_output
+Project [k#x, every_v#x]
++- Filter isnull(every_v#x)
+   +- Aggregate [k#x], [k#x, every(v#x) AS every_v#x]
+      +- SubqueryAlias test_agg
+         +- View (`test_agg`, [k#x, v#x])
+            +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias test_agg
+                     +- LocalRelation [k#x, v#x]
+--! expected_optimized_output
+Filter isnull(every_v#x)
++- Aggregate [k#x], [k#x, min(v#x) AS every_v#x]
+   +- LocalRelation [k#x, v#x]
+--! expected_output_schema
+struct<k:int,every_v:boolean>
+--! expected_result
++---+---------+
+| k | every_v |
++---+---------+
+| 4 | NULL    |
++---+---------+
+printed all 1 rows.
+--! expected_result_hash
+3c3c8c2bd86b08b2f86cf8a0f0796bed2e3989c7d939ee2630e6dbace881b365
+!-- end
+
+
+--! name
+every input type checking: int (error)
+--! script
+scripts/group_by/every_int_error.py
+--! expected_error
+[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] Cannot resolve "every(1)" due to data type mismatch: The first parameter requires the "BOOLEAN" type, however "1" has the type "INT". SQLSTATE: 42K09
+!-- end
+
+
+--! name
+some input type checking: int (error)
+--! script
+scripts/group_by/some_int_error.py
+--! expected_error
+[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] Cannot resolve "some(1)" due to data type mismatch: The first parameter requires the "BOOLEAN" type, however "1" has the type "INT". SQLSTATE: 42K09
+!-- end
+
+
+--! name
+bool_or input type checking: int (error)
+--! script
+scripts/group_by/bool_or_int_error.py
+--! expected_error
+[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] Cannot resolve "bool_or(1)" due to data type mismatch: The first parameter requires the "BOOLEAN" type, however "1" has the type "INT". SQLSTATE: 42K09
+!-- end
+
+
+--! name
+every input type checking: string
+--! script
+scripts/group_by/every_string.py
+--! expected_analysis_output
+Aggregate [every(cast(true as boolean)) AS every(true)#x]
++- SubqueryAlias test_agg
+   +- View (`test_agg`, [k#x, v#x])
+      +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
+         +- Project [k#x, v#x]
+            +- SubqueryAlias test_agg
+               +- LocalRelation [k#x, v#x]
+--! expected_optimized_output
+Aggregate [min(true) AS every(true)#x]
++- LocalRelation
+--! expected_output_schema
+struct<every(true):boolean>
+--! expected_result
++-------------+
+| every(true) |
++-------------+
+| true        |
++-------------+
+printed all 1 rows.
+--! expected_result_hash
+b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b
+!-- end
+
+
+--! name
+bool_and input type checking: decimal (error)
+--! script
+scripts/group_by/bool_and_decimal_error.py
+--! expected_error
+[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] Cannot resolve "bool_and(1.0)" due to data type mismatch: The first parameter requires the "BOOLEAN" type, however "1.0" has the type "DECIMAL(10,1)". SQLSTATE: 42K09
+!-- end
+
+
+--! name
+bool_or input type checking: double (error)
+--! script
+scripts/group_by/bool_or_double_error.py
+--! expected_error
+[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] Cannot resolve "bool_or(1.0)" due to data type mismatch: The first parameter requires the "BOOLEAN" type, however "1.0" has the type "DOUBLE". SQLSTATE: 42K09
+!-- end
+
+
+--! name
+every as window expression
+--! tags
+unordered
+--! script
+scripts/group_by/every_window.py
+--! expected_analysis_output
+Project [k#x, v#x, every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
++- Project [k#x, v#x, every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+   +- Window [every(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
+      +- Project [k#x, v#x]
+         +- SubqueryAlias test_agg
+            +- View (`test_agg`, [k#x, v#x])
+               +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
+                  +- Project [k#x, v#x]
+                     +- SubqueryAlias test_agg
+                        +- LocalRelation [k#x, v#x]
+--! expected_optimized_output
+Window [min(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
++- LocalRelation [k#x, v#x]
+--! expected_output_schema
+struct<k:int,v:boolean,every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+--! expected_result
++---+-------+-------------------------------------------------------------------------------------------------------------+
+| k | v     | every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) |
++---+-------+-------------------------------------------------------------------------------------------------------------+
+| 1 | false | false                                                                                                       |
+| 1 | true  | false                                                                                                       |
+| 2 | true  | true                                                                                                        |
+| 3 | NULL  | NULL                                                                                                        |
+| 3 | false | false                                                                                                       |
+| 4 | NULL  | NULL                                                                                                        |
+| 4 | NULL  | NULL                                                                                                        |
+| 5 | NULL  | NULL                                                                                                        |
+| 5 | false | false                                                                                                       |
+| 5 | true  | false                                                                                                       |
++---+-------+-------------------------------------------------------------------------------------------------------------+
+printed all 10 rows.
+--! expected_result_hash
+1ad0a462e3a29e3f796db5ad23d8d3970b0d1eb9085231fcc4fcf8e128cf2b2d
+!-- end
+
+
+--! name
+some as window expression
+--! tags
+unordered
+--! script
+scripts/group_by/some_window.py
+--! expected_analysis_output
+Project [k#x, v#x, some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
++- Project [k#x, v#x, some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+   +- Window [some(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
+      +- Project [k#x, v#x]
+         +- SubqueryAlias test_agg
+            +- View (`test_agg`, [k#x, v#x])
+               +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
+                  +- Project [k#x, v#x]
+                     +- SubqueryAlias test_agg
+                        +- LocalRelation [k#x, v#x]
+--! expected_optimized_output
+Window [max(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
++- LocalRelation [k#x, v#x]
+--! expected_output_schema
+struct<k:int,v:boolean,some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+--! expected_result
++---+-------+------------------------------------------------------------------------------------------------------------+
+| k | v     | some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) |
++---+-------+------------------------------------------------------------------------------------------------------------+
+| 1 | false | false                                                                                                      |
+| 1 | true  | true                                                                                                       |
+| 2 | true  | true                                                                                                       |
+| 3 | NULL  | NULL                                                                                                       |
+| 3 | false | false                                                                                                      |
+| 4 | NULL  | NULL                                                                                                       |
+| 4 | NULL  | NULL                                                                                                       |
+| 5 | NULL  | NULL                                                                                                       |
+| 5 | false | false                                                                                                      |
+| 5 | true  | true                                                                                                       |
++---+-------+------------------------------------------------------------------------------------------------------------+
+printed all 10 rows.
+--! expected_result_hash
+9a682e38910e199dade7fbe0fd8eb481cf3e924ef37e09ef0c6143b82e9b660e
+!-- end
+
+
+--! name
+bool_or as window expression
+--! tags
+unordered
+--! script
+scripts/group_by/bool_or_window.py
+--! expected_analysis_output
+Project [k#x, v#x, bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
++- Project [k#x, v#x, bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+   +- Window [bool_or(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
+      +- Project [k#x, v#x]
+         +- SubqueryAlias test_agg
+            +- View (`test_agg`, [k#x, v#x])
+               +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
+                  +- Project [k#x, v#x]
+                     +- SubqueryAlias test_agg
+                        +- LocalRelation [k#x, v#x]
+--! expected_optimized_output
+Window [max(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
++- LocalRelation [k#x, v#x]
+--! expected_output_schema
+struct<k:int,v:boolean,bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+--! expected_result
++---+-------+---------------------------------------------------------------------------------------------------------------+
+| k | v     | bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) |
++---+-------+---------------------------------------------------------------------------------------------------------------+
+| 1 | false | false                                                                                                         |
+| 1 | true  | true                                                                                                          |
+| 2 | true  | true                                                                                                          |
+| 3 | NULL  | NULL                                                                                                          |
+| 3 | false | false                                                                                                         |
+| 4 | NULL  | NULL                                                                                                          |
+| 4 | NULL  | NULL                                                                                                          |
+| 5 | NULL  | NULL                                                                                                          |
+| 5 | false | false                                                                                                         |
+| 5 | true  | true                                                                                                          |
++---+-------+---------------------------------------------------------------------------------------------------------------+
+printed all 10 rows.
+--! expected_result_hash
+9a682e38910e199dade7fbe0fd8eb481cf3e924ef37e09ef0c6143b82e9b660e
+!-- end
+
+
+--! name
+bool_and as window expression
+--! tags
+unordered
+--! script
+scripts/group_by/bool_and_window.py
+--! expected_analysis_output
+Project [k#x, v#x, bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
++- Project [k#x, v#x, bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+   +- Window [bool_and(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
+      +- Project [k#x, v#x]
+         +- SubqueryAlias test_agg
+            +- View (`test_agg`, [k#x, v#x])
+               +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
+                  +- Project [k#x, v#x]
+                     +- SubqueryAlias test_agg
+                        +- LocalRelation [k#x, v#x]
+--! expected_optimized_output
+Window [min(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
++- LocalRelation [k#x, v#x]
+--! expected_output_schema
+struct<k:int,v:boolean,bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+--! expected_result
++---+-------+----------------------------------------------------------------------------------------------------------------+
+| k | v     | bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) |
++---+-------+----------------------------------------------------------------------------------------------------------------+
+| 1 | false | false                                                                                                          |
+| 1 | true  | false                                                                                                          |
+| 2 | true  | true                                                                                                           |
+| 3 | NULL  | NULL                                                                                                           |
+| 3 | false | false                                                                                                          |
+| 4 | NULL  | NULL                                                                                                           |
+| 4 | NULL  | NULL                                                                                                           |
+| 5 | NULL  | NULL                                                                                                           |
+| 5 | false | false                                                                                                          |
+| 5 | true  | false                                                                                                          |
++---+-------+----------------------------------------------------------------------------------------------------------------+
+printed all 10 rows.
+--! expected_result_hash
+1ad0a462e3a29e3f796db5ad23d8d3970b0d1eb9085231fcc4fcf8e128cf2b2d
+!-- end
+
+
+--! name
+bool_or as window expression (repeated)
+--! tags
+unordered
+--! script
+scripts/group_by/bool_or_window_repeated.py
+--! expected_analysis_output
+Project [k#x, v#x, bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
++- Project [k#x, v#x, bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+   +- Window [bool_or(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
+      +- Project [k#x, v#x]
+         +- SubqueryAlias test_agg
+            +- View (`test_agg`, [k#x, v#x])
+               +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
+                  +- Project [k#x, v#x]
+                     +- SubqueryAlias test_agg
+                        +- LocalRelation [k#x, v#x]
+--! expected_optimized_output
+Window [max(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
++- LocalRelation [k#x, v#x]
+--! expected_output_schema
+struct<k:int,v:boolean,bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+--! expected_result
++---+-------+---------------------------------------------------------------------------------------------------------------+
+| k | v     | bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) |
++---+-------+---------------------------------------------------------------------------------------------------------------+
+| 1 | false | false                                                                                                         |
+| 1 | true  | true                                                                                                          |
+| 2 | true  | true                                                                                                          |
+| 3 | NULL  | NULL                                                                                                          |
+| 3 | false | false                                                                                                         |
+| 4 | NULL  | NULL                                                                                                          |
+| 4 | NULL  | NULL                                                                                                          |
+| 5 | NULL  | NULL                                                                                                          |
+| 5 | false | false                                                                                                         |
+| 5 | true  | true                                                                                                          |
++---+-------+---------------------------------------------------------------------------------------------------------------+
+printed all 10 rows.
+--! expected_result_hash
+9a682e38910e199dade7fbe0fd8eb481cf3e924ef37e09ef0c6143b82e9b660e
+!-- end
+
+
+--! name
+having referencing aggregate expression
+--! script
+scripts/group_by/having_agg_count.py
+--! expected_analysis_output
+Project [cnt#xL]
++- Filter (cnt#xL > cast(1 as bigint))
+   +- Aggregate [count(k#x) AS cnt#xL]
+      +- SubqueryAlias test_agg
+         +- View (`test_agg`, [k#x, v#x])
+            +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias test_agg
+                     +- LocalRelation [k#x, v#x]
+--! expected_optimized_output
+Filter (cnt#xL > 1)
++- Aggregate [count(1) AS cnt#xL]
+   +- LocalRelation
+--! expected_output_schema
+struct<cnt:bigint>
+--! expected_result
++-----+
+| cnt |
++-----+
+| 10  |
++-----+
+printed all 1 rows.
+--! expected_result_hash
+4a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5
+!-- end
+
+
+--! name
+having on aliased max
+--! tags
+unordered
+--! script
+scripts/group_by/having_max_v.py
+--! expected_analysis_output
+Project [k#x, max_v#x]
++- Filter (max_v#x = true)
+   +- Aggregate [k#x], [k#x, max(v#x) AS max_v#x]
+      +- SubqueryAlias test_agg
+         +- View (`test_agg`, [k#x, v#x])
+            +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias test_agg
+                     +- LocalRelation [k#x, v#x]
+--! expected_optimized_output
+Filter (isnotnull(max_v#x) AND max_v#x)
++- Aggregate [k#x], [k#x, max(v#x) AS max_v#x]
+   +- LocalRelation [k#x, v#x]
+--! expected_output_schema
+struct<k:int,max_v:boolean>
+--! expected_result
++---+-------+
+| k | max_v |
++---+-------+
+| 1 | true  |
+| 2 | true  |
+| 5 | true  |
++---+-------+
+printed all 3 rows.
+--! expected_result_hash
+d6212a5d216fffb25342120cad425c6ebe96fc8485c6b082be8624faf6a531c4
+!-- end
+
+
+--! name
+aggregate expression referenced through alias
+--! script
+scripts/group_by/agg_alias_filter.py
+--! expected_analysis_output
+Filter (cnt#xL > cast(1 as bigint))
++- Aggregate [count(k#x) AS cnt#xL]
+   +- SubqueryAlias test_agg
+      +- View (`test_agg`, [k#x, v#x])
+         +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
+            +- Project [k#x, v#x]
+               +- SubqueryAlias test_agg
+                  +- LocalRelation [k#x, v#x]
+--! expected_optimized_output
+Filter (cnt#xL > 1)
++- Aggregate [count(1) AS cnt#xL]
+   +- LocalRelation
+--! expected_output_schema
+struct<cnt:bigint>
+--! expected_result
++-----+
+| cnt |
++-----+
+| 10  |
++-----+
+printed all 1 rows.
+--! expected_result_hash
+4a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5
+!-- end
+
+
+--! name
+SPARK-34581: do not optimize out grouping expressions
+--! tags
+unordered
+--! script
+scripts/group_by/grouping_exprs_not_optimized.py
+--! expected_analysis_output
+Aggregate [isnull(a#x)], [isnull(a#x) AS (a IS NULL)#x, NOT isnull(a#x) AS (NOT (a IS NULL))#x, count(1) AS c#xL]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+--! expected_optimized_output
+Aggregate [_groupingexpression#x], [_groupingexpression#x AS (a IS NULL)#x, NOT _groupingexpression#x AS (NOT (a IS NULL))#x, count(1) AS c#xL]
++- LocalRelation [_groupingexpression#x]
+--! expected_output_schema
+struct<(a IS NULL):boolean,(NOT (a IS NULL)):boolean,c:bigint>
+--! expected_result
++-------------+-------------------+---+
+| (a IS NULL) | (NOT (a IS NULL)) | c |
++-------------+-------------------+---+
+| false       | true              | 7 |
+| true        | false             | 2 |
++-------------+-------------------+---+
+printed all 2 rows.
+--! expected_result_hash
+c5421419b0d389431648774e2aa0156b8472da926b1dd3cd50c94821001e7bcd
+!-- end
+
+
+--! name
+PullOutGroupingExpressions pulls out grouping expressions
+--! tags
+unordered
+--! script
+scripts/group_by/pull_out_grouping_exprs.py
+--! expected_analysis_output
+Aggregate [isnull(a#x)], [isnull(a#x) AS (a IS NULL)#x, CASE WHEN NOT isnull(a#x) THEN 0 ELSE 1 END AS CASE WHEN (NOT (a IS NULL)) THEN 0 ELSE 1 END#x, first(isnull(a#x), false) AS c#x]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+--! expected_optimized_output
+Aggregate [_groupingexpression#x], [_groupingexpression#x AS (a IS NULL)#x, CASE WHEN NOT _groupingexpression#x THEN 0 ELSE 1 END AS CASE WHEN (NOT (a IS NULL)) THEN 0 ELSE 1 END#x, first(isnull(a#x), false) AS c#x]
++- LocalRelation [a#x, _groupingexpression#x]
+--! expected_output_schema
+struct<(a IS NULL):boolean,CASE WHEN (NOT (a IS NULL)) THEN 0 ELSE 1 END:int,c:boolean>
+--! expected_result
++-------------+-----------------------------------------------+-------+
+| (a IS NULL) | CASE WHEN (NOT (a IS NULL)) THEN 0 ELSE 1 END | c     |
++-------------+-----------------------------------------------+-------+
+| false       | 0                                             | false |
+| true        | 1                                             | true  |
++-------------+-----------------------------------------------+-------+
+printed all 2 rows.
+--! expected_result_hash
+ce61427fcddb697480c2921f7450c541ac0bf1fe284b7e88bd9d784a84a2120a
+!-- end
+
+
+--! name
+count_if with grouping expression reference
+--! tags
+unordered
+--! script
+scripts/group_by/count_if_group_by.py
+--! expected_analysis_output
+Aggregate [(a#x + 1)], [(a#x + 1) AS (a + 1)#x, count_if(((a#x + 1) = b#x)) AS count_if(((a + 1) = b))#xL]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+--! expected_optimized_output
+Aggregate [_groupingexpression#x], [_groupingexpression#x AS (a + 1)#x, count(if (NOT _common_expr_0#x) null else _common_expr_0#x) AS count_if(((a + 1) = b))#xL]
++- LocalRelation [_groupingexpression#x, _common_expr_0#x]
+--! expected_output_schema
+struct<(a + 1):int,count_if(((a + 1) = b)):bigint>
+--! expected_result
++---------+-------------------------+
+| (a + 1) | count_if(((a + 1) = b)) |
++---------+-------------------------+
+| 2       | 1                       |
+| 3       | 0                       |
+| 4       | 0                       |
+| NULL    | 0                       |
++---------+-------------------------+
+printed all 4 rows.
+--! expected_result_hash
+a71fb4e2edd0d56bc2b849747cc6dc084d03786bfaed0681f6ee9b564f09f089
+!-- end

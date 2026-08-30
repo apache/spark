@@ -67,7 +67,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       refs: Array[NamedReference],
       output: Seq[Attribute]): AttributeSet = {
     val plan = LocalRelation(output)
-    AttributeSet(resolveRefs[Attribute](refs.toImmutableArraySeq, plan))
+    AttributeSet(resolveRefs[NamedExpression](refs.toImmutableArraySeq, plan))
   }
 
   /**
@@ -315,8 +315,8 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case "EXP" => convertUnaryExpr(expr, Exp)
       case "POWER" => convertBinaryExpr(expr, Pow)
       case "SQRT" => convertUnaryExpr(expr, Sqrt)
-      case "FLOOR" => convertUnaryExpr(expr, Floor)
-      case "CEIL" => convertUnaryExpr(expr, Ceil)
+      case "FLOOR" => convertUnaryExpr(expr, Floor(_))
+      case "CEIL" => convertUnaryExpr(expr, Ceil(_))
       case "ROUND" => convertBinaryExpr(expr, Round(_, _, ansiEnabled = true))
       case "CBRT" => convertUnaryExpr(expr, Cbrt)
       case "DEGREES" => convertUnaryExpr(expr, ToDegrees)

@@ -1132,10 +1132,14 @@ class ALSStorageSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       (111, 2, 1.0),
       (111, 1, 0.1)
     )).toDF("item", "user", "rating")
-    assert(als.estimateModelSize(df) === estimatedDFSize)
+    assert(als.estimateModelSize(df) === estimatedDFSize + als.estimateMatadataSize)
 
     val model = als.fit(df)
-    assert(model.estimatedSize == estimatedDFSize)
+    assert(model.estimatedSize === estimatedDFSize + model.estimateMatadataSize)
+    val maxSize = 1024 * 16
+    assert(
+      model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
   }
 }
 

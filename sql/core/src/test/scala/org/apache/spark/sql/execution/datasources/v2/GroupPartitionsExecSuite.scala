@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, SortOrder}
-import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyedPartitioning, KeyedShuffleSpec, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.execution.{DummySparkPlan, LeafExecNode, SafeForKWayMerge}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -46,6 +46,22 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
 
     assert(gpe.groupedPartitions.forall(_._2.size <= 1), "expected non-coalescing")
     assert(gpe.outputOrdering === childOrdering)
+  }
+
+  test("SPARK-58324: k-way merge ordering drops sameOrderExpressions") {
+    // The child ordering carries sameOrderExpressions (planner metadata). The k-way merge
+    // comparator only needs the sort key, so kWayMergeOrdering keeps child/direction/nullOrdering
+    // but drops sameOrderExpressions, so LazyCodeGenOrdering does not serialize them with the RDD.
+    val childOrdering = Seq(SortOrder(exprA, Ascending, Seq(exprB, exprC)))
+    val child = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(1))),
+      outputOrdering = childOrdering)
+    val gpe = GroupPartitionsExec(child)
+
+    assert(child.outputOrdering.head.sameOrderExpressions.nonEmpty, "test setup")
+    val merged = gpe.kWayMergeOrdering
+    assert(merged.map(so => (so.child, so.direction)) === Seq((exprA, Ascending)))
+    assert(merged.forall(_.sameOrderExpressions.isEmpty))
   }
 
   test("SPARK-56241: coalescing without reducers keeps key-expression orders from child") {
@@ -236,6 +252,31 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
 
     withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       assert(gpe.tryEnableSortedMerge().isEmpty)
+    }
+  }
+
+  test("SPARK-59027: createShuffleSpec subset-keys spec orders keys the same as this node's " +
+      "grouping") {
+    // With `allowKeysSubsetOfPartitionKeys`, `EnsureRequirements` may shuffle the other join side
+    // onto the spec's projected keys while this side is re-grouped by a `GroupPartitionsExec`
+    // carrying the spec's `joinKeyPositions`. The two key orders must agree (see
+    // `KeyedPartitioning.groupedKeyRowOrdering`), or the sides are mis-aligned -- a planning-time
+    // `PartitioningCollection` invariant failure for inner joins, silent wrong results for join
+    // types that expose only one side's partitioning.
+    // First-appearance order of the projected keys ([3], [1], [2]) differs from their sorted
+    // order ([1], [2], [3]), so the assertion discriminates the sort each side uses.
+    val partitionKeys = Seq(row(3, 30), row(1, 10), row(2, 20), row(1, 99))
+    val partitioning = KeyedPartitioning(Seq(exprA, exprB), partitionKeys)
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val spec = partitioning.createShuffleSpec(ClusteredDistribution(Seq(exprA)))
+        .asInstanceOf[KeyedShuffleSpec]
+      assert(spec.joinKeyPositions === Some(Seq(0)))
+
+      val gpe = GroupPartitionsExec(
+        DummySparkPlan(outputPartitioning = partitioning),
+        joinKeyPositions = spec.joinKeyPositions)
+      assert(gpe.groupedPartitions.map(_._1) === spec.partitioning.partitionKeys)
     }
   }
 

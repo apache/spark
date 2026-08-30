@@ -206,6 +206,13 @@ case class CountMinSketchAgg(
       `CountMinSketch` before usage. Count-min sketch is a probabilistic data structure used for
       cardinality estimation using sub-linear space.
   """,
+  arguments = """
+    Arguments:
+      * col - The column to build the count-min sketch from.
+      * eps - A double literal for the relative error of the sketch.
+      * confidence - A double literal for the confidence of the sketch.
+      * seed - An integer literal used as the random seed.
+  """,
   examples = """
     Examples:
       > SELECT hex(_FUNC_(col, 0.5d, 0.5d, 1)) FROM VALUES (1), (2), (1) AS tab(col);

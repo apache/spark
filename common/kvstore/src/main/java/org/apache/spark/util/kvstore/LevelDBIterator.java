@@ -20,6 +20,7 @@ package org.apache.spark.util.kvstore;
 import java.io.IOException;
 import java.lang.ref.Cleaner;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -289,17 +290,10 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
         key[key.length - 1] == LevelDBTypeInfo.END_MARKER[0]);
   }
 
+  @VisibleForTesting
   static int compare(byte[] a, byte[] b) {
-    int diff = 0;
-    int minLen = Math.min(a.length, b.length);
-    for (int i = 0; i < minLen; i++) {
-      diff += (a[i] - b[i]);
-      if (diff != 0) {
-        return diff;
-      }
-    }
-
-    return a.length - b.length;
+    // Unsigned bytewise comparison, matching LevelDB's key ordering.
+    return Arrays.compareUnsigned(a, b);
   }
 
   static class ResourceCleaner implements Runnable {

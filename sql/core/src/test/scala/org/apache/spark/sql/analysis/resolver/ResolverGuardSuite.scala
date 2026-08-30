@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
 }
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ResolverGuardSuite extends ResolverGuardSuiteBase {
@@ -391,6 +392,88 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
       checkResolverGuard(
         """SELECT `[a-z].{3}(1|3)` FROM VALUES('a', 'b', 'c')"""
       )
+    }
+  }
+
+  test("Session-qualified function is rejected") {
+    checkResolverGuard(
+      "SELECT session.some_func(1)",
+      unsupportedReason = Some("session-qualified user-defined function")
+    )
+  }
+
+  test("Generator functions are unsupported") {
+    Seq(
+      "explode(array(1, 2, 3))",
+      "posexplode(array(1, 2, 3))",
+      "inline(array(struct(1, 'a')))"
+    ).foreach { call =>
+      val name = call.takeWhile(_ != '(')
+      checkResolverGuard(s"SELECT $call", unsupportedReason = Some(s"unsupported function $name"))
+    }
+  }
+
+  test("Higher-order functions are unsupported") {
+    checkResolverGuard(
+      "SELECT transform(array(1, 2), x -> x + 1)",
+      unsupportedReason = Some("unsupported function transform")
+    )
+    checkResolverGuard(
+      "SELECT filter(array(1, 2), x -> x > 1)",
+      unsupportedReason = Some("unsupported function filter")
+    )
+    checkResolverGuard(
+      "SELECT aggregate(array(1, 2), 0, (acc, x) -> acc + x)",
+      unsupportedReason = Some("unsupported function aggregate")
+    )
+  }
+
+  test("Star target with unsupported metadata attribute name") {
+    withTable("t") {
+      sql("CREATE TABLE t (col INT) USING parquet")
+      checkResolverGuard(
+        "SELECT _metadata.* FROM t",
+        unsupportedReason = Some("unsupported attribute name '_metadata'")
+      )
+    }
+  }
+
+  test("prioritizeOrdinalResolutionInSort disabled is unsupported") {
+    withSQLConf("spark.sql.prioritizeOrdinalResolutionInSort.enabled" -> "false") {
+      checkResolverGuard(
+        "SELECT 1",
+        unsupportedReason = Some("configuration: prioritizeOrdinalResolutionInSortDisabled")
+      )
+    }
+  }
+
+  test("persistentCatalogFirst is unsupported") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
+      checkResolverGuard(
+        "SELECT 1",
+        unsupportedReason = Some("configuration: persistentCatalogFirst")
+      )
+    }
+  }
+
+  gridTest("ASOF JOIN")(Seq(true, false)) { enabled =>
+    val asOfJoinQuery =
+      "SELECT t.symbol, q.bid_price FROM " +
+      "VALUES (TIMESTAMP '2026-06-29 10:00:05', 'AAPL') AS t(trade_time, symbol) " +
+      "ASOF JOIN VALUES (TIMESTAMP '2026-06-29 10:00:00', 'AAPL', 180.10) " +
+      "AS q(quote_time, symbol, bid_price) " +
+      "MATCH_CONDITION (t.trade_time >= q.quote_time) ON t.symbol = q.symbol"
+    val expectedReason = if (enabled) {
+      None
+    } else {
+      Some("class org.apache.spark.sql.catalyst.plans.logical.AsOfJoin operator resolution")
+    }
+    withSQLConf(
+      SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key ->
+      enabled.toString
+    ) {
+      checkResolverGuard(asOfJoinQuery, expectedReason)
     }
   }
 

@@ -15,32 +15,33 @@
 # limitations under the License.
 #
 
-import sys
 import json
+import sys
 import warnings
 from typing import (
-    cast,
-    overload,
+    TYPE_CHECKING,
     Any,
     Callable,
     Iterable,
     List,
     Optional,
     Tuple,
-    TYPE_CHECKING,
     Union,
+    cast,
+    overload,
 )
 
-from pyspark.sql.column import Column as ParentColumn
 from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import with_origin_to_class
+from pyspark.sql.column import Column as ParentColumn
 from pyspark.sql.types import DataType
-from pyspark.sql.utils import get_active_spark_context, enum_to_value
+from pyspark.sql.utils import enum_to_value, get_active_spark_context
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+
     from pyspark.core.context import SparkContext
-    from pyspark.sql._typing import ColumnOrName, LiteralType, DecimalLiteral, DateTimeLiteral
+    from pyspark.sql._typing import ColumnOrName, DateTimeLiteral, DecimalLiteral, LiteralType
     from pyspark.sql.window import WindowSpec
 
 __all__ = ["Column"]
@@ -60,6 +61,13 @@ def _create_column_from_name(name: str) -> "JavaObject":
 
     sc = get_active_spark_context()
     return cast(JVMView, sc._jvm).functions.col(name)
+
+
+def _to_java_column_opt(col: Optional["ColumnOrName"]) -> Optional["JavaObject"]:
+    if col is None:
+        return None
+    else:
+        return _to_java_column(col)
 
 
 def _to_java_column(col: "ColumnOrName") -> "JavaObject":
@@ -650,9 +658,13 @@ class Column(ParentColumn):
         return Column(jc)
 
     def __nonzero__(self) -> None:
+        try:
+            column_repr = self._jc.toString()
+        except Exception:
+            column_repr = "<unknown>"
         raise PySparkValueError(
             errorClass="CANNOT_CONVERT_COLUMN_INTO_BOOL",
-            messageParameters={},
+            messageParameters={"column": column_repr},
         )
 
     __bool__ = __nonzero__
@@ -663,8 +675,9 @@ class Column(ParentColumn):
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.sql.column
+    from pyspark.sql import SparkSession
 
     # It inherits docstrings but doctests cannot detect them so we run
     # the parent classe's doctests here directly.

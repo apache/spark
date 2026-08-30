@@ -93,8 +93,10 @@ class GlobalTempViewSuite extends SharedSparkSession {
   }
 
   test("global temp view database should be preserved") {
-    val e = intercept[AnalysisException](sql(s"CREATE DATABASE $globalTempDB"))
-    assert(e.message.contains("system preserved database"))
+    checkError(
+      exception = intercept[AnalysisException](sql(s"CREATE DATABASE $globalTempDB")),
+      condition = "RESERVED_DATABASE_NAME",
+      parameters = Map("database" -> s"`$globalTempDB`"))
 
     val e2 = intercept[AnalysisException](sql(s"USE $globalTempDB"))
     assert(e2.message.contains("system preserved database"))

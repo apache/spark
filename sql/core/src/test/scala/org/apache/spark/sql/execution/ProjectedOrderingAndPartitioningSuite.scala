@@ -23,9 +23,10 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeRef
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, YearsFunction}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType, TimestampType}
 
 class ProjectedOrderingAndPartitioningSuite
   extends SharedSparkSession with AdaptiveSparkPlanHelper {
@@ -82,6 +83,32 @@ class ProjectedOrderingAndPartitioningSuite
             assert(outputPartitioning.isInstanceOf[UnknownPartitioning])
         }
       }
+    }
+  }
+
+  test("SPARK-58323: AliasAware output ordering and partitioning are strict, not lazy") {
+    // A multi-alias projection makes `sameOrderExpressions` and the projected
+    // `PartitioningCollection` non-trivial. Both must be strict collections: the underlying
+    // `multiTransform` produces a `LazyList`, and storing it unforced lets each plan node re-wrap
+    // the child's lazy list. Across a deep projection chain that nesting overflows the stack when
+    // the ordering/partitioning is later serialized or deeply traversed.
+    withSQLConf(SQLConf.EXPRESSION_PROJECTION_CANDIDATE_LIMIT.key -> "5") {
+      // Ordering (AliasAwareQueryOutputOrdering): id -> {x, y, z} gives sameOrderExpressions.
+      val orderDf = spark.range(2).orderBy($"id").selectExpr("id as x", "id as y", "id as z")
+      val outputOrdering = orderDf.queryExecution.optimizedPlan.outputOrdering
+      assert(outputOrdering.head.sameOrderExpressions.nonEmpty)
+      outputOrdering.foreach { so =>
+        assert(!so.sameOrderExpressions.isInstanceOf[LazyList[_]],
+          s"sameOrderExpressions must be strict, was ${so.sameOrderExpressions.getClass.getName}")
+      }
+
+      // Partitioning (PartitioningPreservingUnaryExecNode): repartition(id) -> {x, y, z}.
+      val partDf = spark.range(2).repartition($"id").selectExpr("id as x", "id as y", "id as z")
+      val outputPartitioning = stripAQEPlan(partDf.queryExecution.executedPlan).outputPartitioning
+      val partitionings = outputPartitioning.asInstanceOf[PartitioningCollection].partitionings
+      assert(partitionings.size == 3)
+      assert(!partitionings.isInstanceOf[LazyList[_]],
+        s"partitionings must be strict, was ${partitionings.getClass.getName}")
     }
   }
 
@@ -464,6 +491,38 @@ class ProjectedOrderingAndPartitioningSuite
     }
   }
 
+  test("SPARK-58974: the narrowing guard applies for either value of requireAllClusterKeys") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+
+    // The projected keys have duplicates (x-values: 1, 1, 2), so grouping this partitioning merges
+    // two partitions that held distinct keys. `requireAllClusterKeys` decides which key sets count
+    // as matching; it does not authorise that merge, so the guard must answer the same either way.
+    val keys = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 1))
+    val project = ProjectExec(Seq(x),
+      DummyLeafExecWithPartitioning(output = Seq(x, y),
+        partitioning = KeyedPartitioning(Seq(x, y), keys)))
+    val kp = project.outputPartitioning.asInstanceOf[KeyedPartitioning]
+    assert(kp.isNarrowed && !kp.isGrouped)
+
+    Seq(true, false).foreach { requireAll =>
+      // Both values on purpose: the whole claim of the fix is that the guard answers the same
+      // either way, so the `false` iteration is the control that must keep behaving as before.
+      // The required clustering is exactly this partitioning's single key, so the
+      // `requireAllClusterKeys` branch on its own would accept it.
+      val required = ClusteredDistribution(Seq(x), requireAllClusterKeys = requireAll)
+      withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "false") {
+        assert(!kp.groupedSatisfies(required),
+          s"requireAllClusterKeys=$requireAll must not group a narrowed partitioning whose keys " +
+            "are no longer distinct")
+      }
+      withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+        assert(kp.groupedSatisfies(required),
+          s"requireAllClusterKeys=$requireAll: the opt-in must allow the grouping")
+      }
+    }
+  }
+
   test("SPARK-46367: isNarrowed is sticky across chained PartitioningPreservingUnaryExecNodes") {
     val x = AttributeReference("x", IntegerType)()
     val y = AttributeReference("y", IntegerType)()
@@ -601,6 +660,214 @@ class ProjectedOrderingAndPartitioningSuite
         KeyedPartitioning(Seq(x), keys1d)))
     }
     assert(e.getMessage.contains("partitionKeys"))
+  }
+
+  test("SPARK-58138: BIN BY preserves a child partitioning on a pass-through column") {
+    val tsStart = AttributeReference("ts_start", TimestampType)()
+    val tsEnd = AttributeReference("ts_end", TimestampType)()
+    val value = AttributeReference("value", DoubleType)()
+    val host = AttributeReference("host", IntegerType)()
+    val binBy = BinByExec(
+      binWidthMicros = 300000000L, originMicros = 0L, rangeStart = tsStart, rangeEnd = tsEnd,
+      distributeColumns = Seq(value),
+      scaledDistributeColumns = Seq(AttributeReference("value", DoubleType)()),
+      appendedAttributes = Seq(
+        AttributeReference("bin_start", TimestampType)(),
+        AttributeReference("bin_end", TimestampType)(),
+        AttributeReference("bin_distribute_ratio", DoubleType)()),
+      timeZoneId = None,
+      child = DummyLeafExecWithPartitioning(
+        output = Seq(tsStart, tsEnd, value, host),
+        partitioning = HashPartitioning(Seq(host), 4)))
+
+    binBy.outputPartitioning match {
+      case p: HashPartitioning =>
+        assert(p.expressions === Seq(host))
+        assert(p.numPartitions === 4)
+      case other => fail(s"Expected HashPartitioning, got $other")
+    }
+  }
+
+  test("SPARK-58138: BIN BY drops a child partitioning on a scaled DISTRIBUTE column") {
+    val tsStart = AttributeReference("ts_start", TimestampType)()
+    val tsEnd = AttributeReference("ts_end", TimestampType)()
+    val value = AttributeReference("value", DoubleType)()
+    val binBy = BinByExec(
+      binWidthMicros = 300000000L, originMicros = 0L, rangeStart = tsStart, rangeEnd = tsEnd,
+      distributeColumns = Seq(value),
+      scaledDistributeColumns = Seq(AttributeReference("value", DoubleType)()),
+      appendedAttributes = Seq(
+        AttributeReference("bin_start", TimestampType)(),
+        AttributeReference("bin_end", TimestampType)(),
+        AttributeReference("bin_distribute_ratio", DoubleType)()),
+      timeZoneId = None,
+      child = DummyLeafExecWithPartitioning(
+        output = Seq(tsStart, tsEnd, value),
+        partitioning = HashPartitioning(Seq(value), 4)))
+
+    binBy.outputPartitioning match {
+      case p: UnknownPartitioning => assert(p.numPartitions === 4)
+      case other => fail(s"Expected UnknownPartitioning, got $other")
+    }
+  }
+
+  test("SPARK-58138: BIN BY drops a mixed pass-through and DISTRIBUTE partitioning whole") {
+    val tsStart = AttributeReference("ts_start", TimestampType)()
+    val tsEnd = AttributeReference("ts_end", TimestampType)()
+    val value = AttributeReference("value", DoubleType)()
+    val host = AttributeReference("host", IntegerType)()
+    val binBy = BinByExec(
+      binWidthMicros = 300000000L, originMicros = 0L, rangeStart = tsStart, rangeEnd = tsEnd,
+      distributeColumns = Seq(value),
+      scaledDistributeColumns = Seq(AttributeReference("value", DoubleType)()),
+      appendedAttributes = Seq(
+        AttributeReference("bin_start", TimestampType)(),
+        AttributeReference("bin_end", TimestampType)(),
+        AttributeReference("bin_distribute_ratio", DoubleType)()),
+      timeZoneId = None,
+      child = DummyLeafExecWithPartitioning(
+        output = Seq(tsStart, tsEnd, value, host),
+        partitioning = HashPartitioning(Seq(value, host), 4)))
+
+    binBy.outputPartitioning match {
+      case p: UnknownPartitioning => assert(p.numPartitions === 4)
+      case other => fail(s"Expected UnknownPartitioning, got $other")
+    }
+  }
+
+  test("SPARK-58405: eliminate redundant shuffle when aggregate groups by an alias of " +
+    "the window partition key") {
+    // Register the `testData` view (scoped to just these tests that need it).
+    testData
+    // The window output `vset` is consumed downstream so the window is not eliminated.
+    // The window is hash-partitioned by `key`; the outer aggregate groups by `userid`, which is
+    // an alias of `key`. Since `key` is already a partition key of the window, the outer
+    // aggregate's shuffle on `userid` is redundant.
+    val df = sql(
+      """
+        |SELECT userid, count(*), sum(size(vset))
+        |FROM (
+        |  SELECT key AS userid,
+        |         collect_set(value) OVER (PARTITION BY key) AS vset
+        |  FROM testData
+        |) u
+        |GROUP BY 1
+      """.stripMargin)
+
+    // Correctness: results must match grouping the same window output by `key` directly.
+    val expected = sql(
+      """
+        |SELECT key, count(*), sum(size(vset))
+        |FROM (
+        |  SELECT key,
+        |         collect_set(value) OVER (PARTITION BY key) AS vset
+        |  FROM testData
+        |)
+        |GROUP BY 1
+      """.stripMargin)
+    checkAnswer(df, expected.collect())
+
+    // `collect` from `AdaptiveSparkPlanHelper` descends into the finalized AQE plan, so AQE can
+    // stay enabled. `checkAnswer` above has already materialized the query.
+    val plan = df.queryExecution.executedPlan
+    val shuffles = collect(plan) { case e: ShuffleExchangeExec => e }
+    assert(shuffles.size == 1,
+      s"Expected 1 shuffle but found ${shuffles.size}:\n$plan")
+  }
+
+  test("SPARK-58405: eliminate redundant shuffle for a repartition consumer of a window " +
+    "partitioned by an aliased key") {
+    // Register the `testData` view (scoped to just these tests that need it).
+    testData
+    // Consumer-agnostic: a repartition on `userid` (an alias of the window key `key`) reuses the
+    // window's shuffle rather than adding its own.
+    val df = sql(
+      """
+        |SELECT /*+ REPARTITION(userid) */ userid, vset
+        |FROM (
+        |  SELECT key AS userid,
+        |         collect_set(value) OVER (PARTITION BY key) AS vset
+        |  FROM testData
+        |) u
+      """.stripMargin)
+
+    df.collect()
+    val plan = df.queryExecution.executedPlan
+    val shuffles = collect(plan) { case e: ShuffleExchangeExec => e }
+    assert(shuffles.size == 1,
+      s"Expected 1 shuffle but found ${shuffles.size}:\n$plan")
+  }
+
+  test("SPARK-58405: eliminate redundant shuffle and sort for a window consumer partitioned " +
+    "and ordered by aliased keys") {
+    // Register the `testData` view (scoped to just these tests that need it).
+    testData
+    // Stacked windows: the outer window is PARTITION BY userid ORDER BY tstamp, where `userid`
+    // and `tstamp` are aliases of the inner window's partition key `key` and order key `value`.
+    // The inner window's child is already partitioned by `key` and ordered by `[key, value]`;
+    // pulling both `key AS userid` and `value AS tstamp` above the inner window projects the
+    // partitioning and the full ordering up through the aliases, so the outer window needs
+    // neither a redundant shuffle nor a redundant sort. Without the rule the outer window adds
+    // one of each (2 shuffles, 2 sorts). `size(vset)` keeps the inner window output live so it
+    // is not pruned away.
+    val df = sql(
+      """
+        |SELECT userid, tstamp,
+        |       sum(size(vset)) OVER (PARTITION BY userid ORDER BY tstamp) AS s
+        |FROM (
+        |  SELECT key AS userid, value AS tstamp,
+        |         collect_set(value) OVER (PARTITION BY key ORDER BY value) AS vset
+        |  FROM testData
+        |) u
+      """.stripMargin)
+
+    df.collect()
+    val plan = df.queryExecution.executedPlan
+    val shuffles = collect(plan) { case e: ShuffleExchangeExec => e }
+    val sorts = collect(plan) { case s: SortExec => s }
+    assert(shuffles.size == 1,
+      s"Expected 1 shuffle but found ${shuffles.size}:\n$plan")
+    assert(sorts.size == 1,
+      s"Expected 1 sort but found ${sorts.size}:\n$plan")
+  }
+
+  test("SPARK-58405: eliminate redundant shuffle across a chain of windows over an aliased key") {
+    // Register the `testData` view (scoped to just these tests that need it).
+    testData
+    // Two adjacent windows (different order specs, so they are not collapsed and leave no Project
+    // between them) both partition by `key`; the aggregate downstream groups by `userid`, an alias
+    // of `key`. Pulling `key AS userid` up across the whole window chain lets the parent project's
+    // `HashPartitioning(userid)` satisfy the aggregate, so no redundant shuffle is inserted.
+    // `sum(r1)`/`sum(r2)` keep both window outputs live so the chain is not pruned away.
+    val df = sql(
+      """
+        |SELECT userid, count(*), sum(r1), sum(r2)
+        |FROM (
+        |  SELECT key AS userid,
+        |         row_number() OVER (PARTITION BY key ORDER BY value) AS r1,
+        |         rank()       OVER (PARTITION BY key ORDER BY value DESC) AS r2
+        |  FROM testData
+        |) u
+        |GROUP BY 1
+      """.stripMargin)
+
+    val expected = sql(
+      """
+        |SELECT key, count(*), sum(r1), sum(r2)
+        |FROM (
+        |  SELECT key,
+        |         row_number() OVER (PARTITION BY key ORDER BY value) AS r1,
+        |         rank()       OVER (PARTITION BY key ORDER BY value DESC) AS r2
+        |  FROM testData
+        |)
+        |GROUP BY 1
+      """.stripMargin)
+    checkAnswer(df, expected.collect())
+
+    val plan = df.queryExecution.executedPlan
+    val shuffles = collect(plan) { case e: ShuffleExchangeExec => e }
+    assert(shuffles.size == 1,
+      s"Expected 1 shuffle but found ${shuffles.size}:\n$plan")
   }
 }
 

@@ -17,28 +17,28 @@
 import unittest
 from inspect import getmembers, isfunction
 
-from pyspark.util import is_remote_only
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.types import (
-    _drop_metadata,
-    StringType,
-    StructType,
-    StructField,
     ArrayType,
     IntegerType,
     MapType,
+    StringType,
+    StructField,
+    StructType,
+    _drop_metadata,
 )
 from pyspark.testing import assertDataFrameEqual
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedMixedTestCase, should_test_connect
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+from pyspark.util import is_remote_only
 
 if should_test_connect:
-    from pyspark.sql.connect.column import Column
-    from pyspark.sql import functions as SF
-    from pyspark.sql.window import Window as SW
-    from pyspark.sql.connect import functions as CF
-    from pyspark.sql.connect.window import Window as CW
     from pyspark.errors.exceptions.connect import AnalysisException, SparkConnectException
+    from pyspark.sql import functions as SF
+    from pyspark.sql.connect import functions as CF
+    from pyspark.sql.connect.column import Column
+    from pyspark.sql.connect.window import Window as CW
+    from pyspark.sql.window import Window as SW
 
 
 @unittest.skipIf(is_remote_only(), "Requires JVM access")
@@ -614,6 +614,13 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
                 .toPandas(),
                 check_exact=False,
             )
+
+        # collect_union takes an array-typed column; build one via array(b, c).
+        self.assert_eq(
+            cdf.groupBy("a").agg(CF.sort_array(CF.collect_union(CF.array("b", "c")))).toPandas(),
+            sdf.groupBy("a").agg(SF.sort_array(SF.collect_union(SF.array("b", "c")))).toPandas(),
+            check_exact=False,
+        )
 
         for cfunc, sfunc in [
             (CF.corr, SF.corr),
@@ -2222,6 +2229,14 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         self.assert_eq(
             cdf.select(CF.translate(cdf.b, "abc", "xyz")).toPandas(),
             sdf.select(SF.translate(sdf.b, "abc", "xyz")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.instr(cdf.b, "abc", 1)).toPandas(),
+            sdf.select(SF.instr(sdf.b, "abc", 1)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.instr(cdf.e, ".", -1, 2)).toPandas(),
+            sdf.select(SF.instr(sdf.e, ".", -1, 2)).toPandas(),
         )
 
     # TODO(SPARK-41283): To compare toPandas for test cases with dtypes marked

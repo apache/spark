@@ -40,12 +40,12 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
-  test("single cluster") {
+  test("single cluster with empty partitions") {
     val data = sc.parallelize(Seq(
       Vectors.dense(6.0, 9.0),
       Vectors.dense(5.0, 10.0),
       Vectors.dense(4.0, 11.0)
-    ))
+    ), 4)
 
     // expectations
     val Ew = 1.0

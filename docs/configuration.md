@@ -1606,6 +1606,21 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.ui.holdEnabled</code></td>
+  <td>true</td>
+  <td>
+    Allows the whole application to be held and resumed from the web UI. Holding gracefully
+    decommissions all executors and stops requesting new ones. Cached blocks are not preserved
+    and are recomputed after resuming. This takes effect only when
+    <code>spark.decommission.enabled</code> is true, the shuffle data is kept outside the
+    executors (through either <code>spark.shuffle.service.enabled</code> or a
+    <code>ShuffleDataIO</code> with reliable storage), and the cluster manager can hold
+    executors: Standalone, YARN, and Kubernetes with
+    <code>spark.kubernetes.allocation.pods.allocator=direct</code>.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
   <td><code>spark.ui.threadDumpsEnabled</code></td>
   <td>true</td>
   <td>
@@ -2091,7 +2106,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.rdd.compress</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Whether to compress serialized RDD partitions (e.g. for
     <code>StorageLevel.MEMORY_ONLY_SER</code> in Java
@@ -2224,7 +2239,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.cleaner.periodicGC.interval</code></td>
   <td>30min</td>
   <td>
-    Controls how often to trigger a garbage collection.<br><br>
+    Controls how often to trigger a garbage collection. Setting this to 0 or a negative
+    value disables the periodic garbage collection.<br><br>
     This context cleaner triggers cleanups only when weak references are garbage collected.
     In long-running applications with large driver JVMs, where there is little memory pressure
     on the driver, this may happen very occasionally or not at all. Not cleaning at all may
@@ -3131,9 +3147,11 @@ Apart from these, the following properties are also available, and may be useful
     slots on a single executor and the task is taking longer time than the threshold. This config
     helps speculate stage with very few tasks. Regular speculation configs may also apply if the
     executor slots are large enough. E.g. tasks might be re-launched if there are enough successful
-    runs even though the threshold hasn't been reached. The number of slots is computed based on
-    the conf values of spark.executor.cores and spark.task.cpus minimum 1.
-    Default unit is bytes, unless otherwise specified.
+    runs even though the threshold hasn't been reached. The number of slots is the maximum
+    number of concurrent tasks per executor for the stage's resource profile, computed from
+    the executor cores and the task cpus amount (which may be fractional), or 1 when the
+    executor cores are not known.
+    Default unit is milliseconds, unless otherwise specified.
   </td>
   <td>3.0.0</td>
 </tr>
@@ -3141,7 +3159,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.speculation.efficiency.processRateMultiplier</code></td>
   <td>0.75</td>
   <td>
-    A multiplier that used when evaluating inefficient tasks. The higher the multiplier
+    A multiplier that is used when evaluating inefficient tasks. The higher the multiplier
     is, the more tasks will be possibly considered as inefficient.
   </td>
   <td>3.4.0</td>
@@ -3176,7 +3194,10 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.task.cpus</code></td>
   <td>1</td>
   <td>
-    Number of cores to allocate for each task.
+    Number of cores to allocate for each task. This can also be set to a fractional value,
+    either below 1 (e.g. <code>0.2</code>) to allow multiple tasks to share a CPU core, or
+    above 1 (e.g. <code>1.5</code>). In either case the number of tasks that can run
+    concurrently on an executor is <code>floor(executor cores / spark.task.cpus)</code>.
   </td>
   <td>0.5.0</td>
 </tr>
@@ -3559,6 +3580,30 @@ They are typically set via the config file and command-line options with `--conf
   </td>
   <td>Sets the maximum inbound message size for the gRPC requests. Requests with a larger payload will fail.</td>
   <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.grpc.keepAlive.enabled</code></td>
+  <td>
+    true
+  </td>
+  <td>Whether the server sends gRPC/HTTP2 keepalive PINGs to detect and terminate silently-dead client connections. Can be turned off as an escape hatch, e.g. if it interacts badly with a particular network path, or a server environment is prone to stalls (long GC pauses, etc.) long enough to trip false-positive disconnects.</td>
+  <td>4.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.grpc.keepAlive.time</code></td>
+  <td>
+    60s
+  </td>
+  <td>Sets the time the server waits for the connection to be idle before sending a gRPC/HTTP2 keepalive PING, to detect and terminate a silently-dead connection (e.g. after a NAT gateway or load balancer drops an idle connection mapping without closing the socket). The server separately tolerates client-sent keepalive PINGs no more often than every 10s regardless of this setting; a client configured with <code>grpc_keepalive_time_ms</code> below that floor will have its connection torn down as "too_many_pings".</td>
+  <td>4.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.grpc.keepAlive.timeout</code></td>
+  <td>
+    20s
+  </td>
+  <td>Sets how long the server waits for a keepalive PING ack before considering the connection dead.</td>
+  <td>4.3.0</td>
 </tr>
 <tr>
   <td><code>spark.connect.extensions.relation.classes</code></td>

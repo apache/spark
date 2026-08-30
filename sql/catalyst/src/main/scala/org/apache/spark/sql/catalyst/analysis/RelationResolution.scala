@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.mutable
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
@@ -34,16 +32,17 @@ import org.apache.spark.sql.connector.catalog.{
   CatalogPlugin,
   CatalogV2Util,
   ChangelogContext,
+  DelegatingTable,
   Identifier,
   LookupCatalog,
-  MetadataTable,
+  Relation,
+  RelationCatalog,
   Table,
   TableCatalog,
-  TableViewCatalog,
   V1Table,
   V2TableWithV1Fallback,
-  ViewCatalog,
-  ViewInfo
+  View,
+  ViewCatalog
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
@@ -60,11 +59,10 @@ class RelationResolution(
     with LookupCatalog
     with SQLConfHelper {
 
-  type CacheKey = (Seq[String], Option[TimeTravelSpec])
-
   val v1SessionCatalog = catalogManager.v1SessionCatalog
 
-  private def relationCache: mutable.Map[CacheKey, LogicalPlan] = AnalysisContext.get.relationCache
+  private def relationCache = AnalysisContext.get.relationCache
+  private def tableCache = AnalysisContext.get.tableCache
 
   /**
    * If we are resolving database objects (relations, functions, etc.) inside views, we may need to
@@ -163,16 +161,26 @@ class RelationResolution(
   def resolveRelation(
       u: UnresolvedRelation,
       timeTravelSpec: Option[TimeTravelSpec] = None): Option[LogicalPlan] = {
-    val timeTravelSpecFromOptions = TimeTravelSpec.fromOptions(
-      u.options,
-      conf.getConf(SQLConf.TIME_TRAVEL_TIMESTAMP_KEY),
-      conf.getConf(SQLConf.TIME_TRAVEL_VERSION_KEY),
-      conf.sessionLocalTimeZone
-    )
+    val isWriteTarget = u.options.containsKey(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
+    val hasTimeTravelWriteOptions =
+      isWriteTarget && CatalogV2Util.containsTimeTravelOptions(u.options)
+    val timeTravelSpecFromOptions = if (hasTimeTravelWriteOptions) {
+      // Time travel applies to reads only. Defer the option check until the identifier is resolved
+      // so every write API reports the same qualified relation ID, without parsing the options as
+      // a read time-travel specification first.
+      None
+    } else {
+      TimeTravelSpec.fromOptions(
+        u.options,
+        conf.getConf(SQLConf.TIME_TRAVEL_TIMESTAMP_KEY),
+        conf.getConf(SQLConf.TIME_TRAVEL_VERSION_KEY),
+        conf.sessionLocalTimeZone)
+    }
     if (timeTravelSpec.nonEmpty && timeTravelSpecFromOptions.nonEmpty) {
       throw new AnalysisException("MULTIPLE_TIME_TRAVEL_SPEC", Map.empty[String, String])
     }
     val finalTimeTravelSpec = timeTravelSpec.orElse(timeTravelSpecFromOptions)
+    val isTimeTravel = finalTimeTravelSpec.isDefined || hasTimeTravelWriteOptions
     val identifier = u.multipartIdentifier
 
     // system.session.v (3 parts): only local temp view by name; same as SessionCatalog matching.
@@ -181,7 +189,7 @@ class RelationResolution(
       return resolveTempView(
         normalized,
         u.isStreaming,
-        finalTimeTravelSpec.isDefined
+        isTimeTravel
       )
     }
 
@@ -191,7 +199,7 @@ class RelationResolution(
         identifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
       val viewNameOnly = Seq(identifier.last)
       val tempSession = () =>
-        resolveTempView(viewNameOnly, u.isStreaming, finalTimeTravelSpec.isDefined)
+        resolveTempView(viewNameOnly, u.isStreaming, isTimeTravel)
       val persistentSessionDb = () =>
         tryResolvePersistent(u, identifier, finalTimeTravelSpec)
       return if (conf.prioritizeSystemCatalog) {
@@ -207,7 +215,7 @@ class RelationResolution(
       return resolveTempView(
         identifier,
         u.isStreaming,
-        finalTimeTravelSpec.isDefined
+        isTimeTravel
       ).orElse(tryResolvePersistent(u, identifier, finalTimeTravelSpec))
     }
 
@@ -217,7 +225,7 @@ class RelationResolution(
     for (step <- steps) {
       val result = step match {
         case SessionScopeStep =>
-          resolveTempView(identifier, u.isStreaming, finalTimeTravelSpec.isDefined)
+          resolveTempView(identifier, u.isStreaming, isTimeTravel)
         case PersistentCatalogStep(prefix) =>
           tryResolvePersistent(u, prefix ++ identifier, finalTimeTravelSpec)
       }
@@ -235,77 +243,112 @@ class RelationResolution(
       finalTimeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
     expandIdentifier(identifier) match {
       case CatalogAndIdentifier(catalog, ident) =>
-        val key = toCacheKey(catalog, ident, finalTimeTravelSpec)
         val planId = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
-        relationCache
-          .get(key)
+        val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
+        val finalOptions = u.clearWritePrivileges.options
+        if (writePrivileges != null) {
+          CatalogV2Util.rejectTimeTravelOptionsForWrite(catalog, ident, finalOptions)
+        }
+        // Time travel applies to reads only; reject an explicit time-travel specification on a
+        // write target with a user-facing error.
+        if (finalTimeTravelSpec.nonEmpty && writePrivileges != null) {
+          throw QueryCompilationErrors.timeTravelUnsupportedError(
+            toSQLId(ident.toQualifiedNameParts(catalog)))
+        }
+        val key = toCacheKey(catalog, ident, finalTimeTravelSpec, finalOptions)
+        // A reference that requires write privileges is never served from the per-query relation
+        // cache. The catalog authorizes the write during the uncached `loadTable` below, and a
+        // cache hit would skip that call entirely. The hit happens whenever the write target is
+        // also read in the same statement -- the target is resolved after its query (see
+        // `ResolveRelations`), so it finds the relation the query already put in the cache, e.g.
+        // for `INSERT INTO t SELECT * FROM t`.
+        //
+        // The cache key includes the options, so a hit means the options already match and each
+        // reference's own bag is honored without re-applying it here.
+        val cached = if (writePrivileges == null) relationCache.get(key) else None
+        cached
           .map(adaptCachedRelation(_, planId))
           .orElse {
-            val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
-            val finalOptions = u.clearWritePrivileges.options
-            // For a `TableViewCatalog` with no time-travel / write privileges, the single-RPC
-            // `loadTableOrView` answers both "is there a table?" and "is there a view?" in one
-            // call. Time-travel and write privileges apply to tables only, so for those the
-            // lookup falls through to the table-only `loadTable` path below; views are not
-            // reachable via the v2 fallback in those cases.
+            lazy val tableKey =
+              toTableCacheKey(catalog, ident, finalTimeTravelSpec, finalOptions)
+            val pinnedTable = if (writePrivileges == null && catalog.isInstanceOf[TableCatalog]) {
+              tableCache.get(tableKey)
+            } else {
+              None
+            }
+
+            // When this lookup through a `RelationCatalog` has no table-state options, time travel,
+            // or write privileges, the single-RPC `loadRelation` answers both "is there a table?"
+            // and "is there a view?" in one call. Table-state options, time travel, and write
+            // privileges apply to tables only, so for those the lookup falls through to the
+            // table-only `loadTable` path below. A state-aware table miss can still fall back to
+            // `loadView`;
+            // time-travel and write-privilege loads cannot.
             //
             // Skip the table-side lookup entirely for view-only catalogs (no `TableCatalog`
             // mixin): `CatalogV2Util.loadTable` would call `asTableCatalog` and throw
             // MISSING_CATALOG_ABILITY.TABLES, masking the legitimate view-resolution path.
-            val tableOrView: Option[Table] = catalog match {
-              case mc: TableViewCatalog if finalTimeTravelSpec.isEmpty && writePrivileges == null =>
-                try {
-                  Some(mc.loadTableOrView(ident))
-                } catch {
-                  case _: NoSuchTableException => None
-                }
-              case _ =>
-                val tableSide: Option[Table] = if (
-                  CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
-                ) {
-                  CatalogV2Util.loadTable(
-                    catalog,
-                    ident,
-                    finalTimeTravelSpec,
-                    Option(writePrivileges))
-                } else {
-                  None
-                }
-                // Fallback to ViewCatalog for catalogs that host views but where loadTable
-                // returned None (or was skipped because there's no TableCatalog mixin).
-                // Time-travel / write privileges only apply to tables, not views, so the
-                // fallback only fires when both are absent.
-                tableSide.orElse {
-                  if (finalTimeTravelSpec.isEmpty && writePrivileges == null) {
-                    catalog match {
-                      case vc: ViewCatalog =>
-                        try {
-                          Some(new MetadataTable(vc.loadView(ident), ident.toString))
-                        } catch {
-                          case _: NoSuchViewException => None
-                        }
-                      case _ => None
-                    }
+            val relation: Option[Relation] = pinnedTable.orElse {
+              catalog match {
+                case mc: RelationCatalog
+                    if tableKey.stateOptions.isEmpty &&
+                      finalTimeTravelSpec.isEmpty && writePrivileges == null =>
+                  try {
+                    Some(mc.loadRelation(ident))
+                  } catch {
+                    case _: NoSuchTableException => None
+                  }
+                case _ =>
+                  val tableSide: Option[Table] = if (
+                    CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
+                  ) {
+                    CatalogV2Util.loadTable(
+                      catalog,
+                      ident,
+                      finalTimeTravelSpec,
+                      Option(writePrivileges),
+                      finalOptions)
                   } else {
                     None
                   }
-                }
+                  // Fallback to ViewCatalog for catalogs that host views but where loadTable
+                  // returned None (or was skipped because there's no TableCatalog mixin).
+                  // Time-travel / write privileges only apply to tables, not views, so the
+                  // fallback only fires when both are absent.
+                  tableSide.orElse {
+                    if (finalTimeTravelSpec.isEmpty && writePrivileges == null) {
+                      catalog match {
+                        case vc: ViewCatalog =>
+                          try {
+                            Some(vc.loadView(ident))
+                          } catch {
+                            case _: NoSuchViewException => None
+                          }
+                        case _ => None
+                      }
+                    } else {
+                      None
+                    }
+                  }
+              }
             }
-            // `table` is `tableOrView` filtered to tables only -- used for cache lookup since
+            // `table` is `relation` filtered to tables only -- used for cache lookup since
             // we don't share-cache views.
-            val table: Option[Table] = tableOrView.filter {
-              case t: MetadataTable if t.getTableInfo.isInstanceOf[ViewInfo] => false
-              case _ => true
-            }
+            val table: Option[Table] = relation.collect { case t: Table => t }
 
+            // Reuse a cached relation only when its table identity and state options match. The
+            // returned relation still carries this read's complete option map.
             val sharedRelationCacheMatch = for {
               t <- table
-              if finalTimeTravelSpec.isEmpty && writePrivileges == null && !u.isStreaming
-              cached <- lookupSharedRelationCache(catalog, ident, t)
+              if pinnedTable.isEmpty && finalTimeTravelSpec.isEmpty &&
+                writePrivileges == null && !u.isStreaming
+              cached <- lookupSharedRelationCache(catalog, ident, t, tableKey.stateOptions)
             } yield {
               val updatedRelation = cached.copy(options = finalOptions)
+              updatedRelation.copyTagsFrom(cached)
               val nameParts = ident.toQualifiedNameParts(catalog)
               val aliasedRelation = SubqueryAlias(nameParts, updatedRelation)
+              tableCache.update(tableKey, cached.table)
               relationCache.update(key, aliasedRelation)
               adaptCachedRelation(aliasedRelation, planId)
             }
@@ -314,10 +357,16 @@ class RelationResolution(
               val loaded = createRelation(
                 catalog,
                 ident,
-                tableOrView,
+                relation,
                 finalOptions,
                 u.isStreaming,
                 finalTimeTravelSpec)
+              // A write target skips cache lookup above so authorization always runs, but its
+              // freshly loaded Table is still published for subsequent reads, matching the
+              // relation cache behavior below.
+              if (pinnedTable.isEmpty) {
+                table.foreach(tableCache.update(tableKey, _))
+              }
               loaded.foreach(relationCache.update(key, _))
               loaded.map(cloneWithPlanId(_, planId))
             }
@@ -344,7 +393,7 @@ class RelationResolution(
         val relation = if (u.isStreaming) {
           StreamingRelationV2(
             None, changelogTable.name, changelogTable, u.options,
-            changelogTable.columns.toAttributes, Some(catalog), Some(ident), None)
+            changelogTable.columns.toOutputAttributes, Some(catalog), Some(ident), None)
         } else {
           DataSourceV2Relation.create(changelogTable, Some(catalog), Some(ident), u.options)
         }
@@ -356,8 +405,9 @@ class RelationResolution(
   private def lookupSharedRelationCache(
       catalog: CatalogPlugin,
       ident: Identifier,
-      table: Table): Option[DataSourceV2Relation] = {
-    CatalogV2Util.lookupCachedRelation(sharedRelationCache, catalog, ident, table, conf)
+      table: Table,
+      options: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
+    CatalogV2Util.lookupCachedRelation(sharedRelationCache, catalog, ident, table, options, conf)
   }
 
   private def adaptCachedRelation(cached: LogicalPlan, planId: Option[Long]): LogicalPlan = {
@@ -373,7 +423,7 @@ class RelationResolution(
   private def createRelation(
       catalog: CatalogPlugin,
       ident: Identifier,
-      table: Option[Table],
+      relation: Option[Relation],
       options: CaseInsensitiveStringMap,
       isStreaming: Boolean,
       timeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
@@ -393,7 +443,12 @@ class RelationResolution(
       }
     }
 
-    table.map {
+    relation.map {
+      // A view is interpreted via v1: project it to a `CatalogTable` and run the v1 scan path,
+      // which expands the view text.
+      case v: View =>
+        createDataSourceV1Scan(V1Table.toCatalogTable(catalog, ident, v))
+
       // To utilize this code path to execute V1 commands, e.g. INSERT,
       // either it must be session catalog, or tracksPartitionsInCatalog
       // must be false so it does not require use catalog to manage partitions.
@@ -405,13 +460,13 @@ class RelationResolution(
           || !v1Table.catalogTable.tracksPartitionsInCatalog =>
         createDataSourceV1Scan(v1Table.v1Table)
 
-      // MetadataTable is a sentinel meaning "interpret via v1", so unlike the V1Table
+      // DelegatingTable is a sentinel meaning "interpret via v1", so unlike the V1Table
       // case above we apply no session-catalog / tracksPartitionsInCatalog guard -- any catalog
-      // returning MetadataTable has opted into v1 read semantics.
-      case t: MetadataTable =>
+      // returning DelegatingTable has opted into v1 read semantics.
+      case t: DelegatingTable =>
         createDataSourceV1Scan(V1Table.toCatalogTable(catalog, ident, t))
 
-      case table =>
+      case table: Table =>
         if (isStreaming) {
           assert(timeTravelSpec.isEmpty, "time travel is not allowed in streaming")
           val v1Fallback = table match {
@@ -426,7 +481,7 @@ class RelationResolution(
               table.name,
               table,
               options,
-              table.columns.toAttributes,
+              table.columns.toOutputAttributes,
               Some(catalog),
               Some(ident),
               v1Fallback
@@ -468,12 +523,32 @@ class RelationResolution(
   }
 
   private def getOrLoadRelation(ref: V2TableReference): LogicalPlan = {
-    val key = toCacheKey(ref.catalog, ref.identifier)
+    val key = toCacheKey(ref.catalog, ref.identifier, None, ref.options)
     relationCache.get(key) match {
       case Some(cached) =>
         adaptCachedRelation(cached, ref)
       case None =>
-        val relation = loadRelation(ref)
+        val catalog = catalogManager.catalog(ref.catalog.name).asTableCatalog
+        val tableKey = toTableCacheKey(catalog, ref.identifier, None, ref.options)
+        val relation = tableCache.get(tableKey) match {
+          case Some(pinnedTable) =>
+            createRelation(ref, catalog, pinnedTable)
+          case None =>
+            val table = CatalogV2Util.getTable(catalog, ref.identifier, options = ref.options)
+            val sharedCacheMatch = if (ref.context.sharedCacheable) {
+              lookupSharedRelationCache(catalog, ref.identifier, table, tableKey.stateOptions)
+            } else {
+              None
+            }
+            sharedCacheMatch match {
+              case Some(cached) =>
+                tableCache.update(tableKey, cached.table)
+                adaptCachedRelation(cached, ref)
+              case None =>
+                tableCache.update(tableKey, table)
+                createRelation(ref, catalog, table)
+            }
+        }
         relationCache.update(key, relation)
         relation
     }
@@ -490,7 +565,17 @@ class RelationResolution(
    */
   private def loadRelation(ref: V2TableReference): LogicalPlan = {
     val resolvedCatalog = catalogManager.catalog(ref.catalog.name).asTableCatalog
+    // Only WriteTargetContext gets here (the sole non-cacheable context); it is currently used by
+    // transactional streaming writes and does not retain required write privileges. Keep the
+    // legacy load unchanged; options and privileges must be handled together in a follow-up.
     val table = resolvedCatalog.loadTable(ref.identifier)
+    createRelation(ref, resolvedCatalog, table)
+  }
+
+  private def createRelation(
+      ref: V2TableReference,
+      resolvedCatalog: TableCatalog,
+      table: Table): DataSourceV2Relation = {
     V2TableReferenceUtils.validateLoadedTable(table, ref)
     DataSourceV2Relation(
       table = table,
@@ -528,8 +613,22 @@ class RelationResolution(
   private def toCacheKey(
       catalog: CatalogPlugin,
       ident: Identifier,
-      timeTravelSpec: Option[TimeTravelSpec] = None): CacheKey = {
-    ((catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq, timeTravelSpec)
+      timeTravelSpec: Option[TimeTravelSpec],
+      options: CaseInsensitiveStringMap): RelationCacheKey = {
+    val nameParts = (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq
+    RelationCacheKey(nameParts, timeTravelSpec, options)
+  }
+
+  private def toTableCacheKey(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      timeTravelSpec: Option[TimeTravelSpec],
+      options: CaseInsensitiveStringMap): TableCacheKey = {
+    TableCacheKey(
+      catalog,
+      ident,
+      timeTravelSpec,
+      CatalogV2Util.extractTableStateOptions(catalog, options))
   }
 
   private def cloneWithPlanId(plan: LogicalPlan, planId: Option[Long]): LogicalPlan = {

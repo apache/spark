@@ -32,15 +32,17 @@ import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, Resolv
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
-import org.apache.spark.sql.connector.catalog.CatalogPlugin
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
 import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
@@ -418,9 +420,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     try {
       EliminateSubqueryAliases(plan) match {
         case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
-          val table = catalog.loadTable(ident)
+          val table = CatalogV2Util.getTable(catalog, ident, options = r.options)
           if (r.table.id == table.id) {
-            Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
+            Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident), r.options))
           } else {
             None
           }
@@ -435,17 +437,25 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   private[sql] def lookupCachedTable(
-      name: Seq[String],
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      tableId: Option[String],
+      stateOptions: CaseInsensitiveStringMap,
       resolver: Resolver): Option[LogicalPlan] = {
+    val name = ident.toQualifiedNameParts(catalog)
     val cachedRelations = findCachedRelations(name, resolver)
-    cachedRelations match {
-      case cachedRelation +: _ =>
-        CacheManager.logCacheOperation(
-          log"Relation cache hit for table ${MDC(TABLE_NAME, name.quoted)}")
-        Some(cachedRelation)
-      case _ =>
-        None
+    val cachedRelation = cachedRelations.collectFirst {
+      case r: DataSourceV2Relation
+          if r.catalog.contains(catalog) && r.identifier.contains(ident) &&
+            tableId.forall(_ == r.table.id) &&
+            CatalogV2Util.extractTableStateOptions(catalog, r.options) == stateOptions =>
+        r
     }
+    cachedRelation.foreach { _ =>
+      CacheManager.logCacheOperation(
+        log"Relation cache hit for table ${MDC(TABLE_NAME, name.quoted)}")
+    }
+    cachedRelation
   }
 
   private def findCachedRelations(
@@ -479,8 +489,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     lookupCachedDataInternal(normalized)
   }
 
-  private def lookupCachedDataInternal(plan: LogicalPlan): Option[CachedData] = {
-    val result = cachedData.find(cd => plan.sameResult(cd.plan))
+  private def lookupCachedDataInternal(
+      plan: LogicalPlan,
+      canUse: CachedData => Boolean = _ => true): Option[CachedData] = {
+    val result = cachedData.find(cd => plan.sameResult(cd.plan) && canUse(cd))
     if (result.isDefined) {
       CacheManager.logCacheOperation(log"Dataframe cache hit for input plan:" +
         log"\n${MDC(QUERY_PLAN, plan)} matched with cache entry:" +
@@ -489,16 +501,40 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     result
   }
 
+  // Decides whether the cached entry can be substituted into a plan being executed inside
+  // the given transaction. Collects only the scans whose table belongs to the transaction's
+  // catalog and asks the connector whether reusing the cached snapshot is compatible with its
+  // isolation contract. Note, this function has a side effect of mutating the read set of the
+  // connector.
+  private def validateCachedEntryForTransaction(cd: CachedData, txn: Transaction): Boolean = {
+    val txnCatalogName = txn.catalog().name()
+    val txnTables = cd.cachedRepresentation.cacheBuilder.logicalPlan.collectWithSubqueries {
+      case r: DataSourceV2Relation if r.catalog.exists(_.name() == txnCatalogName) => r.table
+    }.toSet
+    if (txnTables.isEmpty) return true
+
+    val scans = collectWithSubqueries(cd.cachedRepresentation.cacheBuilder.cachedPlan) {
+      case b: BatchScanExec if txnTables.contains(b.table) => b.scan
+    }
+    scans.nonEmpty && txn.registerScans(scans.toArray)
+  }
+
   /**
    * Replaces segments of the given logical plan with cached versions where possible. The input
    * plan must be normalized.
+   *
+   * @param plan   the plan to rewrite.
+   * @param canUse predicate filtering which cached entries are eligible for substitution.
+   *               Defaults to accepting any entry.
    */
-  private[sql] def useCachedData(plan: LogicalPlan): LogicalPlan = {
+  private[sql] def useCachedData(
+      plan: LogicalPlan,
+      canUse: CachedData => Boolean = _ => true): LogicalPlan = {
     val newPlan = plan transformDown {
       case command: Command => command
 
       case currentFragment =>
-        lookupCachedDataInternal(currentFragment).map { cached =>
+        lookupCachedDataInternal(currentFragment, canUse).map { cached =>
           // After cache lookup, we should still keep the hints from the input plan.
           val hints = EliminateResolvedHint.extractHintsFromPlan(currentFragment)._2
           val cachedPlan = cached.cachedRepresentation.withOutput(currentFragment.output)
@@ -511,7 +547,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
 
     val result = newPlan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-      case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan))
+      case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan, canUse))
     }
 
     if (result.fastEquals(plan)) {
@@ -526,6 +562,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
     result
   }
+
+  /** Transaction-aware variant of [[useCachedData]]. */
+  private[sql] def useCachedData(plan: LogicalPlan, txn: Transaction): LogicalPlan =
+    useCachedData(plan, validateCachedEntryForTransaction(_, txn))
 
   /**
    * Tries to re-cache all the cache entries that contain `resourcePath` in one or more

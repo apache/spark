@@ -31,13 +31,19 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
   with AliasAwareOutputExpression {
   final override def outputPartitioning: Partitioning = {
     val (keyedPartitionings, otherPartitionings) =
-      flattenPartitioning(child.outputPartitioning).partition(_.isInstanceOf[KeyedPartitioning])
+      PartitioningCollection.flatten(child.outputPartitioning)
+        .partition(_.isInstanceOf[KeyedPartitioning])
 
     val projectedKPs =
       projectKeyedPartitionings(keyedPartitionings.map(_.asInstanceOf[KeyedPartitioning]))
     val projectedOthers = projectOtherPartitionings(otherPartitionings)
 
-    (projectedKPs ++ projectedOthers).take(aliasCandidateLimit) match {
+    // Materialize into a strict collection. The projected partitionings are lazy `LazyList`s
+    // (needed so `take` can short-circuit); storing an unforced `LazyList` in the returned
+    // `PartitioningCollection` lets each plan node re-wrap the child's lazy list, and across a
+    // deep projection chain that nesting overflows the stack when the partitioning is later
+    // serialized or deeply traversed.
+    (projectedKPs ++ projectedOthers).take(aliasCandidateLimit).toList match {
       case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
       case Seq(p) => p
       case ps => PartitioningCollection.fromPartitionings(ps)
@@ -147,15 +153,6 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
       projectablePositions.map(i => () => alternativesPerPosition(i)))
       .map(projectedExprs =>
         new KeyedPartitioning(projectedExprs, sharedKeys, isGrouped, isNarrowed))
-  }
-
-  private def flattenPartitioning(partitioning: Partitioning): Seq[Partitioning] = {
-    partitioning match {
-      case PartitioningCollection(childPartitionings) =>
-        childPartitionings.flatMap(flattenPartitioning)
-      case rest =>
-        rest +: Nil
-    }
   }
 }
 

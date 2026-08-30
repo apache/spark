@@ -14,14 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from abc import ABC, abstractmethod
-from io import StringIO
 import cProfile
 import os
 import pstats
+import warnings
+from abc import ABC, abstractmethod
+from io import StringIO
 from threading import RLock
 from types import CodeType, TracebackType
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -30,10 +32,8 @@ from typing import (
     Optional,
     Tuple,
     Union,
-    TYPE_CHECKING,
     overload,
 )
-import warnings
 
 import pyspark.memory_profiler_ext
 from pyspark.accumulators import (
@@ -394,7 +394,7 @@ class ProfilerCollector(ABC):
                 os.makedirs(path, exist_ok=True)
                 p = os.path.join(path, f"udf_{id}_memory.txt")
 
-                with open(p, "w+") as f:
+                with open(p, "w+", encoding="utf-8") as f:
                     MemoryProfiler._show_results(cm, stream=f)
 
         if id is not None:

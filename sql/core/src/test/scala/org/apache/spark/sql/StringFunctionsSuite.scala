@@ -145,6 +145,19 @@ class StringFunctionsSuite extends SharedSparkSession {
     checkAnswer(df.selectExpr("levenshtein(l, null, 0)"), Seq(Row(null), Row(null)))
   }
 
+  test("string jaro_winkler_similarity") {
+    val df = Seq(("MARTHA", "MARHTA"), ("ABC", "XYZ")).toDF("l", "r")
+    checkAnswer(
+      df.select(jaro_winkler_similarity($"l", $"r")),
+      Seq(Row(0.9611111111111111), Row(0.0)))
+    checkAnswer(
+      df.selectExpr("jaro_winkler_similarity(l, r)"),
+      Seq(Row(0.9611111111111111), Row(0.0)))
+    checkAnswer(
+      df.select(jaro_winkler_similarity($"l", lit(null))),
+      Seq(Row(null), Row(null)))
+  }
+
   test("string rlike / regexp / regexp_like") {
     val df = Seq(
       ("1a 2b 14m", "\\d+b"),
@@ -295,6 +308,18 @@ class StringFunctionsSuite extends SharedSparkSession {
       Row("AQIDBA==", bytes))
   }
 
+  test("string to_base32/from_base32 function") {
+    val bytes = "foobar".getBytes("UTF-8")
+    val df = Seq((bytes, "MZXW6YTBOI======")).toDF("a", "b")
+    checkAnswer(
+      df.select(to_base32($"a"), from_base32($"b")),
+      Row("MZXW6YTBOI======", bytes))
+
+    checkAnswer(
+      df.selectExpr("to_base32(a)", "from_base32(b)"),
+      Row("MZXW6YTBOI======", bytes))
+  }
+
   test("string overlay function") {
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
@@ -394,6 +419,16 @@ class StringFunctionsSuite extends SharedSparkSession {
     // scalastyle:on
   }
 
+  test("string normalize") {
+    // scalastyle:off
+    val df = Seq("\uFB01").toDF("s")
+    checkAnswer(df.select(normalize($"s")), Row("\uFB01"))
+    checkAnswer(df.select(normalize($"s", lit("NFKC"))), Row("fi"))
+    checkAnswer(df.selectExpr("normalize(s, 'NFKC')"), Row("fi"))
+    checkAnswer(df.select(normalize(lit(null), lit("NFC"))), Row(null))
+    // scalastyle:on
+  }
+
   test("string translate") {
     val df = Seq(("translate", "")).toDF("a", "b")
     checkAnswer(df.select(translate($"a", "rnlt", "123")), Row("1a2s3ae"))
@@ -455,6 +490,47 @@ class StringFunctionsSuite extends SharedSparkSession {
     checkAnswer(
       df.selectExpr("instr(a, b)"),
       Row(1))
+
+    checkAnswer(
+      df.selectExpr("instr(a, b, 2)"),
+      Row(2))
+
+    checkAnswer(
+      df.select(instr($"a", $"b", -1)),
+      Row(2))
+
+    checkAnswer(
+      df.selectExpr("instr(a, '', -1)"),
+      Row(1))
+
+    checkAnswer(
+      df.selectExpr("instr(a, b, 1, 2)"),
+      Row(2))
+
+    checkAnswer(
+      df.select(instr($"a", $"b", -1, 2)),
+      Row(1))
+
+    checkAnswer(
+      df.selectExpr("instr(a, '', -1, 2)"),
+      Row(1))
+
+    checkAnswer(
+      df.selectExpr("instr('abcde', 'cd', -3, 1)"),
+      Row(3))
+
+    // Test throw exception when occurrence <= 0
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        spark.sql("SELECT instr('abc', 'b', 1, 0)").collect()
+      },
+      condition = "INVALID_PARAMETER_VALUE.OCCURRENCE",
+      parameters = Map(
+        "functionName" -> toSQLId("instr"),
+        "parameter" -> toSQLId("occurrence"),
+        "actual" -> "0"
+      )
+    )
   }
 
   test("string substring_index function") {
@@ -1486,6 +1562,63 @@ class StringFunctionsSuite extends SharedSparkSession {
         sql("SELECT split(s, '-')[size(split(s, '-')) - 1] FROM t"),
         Seq(Row("b"), Row(null))
       )
+    }
+  }
+
+  test("SPARK-59043: SimplifyCaseConversionExpressions preserves Unicode semantics") {
+    val excludedConf = "org.apache.spark.sql.catalyst.optimizer.SimplifyCaseConversionExpressions"
+    Seq(true, false).foreach { optimizerEnabled =>
+      val confModifier = if (optimizerEnabled) {
+        Map.empty[String, String]
+      } else {
+        Map(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> excludedConf)
+      }
+
+      withSQLConf(confModifier.toSeq: _*) {
+        // scalastyle:off
+        // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+        // 1. Turkish dotless i (U+0131 LATIN SMALL LETTER DOTLESS I)
+        checkAnswer(
+          sql("SELECT lower(upper('ı')) AS result"),
+          Row("i") :: Nil
+        )
+        checkAnswer(
+          sql("SELECT lower(upper(s)) FROM (VALUES ('ı')) AS t(s)"),
+          Row("i") :: Nil
+        )
+        checkAnswer(
+          sql(
+            """SELECT lower(upper(s2)) AS result
+              |FROM (VALUES ('ı')) AS t(s)
+              |LATERAL VIEW explode(array(s)) e AS s2""".stripMargin),
+          Row("i") :: Nil
+        )
+
+        // 2. Micro sign (U+00B5 MICRO SIGN)
+        checkAnswer(
+          sql("SELECT lower(upper('µ')) AS result"),
+          Row("μ") :: Nil
+        )
+
+        // 3. German Sharp S (U+00DF LATIN SMALL LETTER SHARP S)
+        checkAnswer(
+          sql("SELECT lower(upper('ß')) AS result"),
+          Row("ss") :: Nil
+        )
+
+        // 4. Kelvin Sign (U+212A KELVIN SIGN)
+        checkAnswer(
+          sql("SELECT upper(lower('K')) AS result"),
+          Row("K") :: Nil
+        )
+        // scalastyle:on
+
+        // 5. Verify same-case idempotent operations still simplify
+        checkAnswer(
+          sql("SELECT upper(upper('abc')), lower(lower('XYZ'))"),
+          Row("ABC", "xyz") :: Nil
+        )
+      }
     }
   }
 }

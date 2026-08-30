@@ -36,10 +36,11 @@ import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeleteSummaryImpl, DeltaWrite, DeltaWriter, InsertSummaryImpl, MergeSummaryImpl, PhysicalWriteInfoImpl, RowLevelOperation, RowLevelOperationTable, UpdateSummaryImpl, Write, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SQLExecution, UnaryExecNode}
+import org.apache.spark.sql.execution.{EmptyRDDWithPartitions, QueryExecution, SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLLastAttemptMetric, SQLLastAttemptMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -98,7 +99,7 @@ case class CreateTableAsSelectExec(
       .withProperties(properties.asJava)
       .build()
     val table = Option(catalog.createTable(ident, tableInfo))
-      .getOrElse(catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
+      .getOrElse(loadTableForInsert(catalog, ident, writeOptions))
     val result = writeToTable(catalog, table, writeOptions, ident, query, overwrite = false)
     transaction.foreach(TransactionUtils.commit)
     result
@@ -142,7 +143,7 @@ case class AtomicCreateTableAsSelectExec(
       .withProperties(properties.asJava)
       .build()
     val stagedTable = Option(catalog.stageCreate(ident, tableInfo)
-    ).getOrElse(catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
+    ).getOrElse(loadTableForInsert(catalog, ident, writeOptions))
     writeToTable(catalog, stagedTable, writeOptions, ident, query, overwrite = false)
   }
 }
@@ -205,7 +206,7 @@ case class ReplaceTableAsSelectExec(
       .withProperties(properties.asJava)
       .build()
     val table = Option(catalog.createTable(ident, tableInfo))
-      .getOrElse(catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
+      .getOrElse(loadTableForInsert(catalog, ident, writeOptions))
     val result = writeToTable(
       catalog, table, writeOptions, ident, refreshedQuery,
       overwrite = true, refreshPhaseEnabled = false)
@@ -274,8 +275,7 @@ case class AtomicReplaceTableAsSelectExec(
         ident,
         CatalogV2Util.searchPathForTableIdentifier(catalog, ident))
     }
-    val table = Option(staged).getOrElse(
-      catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
+    val table = Option(staged).getOrElse(loadTableForInsert(catalog, ident, writeOptions))
     writeToTable(catalog, table, writeOptions, ident, query, overwrite = true)
   }
 }
@@ -606,7 +606,7 @@ trait V2TableWriteExec
       // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single
       // partition rdd to make sure we at least set up one write task to write the metadata.
       if (tempRdd.partitions.length == 0) {
-        sparkContext.parallelize(Array.empty[InternalRow].toImmutableArraySeq, 1)
+        new EmptyRDDWithPartitions(sparkContext, 1)
       } else {
         tempRdd
       }
@@ -964,10 +964,19 @@ case class DeltaWithMetadataWritingSparkTask(
 private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
   override def output: Seq[Attribute] = Nil
 
+  protected def loadTableForInsert(
+      catalog: TableCatalog,
+      ident: Identifier,
+      writeOptions: Map[String, String]): Table = {
+    val options = new CaseInsensitiveStringMap(writeOptions.asJava)
+    CatalogV2Util.loadTableForV2Write(
+      catalog, ident, Set(TableWritePrivilege.INSERT), options)
+  }
+
   protected def getV2Columns(schema: StructType, forceNullable: Boolean): Array[Column] = {
     val rawSchema = CharVarcharUtils.getRawSchema(removeInternalMetadata(schema), conf)
     val tableSchema = if (forceNullable) rawSchema.asNullable else rawSchema
-    CatalogV2Util.structTypeToV2Columns(tableSchema)
+    CatalogV2Util.structTypeToV2Columns(tableSchema, keepIds = false)
   }
 
   protected def writeToTable(
@@ -979,7 +988,9 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
       overwrite: Boolean,
       refreshPhaseEnabled: Boolean = true): Seq[InternalRow] = {
     Utils.tryWithSafeFinallyAndFailureCallbacks({
-      val relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
+      val tableOptions = new CaseInsensitiveStringMap(writeOptions.asJava)
+      val relation =
+        DataSourceV2Relation.create(table, Some(catalog), Some(ident), tableOptions)
       val writeCommand = if (overwrite) {
         OverwriteByExpression.byPosition(relation, query, Literal.TrueLiteral, writeOptions)
       } else {

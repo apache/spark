@@ -22,25 +22,26 @@ import string
 
 from pyspark.errors import PySparkValueError
 from pyspark.sql.types import (
-    StructType,
-    StructField,
-    StringType,
+    ArrayType,
     IntegerType,
     LongType,
     MapType,
-    ArrayType,
     Row,
+    StringType,
+    StructField,
+    StructType,
 )
+from pyspark.testing.connectutils import ReusedMixedTestCase, should_test_connect
 from pyspark.testing.objects import MyObject, PythonOnlyUDT
-from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 if should_test_connect:
-    import pandas as pd
     import numpy as np
+    import pandas as pd
+
+    from pyspark.errors.exceptions.connect import ParseException
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
-    from pyspark.errors.exceptions.connect import ParseException
 
 
 class SparkConnectCreationTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
@@ -49,7 +50,7 @@ class SparkConnectCreationTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
         df = self.connect.createDataFrame(pdf)
         rows = df.filter(df.a == CF.lit(3)).collect()
-        self.assertTrue(len(rows) == 1)
+        self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0][0], 3)
         self.assertEqual(rows[0][1], "c")
 
@@ -549,9 +550,10 @@ class SparkConnectCreationTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
     def test_create_dataframe_from_pandas_with_ns_timestamp(self):
         """Truncate the timestamps for nanoseconds."""
-        from datetime import datetime, timezone, timedelta
-        from pandas import Timestamp
+        from datetime import datetime, timedelta, timezone
+
         import pandas as pd
+        from pandas import Timestamp
 
         # Nanoseconds are truncated to microseconds in the serializer
         # Arrow will throw an error if precision is lost

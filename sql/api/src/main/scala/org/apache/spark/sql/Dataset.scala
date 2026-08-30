@@ -1517,7 +1517,7 @@ abstract class Dataset[T] extends Serializable {
    *   ds.groupingSets(Seq(Seq($"department", $"group"), Seq()), $"department", $"group").avg()
    *
    *   // Compute the max age and average salary, group by specific grouping sets.
-   *   ds.groupingSets(Seq($"department", $"gender"), Seq()), $"department", $"group").agg(Map(
+   *   ds.groupingSets(Seq(Seq($"department", $"gender"), Seq()), $"department", $"group").agg(Map(
    *     "salary" -> "avg",
    *     "age" -> "max"
    *   ))

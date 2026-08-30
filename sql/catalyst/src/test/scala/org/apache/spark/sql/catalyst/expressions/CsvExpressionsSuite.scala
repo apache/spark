@@ -268,7 +268,10 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (3, LocalTime.of(14, 30, 45, 123000000), "14:30:45.123"),
       (4, LocalTime.of(14, 30, 45, 123400000), "14:30:45.1234"),
       (5, LocalTime.of(14, 30, 45, 123450000), "14:30:45.12345"),
-      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456")
+      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456"),
+      (7, LocalTime.of(14, 30, 45, 123456700), "14:30:45.1234567"),
+      (8, LocalTime.of(14, 30, 45, 123456780), "14:30:45.12345678"),
+      (9, LocalTime.of(14, 30, 45, 123456789), "14:30:45.123456789")
     )
 
     testData.foreach { case (precision, timeValue, timeStr) =>
@@ -311,4 +314,18 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       CsvToStructs(schema, Map.empty, Literal.create(null, StringType), UTC_OPT),
       null)
   }
+
+  test("CsvToStructs and StructsToCsv are stateful and produce fresh copies") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+
+    val csvToStructs = CsvToStructs(schema, Map.empty, Literal("1"), UTC_OPT)
+    assert(csvToStructs.stateful)
+    assert(csvToStructs.freshCopyIfContainsStatefulExpression() ne csvToStructs)
+
+    val struct = Literal.create(create_row(1), schema)
+    val structsToCsv = StructsToCsv(Map.empty, struct, UTC_OPT)
+    assert(structsToCsv.stateful)
+    assert(structsToCsv.freshCopyIfContainsStatefulExpression() ne structsToCsv)
+  }
+
 }

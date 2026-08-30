@@ -318,17 +318,27 @@ object RandomDataGenerator {
             .map(s => TimestampNanosTestUtils.parseSpecialNanosLTZ(s, ZoneId.systemDefault()))
             .map(i => Instant.ofEpochSecond(i.getEpochSecond, truncate(i.getNano).toLong))
         )
-      case _: TimeType =>
+      case t: TimeType =>
+        // Honor the declared precision: both the uniform random draw and the special values are
+        // truncated to `t.precision` so the generated TIME(p) values carry at most p
+        // fractional-second digits (mirrors the nanosecond-timestamp branches above).
         val specialTimes = Seq(
           "00:00:00",
-          "23:59:59.999999"
-        )
+          "23:59:59.999999",
+          "23:59:59.999999999"
+        ).map(LocalTime.parse)
+          .map(lt => DateTimeUtils.nanosToLocalTime(
+            DateTimeUtils.truncateTimeToPrecision(
+              DateTimeUtils.localTimeToNanos(lt), t.precision)))
         randomNumeric[LocalTime](
           rand,
           (rand: Random) => {
-            DateTimeUtils.nanosToLocalTime(rand.between(0, 24 * 60 * 60 * 1000 * 1000L) * 1000L)
+            // The full valid range is [0, 86_399_999_999_999] nanoseconds since midnight.
+            val nanos = DateTimeUtils.truncateTimeToPrecision(
+              rand.between(0L, 24 * 60 * 60 * 1000 * 1000 * 1000L), t.precision)
+            DateTimeUtils.nanosToLocalTime(nanos)
           },
-          specialTimes.map(LocalTime.parse)
+          specialTimes
         )
       case CalendarIntervalType => Some(() => {
         val months = rand.nextInt(1000)

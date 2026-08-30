@@ -467,12 +467,13 @@ class UISuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-54563: Jetty sanitizes newlines in X-Frame-Options header") {
+  test("SPARK-54563: Jetty sanitizes newlines in CSP frame-ancestors header") {
     val valueWithNewlines = "example.com\nmalicious\nheader"
     val (conf, securityMgr, sslOptions) = sslDisabledConf()
     // Set the config value directly to bypass validation, simulating what could happen
     // if someone bypasses the config validation (e.g., through direct property setting)
     conf.set("spark.ui.allowFramingFrom", valueWithNewlines)
+    conf.set("spark.ui.contentSecurityPolicy.enabled", "true")
 
     val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
     try {
@@ -482,16 +483,20 @@ class UISuite extends SparkFunSuite {
       val url = new URI(s"http://$localhost:${serverInfo.boundPort}/test/root").toURL
       TestUtils.withHttpConnection(url) { conn =>
         val xFrameOptions = conn.getHeaderField("X-Frame-Options")
-        // Jetty should sanitize newlines by replacing them with spaces
-        assert(xFrameOptions !== null, "X-Frame-Options header should be present")
-        assert(!xFrameOptions.contains("\n"),
-          "X-Frame-Options header should not contain newlines")
-        assert(!xFrameOptions.contains("\r"),
-          "X-Frame-Options header should not contain carriage returns")
-        // The header value should have newlines replaced with spaces
-        val expectedValue = "ALLOW-FROM " + valueWithNewlines.replaceAll("[\r\n]+", " ")
-        assert(xFrameOptions === expectedValue,
-          s"X-Frame-Options header should have newlines replaced with spaces")
+        // X-Frame-Options is always SAMEORIGIN as a legacy fallback
+        assert(xFrameOptions === "SAMEORIGIN",
+          "X-Frame-Options should always be SAMEORIGIN")
+
+        // The allowFramingFrom value is now in the CSP frame-ancestors directive.
+        // Jetty should sanitize newlines in the CSP header.
+        val csp = conn.getHeaderField("Content-Security-Policy")
+        assert(csp !== null, "Content-Security-Policy header should be present")
+        assert(csp.contains("frame-ancestors"),
+          "CSP should contain frame-ancestors directive")
+        assert(!csp.contains("\n"),
+          "CSP header should not contain newlines")
+        assert(!csp.contains("\r"),
+          "CSP header should not contain carriage returns")
       }
     } finally {
       stopServer(serverInfo)
@@ -529,9 +534,39 @@ class UISuite extends SparkFunSuite {
       lastRequest = req
       res.sendError(HttpServletResponse.SC_OK)
     }
-
   }
 
+  test("SPARK-58521: createProxyHandler forwards X-Forwarded-Context header") {
+    val (conf, securityMgr, sslOptions) = sslDisabledConf()
+    val targetServer = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
+    val proxyServer = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
+
+    @volatile var forwardedContext: String = null
+    val targetHandler = new ServletContextHandler()
+    targetHandler.setContextPath("/")
+    targetHandler.addServlet(new ServletHolder(new HttpServlet {
+      override def doGet(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+        forwardedContext = req.getHeader("X-Forwarded-Context")
+        resp.setStatus(HttpServletResponse.SC_OK)
+      }
+    }), "/*")
+    targetServer.addHandler(targetHandler, securityMgr)
+
+    val targetAddr = s"http://$localhost:${targetServer.boundPort}"
+    val proxyHandler = JettyUtils.createProxyHandler(_ => Some(targetAddr))
+    proxyServer.addHandler(proxyHandler, securityMgr)
+
+    try {
+      val proxyUrl = s"http://$localhost:${proxyServer.boundPort}/proxy/app-123/stages/"
+      TestUtils.withHttpConnection(new URI(proxyUrl).toURL) { conn =>
+        assert(conn.getResponseCode === HttpServletResponse.SC_OK)
+        assert(forwardedContext === "/proxy/app-123")
+      }
+    } finally {
+      stopServer(proxyServer)
+      stopServer(targetServer)
+    }
+  }
 }
 
 // Filter for testing; returns a configurable code for every request.

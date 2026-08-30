@@ -53,6 +53,22 @@ class CollationTypePrecedenceSuite extends SharedSparkSession {
     assert(DataType.equalsIgnoreNullability(querySchema, expectedSchema))
   }
 
+  private def testFixedPointAndSinglePass(testName: String)(testBody: => Unit): Unit = {
+    test(s"$testName (fixed-point analyzer)") {
+      withSQLConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        testBody
+      }
+    }
+
+    test(s"$testName (single-pass analyzer)") {
+      withSQLConf(
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "true",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        testBody
+      }
+    }
+  }
+
   test("explicit collation propagates up") {
     checkAnswer(
       sql(s"SELECT COLLATION('a' collate unicode)"),
@@ -228,7 +244,7 @@ class CollationTypePrecedenceSuite extends SharedSparkSession {
     )
   }
 
-  test("in subquery expression") {
+  testFixedPointAndSinglePass("in subquery expression") {
     val tableName = "subquery_tbl"
     withTable(tableName) {
       sql(s"""
@@ -284,7 +300,7 @@ class CollationTypePrecedenceSuite extends SharedSparkSession {
     }
   }
 
-  test("scalar subquery") {
+  testFixedPointAndSinglePass("scalar subquery") {
     val tableName = "scalar_subquery_tbl"
     withTable(tableName) {
       sql(s"""

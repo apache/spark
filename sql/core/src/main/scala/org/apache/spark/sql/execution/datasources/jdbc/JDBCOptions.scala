@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.{Locale, Properties}
 
+import scala.util.matching.Regex
+
 import org.apache.commons.io.FilenameUtils
 
 import org.apache.spark.SparkFiles
@@ -253,10 +255,21 @@ class JDBCOptions(
       .map(_.toBoolean)
       .getOrElse(SQLConf.get.timestampType == TimestampNTZType)
 
+  // Infers driver TIMESTAMP columns that report a sub-microsecond fractional-second scale (7-9)
+  // as the nanosecond-capable timestamp types TIMESTAMP_NTZ(p) / TIMESTAMP_LTZ(p). When disabled
+  // (the default) such columns keep the historical microsecond mapping. Only takes effect when the
+  // `spark.sql.timestampNanosTypes.enabled` preview flag is on.
+  val preferTimestampNanos =
+    parameters
+      .get(JDBC_PREFER_TIMESTAMP_NANOS)
+      .map(_.toBoolean)
+      .getOrElse(false)
+
   val hint = parameters.get(JDBC_HINT_STRING).map(value => {
     require(value.matches("(?s)^/\\*\\+ .* \\*/$"),
       s"Invalid value `$value` for option `$JDBC_HINT_STRING`." +
-        s" It should start with `/*+ ` and end with ` */`.")
+        s" It should start with `/*+ ` and end with ` */`," +
+        s" for example `/*+ INDEX(t1 id_idx) */`.")
       s"$value "
     }).getOrElse("")
 
@@ -268,7 +281,7 @@ class JDBCOptions(
     case _ => false
   }
 
-  def getRedactUrl(): String = Utils.redact(SQLConf.get.stringRedactionPattern, url)
+  def getRedactUrl(): String = JDBCOptions.redactUrl(url, SQLConf.get.stringRedactionPattern)
 }
 
 class JdbcOptionsInWrite(
@@ -302,6 +315,37 @@ object JDBCOptions {
     name
   }
 
+  /**
+   * Redacts a JDBC URL so it is safe to surface in logs and error messages.
+   *
+   * A JDBC URL has the form `jdbc:<subprotocol>:<subname>`, where `<subprotocol>` is a registered
+   * driver name (`mysql`, `oracle`, `postgresql`, ...) and `<subname>` is entirely driver-specific.
+   * Credentials can appear anywhere in `<subname>` and in arbitrary syntaxes -- userinfo in a
+   * `//user:pwd@host` authority, Oracle Thin's `user/pwd@host`, `?`/`;` connection properties, etc.
+   * Rather than enumerate every driver's syntax (and inevitably miss one and leak), we keep only
+   * the `jdbc:<subprotocol>:` prefix -- which is credential-free by construction -- and redact
+   * everything after it. The driver type stays visible for debugging; nothing else does.
+   *
+   * This redaction is unconditional, unlike the optional, user-configured
+   * `spark.sql.redaction.string.regex` (which is unset by default and would leave the URL in the
+   * clear). The configured `regex` is still applied on top, preserving existing behavior.
+   */
+  def redactUrl(url: String, regex: Option[Regex]): String = {
+    if (url == null || url.isEmpty) {
+      url
+    } else {
+      // The second colon terminates the subprotocol: "jdbc" ':' "<subprotocol>" ':' "<subname>".
+      val subprotocolEnd = url.indexOf(':', url.indexOf(':') + 1)
+      val redacted = if (subprotocolEnd < 0) {
+        // No subname delimiter -- the URL is malformed, so don't trust any of it.
+        Utils.REDACTION_REPLACEMENT_TEXT
+      } else {
+        url.substring(0, subprotocolEnd + 1) + Utils.REDACTION_REPLACEMENT_TEXT
+      }
+      Utils.redact(regex, redacted)
+    }
+  }
+
   val JDBC_URL = newOption("url")
   val JDBC_TABLE_NAME = newOption("dbtable")
   val JDBC_QUERY_STRING = newOption("query")
@@ -333,5 +377,6 @@ object JDBCOptions {
   val JDBC_CONNECTION_PROVIDER = newOption("connectionProvider")
   val JDBC_PREPARE_QUERY = newOption("prepareQuery")
   val JDBC_PREFER_TIMESTAMP_NTZ = newOption("preferTimestampNTZ")
+  val JDBC_PREFER_TIMESTAMP_NANOS = newOption("preferTimestampNanos")
   val JDBC_HINT_STRING = newOption("hint")
 }

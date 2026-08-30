@@ -14,9 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import json
-from contextlib import contextmanager
 import collections
+import json
 import logging
 import os
 import random
@@ -27,27 +26,28 @@ import sys
 import tempfile
 import textwrap
 import time
+from contextlib import contextmanager
 from typing import (
-    Union,
-    Callable,
-    List,
-    Dict,
-    Optional,
     Any,
-    Tuple,
+    Callable,
+    Dict,
     Generator,
     Iterator,
+    List,
+    Optional,
+    Tuple,
+    Union,
 )
 
 from pyspark import cloudpickle
-from pyspark.resource.information import ResourceInformation
-from pyspark.sql import DataFrame, SparkSession
-from pyspark.taskcontext import BarrierTaskContext
+from pyspark.ml.dl_util import FunctionPickler
 from pyspark.ml.torch.log_communication import (  # type: ignore
     LogStreamingClient,
     LogStreamingServer,
 )
-from pyspark.ml.dl_util import FunctionPickler
+from pyspark.resource.information import ResourceInformation
+from pyspark.sql import DataFrame, SparkSession
+from pyspark.taskcontext import BarrierTaskContext
 
 
 def _get_resources(session: SparkSession) -> Dict[str, ResourceInformation]:
@@ -482,7 +482,7 @@ class TorchDistributor(Distributor):
         tail: collections.deque = collections.deque(maxlen=_TAIL_LINES_TO_KEEP)
         try:
             for line in task.stdout:  # type: ignore
-                decoded = line.decode()
+                decoded = line.decode("utf-8")
                 tail.append(decoded)
                 if redirect_to_stdout:
                     if (
@@ -660,8 +660,10 @@ class TorchDistributor(Distributor):
         # Spark task program
         def wrapped_train_fn(iterator):  # type: ignore[no-untyped-def]
             import os
+
             import pandas as pd
             import pyarrow
+
             from pyspark import BarrierTaskContext
 
             CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
@@ -855,9 +857,10 @@ class TorchDistributor(Distributor):
     def _setup_spark_partition_data(
         partition_data_iterator: Iterator[Any], input_schema_json: Dict[str, Any]
     ) -> Iterator[Any]:
-        from pyspark.sql.pandas.serializers import ArrowStreamSerializer
-        from pyspark.core.files import SparkFiles
         import json
+
+        from pyspark.core.files import SparkFiles
+        from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 
         if input_schema_json is None:
             yield
@@ -883,7 +886,7 @@ class TorchDistributor(Distributor):
             schema_file_path = os.path.join(save_dir, "schema.json")
             schema_json_string = json.dumps(input_schema_json)
 
-            with open(schema_file_path, "w") as f:
+            with open(schema_file_path, "w", encoding="utf-8") as f:
                 f.write(schema_json_string)
 
             os.environ[SPARK_PARTITION_ARROW_DATA_FILE] = arrow_file_path
@@ -1081,14 +1084,15 @@ def _get_spark_partition_data_loader(
     prefetch_factor:
         Number of batches loaded in advance by each worker
     """
-    from pyspark.sql.types import StructType
-    from pyspark.ml.torch.data import _SparkPartitionTorchDataset
     from torch.utils.data import DataLoader
+
+    from pyspark.ml.torch.data import _SparkPartitionTorchDataset
+    from pyspark.sql.types import StructType
 
     arrow_file = os.environ[SPARK_PARTITION_ARROW_DATA_FILE]
     schema_file = os.environ[SPARK_DATAFRAME_SCHEMA_FILE]
 
-    with open(schema_file, "r") as fp:
+    with open(schema_file, "r", encoding="utf-8") as fp:
         schema = StructType.fromJson(json.load(fp))
 
     dataset = _SparkPartitionTorchDataset(arrow_file, schema, num_samples)

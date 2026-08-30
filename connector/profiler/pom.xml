@@ -32,7 +32,7 @@
   <packaging>jar</packaging>
   <name>Spark Profiler</name>
   <description>
-    Enables code profiling of executors based on the the async profiler.
+    Enables code profiling of executors based on the async profiler.
   </description>
   <url>https://spark.apache.org/</url>
 

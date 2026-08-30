@@ -30,12 +30,12 @@ import org.apache.spark.udf.worker.UDFWorkerSpecification
  * [[UDFWorkerSpecification]] (protobuf value equality).
  *
  * Callers obtain a dispatcher via [[getDispatcher]] and create
- * sessions on it directly. On [[stop]], all cached dispatchers
+ * sessions on it directly. On [[close]], all cached dispatchers
  * are closed -- dispatchers are responsible for cleaning up
  * their own sessions.
  *
  * Thread safety: a [[ReentrantReadWriteLock]] allows concurrent
- * [[getDispatcher]] calls (read lock) while [[stop]] has
+ * [[getDispatcher]] calls (read lock) while [[close]] has
  * exclusive access (write lock).
  */
 @Experimental
@@ -44,9 +44,10 @@ class UDFDispatcherManager(
     workerLogger: WorkerLogger = WorkerLogger.NoOp
 ) {
 
-  // Guarded by `rwLock`. The read lock is used by getDispatcher
-  // (with upgrade when a new dispatcher must be added) and the
-  // write lock is used by stop.
+  // Guarded by `rwLock`. getDispatcher takes the read lock, releasing it
+  // and re-acquiring the write lock when a new dispatcher must be added
+  // (ReentrantReadWriteLock does not support upgrading a held read lock);
+  // close takes the write lock.
   private val rwLock = new ReentrantReadWriteLock()
   private val dispatchers =
     new HashMap[UDFWorkerSpecification, WorkerDispatcher]()
@@ -63,7 +64,6 @@ class UDFDispatcherManager(
     try {
       if (closed) throwClosed()
 
-      // Reading existing dispatcher = quick path
       val dispatcher = dispatchers.get(workerSpec)
       if (dispatcher != null) {
         return dispatcher
@@ -93,7 +93,7 @@ class UDFDispatcherManager(
   }
 
   private def throwClosed(): Nothing =
-    throw new IllegalStateException("UDFDispatcherManager is stopped")
+    throw new IllegalStateException("UDFDispatcherManager is closed")
 
   /**
    * Closes all cached dispatchers and resets internal state.

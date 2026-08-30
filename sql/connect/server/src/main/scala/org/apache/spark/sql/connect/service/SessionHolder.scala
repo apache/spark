@@ -38,7 +38,7 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.IllegalStateErrors
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
-import org.apache.spark.sql.connect.ml.MLCache
+import org.apache.spark.sql.connect.ml.{MLCache, MLCacheStatus}
 import org.apache.spark.sql.connect.pipelines.DataflowGraphRegistry
 import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
 import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper
@@ -89,6 +89,13 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // Set only by close(), and only once.
   @volatile private var closedTimeMs: Option[Long] = None
 
+  /**
+   * Whether this session is closing or already closed. closedTimeMs is set at the very beginning
+   * of [[close]], before any session resources (e.g. running streaming queries) are cleaned up,
+   * so this can be used to detect a session shutdown that races with newly started operations.
+   */
+  private[connect] def isClosing: Boolean = closedTimeMs.isDefined
+
   // Custom timeout after a session expires due to inactivity.
   // Used by SparkConnectSessionManager instead of default timeout if set.
   // Setting it to -1 indicated forever.
@@ -125,7 +132,16 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     new ConcurrentHashMap()
 
   // ML model cache
-  private[connect] lazy val mlCache = new MLCache(this)
+  @volatile private var mlCacheInitialized = false
+  private[connect] lazy val mlCache = {
+    val cache = new MLCache(this)
+    mlCacheInitialized = true
+    cache
+  }
+
+  private[connect] def getMLCacheStatus: Option[MLCacheStatus] = {
+    if (mlCacheInitialized) Some(mlCache.getStatus) else None
+  }
 
   // Mapping from id to StreamingQueryListener. Used for methods like removeListener() in
   // StreamingQueryManager.

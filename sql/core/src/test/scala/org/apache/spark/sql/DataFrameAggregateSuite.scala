@@ -132,6 +132,17 @@ class DataFrameAggregateSuite extends SharedSparkSession
     )
   }
 
+  test("cube()/rollup() with no grouping columns return one grand-total row over empty input") {
+    // With no grouping columns, cube()/rollup() lower to a global aggregate (the grand total),
+    // which returns one row even over empty input -- like an aggregation with no GROUP BY clause.
+    // This is the DataFrame-API surface for the empty CUBE/ROLLUP case (not expressible in SQL).
+    checkAnswer(spark.range(0).cube().count(), Row(0L))
+    checkAnswer(spark.range(0).rollup().count(), Row(0L))
+    // Non-empty input still collapses to the single grand-total row.
+    checkAnswer(spark.range(3).cube().count(), Row(3L))
+    checkAnswer(spark.range(3).rollup().count(), Row(3L))
+  }
+
   test("rollup") {
     checkAnswer(
       courseSales.rollup("course", "year").sum("earnings"),
@@ -562,6 +573,56 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
+  testWithWholeStageCodegenOnAndOff("SPARK-58213: corr returns NULL for zero variance") { _ =>
+    val input = Seq(
+      ("both-constant", Some(1.0), Some(1.0)),
+      ("both-constant", Some(1.0), Some(1.0)),
+      ("empty", None, None),
+      ("normal", Some(1.0), Some(1.0)),
+      ("normal", Some(2.0), Some(2.0)),
+      ("normal", Some(3.0), Some(3.0)),
+      ("partial-null", None, Some(0.0)),
+      ("partial-null", Some(1.0), Some(1.0)),
+      ("partial-null", Some(2.0), None),
+      ("partial-null", Some(3.0), Some(3.0)),
+      ("single", Some(1.0), Some(2.0)),
+      ("x-constant", Some(1.0), Some(1.0)),
+      ("x-constant", Some(1.0), Some(2.0)),
+      ("x-constant", Some(1.0), Some(3.0)),
+      ("y-constant", Some(1.0), Some(1.0)),
+      ("y-constant", Some(2.0), Some(1.0)),
+      ("y-constant", Some(3.0), Some(1.0)),
+      ("zero-correlation", Some(0.0), Some(1.0)),
+      ("zero-correlation", Some(1.0), Some(-2.0)),
+      ("zero-correlation", Some(2.0), Some(1.0))).toDF("case", "x", "y")
+
+    Seq(true, false).foreach { ansiEnabled =>
+      Seq(true, false).foreach { legacyStatisticalAggregate =>
+        withSQLConf(
+            SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
+            SQLConf.LEGACY_STATISTICAL_AGGREGATE.key ->
+              legacyStatisticalAggregate.toString) {
+          val singleRow = if (legacyStatisticalAggregate) {
+            Row("single", Double.NaN)
+          } else {
+            Row("single", null)
+          }
+          checkAnswer(
+            input.groupBy($"case").agg(corr($"x", $"y")).orderBy($"case"),
+            Seq(
+              Row("both-constant", null),
+              Row("empty", null),
+              Row("normal", 1.0),
+              Row("partial-null", 1.0),
+              singleRow,
+              Row("x-constant", null),
+              Row("y-constant", null),
+              Row("zero-correlation", 0.0)))
+        }
+      }
+    }
+  }
+
   test("null moments") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
     checkAnswer(emptyTableData.agg(
@@ -576,6 +637,59 @@ class DataFrameAggregateSuite extends SharedSparkSession
         expr("skewness(a)"),
         expr("kurtosis(a)")),
       Row(null, null, null, null, null))
+  }
+
+  test("SPARK-58291: empty-buffer merge must not overflow to NaN for statistical aggregates") {
+    // A single-partition group with two equal, very large finite values has zero variance, so
+    // var_pop / covar_pop / regr_sxy must be 0.0. Previously, when adjacent Partial/Final
+    // aggregates were NOT combined (the old default), the Final merge of the non-empty Partial
+    // buffer into the empty Final buffer computed `delta * deltaN * n1 * n2` where `n1 == 0`;
+    // `delta * deltaN` overflowed to Infinity and `Infinity * 0 = NaN`, corrupting the moments.
+    // CombineAdjacentAggregation (Complete mode) sidesteps the merge and returned 0.0, so the two
+    // configurations disagreed. The merge fix makes both paths return 0.0.
+    // This must hold with and without AQE, and with combining on and off.
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+        val df = Seq(1e155, 1e155).toDF("a").repartition(1)
+        Seq(true, false).foreach { combine =>
+          withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> combine.toString) {
+            checkAnswer(
+              df.selectExpr("var_pop(a)", "covar_pop(a, a)", "regr_sxy(a, a)"),
+              Row(0.0, 0.0, 0.0))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-58291: empty-buffer merge must not overflow to NaN for Pearson correlation") {
+    // Two finite points are perfectly linearly correlated, so corr / regr_r2 are finite. The
+    // Pearson merge computes `dx * dxN * n1 * n2` (and the dy variant) for xMk / yMk. When one
+    // side is an empty buffer (n1 == 0 or n2 == 0) and the other has a large average, `dx * dxN`
+    // overflows to Infinity before being multiplied by the zero count, and `Infinity * 0 = NaN`
+    // corrupts the merged moments. The old default (no combining) hit this Final-merge path and
+    // returned NaN, while CombineAdjacentAggregation (Complete mode) sidestepped the merge, so the
+    // two configurations disagreed. The merge fix makes both paths return the same finite result.
+    // This must hold with and without AQE, and with combining on and off.
+    val data = Seq((1.0e155, 1.0e-150), (1.000000000000001e155, 2.0e-150))
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+        val df = data.toDF("x", "y").repartition(1)
+        // Reference result from the combined (Complete-mode) path, which never runs the merge.
+        val expected = withSQLConf(
+            SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+          df.selectExpr("corr(x, y)", "regr_r2(y, x)").collect()
+        }
+        expected.head.toSeq.foreach { v =>
+          assert(!v.asInstanceOf[Double].isNaN, "corr / regr_r2 must be finite, not NaN")
+        }
+        Seq(true, false).foreach { combine =>
+          withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> combine.toString) {
+            checkAnswer(df.selectExpr("corr(x, y)", "regr_r2(y, x)"), expected.toSeq)
+          }
+        }
+      }
+    }
   }
 
   test("collect functions") {
@@ -610,6 +724,72 @@ class DataFrameAggregateSuite extends SharedSparkSession
       df.select(array_agg($"a"), array_agg($"b")),
       Seq(Row(Seq(1, 2, 3), Seq(2, 2, 4)))
     )
+  }
+
+  test("collect_union function") {
+    // Distinct union of array elements across rows.
+    val df = Seq(Seq(1, 2), Seq(2, 3), Seq(1)).toDF("arr")
+    checkDataset(
+      df.select(collect_union($"arr").as("u")).as[Set[Int]],
+      Set(1, 2, 3))
+    checkAnswer(
+      df.select(sort_array(collect_union($"arr"))),
+      Seq(Row(Seq(1, 2, 3))))
+    checkAnswer(
+      df.selectExpr("sort_array(collect_union(arr))"),
+      Seq(Row(Seq(1, 2, 3))))
+
+    // NULL array inputs are always skipped.
+    val dfNulls = Seq(Seq(1, 2), null, Seq(2, 3)).toDF("arr")
+    checkAnswer(
+      dfNulls.select(sort_array(collect_union($"arr"))),
+      Seq(Row(Seq(1, 2, 3))))
+
+    // NULL elements: dropped by default (IGNORE NULLS, matching collect_set) ...
+    val dfNullElem = Seq(Seq(Integer.valueOf(1), null), Seq(Integer.valueOf(2))).toDF("arr")
+    checkAnswer(
+      dfNullElem.select(sort_array(collect_union($"arr"))),
+      Seq(Row(Seq(1, 2))))
+    // ... and kept (a single null) with RESPECT NULLS, matching
+    // array_distinct(flatten(collect_list(...))). sort_array puts null first in asc order.
+    checkAnswer(
+      dfNullElem.selectExpr("sort_array(collect_union(arr) RESPECT NULLS)"),
+      Seq(Row(Seq(null, 1, 2))))
+    // Equivalent to array_distinct(flatten(collect_list(...))) under RESPECT NULLS. Compare
+    // order-insensitively via sort_array, since element order in either result is unspecified.
+    checkAnswer(
+      dfNullElem.selectExpr("sort_array(collect_union(arr) RESPECT NULLS)"),
+      dfNullElem.selectExpr("sort_array(array_distinct(flatten(collect_list(arr))))"))
+
+    // Per-group union.
+    val g = Seq(("a", Seq(1, 2)), ("a", Seq(2, 3)), ("b", Seq(4))).toDF("k", "arr")
+    checkAnswer(
+      g.groupBy("k").agg(sort_array(collect_union($"arr"))).orderBy("k"),
+      Seq(Row("a", Seq(1, 2, 3)), Row("b", Seq(4))))
+
+    // Empty result: only-NULL arrays produce an empty array, not null.
+    val dfEmpty = Seq[Seq[Int]](null, null).toDF("arr")
+    checkAnswer(
+      dfEmpty.select(collect_union($"arr")),
+      Seq(Row(Seq.empty[Int])))
+  }
+
+  test("collect_union requires an array input") {
+    // A non-array (scalar) input is rejected at analysis time.
+    val df = Seq(1, 2, 3).toDF("a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(collect_union($"a")).collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"collect_union(a)\"",
+        "paramIndex" -> "first",
+        "inputSql" -> "\"a\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"ARRAY\""),
+      context = ExpectedContext(
+        fragment = "collect_union", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("SPARK-55256: array_agg and collect_list skip nulls by default") {
@@ -657,6 +837,51 @@ class DataFrameAggregateSuite extends SharedSparkSession
     // RESPECT NULLS preserves null value in the set
     checkAnswer(
       df.selectExpr("sort_array(collect_set(b) RESPECT NULLS)"), Seq(Row(Seq(null, 2))))
+  }
+
+  test("SPARK-57298: collect_set normalizes NaN and -0.0 for floating-point types") {
+    checkAnswer(
+      sql("SELECT collect_set(v) FROM VALUES (double('NaN')), (double('NaN')) AS t(v)"),
+      Row(Seq(Double.NaN)))
+    checkAnswer(
+      sql("SELECT collect_set(v) FROM VALUES (float('NaN')), (float('NaN')) AS t(v)"),
+      Row(Seq(Float.NaN)))
+
+    checkAnswer(
+      sql("SELECT collect_set(v) FROM VALUES (-0.0D), (0.0D) AS t(v)"),
+      Row(Seq(0.0d)))
+    checkAnswer(
+      sql("SELECT collect_set(v) FROM VALUES (float(-0.0)), (float(0.0)) AS t(v)"),
+      Row(Seq(0.0f)))
+
+    val df = Seq(Double.NaN, Double.NaN, 0.0d, -0.0d, 1.0d).toDF("v").repartition(3)
+    checkAnswer(df.selectExpr("sort_array(collect_set(v))"), Row(Seq(0.0d, 1.0d, Double.NaN)))
+  }
+
+  test("SPARK-57298: collect_set normalizes NaN and -0.0 nested in complex types") {
+    checkAnswer(
+      sql("SELECT collect_set(named_struct('a', v)) FROM VALUES (-0.0D), (0.0D) AS t(v)"),
+      Row(Seq(Row(0.0d))))
+    checkAnswer(
+      sql("SELECT collect_set(a) FROM VALUES (array(-0.0D)), (array(0.0D)) AS t(a)"),
+      Row(Seq(Seq(0.0d))))
+    checkAnswer(
+      sql("SELECT collect_set(a) FROM VALUES (array(float(-0.0))), (array(float(0.0))) AS t(a)"),
+      Row(Seq(Seq(0.0f))))
+
+    // Nested NaN already deduplicates today, included as a guardrail against regressions.
+    checkAnswer(
+      sql("SELECT collect_set(named_struct('a', v)) FROM " +
+        "VALUES (double('NaN')), (double('NaN')) AS t(v)"),
+      Row(Seq(Row(Double.NaN))))
+    checkAnswer(
+      sql("SELECT collect_set(a) FROM " +
+        "VALUES (array(double('NaN'))), (array(double('NaN'))) AS t(a)"),
+      Row(Seq(Seq(Double.NaN))))
+    checkAnswer(
+      sql("SELECT collect_set(a) FROM " +
+        "VALUES (array(float('NaN'))), (array(float('NaN'))) AS t(a)"),
+      Row(Seq(Seq(Float.NaN))))
   }
 
   test("collect functions structs") {
@@ -1044,6 +1269,56 @@ class DataFrameAggregateSuite extends SharedSparkSession
       df.groupBy("arr", "stru", "arrOfStru").count(),
       Row(Seq(0.0f, 0.0f), Row(0.0d, Double.NaN), Seq(Row(0.0d, Double.NaN)), 2)
     )
+  }
+
+  test("SPARK-57329: mode normalizes -0.0/0.0 in the frequency buffer") {
+    checkAnswer(
+      Seq(0.0d, 0.0d, -0.0d, -0.0d, 9.0d, 9.0d, 9.0d).toDF("d").select(expr("mode(d)")),
+      Row(0.0d))
+    checkAnswer(
+      Seq(0.0f, 0.0f, -0.0f, -0.0f, 9.0f, 9.0f, 9.0f).toDF("f").select(expr("mode(f)")),
+      Row(0.0f))
+
+    checkAnswer(
+      Seq(Array(-0.0d), Array(-0.0d), Array(0.0d), Array(0.0d),
+          Array(9.0d), Array(9.0d), Array(9.0d)).toDF("a").select(expr("mode(a)")),
+      Row(Seq(0.0d)))
+
+    // pandas_mode shares the same normalization path; cover it explicitly. It is an
+    // internal expression, so invoke it via Column.internalFn rather than SQL.
+    checkAnswer(
+      Seq(0.0d, 0.0d, -0.0d, -0.0d, 9.0d).toDF("d")
+        .select(Column.internalFn("pandas_mode", col("d"), lit(true))),
+      Row(Seq(0.0d)))
+    checkAnswer(
+      Seq(0.0f, 0.0f, -0.0f, -0.0f, 9.0f).toDF("f")
+        .select(Column.internalFn("pandas_mode", col("f"), lit(true))),
+      Row(Seq(0.0f)))
+    checkAnswer(
+      Seq(Array(-0.0d), Array(-0.0d), Array(0.0d), Array(0.0d), Array(9.0d)).toDF("a")
+        .select(Column.internalFn("pandas_mode", col("a"), lit(true))),
+      Row(Seq(Seq(0.0d))))
+
+    // Struct complex type: same recursive NormalizeFloatingNumbers path as the array case
+    // above, but a different shape. -0.0/0.0 collapse to 4 occurrences, outvoting 9.0's 3.
+    checkAnswer(
+      sql("SELECT mode(named_struct('a', v)) FROM " +
+        "VALUES (-0.0D), (-0.0D), (0.0D), (0.0D), (9.0D), (9.0D), (9.0D) AS t(v)"),
+      Row(Row(0.0d)))
+
+    // NaN with differing bit patterns nested in a complex type. The normalization lambda
+    // canonicalizes the NaN bits so the two patterns collapse to 4 occurrences, outvoting
+    // 9.0's 3. Without normalization each pattern forms its own group of 2 and 9.0 (3) wins,
+    // so the expected NaN result genuinely distinguishes fixed from buggy behavior.
+    val nan1 = java.lang.Double.longBitsToDouble(0x7ff8000000000000L)
+    val nan2 = java.lang.Double.longBitsToDouble(0x7ff8000000000001L)
+    assert(nan1.isNaN && nan2.isNaN &&
+      java.lang.Double.doubleToRawLongBits(nan1) !=
+        java.lang.Double.doubleToRawLongBits(nan2))
+    checkAnswer(
+      Seq(nan1, nan1, nan2, nan2, 9.0d, 9.0d, 9.0d).toDF("v")
+        .select(struct(col("v")).as("s")).select(expr("mode(s)")),
+      Row(Row(Double.NaN)))
   }
 
   test("SPARK-27581: DataFrame count_distinct(\"*\") shouldn't fail with AnalysisException") {
@@ -1510,7 +1785,7 @@ class DataFrameAggregateSuite extends SharedSparkSession
         percentile(col("year"), lit(0.3), lit(2)),
         percentile(col("year"), lit(Array(0.25, 0.75)), lit(2))
       ),
-      Row("Java", 2012.2999999999997, Seq(2012.25, 2012.75), 2012.0, Seq(2012.0, 2013.0)) ::
+      Row("Java", 2012.3, Seq(2012.25, 2012.75), 2012.0, Seq(2012.0, 2013.0)) ::
         Row("dotNET", 2012.0, Seq(2012.0, 2012.5), 2012.0, Seq(2012.0, 2012.75)) :: Nil
     )
 
@@ -2582,6 +2857,70 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
+  // Byte 3 of the serialized sketch holds lgConfigK, so SUBSTRING(hex(...), 7, 2) reads it as a
+  // hex pair: 0x0F = 15, 0x0C = 12.
+  private val allNullGroupSketches =
+    """
+      |with sketches as (
+      |  select 'has_data' as grp, hll_sketch_agg(cast(id as string), 15) as sketch
+      |  from (select explode(sequence(1, 1000)) as id)
+      |  union all
+      |  select 'all_null' as grp, cast(null as binary) as sketch
+      |)
+      |""".stripMargin
+
+  test("hll_union_agg reports the default lgConfigK for a group with no non-NULL sketch") {
+    // hll_union_agg has no lgConfigK parameter, and the all-NULL group holds no sketch to take one
+    // from, so it cannot report the 15 the other group was built at. The estimate is correct either
+    // way; the mismatched precision is what the next test has to cope with.
+    checkAnswer(
+      sql(allNullGroupSketches +
+        """
+          |select
+          |  grp,
+          |  substring(hex(hll_union_agg(sketch)), 7, 2) as lg_config_k,
+          |  hll_sketch_estimate(hll_union_agg(sketch)) as estimate
+          |from sketches
+          |group by grp
+          |""".stripMargin),
+      Seq(Row("all_null", "0C", 0L), Row("has_data", "0F", 1000L)))
+  }
+
+  test("hll_union_agg and hll_union re-merge the empty sketch produced for an all-NULL group") {
+    // The stored sketches are now an empty lgConfigK=12 one beside a populated lgConfigK=15 one.
+    // Rolling them back up must not fail under default settings, because an empty sketch holds no
+    // coupons and so cannot cost precision at any lgConfigK.
+    val stored = sql(allNullGroupSketches +
+      "select grp, hll_union_agg(sketch) as sketch from sketches group by grp")
+      .collect()
+      .map(row => row.getString(0) -> row.getAs[Array[Byte]]("sketch"))
+      .toMap
+
+    Seq(
+      "empty sketch first" -> Seq(stored("all_null"), stored("has_data")),
+      "empty sketch last" -> Seq(stored("has_data"), stored("all_null"))
+    ).foreach { case (order, sketches) =>
+      // One partition exercises update(); two exercise the partial-to-final merge() as well.
+      Seq(1, 2).foreach { numPartitions =>
+        withClue(s"hll_union_agg, $order, $numPartitions partition(s): ") {
+          checkAnswer(
+            sketches.toDF("sketch").repartition(numPartitions).selectExpr(
+              "substring(hex(hll_union_agg(sketch)), 7, 2) as lg_config_k",
+              "hll_sketch_estimate(hll_union_agg(sketch)) as estimate"),
+            Seq(Row("0F", 1000L)))
+        }
+      }
+
+      withClue(s"hll_union, $order: ") {
+        checkAnswer(
+          Seq((sketches.head, sketches.last)).toDF("left", "right").selectExpr(
+            "substring(hex(hll_union(left, right)), 7, 2) as lg_config_k",
+            "hll_sketch_estimate(hll_union(left, right)) as estimate"),
+          Seq(Row("0F", 1000L)))
+      }
+    }
+  }
+
   test("hll_sketch_agg") {
     val df = Seq(1, 1, 2, 2, 3).toDF("col")
     checkAnswer(
@@ -3315,14 +3654,17 @@ class DataFrameAggregateSuite extends SharedSparkSession
       df: => DataFrame,
       expected: Int): Unit = {
     val configurations = Seq(
-      Seq.empty[(String, String)], // hash aggregate is used by default
+      Seq(SQLConf.USE_HASH_AGG.key -> "true"),
       Seq(SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
         "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1, 10"),
       Seq("spark.sql.test.forceApplyObjectHashAggregate" -> "true"),
       Seq(
         "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
         SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1"),
-      Seq("spark.sql.test.forceApplySortAggregate" -> "true")
+      Seq(SQLConf.USE_HASH_AGG.key -> "false"),
+      Seq(
+        SQLConf.USE_HASH_AGG.key -> "false",
+        SQLConf.USE_OBJECT_HASH_AGG.key -> "false")
     )
 
     // Make tests faster

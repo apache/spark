@@ -393,3 +393,17 @@ select date_format(timestamp_ntz'2023-08-18 09:13:14.123456', 'yyyy-MM-dd HH:mm:
 -- !query analysis
 Project [date_format(cast(2023-08-18 09:13:14.123456 as timestamp), yyyy-MM-dd HH:mm:ss.SSSSSS, Some(America/Los_Angeles)) AS date_format(TIMESTAMP_NTZ '2023-08-18 09:13:14.123456', yyyy-MM-dd HH:mm:ss.SSSSSS)#x, date_format(cast(2023-08-18 09:13:14.123456 as timestamp), yyyy-MM-dd HH:mm:ss.SSSSSS, Some(America/Los_Angeles)) AS date_format(TIMESTAMP_NTZ '2023-08-18 09:13:14.123456', yyyy-MM-dd HH:mm:ss.SSSSSS)#x, date_format(cast(2023-08-18 09:13:14.123456 as timestamp), yyyy-MM-dd HH:mm:ss.SSSSSS, Some(America/Los_Angeles)) AS date_format(TIMESTAMP_NTZ '2023-08-18 09:13:14.123456', yyyy-MM-dd HH:mm:ss.SSSSSS)#x]
 +- OneRowRelation
+
+
+-- !query
+select to_char(TIME'12:13:14', 'HH:mm:ss'), to_varchar(TIME'12:13:14', 'HH:mm:ss')
+-- !query analysis
+Project [date_format(12:13:14, HH:mm:ss, Some(America/Los_Angeles)) AS date_format(TIME '12:13:14', HH:mm:ss)#x, date_format(12:13:14, HH:mm:ss, Some(America/Los_Angeles)) AS date_format(TIME '12:13:14', HH:mm:ss)#x]
++- OneRowRelation
+
+
+-- !query
+select to_char(TIME'23:59:59.123456', 'HH:mm:ss.SSSSSS'), to_varchar(TIME'23:59:59.123456', 'HH:mm:ss.SSSSSS')
+-- !query analysis
+Project [date_format(23:59:59.123456, HH:mm:ss.SSSSSS, Some(America/Los_Angeles)) AS date_format(TIME '23:59:59.123456', HH:mm:ss.SSSSSS)#x, date_format(23:59:59.123456, HH:mm:ss.SSSSSS, Some(America/Los_Angeles)) AS date_format(TIME '23:59:59.123456', HH:mm:ss.SSSSSS)#x]
++- OneRowRelation

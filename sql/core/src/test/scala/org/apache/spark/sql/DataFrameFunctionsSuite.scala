@@ -84,6 +84,7 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       "bucket", "days", "hours", "months", "years", // Datasource v2 partition transformations
       "product", // Discussed in https://github.com/apache/spark/pull/30745
       "unwrap_udt",
+      "wrap_udt",
       "timestamp_add",
       "timestamp_diff"
     )
@@ -499,6 +500,23 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         callSitePattern = "",
         startIndex = 0,
         stopIndex = 0))
+    expr = randstr(lit(-1), lit(0))
+    checkError(
+      intercept[AnalysisException](df.select(expr)),
+      condition = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+      parameters = Map(
+        "sqlExpr" -> "\"randstr(-1, 0)\"",
+        "exprName" -> "`length`",
+        "valueRange" -> "[0, 2147483647]",
+        "currentValue" -> "-1"),
+      context = ExpectedContext(
+        contextType = QueryContextType.DataFrame,
+        fragment = "randstr",
+        objectType = "",
+        objectName = "",
+        callSitePattern = "",
+        startIndex = 0,
+        stopIndex = 0))
   }
 
   test("uniform function") {
@@ -662,6 +680,23 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     checkAnswer(
       df.selectExpr("crc32(a)", "crc32(b)"),
       Row(2743272264L, 2180413220L))
+  }
+
+  test("misc xxh3_64 and xxh3_128 function") {
+    val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
+    checkAnswer(
+      df.select(xxh3_64($"a"), xxh3_64($"b")),
+      Row(2615927343983396622L, -4044731995552965649L))
+    checkAnswer(
+      df.select(xxh3_128($"a"), xxh3_128($"b")),
+      Row("9e947f00ecd6acb2244da40f405c870e", "866737830f560dbf3e1f439d2d785f44"))
+
+    checkAnswer(
+      df.selectExpr("xxh3_64(a)", "xxh3_64(b)"),
+      Row(2615927343983396622L, -4044731995552965649L))
+    checkAnswer(
+      df.selectExpr("xxh3_128(a)", "xxh3_128(b)"),
+      Row("9e947f00ecd6acb2244da40f405c870e", "866737830f560dbf3e1f439d2d785f44"))
   }
 
   test("misc aes function") {
@@ -4809,6 +4844,53 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     // Test with cached relation, the Project will be evaluated with codegen
     df.cache()
     testArrayOfPrimitiveTypeNotContainsNull()
+  }
+
+  test("aggregate function - null array does not evaluate zero expression through CSE") {
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
+        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true") {
+      checkAnswer(
+        spark.range(1).selectExpr(
+          """
+            |aggregate(
+            |  CAST(NULL AS ARRAY<INT>),
+            |  (CAST(id AS INT) / 0) + (CAST(id AS INT) / 0),
+            |  (acc, x) -> acc + x)
+            |""".stripMargin),
+        Row(null))
+    }
+  }
+
+  test("aggregate function - generated code clears accumulator null state within row") {
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
+      checkAnswer(
+        spark.range(1).selectExpr(
+          """
+            |aggregate(
+            |  array(CAST(id AS INT) + 1, CAST(id AS INT) + 2),
+            |  CAST(NULL AS INT),
+            |  (acc, x) -> coalesce(acc, 0) + x,
+            |  acc -> coalesce(acc, -1))
+            |""".stripMargin),
+        Row(3))
+    }
+  }
+
+  test("aggregate function - generated code clears accumulator null state across rows") {
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
+      checkAnswer(
+        spark.range(0, 2, 1, 1).selectExpr(
+          """
+            |aggregate(
+            |  CASE WHEN id = 0 THEN array(CAST(NULL AS INT)) ELSE array() END,
+            |  0,
+            |  (acc, x) -> acc + x,
+            |  acc -> coalesce(acc, -1))
+            |""".stripMargin),
+        Seq(Row(-1), Row(0)))
+    }
   }
 
   test("aggregate function - array for primitive type containing null") {

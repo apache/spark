@@ -427,3 +427,17 @@ SELECT
 FROM values (12, 0.25), (13, 0.25), (22, 0.25) as v(a, b);
 
 SET spark.sql.legacy.percentileDiscCalculation = false;
+
+-- SPARK-57557: percentile, median and percentile_cont/disc over the TIME type
+CREATE OR REPLACE TEMPORARY VIEW aggr_time AS SELECT * FROM VALUES
+  (TIME '00:00:00'), (TIME '06:00:00'), (TIME '12:00:00'), (TIME '18:00:00')
+AS aggr_time(t);
+
+SELECT
+  median(t),
+  percentile(t, 0.5),
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY t),
+  percentile_disc(0.5) WITHIN GROUP (ORDER BY t)
+FROM aggr_time;
+
+SELECT percentile_approx(t, array(0.25, 0.5, 0.75)) FROM aggr_time;

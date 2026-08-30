@@ -45,8 +45,8 @@ import java.io.OutputStream;
  * Under the cover, a {@link CountMinSketch} is essentially a two-dimensional {@code long} array
  * with depth {@code d} and width {@code w}, where
  * <ul>
- *   <li>{@code d = ceil(2 / eps)}</li>
- *   <li>{@code w = ceil(-log(1 - confidence) / log(2))}</li>
+ *   <li>{@code w = ceil(2 / eps)}</li>
+ *   <li>{@code d = ceil(-log(1 - confidence) / log(2))}</li>
  * </ul>
  *
  * This implementation is largely based on the {@code CountMinSketch} class from stream-lib.

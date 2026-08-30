@@ -81,15 +81,18 @@ case class CreateTableLikeExec(
     Seq.empty
   }
 
-  // Derive target columns from source; for V1Table sources apply CharVarcharUtils to preserve
-  // CHAR/VARCHAR types as declared rather than collapsed to StringType.
-  private def targetColumns: Array[Column] =
+  // Derive target columns from source without propagating source field IDs to the new table.
+  // For V1Table sources, apply CharVarcharUtils to preserve CHAR/VARCHAR types as declared
+  // rather than collapsed to StringType.
+  private def targetColumns: Array[Column] = {
     sourceTable match {
       case v1: V1Table =>
-        CatalogV2Util.structTypeToV2Columns(CharVarcharUtils.getRawSchema(v1.catalogTable.schema))
+        val rawSchema = CharVarcharUtils.getRawSchema(v1.catalogTable.schema)
+        CatalogV2Util.structTypeToV2Columns(rawSchema, keepIds = false)
       case _ =>
-        sourceTable.columns
+        CatalogV2Util.clearIds(sourceTable.columns)
     }
+  }
 
   // Source table properties are intentionally excluded; connectors read sourceTable
   // to clone any additional format-specific or custom state they need.

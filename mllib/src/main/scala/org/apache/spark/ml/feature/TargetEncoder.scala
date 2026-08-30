@@ -31,6 +31,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.SizeEstimator
 
 /** Private trait for params and common methods for TargetEncoder and TargetEncoderModel */
 private[ml] trait TargetEncoderBase extends Params with HasLabelCol
@@ -291,6 +292,13 @@ class TargetEncoderModel private[ml] (
   // For ml connect only
   private[ml] def this() = this("", Array.empty)
 
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    // stats: Array[Map[Double, (Double, Double)]]
+    size += SizeEstimator.estimate(stats)
+    size
+  }
+
   /** @group setParam */
   @Since("4.0.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -465,4 +473,3 @@ object TargetEncoderModel extends MLReadable[TargetEncoderModel] {
   @Since("4.0.0")
   override def load(path: String): TargetEncoderModel = super.load(path)
 }
-

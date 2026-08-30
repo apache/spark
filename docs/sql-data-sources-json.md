@@ -170,7 +170,7 @@ Data source options of JSON can be set via:
     <td><code>PERMISSIVE</code></td>
     <td>Allows a mode for dealing with corrupt records during parsing.<br>
     <ul>
-      <li><code>PERMISSIVE</code>: when it meets a corrupted record, puts the malformed string into a field configured by <code>columnNameOfCorruptRecord</code>, and sets malformed fields to <code>null</code>. To keep corrupt records, an user can set a string type field named <code>columnNameOfCorruptRecord</code> in an user-defined schema. If a schema does not have the field, it drops corrupt records during parsing. When inferring a schema, it implicitly adds a <code>columnNameOfCorruptRecord</code> field in an output schema.</li>
+      <li><code>PERMISSIVE</code>: when it meets a corrupted record, puts the malformed string into a field configured by <code>columnNameOfCorruptRecord</code>, and sets malformed fields to <code>null</code>. To capture the malformed string, a user can set a string type field named <code>columnNameOfCorruptRecord</code> in a user-defined schema. If a schema does not have the field, the corrupt record is still retained with its malformed fields set to <code>null</code>, but the malformed string is not available. When inferring a schema, it implicitly adds a <code>columnNameOfCorruptRecord</code> field in an output schema.</li>
       <li><code>DROPMALFORMED</code>: ignores the whole corrupted records. This mode is unsupported in the JSON built-in functions.</li>
       <li><code>FAILFAST</code>: throws an exception when it meets corrupted records.</li>
     </ul>
@@ -202,6 +202,30 @@ Data source options of JSON can be set via:
     <td>read/write</td>
   </tr>
   <tr>
+    <td><code>timeFormat</code></td>
+    <td>HH:mm:ss</td>
+    <td>Sets the string that indicates a time format. Custom time formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>. This applies to time type.</td>
+    <td>read/write</td>
+  </tr>
+  <tr>
+    <td><code>inferTimestamp</code></td>
+    <td><code>false</code></td>
+    <td>Allows inferring of <code>TimestampType</code> and <code>TimestampNTZType</code> from strings that match the timestamp patterns defined by the <code>timestampFormat</code> and <code>timestampNTZFormat</code> options respectively. When enabled, it also allows inferring of <code>TimeType</code> from strings that match the time pattern defined by the <code>timeFormat</code> option.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>singleVariantColumn</code></td>
+    <td>(none)</td>
+    <td>If specified, the entire JSON record is parsed and stored as a single column of <code>VariantType</code> with the given column name, instead of being split into individual fields.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>explodeEmbeddedArray</code></td>
+    <td>(none)</td>
+    <td>If specified, each input file is treated as a single JSON object document with a top-level array-valued field of the given name (e.g. <code>{"Records": [record1, record2, ...]}</code>). Each element of that array becomes one row, stored as a single column of <code>VariantType</code>, and anything outside the array is ignored. This is useful for ingesting formats such as AWS CloudTrail. Mutually exclusive with <code>singleVariantColumn</code>. Because each file is consumed as a whole document, line-based options such as <code>multiLine</code> and <code>lineSep</code> are ignored.</td>
+    <td>read</td>
+  </tr>
+  <tr>
     <td><code>enableDateTimeParsingFallback</code></td>
     <td>Enabled if the time parser policy has legacy settings or if no custom date or timestamp pattern was provided.</td>
     <td>Allows falling back to the backward compatible (Spark 1.x and 2.0) behavior of parsing dates and timestamps if values do not match the set patterns.</td>
@@ -224,6 +248,18 @@ Data source options of JSON can be set via:
     <td>Detected automatically when <code>multiLine</code> is set to <code>true</code> (for reading), <code>UTF-8</code> (for writing)</td>
     <td>For reading, allows to forcibly set one of standard basic or extended encoding for the JSON files. For example UTF-16BE, UTF-32LE. For writing, Specifies encoding (charset) of saved json files. JSON built-in functions ignore this option.</td>
     <td>read/write</td>
+  </tr>
+  <tr>
+    <td><code>pretty</code></td>
+    <td><code>false</code></td>
+    <td>If true, writes the generated JSON with the default pretty printer, indenting nested structures over multiple lines instead of emitting each record on a single line.</td>
+    <td>write</td>
+  </tr>
+  <tr>
+    <td><code>writeNonAsciiCharacterAsCodePoint</code></td>
+    <td><code>false</code></td>
+    <td>If true, writes non-ASCII characters as \uXXXX escape sequences instead of emitting them literally.</td>
+    <td>write</td>
   </tr>
   <tr>
     <td><code>lineSep</code></td>

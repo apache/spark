@@ -54,6 +54,13 @@ class VarianceThresholdSelectorSuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(new VarianceThresholdSelector)
   }
 
+  test("model estimated size") {
+    val model = new VarianceThresholdSelector().fit(dataset)
+    val maxSize = 1024 * 2
+    assert(model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
+  }
+
   test("Test VarianceThresholdSelector: varianceThreshold not set") {
     val selector = new VarianceThresholdSelector().setOutputCol("filtered")
     val model = testSelector(selector, dataset)

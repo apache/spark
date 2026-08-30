@@ -87,7 +87,7 @@ RUN apt-get update && apt-get install -y \
 # Set up R CRAN repository for latest R packages
 RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/' >> /etc/apt/sources.list && \
     gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9 && \
-    gpg -a --export E084DAB9 | apt-key add - && \
+    gpg -a --export E084DAB9 > /etc/apt/trusted.gpg.d/cran.asc && \
     add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/'
 
 # Install R packages (same versions across all branches)

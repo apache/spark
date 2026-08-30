@@ -171,7 +171,7 @@ The following configurations are optional:
 <tr>
   <td>changeEndBatchId</td>
   <td>numeric value</td>
-  <td>latest commited batchId</td>
+  <td>latest committed batchId</td>
   <td>Represents the last batch to read in the read change feed mode. This option requires 'readChangeFeed' to be set to true.</td>
 </tr>
 <tr>

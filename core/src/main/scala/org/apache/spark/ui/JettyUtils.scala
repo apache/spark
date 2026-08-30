@@ -27,7 +27,7 @@ import scala.xml.Node
 
 import jakarta.servlet.{DispatcherType, Filter, FilterChain, ServletRequest, ServletResponse}
 import jakarta.servlet.http._
-import org.eclipse.jetty.client.{Response => CResponse}
+import org.eclipse.jetty.client.{Request => CRequest, Response => CResponse}
 import org.eclipse.jetty.client.HttpClient
 import org.eclipse.jetty.client.transport.HttpClientTransportOverHTTP
 import org.eclipse.jetty.compression.server.CompressionHandler
@@ -207,6 +207,25 @@ private[spark] object JettyUtils extends Logging {
           .filter(uri => uri != null && validateDestination(uri.getHost, uri.getPort))
           .map(_.toString)
           .orNull
+      }
+
+      override def addProxyHeaders(
+          clientRequest: HttpServletRequest,
+          proxyRequest: CRequest): Unit = {
+        super.addProxyHeaders(clientRequest, proxyRequest)
+        val path = clientRequest.getPathInfo
+        if (path != null) {
+          val prefixTrailingSlashIndex = path.indexOf('/', 1)
+          val prefix = if (prefixTrailingSlashIndex == -1) {
+            path
+          } else {
+            path.substring(0, prefixTrailingSlashIndex)
+          }
+          val existingContext = Option(clientRequest.getHeader("X-Forwarded-Context")).getOrElse("")
+          val contextPath = Option(clientRequest.getContextPath).getOrElse("")
+          val proxyContext = existingContext + contextPath + prefix
+          proxyRequest.headers(headers => headers.put("X-Forwarded-Context", proxyContext))
+        }
       }
 
       override def newHttpClient(): HttpClient = {

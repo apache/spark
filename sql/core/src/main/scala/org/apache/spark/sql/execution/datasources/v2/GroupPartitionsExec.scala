@@ -101,12 +101,14 @@ case class GroupPartitionsExec(
   }
 
   /**
-   * Groups and sorts partitions by their keys in ascending order.
+   * Groups and sorts partitions by their keys in ascending order. The sort must match
+   * `KeyedPartitioning.toGrouped`, which is why both use
+   * `KeyedPartitioning.groupedKeyRowOrdering` -- see its documentation for the contract.
    */
   private def groupAndSortByKeys(
       keyMap: Map[InternalRowComparableWrapper, Seq[Int]],
       dataTypes: Seq[DataType]) = {
-    val keyOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
+    val keyOrdering = KeyedPartitioning.groupedKeyRowOrdering(dataTypes)
     keyMap.toSeq.sorted(keyOrdering.on((t: (InternalRowComparableWrapper, _)) => t._1.row))
   }
 
@@ -233,12 +235,21 @@ case class GroupPartitionsExec(
     }
   }
 
+  /**
+   * The ordering used by the k-way merge in [[SortedMergeCoalescedRDD]]. The generated comparator
+   * ([[GenerateOrdering]]) only needs each [[SortOrder]]'s sort key (child, direction, null
+   * ordering), so `sameOrderExpressions` -- planner-only metadata that would otherwise be
+   * serialized with the RDD in every task -- is dropped.
+   */
+  private[v2] def kWayMergeOrdering: Seq[SortOrder] =
+    child.outputOrdering.map(_.copy(sameOrderExpressions = Seq.empty))
+
   override protected def doExecute(): RDD[InternalRow] = {
     if (groupedPartitions.isEmpty) {
       sparkContext.emptyRDD
     } else if (hasCoalescing && enableSortedMerge && canUseSortedMerge) {
       val partitionCoalescer = new GroupedPartitionCoalescer(groupedPartitions.map(_._2))
-      val rowOrdering = new LazyCodeGenOrdering(child.outputOrdering, child.output)
+      val rowOrdering = new LazyCodeGenOrdering(kWayMergeOrdering, child.output)
       new SortedMergeCoalescedRDD[InternalRow](
         child.execute(),
         groupedPartitions.size,

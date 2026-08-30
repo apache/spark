@@ -7,6 +7,7 @@ struct<keyword:string,reserved:boolean>
 ADD	false
 AFTER	false
 AGGREGATE	false
+ALIGN	false
 ALL	false
 ALTER	false
 ALWAYS	false
@@ -15,21 +16,28 @@ AND	false
 ANTI	false
 ANY	false
 ANY_VALUE	false
+APPLY	false
 APPROX	false
 ARCHIVE	false
 ARRAY	false
 AS	false
 ASC	false
 ASENSITIVE	false
+ASOF	false
 AT	false
 ATOMIC	false
 AUTHORIZATION	false
+AUTO	false
 BEGIN	false
 BERNOULLI	false
 BETWEEN	false
 BIGINT	false
+BIN	false
 BINARY	false
 BINDING	false
+BIN_DISTRIBUTE_RATIO	false
+BIN_END	false
+BIN_START	false
 BOOLEAN	false
 BOTH	false
 BUCKET	false
@@ -44,6 +52,7 @@ CASE	false
 CAST	false
 CATALOG	false
 CATALOGS	false
+CDC	false
 CHANGE	false
 CHANGES	false
 CHAR	false
@@ -68,6 +77,7 @@ COMPENSATION	false
 COMPUTE	false
 CONCATENATE	false
 CONDITION	false
+CONDITIONAL	false
 CONSTRAINT	false
 CONTAINS	false
 CONTINUE	false
@@ -121,8 +131,10 @@ DOUBLE	false
 DROP	false
 ELSE	false
 ELSEIF	false
+EMPTY	false
 END	false
 ENFORCED	false
+ERROR	false
 ESCAPE	false
 ESCAPED	false
 EVOLUTION	false
@@ -167,6 +179,7 @@ GROUP	false
 GROUPING	false
 HANDLER	false
 HAVING	false
+HISTORY	false
 HOUR	false
 HOURS	false
 IDENTIFIED	false
@@ -200,6 +213,11 @@ ITEMS	false
 ITERATE	false
 JOIN	false
 JSON	false
+JSON_EXISTS	false
+JSON_QUERY	false
+JSON_TABLE	false
+JSON_VALUE	false
+KEEP	false
 KEY	false
 KEYS	false
 LANGUAGE	false
@@ -216,6 +234,7 @@ LINES	false
 LIST	false
 LOAD	false
 LOCAL	false
+LOCALTIME	false
 LOCATION	false
 LOCK	false
 LOCKS	false
@@ -225,6 +244,7 @@ LOOP	false
 MACRO	false
 MAP	false
 MATCHED	false
+MATCH_CONDITION	false
 MATERIALIZED	false
 MAX	false
 MEASURE	false
@@ -256,8 +276,10 @@ NOT	false
 NULL	false
 NULLS	false
 NUMERIC	false
+OBJECT	false
 OF	false
 OFFSET	false
+OMIT	false
 ON	false
 ONLY	false
 OPEN	false
@@ -265,6 +287,7 @@ OPTION	false
 OPTIONS	false
 OR	false
 ORDER	false
+ORDINALITY	false
 OUT	false
 OUTER	false
 OUTPUTFORMAT	false
@@ -290,6 +313,7 @@ PURGE	false
 QUALIFY	false
 QUARTER	false
 QUERY	false
+QUOTES	false
 RANGE	false
 READ	false
 READS	false
@@ -312,6 +336,7 @@ RESET	false
 RESPECT	false
 RESTRICT	false
 RETURN	false
+RETURNING	false
 RETURNS	false
 REVOKE	false
 RIGHT	false
@@ -321,6 +346,7 @@ ROLLBACK	false
 ROLLUP	false
 ROW	false
 ROWS	false
+SCD	false
 SCHEMA	false
 SCHEMAS	false
 SECOND	false
@@ -329,6 +355,7 @@ SECURITY	false
 SELECT	false
 SEMI	false
 SEPARATED	false
+SEQUENCE	false
 SERDE	false
 SERDEPROPERTIES	false
 SESSION_USER	false
@@ -380,6 +407,7 @@ TIMESTAMP_NTZ	false
 TINYINT	false
 TO	false
 TOUCH	false
+TRACK	false
 TRAILING	false
 TRANSACTION	false
 TRANSACTIONS	false
@@ -392,10 +420,13 @@ TYPE	false
 UNARCHIVE	false
 UNBOUNDED	false
 UNCACHE	false
+UNCONDITIONAL	false
+UNIFORM	false
 UNION	false
 UNIQUE	false
 UNKNOWN	false
 UNLOCK	false
+UNNEST	false
 UNPIVOT	false
 UNSET	false
 UNTIL	false
@@ -419,10 +450,12 @@ WEEKS	false
 WHEN	false
 WHERE	false
 WHILE	false
+WIDTH	false
 WINDOW	false
 WITH	false
 WITHIN	false
 WITHOUT	false
+WRAPPER	false
 X	false
 YEAR	false
 YEARS	false

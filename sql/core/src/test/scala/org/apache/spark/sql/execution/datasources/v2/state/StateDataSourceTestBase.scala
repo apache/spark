@@ -29,7 +29,10 @@ import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.util.{ColumnFamilyMetadata, StreamManualClock}
 import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, NullType, StringType, StructField, StructType, TimestampType}
 
-trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
+trait StateDataSourceTestBase
+  extends StreamTest
+  with WriteProtectedCheckpointTestMixin
+  with StateStoreMetricsTest {
   import testImplicits._
 
   override def beforeEach(): Unit = {
@@ -39,8 +42,10 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
 
   override def afterEach(): Unit = {
     // Stop maintenance tasks because they may access already deleted checkpoint.
-    StateStore.stop()
+    // The WriteProtectedCheckpointTestMixin's afterEach (called via super) clears
+    // WriteProtectedPaths first, so teardown writes are not falsely flagged.
     super.afterEach()
+    StateStore.stop()
   }
 
   protected def runCompositeKeyStreamingAggregationQuery(checkpointRoot: String): Unit = {

@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -37,9 +38,13 @@ case class CollectMetricsExec(
   extends UnaryExecNode {
 
   private lazy val accumulator: AggregatingAccumulator = {
-    val acc = AggregatingAccumulator(metricExpressions, child.output)
-    acc.register(sparkContext, Option(CollectMetricsExec.ACCUMULATOR_NAME))
-    acc
+    if (conf.getConf(SQLConf.LEGACY_OBSERVE_METRICS_AGGREGATE_ALL_ATTEMPTS)) {
+      AggregatingAccumulator(
+        sparkContext, CollectMetricsExec.ACCUMULATOR_NAME, metricExpressions, child.output)
+    } else {
+      AggregatingAccumulator.lastAttempt(
+        sparkContext, CollectMetricsExec.ACCUMULATOR_NAME, metricExpressions, child.output)
+    }
   }
 
   private[sql] def accumulatorId: Long = {
@@ -56,7 +61,13 @@ case class CollectMetricsExec(
       .asInstanceOf[InternalRow => Row]
   }
 
-  def collectedMetrics: Row = toRowConverter(accumulator.value)
+  def collectedMetrics: Row = toRowConverter(collectedMetricsRow)
+
+  private def collectedMetricsRow: InternalRow = accumulator match {
+    case acc: LastAttemptAggregatingAccumulator =>
+      acc.lastAttemptValueForHighestRDDId().getOrElse(acc.value)
+    case acc => acc.value
+  }
 
   override def output: Seq[Attribute] = child.output
 
@@ -66,6 +77,10 @@ case class CollectMetricsExec(
 
   override def resetMetrics(): Unit = {
     accumulator.reset()
+    accumulator match {
+      case acc: LastAttemptAggregatingAccumulator => acc.resetLastAttemptAccumulator()
+      case _ =>
+    }
     super.resetMetrics()
   }
 

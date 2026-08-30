@@ -48,6 +48,24 @@ class TypeUtilsSuite extends SparkFunSuite with SQLHelper {
       ArrayType(StringType, containsNull = false) :: Nil)
   }
 
+  test("typeWithProperEquals") {
+    // Atomic types have proper equals.
+    assert(TypeUtils.typeWithProperEquals(IntegerType))
+    assert(TypeUtils.typeWithProperEquals(DoubleType))
+    assert(TypeUtils.typeWithProperEquals(BooleanType))
+    assert(TypeUtils.typeWithProperEquals(TimestampType))
+    // UTF8_BINARY strings support binary equality.
+    assert(TypeUtils.typeWithProperEquals(StringType))
+    // Non-UTF8_BINARY (collated) strings do not support binary equality.
+    assert(!TypeUtils.typeWithProperEquals(StringType("UTF8_LCASE")))
+    // Binary type does not have proper equals.
+    assert(!TypeUtils.typeWithProperEquals(BinaryType))
+    // Complex types are not covered.
+    assert(!TypeUtils.typeWithProperEquals(ArrayType(IntegerType)))
+    assert(!TypeUtils.typeWithProperEquals(MapType(StringType, IntegerType)))
+    assert(!TypeUtils.typeWithProperEquals(new StructType().add("a", IntegerType)))
+  }
+
   test("TIMESTAMP_NANOS_TYPES_ENABLED defaults to Utils.isTesting") {
     assert(SQLConf.get.timestampNanosTypesEnabled === Utils.isTesting)
   }

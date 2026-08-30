@@ -323,4 +323,90 @@ class KafkaOffsetReaderSuite extends SharedSparkSession with KafkaTest {
       reader.close()
     }
   }
+
+  // SPARK-49442: When partition.metadata.cache.ttl.ms is set, repeated fetchLatestOffsets
+  // calls within the TTL window must reuse the cached partition set and issue only one
+  // DescribeTopics RPC to the broker, regardless of how many micro-batches run.
+  test("SPARK-49442: partition.metadata.cache.ttl.ms suppresses redundant " +
+      "DescribeTopics RPCs within the TTL window") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+
+    val ttlMs = 300000 // 5 minutes
+    val describeCount = new AtomicInteger(0)
+    val countingStrategy = new SubscribeStrategy(Seq(topic)) {
+      override def assignedTopicPartitions(admin: Admin): Set[TopicPartition] = {
+        describeCount.incrementAndGet()
+        super.assignedTopicPartitions(admin)
+      }
+    }
+
+    val reader = new KafkaOffsetReaderAdmin(
+      countingStrategy,
+      KafkaSourceProvider.kafkaParamsForDriver(Map(
+        "bootstrap.servers" -> testUtils.brokerAddress
+      )),
+      CaseInsensitiveMap(Map(
+        KafkaSourceProvider.PARTITION_METADATA_CACHE_TTL_MS -> ttlMs.toString
+      )),
+      ""
+    )
+
+    try {
+      val numBatches = 5
+      for (_ <- 1 to numBatches) {
+        reader.fetchLatestOffsets(None)
+      }
+      // All 5 fetches fall within the TTL window, so the partition set is resolved only once.
+      assert(describeCount.get() === 1,
+        s"Expected 1 DescribeTopics call but got ${describeCount.get()}")
+    } finally {
+      reader.close()
+    }
+  }
+
+  test("SPARK-49442: partition.metadata.cache.ttl.ms refreshes after TTL expires") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+
+    val ttlMs = 2000 // large enough to not expire during two sequential fetches
+    val describeCount = new AtomicInteger(0)
+    val countingStrategy = new SubscribeStrategy(Seq(topic)) {
+      override def assignedTopicPartitions(admin: Admin): Set[TopicPartition] = {
+        describeCount.incrementAndGet()
+        super.assignedTopicPartitions(admin)
+      }
+    }
+
+    val reader = new KafkaOffsetReaderAdmin(
+      countingStrategy,
+      KafkaSourceProvider.kafkaParamsForDriver(Map(
+        "bootstrap.servers" -> testUtils.brokerAddress
+      )),
+      CaseInsensitiveMap(Map(
+        KafkaSourceProvider.PARTITION_METADATA_CACHE_TTL_MS -> ttlMs.toString
+      )),
+      ""
+    )
+
+    try {
+      // First fetch populates the cache (1 RPC).
+      reader.fetchLatestOffsets(None)
+      assert(describeCount.get() === 1)
+
+      // Fetches within the TTL reuse the cache (still 1 RPC).
+      reader.fetchLatestOffsets(None)
+      assert(describeCount.get() === 1)
+
+      // Sleep past the TTL so the next fetch must refresh.
+      Thread.sleep(ttlMs + 50)
+
+      // Cache has expired: one more RPC expected.
+      reader.fetchLatestOffsets(None)
+      assert(describeCount.get() === 2,
+        s"Expected 2 DescribeTopics calls after TTL expiry but got ${describeCount.get()}")
+    } finally {
+      reader.close()
+    }
+  }
 }

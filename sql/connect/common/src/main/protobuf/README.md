@@ -14,9 +14,16 @@ reproducible environment.
 
 ### Build the image
 
+From the root of the Spark repository:
+
 ```bash
-docker build -t connect-cg dev/spark-test-image/connect-gen-protos/
+docker build -t connect-cg \
+  --build-context root=. \
+  dev/spark-test-image/connect-gen-protos/
 ```
+
+The `root` build context points at the Spark repository root so the Dockerfile
+can `COPY` `pyproject.toml` for dependency installation.
 
 ### Run the image
 
@@ -41,17 +48,17 @@ Install the required tools:
 - [`buf`](https://buf.build/docs/cli/installation/) — protobuf code generator
 - Python 3.12+
 
-Install the required Python packages. Check `dev/requirements.txt` for the latest
-pinned versions of `mypy`, `mypy-protobuf`, and `black`, then run:
+Install the required Python packages. Check `pyproject.toml` for the latest
+pinned versions of `mypy`, `mypy-protobuf`, and `ruff`, then run:
 
 ```bash
-pip install 'mypy==<version>' 'mypy-protobuf==<version>' 'black==<version>'
+pip install 'mypy==<version>' 'mypy-protobuf==<version>' 'ruff==<version>'
 ```
 
-For example, based on the current `dev/requirements.txt`:
+For example, based on the current `pyproject.toml`:
 
 ```bash
-pip install 'mypy==1.19.1' 'mypy-protobuf==3.3.0' 'black==26.3.1'
+pip install 'mypy==1.19.1' 'mypy-protobuf==3.3.0' 'ruff==0.14.8'
 ```
 
 ### Generate

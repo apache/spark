@@ -6,14 +6,12 @@
 
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=true
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false
---ONLY_IF spark
 
-CREATE TEMPORARY VIEW m AS SELECT * FROM VALUES
+CREATE TEMPORARY VIEW m(a, b) AS VALUES
   (null, null),
   (null, 1.0),
   (2, 3.0),
-  (4, 5.0)
-  AS m(a, b);
+  (4, 5.0);
 
 -- Case 1 (not possible to write a literal with no rows, so we ignore it.)
 -- (subquery is empty -> row is returned)

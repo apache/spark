@@ -32,6 +32,12 @@ class IsolatedClientLoaderIvySettingsSuite extends SparkFunSuite {
     val ivyPath = Utils.createTempDir(namePrefix = "ivy-settings-test")
     val ivySettingsFile = new File(ivyPath, "ivysettings.xml")
     val writer = new PrintWriter(ivySettingsFile)
+    // Honor the DEFAULT_ARTIFACT_REPOSITORY environment variable so that CI environments which
+    // proxy or mirror Maven Central (and may block direct access to repo1.maven.org) can point
+    // this test at their mirror. This matches how `MavenUtils.createRepoResolvers` picks the
+    // default `central` resolver root. Falls back to Maven Central when the variable is unset.
+    val centralRoot =
+      sys.env.getOrElse("DEFAULT_ARTIFACT_REPOSITORY", "https://repo1.maven.org/maven2/")
     try {
       writer.write(
         s"""<ivysettings>
@@ -39,7 +45,7 @@ class IsolatedClientLoaderIvySettingsSuite extends SparkFunSuite {
            |  <resolvers>
            |    <chain name="main">
            |      <ibiblio name="central" m2compatible="true"
-           |               root="https://repo1.maven.org/maven2/"/>
+           |               root="$centralRoot"/>
            |    </chain>
            |  </resolvers>
            |</ivysettings>""".stripMargin)

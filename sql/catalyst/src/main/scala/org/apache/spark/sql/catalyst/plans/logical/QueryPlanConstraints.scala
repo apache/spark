@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils.isBinaryStable
 
 
 trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
@@ -33,6 +34,7 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
     if (conf.constraintPropagationEnabled) {
       validConstraints
         .union(inferAdditionalConstraints(validConstraints))
+        .union(inferConstraintsFromLiteralBindings(validConstraints))
         .union(constructIsNotNullConstraints(validConstraints, output))
         .filter { c =>
           c.references.nonEmpty && c.references.subsetOf(outputSet) && c.deterministic
@@ -77,15 +79,74 @@ trait ConstraintHelper {
         inferredConstraints ++= replaceConstraints(predicates - eq - EqualNullSafe(l, r), l, r)
       case _ => // No inference
     }
+
     inferredConstraints -- constraints
+  }
+
+  /**
+   * Infers additional constraints by substituting known attribute-to-literal bindings into
+   * non-equality predicates. For example, given `a = 5` and `b >= a`, infers `b >= 5`.
+   *
+   * Attribute-to-attribute (and cast-form) [[EqualTo]] and all [[EqualNullSafe]] predicates are
+   * excluded from substitution targets.
+   * Substituting into attribute-attribute [[EqualTo]] would duplicate work already done by the
+   * transitivity case in [[inferAdditionalConstraints]] (e.g. `a = 5` and `b = a` imply `b = 5`,
+   * already derived there). Substituting into [[EqualNullSafe]] would produce a structurally
+   * distinct form (e.g. `b <=> 5`) that downstream rules (such as subquery-reuse matching)
+   * treat differently from the [[EqualTo]] form, leading to duplicate subqueries being generated.
+   */
+  def inferConstraintsFromLiteralBindings(constraints: ExpressionSet): ExpressionSet = {
+    // Collect attr -> literal bindings, guarded by binary-stable collation so that
+    // the substitution is semantically safe (non-binary-stable collations may equate
+    // strings that are binary-distinct, so substituting the literal would change results).
+    val bindings: Map[Attribute, Literal] = constraints.collect {
+      case EqualTo(a: Attribute, l: Literal) if isBinaryStable(a.dataType) => a -> l
+      case EqualTo(l: Literal, a: Attribute) if isBinaryStable(a.dataType) => a -> l
+    }.toMap
+
+    if (bindings.isEmpty) return ExpressionSet()
+
+    val targets = constraints.filterNot {
+      // attr=attr EqualTo: already covered by inferAdditionalConstraints (transitivity).
+      // cast-equality EqualTo: would produce redundant cast literals derivable from that path.
+      // EqualNullSafe: substituting a literal produces a structurally distinct b <=> lit form
+      // that subquery-reuse matching treats differently from b = lit, causing duplicate subqueries.
+      // IsNotNull: handled separately by constructIsNotNullConstraints.
+      case EqualTo(_: Attribute, _: Attribute) => true
+      case EqualTo(Cast(_: Attribute, _, _, _), _: Attribute) => true
+      case EqualTo(_: Attribute, Cast(_: Attribute, _, _, _)) => true
+      case _: EqualNullSafe | _: IsNotNull => true
+      case _ => false
+    }
+
+    var inferred = ExpressionSet()
+    bindings.foreach { case (attr, lit) =>
+      inferred ++= replaceConstraints(targets, attr, lit)
+    }
+    inferred -- constraints
   }
 
   private def replaceConstraints(
       constraints: ExpressionSet,
       source: Expression,
-      destination: Expression): ExpressionSet = constraints.map(_ transform {
-    case e: Expression if e.semanticEquals(source) => destination
-  })
+      destination: Expression): ExpressionSet = {
+    if (isBinaryStable(source.dataType)) {
+      constraints.map(_ transform {
+        case e: Expression if e.semanticEquals(source) => destination
+      })
+    } else {
+      constraints.map(_ transform {
+        case b: BinaryComparison if sameCollationOperand(b, source) =>
+          b.withNewChildren(b.children.map { c =>
+            if (c.semanticEquals(source)) destination else c
+          })
+      })
+    }
+  }
+
+  private def sameCollationOperand(b: BinaryComparison, source: Expression): Boolean =
+    (b.left.semanticEquals(source) || b.right.semanticEquals(source)) &&
+      b.left.dataType == source.dataType && b.right.dataType == source.dataType
 
   /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as

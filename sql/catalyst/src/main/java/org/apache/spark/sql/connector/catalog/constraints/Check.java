@@ -27,12 +27,13 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate;
 /**
  * A CHECK constraint.
  * <p>
- * A CHECK constraint defines a condition each row in a table must satisfy. Connectors can define
- * such constraints either in SQL (Spark SQL dialect) or using a {@link Predicate predicate} if the
- * condition can be expressed using a supported expression. A CHECK constraint can reference one or
- * more columns. Such constraint is considered violated if its condition evaluates to {@code FALSE},
- * but not {@code NULL}. The search condition must be deterministic and cannot contain subqueries
- * and certain functions like aggregates or UDFs.
+ * A CHECK constraint defines a condition each row in a table must satisfy. The condition is always
+ * represented as a SQL string (Spark SQL dialect), accessible via {@link #predicateSql()}, and is
+ * additionally exposed as a {@link Predicate predicate} via {@link #predicate()} whenever it can be
+ * expressed using supported expressions. A CHECK constraint can reference one or more columns. Such
+ * constraint is considered violated if its condition evaluates to {@code FALSE}, but not
+ * {@code NULL}. The search condition must be deterministic and cannot contain subqueries and
+ * certain functions like aggregates or UDFs.
  * <p>
  * Spark supports enforced and not enforced CHECK constraints, allowing connectors to control
  * whether data modifications that violate the constraint must fail. Each constraint is either
@@ -63,13 +64,19 @@ public class Check extends BaseConstraint {
 
   /**
    * Returns the SQL representation of the search condition (Spark SQL dialect).
+   * <p>
+   * This is the canonical representation of the condition and is always present (never
+   * {@code null}). The optional {@link #predicate()} provides a structured form when the condition
+   * can be expressed using supported {@link Predicate} expressions.
    */
   public String predicateSql() {
     return predicateSql;
   }
 
   /**
-   * Returns the search condition.
+   * Returns the search condition as a {@link Predicate}, or {@code null} if the condition cannot be
+   * expressed using supported predicate expressions. Use {@link #predicateSql()} for the canonical
+   * SQL representation, which is always present.
    */
   public Predicate predicate() {
     return predicate;
@@ -77,7 +84,7 @@ public class Check extends BaseConstraint {
 
   @Override
   protected String definition() {
-    return String.format("CHECK (%s)", predicateSql != null ? predicateSql : predicate);
+    return String.format("CHECK (%s)", predicateSql);
   }
 
   @Override
@@ -123,10 +130,10 @@ public class Check extends BaseConstraint {
     }
 
     public Check build() {
-      if (predicateSql == null && predicate == null) {
+      if (predicateSql == null) {
         throw new SparkIllegalArgumentException(
             "INTERNAL_ERROR",
-            Map.of("message", "Predicate SQL and expression can't be both null in CHECK"));
+            Map.of("message", "Predicate SQL can't be null in CHECK"));
       }
       return new Check(name(), predicateSql, predicate, enforced(), validationStatus(), rely());
     }

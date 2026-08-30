@@ -21,8 +21,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.QuotingUtils.quoted
 
 /**
- * Thrown by a catalog when an item already exists. The analyzer will rethrow the exception as an
- * [[org.apache.spark.sql.AnalysisException]] with the correct position information.
+ * Thrown by a catalog when a namespace is not empty. The analyzer will rethrow the exception as
+ * an [[org.apache.spark.sql.AnalysisException]] with the correct position information.
  */
 case class NonEmptyNamespaceException(
     namespace: Array[String],

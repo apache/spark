@@ -113,13 +113,28 @@ abstract class SparkFunSuite
     }
   }
 
-  /** Run `body`; if it throws OutOfMemoryError, force a GC and retry once. */
-  protected def retryOnOOM[T](body: => T): T = {
-    try body
-    catch {
-      case _: OutOfMemoryError =>
-        runGC()
-        body
+  /**
+   * Run `body`; if it throws OutOfMemoryError, force a GC and retry, up to `maxAttempts`
+   * total attempts (default 3). A single GC+retry is not always enough in memory-constrained
+   * CI: a large array retained by a previous test may not be reclaimed by the first
+   * System.gc(), so the retried allocation OOMs again. Retrying a few times (with a full
+   * runGC() that waits for a weak reference to clear between attempts) gives the JVM
+   * additional chances to reclaim memory. This does not mask genuine leaks: an unbounded
+   * allocation still fails once the attempts are exhausted.
+   */
+  protected def retryOnOOM[T](maxAttempts: Int = 3)(body: => T): T = {
+    var attempt = 1
+    while (true) {
+      try {
+        return body
+      } catch {
+        case oom: OutOfMemoryError =>
+          if (attempt >= maxAttempts) throw oom
+          runGC()
+          attempt += 1
+      }
     }
+    // Unreachable: the loop either returns a value or rethrows the OOM.
+    throw new IllegalStateException("retryOnOOM exited its retry loop unexpectedly")
   }
 }

@@ -15,36 +15,36 @@
 # limitations under the License.
 #
 
-import os
-import platform
-import shutil
-import warnings
 import gc
+import heapq
 import itertools
 import operator
+import os
+import platform
 import random
+import shutil
 import sys
-import heapq
+import warnings
 from typing import (
+    IO,
+    TYPE_CHECKING,
     Any,
     Callable,
     Generic,
     Hashable,
-    IO,
     Iterable,
     Iterator,
     Optional,
-    TYPE_CHECKING,
     TypeVar,
     Union,
 )
 
 from pyspark.serializers import (
+    AutoBatchedSerializer,
     BatchedSerializer,
+    CompressedSerializer,
     CPickleSerializer,
     FlattenedValuesSerializer,
-    CompressedSerializer,
-    AutoBatchedSerializer,
     Serializer,
 )
 from pyspark.util import fail_on_stopiteration
@@ -80,7 +80,7 @@ def get_used_memory() -> int:
 
     else:
         if platform.system() == "Linux":
-            for line in open("/proc/self/status"):
+            for line in open("/proc/self/status", encoding="utf-8"):
                 if line.startswith("VmRSS:"):
                     return int(line.split()[1]) >> 10
 

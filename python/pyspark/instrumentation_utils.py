@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -17,12 +16,12 @@
 #
 
 import functools
+import importlib
 import inspect
 import threading
-import importlib
 import time
 from types import ModuleType
-from typing import Tuple, Union, List, Callable, Any, Type
+from typing import Any, Callable, List, Tuple, Type, Union
 
 __all__: List[str] = []
 

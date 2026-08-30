@@ -41,12 +41,10 @@
         <dependency>
           <groupId>io.fabric8</groupId>
           <artifactId>volcano-model</artifactId>
-          <version>${kubernetes-client.version}</version>
         </dependency>
         <dependency>
           <groupId>io.fabric8</groupId>
           <artifactId>volcano-client</artifactId>
-          <version>${kubernetes-client.version}</version>
         </dependency>
       </dependencies>
       <build>
@@ -111,7 +109,6 @@
     <dependency>
       <groupId>io.fabric8</groupId>
       <artifactId>kubernetes-client</artifactId>
-      <version>${kubernetes-client.version}</version>
       <exclusions>
         <exclusion>
           <groupId>com.fasterxml.jackson.core</groupId>
@@ -160,7 +157,6 @@
     <dependency>
       <groupId>com.fasterxml.jackson.dataformat</groupId>
       <artifactId>jackson-dataformat-yaml</artifactId>
-      <version>${fasterxml.jackson.version}</version>
     </dependency>
 
     <!-- Explicitly depend on shaded dependencies from the parent, since shaded deps aren't transitive -->

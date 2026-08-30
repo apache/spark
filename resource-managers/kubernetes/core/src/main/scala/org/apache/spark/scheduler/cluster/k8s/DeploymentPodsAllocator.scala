@@ -54,6 +54,9 @@ class DeploymentPodsAllocator(
 
   private val driverPodReadinessTimeout = conf.get(KUBERNETES_ALLOCATION_DRIVER_READINESS_TIMEOUT)
 
+  private val shouldWaitForDriverReadiness =
+    !conf.get(KUBERNETES_DRIVER_SERVICE_PUBLISH_NOT_READY_ADDRESSES)
+
   private val namespace = conf.get(KUBERNETES_NAMESPACE)
 
   private val kubernetesDriverPodName = conf.get(KUBERNETES_DRIVER_POD_NAME)
@@ -77,13 +80,15 @@ class DeploymentPodsAllocator(
       applicationId: String,
       schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     appId = applicationId
-    driverPod.foreach { pod =>
-      Utils.tryLogNonFatalError {
-        kubernetesClient
-          .pods()
-          .inNamespace(namespace)
-          .withName(pod.getMetadata.getName)
-          .waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
+    if (shouldWaitForDriverReadiness) {
+      driverPod.foreach { pod =>
+        Utils.tryLogNonFatalError {
+          kubernetesClient
+            .pods()
+            .inNamespace(namespace)
+            .withName(pod.getMetadata.getName)
+            .waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
+        }
       }
     }
   }

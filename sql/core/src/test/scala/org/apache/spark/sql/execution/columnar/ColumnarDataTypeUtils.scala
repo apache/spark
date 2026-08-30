@@ -30,6 +30,8 @@ object ColumnarDataTypeUtils {
     case PhysicalShortType => ShortType
     case PhysicalBinaryType => BinaryType
     case PhysicalCalendarIntervalType => CalendarIntervalType
+    case PhysicalTimestampNTZNanosType => TimestampNTZNanosType()
+    case PhysicalTimestampLTZNanosType => TimestampLTZNanosType()
     case PhysicalFloatType => FloatType
     case PhysicalDoubleType => DoubleType
     case PhysicalStringType(collationId) => StringType(collationId)

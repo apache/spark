@@ -41,6 +41,11 @@ import org.apache.spark.sql.types._
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, ...) - Returns the first non-null argument if exists. Otherwise, null.",
+  arguments = """
+    Arguments:
+      * exprN - An expression of any type. All arguments must share a common type.
+          Arguments are evaluated in order and the first non-null value is returned.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(NULL, 1, NULL);
@@ -93,11 +98,37 @@ case class Coalesce(children: Seq[Expression])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val resultType = CodeGenerator.javaType(dataType)
+    // Fast path for the common `coalesce(a, b)` where `b` is non-nullable and its evaluation
+    // generates no code (a literal or an already-evaluated value), e.g. the `coalesce(sum, 0)`
+    // emitted for every SUM/AVG update. The result can never be null and `b` carries a pure
+    // Java expression, so a single ternary replaces the general do-while block below and no
+    // global mutable isNull state is needed. The empty-code requirement also preserves lazy
+    // evaluation: there are no statements of `b` to hoist before the null check.
+    val probedEvals: Option[Seq[ExprCode]] =
+      if (children.length == 2 && !children(1).nullable) {
+        val first = children.head.genCode(ctx)
+        val second = children(1).genCode(ctx)
+        if (second.code.isEmpty) {
+          return ev.copy(
+            code = code"""
+               |${first.code}
+               |$resultType ${ev.value} = ${first.isNull} ? ${second.value} : ${first.value};
+             """.stripMargin,
+            isNull = FalseLiteral)
+        }
+        // The fast path does not apply, so the general path below reuses the code generated for
+        // the probe: generating a child twice would duplicate codegen side effects on the context
+        // (orphaned mutable state for stateful expressions, repeated reference registrations).
+        Some(Seq(first, second))
+      } else {
+        None
+      }
+
     ev.isNull = JavaCode.isNullGlobal(ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, ev.isNull))
 
     // all the evals are meant to be in a do { ... } while (false); loop
-    val evals = children.map { e =>
-      val eval = e.genCode(ctx)
+    val evals = probedEvals.getOrElse(children.map(_.genCode(ctx))).map { eval =>
       s"""
          |${eval.code}
          |if (!${eval.isNull}) {
@@ -108,7 +139,6 @@ case class Coalesce(children: Seq[Expression])
        """.stripMargin
     }
 
-    val resultType = CodeGenerator.javaType(dataType)
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = evals,
       funcName = "coalesce",
@@ -163,6 +193,13 @@ private case class TypedNullLiteral(child: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns null if `expr1` equals to `expr2`, or `expr1` otherwise.",
+  arguments = """
+    Arguments:
+      * expr1 - The value returned when it is not equal to the other expression.
+        An expression of any orderable type.
+      * expr2 - The value compared against the first expression.
+        An expression of any orderable type.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(2, 2);
@@ -194,6 +231,11 @@ case class NullIf(left: Expression, right: Expression, replacement: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns null if `expr` is equal to zero, or `expr` otherwise.",
+  arguments = """
+    Arguments:
+      * expr - The expression that returns null when equal to zero.
+        An expression that evaluates to a numeric.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -215,6 +257,10 @@ case class NullIfZero(input: Expression, replacement: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns zero if `expr` is equal to null, or `expr` otherwise.",
+  arguments = """
+    Arguments:
+      * expr - An expression. Zero is returned when it is null, otherwise `expr` is returned.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(NULL);
@@ -236,6 +282,11 @@ case class ZeroIfNull(input: Expression, replacement: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns `expr2` if `expr1` is null, or `expr1` otherwise.",
+  arguments = """
+    Arguments:
+      * expr1 - An expression. Returned when it is not null.
+      * expr2 - The value returned when `expr1` is null.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(NULL, array('2'));
@@ -260,6 +311,12 @@ case class Nvl(left: Expression, right: Expression, replacement: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, expr3) - Returns `expr2` if `expr1` is not null, or `expr3` otherwise.",
+  arguments = """
+    Arguments:
+      * expr1 - An expression tested for nullability.
+      * expr2 - The value returned when `expr1` is not null.
+      * expr3 - The value returned when `expr1` is null.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(NULL, 2, 1);
@@ -288,6 +345,11 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, replace
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns true if `expr` is NaN, or false otherwise.",
+  arguments = """
+    Arguments:
+      * expr - The expression to test for NaN.
+        An expression that evaluates to a double or float.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(cast('NaN' as double));
@@ -336,6 +398,13 @@ case class IsNaN(child: Expression) extends UnaryExpression
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns `expr1` if it's not NaN, or `expr2` otherwise.",
+  arguments = """
+    Arguments:
+      * expr1 - The value returned when it is not NaN.
+        An expression that evaluates to a double or float.
+      * expr2 - The value returned when the first expression is NaN.
+        An expression that evaluates to a double or float.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(cast('NaN' as double), 123);
@@ -415,6 +484,10 @@ case class NaNvl(left: Expression, right: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns true if `expr` is null, or false otherwise.",
+  arguments = """
+    Arguments:
+      * expr - An expression of any type to test for nullability.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);
@@ -449,6 +522,10 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns true if `expr` is not null, or false otherwise.",
+  arguments = """
+    Arguments:
+      * expr - An expression of any type to test for nullability.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);

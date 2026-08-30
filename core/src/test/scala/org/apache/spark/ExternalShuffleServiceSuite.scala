@@ -238,6 +238,46 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with Eventually {
     }
   }
 
+  test("SPARK-58107: sealed local checkpoint stays verifiable when fetched via shuffle service") {
+    val confWithRddFetchEnabled = conf.clone
+      .set(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, true)
+      .set(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, true)
+      .set(config.LOCAL_CHECKPOINT_VERIFY_CHECKSUM_ENABLED, true)
+      .set(config.EXECUTOR_REMOVE_DELAY.key, "0s")
+      .set(config.DRIVER_BIND_ADDRESS.key, Utils.localHostName())
+    sc = new SparkContext("local-cluster[1,1,1024]", "test", confWithRddFetchEnabled)
+    sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
+    try {
+      // A serialized-level local checkpoint is fingerprinted and sealed to one content checksum
+      // per partition on the master.
+      val rdd = sc.parallelize(0 until 100, 2)
+        .map(i => (i, i))
+        .persist(StorageLevel.DISK_ONLY)
+      rdd.localCheckpoint()
+      rdd.count()
+
+      val blockId = RDDBlockId(rdd.id, 0)
+      // With RDD fetch enabled, the master also tracks the block under the shuffle-service port.
+      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+        val locations = sc.env.blockManager.master.getLocations(blockId)
+        assert(locations.map(_.port).contains(server.getPort))
+      }
+      assert(sc.env.blockManager.master.verifyRddChecksumSeal(rdd.id).isEmpty)
+
+      // After the executor is gone, only the shuffle-service pseudo-replica remains; the seal
+      // invariant must still hold (the pseudo-replica carries no checksum and must be skipped).
+      sc.killExecutors(sc.getExecutorIds())
+      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+        val locations = sc.env.blockManager.master.getLocations(blockId)
+        assert(locations.size === 1)
+        assert(locations.map(_.port).contains(server.getPort))
+      }
+      assert(sc.env.blockManager.master.verifyRddChecksumSeal(rdd.id).isEmpty)
+    } finally {
+      rpcHandler.applicationRemoved(sc.conf.getAppId, true)
+    }
+  }
+
   test("SPARK-37618: external shuffle service removes shuffle blocks from deallocated executors") {
     for (enabled <- Seq(true, false)) {
       // Use local disk reading to get location of shuffle files on disk

@@ -51,6 +51,23 @@ on:
         required: false
         type: string
         default: ''
+      build_timeout_minutes:
+        description: >-
+          Timeout for each `build` matrix job. Raise it for a caller whose configuration makes the
+          tests slower, e.g. a non-default codegen compiler.
+        required: false
+        type: number
+        default: 150
+      pyspark_timeout_minutes:
+        description: Timeout for each `pyspark` matrix job. Same reason as above.
+        required: false
+        type: number
+        default: 120
+      docker_integration_tests_timeout_minutes:
+        description: Timeout for the `docker-integration-tests` job. Same reason as above.
+        required: false
+        type: number
+        default: 120
     secrets:
       codecov_token:
         description: The upload token of codecov.
@@ -69,8 +86,7 @@ jobs:
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
       # Pinned so every downstream job checks out the same snapshot, even if `master` advances mid-run.
-      head_sha: ${{ steps.resolve-sha.outputs.head_sha }}
-      image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
+      head_sha: ${{ steps.checkout.outputs.head_sha }}
       image_docs_url: ${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}
       image_docs_url_link: ${{ steps.infra-image-link.outputs.image_docs_url_link }}
       image_lint_url: ${{ steps.infra-image-lint-outputs.outputs.image_lint_url }}
@@ -80,27 +96,18 @@ jobs:
       image_pyspark_url: ${{ steps.infra-image-pyspark-outputs.outputs.image_pyspark_url }}
       image_pyspark_url_link: ${{ steps.infra-image-link.outputs.image_pyspark_url_link }}
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      id: checkout
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ inputs.branch }}
-    - name: Resolve apache/spark HEAD SHA
-      id: resolve-sha
-      run: echo "head_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Check all modules
       id: set-outputs
       run: |
         if [ -z "${{ inputs.jobs }}" ]; then
-          pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark') and not m.name.startswith('pyspark-pandas')))"`
+          pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark') and not m.name.startswith('pyspark-pandas') and not m.name == 'pyspark-install'))"`
           pyspark_pandas_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark-pandas')))"`
           pyspark=`./dev/is-changed.py -m $pyspark_modules`
           pandas=`./dev/is-changed.py -m $pyspark_pandas_modules`
@@ -114,6 +121,9 @@ jobs:
             docker=`./dev/is-changed.py -m docker-integration-tests`
             # Skip PySpark, SparkR, TPC-DS when only static UI resources (JS/CSS/HTML) changed.
             # These tests are unaffected by UI static resource modifications.
+            # Also we only run the very slow transpile changes when that logic changes
+            transpile=false
+            static_only=false
             changed_files=$(git diff --name-only "$APACHE_SPARK_REF" HEAD 2>/dev/null)
             if [ -n "$changed_files" ]; then
               static_only=true
@@ -123,8 +133,11 @@ jobs:
                   *) static_only=false; break ;;
                 esac
               done
-            else
-              static_only=false
+              for f in $changed_files; do
+                case "$f" in
+                  *transpile*) transpile=true; break ;;
+                esac
+              done
             fi
             if [ "$static_only" = "true" ]; then
               pyspark=false
@@ -136,7 +149,6 @@ jobs:
             buf=true
             ui=true
             docs=true
-            java17=true
             java25=true
           else
             pyspark_install=false
@@ -150,10 +162,9 @@ jobs:
             buf=false
             ui=false
             docs=false
-            java17=false
             java25=false
           fi
-          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
+          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,credential-aws,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
           build_core_utils=`./dev/is-changed.py -m "core,unsafe,kvstore,utils,utils-java,network-common,network-shuffle,sketch,variant,launcher"`
           precondition="
             {
@@ -167,13 +178,13 @@ jobs:
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
               \"lint\" : \"true\",
-              \"java17\" : \"$java17\",
               \"java25\" : \"$java25\",
               \"docs\" : \"$docs\",
               \"yarn\" : \"$yarn\",
               \"k8s-integration-tests\" : \"$kubernetes\",
               \"buf\" : \"$buf\",
               \"ui\" : \"$ui\",
+              \"transpile\": \"$transpile\",
             }"
           echo $precondition # For debugging
           # Remove `\n` to avoid "Invalid format" error
@@ -188,7 +199,6 @@ jobs:
         fi
     - name: Check envs
       id: check-envs
-      if: inputs.branch != 'branch-3.5'
       env: ${{ fromJSON(inputs.envs) }}
       run: |
         if [[ "${{ fromJson(steps.set-outputs.outputs.required).pyspark }}"  == 'true' || "${{ fromJson(steps.set-outputs.outputs.required).pyspark-pandas }}"  == 'true' ]]; then
@@ -208,14 +218,6 @@ jobs:
             exit 1
           fi
         fi
-    - name: Generate infra image URL
-      id: infra-image-outputs
-      run: |
-        # Convert to lowercase to meet Docker repo name requirement
-        REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-        IMG_NAME="apache-spark-ci-image:${{ inputs.branch }}-${{ github.run_id }}"
-        IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
-        echo "image_url=$IMG_URL" >> $GITHUB_OUTPUT
     - name: Generate infra image URL (Documentation)
       id: infra-image-docs-outputs
       run: |
@@ -256,25 +258,18 @@ jobs:
       run: |
         # Set the image URL for job "docs"
         # Should delete the link and directly use image_docs_url after SPARK 3.x EOL
-        if [[ "${{ inputs.branch }}" == 'branch-3.5' ]]; then
-          echo "image_docs_url_link=${{ steps.infra-image-outputs.outputs.image_url }}" >> $GITHUB_OUTPUT
-          echo "image_lint_url_link=${{ steps.infra-image-outputs.outputs.image_url }}" >> $GITHUB_OUTPUT
-          echo "image_sparkr_url_link=${{ steps.infra-image-outputs.outputs.image_url }}" >> $GITHUB_OUTPUT
-          echo "image_pyspark_url_link=${{ steps.infra-image-outputs.outputs.image_url }}" >> $GITHUB_OUTPUT
-        else
-          echo "image_docs_url_link=${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}" >> $GITHUB_OUTPUT
-          echo "image_lint_url_link=${{ steps.infra-image-lint-outputs.outputs.image_lint_url }}" >> $GITHUB_OUTPUT
-          echo "image_sparkr_url_link=${{ steps.infra-image-sparkr-outputs.outputs.image_sparkr_url }}" >> $GITHUB_OUTPUT
-          echo "image_pyspark_url_link=${{ steps.infra-image-pyspark-outputs.outputs.image_pyspark_url }}" >> $GITHUB_OUTPUT
-        fi
+        echo "image_docs_url_link=${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}" >> $GITHUB_OUTPUT
+        echo "image_lint_url_link=${{ steps.infra-image-lint-outputs.outputs.image_lint_url }}" >> $GITHUB_OUTPUT
+        echo "image_sparkr_url_link=${{ steps.infra-image-sparkr-outputs.outputs.image_sparkr_url }}" >> $GITHUB_OUTPUT
+        echo "image_pyspark_url_link=${{ steps.infra-image-pyspark-outputs.outputs.image_pyspark_url }}" >> $GITHUB_OUTPUT
 
   # Build: build Spark and run the tests for specified modules.
   build:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }}"
     needs: [precondition, precompile]
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).build == 'true'
+    if: fromJson(needs.precondition.outputs.required).build == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: ${{ inputs.build_timeout_minutes }}
     strategy:
       fail-fast: false
       max-parallel: 20
@@ -296,7 +291,7 @@ jobs:
             mllib-local, mllib, graphx, profiler, pipelines, repl, examples
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10, streaming-kinesis-asl,
-            kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect, avro
+            credential-aws, kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect, avro
           - yarn
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [""]
@@ -336,9 +331,6 @@ jobs:
             excluded-tags: org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest
             comment: "- other tests"
         exclude:
-          # Always run if yarn == 'true', even infra-image is skip (such as non-master job)
-          # In practice, the build will run in individual PR, but not against the individual commit
-          # in Apache Spark repository.
           - modules: ${{ fromJson(needs.precondition.outputs.required).yarn != 'true' && 'yarn' }}
           # Skip the core/utils group when a PR doesn't touch those modules (e.g. SQL-only or
           # PySpark-only changes). The precondition is opt-out: omitted means run (so periodic
@@ -356,20 +348,12 @@ jobs:
       SKIP_MIMA: true
       SKIP_PACKAGING: true
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
-      # In order to fetch changed files
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
       uses: actions/cache@v5
@@ -378,18 +362,20 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
+          build-${{ runner.os }}-
     - name: Restore Coursier local repository
       uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
-          ${{ runner.os }}-coursier-
+          coursier-${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-
+          coursier-${{ runner.os }}-
     - name: Free up disk space
+      timeout-minutes: 10
+      continue-on-error: true
       run: |
         if [ -f ./dev/free_disk_space ]; then
           ./dev/free_disk_space
@@ -414,19 +400,13 @@ jobs:
         python3.12 -m pip install 'numpy>=1.23.2' pyarrow 'pandas==2.3.3' pyyaml scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'zstandard==0.25.0'
         python3.12 -m pip list
     - name: Download precompiled artifact
-      id: download-precompiled
-      if: needs.precompile.result == 'success'
-      continue-on-error: true
       uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
-      id: extract-precompiled
-      if: steps.download-precompiled.outcome == 'success'
-      continue-on-error: true
       run: |
-        tar -xzf compile-artifact.tar.gz
-        rm compile-artifact.tar.gz
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -436,14 +416,8 @@ jobs:
         export TERM=vt100
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
-        # SPARK-46283: should delete the following env replacement after SPARK 3.x EOL
-        if [[ "$MODULES_TO_TEST" == *"streaming-kinesis-asl"* ]] && [[ "${{ inputs.branch }}" =~ ^branch-3 ]]; then
-          MODULES_TO_TEST=${MODULES_TO_TEST//streaming-kinesis-asl, /}
-        fi
-        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
-          export SKIP_SCALA_BUILD=true
-          echo "Reusing precompiled artifact, skipping local SBT build."
-        fi
+        export SKIP_SCALA_BUILD=true
+        echo "Reusing precompiled artifact, skipping local SBT build."
         export SERIAL_SBT_TESTS=1
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
     - name: Upload test results to report
@@ -456,7 +430,7 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Test Summary
       if: always()
-      uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2
+      uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2.6
       with:
         paths: |
           **/target/test-reports/*.xml
@@ -488,66 +462,51 @@ jobs:
       packages: write
     steps:
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Checkout Spark repository
+      - name: Bootstrap composite actions
         uses: actions/checkout@v6
-        # In order to fetch changed files
+      - name: Checkout and sync Spark repository
+        uses: ./.github/actions/checkout-and-sync
         with:
-          fetch-depth: 0
-          repository: apache/spark
           ref: ${{ needs.precondition.outputs.head_sha }}
-      - name: Sync the current branch with the latest in Apache Spark
-        if: github.repository != 'apache/spark'
-        run: |
-          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd
-      - name: Build and push for branch-3.5
-        if: inputs.branch == 'branch-3.5'
-        id: docker_build
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
-        with:
-          context: ./dev/infra/
-          push: true
-          tags: |
-            ${{ needs.precondition.outputs.image_url }}
-          # Use the infra image cache to speed up
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
       - name: Build and push (Documentation)
-        if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).docs == 'true' && hashFiles('dev/spark-test-image/docs/Dockerfile') != '' }}
+        if: ${{ fromJson(needs.precondition.outputs.required).docs == 'true' && hashFiles('dev/spark-test-image/docs/Dockerfile') != '' }}
         id: docker_build_docs
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./dev/spark-test-image/docs/
+          build-contexts: |
+            root=./
           push: true
           tags: |
             ${{ needs.precondition.outputs.image_docs_url }}
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ inputs.branch }}
       - name: Build and push (Linter)
-        if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).lint == 'true' && hashFiles('dev/spark-test-image/lint/Dockerfile') != '' }}
+        if: ${{ fromJson(needs.precondition.outputs.required).lint == 'true' && hashFiles('dev/spark-test-image/lint/Dockerfile') != '' }}
         id: docker_build_lint
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./dev/spark-test-image/lint/
+          build-contexts: |
+            root=./
           push: true
           tags: |
             ${{ needs.precondition.outputs.image_lint_url }}
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-lint-cache:${{ inputs.branch }}
       - name: Build and push (SparkR)
-        if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).sparkr == 'true' && hashFiles('dev/spark-test-image/sparkr/Dockerfile') != '' }}
+        if: ${{ fromJson(needs.precondition.outputs.required).sparkr == 'true' && hashFiles('dev/spark-test-image/sparkr/Dockerfile') != '' }}
         id: docker_build_sparkr
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./dev/spark-test-image/sparkr/
           push: true
@@ -556,12 +515,14 @@ jobs:
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-sparkr-cache:${{ inputs.branch }}
       - name: Build and push (PySpark with ${{ env.PYSPARK_IMAGE_TO_TEST }})
-        if: ${{ inputs.branch != 'branch-3.5' && (fromJson(needs.precondition.outputs.required).pyspark == 'true' || fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true') && env.PYSPARK_IMAGE_TO_TEST != '' }}
+        if: ${{ (fromJson(needs.precondition.outputs.required).pyspark == 'true' || fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true') && env.PYSPARK_IMAGE_TO_TEST != '' }}
         id: docker_build_pyspark
         env: ${{ fromJSON(inputs.envs) }}
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./dev/spark-test-image/${{ env.PYSPARK_IMAGE_TO_TEST }}/
+          build-contexts: |
+            root=./
           push: true
           tags: |
             ${{ needs.precondition.outputs.image_pyspark_url }}
@@ -584,27 +545,17 @@ jobs:
     name: "Precompile Spark"
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # Optional optimization: if this job fails or is cancelled, the pyspark
-    # matrix entries fall back to running the SBT build locally as before.
-    continue-on-error: true
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache SBT and Maven
       uses: actions/cache@v5
       with:
@@ -612,16 +563,16 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
+          build-${{ runner.os }}-
     - name: Cache Coursier local repository
       uses: actions/cache@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ runner.os }}-coursier-
+          coursier-${{ runner.os }}-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
@@ -630,29 +581,30 @@ jobs:
     - name: Build Spark
       run: |
         ./build/sbt -Phadoop-3 -Pyarn -Pspark-ganglia-lgpl -Phadoop-cloud -Phive \
-          -Pkubernetes -Pjvm-profiler -Pkinesis-asl -Phive-thriftserver \
+          -Pkubernetes -Pjvm-profiler -Pkinesis-asl -Pcredential-aws -Phive-thriftserver \
           -Pdocker-integration-tests -Pkubernetes-integration-tests -Pvolcano \
           Test/package streaming-kinesis-asl-assembly/assembly connect/assembly assembly/package
     - name: Package compile output
       run: |
         find . -type d -name target -not -path './build/*' -not -path './.git/*' -print0 \
-          | tar --null -czf compile-artifact.tar.gz -T -
-        ls -lh compile-artifact.tar.gz
+          | tar --null -cf - -T - | zstd -c -T0 > compile-artifact.tar.zst
+        ls -lh compile-artifact.tar.zst
     - name: Upload compile artifact
       uses: actions/upload-artifact@v7
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
-        path: compile-artifact.tar.gz
+        path: compile-artifact.tar.zst
         retention-days: 1
         if-no-files-found: error
 
   pyspark:
     needs: [precondition, infra-image, precompile]
-    # always run if pyspark == 'true', even infra-image is skip (such as non-master job)
-    if: (!cancelled()) && (fromJson(needs.precondition.outputs.required).pyspark == 'true' || fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true')
+    if: >-
+      fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
+      fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true'
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: ${{ inputs.pyspark_timeout_minutes }}
     container:
       image: ${{ needs.precondition.outputs.image_pyspark_url_link }}
       options: >-
@@ -686,9 +638,6 @@ jobs:
           - >-
             pyspark-pandas-slow-connect
         exclude:
-          # Always run if pyspark == 'true', even infra-image is skip (such as non-master job)
-          # In practice, the build will run in individual PR, but not against the individual commit
-          # in Apache Spark repository.
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-sql, pyspark-resource, pyspark-testing, pyspark-core, pyspark-errors, pyspark-logger' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-mllib, pyspark-ml, pyspark-ml-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-streaming, pyspark-structured-streaming, pyspark-structured-streaming-connect' }}
@@ -696,9 +645,6 @@ jobs:
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-connect-old-client != 'true' &&  'pyspark-connect-old-client'}}
           # pyspark-install is very slow so we only run it when it's changed or explicity requested
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-install != 'true' && 'pyspark-install' }}
-          # Always run if pyspark-pandas == 'true', even infra-image is skip (such as non-master job)
-          # In practice, the build will run in individual PR, but not against the individual commit
-          # in Apache Spark repository.
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-slow' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect' }}
@@ -715,24 +661,19 @@ jobs:
       METASPACE_SIZE: 1g
       BRANCH: ${{ inputs.branch }}
       PYSPARK_TEST_TIMEOUT: 450
+      RUN_HYPOTHESIS: ${{ fromJson(needs.precondition.outputs.required).transpile }}
+      # Each generated example runs two full Spark jobs (transpiled vs. interpreted
+      # differential), so the local default of 1000 blows past PYSPARK_TEST_TIMEOUT.
+      # Cap CI fuzz volume; the explicit @example edge seeds still always run.
+      RUN_HYPOTHESIS_MAX_EXAMPLES: 50
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
-      # In order to fetch changed files
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Add GITHUB_WORKSPACE to git trust safe.directory
-      run: |
-        git config --global --add safe.directory ${GITHUB_WORKSPACE}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        set-safe-directory: 'true'
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
       uses: actions/cache@v5
@@ -741,17 +682,19 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
+          build-${{ runner.os }}-
     - name: Restore Coursier local repository
       uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ runner.os }}-coursier-
+          coursier-${{ runner.os }}-
     - name: Free up disk space
+      timeout-minutes: 10
+      continue-on-error: true
       shell: 'script -q -e -c "bash {0}"'
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ matrix.java }}
@@ -772,39 +715,26 @@ jobs:
           echo ""
         done
     - name: Download precompiled artifact
-      id: download-precompiled
-      if: needs.precompile.result == 'success'
-      continue-on-error: true
       uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
-      id: extract-precompiled
-      if: steps.download-precompiled.outcome == 'success'
-      continue-on-error: true
       run: |
-        tar -xzf compile-artifact.tar.gz
-        rm compile-artifact.tar.gz
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       if: ${{ matrix.modules != 'pyspark-connect-old-client' }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
-        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
-          export SKIP_SCALA_BUILD=true
-          echo "Reusing precompiled artifact, skipping local SBT build."
-        fi
-        if [[ "$MODULES_TO_TEST" == *"pyspark-pipelines"* ]]; then
+        export SKIP_SCALA_BUILD=true
+        echo "Reusing precompiled artifact, skipping local SBT build."
+        if [[ "$MODULES_TO_TEST" == *"pyspark-install"* ]]; then
           export SKIP_PACKAGING=false
           echo "Python Packaging Tests Enabled!"
         fi
-        if [ ! -z "$PYTHON_TO_TEST" ]; then
-          ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --python-executables "$PYTHON_TO_TEST"
-        else
-          # For branch-3.5 and below, it uses the default Python versions.
-          ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
-        fi
+        ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --python-executables "$PYTHON_TO_TEST"
     - name: Run tests for old client
       env:
         SPARK_TESTING: 1
@@ -812,13 +742,6 @@ jobs:
         SPARK_CONNECT_TESTING_REMOTE: sc://localhost
       if: ${{ matrix.modules == 'pyspark-connect-old-client' && inputs.branch == 'master' }}
       run: |
-        # Build Spark
-        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
-          echo "Reusing precompiled artifact, skipping local SBT build."
-        else
-          ./build/sbt -Phive Test/package
-        fi
-
         # Make less noisy
         cp conf/log4j2.properties.template conf/log4j2.properties
         sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' conf/log4j2.properties
@@ -871,7 +794,7 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Test Summary
       if: always()
-      uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2
+      uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2.6
       with:
         paths: |
           **/target/test-reports/*.xml
@@ -886,8 +809,7 @@ jobs:
 
   sparkr:
     needs: [precondition, infra-image, precompile]
-    # always run if sparkr == 'true', even infra-image is skip (such as non-master job)
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).sparkr == 'true'
+    if: fromJson(needs.precondition.outputs.required).sparkr == 'true'
     name: "Build modules: sparkr"
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -902,23 +824,13 @@ jobs:
       SKIP_MIMA: true
       SKIP_PACKAGING: true
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
-      # In order to fetch changed files
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Add GITHUB_WORKSPACE to git trust safe.directory
-      run: |
-        git config --global --add safe.directory ${GITHUB_WORKSPACE}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        set-safe-directory: 'true'
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
       uses: actions/cache@v5
@@ -927,17 +839,19 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
+          build-${{ runner.os }}-
     - name: Restore Coursier local repository
       uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ runner.os }}-coursier-
+          coursier-${{ runner.os }}-
     - name: Free up disk space
+      timeout-minutes: 10
+      continue-on-error: true
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
@@ -945,19 +859,13 @@ jobs:
         distribution: zulu
         java-version: ${{ inputs.java }}
     - name: Download precompiled artifact
-      id: download-precompiled
-      if: needs.precompile.result == 'success'
-      continue-on-error: true
       uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
-      id: extract-precompiled
-      if: steps.download-precompiled.outcome == 'success'
-      continue-on-error: true
       run: |
-        tar -xzf compile-artifact.tar.gz
-        rm compile-artifact.tar.gz
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
@@ -965,10 +873,8 @@ jobs:
         # R issues at docker environment
         export TZ=UTC
         export _R_CHECK_SYSTEM_CLOCK_=FALSE
-        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
-          export SKIP_SCALA_BUILD=true
-          echo "Reusing precompiled artifact, skipping local SBT build."
-        fi
+        export SKIP_SCALA_BUILD=true
+        echo "Reusing precompiled artifact, skipping local SBT build."
         ./dev/run-tests --parallelism 1 --modules sparkr
     - name: Upload test results to report
       if: always()
@@ -980,7 +886,7 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Test Summary
       if: always()
-      uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2
+      uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2.6
       with:
         paths: |
           **/target/test-reports/*.xml
@@ -992,18 +898,12 @@ jobs:
     name: Protobuf breaking change detection and Python CodeGen check
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Install Buf
       uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99 # v1
       with:
@@ -1021,28 +921,17 @@ jobs:
       uses: actions/setup-python@v6
       with:
         python-version: '3.12'
-    - name: Install dependencies for Python CodeGen check (branch-3.5, branch-4.0, branch-4.1)
-      if: inputs.branch == 'branch-3.5' || inputs.branch == 'branch-4.0' || inputs.branch == 'branch-4.1'
-      run: |
-        python3.12 -m pip install 'black==23.12.1' 'protobuf==6.33.5' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
-        python3.12 -m pip list
     - name: Install dependencies for Python CodeGen check
-      if: ${{ inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0' && inputs.branch != 'branch-4.1' }}
       run: |
         python3.12 -m pip install 'ruff==0.14.8' 'protobuf==6.33.5' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
         python3.12 -m pip list
-    - name: Python CodeGen check for branch-3.5
-      if: inputs.branch == 'branch-3.5'
-      run: ./dev/connect-check-protos.py
     - name: Python CodeGen check
-      if: inputs.branch != 'branch-3.5'
       run: ./dev/check-protos.py
 
   # Static analysis
   lint:
     needs: [precondition, infra-image]
-    # always run if lint == 'true', even infra-image is skip (such as non-master job)
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).lint == 'true'
+    if: fromJson(needs.precondition.outputs.required).lint == 'true'
     name: Linters, licenses, and dependencies
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -1054,22 +943,13 @@ jobs:
     container:
       image: ${{ needs.precondition.outputs.image_lint_url_link }}
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Add GITHUB_WORKSPACE to git trust safe.directory
-      run: |
-        git config --global --add safe.directory ${GITHUB_WORKSPACE}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        set-safe-directory: 'true'
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
       uses: actions/cache@v5
@@ -1078,24 +958,26 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
+          build-${{ runner.os }}-
     - name: Restore Coursier local repository
       uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ runner.os }}-coursier-
+          coursier-${{ runner.os }}-
     - name: Cache Maven local repository
       uses: actions/cache@v5
       with:
         path: ~/.m2/repository
-        key: docs-maven-${{ hashFiles('**/pom.xml') }}
+        key: docs-maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
-          docs-maven-
+          docs-maven-${{ runner.os }}-
     - name: Free up disk space
+      timeout-minutes: 10
+      continue-on-error: true
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
@@ -1110,113 +992,58 @@ jobs:
       run: ./dev/mima
     - name: Scala linter
       run: ./dev/lint-scala
+    # The config binding policy exceptions file lists pre-existing configs that were created before
+    # the binding policy was introduced. It must never grow: new configs must declare a binding
+    # policy via .withBindingPolicy() instead of being added to the exceptions file. This step fails
+    # if a PR adds entries to the file. It only runs on forks because PR builds run there, and the
+    # diff against apache/spark master is exactly the PR's change.
+    - name: Config binding policy exceptions check
+      if: github.repository != 'apache/spark'
+      run: |
+        EXCEPTIONS_FILE="sql/hive/src/test/resources/conf/binding-policy-exceptions/configs-without-binding-policy-exceptions"
+        if [ ! -f "$EXCEPTIONS_FILE" ]; then
+          echo "$EXCEPTIONS_FILE does not exist on this branch, skipping."
+          exit 0
+        fi
+        ADDED_ENTRIES=$(git diff "$APACHE_SPARK_REF" HEAD -- "$EXCEPTIONS_FILE" | grep '^+' | grep -v '^+++' || true)
+        if [ -n "$ADDED_ENTRIES" ]; then
+          echo "ERROR: This PR adds the following entries to $EXCEPTIONS_FILE:"
+          echo "$ADDED_ENTRIES"
+          echo ""
+          echo "This file is a frozen list of configs that predate the binding policy, and new"
+          echo "entries must not be added to it. Instead, declare a binding policy when building"
+          echo "the config entry, e.g."
+          echo "  .withBindingPolicy(ConfigBindingPolicy.SESSION/PERSISTED/NOT_APPLICABLE)"
+          echo "See the scaladoc of org.apache.spark.internal.config.ConfigBindingPolicy for the"
+          echo "semantics of each policy and how to choose one."
+          exit 1
+        fi
+        echo "No new entries added to the binding policy exceptions file."
     - name: Scala structured logging check
       if: hashFiles('dev/structured_logging_style.py') != ''
       shell: 'script -q -e -c "bash {0}"'
       run: |
-        if [[ "$BRANCH" == 'branch-3.5' || "$BRANCH" == 'branch-4.0' ]]; then
-          python3.9 ./dev/structured_logging_style.py
-        elif [[ "$BRANCH" == 'branch-4.2' || "$BRANCH" == 'branch-4.x' ]]; then
-          python3.12 ./dev/structured_logging_style.py
-        elif [[ "$BRANCH" == 'branch-4.1' ]]; then
-          python3.11 ./dev/structured_logging_style.py
-        else
-          python3.12 ./dev/structured_logging_style.py
-        fi
+        python3.12 ./dev/structured_logging_style.py
     - name: Java linter
       run: ./dev/lint-java
     - name: Spark connect jvm client mima check
       run: ./dev/connect-jvm-client-mima-check
-    - name: Install Python linter dependencies for branch-3.5
-      if: inputs.branch == 'branch-3.5'
-      run: |
-        # SPARK-45212: Copy from https://github.com/apache/spark/blob/555c8def51e5951c7bf5165a332795e9e330ec9d/.github/workflows/build_and_test.yml#L631-L638
-        # Should delete this section after SPARK 3.5 EOL.
-        python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.982' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==26.3.1'
-        python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.56.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
     - name: List Python packages
       shell: 'script -q -e -c "bash {0}"'
       run: |
         lsb_release -a
-        if [[ "$BRANCH" == 'branch-3.5' || "$BRANCH" == 'branch-4.0' ]]; then
-          python3.9 --version
-          python3.9 -m pip list
-        elif [[ "$BRANCH" == 'branch-4.2' || "$BRANCH" == 'branch-4.x' ]]; then
-          python3.12 --version
-          python3.12 -m pip list
-        elif [[ "$BRANCH" == 'branch-4.1' ]]; then
-          python3.11 --version
-          python3.11 -m pip list
-        else
-          python3.12 --version
-          python3.12 -m pip list
-        fi
+        python3.12 --version
+        python3.12 -m pip list
     - name: Python linter
       shell: 'script -q -e -c "bash {0}"'
       run: |
-        if [[ "$BRANCH" == 'branch-3.5' || "$BRANCH" == 'branch-4.0' ]]; then
-          PYTHON_EXECUTABLE=python3.9 ./dev/lint-python
-        elif [[ "$BRANCH" == 'branch-4.2' || "$BRANCH" == 'branch-4.x' ]]; then
-          PYTHON_EXECUTABLE=python3.12 ./dev/lint-python
-        elif [[ "$BRANCH" == 'branch-4.1' ]]; then
-          PYTHON_EXECUTABLE=python3.11 ./dev/lint-python
-        else
-          PYTHON_EXECUTABLE=python3.12 ./dev/lint-python
-        fi
-    # Should delete this section after SPARK 3.5 EOL.
-    - name: Install dependencies for Python code generation check for branch-3.5
-      if: inputs.branch == 'branch-3.5'
-      run: |
-        # See more in "Installation" https://docs.buf.build/installation#tarball
-        curl -LO https://github.com/bufbuild/buf/releases/download/v1.28.1/buf-Linux-x86_64.tar.gz
-        mkdir -p $HOME/buf
-        tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
-        rm buf-Linux-x86_64.tar.gz
-        python3.9 -m pip install 'protobuf==4.25.1' 'mypy-protobuf==3.3.0'
-    # Should delete this section after SPARK 3.5 EOL.
-    - name: Python code generation check for branch-3.5
-      if: inputs.branch == 'branch-3.5'
-      run: if test -f ./dev/connect-check-protos.py; then PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/connect-check-protos.py; fi
-    # Should delete this section after SPARK 3.5 EOL.
-    - name: Install JavaScript linter dependencies for branch-3.5
-      if: inputs.branch == 'branch-3.5'
-      run: |
-        apt update
-        apt-get install -y nodejs npm
+        PYTHON_EXECUTABLE=python3.12 ./dev/lint-python
     - name: JS linter
       run: ./dev/lint-js
-    # Should delete this section after SPARK 3.5 EOL.
-    - name: Install R linter dependencies for branch-3.5
-      if: inputs.branch == 'branch-3.5'
-      run: |
-        apt update
-        apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev \
-          libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev \
-          libtiff5-dev libjpeg-dev
-        Rscript -e "install.packages(c('remotes'), repos='https://cloud.r-project.org/')"
-        Rscript -e "remotes::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
     - name: Install R linter dependencies and SparkR
       run: ./R/install-dev.sh
     - name: R linter
       run: ./dev/lint-r
-
-  java17:
-    needs: [precondition]
-    if: fromJson(needs.precondition.outputs.required).java17 == 'true'
-    name: Java 17 build with Maven
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    steps:
-    - uses: actions/checkout@v6
-    - uses: actions/setup-java@v5
-      with:
-        distribution: zulu
-        java-version: 17
-    - name: Build with Maven
-      run: |
-        export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
-        export MAVEN_CLI_OPTS="--no-transfer-progress"
-        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl clean install
 
   java25:
     needs: [precondition]
@@ -1234,13 +1061,12 @@ jobs:
       run: |
         export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
         export MAVEN_CLI_OPTS="--no-transfer-progress"
-        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl clean install
+        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Pcredential-aws clean install
 
   # Documentation build
   docs:
     needs: [precondition, infra-image]
-    # always run if lint == 'true', even infra-image is skip (such as non-master job)
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).docs == 'true'
+    if: fromJson(needs.precondition.outputs.required).docs == 'true'
     name: Documentation generation
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -1253,22 +1079,13 @@ jobs:
     container:
       image: ${{ needs.precondition.outputs.image_docs_url_link }}
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Add GITHUB_WORKSPACE to git trust safe.directory
-      run: |
-        git config --global --add safe.directory ${GITHUB_WORKSPACE}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        set-safe-directory: 'true'
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
       uses: actions/cache@v5
@@ -1277,56 +1094,33 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
+          build-${{ runner.os }}-
     - name: Restore Coursier local repository
       uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ runner.os }}-coursier-
+          coursier-${{ runner.os }}-
     - name: Cache Maven local repository
       uses: actions/cache@v5
       with:
         path: ~/.m2/repository
-        key: docs-maven-${{ hashFiles('**/pom.xml') }}
+        key: docs-maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
-          docs-maven-
+          docs-maven-${{ runner.os }}-
     - name: Free up disk space
+      timeout-minutes: 10
+      continue-on-error: true
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
-    - name: Install dependencies for documentation generation for branch-3.5
-      if: inputs.branch == 'branch-3.5'
-      run: |
-        # pandoc is required to generate PySpark APIs as well in nbsphinx.
-        apt-get update -y
-        apt-get install -y libcurl4-openssl-dev pandoc
-        apt-get install -y ruby ruby-dev
-        Rscript -e "install.packages(c('remotes', 'testthat', 'knitr', 'rmarkdown', 'markdown', 'e1071', 'roxygen2', 'ggplot2', 'mvtnorm', 'statmod'), repos='https://cloud.r-project.org/')"
-        Rscript -e "remotes::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
-        Rscript -e "remotes::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
-        # Should unpin 'sphinxcontrib-*' after upgrading sphinx>5
-        python3.9 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe 'pyzmq<24.0.0' 'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' 'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' 'sphinxcontrib-serializinghtml==1.1.5'
-        python3.9 -m pip install ipython_genutils # See SPARK-38517
-        python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.22' pyarrow pandas 'plotly<6.0.0'
-        python3.9 -m pip install 'docutils<0.18.0' # See SPARK-39421
-    - name: List Python packages for branch-3.5 and branch-4.0
-      if: inputs.branch == 'branch-3.5' || inputs.branch == 'branch-4.0'
-      run: python3.9 -m pip list
-    - name: List Python packages for branch-4.2 and branch-4.x (Python 3.12)
-      if: inputs.branch == 'branch-4.2' || inputs.branch == 'branch-4.x'
-      run: python3.12 -m pip list
-    - name: List Python packages for branch-4.1
-      if: inputs.branch == 'branch-4.1'
-      run: python3.11 -m pip list
     - name: List Python packages
-      if: ${{ inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0' && inputs.branch != 'branch-4.1' && inputs.branch != 'branch-4.2' && inputs.branch != 'branch-4.x' }}
       run: |
         lsb_release -a
         python3.12 -m pip list
@@ -1338,78 +1132,7 @@ jobs:
         gem install bundler -v 2.4.22
         cd docs
         bundle install --retry=100
-    - name: Run documentation build for branch-3.5 and branch-4.0
-      if: inputs.branch == 'branch-3.5' || inputs.branch == 'branch-4.0'
-      run: |
-        # We need this link to make sure `python3` points to `python3.9` which contains the prerequisite packages.
-        ln -s "$(which python3.9)" "/usr/local/bin/python3"
-        # Build docs first with SKIP_API to ensure they are buildable without requiring any
-        # language docs to be built beforehand.
-        cd docs; SKIP_ERRORDOC=1 SKIP_API=1 bundle exec jekyll build; cd ..
-        if [ -f "./dev/is-changed.py" ]; then
-          # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
-          pyspark_modules=`cd dev && python3.9 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
-          if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
-          if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
-        fi
-        # Print the values of environment variables `SKIP_ERRORDOC`, `SKIP_SCALADOC`, `SKIP_PYTHONDOC`, `SKIP_RDOC` and `SKIP_SQLDOC`
-        echo "SKIP_ERRORDOC: $SKIP_ERRORDOC"
-        echo "SKIP_SCALADOC: $SKIP_SCALADOC"
-        echo "SKIP_PYTHONDOC: $SKIP_PYTHONDOC"
-        echo "SKIP_RDOC: $SKIP_RDOC"
-        echo "SKIP_SQLDOC: $SKIP_SQLDOC"
-        cd docs
-        bundle exec jekyll build
-    - name: Run documentation build for branch-4.2 and branch-4.x (Python 3.12)
-      if: inputs.branch == 'branch-4.2' || inputs.branch == 'branch-4.x'
-      run: |
-        # We need this link to make sure `python3` points to `python3.12` which contains the prerequisite packages.
-        ln -s "$(which python3.12)" "/usr/local/bin/python3"
-        # Build docs first with SKIP_API to ensure they are buildable without requiring any
-        # language docs to be built beforehand.
-        cd docs; SKIP_ERRORDOC=1 SKIP_API=1 bundle exec jekyll build; cd ..
-        if [ -f "./dev/is-changed.py" ]; then
-          # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
-          pyspark_modules=`cd dev && python3.12 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
-          if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
-          if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
-        fi
-        export PYSPARK_DRIVER_PYTHON=python3.12
-        export PYSPARK_PYTHON=python3.12
-        # Print the values of environment variables `SKIP_ERRORDOC`, `SKIP_SCALADOC`, `SKIP_PYTHONDOC`, `SKIP_RDOC` and `SKIP_SQLDOC`
-        echo "SKIP_ERRORDOC: $SKIP_ERRORDOC"
-        echo "SKIP_SCALADOC: $SKIP_SCALADOC"
-        echo "SKIP_PYTHONDOC: $SKIP_PYTHONDOC"
-        echo "SKIP_RDOC: $SKIP_RDOC"
-        echo "SKIP_SQLDOC: $SKIP_SQLDOC"
-        cd docs
-        bundle exec jekyll build
-    - name: Run documentation build for branch-4.1
-      if: inputs.branch == 'branch-4.1'
-      run: |
-        # We need this link to make sure `python3` points to `python3.11` which contains the prerequisite packages.
-        ln -s "$(which python3.11)" "/usr/local/bin/python3"
-        # Build docs first with SKIP_API to ensure they are buildable without requiring any
-        # language docs to be built beforehand.
-        cd docs; SKIP_ERRORDOC=1 SKIP_API=1 bundle exec jekyll build; cd ..
-        if [ -f "./dev/is-changed.py" ]; then
-          # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
-          pyspark_modules=`cd dev && python3.11 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
-          if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
-          if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
-        fi
-        export PYSPARK_DRIVER_PYTHON=python3.11
-        export PYSPARK_PYTHON=python3.11
-        # Print the values of environment variables `SKIP_ERRORDOC`, `SKIP_SCALADOC`, `SKIP_PYTHONDOC`, `SKIP_RDOC` and `SKIP_SQLDOC`
-        echo "SKIP_ERRORDOC: $SKIP_ERRORDOC"
-        echo "SKIP_SCALADOC: $SKIP_SCALADOC"
-        echo "SKIP_PYTHONDOC: $SKIP_PYTHONDOC"
-        echo "SKIP_RDOC: $SKIP_RDOC"
-        echo "SKIP_SQLDOC: $SKIP_SQLDOC"
-        cd docs
-        bundle exec jekyll build
     - name: Run documentation build
-      if: ${{ inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0' && inputs.branch != 'branch-4.1' && inputs.branch != 'branch-4.2' && inputs.branch != 'branch-4.x' }}
       run: |
         # We need this link to make sure `python3` points to `python3.12` which contains the prerequisite packages.
         ln -s "$(which python3.12)" "/usr/local/bin/python3"
@@ -1446,25 +1169,19 @@ jobs:
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well
   tpcds-1g:
     needs: [precondition, precompile]
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
+    if: fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
     name: Run TPC-DS queries with SF=1
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
       SPARK_LOCAL_IP: localhost
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache SBT and Maven
       uses: actions/cache@v5
       with:
@@ -1472,41 +1189,35 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
+          build-${{ runner.os }}-
     - name: Restore Coursier local repository
       uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ runner.os }}-coursier-
+          coursier-${{ runner.os }}-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
     - name: Download precompiled artifact
-      id: download-precompiled
-      if: needs.precompile.result == 'success'
-      continue-on-error: true
       uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
-      id: extract-precompiled
-      if: steps.download-precompiled.outcome == 'success'
-      continue-on-error: true
       run: |
-        tar -xzf compile-artifact.tar.gz
-        rm compile-artifact.tar.gz
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     - name: Cache TPC-DS generated data
       id: cache-tpcds-sf-1
       uses: actions/cache@v5
       with:
         path: ./tpcds-sf-1
-        key: tpcds-${{ hashFiles('.github/workflows/build_and_test.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
+        key: tpcds-${{ runner.os }}-${{ hashFiles('.github/workflows/build_and_test.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
     - name: Checkout tpcds-kit repository
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
       uses: actions/checkout@v6
@@ -1525,6 +1236,7 @@ jobs:
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
         SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
+        SPARK_CODEGEN_COMPILER: ${{ fromJSON(inputs.envs).SPARK_CODEGEN_COMPILER }}
         SPARK_TPCDS_JOIN_CONF: |
           spark.sql.autoBroadcastJoinThreshold=-1
           spark.sql.join.preferSortMergeJoin=true
@@ -1533,6 +1245,7 @@ jobs:
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
         SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
+        SPARK_CODEGEN_COMPILER: ${{ fromJSON(inputs.envs).SPARK_CODEGEN_COMPILER }}
         SPARK_TPCDS_JOIN_CONF: |
           spark.sql.autoBroadcastJoinThreshold=10485760
     - name: Run TPC-DS queries (Shuffled hash join)
@@ -1540,13 +1253,15 @@ jobs:
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
         SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
+        SPARK_CODEGEN_COMPILER: ${{ fromJSON(inputs.envs).SPARK_CODEGEN_COMPILER }}
         SPARK_TPCDS_JOIN_CONF: |
           spark.sql.autoBroadcastJoinThreshold=-1
           spark.sql.join.forceApplyShuffledHashJoin=true
     - name: Run TPC-DS queries on collated data
-      if: inputs.branch != 'branch-3.5'
       run: |
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSCollationQueryTestSuite"
+      env:
+        SPARK_CODEGEN_COMPILER: ${{ fromJSON(inputs.envs).SPARK_CODEGEN_COMPILER }}
     - name: Upload test results to report
       if: always()
       uses: actions/upload-artifact@v7
@@ -1557,7 +1272,7 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Test Summary
       if: always()
-      uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2
+      uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2.6
       with:
         paths: |
           **/target/test-reports/*.xml
@@ -1571,10 +1286,10 @@ jobs:
 
   docker-integration-tests:
     needs: [precondition, precompile]
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
+    if: fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
     name: Run Docker integration tests
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: ${{ inputs.docker_integration_tests_timeout_minutes }}
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
@@ -1584,19 +1299,12 @@ jobs:
       SKIP_MIMA: true
       SKIP_PACKAGING: true
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache SBT and Maven
       uses: actions/cache@v5
       with:
@@ -1604,42 +1312,34 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
+          build-${{ runner.os }}-
     - name: Restore Coursier local repository
       uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ runner.os }}-coursier-
+          coursier-${{ runner.os }}-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
     - name: Download precompiled artifact
-      id: download-precompiled
-      if: needs.precompile.result == 'success'
-      continue-on-error: true
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
-      id: extract-precompiled
-      if: steps.download-precompiled.outcome == 'success'
-      continue-on-error: true
       run: |
-        tar -xzf compile-artifact.tar.gz
-        rm compile-artifact.tar.gz
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
-        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
-          export SKIP_SCALA_BUILD=true
-          echo "Reusing precompiled artifact, skipping local SBT build."
-        fi
+        export SKIP_SCALA_BUILD=true
+        echo "Reusing precompiled artifact, skipping local SBT build."
         ./dev/run-tests --parallelism 1 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
     - name: Upload test results to report
       if: always()
@@ -1651,7 +1351,7 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Test Summary
       if: always()
-      uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2
+      uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2.6
       with:
         paths: |
           **/target/test-reports/*.xml
@@ -1665,24 +1365,17 @@ jobs:
 
   k8s-integration-tests:
     needs: [precondition, precompile]
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
+    if: fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
     name: Run Spark on Kubernetes Integration test
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - name: Checkout Spark repository
+      - name: Bootstrap composite actions
         uses: actions/checkout@v6
+      - name: Checkout and sync Spark repository
+        uses: ./.github/actions/checkout-and-sync
         with:
-          fetch-depth: 0
-          repository: apache/spark
           ref: ${{ needs.precondition.outputs.head_sha }}
-      - name: Sync the current branch with the latest in Apache Spark
-        if: github.repository != 'apache/spark'
-        run: |
-          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       - name: Cache SBT and Maven
         uses: actions/cache@v5
         with:
@@ -1690,17 +1383,19 @@ jobs:
             build/apache-maven-*
             build/*.jar
             ~/.sbt
-          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
           restore-keys: |
-            build-
+            build-${{ runner.os }}-
       - name: Restore Coursier local repository
         uses: actions/cache/restore@v5
         with:
           path: ~/.cache/coursier
-          key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
           restore-keys: |
-            ${{ runner.os }}-coursier-
+            coursier-${{ runner.os }}-
       - name: Free up disk space
+        timeout-minutes: 10
+        continue-on-error: true
         run: |
           if [ -f ./dev/free_disk_space ]; then
             ./dev/free_disk_space
@@ -1711,19 +1406,13 @@ jobs:
           distribution: zulu
           java-version: ${{ inputs.java }}
       - name: Download precompiled artifact
-        id: download-precompiled
-        if: needs.precompile.result == 'success'
-        continue-on-error: true
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
       - name: Extract precompiled artifact
-        id: extract-precompiled
-        if: steps.download-precompiled.outcome == 'success'
-        continue-on-error: true
         run: |
-          tar -xzf compile-artifact.tar.gz
-          rm compile-artifact.tar.gz
+          zstd -dc compile-artifact.tar.zst | tar -xf -
+          rm compile-artifact.tar.zst
       - name: Install R
         run: |
           sudo apt update
@@ -1731,7 +1420,7 @@ jobs:
       - name: Start Minikube
         uses: medyagh/setup-minikube@e9e035a86bbc3caea26a450bd4dbf9d0c453682e # v0.0.21
         with:
-          kubernetes-version: "1.36.0"
+          kubernetes-version: "1.37.0"
           # GitHub Actions limit 4C/16G, limit to 2C/6G for better resource statistic
           # https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-public-repositories
           cpus: 2
@@ -1748,13 +1437,7 @@ jobs:
           export PVC_TESTS_VM_PATH=$PVC_TMP_DIR
           minikube mount ${PVC_TESTS_HOST_PATH}:${PVC_TESTS_VM_PATH} --gid=0 --uid=185 &
           kubectl create clusterrolebinding serviceaccounts-cluster-admin --clusterrole=cluster-admin --group=system:serviceaccounts || true
-          if [[ "${{ inputs.branch }}" == 'branch-3.5' ]]; then
-            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml || true
-          elif [[ "${{ inputs.branch }}" == 'branch-4.0' ]]; then
-            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.11.0/installer/volcano-development.yaml || true
-          else
-            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.2/installer/volcano-development.yaml || true
-          fi
+          kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.2/installer/volcano-development.yaml || true
           eval $(minikube docker-env)
           build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
       - name: Upload Spark on K8S integration tests log files

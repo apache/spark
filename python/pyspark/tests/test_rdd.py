@@ -14,30 +14,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from datetime import datetime, timedelta
 import hashlib
 import os
 import random
 import tempfile
 import time
 import unittest
+from datetime import datetime, timedelta
 from glob import glob
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark import shuffle, RDD
+from pyspark import RDD, shuffle
 from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder, TaskResourceRequests
 from pyspark.serializers import (
-    CloudPickleSerializer,
     BatchedSerializer,
+    CloudPickleSerializer,
     CPickleSerializer,
     MarshalSerializer,
-    UTF8Deserializer,
     NoOpSerializer,
+    UTF8Deserializer,
 )
 from pyspark.sql import SparkSession
-from pyspark.testing.utils import ReusedPySparkTestCase, QuietTest, have_numpy, have_pandas
 from pyspark.testing.sqlutils import SPARK_HOME
+from pyspark.testing.utils import QuietTest, ReusedPySparkTestCase, have_numpy, have_pandas
 
 global_func = lambda: "Hi"  # noqa: E731
 
@@ -619,10 +619,10 @@ class RDDTests(ReusedPySparkTestCase):
         a = self.sc.parallelize(range(int(1000)), 2)
         xs = a.repartition(num_partitions).glom().map(len).collect()
         zeros = len([x for x in xs if x == 0])
-        self.assertTrue(zeros == 0)
+        self.assertEqual(zeros, 0)
         xs = a.coalesce(num_partitions, True).glom().map(len).collect()
         zeros = len([x for x in xs if x == 0])
-        self.assertTrue(zeros == 0)
+        self.assertEqual(zeros, 0)
 
     def test_repartition_on_textfile(self):
         path = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")
@@ -637,6 +637,36 @@ class RDDTests(ReusedPySparkTestCase):
         result = rdd.distinct(5)
         self.assertEqual(result.getNumPartitions(), 5)
         self.assertEqual(result.count(), 3)
+
+    def test_count_approx_respects_timeout(self):
+        def slow(x):
+            time.sleep(1)
+            return x
+
+        rdd = self.sc.parallelize(range(20), 20).map(slow)
+        start = time.time()
+        rdd.countApprox(timeout=100)
+        elapsed = time.time() - start
+        self.assertLess(elapsed, 2)
+        # Cancel the background approximate job before subsequent tests run.
+        self.sc.cancelAllJobs()
+
+    def test_count_approx_returns_exact_when_completed(self):
+        rdd = self.sc.parallelize(range(1000), 8)
+        self.assertEqual(rdd.countApprox(timeout=5000), 1000)
+
+    def test_mean_approx_respects_timeout(self):
+        def slow(x):
+            time.sleep(1)
+            return float(x)
+
+        rdd = self.sc.parallelize(range(20), 20).map(slow)
+        start = time.time()
+        rdd.meanApprox(timeout=100)
+        elapsed = time.time() - start
+        self.assertLess(elapsed, 2)
+        # Cancel the background approximate job before subsequent tests run.
+        self.sc.cancelAllJobs()
 
     def test_external_group_by_key(self):
         self.sc._conf.set("spark.python.worker.memory", "1m")

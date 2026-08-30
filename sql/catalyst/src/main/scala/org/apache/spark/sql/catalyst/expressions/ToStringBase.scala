@@ -22,19 +22,25 @@ import java.time.ZoneOffset
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.types.ops.TypeApiOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, CharVarcharCodegenUtils, DateFormatter, FractionTimeFormatter, IntervalStringStyles, IntervalUtils, MapData, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
-import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkStringUtils
 
 trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
+
+  /**
+   * ISO 6.13 truncation applies only to user-written CAST / TRY_CAST. Implicit and
+   * store-assignment Casts keep the write-side length check. [[ToPrettyString]] is never
+   * a CAST, so it stays false.
+   */
+  protected def truncateCharVarcharOnCast: Boolean = false
 
   private lazy val dateFormatter = DateFormatter()
   private lazy val timeFormatter = new FractionTimeFormatter()
@@ -58,18 +64,30 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
   // Returns a function to convert a value to pretty string. The function assumes input is not null.
   protected final def castToString(
-      from: DataType, to: StringConstraint = NoConstraint): Any => UTF8String =
-    to match {
-      case FixedLength(length) =>
-        s => CharVarcharCodegenUtils.charTypeWriteSideCheck(castToString(from)(s), length)
-      case MaxLength(length) =>
-        s => CharVarcharCodegenUtils.varcharTypeWriteSideCheck(castToString(from)(s), length)
-      case NoConstraint => castToString(from)
+      from: DataType, to: StringConstraint = NoConstraint): Any => UTF8String = {
+    val toUTF8String = castToString(from)
+    (to, from) match {
+      case (FixedLength(length), _: StringType)
+          if SQLConf.get.charVarcharStandardSemantics && truncateCharVarcharOnCast =>
+        s => CharVarcharCodegenUtils.charTypeCast(toUTF8String(s), length)
+      case (MaxLength(length), _: StringType)
+          if SQLConf.get.charVarcharStandardSemantics && truncateCharVarcharOnCast =>
+        s => CharVarcharCodegenUtils.varcharTypeCast(toUTF8String(s), length)
+      case (FixedLength(length), _) =>
+        s => CharVarcharCodegenUtils.charTypeWriteSideCheck(toUTF8String(s), length)
+      case (MaxLength(length), _) =>
+        s => CharVarcharCodegenUtils.varcharTypeWriteSideCheck(toUTF8String(s), length)
+      case (NoConstraint, _) => toUTF8String
     }
+  }
 
+  // The Types Framework is the single integration point for framework types' cast-to-string, via
+  // the zone-less formatUTF8. The cast's session zone is threaded into the lookup so TIMESTAMP_LTZ
+  // nanos renders in it; zone-independent types (TimeType, TIMESTAMP_NTZ nanos) ignore it
+  // (SPARK-57285).
   private def castToString(from: DataType): Any => UTF8String =
-    TypeApiOps(from)
-      .map(ops => acceptAny[Any](v => ops.formatUTF8(v)))
+    TypeApiOps(from, zoneId)
+      .map(ops => acceptAny[Any](ops.formatUTF8))
       .getOrElse(castToStringDefault(from))
 
   private def castToStringDefault(from: DataType): Any => UTF8String = from match {
@@ -82,8 +100,6 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       acceptAny[Long](t => UTF8String.fromString(timestampFormatter.format(t)))
     case TimestampNTZType =>
       acceptAny[Long](t => UTF8String.fromString(timestampNTZFormatter.format(t)))
-    case _: TimeType =>
-      acceptAny[Long](t => UTF8String.fromString(timeFormatter.format(t)))
     case ArrayType(et, _) =>
       acceptAny[ArrayData](array => {
         val builder = new UTF8StringBuilder
@@ -195,14 +211,22 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
     (c, evPrim) => {
       val tmpVar = ctx.freshVariable("tmp", classOf[UTF8String])
       val castToString = castToStringCode(from, ctx)(c, tmpVar)
-      val maintainConstraint = to match {
-        case FixedLength(length) =>
+      val maintainConstraint = (to, from) match {
+        case (FixedLength(length), _: StringType)
+            if SQLConf.get.charVarcharStandardSemantics && truncateCharVarcharOnCast =>
+          code"""$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
+                .charTypeCast($tmpVar, $length);""".stripMargin
+        case (MaxLength(length), _: StringType)
+            if SQLConf.get.charVarcharStandardSemantics && truncateCharVarcharOnCast =>
+          code"""$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
+                .varcharTypeCast($tmpVar, $length);""".stripMargin
+        case (FixedLength(length), _) =>
           code"""$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
                 .charTypeWriteSideCheck($tmpVar, $length);""".stripMargin
-        case MaxLength(length) =>
+        case (MaxLength(length), _) =>
           code"""$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
                 .varcharTypeWriteSideCheck($tmpVar, $length);""".stripMargin
-        case NoConstraint => code"$evPrim = $tmpVar;"
+        case (NoConstraint, _) => code"$evPrim = $tmpVar;"
       }
       code"""
             UTF8String $tmpVar;
@@ -216,10 +240,19 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       from: DataType, ctx: CodegenContext): (ExprValue, ExprValue) => Block = {
     from match {
       case BinaryType =>
+        // Pass the public BinaryFormatter trait as the reference's cast type.
+        // `binaryFormatter` is a lambda (UTF8String.fromBytes); its runtime class is a
+        // non-nameable synthetic (e.g. ToStringBase$$anonfun$binaryFormatter$N), which
+        // the JDK compiler cannot reference ("cannot find symbol"); Janino tolerates it.
         val bf = JavaCode.global(
-          ctx.addReferenceObj("binaryFormatter", binaryFormatter),
+          ctx.addReferenceObj("binaryFormatter", binaryFormatter, classOf[BinaryFormatter].getName),
           classOf[BinaryFormatter])
-        (c, evPrim) => code"$evPrim = $bf.apply($c);"
+        // `BinaryFormatter` extends `Array[Byte] => UTF8String` (a Function1). The JDK
+        // compiler resolves `bf.apply(c)` through the parameterised signature and infers
+        // `UTF8String`, but Janino binds it to the erased `apply(Object)` and infers
+        // `Object`, so the assignment to the `UTF8String` result needs an explicit cast
+        // to compile under both backends.
+        (c, evPrim) => code"$evPrim = (UTF8String) $bf.apply($c);"
       case DateType =>
         val df = JavaCode.global(
           ctx.addReferenceObj("dateFormatter", dateFormatter),
@@ -235,6 +268,20 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           ctx.addReferenceObj("timestampNTZFormatter", timestampNTZFormatter),
           timestampNTZFormatter.getClass)
         (c, evPrim) => code"$evPrim = UTF8String.fromString($tf.format($c));"
+      case _: AnyTimestampNanoType =>
+        // Route nanosecond timestamp cast-to-string through the Types Framework: emit a runtime
+        // call into the ops reference object. The cast's session zone is threaded into the lookup
+        // so LTZ carries it; NTZ is zone-independent (SPARK-57285).
+        // Resolve the zone here so the reference object holds a ZoneId, not a closure capturing
+        // this Cast; the held value is the cast's resolved zone, not a session-config read.
+        val z = zoneId
+        val ops = TypeApiOps(from, z).get
+        // Pin the reference-object cast type to the public TypeApiOps class; the runtime ops class
+        // lives in sql/api, so the inferred concrete-class cast would be unnecessarily specific.
+        val opsRef = JavaCode.global(
+          ctx.addReferenceObj("typeApiOps", ops, classOf[TypeApiOps].getName),
+          classOf[TypeApiOps])
+        (c, evPrim) => code"$evPrim = $opsRef.formatUTF8($c);"
       case _: TimeType =>
         val tf = JavaCode.global(
           ctx.addReferenceObj("timeFormatter", timeFormatter),
@@ -306,13 +353,6 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
         (c, evPrim) => code"$evPrim = UTF8String.fromString($c.toPlainString());"
       case _: StringType =>
         (c, evPrim) => code"$evPrim = $c;"
-      // Fractional-second (nanosecond) timestamp formatting is not implemented yet: there is no
-      // TimestampFormatter for the nanos timestamp types. The interpreted path raises this via the
-      // Types Framework (castToString -> TypeApiOps.format); the codegen path has no framework
-      // hook, so it raises the same user-facing error directly until a formatter lands
-      // (SPARK-57207).
-      case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
-        throw DataTypeErrors.cannotConvertNanosTimestampToStringError(from)
       case _ =>
         (c, evPrim) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }

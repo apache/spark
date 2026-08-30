@@ -28,7 +28,7 @@ import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, anyString, eq => meq}
-import org.mockito.Mockito.{never, times, verify, when}
+import org.mockito.Mockito.{clearInvocations, never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
@@ -154,6 +154,33 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(pvcWithNamespace.resource(any())).thenReturn(pvcResource)
     when(labeledPersistentVolumeClaims.list()).thenReturn(persistentVolumeClaimList)
     when(persistentVolumeClaimList.getItems).thenReturn(Seq.empty[PersistentVolumeClaim].asJava)
+  }
+
+  test("SPARK-58192: warn when recovery mode cannot isolate a single task") {
+    val confWithFractionalCpus = conf.clone.set(CPUS_PER_TASK, BigDecimal(0.5))
+    val allocator = new ExecutorPodsAllocator(confWithFractionalCpus, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    val logAppender = new LogAppender("recovery mode fractional cpus")
+    withLogAppender(logAppender) {
+      allocator.setRecoveryMode()
+      // the warning is logged at most once
+      allocator.setRecoveryMode()
+    }
+    val warnings = logAppender.loggingEvents
+      .map(_.getMessage.getFormattedMessage)
+      .filter(_.contains("instead of only one"))
+    assert(warnings.size === 1)
+    assert(warnings.head.contains("2 concurrent tasks"))
+
+    // no warning when a recovery-mode executor's single announced core fits exactly one task
+    val allocator2 = new ExecutorPodsAllocator(conf.clone, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    val logAppender2 = new LogAppender("recovery mode whole cpus")
+    withLogAppender(logAppender2) {
+      allocator2.setRecoveryMode()
+    }
+    assert(!logAppender2.loggingEvents.exists(
+      _.getMessage.getFormattedMessage.contains("instead of only one")))
   }
 
   test("SPARK-49447: Prevent small values less than 100 for batch delay") {
@@ -893,6 +920,23 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock))
     assert(e.getMessage.contains("No pod was found named i-do-not-exist in the cluster in the" +
       " namespace default"))
+  }
+
+  test("SPARK-58113: wait for driver readiness by default") {
+    // The allocator in `before` was started with the default conf.
+    verify(driverPodOperations, times(1)).waitUntilReady(any(), any())
+  }
+
+  test("SPARK-58113: skip driver readiness wait when publishNotReadyAddresses is enabled") {
+    clearInvocations(driverPodOperations)
+    val confWithPublishNotReady = conf.clone()
+      .set(KUBERNETES_DRIVER_SERVICE_PUBLISH_NOT_READY_ADDRESSES, true)
+    val podsAllocator = new ExecutorPodsAllocator(
+      confWithPublishNotReady, secMgr, executorBuilder, kubernetesClient, snapshotsStore,
+      waitForExecutorPodsClock)
+    podsAllocator.setExecutorPodsLifecycleManager(lifecycleManager)
+    podsAllocator.start(TEST_SPARK_APP_ID, schedulerBackend)
+    verify(driverPodOperations, never()).waitUntilReady(any(), any())
   }
 
   test("SPARK-39688: getReusablePVCs should handle accounts with no PVC permission") {

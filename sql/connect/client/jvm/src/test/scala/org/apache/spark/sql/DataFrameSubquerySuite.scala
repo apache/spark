@@ -339,6 +339,31 @@ class DataFrameSubquerySuite extends QueryTest with RemoteSparkSession {
       sql("select * from l where l.a in (select c from r) and l.a > 2 and l.b is not null"))
   }
 
+  test("SPARK-58165: scalar subquery nested in IN subquery values") {
+    // A scalar subquery nested inside the IN subquery's values. The nested SubqueryExpression
+    // must still contribute its plan to WithRelations; otherwise the server fails with
+    // "Missing relation in WithRelations". Regression guard for the Connect path.
+    checkAnswer(
+      spark
+        .table("l")
+        .where(spark.table("r").select(max($"c")).scalar().isin(spark.table("r").select($"c"))),
+      sql("select * from l where (select max(c) from r) in (select c from r)"))
+
+    // Correlated variant: the nested scalar subquery references the outer row via outer(), so it
+    // is recomputed per row instead of being a constant.
+    checkAnswer(
+      spark
+        .table("l")
+        .where(
+          spark
+            .table("r")
+            .where($"c" === $"a".outer())
+            .select(max($"d"))
+            .scalar()
+            .isin(spark.table("r").select($"c"))),
+      sql("select * from l where (select max(d) from r where c = a) in (select c from r)"))
+  }
+
   test("IN predicate subquery with struct") {
     withTempView("ll", "rr") {
       spark.table("l").select($"*", struct("a", "b").alias("sab")).createOrReplaceTempView("ll")

@@ -26,8 +26,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.runtime.ErrorNotifier
-import org.apache.spark.util.{Clock, SystemClock}
+import org.apache.spark.util.{Clock, ErrorNotifier, SystemClock}
 
 /**
  * Used to write entries to the offset log asynchronously
@@ -84,7 +83,7 @@ class AsyncOffsetSeqLog(
    *         to indicate some write error.
    */
   def addAsync(batchId: Long, metadata: OffsetSeqBase): CompletableFuture[(Long, Boolean)] = {
-    require(metadata != null, "'null' metadata cannot written to a metadata log")
+    require(metadata != null, "'null' metadata cannot be written to a metadata log")
 
     def issueAsyncWrite(batchId: Long): CompletableFuture[Long] = {
       lastCommitIssuedTimestampMs.set(clock.getTimeMillis())

@@ -238,7 +238,7 @@ class BarrierTaskContext private[spark] (
     taskContext.getMetricsSources(sourceName)
   }
 
-  override def cpus(): Int = taskContext.cpus()
+  override def cpuAmount(): BigDecimal = taskContext.cpuAmount()
 
   override def resources(): Map[String, ResourceInformation] = taskContext.resources()
 
@@ -294,6 +294,15 @@ class BarrierTaskContext private[spark] (
   override private[spark] def createResourceUninterruptibly[T <: Closeable](resourceBuilder: => T)
     : T = {
     taskContext.createResourceUninterruptibly(resourceBuilder)
+  }
+
+  override def addPostStatusUpdateListener(listener: PostStatusUpdateListener): TaskContext = {
+    taskContext.addPostStatusUpdateListener(listener)
+    this
+  }
+
+  override private[spark] def invokePostStatusUpdateListeners(): Unit = {
+    taskContext.invokePostStatusUpdateListeners()
   }
 }
 

@@ -18,6 +18,7 @@ package org.apache.spark.sql.connect.client
 
 import java.util.UUID
 
+import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.test.ConnectFunSuite
 
 /**
@@ -49,6 +50,15 @@ class SparkConnectClientBuilderParseTestSuite extends ConnectFunSuite {
   argumentTest("user_name", "alice", _.userName.get)
   argumentTest("user_agent", "robert", _.userAgent.split(" ")(0))
   argumentTest("session_id", UUID.randomUUID().toString, _.sessionId.get)
+  argumentTest("grpc_keepalive_enabled", "false", _.grpcKeepAliveEnabled.toString)
+  argumentTest("grpc_keepalive_time_ms", "12345", _.grpcKeepAliveTimeMs.toString)
+  argumentTest("grpc_keepalive_timeout_ms", "6789", _.grpcKeepAliveTimeoutMs.toString)
+  argumentTest("grpc_keepalive_without_calls", "false", _.grpcKeepAliveWithoutCalls.toString)
+
+  test("Argument - grpc_keepalive_enabled explicit true") {
+    val builder = build("--grpc_keepalive_enabled", "true")
+    assert(builder.grpcKeepAliveEnabled)
+  }
 
   test("Argument - remote") {
     val builder =
@@ -59,6 +69,41 @@ class SparkConnectClientBuilderParseTestSuite extends ConnectFunSuite {
     assert(builder.userId.contains("x127"))
     assert(builder.options === Map(("user_name", "Q"), ("param1", "x")))
     assert(builder.sessionId.isEmpty)
+  }
+
+  test("Argument - remote with keepalive params (disabled)") {
+    val builder = build(
+      "--remote",
+      "sc://srv.apache.org/;grpc_keepalive_enabled=false;grpc_keepalive_time_ms=15000;" +
+        "grpc_keepalive_timeout_ms=5000;grpc_keepalive_without_calls=false")
+    assert(!builder.grpcKeepAliveEnabled)
+    assert(builder.grpcKeepAliveTimeMs === 15000L)
+    assert(builder.grpcKeepAliveTimeoutMs === 5000L)
+    assert(!builder.grpcKeepAliveWithoutCalls)
+  }
+
+  test("Argument - remote with keepalive params (explicitly enabled)") {
+    val builder = build(
+      "--remote",
+      "sc://srv.apache.org/;grpc_keepalive_enabled=true;grpc_keepalive_time_ms=15000;" +
+        "grpc_keepalive_timeout_ms=5000;grpc_keepalive_without_calls=true")
+    assert(builder.grpcKeepAliveEnabled)
+    assert(builder.grpcKeepAliveTimeMs === 15000L)
+    assert(builder.grpcKeepAliveTimeoutMs === 5000L)
+    assert(builder.grpcKeepAliveWithoutCalls)
+  }
+
+  test("keepalive defaults apply when unset") {
+    val builder = build("--host", "localhost")
+    assert(
+      builder.configuration.grpcKeepAliveEnabled === ConnectCommon.CONNECT_GRPC_KEEPALIVE_ENABLED)
+    assert(
+      builder.configuration.grpcKeepAliveTimeMs ===
+        ConnectCommon.CONNECT_GRPC_KEEPALIVE_TIME_SECONDS * 1000)
+    assert(
+      builder.configuration.grpcKeepAliveTimeoutMs ===
+        ConnectCommon.CONNECT_GRPC_KEEPALIVE_TIMEOUT_SECONDS * 1000)
+    assert(builder.configuration.grpcKeepAliveWithoutCalls)
   }
 
   test("Argument - use_ssl") {

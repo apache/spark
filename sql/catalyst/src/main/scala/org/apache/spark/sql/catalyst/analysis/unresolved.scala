@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIden
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, SupportsSubquery, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{DeduplicateKeySpec, LeafNode, LogicalPlan, SupportsSubquery, UnaryNode}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -63,12 +63,9 @@ trait UnresolvedUnaryNode extends UnaryNode with UnresolvedNode
  * Extends `NamedRelation` so it can occupy a `NamedRelation`-typed slot (e.g.
  * `OverwriteByExpression.table`) directly at parse time, instead of wrapping the whole command.
  *
- * The parser always places this node inside the command's identifier slot (a child slot for
- * DELETE/UPDATE/MERGE/CTAS/RTAS, or a non-child slot for `InsertIntoStatement.table` and
- * `OverwriteByExpression.table` -- handled via explicit cases in `ResolveIdentifierClause` and
- * `BindParameters`). It is never the substitution root of a `WITH ... <command>` subtree, so
- * `CTEInChildren` semantics are not needed: any surrounding `WithCTE` produced by
- * `CTESubstitution` targets the inner command directly.
+ * Depending on the command shape, the parser uses this node either as the plan root or within the
+ * command's identifier slot. For INSERT, the slot is a child of `UnresolvedInsert` until the
+ * identifier expression has been evaluated.
  */
 case class PlanWithUnresolvedIdentifier(
     identifierExpr: Expression,
@@ -124,6 +121,19 @@ case class ExpressionWithUnresolvedIdentifier(
 }
 
 /**
+ * Holds the raw table identifier and lookup context for an unresolved INSERT target.
+ *
+ * This is deliberately not a [[NamedRelation]]: while it is a child of
+ * [[org.apache.spark.sql.catalyst.plans.logical.UnresolvedInsert]], it must not be interpreted as
+ * a readable relation or substituted with a same-named CTE. It is converted to an
+ * [[UnresolvedRelation]] when the enclosing INSERT is lowered to `InsertIntoStatement`.
+ */
+case class UnresolvedInsertTarget(
+    multipartIdentifier: Seq[String],
+    options: CaseInsensitiveStringMap,
+    writePrivileges: Set[TableWritePrivilege]) extends UnresolvedLeafNode
+
+/**
  * Holds the name of a relation that has yet to be looked up in a catalog.
  *
  * @param multipartIdentifier table name, the location of files or Kafka topic name, etc.
@@ -144,7 +154,9 @@ case class UnresolvedRelation(
   def requireWritePrivileges(privileges: Set[TableWritePrivilege]): UnresolvedRelation = {
     if (privileges.nonEmpty) {
       val newOptions = new java.util.HashMap[String, String]
-      newOptions.putAll(options)
+      // CaseInsensitiveStringMap's Map view exposes lowercase keys. Copy the original map to
+      // preserve user-provided key casing when adding the internal marker.
+      newOptions.putAll(options.asCaseSensitiveMap())
       newOptions.put(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES, privileges.mkString(","))
       copy(options = new CaseInsensitiveStringMap(newOptions))
     } else {
@@ -155,7 +167,8 @@ case class UnresolvedRelation(
   def clearWritePrivileges: UnresolvedRelation = {
     if (options.containsKey(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)) {
       val newOptions = new java.util.HashMap[String, String]
-      newOptions.putAll(options)
+      // Preserve user-provided key casing while removing the internal marker as well.
+      newOptions.putAll(options.asCaseSensitiveMap())
       newOptions.remove(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
       copy(options = new CaseInsensitiveStringMap(newOptions))
     } else {
@@ -1166,6 +1179,37 @@ case class UnresolvedQualify(condition: Expression, child: LogicalPlan) extends 
   override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedQualify =
     copy(child = newChild)
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_QUALIFY)
+}
+
+/**
+ * An unresolved logical plan for `dropDuplicates` / `dropDuplicatesWithinWatermark`. It holds the
+ * user-requested deduplication columns (by name, or "all columns") and is resolved by the
+ * `ResolveDeduplicate` analyzer rule into a [[Deduplicate]] / [[DeduplicateWithinWatermark]].
+ *
+ * Resolving the keys in the analyzer (rather than eagerly in the DataFrame API or the Spark Connect
+ * planner) lets both engines share one resolution with a stable key order. A stable order matters
+ * for streaming deduplication, whose state store binds keys by position: a different key order
+ * across restarts would break state-store key-schema compatibility. See SPARK-57489.
+ *
+ * @param keySpec which columns form the deduplication key (an explicit set, or all columns).
+ * @param withinWatermark when true, resolves to `DeduplicateWithinWatermark`.
+ * @param viaSparkClassic whether the deduplication was requested via Spark Classic
+ *   (`Dataset.dropDuplicates*`, true) or Spark Connect (`transformDeduplicate`, false). This only
+ *   matters on the legacy-fallback path, consulted ONLY when the deterministic key order is
+ *   disabled (an existing query restored from a checkpoint that predates this change): Spark
+ *   Classic reproduces its legacy resolution (`toSet`-based dedup, `Set` order) while Spark
+ *   Connect reproduces its own (no dedup, input order). Ignored on the deterministic path.
+ */
+case class UnresolvedDeduplicate(
+    keySpec: DeduplicateKeySpec,
+    withinWatermark: Boolean,
+    viaSparkClassic: Boolean,
+    child: LogicalPlan) extends UnaryNode {
+  override lazy val resolved: Boolean = false
+  override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedDeduplicate =
+    copy(child = newChild)
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_DEDUPLICATE)
 }
 
 /**
