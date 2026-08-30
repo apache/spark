@@ -21,6 +21,8 @@ import java.util.concurrent.{CountDownLatch, Executors, TimeUnit}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -57,6 +59,34 @@ class UnionCodegenSuite extends SharedSparkSession {
     df.queryExecution.executedPlan.collect {
       case w: WholeStageCodegenExec if w.find(_.isInstanceOf[UnionExec]).isDefined => w
     }.nonEmpty
+
+  /**
+   * Every node of the final plan, descending through AQE wrappers and query stages.
+   * `SparkPlan.collect` stops at `AdaptiveSparkPlanExec` and `QueryStageExec`, both of which
+   * are `LeafExecNode`s, so it cannot see a union that AQE placed inside a stage.
+   */
+  private def allNodes(plan: SparkPlan): Seq[SparkPlan] = plan match {
+    case a: AdaptiveSparkPlanExec => plan +: allNodes(a.executedPlan)
+    case q: QueryStageExec => plan +: allNodes(q.plan)
+    case other => other +: other.children.flatMap(allNodes)
+  }
+
+  private def fusedUnions(df: DataFrame): Seq[UnionExec] =
+    allNodes(df.queryExecution.executedPlan).collect {
+      case w: WholeStageCodegenExec if w.child.isInstanceOf[UnionExec] =>
+        w.child.asInstanceOf[UnionExec]
+    }
+
+  /** A cached aggregate, so the union's children read an `InMemoryTableScanExec`. */
+  private def cacheAggregateView(view: String): Unit = {
+    spark.catalog.clearCache()
+    spark.range(0, 200, 1, 4)
+      .selectExpr("id % 10 AS k", "id AS v")
+      .groupBy("k")
+      .agg(sum("v").as("s"))
+      .createOrReplaceTempView(view)
+    spark.catalog.cacheTable(view)
+  }
 
   /** Run query with flag on, then flag off, assert results match. */
   protected def assertFlagParity(buildDf: () => DataFrame): Unit = {
@@ -625,6 +655,53 @@ class UnionCodegenSuite extends SharedSparkSession {
       assert(!unionExec.metrics.contains("numOutputRows"),
         "numOutputRows metric must not be registered on the partitioning-aware path")
       assertFlagParity(() => a.union(b).orderBy("id"))
+    }
+  }
+
+  test("SPARK-59122: a fused union keeps numOutputRows when a child's partitioning firms up") {
+    // The children's partitioning is not stable while the plan is being prepared:
+    // `InMemoryTableScanExec` reads `cachedPlan.outputPartitioning`, and the inner
+    // `AdaptiveSparkPlanExec` answers `UnknownPartitioning` until its final plan exists. The
+    // asymmetry matters -- an expression on one branch only keeps a `ProjectExec` from being
+    // collapsed away, so `comparePartitioning` rejects the pair, the union looks plain and is
+    // fused. Once the cache stages finalise, both children report the same `HashPartitioning`,
+    // and re-deriving the decision at that point left `metrics` empty while the generated code
+    // still incremented it, so `doProduce` threw
+    // `NoSuchElementException: key not found: numOutputRows`. `SELECT *` or a plain alias is
+    // collapsed away and does not reproduce this.
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withTempView("v") {
+        cacheAggregateView("v")
+        val df = spark.sql("SELECT k, abs(s) AS s FROM v UNION ALL SELECT k, s FROM v")
+        // Execute this DataFrame rather than a count over it: the plan being inspected has to be
+        // the one that ran, and an AQE plan that never ran has no final plan to inspect.
+        assert(df.collect().length == 20)
+        val fused = fusedUnions(df)
+        assert(fused.nonEmpty,
+          "this shape must actually fuse, or the test is not exercising the defect")
+        assert(fused.forall(_.metrics.contains("numOutputRows")),
+          "a fused union must register the metric its generated code increments")
+      }
+    }
+  }
+
+  test("SPARK-59122: a fused union reports UnknownPartitioning, so no parent skips an exchange") {
+    // The other half of the same decision. A fused union concatenates its children's partitions,
+    // so if it went on claiming the children's `HashPartitioning` a parent could satisfy a
+    // clustered distribution from an RDD that does not have it -- a wrong answer rather than a
+    // crash, which is why the missing metric must not simply be registered unconditionally.
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withTempView("v") {
+        cacheAggregateView("v")
+        val df = spark.sql("SELECT k, abs(s) AS s FROM v UNION ALL SELECT k, s FROM v")
+        df.collect()
+        val fused = fusedUnions(df)
+        assert(fused.nonEmpty, "this shape must actually fuse")
+        fused.foreach { u =>
+          assert(u.outputPartitioning.isInstanceOf[UnknownPartitioning],
+            s"a fused union must not claim a concrete partitioning, got ${u.outputPartitioning}")
+        }
+      }
     }
   }
 

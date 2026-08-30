@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.plans.logical.Sample
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -964,7 +965,12 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     }
   }
 
-  override def outputPartitioning: Partitioning = {
+  /**
+   * The SPARK-52921 pass-through partitioning, derived from the children on every call. Callers
+   * go through `outputPartitioning`, which reconciles this with the latched
+   * plain-union decision; see `isPlainUnion`.
+   */
+  private def rawPartitioning: Partitioning = {
     if (!conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING)) {
       return super.outputPartitioning
     }
@@ -1023,13 +1029,46 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     }
   }
 
-  // True when the codegen path applies: `outputPartitioning` is `UnknownPartitioning`,
-  // and `unionedInputRDD` matches the semantics of `sparkContext.union(...)` in `doExecute`.
-  // A `KeyedPartitioning` union also uses `sparkContext.union(...)` in `doExecute`, but
-  // codegen is disabled for it (`supportCodegenFailureReason` reports "partitioning-aware"):
-  // the per-partition key descriptor is consumed by a downstream `GroupPartitionsExec`, and
-  // keeping these unions out of whole-stage codegen matches the `HashPartitioning` union case.
-  private[sql] def isPlainUnion: Boolean = outputPartitioning.isInstanceOf[UnknownPartitioning]
+  /**
+   * True when the codegen path applies: this union behaves as a plain concatenation, so
+   * `unionedInputRDD` matches the semantics of `sparkContext.union(...)` in `doExecute`.
+   * A `KeyedPartitioning` union also uses `sparkContext.union(...)` in `doExecute`, but
+   * codegen is disabled for it (`supportCodegenFailureReason` reports "partitioning-aware"):
+   * the per-partition key descriptor is consumed by a downstream `GroupPartitionsExec`, and
+   * keeping these unions out of whole-stage codegen matches the `HashPartitioning` union case.
+   *
+   * DECIDED ONCE and then carried on the node, rather than re-derived per caller. The children's
+   * partitioning is not stable over a node's lifetime: `InMemoryTableScanExec.outputPartitioning`
+   * reads `cachedPlan.outputPartitioning`, and an inner `AdaptiveSparkPlanExec` answers
+   * `UnknownPartitioning` until its final plan exists. A union can therefore look plain while
+   * `CollapseCodegenStages` decides to fuse it and partitioning-aware by the time the stage runs,
+   * at which point every consumer of this predicate flips with it.
+   *
+   * That flip is observable because `insertInputAdapter` rebuilds the node through
+   * `withNewChildren` and puts the COPY inside the `WholeStageCodegenExec` it just created, so
+   * the copy re-derives the predicate later and can answer the opposite of the decision the
+   * shell was built from: `metrics` comes back empty and `doProduce`'s `metricTerm` throws
+   * `key not found: numOutputRows`. A `TreeNodeTag` survives that rebuild
+   * (`TreeNode.withNewChildren` ends in `copyTagsFrom`, which copies into a tagless node), so
+   * the copy inherits the decision instead of making a new one.
+   */
+  private[sql] def isPlainUnion: Boolean =
+    getTagValue(UnionExec.PLAIN_UNION_DECISION).getOrElse {
+      val plain = rawPartitioning.isInstanceOf[UnknownPartitioning]
+      setTagValue(UnionExec.PLAIN_UNION_DECISION, plain)
+      plain
+    }
+
+  /**
+   * The partitioning this node both reports and executes by, so the RDD shape can never
+   * contradict the claim. A node latched plain reports `UnknownPartitioning` and concatenates,
+   * even if its children have since agreed on a concrete partitioning -- a fused union
+   * concatenates its children's partitions, and claiming their partitioning would let a parent
+   * skip an exchange it needs. The cost is that SPARK-52921's exchange elimination is lost for a
+   * union whose children only agree later, which is the conservative direction.
+   */
+  override def outputPartitioning: Partitioning =
+    if (isPlainUnion) super.outputPartitioning else rawPartitioning
 
   // Per-child projection from the child's output to the union's output. The wrapped
   // child is always the source `Attribute` (deterministic by construction); the Alias
@@ -1267,6 +1306,14 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
 }
 
 object UnionExec {
+  /**
+   * The once-and-for-all "does this union behave as a plain concatenation" decision, carried on
+   * the node so that the copy `CollapseCodegenStages.insertInputAdapter` puts inside a
+   * `WholeStageCodegenExec` cannot re-derive it and answer differently. See
+   * `UnionExec.isPlainUnion`.
+   */
+  val PLAIN_UNION_DECISION = TreeNodeTag[Boolean]("plainUnionDecision")
+
   /**
    * Codegen operators that return more than one RDD from `inputRDDs()`.
    * `UnionExec`'s fusion assumes each direct child contributes one RDD.
