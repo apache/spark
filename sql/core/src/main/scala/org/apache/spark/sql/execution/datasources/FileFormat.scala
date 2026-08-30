@@ -138,7 +138,7 @@ trait FileFormat {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration,
-      strictlyColumnar: Boolean,
+      strictlyColumnar: Boolean
       ): PartitionedFile => Iterator[InternalRow] = {
     val dataReader = buildReader(
       sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
