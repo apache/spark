@@ -3740,9 +3740,10 @@ class AvroV1Suite extends AvroSuite {
         spark.read.option("positionalFieldMatching", "true").format("avro").load(path)
           .createOrReplaceTempView("t")
         // Positional matching pairs a column with the Avro field at its position in the projected
-        // schema, so a scan shared between the two subqueries answers 100 for sum(b). Both values
-        // are wrong against the file, which is SPARK-59108; what merging must not do is make one
-        // subquery's values depend on what the other one projects.
+        // schema, so a scan of b alone reads the first Avro field and answers 10, while a scan
+        // shared with sum(a) reads both fields, pairs them by coincidence and answers 100. The 10
+        // is wrong against the file, which is SPARK-59108; what merging must not do is make one
+        // subquery's value depend on what the other one projects.
         checkAnswer(sql("SELECT (SELECT sum(a) FROM t), (SELECT sum(b) FROM t)"), Row(10L, 10L))
       }
     }
