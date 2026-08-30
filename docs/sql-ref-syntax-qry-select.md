@@ -49,6 +49,8 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
     [ WHERE boolean_expression ]
     [ GROUP BY expression [ , ... ] ]
     [ HAVING boolean_expression ]
+    [ WINDOW clause ]
+    [ QUALIFY boolean_expression ]
 ```
 
 ### Parameters
@@ -87,10 +89,13 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
      Specifies a source of input for the query. It can be one of the following:
      * Table relation
      * [Join relation](sql-ref-syntax-qry-select-join.html)
+     * [ASOF JOIN](sql-ref-syntax-qry-select-asof-join.html)
      * [Pivot relation](sql-ref-syntax-qry-select-pivot.html)
      * [Unpivot relation](sql-ref-syntax-qry-select-unpivot.html)
      * [Table-value function](sql-ref-syntax-qry-select-tvf.html)
+     * [JSON_TABLE](sql-ref-syntax-qry-select-json-table.html)
      * [Inline table](sql-ref-syntax-qry-select-inline-table.html)
+     * [UNNEST relation](sql-ref-syntax-qry-select-unnest.html)
      * [ [LATERAL](sql-ref-syntax-qry-select-lateral-subquery.html) ] ( Subquery )
      * [File](sql-ref-syntax-qry-select-file.html)
      
@@ -121,6 +126,14 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
      Specifies the predicates by which the rows produced by GROUP BY are filtered. The HAVING clause is used to
      filter rows after the grouping is performed. If HAVING is specified without GROUP BY, it indicates a GROUP BY
      without grouping expressions (global aggregate).
+
+* **QUALIFY**
+
+     Filters rows after window functions have been evaluated. The current `SELECT` list or the
+     `QUALIFY` condition must contain at least one window function, and aggregate functions are
+     not allowed inside the `QUALIFY` condition. Column references in `QUALIFY` are resolved
+     against input columns first; `SELECT` aliases are used only when there is no matching
+     input column.
 
 * **ORDER BY**
 
@@ -195,10 +208,14 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 * [Inline Table](sql-ref-syntax-qry-select-inline-table.html)
 * [File](sql-ref-syntax-qry-select-file.html)
 * [JOIN](sql-ref-syntax-qry-select-join.html)
+* [ASOF JOIN](sql-ref-syntax-qry-select-asof-join.html)
 * [LIKE Predicate](sql-ref-syntax-qry-select-like.html)
 * [Set Operators](sql-ref-syntax-qry-select-setops.html)
 * [TABLESAMPLE](sql-ref-syntax-qry-select-sampling.html)
 * [Table-valued Function](sql-ref-syntax-qry-select-tvf.html)
+* [JSON_QUERY](sql-ref-syntax-qry-select-json-query.html)
+* [JSON_VALUE](sql-ref-syntax-qry-select-json-value.html)
+* [JSON_EXISTS](sql-ref-syntax-qry-select-json-exists.html)
 * [Window Function](sql-ref-syntax-qry-select-window.html)
 * [CASE Clause](sql-ref-syntax-qry-select-case.html)
 * [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)

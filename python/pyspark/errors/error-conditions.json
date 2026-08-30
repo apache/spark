@@ -72,7 +72,7 @@
   },
   "CANNOT_CONVERT_COLUMN_INTO_BOOL": {
     "message": [
-      "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
+      "Cannot convert column into bool (offending column: <column>): please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
     ]
   },
   "CANNOT_CONVERT_TYPE": {
@@ -204,7 +204,7 @@
   },
   "DATA_SOURCE_PUSHDOWN_DISABLED": {
     "message": [
-      "<type> implements pushFilters() but filter pushdown is disabled because configuration '<conf>' is false. Set it to true to enable filter pushdown."
+      "<type> implements <method>() but the corresponding pushdown is disabled because configuration '<conf>' is false. Set it to true to enable it."
     ]
   },
   "DATA_SOURCE_RETURN_SCHEMA_MISMATCH": {
@@ -417,7 +417,7 @@
   },
   "INVALID_MULTIPLE_ARGUMENT_CONDITIONS": {
     "message": [
-      "[{arg_names}] cannot be <condition>."
+      "[<arg_names>] cannot be <condition>."
     ]
   },
   "INVALID_NDARRAY_DIMENSION": {
@@ -546,6 +546,16 @@
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
     ]
   },
+  "LOCAL_CONNECT_RUNTIME_DIR_UNAVAILABLE": {
+    "message": [
+      "Cannot claim the per-user runtime directory <path> (was it created by another user?); remove it or point SPARK_LOCAL_CONNECT_DISCOVERY at a path you own."
+    ]
+  },
+  "LOCAL_CONNECT_SERVER_START_FAILED": {
+    "message": [
+      "Failed to start a persistent local Spark Connect server: <reason>."
+    ]
+  },
   "LOCAL_RELATION_SIZE_LIMIT_EXCEEDED": {
     "message": [
       "Local relation size (<actualSize> bytes) exceeds the limit (<sizeLimit> bytes)."
@@ -601,6 +611,34 @@
     "message": [
       "Multiple pipeline spec files found in the directory `<dir_path>`. Please remove one or choose a particular one with the --spec argument."
     ]
+  },
+  "NEAREST_BY_JOIN": {
+    "message": [
+      "Invalid nearest-by join."
+    ],
+    "sub_class": {
+      "NUM_RESULTS_OUT_OF_RANGE": {
+        "message": [
+          "The number of results <numResults> must be between <min> and <max>. Update the literal in `APPROX NEAREST <numResults> BY ...` (or `EXACT NEAREST <numResults> BY ...`) to fall within that range."
+        ]
+      },
+      "UNSUPPORTED_DIRECTION": {
+        "message": [
+          "Unsupported nearest-by join direction '<direction>'. Supported nearest-by join directions include: <supported>."
+        ]
+      },
+      "UNSUPPORTED_JOIN_TYPE": {
+        "message": [
+          "Unsupported nearest-by join type <joinType>. Supported types: <supported>."
+        ]
+      },
+      "UNSUPPORTED_MODE": {
+        "message": [
+          "Unsupported nearest-by join mode '<mode>'. Supported modes include: <supported>."
+        ]
+      }
+    },
+    "sqlState": "42604"
   },
   "NEGATIVE_VALUE": {
     "message": [
@@ -808,14 +846,14 @@
       "Number of columns of the returned data doesn't match specified schema. Expected: <expected> Actual: <actual>"
     ]
   },
+  "RESULT_COLUMN_TYPES_MISMATCH": {
+    "message": [
+      "Column types of the returned data do not match specified schema. Mismatch: <mismatch>."
+    ]
+  },
   "RESULT_ROWS_MISMATCH": {
     "message": [
       "The number of output rows (<output_length>) must match the number of input rows (<input_length>)."
-    ]
-  },
-  "RESULT_TYPE_MISMATCH_FOR_ARROW_UDF": {
-    "message": [
-      "Columns do not match in their data type: <mismatch>."
     ]
   },
   "REUSE_OBSERVATION": {
@@ -823,16 +861,7 @@
       "An Observation can be used with a DataFrame only once."
     ]
   },
-  "SCHEMA_MISMATCH_FOR_ARROW_PYTHON_UDF": {
-    "message": [
-      "Result vector from <udf_type> was not the required length: expected <expected>, got <actual>."
-    ]
-  },
-  "SCHEMA_MISMATCH_FOR_PANDAS_UDF": {
-    "message": [
-      "Result vector from <udf_type> was not the required length: expected <expected>, got <actual>."
-    ]
-  },
+
   "SESSION_ALREADY_EXIST": {
     "message": [
       "Cannot start a remote Spark session because there is a regular Spark session already running."
@@ -963,6 +992,12 @@
     ],
     "sqlState" : "22023"
   },
+  "ST_INVALID_ENDIANNESS_VALUE" : {
+    "message" : [
+      "Endianness '<endianness>' must be either 'NDR' (little-endian) or 'XDR' (big-endian)."
+    ],
+    "sqlState" : "22023"
+  },
   "ST_INVALID_SRID_VALUE" : {
     "message" : [
       "Invalid or unsupported SRID (spatial reference identifier) value: <srid>."
@@ -1052,11 +1087,6 @@
   "UNEXPECTED_TUPLE_WITH_STRUCT": {
     "message": [
       "Unexpected tuple <tuple> with StructType."
-    ]
-  },
-  "UNKNOWN_EXPLAIN_MODE": {
-    "message": [
-      "Unknown explain mode: '<explain_mode>'. Accepted explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'."
     ]
   },
   "UNKNOWN_INTERRUPT_TYPE": {
@@ -1169,11 +1199,6 @@
       "Value for `<arg_name>` has to be amongst the following values: <allowed_values>."
     ]
   },
-  "VALUE_NOT_ANY_OR_ALL": {
-    "message": [
-      "Value for `<arg_name>` must be 'any' or 'all', got '<arg_value>'."
-    ]
-  },
   "VALUE_NOT_BETWEEN": {
     "message": [
       "Value for `<arg_name>` must be between <min> and <max>."
@@ -1184,11 +1209,6 @@
       "Value for `<arg_name>` must be a non-empty string, got '<arg_value>'."
     ]
   },
-  "VALUE_NOT_PEARSON": {
-    "message": [
-      "Value for `<arg_name>` only supports 'pearson', got '<arg_value>'."
-    ]
-  },
   "VALUE_NOT_PLAIN_COLUMN_REFERENCE": {
     "message": [
       "Value `<val>` in `<field_name>` should be a plain column reference such as `df.col` or `col('column')`."
@@ -1197,11 +1217,6 @@
   "VALUE_NOT_POSITIVE": {
     "message": [
       "Value for `<arg_name>` must be positive, got '<arg_value>'."
-    ]
-  },
-  "VALUE_NOT_TRUE": {
-    "message": [
-      "Value for `<arg_name>` must be True, got '<arg_value>'."
     ]
   },
   "VALUE_OUT_OF_BOUNDS": {

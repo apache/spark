@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
-import org.apache.spark.sql.functions.{array, avg, col, count, transform}
+import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, Row}
+import org.apache.spark.sql.functions.{aggregate, array, avg, col, count, lit, transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
 
-class PythonUDFSuite extends QueryTest with SharedSparkSession {
+class PythonUDFSuite extends SharedSparkSession {
   import testImplicits._
 
   import IntegratedUDFTestUtils._
@@ -117,16 +117,28 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
     assert(df.agg(pandasTestUDF(df("id"))).schema.fieldNames.exists(_.startsWith(udfName)))
   }
 
-  test("SPARK-48706: Negative test case for Python UDF in higher order functions") {
+  test("SPARK-27052: Python UDF in a higher order function lambda") {
     assume(shouldTestPythonUDFs)
+    // SPARK-48706 originally rejected this. `ExtractPythonUDFFromLambda` now rewrites it so the
+    // UDF is applied to the whole array outside the lambda, so it runs and returns a result.
+    checkAnswer(
+      spark.range(1).select(transform(array("id"), x => pythonTestUDF(x))),
+      Row(Seq(0)))
+  }
+
+  test("SPARK-27052: Negative test case for Python UDF in higher order functions") {
+    assume(shouldTestPythonUDFs)
+    // A UDF reading `aggregate`'s accumulator is sequential, so there is no array to precompute
+    // over and the rewrite does not apply. This must still fail rather than give a wrong answer.
     checkError(
       exception = intercept[AnalysisException] {
-        spark.range(1).select(transform(array("id"), x => pythonTestUDF(x))).collect()
+        spark.range(1).select(
+          aggregate(array("id"), lit(0L), (acc, x) => pythonTestUDF(acc) + x)).collect()
       },
       condition = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
       parameters = Map("funcName" -> "\"pyUDF(namedlambdavariable())\""),
       context = ExpectedContext(
-        "transform", s".*${this.getClass.getSimpleName}.*"))
+        "aggregate", s".*${this.getClass.getSimpleName}.*"))
   }
 
   test("SPARK-48666: Python UDF execution against partitioned column") {
@@ -260,6 +272,38 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
         assert(pythonTotalTime > 0 && pythonTotalTime >= processingTime,
           s"pythonTotalTime should be > 0 for BatchEvalPythonUDTFExec," +
             s" but was $pythonTotalTime")
+      } finally {
+        spark.sessionState.catalog.dropTempFunction(udtf.name, ignoreIfNotExists = true)
+      }
+    }
+  }
+
+  test("SPARK-57593: pythonPeakPickledBatchBytes metric for BatchEvalPythonUDTFExec") {
+    assume(shouldTestPythonUDFs)
+    val udtf = TestPythonUDTF(name = "test_udtf")
+
+    spark.udtf.registerPython(udtf.name, udtf.udtf)
+    withTempView("t") {
+      try {
+        spark.range(1000).selectExpr("id % 100 as a", "id % 50 as b")
+          .createOrReplaceTempView("t")
+        val result = sql(s"SELECT f.* FROM t, LATERAL ${udtf.name}(a, b) f")
+        result.collect()
+
+        val udtfExec = result.queryExecution.executedPlan.collectFirst {
+          case p: BatchEvalPythonUDTFExec => p
+        }.getOrElse {
+          fail("Expected BatchEvalPythonUDTFExec in executed plan")
+        }
+
+        // The UDTF pickle path pickles its input through the same contiguous-allocation code as
+        // BatchEvalPythonExec, so the peak pickled-batch size is recorded here too (passed via the
+        // shared pythonMetrics map) even though the UDTF path sets no byte cap.
+        val peakPickledBatchBytes =
+          udtfExec.metrics.get("pythonPeakPickledBatchBytes").map(_.value).getOrElse(0L)
+        assert(peakPickledBatchBytes > 0,
+          "pythonPeakPickledBatchBytes should be > 0 for BatchEvalPythonUDTFExec, " +
+            s"but was $peakPickledBatchBytes")
       } finally {
         spark.sessionState.catalog.dropTempFunction(udtf.name, ignoreIfNotExists = true)
       }

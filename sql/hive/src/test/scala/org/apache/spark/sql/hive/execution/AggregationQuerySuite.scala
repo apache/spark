@@ -30,7 +30,6 @@ import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAg
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, timeTypes, unsafeRowMutableFieldTypes}
 import org.apache.spark.tags.SlowHiveTest
@@ -131,7 +130,7 @@ class LongProductSum extends UserDefinedAggregateFunction {
     buffer.getLong(0)
 }
 
-abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+abstract class AggregationQuerySuite extends QueryTest with TestHiveSingleton {
   import testImplicits._
 
   override def beforeAll(): Unit = {

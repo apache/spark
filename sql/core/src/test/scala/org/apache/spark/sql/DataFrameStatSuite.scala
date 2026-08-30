@@ -29,7 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, DoubleType, StringType, StructField, StructType}
 
-class DataFrameStatSuite extends QueryTest with SharedSparkSession {
+class DataFrameStatSuite extends SharedSparkSession {
   import testImplicits._
 
   private def toLetter(i: Int): String = (i + 97).toChar.toString
@@ -264,7 +264,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
 
     val q1 = 0.5
     val q2 = 0.8
-    val epsilons = List(2.0, 5.0, 100.0)
+    val epsilons = List(2.0, 5.0, 100.0, Double.PositiveInfinity)
 
     val Array(single1_1) = df.stat.approxQuantile("singles", Array(q1), 1.0)
     val Array(s1_1, s2_1) = df.stat.approxQuantile("singles", Array(q1, q2), 1.0)
@@ -608,7 +608,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
 }
 
 
-class DataFrameStatPerfSuite extends QueryTest with SharedSparkSession with Logging {
+class DataFrameStatPerfSuite extends SharedSparkSession with Logging {
 
   // Turn on this test if you want to test the performance of approximate quantiles.
   ignore("computing quantiles should not take much longer than describe()") {

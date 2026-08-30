@@ -28,7 +28,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.columnar.compression.CompressibleColumnAccessor
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, VariantVal}
 
 /**
  * An `Iterator` like trait used to extract values from columnar byte buffer. When a value is
@@ -115,6 +115,14 @@ private[columnar] class VariantColumnAccessor(buffer: ByteBuffer)
   extends BasicColumnAccessor[VariantVal](buffer, VARIANT)
   with NullableColumnAccessor
 
+private[columnar] class TimestampNTZNanosColumnAccessor(buffer: ByteBuffer)
+  extends BasicColumnAccessor[TimestampNanosVal](buffer, TIMESTAMP_NTZ_NANOS)
+  with NullableColumnAccessor
+
+private[columnar] class TimestampLTZNanosColumnAccessor(buffer: ByteBuffer)
+  extends BasicColumnAccessor[TimestampNanosVal](buffer, TIMESTAMP_LTZ_NANOS)
+  with NullableColumnAccessor
+
 private[columnar] class CompactDecimalColumnAccessor(buffer: ByteBuffer, dataType: DecimalType)
   extends NativeColumnAccessor(buffer, COMPACT_DECIMAL(dataType))
 
@@ -153,6 +161,8 @@ private[sql] object ColumnAccessor {
       case DoubleType => new DoubleColumnAccessor(buf)
       case s: StringType => new StringColumnAccessor(buf, s)
       case BinaryType => new BinaryColumnAccessor(buf)
+      case _: TimestampNTZNanosType => new TimestampNTZNanosColumnAccessor(buf)
+      case _: TimestampLTZNanosType => new TimestampLTZNanosColumnAccessor(buf)
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
         new CompactDecimalColumnAccessor(buf, dt)
       case dt: DecimalType => new DecimalColumnAccessor(buf, dt)

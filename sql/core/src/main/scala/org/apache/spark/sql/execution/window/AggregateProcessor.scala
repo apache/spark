@@ -181,7 +181,27 @@ private[window] final class AggregateProcessor(
   }
 
   /** Evaluate buffer. */
-  def evaluate(target: InternalRow): Unit = {
-    evaluateProjection.target(target)(buffer)
+  def evaluate(target: InternalRow): Unit = evaluate(buffer, target)
+
+  /**
+   * Evaluate using an arbitrary `source` buffer (e.g. a segment-tree query
+   * result) instead of the internal one.
+   *
+   * '''Contract''': `source` must share this processor's internal
+   * `aggBufferAttributes` layout -- same field count, same dataTypes, in the
+   * same order. The segment-tree path enforces this upstream in
+   * `WindowEvaluatorFactoryBase.eligibleForSegTree`, which restricts eligible
+   * functions to `WindowSegmentTree.EligibleAggregates` (an explicit allowlist
+   * of `DeclarativeAggregate` classes). The same `functions: Array[DeclarativeAggregate]`
+   * drives both this processor's `bufferSchema` and `WindowSegmentTree`'s
+   * internal buffer schema. The contract is invisible at the call site and
+   * easy to break from either end; the cheap field-count `assert` below
+   * surfaces drift loudly instead of producing silently garbled output.
+   */
+  private[window] def evaluate(source: InternalRow, target: InternalRow): Unit = {
+    assert(source.numFields == bufferSchema.length,
+      s"source buffer has ${source.numFields} fields, " +
+        s"expected ${bufferSchema.length} to match aggBufferAttributes layout")
+    evaluateProjection.target(target)(source)
   }
 }

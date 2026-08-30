@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.util.{Locale, ServiceConfigurationError, ServiceLoader}
+import java.util.regex.Pattern
 
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
@@ -30,7 +31,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, DATA_SOURCE, DATA_SOURCES, PATHS}
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
-import org.apache.spark.sql.catalyst.DataSourceOptions
+import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -275,9 +276,13 @@ case class DataSource(
         val isSingleVariantColumn = (providingClass == classOf[json.JsonFileFormat] ||
           providingClass == classOf[csv.CSVFileFormat]) &&
           caseInsensitiveOptions.contains(DataSourceOptions.SINGLE_VARIANT_COLUMN)
+        // Like `singleVariantColumn`, an embedded-array JSON scan has a fixed schema and does
+        // not require schema inference.
+        val isExplodeEmbeddedArray = providingClass == classOf[json.JsonFileFormat] &&
+          caseInsensitiveOptions.contains(DataSourceOptions.EXPLODE_EMBEDDED_ARRAY)
         // If the schema inference is disabled, only text sources require schema to be specified
         if (!isSchemaInferenceEnabled && !isTextSource && !isSingleVariantColumn &&
-            userSpecifiedSchema.isEmpty) {
+            !isExplodeEmbeddedArray && userSpecifiedSchema.isEmpty) {
           throw QueryExecutionErrors.createStreamingSourceNotSpecifySchemaError()
         }
 
@@ -420,6 +425,11 @@ case class DataSource(
           catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog &&
           catalogTable.get.partitionColumnNames.nonEmpty
         val (fileCatalog, dataSchema, partitionSchema) = if (useCatalogFileIndex) {
+          if (caseInsensitiveOptions.getOrElse(
+              FileIndexOptions.RECURSIVE_FILE_LOOKUP, "false").toBoolean) {
+            throw QueryCompilationErrors
+              .recursiveFileLookupNotSupportedForPartitionedDataSourceError()
+          }
           val defaultTableSize = conf.defaultSizeInBytes
           val index = new CatalogFileIndex(
             sparkSession,
@@ -584,8 +594,11 @@ case class DataSource(
       checkEmptyGlobPath: Boolean,
       checkFilesExist: Boolean): Seq[Path] = {
     val allPaths = caseInsensitiveOptions.get("path") ++ paths
+    val ignoredPathSegmentRegex =
+      new FileSourceOptions(caseInsensitiveOptions).ignoredPathSegmentRegexPattern
     DataSource.checkAndGlobPathIfNecessary(allPaths.toSeq, newHadoopConfiguration(),
-      checkEmptyGlobPath, checkFilesExist, enableGlobbing = globPaths)
+      checkEmptyGlobPath, checkFilesExist, enableGlobbing = globPaths,
+      ignoredPathSegmentRegex = ignoredPathSegmentRegex)
   }
 
   private def disallowWritingIntervals(
@@ -792,7 +805,9 @@ object DataSource extends Logging {
       checkEmptyGlobPath: Boolean,
       checkFilesExist: Boolean,
       numThreads: Integer = 40,
-      enableGlobbing: Boolean): Seq[Path] = {
+      enableGlobbing: Boolean,
+      ignoredPathSegmentRegex: Pattern = HadoopFSUtils.defaultIgnoredPathSegmentRegexPattern)
+      : Seq[Path] = {
     val qualifiedPaths = pathStrings.map { pathString =>
       val path = new Path(pathString)
       val fs = path.getFileSystem(hadoopConf)
@@ -839,7 +854,7 @@ object DataSource extends Logging {
     val allPaths = globbedPaths ++ nonGlobPaths
     if (checkFilesExist) {
       val (filteredOut, filteredIn) = allPaths.partition { path =>
-        HadoopFSUtils.shouldFilterOutPathName(path.getName)
+        HadoopFSUtils.shouldFilterOutPathName(path.getName, ignoredPathSegmentRegex)
       }
       if (filteredIn.isEmpty) {
         logWarning(

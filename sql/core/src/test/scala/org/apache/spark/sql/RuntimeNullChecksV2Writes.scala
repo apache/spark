@@ -23,7 +23,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, StructType}
 
-class RuntimeNullChecksV2Writes extends QueryTest with SharedSparkSession {
+class RuntimeNullChecksV2Writes extends SharedSparkSession {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 

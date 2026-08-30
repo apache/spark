@@ -25,14 +25,14 @@ import org.apache.spark.sql.execution.CommandResultExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, SQLUserDefinedType, UserDefinedType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * The base trait for SQL INSERT.
  */
-trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkPlanHelper {
+trait SQLInsertTestSuite extends QueryTest with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
@@ -589,6 +589,73 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
         sql("INSERT INTO t SELECT c1, struct(c2 as f1, c2 as f2) FROM v")
         checkAnswer(spark.table("t"), Row(1, Row(2, 2)))
       }
+    }
+  }
+
+  test("SPARK-58816: insert with column list resolves structs inside arrays positionally") {
+    withTable("t") {
+      createTable("t", Seq("arr"), Seq("ARRAY<STRUCT<x: INT, y: INT>>"))
+      // Source has fields in (y, x) order; target expects (x, y).
+      // Positional resolution must rename y->x and x->y so the cast maps by position.
+      sql("INSERT INTO t (arr) SELECT array(named_struct('y', 20, 'x', 10))")
+      checkAnswer(spark.table("t"), Row(Seq(Row(20, 10))))
+
+      // Contrast: INSERT BY NAME must continue to resolve by name, giving {x:10, y:20}.
+      sql("INSERT INTO t BY NAME SELECT array(named_struct('y', 20, 'x', 10)) AS arr")
+      checkAnswer(spark.table("t"), Seq(Row(Seq(Row(20, 10))), Row(Seq(Row(10, 20)))))
+    }
+  }
+
+  test("SPARK-58816: insert with column list resolves structs inside maps positionally") {
+    withTable("t") {
+      // Map value: MAP<STRING, STRUCT<x: INT, y: INT>>
+      createTable("t", Seq("m"), Seq("MAP<STRING, STRUCT<x: INT, y: INT>>"))
+      sql("INSERT INTO t (m) SELECT map('k', named_struct('y', 20, 'x', 10))")
+      checkAnswer(spark.table("t"), Row(Map("k" -> Row(20, 10))))
+    }
+    // Map key: MAP<STRUCT<x: INT, y: INT>, STRING> -- exercises the key recursion branch.
+    withTable("t") {
+      createTable("t", Seq("m"), Seq("MAP<STRUCT<x: INT, y: INT>, STRING>"))
+      sql("INSERT INTO t (m) SELECT map(named_struct('y', 20, 'x', 10), 'v')")
+      checkAnswer(spark.table("t"), Row(Map(Row(20, 10) -> "v")))
+    }
+  }
+
+  test("SPARK-58816: insert with column list resolves structs positionally at all nesting levels") {
+    // All three nesting modes must behave identically: direct struct, array-of-struct,
+    // map-of-struct.  Source fields are (y, x); target fields are (x, y).
+    // Positional resolution writes y->x slot and x->y slot for each case.
+    withTable("t") {
+      createTable(
+        "t",
+        Seq("s", "arr", "m"),
+        Seq(
+          "STRUCT<x: INT, y: INT>",
+          "ARRAY<STRUCT<x: INT, y: INT>>",
+          "MAP<STRING, STRUCT<x: INT, y: INT>>"))
+      sql(
+        """INSERT INTO t (s, arr, m)
+          |SELECT
+          |  named_struct('y', 20, 'x', 10),
+          |  array(named_struct('y', 20, 'x', 10)),
+          |  map('k', named_struct('y', 20, 'x', 10))
+          |""".stripMargin)
+      // After positional resolution: first field slot gets 20, second gets 10 in all three cases.
+      checkAnswer(
+        spark.table("t"),
+        Row(Row(20, 10), Seq(Row(20, 10)), Map("k" -> Row(20, 10))))
+    }
+    // Deep mixed nesting: ARRAY<STRUCT<nested: ARRAY<STRUCT<x: INT, y: INT>>>>.
+    // Two recursive transitions (Array->Struct->Array->Struct) must all be renamed positionally.
+    withTable("t") {
+      createTable(
+        "t", Seq("col"),
+        Seq("ARRAY<STRUCT<nested: ARRAY<STRUCT<x: INT, y: INT>>>>"))
+      sql(
+        """INSERT INTO t (col)
+          |SELECT array(named_struct(
+          |  'nested', array(named_struct('y', 20, 'x', 10))))""".stripMargin)
+      checkAnswer(spark.table("t"), Row(Seq(Row(Seq(Row(20, 10))))))
     }
   }
 }

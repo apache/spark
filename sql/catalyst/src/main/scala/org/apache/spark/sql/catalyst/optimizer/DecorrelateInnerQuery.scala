@@ -725,9 +725,21 @@ object DecorrelateInnerQuery extends PredicateHelper {
             if (partitionFields.isEmpty) {
               // Underlying subquery has no predicates connecting inner and outer query.
               // In this case, limit can be computed over the inner query directly.
+              // The ORDER BY was peeled off the Sort above; re-apply it as a global Sort below
+              // the limit so that ORDER BY ... LIMIT (and ORDER BY ... LIMIT ... OFFSET) is
+              // order-preserving. Otherwise the ordering is dropped and the limit returns an
+              // arbitrary (non-deterministic) rows.
+              val orderedChild =
+                if (ordering.nonEmpty && !SQLConf.get.getConf(
+                    SQLConf.DECORRELATE_LIMIT_OFFSET_LEGACY_INCORRECT_ORDER_HANDLING_ENABLED)) {
+                  Sort(replaceOuterReferences(ordering, outerReferenceMap), global = true, newChild)
+                } else {
+                  newChild
+                }
               offsetExpr match {
-                case IntegerLiteral(0) => (Limit(limit, newChild), joinCond, outerReferenceMap)
-                case _ => (Limit(limit, Offset(offsetExpr, newChild)), joinCond, outerReferenceMap)
+                case IntegerLiteral(0) => (Limit(limit, orderedChild), joinCond, outerReferenceMap)
+                case _ =>
+                  (Limit(limit, Offset(offsetExpr, orderedChild)), joinCond, outerReferenceMap)
               }
             } else {
               val orderByFields = replaceOuterReferences(ordering, outerReferenceMap)
@@ -1006,7 +1018,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
               // predicate does, and the correlations can not be replaced via equivalences.
               // Introduce a domain join on the left side of the join
               // (chosen arbitrarily) to provide values for the correlated attribute reference.
-              shouldPushToLeft = true;
+              shouldPushToLeft = true
             }
             val (newLeft, leftJoinCond, leftOuterReferenceMap) = if (shouldPushToLeft) {
               decorrelate(left, newOuterReferences, aggregated, underSetOp)

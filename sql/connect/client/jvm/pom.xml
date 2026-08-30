@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.13</artifactId>
-    <version>4.2.0-SNAPSHOT</version>
+    <version>5.0.0-SNAPSHOT</version>
     <relativePath>../../../../pom.xml</relativePath>
   </parent>
 
@@ -115,7 +115,7 @@
     <dependency>
       <groupId>org.scalameta</groupId>
       <artifactId>semanticdb-shared_${scala.binary.version}</artifactId>
-      <version>4.13.10</version>
+      <version>4.15.2</version>
       <exclusions>
         <exclusion>
           <groupId>org.scala-lang</groupId>

@@ -15,11 +15,12 @@
 # limitations under the License.
 #
 import unittest
+from unittest import mock
 
 from pyspark.testing.connectutils import (
     ReusedConnectTestCase,
-    should_test_connect,
     connect_requirement_message,
+    should_test_connect,
 )
 
 if should_test_connect:
@@ -88,6 +89,44 @@ class AddPipelineAnalysisContextTests(ReusedConnectTestCase):
             self.assertEqual(context_3.flow_name, "")
         thread_local_extensions_after_2 = self.spark.client.thread_local.user_context_extensions
         self.assertEqual(len(thread_local_extensions_after_2), 0)
+
+    def test_setup_failure_does_not_mask_original_error(self):
+        # If any setup step fails before the extension is registered, extension_id stays None and
+        # the finally block must skip remove_user_context_extension(None) - which would raise
+        # AttributeError and mask the original error. Cover each step that can fail.
+        from google.protobuf import any_pb2
+
+        import pyspark.sql.connect.proto as pb2
+
+        failing_any = mock.MagicMock()
+        failing_any.Pack.side_effect = ValueError("boom")
+
+        failure_points = {
+            "context construction": mock.patch.object(
+                pb2, "PipelineAnalysisContext", side_effect=ValueError("boom")
+            ),
+            "extension packing": mock.patch.object(any_pb2, "Any", return_value=failing_any),
+            "extension registration": mock.patch.object(
+                self.spark.client,
+                "add_threadlocal_user_context_extension",
+                side_effect=ValueError("boom"),
+            ),
+        }
+        for step, patcher in failure_points.items():
+            with self.subTest(failing_step=step):
+                with patcher:
+                    with self.assertRaises(ValueError):
+                        with add_pipeline_analysis_context(
+                            self.spark, "test_dataflow_graph_id", None
+                        ):
+                            pass
+                # A failed setup should not leave an extension registered. Read lazily, since the
+                # attribute is only created on first successful registration, which never happens
+                # here.
+                thread_local_extensions = getattr(
+                    self.spark.client.thread_local, "user_context_extensions", []
+                )
+                self.assertEqual(len(thread_local_extensions), 0)
 
 
 if __name__ == "__main__":

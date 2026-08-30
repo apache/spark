@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, IntegerType, MetadataBuilder, StringType, StructField, StructType}
 
-class ComplexTypesSuite extends QueryTest with SharedSparkSession {
+class ComplexTypesSuite extends SharedSparkSession {
   import testImplicits._
 
   override def beforeAll(): Unit = {

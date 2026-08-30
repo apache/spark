@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.collation
 
-import org.apache.spark.sql.{Column, Dataset, QueryTest}
+import org.apache.spark.sql.{Column, Dataset}
 import org.apache.spark.sql.functions.{from_json, from_xml}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class CollationSQLFunctionsSuite extends QueryTest with SharedSparkSession {
+class CollationSQLFunctionsSuite extends SharedSparkSession {
 
   test("SPARK-50214: from_json and from_xml work correctly with session collation") {
     import testImplicits._

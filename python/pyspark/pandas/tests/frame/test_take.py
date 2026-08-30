@@ -19,7 +19,6 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class FrameTakeMixin:
@@ -75,7 +74,6 @@ class FrameTakeMixin:
 class FrameTakeTests(
     FrameTakeMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

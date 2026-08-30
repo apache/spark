@@ -19,7 +19,6 @@ package org.apache.spark.sql.pipelines.graph
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -33,19 +32,6 @@ case class UnresolvedDatasetException(identifier: TableIdentifier)
     extends AnalysisException(
       s"Failed to read dataset '${identifier.unquotedString}'. Dataset is defined in the " +
       s"pipeline but could not be resolved."
-    )
-
-/**
- * Exception raised when a flow fails to read from a table defined within the pipeline
- *
- * @param name The name of the table
- * @param cause The cause of the failure
- */
-case class LoadTableException(name: String, cause: Option[Throwable])
-    extends SparkException(
-      errorClass = "INTERNAL_ERROR",
-      messageParameters = Map("message" -> s"Failed to load table '$name'"),
-      cause = cause.orNull
     )
 
 object PipelinesErrors extends Logging {
@@ -78,6 +64,30 @@ object PipelinesErrors extends Logging {
   }
 
   /**
+   * Returns true if `ex` (or any of its causes) indicates that a streaming flow's set of sources
+   * changed since the last run. This is unrecoverable without a full refresh, so a flow that fails
+   * with this error must not be retried.
+   *
+   * Structured Streaming reports this as a bare `AssertionError`, so the only signal available
+   * here is the message text, produced by the source-count assertion in
+   * `org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeq.toStreamProgress`. Since
+   * this predicate drives the retry decision, a change to that message silently turns these
+   * failures back into retried ones; keep the two in sync. Giving that assertion an error
+   * condition and matching on it here would remove the coupling.
+   */
+  private[graph] def streamingSourcesChanged(ex: Throwable): Boolean = {
+    checkCauses(
+      throwable = ex,
+      check = cause => {
+        cause.isInstanceOf[AssertionError] &&
+        cause.getMessage != null &&
+        cause.getMessage.contains("sources in the checkpoint offsets and now there are") &&
+        cause.getMessage.contains("sources requested by the query. Cannot continue.")
+      }
+    )
+  }
+
+  /**
    * Checks an error for streaming specific handling. This is a pretty messy signature as a result
    * of unifying some divergences between the triggered caller in TriggeredGraphExecution and the
    * continuous caller in StreamWatchdog.
@@ -101,28 +111,7 @@ object PipelinesErrors extends Logging {
       maxRetries: Int,
       onRetry: => Unit
   ): Unit = {
-    if (PipelinesErrors.checkCauses(
-        throwable = ex,
-        check = ex => {
-          ex.isInstanceOf[AssertionError] &&
-          ex.getMessage != null &&
-          ex.getMessage.contains("sources in the checkpoint offsets and now there are") &&
-          ex.getMessage.contains("sources requested by the query. Cannot continue.")
-        }
-      )) {
-      val message = s"""
-         |Flow '${flow.displayName}' had streaming sources added or removed. Please perform a
-         |full refresh in order to rebuild '${flow.displayName}' against the current set of
-         |sources.
-         |""".stripMargin
-
-      env.flowProgressEventLogger.recordFailed(
-        flow = flow,
-        exception = ex,
-        logAsWarn = false,
-        messageOpt = Option(message)
-      )
-    } else if (flow.once && ex == null) {
+    if (flow.once && ex == null) {
       // No need to do anything if this is a ONCE flow with no exception. That just means it's done.
     } else {
       val actionFromError = GraphExecution.determineFlowExecutionActionFromError(
@@ -134,7 +123,8 @@ object PipelinesErrors extends Logging {
       actionFromError match {
         // Simply retry
         case GraphExecution.RetryFlowExecution => onRetry
-        // Schema change exception
+        // Non-retryable stop reason (max retries exceeded, streaming sources changed, ...).
+        // When shouldRethrow is true, this rethrows so the run stops eagerly on these reasons.
         case GraphExecution.StopFlowExecution(reason) =>
           val msg = reason.failureMessage
           if (reason.warnInsteadOfError) {

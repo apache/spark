@@ -790,6 +790,24 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
+  public void testTimestampNanosRowEncoder() {
+    final StructType schema = new StructType()
+        .add("ntz", org.apache.spark.sql.types.TimestampNTZNanosType.apply())
+        .add("ltz", org.apache.spark.sql.types.TimestampLTZNanosType.apply());
+    LocalDateTime ldt = LocalDateTime.parse("2019-02-26T16:56:00.123456789");
+    Instant instant = Instant.parse("2019-02-26T16:56:00.987654321Z");
+    List<Row> rows = Arrays.asList(create(ldt, instant), create(null, null));
+    Dataset<Row> ds = spark.createDataset(rows, Encoders.row(schema));
+    Assertions.assertEquals(schema, ds.schema());
+    List<Row> collected = ds.collectAsList();
+    Assertions.assertEquals(2, collected.size());
+    Assertions.assertEquals(ldt, collected.get(0).get(0));
+    Assertions.assertEquals(instant, collected.get(0).get(1));
+    Assertions.assertTrue(collected.get(1).isNullAt(0));
+    Assertions.assertTrue(collected.get(1).isNullAt(1));
+  }
+
+  @Test
   public void testDurationEncoder() {
     Encoder<Duration> encoder = Encoders.DURATION();
     List<Duration> data = Arrays.asList(Duration.ofDays(0));

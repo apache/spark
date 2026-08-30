@@ -300,6 +300,37 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     })
   }
 
+  test("test concurrent comparator, sortKeyFunction, and getCollator on ICU collations") {
+    // Thread-local collator instances avoid lock contention on ICU's internal collation buffer.
+    // This test verifies correctness under concurrent access for all three paths:
+    // comparator, sortKeyFunction, and getCollator().
+    val collationNames = Seq("UNICODE", "en", "de", "en_CI", "en_AI")
+    collationNames.foreach { name =>
+      val collation = fetchCollation(name)
+      val s1 = toUTF8("apple")
+      val s2 = toUTF8("banana")
+      val expectedCmp = collation.comparator.compare(s1, s2)
+      val expectedKey = collation.sortKeyFunction.apply(s1).asInstanceOf[Array[Byte]]
+      val expectedCollatorKey =
+        collation.getCollator.getCollationKey(s1.toValidString()).toByteArray
+
+      (0 to 5).foreach(_ => {
+        IntStream.rangeClosed(0, 200).parallel().forEach { _ =>
+          val cmp = collation.comparator.compare(s1, s2)
+          assert(cmp == expectedCmp,
+            s"Comparator returned inconsistent result for $name")
+          val key = collation.sortKeyFunction.apply(s1).asInstanceOf[Array[Byte]]
+          assert(java.util.Arrays.equals(key, expectedKey),
+            s"sortKeyFunction returned inconsistent result for $name")
+          val collatorKey =
+            collation.getCollator.getCollationKey(s1.toValidString()).toByteArray
+          assert(java.util.Arrays.equals(collatorKey, expectedCollatorKey),
+            s"getCollator().getCollationKey() returned inconsistent result for $name")
+        }
+      })
+    }
+  }
+
   test("test collation caching") {
     Seq(
       "UTF8_BINARY",

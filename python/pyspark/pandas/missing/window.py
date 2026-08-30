@@ -81,7 +81,6 @@ class MissingPandasLikeExpanding:
     apply = _unsupported_function_expanding("apply")
     corr = _unsupported_function_expanding("corr")
     cov = _unsupported_function_expanding("cov")
-    median = _unsupported_function_expanding("median")
     validate = _unsupported_function_expanding("validate")
 
     exclusions = _unsupported_property_expanding("exclusions")
@@ -99,7 +98,6 @@ class MissingPandasLikeRolling:
     apply = _unsupported_function_rolling("apply")
     corr = _unsupported_function_rolling("corr")
     cov = _unsupported_function_rolling("cov")
-    median = _unsupported_function_rolling("median")
     validate = _unsupported_function_rolling("validate")
 
     exclusions = _unsupported_property_rolling("exclusions")
@@ -117,7 +115,6 @@ class MissingPandasLikeExpandingGroupby:
     apply = _unsupported_function_expanding("apply")
     corr = _unsupported_function_expanding("corr")
     cov = _unsupported_function_expanding("cov")
-    median = _unsupported_function_expanding("median")
     validate = _unsupported_function_expanding("validate")
 
     exclusions = _unsupported_property_expanding("exclusions")
@@ -135,7 +132,6 @@ class MissingPandasLikeRollingGroupby:
     apply = _unsupported_function_rolling("apply")
     corr = _unsupported_function_rolling("corr")
     cov = _unsupported_function_rolling("cov")
-    median = _unsupported_function_rolling("median")
     validate = _unsupported_function_rolling("validate")
 
     exclusions = _unsupported_property_rolling("exclusions")

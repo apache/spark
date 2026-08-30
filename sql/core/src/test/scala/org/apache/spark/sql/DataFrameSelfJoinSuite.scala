@@ -28,7 +28,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 
-class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
+class DataFrameSelfJoinSuite extends SharedSparkSession {
   import testImplicits._
 
   test("join - join using self join") {

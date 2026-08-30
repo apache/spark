@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryTable, InMemoryTableCatalog, Table}
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class TableLookupCacheSuite extends AnalysisTest with Matchers {
@@ -74,6 +75,17 @@ class TableLookupCacheSuite extends AnalysisTest with Matchers {
     when(catalogManager.v1SessionCatalog).thenReturn(v1Catalog)
     when(catalogManager.currentCatalog).thenReturn(v2Catalog)
     when(catalogManager.currentNamespace).thenReturn(Array("default"))
+    when(catalogManager.sessionPathEntries).thenReturn(None)
+    val defaultPath = SQLConf.get.resolutionSearchPath(
+      (v2Catalog.name() +: Array("default")).toSeq)
+    when(catalogManager.sqlResolutionPathEntries(
+      any[String], any[Seq[String]], any[String], any[Seq[String]]))
+      .thenReturn(defaultPath)
+    when(catalogManager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
+      .thenReturn(defaultPath)
+    when(catalogManager.resolutionPathEntriesForAnalysis(
+      any[Option[Seq[Seq[String]]]], any[Seq[String]]))
+      .thenReturn(defaultPath)
 
     new Analyzer(catalogManager)
   }
@@ -105,6 +117,23 @@ class TableLookupCacheSuite extends AnalysisTest with Matchers {
       reset(catalog)
       analyzer.execute(table("t1").join(table("view")).join(table("view")))
       verify(catalog, times(1)).getTable("default", "t1")
+    }
+  }
+
+  test("nested view analysis shares both query-scoped caches") {
+    AnalysisContext.withNewAnalysisContext {
+      val outer = AnalysisContext.get
+      val viewDesc = CatalogTable(
+        TableIdentifier("view", Some("default")),
+        CatalogTableType.VIEW,
+        CatalogStorageFormat.empty,
+        StructType(Seq(StructField("a", IntegerType))),
+        viewText = Some("select * from t1"))
+
+      AnalysisContext.withAnalysisContext(viewDesc) {
+        assert(AnalysisContext.get.relationCache eq outer.relationCache)
+        assert(AnalysisContext.get.tableCache eq outer.tableCache)
+      }
     }
   }
 }

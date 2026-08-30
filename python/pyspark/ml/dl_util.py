@@ -119,7 +119,7 @@ class FunctionPickler:
                         with open("{fn_output_path}", "wb") as f:
                             cloudpickle.dump(output, f)
                     """)
-        with open(script_path, "w") as f:
+        with open(script_path, "w", encoding="utf-8") as f:
             if prefix_code != "":
                 f.write(prefix_code)
             f.write(code_snippet)

@@ -1,0 +1,172 @@
+================================================================================================
+Section A - MIN (non-invertible)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+MIN sliding window, W=1001, 256K rows:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+MIN naive (current, baseline)                      3389           3412          22          0.1       12929.5       1.0X
+MIN segtree (default)                               357            362           6          0.7        1360.6       9.5X
+MIN segtree (blockSize=256)                        1939           1956          29          0.1        7397.7       1.7X
+
+
+================================================================================================
+Section A - MAX (non-invertible)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+MAX sliding window, W=1001, 256K rows:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+MAX naive (current, baseline)                      3474           3484          14          0.1       13252.3       1.0X
+MAX segtree (default)                               362            380          18          0.7        1382.5       9.6X
+MAX segtree (blockSize=256)                        1940           1951          13          0.1        7400.0       1.8X
+
+
+================================================================================================
+Section A - SUM (Spark has no inverse; full recompute)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+SUM sliding window, W=1001, 256K rows:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+SUM naive (current, baseline)                      4160           4246         150          0.1       15869.5       1.0X
+SUM segtree (default)                               370            384          14          0.7        1410.6      11.3X
+SUM segtree (blockSize=256)                        1950           2030         172          0.1        7438.2       2.1X
+
+
+================================================================================================
+Section A - COUNT
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+COUNT sliding window, W=1001, 256K rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+COUNT naive (current, baseline)                    3476           3494          14          0.1       13260.1       1.0X
+COUNT segtree (default)                             331            345          14          0.8        1260.9      10.5X
+COUNT segtree (blockSize=256)                      1899           1913          20          0.1        7242.7       1.8X
+
+
+================================================================================================
+Section A - AVG (multi-buffer)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+AVG sliding window, W=1001, 192K rows:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+AVG naive (current, baseline)                      4461           4472           9          0.0       22690.5       1.0X
+AVG segtree (default)                               339            353          23          0.6        1723.8      13.2X
+AVG segtree (blockSize=256)                        1231           1239           9          0.2        6263.2       3.6X
+
+
+================================================================================================
+Section A - STDDEV_SAMP (multi-buffer, stress)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+STDDEV_SAMP sliding window, W=1001, 2M rows (stress):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------
+STDDEV_SAMP naive (current, baseline)                        108042         109118        1061          0.0       54021.1       1.0X
+STDDEV_SAMP segtree (default)                                  6007           6035          26          0.3        3003.6      18.0X
+STDDEV_SAMP segtree (blockSize=256)                           98846          98968         112          0.0       49423.2       1.1X
+
+
+================================================================================================
+Section B - W=10 scaling (stress: Pareto loss zone)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+SUM scaling, W=11, 2M rows (stress):      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+SUM naive W=11                                      878            890          16          2.3         439.2       1.0X
+SUM segtree (default) W=11                         1834           1862          25          1.1         916.8       0.5X
+
+
+================================================================================================
+Section B - W=50 scaling (stress: Pareto loss zone)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+SUM scaling, W=51, 2M rows (stress):      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+SUM naive W=51                                     2114           2137          31          0.9        1057.0       1.0X
+SUM segtree (default) W=51                         2119           2138          17          0.9        1059.7       1.0X
+
+
+================================================================================================
+Section B - W=201 scaling
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+SUM scaling, W=201, 1M rows:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+SUM naive W=201                                    3298           3315          20          0.3        3298.1       1.0X
+SUM segtree (default) W=201                        1231           1250          15          0.8        1230.9       2.7X
+
+
+================================================================================================
+Section B - W=4001 scaling (stress, + bs=256 cross-block)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+SUM scaling, W=4001, 2M rows (stress):    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+SUM naive W=4001                                 118433         119695        1093          0.0       59216.7       1.0X
+SUM segtree (default) W=4001                       3301           3315          14          0.6        1650.6      35.9X
+SUM segtree (blockSize=256) W=4001                95815          96039         220          0.0       47907.6       1.2X
+
+
+================================================================================================
+Section F - spill regression guard (String, stress)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+MAX String spill guard, W=1001, 1M rows (stress):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+MAX naive (String)                                        43832          44261         730          0.0       43831.7       1.0X
+MAX segtree default (String)                               2511           2524          18          0.4        2510.6      17.5X
+
+
+================================================================================================
+Section C - N-sweep small (stress)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+SUM N-sweep (segtree-only), W=1001, 2M rows (stress):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------
+SUM segtree (default) N=2M                                     2789           2812          22          0.7        1394.4       1.0X
+
+
+================================================================================================
+Section C - N-sweep mid (stress)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+SUM N-sweep (segtree-only), W=1001, 8M rows (stress):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------
+SUM segtree (default) N=8M                                    13164          13235          74          0.6        1645.5       1.0X
+
+
+================================================================================================
+Section C - N-sweep large (stress)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+SUM N-sweep (segtree-only), W=1001, 16M rows (stress):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------
+SUM segtree (default) N=16M                                    32079          33138        1753          0.5        2005.0       1.0X
+
+

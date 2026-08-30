@@ -74,7 +74,7 @@ name: Release Apache Spark
 
 on:
   schedule:
-    - cron: '0 7 * * *'
+    - cron: '0 7 */2 * *'
   workflow_dispatch:
     inputs:
       branch:
@@ -177,6 +177,7 @@ jobs:
             GPG_PASSPHRASE="not_used"
             ASF_USERNAME="gurwls223"
             ASF_NEXUS_TOKEN="not_used"
+            PYPI_API_TOKEN="not_used"
             export SKIP_TAG=1
             unset RELEASE_VERSION
           else
@@ -184,7 +185,7 @@ jobs:
             export DRYRUN_MODE=0
           fi
 
-          export ASF_PASSWORD GPG_PRIVATE_KEY GPG_PASSPHRASE ASF_USERNAME ASF_NEXUS_TOKEN
+          export ASF_PASSWORD GPG_PRIVATE_KEY GPG_PASSPHRASE ASF_USERNAME ASF_NEXUS_TOKEN PYPI_API_TOKEN
           export GIT_BRANCH="${GIT_BRANCH:-master}"
           [ -n "$RELEASE_VERSION" ] && export RELEASE_VERSION
 
@@ -310,13 +311,13 @@ jobs:
           fi
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: build-logs
           path: logs.zip
       - name: Upload output
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: build-output
           path: output.zip

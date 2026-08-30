@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ReplaceIntegerLiteralsWithOrdinalsSqlSuite extends QueryTest with SharedSparkSession {
+class ReplaceIntegerLiteralsWithOrdinalsSqlSuite extends SharedSparkSession {
 
   test("Group by ordinal - SQL") {
     val correctSqlText = "SELECT col1, max(col2) FROM VALUES(1,2),(1,3),(2,4) GROUP BY 1"

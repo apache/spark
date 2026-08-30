@@ -17,17 +17,23 @@
 
 package org.apache.spark.sql.types
 
+import java.util.Locale
+
 import com.fasterxml.jackson.core.JsonParseException
 import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFunSuite}
+import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, UninitializedPhysicalType}
 import org.apache.spark.sql.catalyst.util.{CollationFactory, StringConcat}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 
-class DataTypeSuite extends SparkFunSuite {
+class DataTypeSuite extends SparkFunSuite with SQLHelper {
 
   private val UNICODE_COLLATION_ID = CollationFactory.collationNameToId("UNICODE")
   private val UTF8_LCASE_COLLATION_ID = CollationFactory.collationNameToId("UTF8_LCASE")
@@ -202,6 +208,68 @@ class DataTypeSuite extends SparkFunSuite {
     assert(DataType.fromDDL("ts timestamp_ltz") == expectedStructType)
   }
 
+  test("loading a UDT class from a schema string is enabled by default") {
+    val udt = new ExampleBaseTypeUDT()
+    assert(DataType.fromJson(udt.json).isInstanceOf[ExampleBaseTypeUDT])
+  }
+
+  test("loading a UDT class from a schema string can be disabled") {
+    val udt = new ExampleBaseTypeUDT()
+    withSQLConf(SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "false") {
+      checkError(
+        exception = intercept[SparkException] {
+          DataType.fromJson(udt.json)
+        },
+        condition = "UDT_CLASS_LOADING_DISABLED",
+        parameters = Map("udtClass" -> udt.getClass.getName, "allowed" -> ""))
+    }
+  }
+
+  test("disabled UDT loading still honors the allow list") {
+    val udt = new ExampleBaseTypeUDT()
+    withSQLConf(
+        SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "false",
+        SQLConf.ALLOWED_DYNAMIC_UDT_CLASSES.key -> udt.getClass.getName) {
+      assert(DataType.fromJson(udt.json).isInstanceOf[ExampleBaseTypeUDT])
+    }
+  }
+
+  test("a schema string cannot load an arbitrary non-UserDefinedType class") {
+    // Simulate a crafted schema string (e.g. from Parquet file metadata) whose UDT "class" field
+    // points at an arbitrary class that is not a UserDefinedType. Spark must refuse to load and
+    // instantiate it, both when UDT loading is enabled and when the class is explicitly allowed.
+    val gadget = classOf[java.lang.Object].getName
+    val json = s"""{"type":"udt","class":"$gadget","pyClass":null,"sqlType":"integer"}"""
+    Seq(
+      Map(SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "true"),
+      Map(
+        SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "false",
+        SQLConf.ALLOWED_DYNAMIC_UDT_CLASSES.key -> gadget)
+    ).foreach { conf =>
+      withSQLConf(conf.toSeq: _*) {
+        checkError(
+          exception = intercept[SparkException] {
+            DataType.fromJson(json)
+          },
+          condition = "UDT_CLASS_NOT_USER_DEFINED_TYPE",
+          parameters = Map("udtClass" -> gadget))
+      }
+    }
+  }
+
+  test("UDT_CLASS_NOT_FOUND.WITHOUT_USER_CLASS when UDT class is not on classpath") {
+    val fakeUdtClass = "org.apache.spark.sql.types.NonExistentUDT"
+    val udtJson =
+      s"""{"class":"$fakeUdtClass","pyClass":"","sqlType":"integer","type":"udt"}"""
+    checkError(
+      exception = intercept[SparkClassNotFoundException] {
+        DataType.fromJson(udtJson)
+      },
+      condition = "UDT_CLASS_NOT_FOUND.WITHOUT_USER_CLASS",
+      sqlState = Some("38000"),
+      parameters = Map("udtClass" -> fakeUdtClass))
+  }
+
   def checkDataTypeFromJson(dataType: DataType): Unit = {
     test(s"from Json - $dataType") {
       assert(DataType.fromJson(dataType.json) === dataType)
@@ -254,6 +322,20 @@ class DataTypeSuite extends SparkFunSuite {
 
   checkDataTypeFromJson(TimestampNTZType)
   checkDataTypeFromDDL(TimestampNTZType)
+
+  test("SPARK-56876: from Json roundtrip for nanos timestamp types (preview flag enabled)") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      Seq(
+        TimestampLTZNanosType(TimestampLTZNanosType.MIN_PRECISION),
+        TimestampLTZNanosType(8),
+        TimestampLTZNanosType(TimestampLTZNanosType.MAX_PRECISION),
+        TimestampNTZNanosType(TimestampNTZNanosType.MIN_PRECISION),
+        TimestampNTZNanosType(8),
+        TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION)).foreach { dt =>
+        assert(DataType.fromJson(dt.json) === dt)
+      }
+    }
+  }
 
   checkDataTypeFromJson(StringType)
   checkDataTypeFromDDL(StringType)
@@ -403,6 +485,19 @@ class DataTypeSuite extends SparkFunSuite {
   dayTimeIntervalTypes.foreach(checkDefaultSize(_, 8))
   checkDefaultSize(TimeType(TimeType.MIN_PRECISION), 8)
   checkDefaultSize(TimeType(TimeType.MAX_PRECISION), 8)
+  checkDefaultSize(TimestampLTZNanosType(TimestampLTZNanosType.MIN_PRECISION), 10)
+  checkDefaultSize(TimestampLTZNanosType(TimestampLTZNanosType.MAX_PRECISION), 10)
+  checkDefaultSize(TimestampNTZNanosType(TimestampNTZNanosType.MIN_PRECISION), 10)
+  checkDefaultSize(TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION), 10)
+
+  test("PhysicalDataType for nanosecond timestamp types") {
+    for (p <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION) {
+      assert(PhysicalDataType(TimestampNTZNanosType(p)) != UninitializedPhysicalType)
+    }
+    for (p <- TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION) {
+      assert(PhysicalDataType(TimestampLTZNanosType(p)) != UninitializedPhysicalType)
+    }
+  }
 
   def checkEqualsIgnoreCompatibleNullability(
       from: DataType,
@@ -1428,7 +1523,7 @@ class DataTypeSuite extends SparkFunSuite {
   }
 
   test("Parse time(n) as TimeType(n)") {
-    0 to 6 foreach { n =>
+    TimeType.MIN_PRECISION to TimeType.MAX_PRECISION foreach { n =>
       assert(DataType.fromJson(s"\"time($n)\"") == TimeType(n))
       val expectedStructType = StructType(Seq(StructField("t", TimeType(n))))
       assert(DataType.fromDDL(s"t time($n)") == expectedStructType)
@@ -1436,16 +1531,169 @@ class DataTypeSuite extends SparkFunSuite {
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
-        DataType.fromJson("\"time(9)\"")
+        DataType.fromJson("\"time(10)\"")
       },
       condition = "INVALID_JSON_DATA_TYPE",
-      parameters = Map("invalidType" -> "time(9)"))
+      parameters = Map("invalidType" -> "time(10)"))
     checkError(
       exception = intercept[ParseException] {
         DataType.fromDDL("t time(-1)")
       },
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'time'", "hint" -> ""))
+  }
+
+  test("SPARK-56876: precisions of nanos-capable TIMESTAMP_LTZ and TIMESTAMP_NTZ types") {
+    TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION foreach { p =>
+      assert(TimestampLTZNanosType(p).sql === s"TIMESTAMP_LTZ($p)")
+      assert(TimestampNTZNanosType(p).sql === s"TIMESTAMP_NTZ($p)")
+    }
+
+    Seq(6, 10, Int.MinValue, Int.MaxValue).foreach { p =>
+      checkError(
+        exception = intercept[SparkException] {
+          TimestampLTZNanosType(p)
+        },
+        condition = "INVALID_TIMESTAMP_PRECISION",
+        parameters = Map("precision" -> p.toString, "type" -> "TIMESTAMP_LTZ"))
+      checkError(
+        exception = intercept[SparkException] {
+          TimestampNTZNanosType(p)
+        },
+        condition = "INVALID_TIMESTAMP_PRECISION",
+        parameters = Map("precision" -> p.toString, "type" -> "TIMESTAMP_NTZ"))
+    }
+  }
+
+  test("SPARK-56876: parse timestamp with nanosecond precision from JSON") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      // (json-type-name, sql-type-name-in-error, factory)
+      val variants = Seq[(String, String, Int => DataType)](
+        ("timestamp_ltz", "TIMESTAMP_LTZ", TimestampLTZNanosType(_)),
+        ("timestamp_ntz", "TIMESTAMP_NTZ", TimestampNTZNanosType(_)))
+      val overflowing = "9" * 20
+
+      variants.foreach { case (name, sqlTypeName, factory) =>
+        // Happy path across valid precisions, tolerant of surrounding whitespace.
+        TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION foreach { n =>
+          assert(DataType.fromJson(s"""\"$name($n)\"""") === factory(n))
+          assert(DataType.fromJson(s"""\"$name( $n)\"""") === factory(n))
+          assert(DataType.fromJson(s"""\"$name($n )\"""") === factory(n))
+        }
+
+        // Out-of-range precisions surface as INVALID_TIMESTAMP_PRECISION. Precision 6 is
+        // valid (maps to the GA type) and is covered separately. Precision 5 is included
+        // to pin the lower boundary of the p=6 carve-out. The overflowing case verifies
+        // the original digit string is preserved instead of leaking NumberFormatException.
+        Seq("0", "5", "10", overflowing).foreach { p =>
+          checkError(
+            exception = intercept[SparkException] {
+              DataType.fromJson(s"""\"$name($p)\"""")
+            },
+            condition = "INVALID_TIMESTAMP_PRECISION",
+            parameters = Map("precision" -> p, "type" -> sqlTypeName))
+        }
+
+        // Malformed precision forms that don't match the regex fall through to
+        // INVALID_JSON_DATA_TYPE: negative, empty parens, non-numeric, and uppercase
+        // (JSON type-name convention is lowercase).
+        Seq(
+          s"$name(-1)",
+          s"$name()",
+          s"$name(abc)",
+          s"${name.toUpperCase(Locale.ROOT)}(7)").foreach { raw =>
+          checkError(
+            exception = intercept[SparkIllegalArgumentException] {
+              DataType.fromJson(s"""\"$raw\"""")
+            },
+            condition = "INVALID_JSON_DATA_TYPE",
+            parameters = Map("invalidType" -> raw))
+        }
+      }
+
+      // JSON round-trip for nanos timestamp types inside struct, array, and map.
+      val structWithNanos = StructType(Seq(
+        StructField("ntz", TimestampNTZNanosType(7)),
+        StructField("ltz", TimestampLTZNanosType(8))))
+      assert(DataType.fromJson(structWithNanos.json) === structWithNanos)
+      val arrayOfNanos = ArrayType(TimestampNTZNanosType(9), containsNull = false)
+      assert(DataType.fromJson(arrayOfNanos.json) === arrayOfNanos)
+      val mapOfNanos = MapType(StringType, TimestampNTZNanosType(7), valueContainsNull = true)
+      assert(DataType.fromJson(mapOfNanos.json) === mapOfNanos)
+
+      // Family B agrees with Family A: a nanos type's typeName re-parses (as a JSON name) to
+      // the same type. For atomic types `json` is exactly the quoted `typeName`, so this pins
+      // the type-name spelling that Family A produces against Family B's JSON parser.
+      variants.foreach { case (_, _, factory) =>
+        TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION foreach { n =>
+          val t = factory(n)
+          assert(DataType.fromJson("\"" + t.typeName + "\"") === t)
+        }
+      }
+    }
+
+    // Bare names without parens still map to the legacy single-precision types, regardless
+    // of the preview flag.
+    assert(DataType.fromJson("\"timestamp_ltz\"") === TimestampType)
+    assert(DataType.fromJson("\"timestamp_ntz\"") === TimestampNTZType)
+  }
+
+  test("SPARK-57163: parse timestamp_*(6) as the GA microsecond types") {
+    // Precision 6 maps to the GA types regardless of the preview flag.
+    Seq("true", "false").foreach { flag =>
+      withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> flag) {
+        // Compact form and whitespace-tolerant forms (mirrors the nanos-type test pattern).
+        assert(DataType.fromJson("\"timestamp_ltz(6)\"") === TimestampType)
+        assert(DataType.fromJson("\"timestamp_ltz( 6)\"") === TimestampType)
+        assert(DataType.fromJson("\"timestamp_ltz(6 )\"") === TimestampType)
+        assert(DataType.fromJson("\"timestamp_ntz(6)\"") === TimestampNTZType)
+        assert(DataType.fromJson("\"timestamp_ntz( 6)\"") === TimestampNTZType)
+        assert(DataType.fromJson("\"timestamp_ntz(6 )\"") === TimestampNTZType)
+        assert(DataType.fromDDL("ts timestamp_ntz(6)") ===
+          StructType(Seq(StructField("ts", TimestampNTZType))))
+        assert(DataType.fromDDL("ts timestamp_ltz(6)") ===
+          StructType(Seq(StructField("ts", TimestampType))))
+      }
+    }
+  }
+
+  test("SPARK-57835: JSON parser reconstructs nanos timestamp types when preview flag is off") {
+    // Read-through policy: unlike the SQL parser (DataTypeAstBuilder), the JSON path is how a
+    // persisted schema is restored from the catalog, so it must reconstruct nanos types even
+    // when the preview flag is off. Otherwise a table written with the flag on would become
+    // completely inaccessible (DESCRIBE / SHOW CREATE TABLE / DROP) once it is off. The flag is
+    // instead enforced at analysis/execution time (TypeUtils.failUnsupportedDataType). This
+    // mirrors how TIME types round-trip through fromJson regardless of their own flag.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      Seq(
+        "\"timestamp_ltz(7)\"" -> TimestampLTZNanosType(7),
+        "\"timestamp_ntz(9)\"" -> TimestampNTZNanosType(9)).foreach {
+        case (json, expected) =>
+          assert(DataType.fromJson(json) === expected)
+      }
+      // Nested nanos types (inside struct/array/map) also reconstruct with the flag off, since
+      // that is exactly how catalog schemas are shaped.
+      val nested = StructType(Seq(
+        StructField("s", StructType(Seq(StructField("ntz", TimestampNTZNanosType(7))))),
+        StructField("a", ArrayType(TimestampLTZNanosType(8), containsNull = false)),
+        StructField("m", MapType(StringType, TimestampNTZNanosType(9)))))
+      assert(DataType.fromJson(nested.json) === nested)
+      // Precision 6 maps to the GA types and stays accepted with the gate off.
+      assert(DataType.fromJson("\"timestamp_ltz(6)\"") === TimestampType)
+      assert(DataType.fromJson("\"timestamp_ntz(6)\"") === TimestampNTZType)
+      // Out-of-range precisions surface as INVALID_TIMESTAMP_PRECISION regardless of the flag.
+      Seq("timestamp_ltz" -> "TIMESTAMP_LTZ", "timestamp_ntz" -> "TIMESTAMP_NTZ").foreach {
+        case (name, sqlTypeName) =>
+          Seq("0", "5", "10").foreach { p =>
+            checkError(
+              exception = intercept[SparkException] {
+                DataType.fromJson(s"""\"$name($p)\"""")
+              },
+              condition = "INVALID_TIMESTAMP_PRECISION",
+              parameters = Map("precision" -> p, "type" -> sqlTypeName))
+          }
+      }
+    }
   }
 
   test("singleton DataType equality after deserialization") {
@@ -1486,5 +1734,15 @@ class DataTypeSuite extends SparkFunSuite {
       assert(PhysicalDataType(nonSingleton) != UninitializedPhysicalType,
         s"${clazz.getSimpleName}: PhysicalDataType should recognize non-singleton instance")
     }
+  }
+
+  test("SPARK-58350: DecimalType with scale greater than precision throws " +
+    "DECIMAL_SCALE_EXCEEDS_PRECISION") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        DecimalType(2, 3)
+      },
+      condition = "DECIMAL_SCALE_EXCEEDS_PRECISION",
+      parameters = Map("scale" -> "3", "precision" -> "2"))
   }
 }

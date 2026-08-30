@@ -15,20 +15,22 @@
 # limitations under the License.
 #
 import sys
-from typing import cast, overload, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING, Union
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple, Union, cast, overload
 
-from pyspark.util import is_remote_only
-from pyspark.sql.types import StructType
-from pyspark.sql import utils
-from pyspark.sql.utils import to_str
 from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.sql import utils
+from pyspark.sql.types import StructType
+from pyspark.sql.utils import to_str
+from pyspark.util import is_remote_only
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+
     from pyspark.core.rdd import RDD
-    from pyspark.sql._typing import OptionalPrimitiveType, ColumnOrName
-    from pyspark.sql.session import SparkSession
+    from pyspark.sql._typing import ColumnOrName, OptionalPrimitiveType
     from pyspark.sql.dataframe import DataFrame
+    from pyspark.sql.session import SparkSession
     from pyspark.sql.streaming import StreamingQuery
 
 __all__ = ["DataFrameReader", "DataFrameWriter", "DataFrameWriterV2"]
@@ -37,7 +39,10 @@ PathOrPaths = Union[str, List[str]]
 TupleOrListOfString = Union[List[str], Tuple[str, ...]]
 
 
-class OptionUtils:
+class OptionUtils(ABC):
+    @abstractmethod
+    def option(self, key: str, value: "OptionalPrimitiveType") -> Any: ...
+
     def _set_opts(
         self,
         schema: Optional[Union[StructType, str]] = None,
@@ -50,7 +55,7 @@ class OptionUtils:
             self.schema(schema)  # type: ignore[attr-defined]
         for k, v in options.items():
             if v is not None:
-                self.option(k, v)  # type: ignore[attr-defined]
+                self.option(k, v)
 
 
 class DataFrameReader(OptionUtils):
@@ -201,6 +206,8 @@ class DataFrameReader(OptionUtils):
         |100|NULL|
         +---+----+
         """
+        if value is None:
+            return self
         self._jreader = self._jreader.option(key, to_str(value))
         return self
 
@@ -248,8 +255,9 @@ class DataFrameReader(OptionUtils):
         |100|NULL|
         +---+----+
         """
-        for k in options:
-            self._jreader = self._jreader.option(k, to_str(options[k]))
+        for k, v in options.items():
+            if v is not None:
+                self._jreader = self._jreader.option(k, to_str(v))
         return self
 
     def load(
@@ -1433,6 +1441,8 @@ class DataFrameWriter(OptionUtils):
         +---+------------+
         """
 
+        if value is None:
+            return self
         self._jwrite = self._jwrite.option(key, to_str(value))
         return self
 
@@ -1483,8 +1493,9 @@ class DataFrameWriter(OptionUtils):
         |100|Hyukjin Kwon|
         +---+------------+
         """
-        for k in options:
-            self._jwrite = self._jwrite.option(k, to_str(options[k]))
+        for k, v in options.items():
+            if v is not None:
+                self._jwrite = self._jwrite.option(k, to_str(v))
         return self
 
     @overload
@@ -2458,7 +2469,7 @@ class DataFrameWriterV2:
         Specifies a provider for the underlying output data source.
         Spark's default catalog supports "parquet", "json", etc.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.using(provider)
         return self
@@ -2467,8 +2478,10 @@ class DataFrameWriterV2:
         """
         Add a write option.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
+        if value is None:
+            return self
         self._jwriter.option(key, to_str(value))
         return self
 
@@ -2476,9 +2489,9 @@ class DataFrameWriterV2:
         """
         Add write options.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
-        options = {k: to_str(v) for k, v in options.items()}
+        options = {k: to_str(v) for k, v in options.items() if v is not None}
         self._jwriter.options(options)
         return self
 
@@ -2486,7 +2499,7 @@ class DataFrameWriterV2:
         """
         Add table property.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.tableProperty(property, value)
         return self
@@ -2517,9 +2530,9 @@ class DataFrameWriterV2:
         * :py:func:`pyspark.sql.functions.hours`
         * :py:func:`pyspark.sql.functions.bucket`
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
-        from pyspark.sql.classic.column import _to_seq, _to_java_column
+        from pyspark.sql.classic.column import _to_java_column, _to_seq
 
         col = _to_java_column(col)
         cols = _to_seq(self._spark._sc, [_to_java_column(c) for c in cols])
@@ -2542,7 +2555,7 @@ class DataFrameWriterV2:
         The new table's schema, partition layout, properties, and other configuration will be
         based on the configuration set on this writer.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.create()
 
@@ -2553,7 +2566,7 @@ class DataFrameWriterV2:
         The existing table's schema, partition layout, properties, and other configuration will be
         replaced with the contents of the data frame and the configuration set on this writer.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.replace()
 
@@ -2566,7 +2579,7 @@ class DataFrameWriterV2:
         and the configuration set on this writer.
         If the table exists, its configuration and data will be replaced.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.createOrReplace()
 
@@ -2574,7 +2587,7 @@ class DataFrameWriterV2:
         """
         Append the contents of the data frame to the output table.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.append()
 
@@ -2583,7 +2596,7 @@ class DataFrameWriterV2:
         Overwrite rows matching the given filter condition with the contents of the data frame in
         the output table.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         from pyspark.sql.classic.column import _to_java_column
 
@@ -2598,7 +2611,7 @@ class DataFrameWriterV2:
         This operation is equivalent to Hive's `INSERT OVERWRITE ... PARTITION`, which replaces
         partitions dynamically depending on the contents of the data frame.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.overwritePartitions()
 
@@ -2606,10 +2619,12 @@ class DataFrameWriterV2:
 def _test() -> None:
     import doctest
     import os
+
     import py4j
+
+    import pyspark.sql.readwriter
     from pyspark.core.context import SparkContext
     from pyspark.sql import SparkSession
-    import pyspark.sql.readwriter
 
     os.chdir(os.environ["SPARK_HOME"])
 

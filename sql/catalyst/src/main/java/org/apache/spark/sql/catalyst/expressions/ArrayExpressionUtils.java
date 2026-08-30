@@ -19,9 +19,54 @@ package org.apache.spark.sql.catalyst.expressions;
 import java.util.Arrays;
 import java.util.Comparator;
 
+import org.apache.spark.QueryContext;
 import org.apache.spark.sql.catalyst.util.SQLOrderingUtil;
+import org.apache.spark.sql.errors.QueryExecutionErrors;
 
 public class ArrayExpressionUtils {
+
+  // ANSI index helpers used by ArrayType expression codegen and eval paths.
+
+  /**
+   * Resolves the user-supplied 1-based {@code element_at} index to a
+   * 0-based array position. Throws when the absolute index exceeds the
+   * array length (ANSI out-of-bounds) or when {@code index} is zero
+   * (always invalid).
+   *
+   * @param length  the array length
+   * @param index   the 1-based index supplied by the user (positive or negative)
+   * @param context the query context attached to the error
+   * @return        the resolved 0-based position
+   */
+  public static int resolveArrayIndex(int length, int index, QueryContext context) {
+    // Widen the index to long before Math.abs to avoid overflow: Math.abs(Int.MinValue)
+    // wraps back to a negative value and would bypass this out-of-bounds guard.
+    if (length < Math.abs((long) index)) {
+      throw QueryExecutionErrors.invalidElementAtIndexError(index, length, context);
+    }
+    if (index == 0) {
+      throw QueryExecutionErrors.invalidIndexOfZeroError(context);
+    }
+    return index > 0 ? index - 1 : length + index;
+  }
+
+  /**
+   * Validates a 0-based {@code arr[idx]} index against the array length
+   * under ANSI mode. Throws when {@code index} is negative or
+   * {@code >= length}; otherwise returns {@code index} unchanged so the
+   * caller can chain into {@code arr.get(idx, dataType)}.
+   *
+   * @param length  the array length
+   * @param index   the 0-based index supplied by the user
+   * @param context the query context attached to the error
+   * @return        the validated 0-based position (== {@code index})
+   */
+  public static int checkArrayIndex(int length, int index, QueryContext context) {
+    if (index < 0 || index >= length) {
+      throw QueryExecutionErrors.invalidArrayIndexError(index, length, context);
+    }
+    return index;
+  }
 
   // comparator
   // Boolean ascending nullable comparator
@@ -204,5 +249,40 @@ public class ArrayExpressionUtils {
   // Object
   public static int binarySearch(Object[] data, Object value, Comparator<Object> comp) {
     return Arrays.binarySearch(data, value, comp);
+  }
+
+  // ----- slice(array, start, length) index resolution -----
+  // Pure 1-based -> 0-based index arithmetic, independent of the array element
+  // type, shared by Slice's eval and codegen paths.
+
+  /**
+   * Resolves the 0-based start index for {@code slice(array, start, length)}.
+   * SQL {@code slice} is 1-based; a negative {@code start} counts back from the
+   * end of the array. A {@code start} of 0 is rejected.
+   */
+  public static int sliceStartIndex(int start, int numElements, String functionName) {
+    if (start == 0) {
+      throw QueryExecutionErrors.unexpectedValueForStartInFunctionError(functionName);
+    } else if (start < 0) {
+      return start + numElements;
+    } else {
+      // arrays in SQL are 1-based instead of 0-based
+      return start - 1;
+    }
+  }
+
+  /**
+   * Resolves the result length for {@code slice(array, start, length)} given the
+   * already-resolved {@code startIdx}, clamping it to the number of elements
+   * remaining after {@code startIdx}. A negative {@code length} is rejected.
+   */
+  public static int sliceLength(int length, int numElements, int startIdx, String functionName) {
+    if (length < 0) {
+      throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(functionName, length);
+    } else if (length > numElements - startIdx) {
+      return numElements - startIdx;
+    } else {
+      return length;
+    }
   }
 }

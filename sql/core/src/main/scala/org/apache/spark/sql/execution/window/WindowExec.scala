@@ -91,7 +91,12 @@ case class WindowExec(
     child: SparkPlan)
   extends WindowExecBase {
   override lazy val metrics: Map[String, SQLMetric] = Map(
-    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size")
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
+    "numSegmentTreeFrames" ->
+      SQLMetrics.createMetric(sparkContext, "number of segment-tree frames prepared"),
+    "numSegmentTreeFallbackFrames" ->
+      SQLMetrics.createMetric(sparkContext,
+        "number of segment-tree fallback frames prepared")
   )
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -101,7 +106,9 @@ case class WindowExec(
         partitionSpec,
         orderSpec,
         child.output,
-        longMetric("spillSize"))
+        longMetric("spillSize"),
+        longMetric("numSegmentTreeFrames"),
+        longMetric("numSegmentTreeFallbackFrames"))
 
     // Start processing.
     if (conf.usePartitionEvaluator) {

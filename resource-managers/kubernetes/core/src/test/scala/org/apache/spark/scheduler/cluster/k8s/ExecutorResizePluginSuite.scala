@@ -29,7 +29,9 @@ import org.mockito.Mockito.{mock, never, times, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.api.plugin.PluginContext
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_ALLOCATION_PODS_ALLOCATOR
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 
@@ -41,6 +43,7 @@ class ExecutorResizePluginSuite
 
   private var kubernetesClient: KubernetesClient = _
   private var sparkContext: SparkContext = _
+  private var schedulerBackend: KubernetesClusterSchedulerBackend = _
   private var podOperations: PODS = _
   private var podsWithNamespace: PODS_WITH_NAMESPACE = _
   private var labeledPods: LABELED_PODS = _
@@ -54,6 +57,7 @@ class ExecutorResizePluginSuite
   before {
     kubernetesClient = mock(classOf[KubernetesClient])
     sparkContext = mock(classOf[SparkContext])
+    schedulerBackend = mock(classOf[KubernetesClusterSchedulerBackend])
     podOperations = mock(classOf[PODS])
     podsWithNamespace = mock(classOf[PODS_WITH_NAMESPACE])
     labeledPods = mock(classOf[LABELED_PODS])
@@ -62,6 +66,8 @@ class ExecutorResizePluginSuite
     podMetricOperations = mock(classOf[PodMetricOperation])
 
     when(sparkContext.applicationId).thenReturn(appId)
+    when(sparkContext.schedulerBackend).thenReturn(schedulerBackend)
+    when(schedulerBackend.kubernetesClient).thenReturn(kubernetesClient)
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.inNamespace(namespace)).thenReturn(podsWithNamespace)
     when(podsWithNamespace.withLabel(SPARK_APP_ID_LABEL, appId)).thenReturn(labeledPods)
@@ -73,15 +79,9 @@ class ExecutorResizePluginSuite
 
   private def createPlugin(): ExecutorResizeDriverPlugin = {
     val plugin = new ExecutorResizeDriverPlugin()
-    // Use reflection to set private fields
     val scField = plugin.getClass.getDeclaredField("sparkContext")
     scField.setAccessible(true)
     scField.set(plugin, sparkContext)
-
-    val clientField = plugin.getClass.getDeclaredField("kubernetesClient")
-    clientField.setAccessible(true)
-    clientField.set(plugin, kubernetesClient)
-
     plugin
   }
 
@@ -124,7 +124,7 @@ class ExecutorResizePluginSuite
     val plugin = createPlugin()
     when(podList.getItems).thenReturn(Collections.emptyList())
 
-    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1))
+    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
 
     verify(podMetricOperations, never()).metrics(anyString(), anyString())
   }
@@ -142,7 +142,7 @@ class ExecutorResizePluginSuite
 
     when(podList.getItems).thenReturn(Collections.singletonList(pod))
 
-    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1))
+    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
 
     verify(podMetricOperations, never()).metrics(anyString(), anyString())
   }
@@ -158,7 +158,7 @@ class ExecutorResizePluginSuite
     val podResource = mock(classOf[SINGLE_POD])
     when(podsWithNamespace.withName("spark-executor-1")).thenReturn(podResource)
 
-    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1))
+    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
 
     verify(podResource, never()).patch(any(), any(classOf[Pod]))
   }
@@ -175,7 +175,7 @@ class ExecutorResizePluginSuite
     when(podsWithNamespace.withName("spark-executor-1")).thenReturn(podResource)
     when(podResource.subresource(anyString())).thenReturn(podResource)
 
-    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1))
+    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
 
     verify(podResource, times(1)).patch(any(), any(classOf[Pod]))
   }
@@ -191,7 +191,7 @@ class ExecutorResizePluginSuite
     val podResource = mock(classOf[SINGLE_POD])
     when(podsWithNamespace.withName("spark-executor-1")).thenReturn(podResource)
 
-    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1))
+    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
 
     verify(podResource, never()).patch(any(), any(classOf[Pod]))
   }
@@ -223,7 +223,7 @@ class ExecutorResizePluginSuite
     val podResource = mock(classOf[SINGLE_POD])
     when(podsWithNamespace.withName("spark-executor-1")).thenReturn(podResource)
 
-    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1))
+    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
 
     verify(podResource, never()).patch(any(), any(classOf[Pod]))
   }
@@ -246,7 +246,7 @@ class ExecutorResizePluginSuite
     when(podsWithNamespace.withName("spark-executor-2")).thenReturn(podResource2)
     when(podResource2.subresource(anyString())).thenReturn(podResource2)
 
-    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1))
+    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
 
     verify(podResource1, never()).patch(any(), any(classOf[Pod]))
     verify(podResource2, times(1)).patch(any(), any(classOf[Pod]))
@@ -265,7 +265,7 @@ class ExecutorResizePluginSuite
     when(podResource.subresource(anyString())).thenReturn(podResource)
 
     // Use 50% threshold - 60% usage should trigger resize
-    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.5, 0.1))
+    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.5, 0.1, kubernetesClient))
 
     verify(podResource, times(1)).patch(any(), any(classOf[Pod]))
   }
@@ -283,8 +283,22 @@ class ExecutorResizePluginSuite
     when(podsWithNamespace.withName("spark-executor-1")).thenReturn(podResource)
     when(podResource.subresource(anyString())).thenReturn(podResource)
 
-    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1))
+    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
 
     verify(podResource, times(1)).patch(any(), any(classOf[Pod]))
+  }
+
+  Seq("statefulset", "deployment").foreach { allocator =>
+    test(s"init returns early when pods allocator is '$allocator'") {
+      val plugin = new ExecutorResizeDriverPlugin()
+      val sparkConf = new SparkConf().set(KUBERNETES_ALLOCATION_PODS_ALLOCATOR, allocator)
+      val sc = mock(classOf[SparkContext])
+      when(sc.conf).thenReturn(sparkConf)
+      val pluginCtx = mock(classOf[PluginContext])
+
+      val result = plugin.init(sc, pluginCtx)
+
+      assert(result.isEmpty)
+    }
   }
 }

@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.expressions.xml.{StructsToXmlEvaluator, XmlExpressionEvalUtils, XmlToStructsEvaluator}
 import org.apache.spark.sql.catalyst.util.DropMalformedMode
@@ -38,6 +38,13 @@ import org.apache.spark.unsafe.types.UTF8String
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(xmlStr, schema[, options]) - Returns a struct value with the given `xmlStr` and `schema`.",
+  arguments = """
+    Arguments:
+      * xmlStr - A string expression containing a single XML record to parse.
+      * schema - The schema of the output struct, as a DDL-formatted string or a schema
+          expression.
+      * options - Optional. A map of key-value pairs controlling how the XML is parsed.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('<p><a>1</a><b>0.8</b></p>', 'a INT, b DOUBLE');
@@ -96,6 +103,7 @@ case class XmlToStructs(
   @transient
   private lazy val evaluator: XmlToStructsEvaluator =
     XmlToStructsEvaluator(options, nullableSchema, nameOfCorruptRecord, timeZoneId, child)
+  override def stateful: Boolean = true
 
   private val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
 
@@ -109,7 +117,20 @@ case class XmlToStructs(
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val expr = ctx.addReferenceObj("this", this)
-    defineCodeGen(ctx, ev, input => s"(InternalRow) $expr.nullSafeEval($input)")
+    // nullSafeEval returns an InternalRow for struct output and a VariantVal for variant output.
+    // The variant result can be null (e.g. a malformed record rescued under PERMISSIVE mode), so
+    // cast to the actual output type and null-check the result.
+    val resultType = CodeGenerator.javaType(dataType)
+    val result = ctx.freshName("xmlResult")
+    nullSafeCodeGen(ctx, ev, input =>
+      s"""
+         |$resultType $result = ($resultType) $expr.nullSafeEval($input);
+         |if ($result == null) {
+         |  ${ev.isNull} = true;
+         |} else {
+         |  ${ev.value} = $result;
+         |}
+       """.stripMargin)
   }
 
   override def inputTypes: Seq[AbstractDataType] =
@@ -126,6 +147,11 @@ case class XmlToStructs(
  */
 @ExpressionDescription(
   usage = "_FUNC_(xml[, options]) - Returns schema in the DDL format of XML string.",
+  arguments = """
+    Arguments:
+      * xml - A foldable string expression containing an XML record whose schema is inferred.
+      * options - Optional. A map of key-value pairs controlling how the XML is parsed.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('<p><a>1</a></p>');
@@ -210,6 +236,11 @@ case class SchemaOfXml(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr[, options]) - Returns a XML string with a given struct value",
+  arguments = """
+    Arguments:
+      * expr - A struct-valued expression to convert to an XML string.
+      * options - Optional. A map of key-value pairs controlling how the XML is generated.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
@@ -265,6 +296,7 @@ case class StructsToXml(
 
   @transient
   private lazy val evaluator = StructsToXmlEvaluator(options, child.dataType, timeZoneId)
+  override def stateful: Boolean = true
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))

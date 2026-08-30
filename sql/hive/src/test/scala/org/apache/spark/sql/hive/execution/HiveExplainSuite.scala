@@ -25,14 +25,13 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.SlowHiveTest
 
 /**
  * A set of tests that validates support for Hive Explain command.
  */
 @SlowHiveTest
-class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+class HiveExplainSuite extends QueryTest with TestHiveSingleton {
   import testImplicits._
 
   test("show cost in explain command") {

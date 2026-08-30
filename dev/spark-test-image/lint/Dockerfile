@@ -29,6 +29,8 @@ ENV FULL_REFRESH_DATE=20260316
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
 
+RUN printf 'Types: deb\nURIs: https://mirrors.edge.kernel.org/ubuntu\nSuites: noble noble-updates noble-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n' > /etc/apt/sources.list.d/mirror.sources
+
 RUN apt-get update && apt-get install -y \
     build-essential \
     ca-certificates \
@@ -47,6 +49,7 @@ RUN apt-get update && apt-get install -y \
     libpng-dev \
     libssl-dev \
     libtiff5-dev \
+    libuv1-dev \
     libwebp-dev \
     libxml2-dev \
     nodejs \
@@ -60,6 +63,7 @@ RUN apt-get update && apt-get install -y \
     software-properties-common \
     wget \
     zlib1g-dev \
+    zstd \
     && apt-get autoremove --purge -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -77,30 +81,10 @@ ENV VIRTUAL_ENV=/opt/spark-venv
 RUN python3.12 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-RUN python3.12 -m pip install \
-    'flake8==3.9.0' \
-    'ruff==0.14.8' \
-    'googleapis-common-protos-stubs==2.2.0' \
-    'grpc-stubs==1.24.11' \
-    'grpcio-status==1.76.0' \
-    'grpcio==1.76.0' \
-    'zstandard==0.25.0' \
-    'ipython' \
-    'ipython_genutils' \
-    'jinja2' \
-    'matplotlib' \
-    'mypy==1.19.1' \
-    'numpy==2.4.1' \
-    'numpydoc' \
-    'pandas' \
-    'pandas-stubs' \
-    'plotly>=4.8' \
-    'pyarrow>=23.0.0' \
-    'pytest-mypy-plugins==1.9.3' \
-    'pytest==7.1.3' \
-    'scipy>=1.8.0' \
-    'scipy-stubs' \
-    'types-protobuf==6.32.1.20260221' \
-    && python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
-    && python3.12 -m pip install torcheval \
-    && python3.12 -m pip cache purge
+COPY --from=root pyproject.toml ./pyproject.toml
+
+RUN python3.12 -m pip install -U pip
+
+RUN python3.12 -m pip install --group ml_torch --index-url https://download.pytorch.org/whl/cpu && \
+    python3.12 -m pip install --group ci_lint && \
+    python3.12 -m pip cache purge

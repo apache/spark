@@ -20,12 +20,18 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{MAX, TreePattern}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the maximum value of `expr`.",
+  arguments = """
+    Arguments:
+      * expr - An expression of any orderable type whose maximum value across the group is
+          returned. NULL values are ignored.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (10), (50), (20) AS tab(col);
@@ -42,6 +48,8 @@ case class Max(child: Expression) extends DeclarativeAggregate with UnaryLike[Ex
 
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForOrderingExpr(child.dataType, prettyName)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(MAX)
 
   private lazy val max = AttributeReference("max", child.dataType)()
 

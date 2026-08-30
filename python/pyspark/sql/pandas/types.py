@@ -21,55 +21,56 @@ pandas instances during the type conversion.
 """
 
 import datetime
-import itertools
 import functools
+import itertools
 import json
 from decimal import Decimal
-from typing import Any, Callable, Dict, Iterable, List, Optional, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Union
 
-from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
+from pyspark.errors import PySparkTypeError, PySparkValueError, UnsupportedOperationException
 from pyspark.loose_version import LooseVersion
 from pyspark.sql.types import (
-    cast,
+    ArrayType,
+    BinaryType,
     BooleanType,
     ByteType,
-    ShortType,
+    DataType,
+    DateType,
+    DayTimeIntervalType,
+    DecimalType,
+    DoubleType,
+    FloatType,
+    Geography,
+    GeographyType,
+    Geometry,
+    GeometryType,
     IntegerType,
     IntegralType,
     LongType,
-    FloatType,
-    DoubleType,
-    DecimalType,
-    StringType,
-    BinaryType,
-    DateType,
-    TimeType,
-    TimestampType,
-    TimestampNTZType,
-    DayTimeIntervalType,
-    ArrayType,
     MapType,
-    StructType,
-    StructField,
     NullType,
-    DataType,
+    ShortType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampNTZType,
+    TimestampType,
+    TimeType,
     UserDefinedType,
     VariantType,
     VariantVal,
-    GeometryType,
-    Geometry,
-    GeographyType,
-    Geography,
+    YearMonthIntervalType,
     _create_row,
+    cast,
 )
 
 if TYPE_CHECKING:
+    import numpy as np
     import pandas as pd
     import pyarrow as pa
-    import numpy as np
 
-    from pyspark.sql.pandas._typing import SeriesLike as PandasSeriesLike
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
+    from pyspark.sql.pandas._typing import SeriesLike as PandasSeriesLike
 
 
 # Should keep in line with org.apache.spark.sql.util.ArrowUtils.metadataKey
@@ -410,6 +411,13 @@ def from_arrow_type(
             spark_type = TimestampType()
     elif types.is_duration(at):
         spark_type = DayTimeIntervalType()
+    elif at.id == 21:  # Arrow Type.INTERVAL_MONTHS
+        # The JVM serializes Spark's YearMonthIntervalType to an Arrow YEAR_MONTH interval
+        # (an integer number of months); see ArrowUtils.scala / ArrowWriter.scala. Unlike
+        # DayTimeIntervalType (sent as an Arrow Duration), PyArrow exposes no factory or
+        # is_*() helper for this type -- only MONTH_DAY_NANO is in pyarrow.types -- so match
+        # on the stable Arrow type id (Type::INTERVAL_MONTHS == 21).
+        spark_type = YearMonthIntervalType()
     elif types.is_list(at):
         spark_type = ArrayType(
             elementType=from_arrow_type(at.value_type, prefer_timestamp_ntz),
@@ -530,9 +538,9 @@ def _check_arrow_array_timestamps_localize(
     -------
     :class:`pyarrow.Array` or :class:`pyarrow.ChunkedArray`
     """
-    import pyarrow.types as types
     import pyarrow as pa
     import pyarrow.compute as pc
+    import pyarrow.types as types
 
     if isinstance(a, pa.ChunkedArray) and (types.is_nested(a.type) or types.is_dictionary(a.type)):
         return pa.chunked_array(
@@ -639,8 +647,8 @@ def _check_arrow_table_timestamps_localize(
     -------
     :class:`pyarrow.Table`
     """
-    import pyarrow.types as types
     import pyarrow as pa
+    import pyarrow.types as types
 
     # Return the table as-is if it contains no nested fields or timestamps
     if all([not types.is_nested(at) and not types.is_timestamp(at) for at in table.schema.types]):

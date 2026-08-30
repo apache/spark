@@ -54,6 +54,14 @@ private[hive] class SparkGetCatalogsOperation(
       if (isAuthV2Enabled) {
         authorizeMetaGets(HiveOperationType.GET_CATALOGS, null)
       }
+      if (isCatalogMetadataEnabled) {
+        // Note: listCatalogs() returns only ALREADY-LOADED catalogs (catalogs configured via
+        // spark.sql.catalog.* but never accessed are not returned). We do NOT eagerly load
+        // all configured catalogs to avoid unexpected side effects and performance overhead.
+        catalogManager.listCatalogs(None).foreach { catalogName =>
+          rowSet.addRow(Array[AnyRef](catalogName))
+        }
+      }
       setState(OperationState.FINISHED)
     } catch onError()
 

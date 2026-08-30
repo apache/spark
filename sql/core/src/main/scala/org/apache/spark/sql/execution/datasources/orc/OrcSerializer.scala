@@ -27,6 +27,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.datasources.orc.types.ops.OrcTypeOps
 import org.apache.spark.sql.types._
 
 /**
@@ -106,7 +107,7 @@ class OrcSerializer(dataSchema: StructType) {
       }
 
 
-    case LongType | _: DayTimeIntervalType | _: TimestampNTZType | _: TimeType =>
+    case LongType | _: DayTimeIntervalType | _: TimestampNTZType =>
       if (reuseObj) {
         val result = new LongWritable()
         (getter, ordinal) =>
@@ -154,6 +155,9 @@ class OrcSerializer(dataSchema: StructType) {
       val result = new OrcTimestamp(ts.getTime)
       result.setNanos(ts.getNanos)
       result
+
+    // Framework types (TimeType, nanosecond timestamps) provide their own ORC value writer.
+    case OrcTypeOps(ops) => ops.makeSerializer(reuseObj)
 
     case DecimalType.Fixed(precision, scale) =>
       OrcShimUtils.getHiveDecimalWritable(precision, scale)

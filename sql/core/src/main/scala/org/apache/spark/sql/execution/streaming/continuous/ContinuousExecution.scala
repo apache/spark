@@ -26,13 +26,14 @@ import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestampLike, LocalTimestamp}
+import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestampLike, LocalTimestamp, LocalTimestampNanos}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
 import org.apache.spark.sql.connector.distributions.UnspecifiedDistribution
+import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, PartitionOffset, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{RequiresDistributionAndOrdering, Write}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -92,7 +93,15 @@ class ContinuousExecution(
             log"from DataSourceV2 named '${MDC(STREAMING_DATA_SOURCE_NAME, sourceName)}' " +
             log"${MDC(STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
           // TODO: operator pushdown.
-          val scan = table.newScanBuilder(options).build()
+          // Passes the full output schema (not a pruned subset) so that connectors
+          // implementing SupportsMetadataColumns can include metadata columns in readSchema().
+          val scanBuilder = table.newScanBuilder(options)
+          scanBuilder match {
+            case r: SupportsPushDownRequiredColumns =>
+              r.pruneColumns(output.toStructType)
+            case _ =>
+          }
+          val scan = scanBuilder.build()
           val stream = scan.toContinuousStream(metadataPath)
           val relation = StreamingDataSourceV2Relation(
               table, output, catalog, identifier, options, metadataPath)
@@ -225,7 +234,8 @@ class ContinuousExecution(
     }
 
     withNewSources.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
-      case (_: CurrentTimestampLike | _: CurrentDate | _: LocalTimestamp) =>
+      case (_: CurrentTimestampLike | _: CurrentDate | _: LocalTimestamp |
+          _: LocalTimestampNanos) =>
         throw new IllegalStateException("CurrentTimestamp, Now, CurrentDate and LocalTimestamp" +
           " not yet supported for continuous processing")
     }

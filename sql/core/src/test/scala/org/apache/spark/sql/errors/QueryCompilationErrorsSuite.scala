@@ -22,13 +22,15 @@ import java.util.IllegalFormatException
 import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal, UnsafeRow}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
 import org.apache.spark.sql.execution.datasources.parquet.SparkToParquetSchemaConverter
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -41,9 +43,8 @@ case class ComplexClass(a: Long, b: StringLongClass)
 case class ArrayClass(arr: Seq[StringIntClass])
 
 class QueryCompilationErrorsSuite
-  extends QueryTest
-  with QueryErrorsBase
-  with SharedSparkSession {
+  extends SharedSparkSession
+  with QueryErrorsBase {
   import testImplicits._
 
   test("CANNOT_UP_CAST_DATATYPE: invalid upcast data type") {
@@ -411,6 +412,29 @@ class QueryCompilationErrorsSuite
       },
       condition = "INVALID_JSON_SCHEMA_MAP_TYPE",
       parameters = Map("jsonSchema" -> "\"STRUCT<map: MAP<INT, INT> NOT NULL>\"")
+    )
+  }
+
+  test("COLUMN_IS_NOT_VARIANT_TYPE: semi-structured extraction on non-variant column") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT id:field FROM range(1)")
+      },
+      condition = "COLUMN_IS_NOT_VARIANT_TYPE",
+      parameters = Map.empty[String, String]
+    )
+  }
+
+  test("INVALID_XML_SCHEMA_MAP_TYPE: only STRING as a key type for MAP") {
+    val schema = StructType(
+      StructField("map", MapType(IntegerType, IntegerType, true), false) :: Nil)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.read.schema(schema).xml(spark.emptyDataset[String])
+      },
+      condition = "INVALID_XML_SCHEMA_MAP_TYPE",
+      parameters = Map("xmlSchema" -> "\"STRUCT<map: MAP<INT, INT> NOT NULL>\"")
     )
   }
 
@@ -877,39 +901,6 @@ class QueryCompilationErrorsSuite
         "inputTypes" -> "[\"INT\", \"STRING\", \"STRING\"]"))
   }
 
-  test("SPARK-49666: the trim collation feature is off without collate builder call") {
-    withSQLConf(SQLConf.TRIM_COLLATION_ENABLED.key -> "false") {
-      Seq(
-        "CREATE TABLE t(col STRING COLLATE EN_RTRIM_CI) USING parquet",
-        "CREATE TABLE t(col STRING COLLATE UTF8_LCASE_RTRIM) USING parquet",
-        "SELECT 'aaa' COLLATE UNICODE_LTRIM_CI"
-      ).foreach { sqlText =>
-        checkError(
-          exception = intercept[AnalysisException](sql(sqlText)),
-          condition = "UNSUPPORTED_FEATURE.TRIM_COLLATION"
-        )
-      }
-    }
-  }
-
-  test("SPARK-49666: the trim collation feature is off with collate builder call") {
-    withSQLConf(SQLConf.TRIM_COLLATION_ENABLED.key -> "false") {
-      Seq(
-        "SELECT collate('aaa', 'UNICODE_RTRIM')",
-        "SELECT collate('aaa', 'UTF8_BINARY_RTRIM')",
-        "SELECT collate('aaa', 'EN_AI_RTRIM')"
-      ).foreach { sqlText =>
-        checkError(
-          exception = intercept[AnalysisException](sql(sqlText)),
-          condition = "UNSUPPORTED_FEATURE.TRIM_COLLATION",
-          parameters = Map.empty,
-          context =
-            ExpectedContext(fragment = sqlText.substring(7), start = 7, stop = sqlText.length - 1)
-        )
-      }
-    }
-  }
-
   test("SPARK-50779: the object level collations feature is unsupported when flag is disabled") {
     withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "false") {
       Seq(
@@ -1132,6 +1123,33 @@ class QueryCompilationErrorsSuite
         parameters = Map("format" -> "JSON")
       )
     }
+  }
+
+  test("RESERVED_DATABASE_NAME: cannot create a database with a system-preserved name") {
+    val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"CREATE DATABASE $globalTempDB")
+      },
+      condition = "RESERVED_DATABASE_NAME",
+      parameters = Map("database" -> s"`$globalTempDB`")
+    )
+  }
+
+  test("SPARK-58349: TABLE_LOCATION_URI_NOT_SPECIFIED: table does not specify locationUri") {
+    val identifier = TableIdentifier("t", Some("db"))
+    val table = CatalogTable(
+      identifier = identifier,
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType())
+    checkError(
+      exception = intercept[AnalysisException] {
+        table.location
+      },
+      condition = "TABLE_LOCATION_URI_NOT_SPECIFIED",
+      parameters = Map("identifier" -> identifier.toString)
+    )
   }
 }
 

@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vector, Vectors}
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.stat.Summarizer
@@ -64,10 +64,10 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     require($(min) < $(max), s"The specified min(${$(min)}) is larger or equal to max(${$(max)})")
-    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(inputCol), SQLDataTypes.VectorType)
     require(!schema.fieldNames.contains($(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
-    val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
+    val outputFields = schema.fields :+ StructField($(outputCol), SQLDataTypes.VectorType, false)
     StructType(outputFields)
   }
 
@@ -157,6 +157,17 @@ class MinMaxScalerModel private[ml] (
 
   // For ml connect only
   private[ml] def this() = this("", Vectors.empty, Vectors.empty)
+
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (originalMin != null) {
+      size += originalMin.getSizeInBytes
+    }
+    if (originalMax != null) {
+      size += originalMax.getSizeInBytes
+    }
+    size
+  }
 
   /** @group setParam */
   @Since("1.5.0")

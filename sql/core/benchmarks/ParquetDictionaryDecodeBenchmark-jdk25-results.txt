@@ -1,0 +1,48 @@
+================================================================================================
+Dictionary Decode (no nulls)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+Dictionary Decode (no nulls):             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+IntegerUpdater                                        3              3           0        343.5           2.9       1.0X
+LongUpdater                                           3              3           0        341.6           2.9       1.0X
+FloatUpdater                                          3              3           0        343.7           2.9       1.0X
+DoubleUpdater                                         3              3           0        341.6           2.9       1.0X
+IntegerToLongUpdater (INT32 -> Long)                  3              3           0        341.5           2.9       1.0X
+FloatToDoubleUpdater (FLOAT -> Double)                3              3           0        341.1           2.9       1.0X
+
+
+================================================================================================
+Dictionary Decode (10% nulls)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+Dictionary Decode (10% nulls):            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+IntegerUpdater                                        5              5           0        207.4           4.8       1.0X
+LongUpdater                                           5              5           0        206.5           4.8       1.0X
+FloatUpdater                                          5              5           0        207.7           4.8       1.0X
+DoubleUpdater                                         5              5           0        206.9           4.8       1.0X
+IntegerToLongUpdater (INT32 -> Long)                  5              6           0        206.5           4.8       1.0X
+FloatToDoubleUpdater (FLOAT -> Double)                5              6           0        204.7           4.9       1.0X
+
+
+================================================================================================
+Dictionary Decode (50% nulls)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+Dictionary Decode (50% nulls):            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+IntegerUpdater                                        8              8           0        133.8           7.5       1.0X
+LongUpdater                                           8              9           1        133.9           7.5       1.0X
+FloatUpdater                                          8              8           0        134.5           7.4       1.0X
+DoubleUpdater                                         8              9           1        134.3           7.4       1.0X
+IntegerToLongUpdater (INT32 -> Long)                  8              8           0        134.0           7.5       1.0X
+FloatToDoubleUpdater (FLOAT -> Double)                8              8           0        133.6           7.5       1.0X
+
+

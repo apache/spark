@@ -44,7 +44,7 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{AnalysisException, Column, Encoders, ForeachWriter, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, InternalRow, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{ChangelogInfoUtils, FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, RelationChanges, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.analysis.{ChangelogContextUtils, FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, RelationChanges, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeduplicate, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
@@ -52,7 +52,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.{NamedParameterContext, ParameterContext, ParseException, ParserUtils, PositionalParameterContext}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -160,6 +160,9 @@ class SparkConnectPlanner(
         case proto.Relation.RelTypeCase.JOIN => transformJoinOrJoinWith(rel.getJoin)
         case proto.Relation.RelTypeCase.AS_OF_JOIN => transformAsOfJoin(rel.getAsOfJoin)
         case proto.Relation.RelTypeCase.LATERAL_JOIN => transformLateralJoin(rel.getLateralJoin)
+        case proto.Relation.RelTypeCase.NEAREST_BY_JOIN =>
+          transformNearestByJoin(rel.getNearestByJoin)
+        case proto.Relation.RelTypeCase.ZIP => transformZip(rel.getZip)
         case proto.Relation.RelTypeCase.DEDUPLICATE => transformDeduplicate(rel.getDeduplicate)
         case proto.Relation.RelTypeCase.SET_OP => transformSetOperation(rel.getSetOp)
         case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
@@ -389,7 +392,9 @@ class SparkConnectPlanner(
         s"_pos_$idx" -> expr
       }.toMap
       val resolvedParams = session.resolveAndValidateParameters(paramMap)
-      Some(PositionalParameterContext(resolvedParams.values.toSeq))
+      // Look up by the positional key instead of relying on `resolvedParams.values`:
+      // the map does not preserve insertion order for 5+ entries.
+      Some(PositionalParameterContext(paramList.indices.map(idx => resolvedParams(s"_pos_$idx"))))
     } else if (!args.isEmpty) {
       // Use named arguments (literals) - already resolved
       val paramMap = args.asScala.toMap.transform((_, v) => transformLiteral(v))
@@ -1453,27 +1458,16 @@ class SparkConnectPlanner(
     if (!rel.getAllColumnsAsKeys && rel.getColumnNamesCount == 0) {
       throw InvalidInputErrors.deduplicateRequiresColumnsOrAll()
     }
-    val queryExecution = new QueryExecution(session, transformRelation(rel.getInput))
-    val resolver = session.sessionState.analyzer.resolver
-    val allColumns = queryExecution.analyzed.output
-    if (rel.getAllColumnsAsKeys) {
-      if (rel.getWithinWatermark) DeduplicateWithinWatermark(allColumns, queryExecution.analyzed)
-      else Deduplicate(allColumns, queryExecution.analyzed)
+    val keySpec = if (rel.getAllColumnsAsKeys) {
+      DeduplicateAllColumnsAsKey
     } else {
-      val toGroupColumnNames = rel.getColumnNamesList.asScala.toSeq
-      val groupCols = toGroupColumnNames.flatMap { (colName: String) =>
-        // It is possibly there are more than one columns with the same name,
-        // so we call filter instead of find.
-        val cols = allColumns.filter(col => resolver(col.name, colName))
-        if (cols.isEmpty) {
-          val fieldNames = allColumns.map(_.name).mkString(", ")
-          throw InvalidInputErrors.invalidDeduplicateColumn(colName, fieldNames)
-        }
-        cols
-      }
-      if (rel.getWithinWatermark) DeduplicateWithinWatermark(groupCols, queryExecution.analyzed)
-      else Deduplicate(groupCols, queryExecution.analyzed)
+      DeduplicateKeyColumns(rel.getColumnNamesList.asScala.toSeq)
     }
+    UnresolvedDeduplicate(
+      keySpec = keySpec,
+      withinWatermark = rel.getWithinWatermark,
+      viaSparkClassic = false,
+      child = transformRelation(rel.getInput))
   }
 
   private def transformDataType(t: proto.DataType): DataType = {
@@ -1669,10 +1663,17 @@ class SparkConnectPlanner(
 
     rel.getReadTypeCase match {
       case proto.Read.ReadTypeCase.NAMED_TABLE =>
-        UnresolvedRelation(
-          parser.parseMultipartIdentifier(rel.getNamedTable.getUnparsedIdentifier),
+        val temporalIdent =
+          parser.parseTemporalTableIdentifier(rel.getNamedTable.getUnparsedIdentifier)
+        if (temporalIdent.isTemporal && rel.getIsStreaming) {
+          throw QueryCompilationErrors.timeTravelUnsupportedError(
+            QueryCompilationErrors.toSQLId(temporalIdent.nameParts))
+        }
+        val relation = UnresolvedRelation(
+          temporalIdent.nameParts,
           new CaseInsensitiveStringMap(rel.getNamedTable.getOptionsMap),
           isStreaming = rel.getIsStreaming)
+        temporalIdent.wrapTimeTravel(relation)
 
       case proto.Read.ReadTypeCase.DATA_SOURCE if !rel.getIsStreaming =>
         val reader = session.read
@@ -1740,10 +1741,10 @@ class SparkConnectPlanner(
     val tableName = rel.getUnparsedIdentifier
     val options = new CaseInsensitiveStringMap(rel.getOptionsMap)
     val timeZone = session.sessionState.conf.sessionLocalTimeZone
-    val changelogInfo = ChangelogInfoUtils.fromOptions(options, timeZone)
+    val ctx = ChangelogContextUtils.fromOptions(options, timeZone)
     val ident = parser.parseMultipartIdentifier(tableName)
     val relation = UnresolvedRelation(ident, options, isStreaming = rel.getIsStreaming)
-    RelationChanges(relation, changelogInfo)
+    RelationChanges(relation, ctx)
   }
 
   private def transformParse(rel: proto.Parse): LogicalPlan = {
@@ -2201,6 +2202,15 @@ class SparkConnectPlanner(
     createUserDefinedPythonFunction(fun)
       .builder(fun.getArgumentsList.asScala.map(transformExpression).toSeq) match {
       case udaf: PythonUDAF => udaf.toAggregateExpression()
+      case agg: PythonAggregate =>
+        // The two-stage incremental aggregation operators do not implement DISTINCT. The SQL path
+        // rejects it in FunctionResolution, but a Connect aggregate is already resolved and skips
+        // that guard, so reject `is_distinct` here rather than silently dropping it and returning a
+        // non-distinct result.
+        if (fun.getIsDistinct) {
+          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(agg.name, "DISTINCT")
+        }
+        agg.toAggregateExpression()
       case other => other
     }
   }
@@ -2214,7 +2224,9 @@ class SparkConnectPlanner(
       func = function,
       dataType = transformDataType(udf.getOutputType),
       pythonEvalType = udf.getEvalType,
-      udfDeterministic = fun.getDeterministic)
+      udfDeterministic = fun.getDeterministic,
+      // Set only for incremental Python aggregators (see PythonAggregate).
+      bufferType = if (udf.hasBufferType) transformDataType(udf.getBufferType) else null)
   }
 
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
@@ -2566,6 +2578,33 @@ class SparkConnectPlanner(
       right = LateralSubquery(transformRelation(rel.getRight)),
       joinType = joinType,
       condition = joinCondition)
+  }
+
+  private def transformNearestByJoin(rel: proto.NearestByJoin): LogicalPlan = {
+    assertPlan(rel.hasLeft && rel.hasRight, "Both join sides must be present")
+    assertPlan(rel.hasRankingExpression, "Ranking expression must be present")
+    // proto3 string fields default to "" when not set; reject the empty case explicitly so the
+    // user sees a "must be set" error instead of a misleading "unsupported value" error.
+    assertPlan(rel.getJoinType.nonEmpty, "NearestByJoin.join_type must be set")
+    assertPlan(rel.getMode.nonEmpty, "NearestByJoin.mode must be set")
+    assertPlan(rel.getDirection.nonEmpty, "NearestByJoin.direction must be set")
+    val left = Dataset.ofRows(session, transformRelation(rel.getLeft))
+    val right = Dataset.ofRows(session, transformRelation(rel.getRight))
+    val rankingExpression = Column(transformExpression(rel.getRankingExpression))
+    left
+      .nearestByJoin(
+        right,
+        rankingExpression,
+        rel.getNumResults,
+        rel.getMode,
+        rel.getDirection,
+        rel.getJoinType)
+      .logicalPlan
+  }
+
+  private def transformZip(rel: proto.Zip): LogicalPlan = {
+    assertPlan(rel.hasLeft && rel.hasRight, "Both zip sides must be present")
+    logical.Zip(transformRelation(rel.getLeft), transformRelation(rel.getRight))
   }
 
   private def transformSort(sort: proto.Sort): LogicalPlan = {
@@ -2932,7 +2971,8 @@ class SparkConnectPlanner(
       sessionHolder,
       command,
       responseObserver,
-      transformRelation)
+      transformRelation,
+      transformExpression)
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(
       proto.ExecutePlanResponse
@@ -3354,6 +3394,10 @@ class SparkConnectPlanner(
       w.format(writeOperation.getSource)
     }
 
+    if (writeOperation.getWithSchemaEvolution) {
+      w.withSchemaEvolution()
+    }
+
     writeOperation.getSaveTypeCase match {
       case proto.WriteOperation.SaveTypeCase.SAVETYPE_NOT_SET => w.saveCommand(None)
       case proto.WriteOperation.SaveTypeCase.PATH =>
@@ -3418,6 +3462,10 @@ class SparkConnectPlanner(
     if (writeOperation.getClusteringColumnsCount > 0) {
       val names = writeOperation.getClusteringColumnsList.asScala
       w.clusterBy(names.head, names.tail.toSeq: _*)
+    }
+
+    if (writeOperation.getWithSchemaEvolution) {
+      w.withSchemaEvolution()
     }
 
     writeOperation.getMode match {
@@ -3918,13 +3966,16 @@ class SparkConnectPlanner(
       name -> new TaskResourceRequest(res.getResourceName, res.getAmount)
     }.toMap
 
-    // Create ResourceProfile add add it to ResourceProfileManager
-    val profile = if (ereqs.isEmpty) {
+    // Create the ResourceProfile and register it, reusing an already-registered profile with
+    // equal resources if one exists so that equivalent profiles share a single id (and thus
+    // can reuse the same executors instead of triggering new allocations).
+    val newProfile = if (ereqs.isEmpty) {
       new TaskResourceProfile(treqs)
     } else {
       new ResourceProfile(ereqs, treqs)
     }
-    session.sparkContext.resourceProfileManager.addResourceProfile(profile)
+    val profile =
+      session.sparkContext.resourceProfileManager.getOrAddEquivalentProfile(newProfile)
 
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(

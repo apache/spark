@@ -143,6 +143,31 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(featureStep.getAdditionalPodSystemProperties() === expectedSparkConf)
   }
 
+  test("Set allowPrivilegeEscalation to false on the driver container by default") {
+    val sparkConf = new SparkConf().set(CONTAINER_IMAGE, "spark-driver:latest")
+    val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+    val pod = new BasicDriverFeatureStep(conf).configurePod(SparkPod.initialPod())
+    assert(pod.container.getSecurityContext.getAllowPrivilegeEscalation === false)
+  }
+
+  test("Support spark.kubernetes.driver.securityContext.allowPrivilegeEscalation") {
+    val sparkConf = new SparkConf()
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(KUBERNETES_DRIVER_ALLOW_PRIVILEGE_ESCALATION, true)
+    val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+    val pod = new BasicDriverFeatureStep(conf).configurePod(SparkPod.initialPod())
+    assert(pod.container.getSecurityContext.getAllowPrivilegeEscalation === true)
+  }
+
+  test("driver allowPrivilegeEscalation falls back to the shared config") {
+    val sparkConf = new SparkConf()
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(KUBERNETES_ALLOW_PRIVILEGE_ESCALATION, true)
+    val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+    val pod = new BasicDriverFeatureStep(conf).configurePod(SparkPod.initialPod())
+    assert(pod.container.getSecurityContext.getAllowPrivilegeEscalation === true)
+  }
+
   test("Check driver pod respects kubernetes driver request cores") {
     val sparkConf = new SparkConf()
       .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
@@ -448,6 +473,44 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(amountAndFormat(requests("memory")) === "5500Mi")
     val limits = resourceRequirements.getLimits.asScala
     assert(amountAndFormat(limits("memory")) === "5500Mi")
+  }
+
+  test("SPARK-58202: containerPort entries are skipped when the corresponding Spark port is 0") {
+    val sparkConf = new SparkConf()
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
+      .set(DRIVER_PORT, 0)
+      .set(DRIVER_BLOCK_MANAGER_PORT, 0)
+      .set(UI_PORT, 0)
+      .set(CONNECT_GRPC_BINDING_PORT, "0")
+    val kubernetesConf: KubernetesDriverConf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf,
+      environment = DRIVER_ENVS,
+      annotations = DRIVER_ANNOTATIONS)
+
+    val featureStep = new BasicDriverFeatureStep(kubernetesConf)
+    val configuredPod = featureStep.configurePod(SparkPod.initialPod())
+    assert(configuredPod.container.getPorts.isEmpty)
+  }
+
+  test("SPARK-58202: containerPort entries include only ports with non-zero values") {
+    val sparkConf = new SparkConf()
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
+      .set(DRIVER_PORT, 9000)
+      .set(DRIVER_BLOCK_MANAGER_PORT, 0)
+      .set(UI_PORT, 4040)
+      .set(CONNECT_GRPC_BINDING_PORT, "0")
+    val kubernetesConf: KubernetesDriverConf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf,
+      environment = DRIVER_ENVS,
+      annotations = DRIVER_ANNOTATIONS)
+
+    val featureStep = new BasicDriverFeatureStep(kubernetesConf)
+    val configuredPod = featureStep.configurePod(SparkPod.initialPod())
+    val portsByName = configuredPod.container.getPorts.asScala
+      .map(cp => cp.getName -> cp.getContainerPort).toMap
+    assert(portsByName === Map(DRIVER_PORT_NAME -> 9000, UI_PORT_NAME -> 4040))
   }
 
 

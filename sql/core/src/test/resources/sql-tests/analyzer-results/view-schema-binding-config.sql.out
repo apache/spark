@@ -111,7 +111,7 @@ CreateViewCommand `spark_catalog`.`default`.`v`, SELECT 1, false, true, Persiste
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, spark_catalog.default.v
 
 
 -- !query
@@ -197,7 +197,7 @@ Project [c1#x]
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, spark_catalog.default.v
 
 
 -- !query
@@ -235,7 +235,7 @@ Project [c1#x]
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, spark_catalog.default.v
 
 
 -- !query
@@ -294,7 +294,7 @@ Project [c1#x]
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, spark_catalog.default.v
 
 
 -- !query
@@ -344,7 +344,7 @@ org.apache.spark.sql.AnalysisException
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, spark_catalog.default.v
 
 
 -- !query
@@ -397,7 +397,7 @@ Project [c1#x]
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, spark_catalog.default.v
 
 
 -- !query
@@ -443,7 +443,7 @@ Project [c1#x]
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, spark_catalog.default.v
 
 
 -- !query
@@ -489,7 +489,7 @@ Project [c1#x]
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, spark_catalog.default.v
 
 
 -- !query
@@ -551,7 +551,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, spark_catalog.default.v
 
 
 -- !query
@@ -600,7 +600,7 @@ Project [c1#x, c2#x]
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, spark_catalog.default.v
 
 
 -- !query
@@ -637,7 +637,7 @@ org.apache.spark.sql.AnalysisException
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, spark_catalog.default.v
 
 
 -- !query
@@ -674,7 +674,7 @@ org.apache.spark.sql.AnalysisException
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, spark_catalog.default.v
 
 
 -- !query
@@ -707,7 +707,7 @@ SetCommand (spark.sql.legacy.viewSchemaBindingMode,Some(true))
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, spark_catalog.default.v
 
 
 -- !query
@@ -732,7 +732,7 @@ SetCommand (spark.sql.legacy.viewSchemaCompensation,Some(true))
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, spark_catalog.default.v
 
 
 -- !query

@@ -14,21 +14,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Callable, Dict, List, Optional, Union, overload
+from typing import Callable, Dict, List, Literal, Optional, Union, overload
 
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.pipelines.flow import AutoCdcFlow, Flow, QueryFunction
 from pyspark.pipelines.graph_element_registry import get_active_graph_element_registry
-from pyspark.pipelines.type_error_utils import validate_optional_list_of_str_arg
-from pyspark.pipelines.flow import Flow, QueryFunction
+from pyspark.pipelines.output import (
+    MaterializedView,
+    Sink,
+    StreamingTable,
+    TemporaryView,
+)
 from pyspark.pipelines.source_code_location import (
     get_caller_source_code_location,
 )
-from pyspark.pipelines.output import (
-    MaterializedView,
-    StreamingTable,
-    TemporaryView,
-    Sink,
-)
+from pyspark.pipelines.type_error_utils import validate_optional_list_of_str_arg
+from pyspark.sql import Column
 from pyspark.sql.types import StructType
 
 
@@ -525,3 +526,286 @@ def create_sink(
         comment=None,
     )
     get_active_graph_element_registry().register_output(sink)
+
+
+def create_auto_cdc_flow(
+    target: str,
+    source: str,
+    keys: Union[List[str], List[Column]],
+    sequence_by: Union[str, Column],
+    apply_as_deletes: Optional[Union[str, Column]] = None,
+    column_list: Optional[Union[List[str], List[Column]]] = None,
+    except_column_list: Optional[Union[List[str], List[Column]]] = None,
+    stored_as_scd_type: Optional[Literal[1, 2, "1", "2"]] = None,
+    name: Optional[str] = None,
+    *,
+    track_history_column_list: Optional[Union[List[str], List[Column]]] = None,
+    track_history_except_column_list: Optional[Union[List[str], List[Column]]] = None,
+    spark_conf: Optional[Dict[str, str]] = None,
+) -> None:
+    """
+    Create an Auto CDC flow into the target table from the Change Data Capture (CDC) source.
+    Target table must have already been created using the `create_streaming_table` function.
+    Only one of column_list and except_column_list can be specified.
+
+    Example:
+        create_auto_cdc_flow(
+            target="target",
+            source="source",
+            keys=["key"],
+            sequence_by="sequence_expr",
+            column_list=["key", "value"],
+        )
+
+    Note that for keys, sequence_by, column_list, and except_column_list the arguments have to
+    be column identifiers without qualifiers, e.g. they cannot be col("sourceTable.keyId").
+
+    The set and types of `keys` are part of the Auto CDC flow's persisted state. Changing keys
+    across incremental runs (renaming, swapping, growing, shrinking, or changing the type of a
+    key column) is not supported and will produce undefined behavior. To change the key set,
+    fully refresh the target table.
+
+    :param target: The name of the target table that receives the Auto CDC flow.
+    :param source: The name of the CDC source to stream from.
+    :param keys: The column or combination of columns that uniquely identify a row in the source \
+        data. This is used to identify which CDC events apply to specific records in the target \
+        table. These keys also identify records in the target table, e.g., if there exists a record \
+        for given keys and the CDC source has an UPSERT operation for the same keys, we will update \
+        the existing record. At least one key must be provided. This should be a list of column \
+        identifiers without qualifiers, expressed as either Python strings or PySpark Columns.
+    :param sequence_by: An expression that we use to order the source data. This can be expressed \
+        as either a SQL expression string or a PySpark Column.
+    :param apply_as_deletes: A boolean expression indicating whether an event represents a \
+        delete. This can be expressed as either a SQL expression string or a PySpark Column.
+    :param column_list: Columns that will be included in the output table. This should be a list \
+        of column identifiers without qualifiers, expressed as either Python strings or PySpark \
+        Columns. Only one of column_list and except_column_list can be specified.
+    :param except_column_list: Columns that will be excluded from the output table. This should \
+        be a list of column identifiers without qualifiers, expressed as either Python strings or \
+        PySpark Columns. Only one of column_list and except_column_list can be specified. When \
+        this is specified, all columns in the `DataFrame` of the target table except those in \
+        this list will be in the output table.
+    :param stored_as_scd_type: The SCD type for the target table. 1 (or "1") and 2 (or "2") are \
+        supported. When not specified, the server default applies.
+    :param track_history_column_list: SCD2-only. Columns whose value change opens a new history \
+        record; two consecutive upsert events for the same key are coalesced into the same \
+        history record when they agree on every tracked column. When not specified, every \
+        eligible selected user column is tracked. This should be a list of column identifiers \
+        without qualifiers, expressed as either Python strings or PySpark Columns. Only one of \
+        track_history_column_list and track_history_except_column_list can be specified, and \
+        both require stored_as_scd_type to be 2.
+    :param track_history_except_column_list: SCD2-only. Columns excluded from history tracking. \
+        This should be a list of column identifiers without qualifiers, expressed as either \
+        Python strings or PySpark Columns. Only one of track_history_column_list and \
+        track_history_except_column_list can be specified, and both require stored_as_scd_type \
+        to be 2.
+    :param name: The name of the flow for this create_auto_cdc_flow command. When unspecified, \
+        this will build a "default flow" with name equal to the target name.
+    :param spark_conf: A dict whose keys are the conf names and values are the conf values. \
+        These confs will be set when the flow is executed; they can override confs set for the \
+        destination, for the pipeline, or on the cluster.
+    """
+    # Lazy import: pyspark.sql.connect.functions.builtin transitively imports grpc, which is
+    # not available in the docs-build environment. pyspark.pipelines.api is loaded eagerly
+    # from pyspark.pipelines.__init__, so a top-level import here would break docs CI.
+    from pyspark.sql.connect.functions.builtin import expr as _connect_expr
+
+    if type(target) is not str:
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "target",
+                "expected_type": "str",
+                "arg_type": type(target).__name__,
+            },
+        )
+    if type(source) is not str:
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "source",
+                "expected_type": "str",
+                "arg_type": type(source).__name__,
+            },
+        )
+    if name is not None and type(name) is not str:
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "name",
+                "expected_type": "str",
+                "arg_type": type(name).__name__,
+            },
+        )
+
+    if name is None:
+        name = target
+
+    keys = _normalize_column_list(arg_name="keys", column_list=keys)
+    column_list = _normalize_optional_column_list(arg_name="column_list", column_list=column_list)
+    except_column_list = _normalize_optional_column_list(
+        arg_name="except_column_list", column_list=except_column_list
+    )
+    track_history_column_list = _normalize_optional_column_list(
+        arg_name="track_history_column_list", column_list=track_history_column_list
+    )
+    track_history_except_column_list = _normalize_optional_column_list(
+        arg_name="track_history_except_column_list",
+        column_list=track_history_except_column_list,
+    )
+
+    # An include/except pair is mutually exclusive. The server enforces this too, but failing
+    # here avoids a round-trip. An empty list serializes identically to an omitted one (an unset
+    # repeated field on the wire), so it is a no-op; gate on non-empty lists rather than
+    # `is not None`.
+    _reject_include_and_except_together(
+        "column_list", column_list, "except_column_list", except_column_list
+    )
+    _reject_include_and_except_together(
+        "track_history_column_list",
+        track_history_column_list,
+        "track_history_except_column_list",
+        track_history_except_column_list,
+    )
+
+    if isinstance(sequence_by, str):
+        sequence_by = _connect_expr(sequence_by)
+    elif not isinstance(sequence_by, Column):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "sequence_by",
+                "expected_type": "str or Column",
+                "arg_type": type(sequence_by).__name__,
+            },
+        )
+
+    if isinstance(apply_as_deletes, str):
+        apply_as_deletes = _connect_expr(apply_as_deletes)
+    elif apply_as_deletes is not None and not isinstance(apply_as_deletes, Column):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "apply_as_deletes",
+                "expected_type": "str or Column",
+                "arg_type": type(apply_as_deletes).__name__,
+            },
+        )
+
+    if stored_as_scd_type is not None and str(stored_as_scd_type) not in ("1", "2"):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "stored_as_scd_type",
+                "expected_type": "Literal[1, 2, '1', '2']",
+                "arg_type": type(stored_as_scd_type).__name__,
+            },
+        )
+
+    # Track-history columns describe how consecutive upserts are coalesced into history records,
+    # a notion that only exists under SCD2. Reject them for any other SCD type. The engine
+    # enforces this too, but failing here gives a clearer, client-side error.
+    #
+    # An empty list serializes identically to an omitted one (an unset repeated field on the
+    # wire) and is therefore a no-op, so gate on non-empty lists rather than `is not None`.
+    is_scd2 = stored_as_scd_type is not None and str(stored_as_scd_type) == "2"
+    supplied_track_history_args = [
+        arg_name
+        for arg_name, cols in (
+            ("track_history_column_list", track_history_column_list),
+            ("track_history_except_column_list", track_history_except_column_list),
+        )
+        if cols
+    ]
+    if not is_scd2 and supplied_track_history_args:
+        raise PySparkValueError(
+            errorClass="INVALID_MULTIPLE_ARGUMENT_CONDITIONS",
+            messageParameters={
+                "arg_names": ", ".join(supplied_track_history_args),
+                "condition": "specified unless stored_as_scd_type is 2 (or '2')",
+            },
+        )
+
+    source_code_location = get_caller_source_code_location(stacklevel=1)
+
+    flow = AutoCdcFlow(
+        name=name,
+        target=target,
+        source=source,
+        keys=keys,
+        sequence_by=sequence_by,
+        apply_as_deletes=apply_as_deletes,
+        column_list=column_list,
+        except_column_list=except_column_list,
+        stored_as_scd_type=stored_as_scd_type,
+        track_history_column_list=track_history_column_list,
+        track_history_except_column_list=track_history_except_column_list,
+        spark_conf=spark_conf or {},
+        source_code_location=source_code_location,
+    )
+
+    get_active_graph_element_registry().register_auto_cdc_flow(flow)
+
+
+def _reject_include_and_except_together(
+    include_arg_name: str,
+    include_columns: Optional[List[Column]],
+    except_arg_name: str,
+    except_columns: Optional[List[Column]],
+) -> None:
+    """Reject specifying a non-empty include list and a non-empty except list together.
+
+    An empty list is a no-op (it serializes to an unset repeated field, indistinguishable from an
+    omitted argument), so only non-empty lists count as "specified".
+    """
+    if include_columns and except_columns:
+        raise PySparkValueError(
+            errorClass="CANNOT_SET_TOGETHER",
+            messageParameters={"arg_list": f"{include_arg_name} and {except_arg_name}"},
+        )
+
+
+def _normalize_optional_column_list(
+    arg_name: str,
+    column_list: Optional[Union[List[str], List[Column]]],
+) -> Optional[List[Column]]:
+    if column_list is None:
+        return None
+    return _normalize_column_list(arg_name=arg_name, column_list=column_list)
+
+
+def _normalize_column_list(
+    arg_name: str,
+    column_list: Union[List[str], List[Column]],
+) -> List[Column]:
+    # Lazy import: see comment in create_auto_cdc_flow.
+    from pyspark.sql.connect.functions.builtin import col as _connect_col
+
+    if not isinstance(column_list, list):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": arg_name,
+                "expected_type": "list[str] or list[Column]",
+                "arg_type": type(column_list).__name__,
+            },
+        )
+
+    normalized: List[Column] = []
+
+    for column in column_list:
+        if isinstance(column, str):
+            normalized.append(_connect_col(column))
+        elif isinstance(column, Column):
+            normalized.append(column)
+        else:
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": arg_name,
+                    "expected_type": "list[str] or list[Column]",
+                    "arg_type": type(column).__name__,
+                },
+            )
+
+    return normalized

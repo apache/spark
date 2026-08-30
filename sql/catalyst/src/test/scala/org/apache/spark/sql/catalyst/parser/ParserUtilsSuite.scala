@@ -232,21 +232,6 @@ class ParserUtilsSuite extends SparkFunSuite {
     assert(position(emptyContext.stop) == Origin(None, None))
   }
 
-  test("validate") {
-    val f1 = { ctx: ParserRuleContext =>
-      ctx.children != null && !ctx.children.isEmpty
-    }
-    val message = "ParserRuleContext should not be empty."
-    validate(f1(showFuncContext), message, showFuncContext)
-
-    checkError(
-      exception = intercept[ParseException] {
-        validate(f1(emptyContext), message, emptyContext)
-      },
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> message))
-  }
-
   test("withOrigin") {
     val ctx = createDbContext.locationSpec.asScala.head
     val current = CurrentOrigin.get

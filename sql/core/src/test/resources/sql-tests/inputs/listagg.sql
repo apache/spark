@@ -61,3 +61,18 @@ SELECT listagg(DISTINCT col1) WITHIN GROUP (ORDER BY col1, col2) FROM df;
 SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (cast(1.1 as double)), (cast(2.2 as double)), (cast(2.2 as double)), (cast(3.3 as double)) AS t(col);
 SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (cast(1.0 as float)), (cast(2.0 as float)), (cast(2.0 as float)) AS t(col);
 SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (TIMESTAMP'2024-01-01 10:00:00'), (TIMESTAMP'2024-01-02 12:00:00'), (TIMESTAMP'2024-01-01 10:00:00') AS t(col);
+
+-- LISTAGG with semi-structured extract (parser wraps v:a in Alias with fresh ExprId)
+-- Tests that isOrderCompatible strips Alias wrappers before comparing via semanticEquals
+SELECT listagg(DISTINCT v:a::string, ',') WITHIN GROUP (ORDER BY v:a::string) FROM (SELECT parse_json('{"a": "x"}') v UNION ALL SELECT parse_json('{"a": "y"}') UNION ALL SELECT parse_json('{"a": "x"}'));
+-- Semi-structured extract without DISTINCT
+SELECT listagg(v:a::string, ',') WITHIN GROUP (ORDER BY v:a::string) FROM (SELECT parse_json('{"a": "x"}') v UNION ALL SELECT parse_json('{"a": "y"}') UNION ALL SELECT parse_json('{"a": "x"}'));
+-- Semi-structured extract with DESC ordering
+SELECT listagg(DISTINCT v:a::string, ',') WITHIN GROUP (ORDER BY v:a::string DESC) FROM (SELECT parse_json('{"a": "x"}') v UNION ALL SELECT parse_json('{"a": "y"}') UNION ALL SELECT parse_json('{"a": "x"}'));
+-- Semi-structured extract with nested path
+SELECT listagg(DISTINCT v:a.b::string, ',') WITHIN GROUP (ORDER BY v:a.b::string) FROM (SELECT parse_json('{"a": {"b": "x"}}') v UNION ALL SELECT parse_json('{"a": {"b": "y"}}') UNION ALL SELECT parse_json('{"a": {"b": "x"}}'));
+-- Semi-structured extract with GROUP BY
+SELECT grp, listagg(DISTINCT v:a::string, ',') WITHIN GROUP (ORDER BY v:a::string) FROM (SELECT 1 grp, parse_json('{"a": "x"}') v UNION ALL SELECT 1, parse_json('{"a": "y"}') UNION ALL SELECT 2, parse_json('{"a": "x"}') UNION ALL SELECT 2, parse_json('{"a": "x"}') UNION ALL SELECT 1, parse_json('{"a": "x"}')) GROUP BY grp;
+-- Semi-structured extract: DISTINCT with non-equality-preserving cast (double->string)
+-- Tests that checkOrderValueDeterminism strips Alias wrappers before comparing via semanticEquals
+SELECT listagg(DISTINCT (v:a)::double::string, ',') WITHIN GROUP (ORDER BY (v:a)::double) FROM (SELECT parse_json('{"a": 1.1}') v UNION ALL SELECT parse_json('{"a": 2.2}') UNION ALL SELECT parse_json('{"a": 1.1}'));

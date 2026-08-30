@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.SparkCharVarcharUtils.replaceCharVarch
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -44,7 +45,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case c @ CreateVariable(identifiers, _, _) =>
       // We resolve only UnresolvedIdentifiers, and pass on the other nodes
       val resolved = identifiers.map {
-        case UnresolvedIdentifier(nameParts, _) =>
+        case u @ UnresolvedIdentifier(nameParts, _) =>
           if (withinLocalVariableScope) {
             if (c.replace) {
               throw new AnalysisException(
@@ -67,20 +68,22 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
             val resolvedIdentifier
             = catalogManager.tempVariableManager.qualify(nameParts.last)
 
-            assertValidSessionVariableNameParts(nameParts, resolvedIdentifier)
+            assertValidSessionVariableNameParts(nameParts, resolvedIdentifier, u.origin)
             resolvedIdentifier
           }
         case plan => plan
       }
       c.copy(names = resolved)
 
-    case d @ DropVariable(UnresolvedIdentifier(nameParts, _), _) =>
+    case d @ DropVariable(u @ UnresolvedIdentifier(nameParts, _), _) =>
       if (withinLocalVariableScope) {
         throw new AnalysisException(
           "UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE", Map.empty)
       }
+      // DDL on session variables targets `system.session` directly; the SQL path only applies
+      // to DML (see [[VariableResolution.allowUnqualifiedSessionTempVariableLookup]]).
       val resolved = catalogManager.tempVariableManager.qualify(nameParts.last)
-      assertValidSessionVariableNameParts(nameParts, resolved)
+      assertValidSessionVariableNameParts(nameParts, resolved, u.origin)
       d.copy(name = resolved)
 
     case CreateFunction(UnresolvedIdentifier(nameParts, _), _, _, _, _)
@@ -125,6 +128,18 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, Nil)
       c.copy(name = resolvedIdentifier)
 
+    case c @ CreateTableAsSelect(
+        UnresolvedIdentifier(nameParts, allowTemp), _, _, _, writeOptions, _, _) =>
+      val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, Nil)
+      rejectTimeTravelOptionsForWrite(resolvedIdentifier, writeOptions)
+      c.copy(name = resolvedIdentifier)
+
+    case r @ ReplaceTableAsSelect(
+        UnresolvedIdentifier(nameParts, allowTemp), _, _, _, writeOptions, _, _) =>
+      val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, Nil)
+      rejectTimeTravelOptionsForWrite(resolvedIdentifier, writeOptions)
+      r.copy(name = resolvedIdentifier)
+
     case UnresolvedIdentifier(nameParts, allowTemp) =>
       resolveIdentifier(nameParts, allowTemp, Nil)
 
@@ -141,7 +156,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       allowTemp: Boolean,
       columns: Seq[ColumnDefinition]): ResolvedIdentifier = {
     val columnOutput = columns.map { col =>
-      val dataType = if (conf.preserveCharVarcharTypeInfo) {
+      val dataType = if (conf.charVarcharFirstClassTypes) {
         col.dataType
       } else {
         replaceCharVarcharWithString(col.dataType)
@@ -155,6 +170,15 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       val CatalogAndIdentifier(catalog, identifier) = nameParts
       ResolvedIdentifier(catalog, identifier, columnOutput)
     }
+  }
+
+  private def rejectTimeTravelOptionsForWrite(
+      resolvedIdentifier: ResolvedIdentifier,
+      writeOptions: Map[String, String]): Unit = {
+    CatalogV2Util.rejectTimeTravelOptionsForWrite(
+      resolvedIdentifier.catalog,
+      resolvedIdentifier.identifier,
+      new CaseInsensitiveStringMap(writeOptions.asJava))
   }
 
   private def isSystemBuiltinName(nameParts: Seq[String]): Boolean = {
@@ -215,13 +239,15 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
   private def assertValidSessionVariableNameParts(
       nameParts: Seq[String],
-      resolvedIdentifier: ResolvedIdentifier): Unit = {
+      resolvedIdentifier: ResolvedIdentifier,
+      origin: Origin): Unit = {
     if (!validSessionVariableName(nameParts)) {
       throw QueryCompilationErrors.unresolvedVariableError(
         nameParts,
-        Seq(
+        Seq(Seq(
           resolvedIdentifier.catalog.name(),
-          resolvedIdentifier.identifier.namespace().head)
+          resolvedIdentifier.identifier.namespace().head)),
+        origin
       )
     }
 

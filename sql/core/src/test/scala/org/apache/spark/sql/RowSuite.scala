@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SparkFunSuite, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, SpecificInternalRow}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-class RowSuite extends SparkFunSuite with SharedSparkSession {
+class RowSuite extends SharedSparkSession {
   import testImplicits._
 
   test("create row") {

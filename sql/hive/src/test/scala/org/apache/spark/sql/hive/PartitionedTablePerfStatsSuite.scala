@@ -25,10 +25,9 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.datasources.FileStatusCache
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 
 class PartitionedTablePerfStatsSuite
-  extends QueryTest with TestHiveSingleton with SQLTestUtils {
+  extends QueryTest with TestHiveSingleton {
 
   override def beforeEach(): Unit = {
     super.beforeEach()

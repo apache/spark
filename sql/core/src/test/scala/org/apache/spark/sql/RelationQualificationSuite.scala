@@ -26,7 +26,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * (spark.sql.functionResolution.sessionOrder for unqualified names;
  * spark.sql.legacy.persistentCatalogFirst for two-part session.name vs persistent schema session).
  */
-class RelationQualificationSuite extends QueryTest with SharedSparkSession {
+class RelationQualificationSuite extends SharedSparkSession {
 
   test("SECTION 1: Basic qualification - SELECT from session.v and system.session.v") {
     sql("CREATE TEMPORARY VIEW v1 AS SELECT 1 AS c")

@@ -27,7 +27,7 @@ import scala.xml.Node
 
 import jakarta.servlet.{DispatcherType, Filter, FilterChain, ServletRequest, ServletResponse}
 import jakarta.servlet.http._
-import org.eclipse.jetty.client.{Response => CResponse}
+import org.eclipse.jetty.client.{Request => CRequest, Response => CResponse}
 import org.eclipse.jetty.client.HttpClient
 import org.eclipse.jetty.client.transport.HttpClientTransportOverHTTP
 import org.eclipse.jetty.compression.server.CompressionHandler
@@ -209,6 +209,25 @@ private[spark] object JettyUtils extends Logging {
           .orNull
       }
 
+      override def addProxyHeaders(
+          clientRequest: HttpServletRequest,
+          proxyRequest: CRequest): Unit = {
+        super.addProxyHeaders(clientRequest, proxyRequest)
+        val path = clientRequest.getPathInfo
+        if (path != null) {
+          val prefixTrailingSlashIndex = path.indexOf('/', 1)
+          val prefix = if (prefixTrailingSlashIndex == -1) {
+            path
+          } else {
+            path.substring(0, prefixTrailingSlashIndex)
+          }
+          val existingContext = Option(clientRequest.getHeader("X-Forwarded-Context")).getOrElse("")
+          val contextPath = Option(clientRequest.getContextPath).getOrElse("")
+          val proxyContext = existingContext + contextPath + prefix
+          proxyRequest.headers(headers => headers.put("X-Forwarded-Context", proxyContext))
+        }
+      }
+
       override def newHttpClient(): HttpClient = {
         // SPARK-21176: Use the Jetty logic to calculate the number of selector threads (#CPUs/2),
         // but limit it to 8 max.
@@ -335,9 +354,11 @@ private[spark] object JettyUtils extends Logging {
       val securePort = sslOptions.createJettySslContextFactoryServer().map { factory =>
 
         // SPARK-45522: SniHostCheck defaulted to true since Jetty 10,
-        // this will affect the standalone deployment.
+        // this will affect the standalone deployment. Exposed via
+        // spark.ui.jetty.sniHostCheckEnabled so operators can enable
+        // it when stricter host checking is desired.
         val src = new SecureRequestCustomizer()
-        src.setSniHostCheck(false)
+        src.setSniHostCheck(conf.get(UI_JETTY_SNI_HOST_CHECK))
         httpConfig.addCustomizer(src)
 
         val securePort = sslOptions.port.getOrElse(if (port > 0) Utils.userPort(port, 400) else 0)

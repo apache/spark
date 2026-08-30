@@ -309,13 +309,19 @@ class RocksDB(
    *
    * @param colFamilyName - column family name
    * @param isInternal - whether the column family is for internal use or not
+   * @param readOnly - when true (read-only callers), do not force a snapshot for a newly created
+   *                   family; read stores never commit, so registering a family carries no write
+   *                   intent.
    * @return - virtual column family id
    */
-  def createColFamilyIfAbsent(colFamilyName: String, isInternal: Boolean): Short = {
+  def createColFamilyIfAbsent(
+      colFamilyName: String,
+      isInternal: Boolean,
+      readOnly: Boolean = false): Short = {
     if (!checkColFamilyExists(colFamilyName)) {
       val newColumnFamilyId = maxColumnFamilyId.incrementAndGet().toShort
       addToColFamilyMaps(colFamilyName, newColumnFamilyId, isInternal)
-      shouldForceSnapshot.set(true)
+      if (!readOnly) shouldForceSnapshot.set(true)
       newColumnFamilyId
     } else {
       colFamilyNameToInfoMap.get(colFamilyName).cfId
@@ -1652,6 +1658,36 @@ class RocksDB(
     }
   }
 
+  /**
+   * Return an iterator that remains open when exhausted so it can be refreshed and reused.
+   */
+  private[state] def reusableIterator(
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): RocksDBIterator = {
+    updateMemoryUsageIfNeeded()
+    val virtualColumnFamilyId = if (useColumnFamilies) {
+      Some(getColumnFamilyInfo(cfName).cfId)
+    } else {
+      None
+    }
+    val reusableIterator = new RocksDBIterator(
+      db.newIterator(),
+      useColumnFamilies,
+      virtualColumnFamilyId,
+      conf.rowChecksumEnabled,
+      readVerifier,
+      delimiterSize)
+    if (useColumnFamilies) {
+      reusableIterator.seek(Array.emptyByteArray)
+    } else {
+      reusableIterator.seekToFirst()
+    }
+
+    Option(TaskContext.get()).foreach { tc =>
+      tc.addTaskCompletionListener[Unit] { _ => reusableIterator.close() }
+    }
+    reusableIterator
+  }
+
   private def countKeys(): (Long, Long) = {
     val iter = db.newIterator()
 
@@ -2045,7 +2081,8 @@ class RocksDB(
     logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
   }
 
-  def doMaintenance(): Unit = {
+  /** Run only the snapshot upload portion of maintenance. */
+  def doSnapshotMaintenance(): Unit = {
     if (enableChangelogCheckpointing) {
 
       var mostRecentSnapshot: Option[RocksDBSnapshot] = None
@@ -2076,6 +2113,10 @@ class RocksDB(
         uploadSnapshot(snapshotToUpload)
       }
     }
+  }
+
+  /** Run only the cleanup portion of maintenance. */
+  def doCleanupMaintenance(): Unit = {
     val cleanupTime = timeTakenMs {
       fileManager.deleteOldVersions(
         numVersionsToRetain = conf.minVersionsToRetain,
@@ -2083,6 +2124,11 @@ class RocksDB(
         minVersionsToDelete = conf.minVersionsToDelete)
     }
     logInfo(log"Cleaned old data, time taken: ${MDC(LogKeys.TIME_UNITS, cleanupTime)} ms")
+  }
+
+  def doMaintenance(): Unit = {
+    doSnapshotMaintenance()
+    doCleanupMaintenance()
   }
 
   /**
@@ -2133,6 +2179,15 @@ class RocksDB(
       nativeStats.close()
       rocksDbOptions.close()
       dbLogger.close()
+      // In unbounded memory mode each RocksDB instance owns its LRUCache. Without explicit
+      // close() the native C++ cache object is only freed when the JVM GC finalizes the Java
+      // wrapper -- which rarely happens under low heap pressure. Closing explicitly here
+      // ensures native memory is reclaimed deterministically when the instance is released.
+      // In bounded mode the cache is a shared singleton managed by RocksDBMemoryManager
+      // and must not be closed here.
+      if (!conf.boundedMemoryUsage && lruCache != null) {
+        lruCache.close()
+      }
 
       var snapshot = snapshotsToUploadQueue.poll()
       while (snapshot != null) {

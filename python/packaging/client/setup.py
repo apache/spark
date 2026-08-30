@@ -22,12 +22,13 @@
 # cd python/packaging/classic
 # python setup.py sdist
 
-import sys
-from setuptools import setup
-import os
-from shutil import copyfile, move
 import glob
+import os
+import sys
 from pathlib import Path
+from shutil import copyfile
+
+from setuptools import setup
 
 if (
     # When we package, the parent directory 'client' dir
@@ -118,13 +119,10 @@ if "SPARK_TESTING" in os.environ:
 
 try:
     if in_spark:
-        # !!HACK ALTERT!!
-        # 1. `setup.py` has to be located with the same directory with the package.
-        #    Therefore, we copy the current file, and place it at `spark/python` directory.
-        #    After that, we remove it in the end.
-        # 2. Here it renames `lib` to `lib.back` so MANIFEST.in does not pick `py4j` up.
-        #    We rename it back in the end.
-        move("lib", "lib.back")
+        # !!HACK ALERT!!
+        # `setup.py` has to be located with the same directory with the package.
+        # Therefore, we copy the current file, and place it at `spark/python` directory.
+        # After that, we remove it in the end.
         copyfile("packaging/client/setup.py", "setup.py")
         copyfile("packaging/client/setup.cfg", "setup.cfg")
 
@@ -135,19 +133,21 @@ try:
     # python/docs/source/tutorial/sql/arrow_pandas.rst,
     # python/packaging/classic/setup.py, and python/packaging/connect/setup.py
     _minimum_pandas_version = "2.2.0"
-    _minimum_numpy_version = "1.21"
+    _minimum_numpy_version = "1.23.2"
     _minimum_pyarrow_version = "18.0.0"
     _minimum_grpc_version = "1.76.0"
     _minimum_googleapis_common_protos_version = "1.71.0"
     _minimum_pyyaml_version = "3.11"
     _minimum_zstandard_version = "0.25.0"
 
-    with open("README.md") as f:
+    with open("README.md", encoding="utf-8") as f:
         long_description = f.read()
 
     connect_packages = [
         "pyspark",
         "pyspark.cloudpickle",
+        "pyspark.messages",
+        "pyspark.messages.socket",
         "pyspark.mllib",
         "pyspark.mllib.linalg",
         "pyspark.mllib.stat",
@@ -204,7 +204,11 @@ try:
         url="https://github.com/apache/spark/tree/master/python",
         packages=connect_packages + test_packages,
         include_package_data=True,
+        package_data={
+            "pyspark": ["**/*.pyi", "**/py.typed", "**/*.json"],
+        },
         license="Apache-2.0",
+        license_files=["LICENSE", "NOTICE"],
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
         install_requires=[
@@ -217,10 +221,9 @@ try:
             "numpy>=%s" % _minimum_numpy_version,
             "pyyaml>=%s" % _minimum_pyyaml_version,
         ],
-        python_requires=">=3.10",
+        python_requires=">=3.11",
         classifiers=[
             "Development Status :: 5 - Production/Stable",
-            "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",
             "Programming Language :: Python :: 3.12",
             "Programming Language :: Python :: 3.13",
@@ -231,6 +234,5 @@ try:
     )
 finally:
     if in_spark:
-        move("lib.back", "lib")
         os.remove("setup.py")
         os.remove("setup.cfg")

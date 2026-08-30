@@ -455,38 +455,13 @@ private[spark] object Utils
     } else if (lowerSrc.endsWith(".zip")) {
       // After issue HADOOP-18145, unzip could keep file permissions.
       FileUtil.unZip(source, dest)
-    } else if (lowerSrc.endsWith(".tar.gz") || lowerSrc.endsWith(".tgz")) {
+    } else if (
+      lowerSrc.endsWith(".tar.gz") || lowerSrc.endsWith(".tgz") || lowerSrc.endsWith(".tar")) {
       FileUtil.unTar(source, dest)
-    } else if (lowerSrc.endsWith(".tar")) {
-      // TODO(SPARK-38632): should keep file permissions. Java implementation doesn't.
-      unTarUsingJava(source, dest)
     } else {
       logWarning(log"Cannot unpack ${MDC(LogKeys.FILE_NAME, source)}, " +
         log"just copying it to ${MDC(FILE_NAME2, dest)}.")
       copyRecursive(source, dest)
-    }
-  }
-
-  /**
-   * The method below was copied from `FileUtil.unTar` but uses Java-based implementation
-   * to work around a security issue, see also SPARK-38631.
-   */
-  private def unTarUsingJava(source: File, dest: File): Unit = {
-    if (!Utils.createDirectory(dest) && !dest.isDirectory) {
-      throw new IOException(s"Mkdirs failed to create $dest")
-    } else {
-      try {
-        // Should not fail because all Hadoop 2.1+ (from HADOOP-9264)
-        // have 'unTarUsingJava'.
-        val mth = classOf[FileUtil].getDeclaredMethod(
-          "unTarUsingJava", classOf[File], classOf[File], classOf[Boolean])
-        mth.setAccessible(true)
-        mth.invoke(null, source, dest, java.lang.Boolean.FALSE)
-      } catch {
-        // Re-throw the original exception.
-        case e: java.lang.reflect.InvocationTargetException if e.getCause != null =>
-          throw e.getCause
-      }
     }
   }
 
@@ -517,8 +492,8 @@ private[spark] object Utils
       in: InputStream,
       destFile: File,
       fileOverwrite: Boolean): Unit = {
-    val tempFile = File.createTempFile("fetchFileTemp", null,
-      new File(destFile.getParentFile.getAbsolutePath))
+    val tempFile = Files.createTempFile(
+      new File(destFile.getParentFile.getAbsolutePath).toPath, "fetchFileTemp", null).toFile
     logInfo(log"Fetching ${MDC(LogKeys.URL, url)} to ${MDC(FILE_ABSOLUTE_PATH, tempFile)}")
 
     try {
@@ -971,17 +946,24 @@ private[spark] object Utils
    */
   private[spark] def normalizeIpIfNeeded(host: String): String = {
     // Is this a v6 address. We ask users to add [] around v6 addresses as strs but
-    // there not always there. If it's just 0-9 and : and [] we treat it as a v6 address.
+    // they're not always there. If it's just hexadecimal digits, :, and [] we treat it as a
+    // v6 address.
     // This means some invalid addresses are treated as v6 addresses, but since they are
     // not valid hostnames it doesn't matter.
     // See https://www.rfc-editor.org/rfc/rfc1123#page-13 for context around valid hostnames.
-    val addressRe = """^\[{0,1}([0-9:]+?:[0-9]*)\]{0,1}$""".r
+    val addressRe = """^\[{0,1}([0-9a-fA-F:]+?:[0-9a-fA-F]*)\]{0,1}$""".r
     host match {
       case addressRe(unbracketed) =>
         addBracketsIfNeeded(InetAddresses.toAddrString(InetAddresses.forString(unbracketed)))
       case _ =>
         host
     }
+  }
+
+  /** Returns whether a literal IPv4 or IPv6 address binds to every local interface. */
+  private[spark] def isAnyLocalAddress(host: String): Boolean = {
+    val address = host.stripPrefix("[").stripSuffix("]")
+    InetAddresses.isInetAddress(address) && InetAddresses.forString(address).isAnyLocalAddress
   }
 
   /**
@@ -3091,7 +3073,8 @@ private[spark] object Utils
   def checkOffHeapEnabled(sparkConf: ReadOnlySparkConf, offHeapSize: Long): Long = {
     if (sparkConf.get(MEMORY_OFFHEAP_ENABLED)) {
       require(offHeapSize > 0,
-        s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
+        s"${MEMORY_OFFHEAP_SIZE.key} must be at least 1MiB when " +
+          s"${MEMORY_OFFHEAP_ENABLED.key} == true")
       offHeapSize
     } else {
       0

@@ -17,7 +17,6 @@
 package org.apache.spark.sql.avro
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.DecimalType
@@ -27,9 +26,7 @@ import org.apache.spark.sql.types.DecimalType
  * Tests here must run in isolation, otherwise some other test might
  * initialize variable and make this test flaky
  */
-abstract class AvroLogicalTypeInitSuite
-  extends QueryTest
-  with SharedSparkSession {
+abstract class AvroLogicalTypeInitSuite extends SharedSparkSession {
 
   test("SPARK-47739: custom logical type registration test") {
     val avroTypeJson =

@@ -224,7 +224,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT hex(ST_AsBinary(CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS GEOGRAPHY(ANY)))) AS result
 -- !query analysis
-Project [hex(st_asbinary(cast(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040) as geography(any)))) AS result#x]
+Project [hex(st_asbinary(cast(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040) as geography(any)), NDR)) AS result#x]
 +- OneRowRelation
 
 
@@ -253,7 +253,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT hex(ST_AsBinary(CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS GEOMETRY(4326)))) AS result
 -- !query analysis
-Project [hex(st_asbinary(cast(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040) as geometry(4326)))) AS result#x]
+Project [hex(st_asbinary(cast(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040) as geometry(4326)), NDR)) AS result#x]
 +- OneRowRelation
 
 
@@ -282,7 +282,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT hex(ST_AsBinary(CAST(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040') AS GEOMETRY(ANY)))) AS result
 -- !query analysis
-Project [hex(st_asbinary(cast(st_geomfromwkb(0x0101000000000000000000F03F0000000000000040, 0) as geometry(any)))) AS result#x]
+Project [hex(st_asbinary(cast(st_geomfromwkb(0x0101000000000000000000F03F0000000000000040, 0) as geometry(any)), NDR)) AS result#x]
 +- OneRowRelation
 
 
@@ -311,7 +311,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT hex(ST_AsBinary(CAST(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040', 4326) AS GEOGRAPHY(4326)))) AS result
 -- !query analysis
-Project [hex(st_asbinary(cast(st_geomfromwkb(0x0101000000000000000000F03F0000000000000040, 4326) as geography(4326)))) AS result#x]
+Project [hex(st_asbinary(cast(st_geomfromwkb(0x0101000000000000000000F03F0000000000000040, 4326) as geography(4326)), NDR)) AS result#x]
 +- OneRowRelation
 
 
@@ -491,28 +491,28 @@ Project [typeof(if (isnotnull(wkb#x)) cast(st_geomfromwkb(wkb#x, 0) as geometry(
 -- !query
 SELECT hex(ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040'))) AS result
 -- !query analysis
-Project [hex(st_asbinary(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040))) AS result#x]
+Project [hex(st_asbinary(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040), NDR)) AS result#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040'))) AS result
 -- !query analysis
-Project [hex(st_asbinary(st_geomfromwkb(0x0101000000000000000000F03F0000000000000040, 0))) AS result#x]
+Project [hex(st_asbinary(st_geomfromwkb(0x0101000000000000000000F03F0000000000000040, 0), NDR)) AS result#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT ST_AsBinary(ST_GeogFromWKB(NULL))
 -- !query analysis
-Project [st_asbinary(st_geogfromwkb(cast(null as binary))) AS st_asbinary(st_geogfromwkb(NULL))#x]
+Project [st_asbinary(st_geogfromwkb(cast(null as binary)), NDR) AS st_asbinary(st_geogfromwkb(NULL), NDR)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040')))
 -- !query analysis
-Project [hex(st_asbinary(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040))) AS hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040')))#x]
+Project [hex(st_asbinary(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040), NDR)) AS hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'), NDR))#x]
 +- OneRowRelation
 
 
@@ -536,7 +536,7 @@ Aggregate [count(1) AS count(1)#xL]
 SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb)) <> wkb
 -- !query analysis
 Aggregate [count(1) AS count(1)#xL]
-+- Filter NOT (st_asbinary(st_geogfromwkb(wkb#x)) = wkb#x)
++- Filter NOT (st_asbinary(st_geogfromwkb(wkb#x), NDR) = wkb#x)
    +- SubqueryAlias spark_catalog.default.geodata
       +- Relation spark_catalog.default.geodata[wkb#x] parquet
 
@@ -544,35 +544,35 @@ Aggregate [count(1) AS count(1)#xL]
 -- !query
 SELECT ST_AsBinary(ST_GeomFromWKB(NULL))
 -- !query analysis
-Project [st_asbinary(st_geomfromwkb(cast(null as binary), 0)) AS st_asbinary(st_geomfromwkb(NULL, 0))#x]
+Project [st_asbinary(st_geomfromwkb(cast(null as binary), 0), NDR) AS st_asbinary(st_geomfromwkb(NULL, 0), NDR)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040')))
 -- !query analysis
-Project [hex(st_asbinary(st_geomfromwkb(0x0101000000000000000000F03F0000000000000040, 0))) AS hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0)))#x]
+Project [hex(st_asbinary(st_geomfromwkb(0x0101000000000000000000F03F0000000000000040, 0), NDR)) AS hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0), NDR))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040', 0)))
 -- !query analysis
-Project [hex(st_asbinary(st_geomfromwkb(0x0101000000000000000000F03F0000000000000040, 0))) AS hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0)))#x]
+Project [hex(st_asbinary(st_geomfromwkb(0x0101000000000000000000F03F0000000000000040, 0), NDR)) AS hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0), NDR))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040', 3857)))
 -- !query analysis
-Project [hex(st_asbinary(st_geomfromwkb(0x0101000000000000000000F03F0000000000000040, 3857))) AS hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 3857)))#x]
+Project [hex(st_asbinary(st_geomfromwkb(0x0101000000000000000000F03F0000000000000040, 3857), NDR)) AS hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 3857), NDR))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040', 4326)))
 -- !query analysis
-Project [hex(st_asbinary(st_geomfromwkb(0x0101000000000000000000F03F0000000000000040, 4326))) AS hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 4326)))#x]
+Project [hex(st_asbinary(st_geomfromwkb(0x0101000000000000000000F03F0000000000000040, 4326), NDR)) AS hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 4326), NDR))#x]
 +- OneRowRelation
 
 
@@ -638,7 +638,7 @@ Aggregate [count(1) AS count(1)#xL]
 SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeomFromWKB(wkb)) <> wkb
 -- !query analysis
 Aggregate [count(1) AS count(1)#xL]
-+- Filter NOT (st_asbinary(st_geomfromwkb(wkb#x, 0)) = wkb#x)
++- Filter NOT (st_asbinary(st_geomfromwkb(wkb#x, 0), NDR) = wkb#x)
    +- SubqueryAlias spark_catalog.default.geodata
       +- Relation spark_catalog.default.geodata[wkb#x] parquet
 
@@ -647,7 +647,7 @@ Aggregate [count(1) AS count(1)#xL]
 SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeomFromWKB(wkb, 4326)) <> wkb
 -- !query analysis
 Aggregate [count(1) AS count(1)#xL]
-+- Filter NOT (st_asbinary(st_geomfromwkb(wkb#x, 4326)) = wkb#x)
++- Filter NOT (st_asbinary(st_geomfromwkb(wkb#x, 4326), NDR) = wkb#x)
    +- SubqueryAlias spark_catalog.default.geodata
       +- Relation spark_catalog.default.geodata[wkb#x] parquet
 
@@ -663,6 +663,157 @@ org.apache.spark.SparkIllegalArgumentException
     "srid" : "1"
   }
 }
+
+
+-- !query
+SELECT ST_AsBinary(NULL)
+-- !query analysis
+Project [st_asbinary(cast(null as geography(any)), NDR) AS st_asbinary(NULL, NDR)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT hex(ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040')))
+-- !query analysis
+Project [hex(st_asbinary(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040), NDR)) AS hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'), NDR))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT hex(ST_AsBinary(ST_GeogFromWKB(X'00000000013FF00000000000004000000000000000'), 'NDR'))
+-- !query analysis
+Project [hex(st_asbinary(st_geogfromwkb(0x00000000013FF00000000000004000000000000000), NDR)) AS hex(st_asbinary(st_geogfromwkb(X'00000000013FF00000000000004000000000000000'), NDR))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT hex(ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'), 'XDR'))
+-- !query analysis
+Project [hex(st_asbinary(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040), XDR)) AS hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'), XDR))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040')))
+-- !query analysis
+Project [hex(st_asbinary(st_geomfromwkb(0x0101000000000000000000F03F0000000000000040, 0), NDR)) AS hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0), NDR))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'00000000013FF00000000000004000000000000000'), 'NDR'))
+-- !query analysis
+Project [hex(st_asbinary(st_geomfromwkb(0x00000000013FF00000000000004000000000000000, 0), NDR)) AS hex(st_asbinary(st_geomfromwkb(X'00000000013FF00000000000004000000000000000', 0), NDR))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040'), 'XDR'))
+-- !query analysis
+Project [hex(st_asbinary(st_geomfromwkb(0x0101000000000000000000F03F0000000000000040, 0), XDR)) AS hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0), XDR))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'), '')
+-- !query analysis
+Project [st_asbinary(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040), ) AS st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'), )#x]
++- OneRowRelation
+
+
+-- !query
+SELECT ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'), 'ABC')
+-- !query analysis
+Project [st_asbinary(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040), ABC) AS st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'), ABC)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'), 'big-endian')
+-- !query analysis
+Project [st_asbinary(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040), big-endian) AS st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'), big-endian)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb)) <> wkb
+-- !query analysis
+Aggregate [count(1) AS count(1)#xL]
++- Filter NOT (st_asbinary(st_geogfromwkb(wkb#x), NDR) = wkb#x)
+   +- SubqueryAlias spark_catalog.default.geodata
+      +- Relation spark_catalog.default.geodata[wkb#x] parquet
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb), 'NDR') <> wkb
+-- !query analysis
+Aggregate [count(1) AS count(1)#xL]
++- Filter NOT (st_asbinary(st_geogfromwkb(wkb#x), NDR) = wkb#x)
+   +- SubqueryAlias spark_catalog.default.geodata
+      +- Relation spark_catalog.default.geodata[wkb#x] parquet
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb), 'XDR') = wkb
+-- !query analysis
+Aggregate [count(1) AS count(1)#xL]
++- Filter (st_asbinary(st_geogfromwkb(wkb#x), XDR) = wkb#x)
+   +- SubqueryAlias spark_catalog.default.geodata
+      +- Relation spark_catalog.default.geodata[wkb#x] parquet
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeomFromWKB(wkb)) <> wkb
+-- !query analysis
+Aggregate [count(1) AS count(1)#xL]
++- Filter NOT (st_asbinary(st_geomfromwkb(wkb#x, 0), NDR) = wkb#x)
+   +- SubqueryAlias spark_catalog.default.geodata
+      +- Relation spark_catalog.default.geodata[wkb#x] parquet
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeomFromWKB(wkb), 'NDR') <> wkb
+-- !query analysis
+Aggregate [count(1) AS count(1)#xL]
++- Filter NOT (st_asbinary(st_geomfromwkb(wkb#x, 0), NDR) = wkb#x)
+   +- SubqueryAlias spark_catalog.default.geodata
+      +- Relation spark_catalog.default.geodata[wkb#x] parquet
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeomFromWKB(wkb), 'XDR') = wkb
+-- !query analysis
+Aggregate [count(1) AS count(1)#xL]
++- Filter (st_asbinary(st_geomfromwkb(wkb#x, 0), XDR) = wkb#x)
+   +- SubqueryAlias spark_catalog.default.geodata
+      +- Relation spark_catalog.default.geodata[wkb#x] parquet
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb), '') IS NOT NULL
+-- !query analysis
+Aggregate [count(1) AS count(1)#xL]
++- Filter isnotnull(st_asbinary(st_geogfromwkb(wkb#x), ))
+   +- SubqueryAlias spark_catalog.default.geodata
+      +- Relation spark_catalog.default.geodata[wkb#x] parquet
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb), 'ABC') IS NOT NULL
+-- !query analysis
+Aggregate [count(1) AS count(1)#xL]
++- Filter isnotnull(st_asbinary(st_geogfromwkb(wkb#x), ABC))
+   +- SubqueryAlias spark_catalog.default.geodata
+      +- Relation spark_catalog.default.geodata[wkb#x] parquet
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb), 'big-endian') IS NOT NULL
+-- !query analysis
+Aggregate [count(1) AS count(1)#xL]
++- Filter isnotnull(st_asbinary(st_geogfromwkb(wkb#x), big-endian))
+   +- SubqueryAlias spark_catalog.default.geodata
+      +- Relation spark_catalog.default.geodata[wkb#x] parquet
 
 
 -- !query

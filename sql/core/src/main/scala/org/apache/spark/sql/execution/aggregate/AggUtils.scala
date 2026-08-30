@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.streaming.{ProjectAggregationBufferExec, StatefulStreamlineAggregateExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -75,13 +76,12 @@ object AggUtils {
       initialInputBufferOffset: Int = 0,
       resultExpressions: Seq[NamedExpression] = Nil,
       child: SparkPlan): SparkPlan = {
-    val useHash = Aggregate.supportsHashAggregate(
+    val useHash = child.conf.useHashAggregation && Aggregate.supportsHashAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes), groupingExpressions)
 
     val forceObjHashAggregate = forceApplyObjectHashAggregate(child.conf)
-    val forceSortAggregate = forceApplySortAggregate(child.conf)
 
-    if (useHash && !forceSortAggregate && !forceObjHashAggregate) {
+    if (useHash && !forceObjHashAggregate) {
       HashAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
         isStreaming = isStreaming,
@@ -97,7 +97,7 @@ object AggUtils {
       val useObjectHash = Aggregate.supportsObjectHashAggregate(
         aggregateExpressions, groupingExpressions)
 
-      if (forceObjHashAggregate || (objectHashEnabled && useObjectHash && !forceSortAggregate)) {
+      if (forceObjHashAggregate || (objectHashEnabled && useObjectHash)) {
         ObjectHashAggregateExec(
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
           isStreaming = isStreaming,
@@ -129,6 +129,36 @@ object AggUtils {
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
     // Check if we can use HashAggregate.
+
+    // When partial aggregation is bypassed, skip the pre-shuffle partial aggregation and run a
+    // single Complete-mode aggregation after the shuffle. This can improve performance when the
+    // group cardinality is high and the pre-shuffle reduction ratio is low.
+    //
+    // The bypass is only beneficial when there are grouping keys (groupingExpressions.nonEmpty):
+    // global aggregations (no GROUP BY) always produce a single output row, so the pre-shuffle
+    // partial aggregation achieves the maximum possible reduction ratio and should never be
+    // skipped. Bypassing a global aggregation would shuffle all raw rows to a single partition
+    // with no benefit, which is strictly worse than the normal Partial+Final path.
+    val hasGroupingKeys = groupingExpressions.nonEmpty
+    //
+    // session_window requires MergingSessionsExec (inserted below via mayAppendMergingSessionExec)
+    // to sort and merge overlapping sessions before the final aggregation. The bypass is skipped
+    // when a session_window grouping key is present so that the normal Partial+Merge+Final path
+    // runs and MergingSessionsExec is correctly inserted.
+    val hasSessionWindow = groupingExpressions.exists(_.metadata.contains(SessionWindow.marker))
+    if (child.conf.bypassPartialAggregation && hasGroupingKeys && !hasSessionWindow) {
+      val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
+      val completeAggregateAttributes = completeAggregateExpressions.map(_.resultAttribute)
+      val completeAggregate = createAggregate(
+        requiredChildDistributionExpressions = Some(groupingExpressions),
+        groupingExpressions = groupingExpressions,
+        aggregateExpressions = completeAggregateExpressions,
+        aggregateAttributes = completeAggregateAttributes,
+        initialInputBufferOffset = 0,
+        resultExpressions = resultExpressions,
+        child = child)
+      return completeAggregate :: Nil
+    }
 
     // 1. Create an Aggregate Operator for partial aggregations.
 
@@ -397,6 +427,95 @@ object AggUtils {
   }
 
   /**
+   * Plans a "streamlined" streaming aggregation using the following progression:
+   * (Here the term "streamline" represents the loop of "read-process-output" for each input.)
+   *
+   *  - Initialize Aggregation Buffer (Passthrough aggregation)
+   *  - Shuffle
+   *  - Streamlined Stateful Aggregation
+   *    - For each input, do the following
+   *      - Read the previous value for grouping key in state store
+   *      - Merge the input and previous value (if any)
+   *      - Store the new value to the state store
+   *  - Complete (output the current result of the aggregation)
+   *
+   * The concept is to aggregate only between input and the state store, enabling an output to
+   * be available just from processing a single input. In update mode, each input will produce
+   * an output, which won't have any blocking operation in real time mode, leading to the
+   * lowest output latency.
+   */
+  def planStreamlineStreamingAggregation(
+      groupingExpressions: Seq[NamedExpression],
+      functionsWithoutDistinct: Seq[AggregateExpression],
+      resultExpressions: Seq[NamedExpression],
+      stateFormatVersion: Int,
+      child: SparkPlan): Seq[SparkPlan] = {
+    val groupingAttributes = groupingExpressions.map(_.toAttribute)
+
+    val initAggBuffer: SparkPlan = {
+      val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
+      val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
+
+      ProjectAggregationBufferExec(
+        numShufflePartitions = None,
+        groupingExpressions = groupingExpressions,
+        aggregateExpressions = aggregateExpressions,
+        aggregateAttributes = aggregateAttributes,
+        resultExpressions = groupingAttributes ++
+          aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
+        isFinalAggregate = false,
+        child = child)
+    }
+
+    val aggregate: SparkPlan = {
+      val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
+      val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
+
+      StatefulStreamlineAggregateExec(
+        requiredChildDistributionExpressions =
+          Some(groupingAttributes),
+        groupingExpressions = groupingAttributes,
+        aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
+        aggregateAttributes = aggregateAttributes,
+        initialInputBufferOffset = groupingAttributes.length,
+        resultExpressions = groupingAttributes ++
+          aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
+        isFinalAggregate = false,
+        numShufflePartitions = None,
+        outputMode = None,
+        stateFormatVersion = stateFormatVersion,
+        child = initAggBuffer,
+        stateInfo = None,
+        eventTimeWatermarkForLateEvents = None,
+        eventTimeWatermarkForEviction = None)
+    }
+
+    val finalAndCompleteAggregate: SparkPlan = {
+      val finalAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Final))
+      // The attributes of the final aggregation buffer, which is presented as input to the result
+      // projection:
+      val finalAggregateAttributes = finalAggregateExpressions.map(_.resultAttribute)
+
+      ProjectAggregationBufferExec(
+        requiredChildDistributionExpressions = Some(groupingAttributes),
+        numShufflePartitions = None,
+        // The child here is the post-shuffle output of the stateful aggregate, whose grouping
+        // columns are already resolved attributes, so group by those rather than by the original
+        // expressions. This matches planStreamingAggregation's final stage and the stateful
+        // aggregate above, both of which group by the attributes.
+        groupingExpressions = groupingAttributes,
+        aggregateExpressions = finalAggregateExpressions,
+        aggregateAttributes = finalAggregateAttributes,
+        initialInputBufferOffset = groupingAttributes.length,
+        resultExpressions = resultExpressions,
+        isFinalAggregate = true,
+        child = aggregate)
+    }
+
+    finalAndCompleteAggregate :: Nil
+  }
+
+  /**
    * Plans a streaming session aggregation using the following progression:
    *
    *  - Partial Aggregation
@@ -582,15 +701,6 @@ object AggUtils {
 
       case None => partialAggregate
     }
-  }
-
-  /**
-   * Returns whether a sort aggregate should be force applied.
-   * The config key is hard-coded because it's testing only and should not be exposed.
-   */
-  private def forceApplySortAggregate(conf: SQLConf): Boolean = {
-    Utils.isTesting &&
-      conf.getConfString("spark.sql.test.forceApplySortAggregate", "false") == "true"
   }
 
   /**

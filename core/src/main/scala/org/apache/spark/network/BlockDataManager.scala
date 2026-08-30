@@ -63,7 +63,9 @@ trait BlockDataManager {
       blockId: BlockId,
       data: ManagedBuffer,
       level: StorageLevel,
-      classTag: ClassTag[_]): Boolean
+      classTag: ClassTag[_],
+      checksum: Option[Long] = None,
+      verifySealedChecksum: Boolean = false): Boolean
 
   /**
    * Put the given block that will be received as a stream.
@@ -74,7 +76,9 @@ trait BlockDataManager {
   def putBlockDataAsStream(
       blockId: BlockId,
       level: StorageLevel,
-      classTag: ClassTag[_]): StreamCallbackWithID
+      classTag: ClassTag[_],
+      checksum: Option[Long] = None,
+      verifySealedChecksum: Boolean = false): StreamCallbackWithID
 
   /**
    * Release locks acquired by [[putBlockData()]] and [[getLocalBlockData()]].

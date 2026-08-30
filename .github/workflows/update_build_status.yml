@@ -26,13 +26,13 @@ on:
 jobs:
   update:
     name: Update build status
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     permissions:
       actions: read
       checks: write
     steps:
       - name: "Update build status"
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -46,6 +46,72 @@ jobs:
             // See https://docs.github.com/en/graphql/reference/enums#mergestatestatus
             const maybeReady = ['behind', 'clean', 'draft', 'has_hooks', 'unknown', 'unstable'];
 
+            // A fork workflow-run lookup can fail transiently (server errors, network drops, or
+            // REST rate limiting, which GitHub returns as 403 with rate-limit headers or 429).
+            // These should be retried on a later scheduled pass rather than reported to the
+            // contributor as a broken fork. Any other failure (e.g. a 404 for a missing
+            // build_main.yml) is treated as permanent.
+            // https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
+            const isTransientError = (e) => {
+              if (!e.status) return true;
+              if (e.status >= 500 || e.status == 429) return true;
+              if (e.status == 403) {
+                const headers = (e.response && e.response.headers) || {};
+                return !!headers['retry-after'] || headers['x-ratelimit-remaining'] === '0'
+                  || /rate limit/i.test(e.message || '');
+              }
+              return false;
+            };
+
+            // List all check-runs for a commit. per_page=100 (not the default 30) matches
+            // notify_test_workflow.yml: a SHA can accumulate more check-runs than one page
+            // (CI matrix, external checks, duplicate Build checks from reopened PRs), which
+            // could otherwise push the target Build check off the first page and leave the PR
+            // stuck in 'queued' forever.
+            const listCheckRuns = (ref) => github.paginate(
+              'GET /repos/{owner}/{repo}/commits/{ref}/check-runs',
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: ref,
+                per_page: 100
+              }
+            );
+
+            // Parse a Build check's output text into the {owner, repo, run_id} the run fetch
+            // needs, or return null if it is absent, malformed, or missing a field. JSON.parse
+            // succeeding is not enough: a check from an older version, a manual run, or another
+            // app can carry null, {}, or unrelated JSON that parses but lacks these fields, and
+            // the run fetch would then fail.
+            const parseRunParams = (cr) => {
+              let params;
+              try {
+                params = JSON.parse(cr.output.text);
+              } catch (error) {
+                return null;
+              }
+              if (!params || !params.owner || !params.repo || !params.run_id) {
+                return null;
+              }
+              return params;
+            };
+
+            // A Build check this updater can actually sync: not action_required (notify writes
+            // that when it missed the fork run, and it carries no run params) and with output
+            // text carrying the {owner, repo, run_id} needed to fetch the fork run. A Build check
+            // with empty/malformed/fieldless output can never be synced, so it must not count as
+            // present - otherwise it would suppress the backfill and leave the PR stuck with an
+            // unsyncable check.
+            const isSyncableBuildCheck = (cr) =>
+              cr.name == 'Build' && cr.conclusion != 'action_required'
+                && parseRunParams(cr) != null;
+
+            // An action_required Build check: the contributor-facing "enable Actions / rebase"
+            // status notify writes when it found no fork run. It is not syncable, but it already
+            // carries the guidance the no-run backfill branch would create, so it is "useful".
+            const isActionRequiredBuildCheck = (cr) =>
+              cr.name == 'Build' && cr.conclusion == 'action_required';
+
             // Iterate open PRs
             for await (const prs of github.paginate.iterator(endpoint,params)) {
               // Each page
@@ -53,17 +119,40 @@ jobs:
                 console.log('SHA: ' + pr.head.sha)
                 console.log('  Mergeable status: ' + pr.mergeable_state)
                 if (pr.mergeable_state == null || maybeReady.includes(pr.mergeable_state)) {
-                  const checkRuns = await github.request('GET /repos/{owner}/{repo}/commits/{ref}/check-runs', {
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    ref: pr.head.sha
-                  })
+                  const checkRuns = await listCheckRuns(pr.head.sha)
 
-                  // Iterator GitHub Checks in the PR
-                  for await (const cr of checkRuns.data.check_runs) {
+                  // Does this SHA already carry an action_required Build check? notify (or an
+                  // earlier pass of this updater) writes one when no fork run was found. It is
+                  // not syncable, so it never suppresses the backfill below - which means a PR
+                  // that permanently lacks a fork run (Actions disabled, old master) would
+                  // otherwise re-poll on every 15-minute pass forever. When one is already
+                  // present, the backfill's re-poll is unnecessary (see below).
+                  const hasActionRequiredBuildCheck = checkRuns.some(isActionRequiredBuildCheck)
+
+                  // Track whether a syncable Build check exists (see isSyncableBuildCheck).
+                  // notify_test_workflow.yml creates one per push; if that job never completed
+                  // (e.g. cancelled while starved of an ASF runner) the check is missing and the
+                  // backfill after this loop recreates it. Sync every match (no early break): a
+                  // SHA can carry more than one Build check (reopened PRs, or a backfill that
+                  // raced notify). Branch protection evaluates the newest check-run of a given
+                  // name, so syncing only the first would leave a newer duplicate stuck in
+                  // 'queued' and block the PR.
+                  let syncableBuildCheck = false
+                  // Build checks whose referenced fork run is permanently gone (404). They parse
+                  // as syncable (their output still carries valid run params) but can never be
+                  // synced, so the recheck below must not let them suppress the backfill.
+                  const staleCheckIds = new Set()
+                  for await (const cr of checkRuns) {
                     if (cr.name == 'Build' && cr.conclusion != "action_required") {
-                      // text contains parameters to make request in JSON.
-                      const params = JSON.parse(cr.output.text)
+                      // Skip a check with unusable output (see parseRunParams) instead of
+                      // aborting the whole scheduled run, which would block every PR queued
+                      // behind it. Leaving syncableBuildCheck false lets the backfill below
+                      // replace it rather than stranding the PR.
+                      const params = parseRunParams(cr)
+                      if (!params) {
+                        console.error('Skipping Build check ' + cr.id + ' with unusable output')
+                        continue
+                      }
 
                       // Get the workflow run in the forked repository
                       let run
@@ -71,10 +160,22 @@ jobs:
                         run = await github.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}', params)
                       } catch (error) {
                         console.error(error)
-                        // Run not found. This can happen when the PR author removes GitHub Actions runs or
-                        // disables GitHub Actions.
+                        // The referenced fork run could not be fetched. A transient failure (5xx,
+                        // rate limit) should be retried on a later pass, so count the check as
+                        // syncable to suppress the backfill this pass. A permanent not-found (404:
+                        // the PR author deleted the fork run or disabled GitHub Actions) means this
+                        // check can never be synced, so leave syncableBuildCheck false and let the
+                        // backfill below recreate a useful status - otherwise the flag would stay
+                        // set and leave Build 'queued' indefinitely on every pass.
+                        if (isTransientError(error)) {
+                          syncableBuildCheck = true
+                        } else {
+                          staleCheckIds.add(cr.id)
+                        }
                         continue
                       }
+                      // Only now that the run is fetched is this a check we can actually sync.
+                      syncableBuildCheck = true
 
                       // Keep syncing the status of the checks
                       if (run.data.status == 'completed') {
@@ -89,18 +190,196 @@ jobs:
                           details_url: run.data.details_url
                         })
                       } else {
-                        console.log('    Run ' + cr.id + ': set status (' + run.data.status + ')')
+                        // PATCH /check-runs accepts only queued | in_progress | completed,
+                        // but workflow_run may also report requested / waiting / pending.
+                        const status = run.data.status == 'in_progress' ? 'in_progress' : 'queued'
+                        console.log('    Run ' + cr.id + ': set status (' + run.data.status + ' -> ' + status + ')')
                         const response = await github.request('PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}', {
                           owner: context.repo.owner,
                           repo: context.repo.repo,
                           check_run_id: cr.id,
                           output: cr.output,
-                          status: run.data.status,
+                          status: status,
                           details_url: run.data.details_url
                         })
                       }
+                    }
+                  }
 
-                      break
+                  // No syncable Build check: notify_test_workflow.yml never created one, or only
+                  // a stale action_required one exists. Recreate it here, mirroring notify. Skip
+                  // if the head repo was deleted.
+                  if (!syncableBuildCheck && pr.head.repo) {
+                    const forkOwner = pr.head.repo.owner.login
+                    const forkRepo = pr.head.repo.name
+                    // Look up the fork's build_main.yml runs for the PR branch, matching
+                    // notify_test_workflow.yml. Filter by branch (head.ref), not just head_sha:
+                    // build_main.yml skips fork pushes to master (the "Sync fork" case), so the
+                    // same SHA can carry a skipped/unrelated run on another branch, and a
+                    // head_sha-only lookup could attach the Build check to that run instead of
+                    // the PR branch's. Then pick the run whose head_sha equals the settled head
+                    // SHA so stale runs from earlier commits on the branch cannot drive the
+                    // decision. Re-poll a few times: the run is often not yet registered right
+                    // after a push, and we must not create the sticky action_required check below
+                    // over registration lag. A transient lookup error (5xx, network, rate limit)
+                    // aborts to a later scheduled pass; any other error is treated as "no runs".
+                    //
+                    // When an action_required check already exists that lag risk is already
+                    // realized, so a single sleepless lookup suffices - this stops a PR that
+                    // permanently lacks a fork run (Actions disabled, old master) from re-polling
+                    // (3 lookups plus two 3s sleeps) on every 15-minute pass forever, while still
+                    // promoting it to a queued check on whichever pass first sees a run appear.
+                    const attempts = hasActionRequiredBuildCheck ? 1 : 3
+                    let matched_run
+                    let transient = false
+                    for (let attempt = 0; attempt < attempts; attempt++) {
+                      let forkRuns
+                      try {
+                        const runs = await github.request(
+                          'GET /repos/{owner}/{repo}/actions/workflows/{id}/runs',
+                          {
+                            owner: forkOwner,
+                            repo: forkRepo,
+                            id: 'build_main.yml',
+                            branch: pr.head.ref
+                          }
+                        )
+                        forkRuns = runs.data.workflow_runs
+                      } catch (error) {
+                        console.error(error)
+                        // Transient -> retry on a later pass. Permanent (e.g. a 404 for a
+                        // missing build_main.yml) -> there is no run to find and it will not
+                        // appear in 3s, so stop polling with matched_run undefined and let the
+                        // action_required branch below handle it. Either way, do not burn the
+                        // remaining retries and sleeps on an error that cannot resolve here.
+                        if (isTransientError(error)) {
+                          transient = true
+                        }
+                        break
+                      }
+                      matched_run = forkRuns.find(r => r.head_sha == pr.head.sha)
+                      if (matched_run) {
+                        break
+                      }
+                      if (attempt < attempts - 1) {
+                        await new Promise(resolve => setTimeout(resolve, 3000))
+                      }
+                    }
+                    if (transient) {
+                      console.log('  Fork run lookup failed transiently; will retry next pass')
+                      continue
+                    }
+
+                    // An action_required Build check already exists and we still found no run:
+                    // the guidance check the no-run branch below would create is already present,
+                    // so there is nothing to backfill. Skip the recheck listing and the create
+                    // outright. (This is only reachable via the single, sleepless lookup above,
+                    // so there was no ~6s window for notify to have created a syncable check in
+                    // the meantime; even if it had, skipping is safe - with no run there is
+                    // nothing to promote to 'queued' this pass anyway.)
+                    if (hasActionRequiredBuildCheck && !matched_run) {
+                      console.log('  action_required Build check present; nothing to backfill')
+                      continue
+                    }
+
+                    // Recheck for an existing Build check immediately before creating one. The
+                    // poll above can span up to ~6 seconds, during which notify_test_workflow.yml
+                    // may create the check; this recheck skips the backfill in that common case.
+                    // It narrows but cannot fully close the window (there is no atomic
+                    // create-if-absent, and the list endpoint is eventually consistent) - the
+                    // sync loop above stays tolerant of duplicates so any that slip through still
+                    // converge.
+                    //
+                    // Skip the backfill only if a check that is already at least as useful as the
+                    // one we would create exists. When we found a fork run, that means a syncable
+                    // check (the queued check we would create). When we found no run, that means a
+                    // syncable OR an action_required check (the guidance check we would create).
+                    // In both cases a malformed/fieldless check does NOT count - the sync loop
+                    // cannot sync it, so refusing here would strand the PR on an unsyncable check;
+                    // we fall through and create a usable one instead. A check whose fork run the
+                    // sync loop just found permanently gone (staleCheckIds) is likewise not useful,
+                    // even though its output still parses as syncable, so it too is excluded.
+                    //
+                    // The recheck listing and the create below are wrapped so a failure on one
+                    // PR degrades to "skip this PR, retry next pass" rather than aborting the
+                    // whole scheduled run and starving every PR later in the iteration - the same
+                    // reason the sync loop above guards its calls.
+                    try {
+                      const recheck = await listCheckRuns(pr.head.sha)
+                      const existingBuild = recheck.some(cr =>
+                        (isSyncableBuildCheck(cr) && !staleCheckIds.has(cr.id))
+                          || (!matched_run && isActionRequiredBuildCheck(cr)))
+                      if (existingBuild) {
+                        console.log('  Build check appeared during polling; skipping backfill')
+                        continue
+                      }
+
+                      if (matched_run) {
+                        // A run exists for this head commit; point the check at it and let the
+                        // next pass sync its status.
+                        const actions_url = 'https://github.com/' + forkOwner + '/' + forkRepo
+                          + '/actions/runs/' + matched_run.id
+                        console.log('  Backfilling missing Build check -> ' + actions_url)
+                        await github.rest.checks.create({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          name: 'Build',
+                          head_sha: pr.head.sha,
+                          status: 'queued',
+                          output: {
+                            title: 'Test results',
+                            summary: '[See test results](' + actions_url + ')\n\n'
+                              + 'If the tests fail for reasons unrelated to this pull request, '
+                              + 'please rerun the workflow in your forked repository.\n'
+                              + 'If the failures are related to this pull request, '
+                              + 'please investigate them and push follow-up changes.',
+                            text: JSON.stringify({
+                              owner: forkOwner,
+                              repo: forkRepo,
+                              run_id: matched_run.id
+                            })
+                          },
+                          details_url: actions_url
+                        })
+                      } else {
+                        // No run for this head commit after re-polling (empty result, permanent
+                        // lookup failure, or build_main.yml missing): Actions is disabled, the
+                        // branch is on an old master, or the commit never triggered a run. Mirror
+                        // notify's action_required check so the PR carries a required status
+                        // telling the contributor how to fix it.
+                        console.log('  No forked run for head SHA; creating action_required check')
+                        await github.rest.checks.create({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          name: 'Build',
+                          head_sha: pr.head.sha,
+                          status: 'completed',
+                          conclusion: 'action_required',
+                          output: {
+                            title: 'Workflow run detection failed',
+                            summary: `
+            Unable to detect the workflow run for testing the changes in your PR.
+
+            1. If you did not enable GitHub Actions in your forked repository, please enable it by clicking the button as shown in the image below. See also [Managing Github Actions Settings for a repository](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository) for more details.
+            2. It is possible your branch is based on the old \`master\` branch in Apache Spark, please sync your branch to the latest master branch. For example as below:
+                \`\`\`bash
+                git fetch upstream
+                git rebase upstream/master
+                git push origin YOUR_BRANCH --force
+                \`\`\``,
+                            images: [
+                              {
+                                alt: 'enabling workflows button',
+                                image_url: 'https://raw.githubusercontent.com/apache/spark/master/.github/workflows/images/workflow-enable-button.png'
+                              }
+                            ]
+                          }
+                        })
+                      }
+                    } catch (error) {
+                      console.error('  Backfill failed for this PR; will retry next pass')
+                      console.error(error)
+                      continue
                     }
                   }
                 }

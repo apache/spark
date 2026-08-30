@@ -24,11 +24,13 @@ import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.execution.command.{DescribeTableJson, Field, TableColumn, Type}
+import org.apache.spark.sql.execution.command.{DescribeTableJson, Field, SqlPathEntry, TableColumn, Type}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 /**
  * This base suite contains unified tests for the `DESCRIBE TABLE` command that checks V1
@@ -606,6 +608,36 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
       }
   }
 
+  test("DESCRIBE EXTENDED AS JSON for view shows SQL Path when PATH is enabled") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      withNamespaceAndTable("ns", "table") { t =>
+        withView("path_view") {
+          spark.sql(s"CREATE TABLE $t (id INT) USING parquet")
+          spark.sql("SET PATH = spark_catalog.default, system.builtin")
+          spark.sql(s"CREATE VIEW path_view AS SELECT * FROM $t")
+
+          // AS JSON
+          val jsonDf = spark.sql("DESCRIBE EXTENDED path_view AS JSON")
+          val jsonStr = jsonDf.select("json_metadata").head().getString(0)
+          val parsed = parse(jsonStr).extract[DescribeTableJson]
+          assert(parsed.sql_path.isDefined, s"sql_path should be present, got: $jsonStr")
+          assert(parsed.sql_path.get == List(
+            SqlPathEntry("spark_catalog", List("default")),
+            SqlPathEntry("system", List("builtin"))),
+            s"sql_path entries should match exactly, got: ${parsed.sql_path.get}")
+
+          // Regular DESCRIBE EXTENDED
+          val extDf = spark.sql("DESCRIBE EXTENDED path_view")
+          val rows = extDf.collect().map(r =>
+            (0 until r.length).map(r.getString).mkString("\t"))
+          assert(rows.exists(_.contains(
+            "spark_catalog.default, system.builtin")),
+            s"DESCRIBE EXTENDED should show exact SQL Path, got:\n${rows.mkString("\n")}")
+        }
+      }
+    }
+  }
+
   test("DESCRIBE AS JSON for column throws Analysis Exception") {
     withNamespaceAndTable("ns", "table") { t =>
       val tableCreationStr =
@@ -841,6 +873,40 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         .collect().head.getString(1).trim
 
       assert(timeRegex.matches(createdTimeValue))
+    }
+  }
+
+  test("DESCRIBE TABLE is resilient to corrupt partition metadata") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      // Simulate corrupt metadata where the declared partition column does not match the
+      // last field in the table schema.
+      val table = CatalogTable(
+        identifier = TableIdentifier("table", Some("ns")),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat.empty,
+        schema = new StructType()
+          .add("id", IntegerType)
+          .add("actual_part", StringType),
+        provider = Some(getProvider()),
+        partitionColumnNames = Seq("declared_part"))
+      spark.sessionState.catalog.createTable(table, ignoreIfExists = false)
+
+      val expectedInvalidInfo = Seq(
+        Row("# Invalid Partition Information", "", ""),
+        Row("Declared Partition Columns", "[declared_part]", ""),
+        Row("Last Columns in Table Schema", "[actual_part]", ""))
+
+      Seq("DESCRIBE TABLE", "DESCRIBE TABLE EXTENDED").foreach { command =>
+        val description = spark.sql(s"$command $tbl").collect().toSeq
+        assert(description.contains(Row("id", "int", null)))
+        assert(description.contains(Row("actual_part", "string", null)))
+        assert(description.containsSlice(expectedInvalidInfo))
+        assert(!description.exists(_.getString(0) == "# Partition Information"))
+      }
+
+      val jsonValue = spark.sql(s"DESCRIBE TABLE EXTENDED $tbl AS JSON").head().getString(0)
+      val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
+      assert(parsedOutput.partition_columns === Some(List("declared_part")))
     }
   }
 

@@ -145,6 +145,14 @@ object TypeCoercion extends TypeCoercionBase {
       => if (conf.castDatetimeToString) Some(st) else Some(TimestampType)
     case (TimestampType, st: StringType)
       => if (conf.castDatetimeToString) Some(st) else Some(TimestampType)
+    // Mirror the micros TimestampType (LTZ) arms above: nanos TIMESTAMP_LTZ(p) honors
+    // castDatetimeToString. Nanos TIMESTAMP_NTZ(p) intentionally has no arm here and, exactly like
+    // micros TimestampNTZType, falls through to the config-blind canPromoteAsInBinaryComparison
+    // line below -- so the LTZ and NTZ families stay consistent across micros and nanos.
+    case (st: StringType, tsNanos: TimestampLTZNanosType)
+      => if (conf.castDatetimeToString) Some(st) else Some(tsNanos)
+    case (tsNanos: TimestampLTZNanosType, st: StringType)
+      => if (conf.castDatetimeToString) Some(st) else Some(tsNanos)
     case (st: StringType, NullType) => Some(st)
     case (NullType, st: StringType) => Some(st)
 
@@ -194,6 +202,10 @@ object TypeCoercion extends TypeCoercionBase {
   private def implicitCast(inType: DataType, expectedType: AbstractDataType): Option[DataType] = {
     // Note that ret is nullable to avoid typing a lot of Some(...) in this local scope.
     // We wrap immediately an Option after this.
+    // CHAR/VARCHAR promotion is checked first: the acceptsType case below would otherwise
+    // accept the constrained type unchanged, since CharType and VarcharType extend StringType.
+    charVarcharToPlainString(inType, expectedType).foreach(dt => return Some(dt))
+
     @Nullable val ret: DataType = (inType, expectedType) match {
       // If the expected type is already a parent of the input type, no need to cast.
       case _ if expectedType.acceptsType(inType) => inType
@@ -228,6 +240,7 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: StringType, target: NumericType) => target
       case (_: StringType, datetime: DatetimeType) => datetime
       case (_: StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
+      case (_: StringType, AnyTimeType) => AnyTimeType.defaultConcreteType
       case (_: StringType, BinaryType) => BinaryType
       // Cast any atomic type to string except if there are strings with different collations.
       case (any: AtomicType, st: StringType) if !any.isInstanceOf[StringType] => st

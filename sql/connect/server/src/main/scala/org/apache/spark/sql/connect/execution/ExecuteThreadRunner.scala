@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 
 import com.google.protobuf.Message
 
-import org.apache.spark.SparkSQLException
+import org.apache.spark.{SparkContext, SparkSQLException}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.connect.common.ProtoUtils
@@ -224,6 +224,9 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         "callSite.short",
         s"Spark Connect - ${Utils.abbreviate(debugString, 128)}")
       session.sparkContext.setLocalProperty("callSite.long", Utils.abbreviate(debugString, 2048))
+      session.sparkContext.setLocalProperty(
+        SparkContext.SPARK_CONNECT_OPERATION_ID_PROPERTY,
+        executeHolder.operationId)
 
       executeHolder.request.getPlan.getOpTypeCase match {
         case proto.Plan.OpTypeCase.ROOT | proto.Plan.OpTypeCase.COMMAND =>

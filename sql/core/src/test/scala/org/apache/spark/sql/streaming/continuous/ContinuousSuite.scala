@@ -185,6 +185,24 @@ class ContinuousSuite extends ContinuousSuiteBase {
       "Continuous processing does not support current time operations."))
   }
 
+  test("SPARK-57837: nanosecond current-timestamp functions are rejected") {
+    // current_timestamp(p) -> CurrentTimestampNanos and localtimestamp(p) -> LocalTimestampNanos
+    // must be rejected in continuous processing just like their microsecond forms. The nanos
+    // types are enabled by default under Utils.isTesting.
+    Seq("current_timestamp(9)", "now(9)", "localtimestamp(9)").foreach { fn =>
+      val input = ContinuousMemoryStream[Int]
+      val df = input.toDF().selectExpr(fn)
+
+      val except = intercept[AnalysisException] {
+        testStream(df)(StartStream())
+      }
+
+      assert(except.message.contains(
+        "Continuous processing does not support current time operations."),
+        s"$fn should be rejected for continuous processing")
+    }
+  }
+
   test("subquery alias") {
     withTempView("memory") {
       val input = ContinuousMemoryStream[Int]

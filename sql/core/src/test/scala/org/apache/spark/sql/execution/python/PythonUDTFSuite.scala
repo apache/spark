@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.{IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.{IntegratedUDFTestUtils, Row}
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Expression, FunctionTableSubqueryArgumentExpression, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, OneRowRelation, Project, Repartition, RepartitionByExpression, Sort, SubqueryAlias}
@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
-class PythonUDTFSuite extends QueryTest with SharedSparkSession {
+class PythonUDTFSuite extends SharedSparkSession {
 
   import testImplicits._
 
@@ -410,12 +410,8 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
           |  WITH SINGLE PARTITION
           |  ORDER BY device_id, data_ds)
           |""".stripMargin)),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" ->
-        ("The table function call includes a table argument with an invalid " +
-          "partitioning/ordering specification: the ORDER BY clause included multiple " +
-          "expressions without parentheses surrounding them; please add parentheses around these " +
-          "expressions and then retry the query again")),
+      condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_TABLE_ARGUMENT_PARTITIONING",
+      parameters = Map("clause" -> "ORDER BY"),
       context = ExpectedContext(
         fragment = "TABLE(SELECT 1 AS device_id, 2 AS data_ds)\n  " +
           "WITH SINGLE PARTITION\n  " +

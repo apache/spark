@@ -25,10 +25,10 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
-import org.apache.spark.unsafe.types.GeographyVal;
-import org.apache.spark.unsafe.types.GeometryVal;
+import org.apache.spark.unsafe.types.BinaryView;
 
 /**
  * This class wraps an array of {@link ColumnVector} and provides a row view.
@@ -74,10 +74,8 @@ public final class ColumnarBatchRow extends InternalRow {
           row.update(i, getUTF8String(i).copy());
         } else if (pdt instanceof PhysicalBinaryType) {
           row.update(i, getBinary(i));
-        } else if (pdt instanceof PhysicalGeographyType) {
-          row.update(i, getGeography(i));
-        } else if (pdt instanceof PhysicalGeometryType) {
-          row.update(i, getGeometry(i));
+        } else if (pdt instanceof PhysicalBinaryViewType) {
+          row.update(i, getBinaryView(i).copy());
         } else if (pdt instanceof PhysicalDecimalType t) {
           row.setDecimal(i, getDecimal(i, t.precision(), t.scale()), t.precision());
         } else if (pdt instanceof PhysicalStructType t) {
@@ -88,6 +86,11 @@ public final class ColumnarBatchRow extends InternalRow {
           row.update(i, getMap(i).copy());
         } else if (pdt instanceof PhysicalVariantType) {
           row.update(i, getVariant(i));
+        } else if (pdt instanceof PhysicalTimestampNTZNanosType) {
+          // TimestampNanosVal is immutable, so it can be shared without copying.
+          row.update(i, getTimestampNTZNanos(i));
+        } else if (pdt instanceof PhysicalTimestampLTZNanosType) {
+          row.update(i, getTimestampLTZNanos(i));
         } else {
           throw new RuntimeException("Not implemented. " + dt);
         }
@@ -141,18 +144,23 @@ public final class ColumnarBatchRow extends InternalRow {
   }
 
   @Override
-  public GeographyVal getGeography(int ordinal) {
-    return columns[ordinal].getGeography(rowId);
-  }
-
-  @Override
-  public GeometryVal getGeometry(int ordinal) {
-    return columns[ordinal].getGeometry(rowId);
+  public BinaryView getBinaryView(int ordinal) {
+    return columns[ordinal].getBinaryView(rowId);
   }
 
   @Override
   public CalendarInterval getInterval(int ordinal) {
     return columns[ordinal].getInterval(rowId);
+  }
+
+  @Override
+  public TimestampNanosVal getTimestampNTZNanos(int ordinal) {
+    return columns[ordinal].getTimestampNTZNanos(rowId);
+  }
+
+  @Override
+  public TimestampNanosVal getTimestampLTZNanos(int ordinal) {
+    return columns[ordinal].getTimestampLTZNanos(rowId);
   }
 
   @Override
@@ -195,10 +203,8 @@ public final class ColumnarBatchRow extends InternalRow {
       return getUTF8String(ordinal);
     } else if (dataType instanceof BinaryType) {
       return getBinary(ordinal);
-    } else if (dataType instanceof GeographyType) {
-      return getGeography(ordinal);
-    } else if (dataType instanceof GeometryType) {
-      return getGeometry(ordinal);
+    } else if (dataType instanceof GeographyType || dataType instanceof GeometryType) {
+      return getBinaryView(ordinal);
     } else if (dataType instanceof DecimalType t) {
       return getDecimal(ordinal, t.precision(), t.scale());
     } else if (dataType instanceof DateType) {
@@ -207,6 +213,10 @@ public final class ColumnarBatchRow extends InternalRow {
       return getLong(ordinal);
     } else if (dataType instanceof TimestampNTZType) {
       return getLong(ordinal);
+    } else if (dataType instanceof TimestampNTZNanosType) {
+      return getTimestampNTZNanos(ordinal);
+    } else if (dataType instanceof TimestampLTZNanosType) {
+      return getTimestampLTZNanos(ordinal);
     } else if (dataType instanceof ArrayType) {
       return getArray(ordinal);
     } else if (dataType instanceof StructType structType) {
@@ -215,6 +225,8 @@ public final class ColumnarBatchRow extends InternalRow {
       return getMap(ordinal);
     } else if (dataType instanceof VariantType) {
       return getVariant(ordinal);
+    } else if (dataType instanceof UserDefinedType<?> udt) {
+      return get(ordinal, udt.sqlType());
     } else {
       throw new SparkUnsupportedOperationException(
         "_LEGACY_ERROR_TEMP_3152", Map.of("dataType", String.valueOf(dataType)));

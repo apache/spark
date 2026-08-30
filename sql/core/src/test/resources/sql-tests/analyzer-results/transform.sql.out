@@ -495,9 +495,10 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
+  "errorClass" : "INVALID_SQL_SYNTAX.UNSUPPORTED_ROW_FORMAT_LINES_TERMINATED_BY",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "msg" : "LINES TERMINATED BY only supports newline '\\n' right now: @"
+    "value" : "@"
   },
   "queryContext" : [ {
     "objectType" : "",

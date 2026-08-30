@@ -21,7 +21,6 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 # This file contains test cases for 'Time series-related'
@@ -122,7 +121,6 @@ class FrameTimeSeriesMixin:
 class FrameTimeSeriesTests(
     FrameTimeSeriesMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

@@ -333,8 +333,10 @@ class TransformWithStateInPySparkPythonPreInitRunner(
 
   override def stop(): Unit = {
     super.stop()
+    if (daemonThread != null) {
+      daemonThread.interrupt()
+    }
     closeServerSocketChannelSilently(stateServerSocket)
-    daemonThread.interrupt()
   }
 
   private def startStateServer(): Unit = {

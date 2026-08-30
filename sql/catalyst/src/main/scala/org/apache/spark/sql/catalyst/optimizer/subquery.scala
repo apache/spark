@@ -71,10 +71,15 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       outerPlan: LogicalPlan,
       sub: LogicalPlan,
       joinCond: Option[Expression]): LogicalPlan = {
-    if (SQLConf.get.decorrelateInnerQueryEnabledForExistsIn) {
+    if (SQLConf.get.decorrelateInnerQueryEnabledForExistsIn && joinCond.isDefined) {
       DecorrelateInnerQuery.rewriteDomainJoins(outerPlan,
         sub, splitConjunctivePredicates(joinCond.get))
     } else {
+      // After PullupCorrelatedPredicates, BooleanSimplification can eliminate every
+      // correlated predicate in the subquery (e.g., FALSE AND outer.x = inner.x -> FALSE),
+      // leaving joinCond as None. In this case, no DomainJoin exists in sub because both
+      // joinCond and DomainJoins are produced by the same DecorrelateInnerQuery call --
+      // if there's no join condition, there are no domain joins to rewrite.
       sub
     }
   }
@@ -131,7 +136,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
             case _ => false
           }
         }
-      case _ => false;
+      case _ => false
     }
   }
 
@@ -413,7 +418,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
-          val inConditions = values.zip(sub.output).map(EqualTo.tupled)
+          val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
           // To handle a null-aware predicate not-in-subquery in nested conditions
           // (e.g., `v > 0 OR t1.id NOT IN (SELECT id FROM t2)`), we transform
           // `inCondition` (t1.id=t2.id) into `(inCondition) OR ISNULL(inCondition)`.

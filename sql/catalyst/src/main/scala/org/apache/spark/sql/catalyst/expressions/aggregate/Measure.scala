@@ -30,6 +30,11 @@ import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - this function is used and can only be used to calculate a measure defined in a metric view.",
+  arguments = """
+    Arguments:
+      * expr - The measure defined in a metric view to calculate.
+        An expression of any type.
+  """,
   examples = """
     Examples:
       > SELECT dimension_col, _FUNC_(measure_col)

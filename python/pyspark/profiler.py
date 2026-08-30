@@ -15,7 +15,14 @@
 # limitations under the License.
 #
 
+import atexit
+import cProfile
+import linecache
+import os
+import pstats
+import sys
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -23,16 +30,9 @@ from typing import (
     Optional,
     Tuple,
     Type,
-    TYPE_CHECKING,
     Union,
     cast,
 )
-import cProfile
-import pstats
-import linecache
-import os
-import atexit
-import sys
 
 import pyspark
 from pyspark.accumulators import AccumulatorParam
@@ -410,7 +410,7 @@ class MemoryProfiler(Profiler):
         stats = self.stats()  # dict
         if stats:
             p = os.path.join(path, "udf_%d_memory.txt" % id)
-            with open(p, "w+") as f:
+            with open(p, "w+", encoding="utf-8") as f:
                 self._show_results(stats, stream=f)
 
 

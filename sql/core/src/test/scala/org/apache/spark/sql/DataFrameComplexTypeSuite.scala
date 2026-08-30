@@ -23,19 +23,22 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.objects.MapObjects
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BooleanType, Decimal, DoubleType, IntegerType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{
+  ArrayType, BooleanType, Decimal, DoubleType, IntegerType, LongType, MapType, StringType,
+  StructField, StructType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * A test suite to test DataFrame/SQL functionalities with complex types (i.e. array, struct, map).
  */
-class DataFrameComplexTypeSuite extends QueryTest with SharedSparkSession {
+class DataFrameComplexTypeSuite extends SharedSparkSession {
   import testImplicits._
 
   test("ArrayTransform with scan input") {
@@ -207,6 +210,72 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSparkSession {
     checkAnswer(testMap, Row(Map("abc" -> "cba", "def" -> "fed")) :: Nil)
   }
 
+  test("ArrayAggregate codegen respects widened accumulator nested nullability") {
+    val queries = Seq(
+      """
+        |SELECT aggregate(
+        |  array(1),
+        |  array(1),
+        |  (acc, x) -> array(CAST(NULL AS INT)),
+        |  acc -> acc[0])
+        |""".stripMargin,
+      """
+        |SELECT aggregate(
+        |  array(1),
+        |  map(1, 1),
+        |  (acc, x) -> map(1, CAST(NULL AS INT)),
+        |  acc -> acc[1])
+        |""".stripMargin)
+
+    Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN).foreach {
+      codegenMode =>
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode.toString) {
+          queries.foreach { query =>
+            checkAnswer(sql(query), Row(null))
+          }
+        }
+    }
+  }
+
+  test("ArrayAggregate resolves nested lambda arguments before inspecting their types") {
+    val positionType = StructType(Seq(
+      StructField("turn_idx", LongType, nullable = false),
+      StructField("turn_kind", StringType, nullable = false),
+      StructField("start_message_index", LongType, nullable = false),
+      StructField("previous_start_message_index", LongType, nullable = true)))
+    val positionsType = ArrayType(positionType, containsNull = false)
+    val messages = array(struct(
+      lit("user").as("turn_kind"),
+      lit(0L).as("message_index")))
+    val candidates = filter(
+      transform(messages, message => struct(
+        message.getField("turn_kind").as("turn_kind"),
+        message.getField("message_index").as("message_index"))),
+      candidate => candidate.getField("turn_kind").isNotNull)
+    // The aggregate first sees `candidates` with its transform/filter lambdas still unbound. Those
+    // argument expressions must resolve before the aggregate inspects their complex data types.
+    val lastPosition = aggregate(
+      candidates,
+      array().cast(positionsType),
+      (positions, candidate) => {
+        val previousPosition = try_element_at(positions, lit(-1))
+        when(
+          previousPosition.getField("turn_kind").eqNullSafe(candidate.getField("turn_kind")),
+          positions).otherwise(
+          concat(positions, array(struct(
+            (size(positions).cast(LongType) + 1L).as("turn_idx"),
+            candidate.getField("turn_kind").as("turn_kind"),
+            candidate.getField("message_index").as("start_message_index"),
+            previousPosition.getField("start_message_index")
+              .as("previous_start_message_index")))))
+      },
+      positions => try_element_at(positions, lit(-1)))
+
+    checkAnswer(
+      spark.range(1).select(lastPosition),
+      Row(Row(1L, "user", 0L, null)))
+  }
+
   test("SPARK-31552: array encoder with different types") {
     // primitives
     val booleans = Array(true, false)
@@ -366,5 +435,3 @@ extends DefinedByConstructorParams
 case class S100_5(
   s1: S100 = new S100(), s2: S100 = new S100(), s3: S100 = new S100(),
   s4: S100 = new S100(), s5: S100 = new S100())
-
-

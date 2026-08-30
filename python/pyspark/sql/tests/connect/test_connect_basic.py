@@ -15,44 +15,47 @@
 # limitations under the License.
 #
 
-import os
+import datetime
 import gc
-import unittest
+import io
+import os
 import shutil
 import tempfile
-import io
+import unittest
 from contextlib import redirect_stdout
-import datetime
 
-from pyspark.util import is_remote_only
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.types import (
-    StructType,
-    StructField,
-    LongType,
-    StringType,
-    IntegerType,
-    MapType,
     ArrayType,
+    CharType,
+    IntegerType,
+    LongType,
+    MapType,
     Row,
+    StringType,
+    StructField,
+    StructType,
+    VarcharType,
 )
 from pyspark.testing import assertDataFrameEqual
-from pyspark.testing.utils import eventually
 from pyspark.testing.connectutils import (
-    should_test_connect,
-    connect_requirement_message,
     ReusedMixedTestCase,
+    connect_requirement_message,
+    should_test_connect,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+from pyspark.testing.utils import eventually
+from pyspark.util import is_remote_only
 
 if should_test_connect:
-    from pyspark.sql.connect.proto import ExecutePlanResponse, Expression as ProtoExpression
-    from pyspark.sql.connect.column import Column
-    from pyspark.sql.dataframe import DataFrame
-    from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
+    from pyspark.errors.exceptions.connect import AnalysisException, SparkConnectException
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
-    from pyspark.errors.exceptions.connect import AnalysisException, SparkConnectException
+    from pyspark.sql.connect.column import Column
+    from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
+    from pyspark.sql.connect.proto import ExecutePlanResponse
+    from pyspark.sql.connect.proto import Expression as ProtoExpression
+    from pyspark.sql.dataframe import DataFrame
 
 
 @unittest.skipIf(
@@ -154,8 +157,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertEqual(cdf.collect(), cdf2.collect())
 
     def test_window_spec_serialization(self):
-        from pyspark.sql.connect.window import Window
         from pyspark.serializers import CPickleSerializer
+        from pyspark.sql.connect.window import Window
 
         pickle_ser = CPickleSerializer()
         w = Window.partitionBy("some_string").orderBy("value")
@@ -486,6 +489,19 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.connect.sql(query).schema,
         )
         self._check_print_schema(query)
+
+    def test_char_varchar_result_schema(self):
+        # SPARK-58794: Python Connect maps first-class CHAR/VARCHAR the same as classic.
+        query = "SELECT CAST('ab' AS CHAR(4)) AS c, CAST('cd' AS VARCHAR(6)) AS v"
+        conf = {"spark.sql.charVarchar.standardSemantics.enabled": "true"}
+        with self.both_conf(conf):
+            classic_df = self.spark.sql(query)
+            connect_df = self.connect.sql(query)
+            self.assertEqual(classic_df.schema, connect_df.schema)
+            self.assertEqual(classic_df.schema["c"].dataType, CharType(4))
+            self.assertEqual(classic_df.schema["v"].dataType, VarcharType(6))
+            self.assertEqual(classic_df.collect(), connect_df.collect())
+            self.assertEqual(connect_df.collect(), [Row(c="ab  ", v="cd")])
 
     def test_to(self):
         # SPARK-41464: test DataFrame.to()
@@ -1119,8 +1135,11 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.connect.sql("SELECT 1")._explain_string(mode="unknown")
         self.check_error(
             exception=pe.exception,
-            errorClass="UNKNOWN_EXPLAIN_MODE",
-            messageParameters={"explain_mode": "unknown"},
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={
+                "arg_name": "explain_mode",
+                "allowed_values": "['simple', 'extended', 'codegen', 'cost', 'formatted']",
+            },
         )
 
     def test_count(self) -> None:
@@ -1484,7 +1503,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.connect.range(1).count()
         default_plan_compression_threshold = self.connect._client._plan_compression_threshold
         self.assertTrue(default_plan_compression_threshold > 0)
-        self.assertTrue(self.connect._client._plan_compression_algorithm == "ZSTD")
+        self.assertEqual(self.connect._client._plan_compression_algorithm, "ZSTD")
         try:
             self.connect._client._plan_compression_threshold = 1000
 
@@ -1492,17 +1511,17 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             cdf1 = self.connect.range(1).select(CF.lit("Apache Spark"))
             plan1 = cdf1._plan.to_proto(self.connect._client)
             self.assertTrue(plan1.root is not None)
-            self.assertTrue(cdf1.count() == 1)
+            self.assertEqual(cdf1.count(), 1)
 
             # Large plan should be compressed
             cdf2 = self.connect.range(1).select(CF.lit("Apache Spark" * 1000))
             plan2 = cdf2._plan.to_proto(self.connect._client)
             self.assertTrue(plan2.compressed_operation is not None)
             # Test compressed relation
-            self.assertTrue(cdf2.count() == 1)
+            self.assertEqual(cdf2.count(), 1)
             # Test compressed command
             cdf2.createOrReplaceTempView("temp_view_cdf2")
-            self.assertTrue(self.connect.sql("SELECT * FROM temp_view_cdf2").count() == 1)
+            self.assertEqual(self.connect.sql("SELECT * FROM temp_view_cdf2").count(), 1)
         finally:
             self.connect._client._plan_compression_threshold = default_plan_compression_threshold
 

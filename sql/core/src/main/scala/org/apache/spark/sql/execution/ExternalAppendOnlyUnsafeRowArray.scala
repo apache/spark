@@ -122,7 +122,7 @@ class ExternalAppendOnlyUnsafeRowArray(
       spillableArray = null
     } else if (inMemoryBuffer != null) {
       inMemoryBuffer.clear()
-      inMemoryBufferSizeInBytes = 0;
+      inMemoryBufferSizeInBytes = 0
     }
     numFieldsPerRow = 0
     numRows = 0
@@ -154,6 +154,7 @@ class ExternalAppendOnlyUnsafeRowArray(
           pageSizeBytes,
           numRowsSpillThreshold,
           sizeInBytesSpillThreshold,
+          -1, // bounded merge not applicable — this class does not sort
           false)
 
         // populate with existing in-memory buffered rows

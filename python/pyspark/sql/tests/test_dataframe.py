@@ -16,50 +16,49 @@
 #
 
 import glob
+import io
 import os
 import pydoc
 import shutil
 import tempfile
-import warnings
 import unittest
-import io
+import warnings
 from contextlib import redirect_stdout
 
-from pyspark.sql import Row, functions, DataFrame
-from pyspark.sql.functions import (
-    col,
-    lit,
-    count,
-    struct,
-    date_format,
-    to_date,
-    array,
-    explode,
-    when,
-    concat,
-)
-from pyspark.sql.types import (
-    StringType,
-    IntegerType,
-    LongType,
-    StructType,
-    StructField,
-)
-from pyspark.storagelevel import StorageLevel
 from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
     PySparkTypeError,
     PySparkValueError,
+    QueryContextType,
 )
+from pyspark.sql import DataFrame, Row, functions
+from pyspark.sql.functions import (
+    array,
+    col,
+    count,
+    date_format,
+    explode,
+    lit,
+    struct,
+    to_date,
+)
+from pyspark.sql.types import (
+    IntegerType,
+    LongType,
+    StringType,
+    StructField,
+    StructType,
+)
+from pyspark.storagelevel import StorageLevel
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
     SPARK_HOME,
+    ReusedSQLTestCase,
 )
 from pyspark.testing.utils import (
-    have_pyarrow,
     have_pandas,
+    have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
@@ -136,50 +135,14 @@ class DataFrameTestsMixin:
         self.assertEqual(df3.select(count(df3["*"])).columns, ["count(1)"])
         self.assertEqual(df3.select(count(col("*"))).columns, ["count(1)"])
 
-    def test_self_join(self):
-        df1 = self.spark.range(10).withColumn("a", lit(0))
-        df2 = df1.withColumnRenamed("a", "b")
-        df = df1.join(df2, df1["a"] == df2["b"])
-        self.assertTrue(df.count() == 100)
-        df = df2.join(df1, df2["b"] == df1["a"])
-        self.assertTrue(df.count() == 100)
-
-    def test_self_join_II(self):
-        df = self.spark.createDataFrame([(1, 2), (3, 4)], schema=["a", "b"])
-        df2 = df.select(df.a.alias("aa"), df.b)
-        df3 = df2.join(df, df2.b == df.b)
-        self.assertTrue(df3.columns, ["aa", "b", "a", "b"])
-        self.assertTrue(df3.count() == 2)
-
-    def test_self_join_III(self):
-        df1 = self.spark.range(10).withColumn("value", lit(1))
-        df2 = df1.union(df1)
-        df3 = df1.join(df2, df1.id == df2.id, "left")
-        self.assertTrue(df3.columns, ["id", "value", "id", "value"])
-        self.assertTrue(df3.count() == 20)
-
-    def test_self_join_IV(self):
-        df1 = self.spark.range(10).withColumn("value", lit(1))
-        df2 = df1.withColumn("value", lit(2)).union(df1.withColumn("value", lit(3)))
-        df3 = df1.join(df2, df1.id == df2.id, "right")
-        self.assertTrue(df3.columns, ["id", "value", "id", "value"])
-        self.assertTrue(df3.count() == 20)
-
-    def test_select_join_keys(self):
-        df1 = self.spark.range(10).withColumn("v1", lit(1))
-        df2 = self.spark.range(10).withColumn("v2", lit(2))
-        for how in ["inner", "left", "right", "full", "cross"]:
-            self.assertTrue(df1.join(df2, "id", how).select(df1["id"]).count() >= 0, how)
-            self.assertTrue(df1.join(df2, "id", how).select(df2["id"]).count() >= 0, how)
-
     def test_lateral_column_alias(self):
         df1 = self.spark.range(10).select(
             (col("id") + lit(1)).alias("x"), (col("x") + lit(1)).alias("y")
         )
         df2 = self.spark.range(10).select(col("id").alias("x"))
         df3 = df1.join(df2, df1.x == df2.x).select(df1.y)
-        self.assertTrue(df3.columns, ["y"])
-        self.assertTrue(df3.count() == 9)
+        self.assertEqual(df3.columns, ["y"])
+        self.assertEqual(df3.count(), 9)
 
     def test_duplicated_column_names(self):
         df = self.spark.createDataFrame([(1, 2)], ["c", "c"])
@@ -212,26 +175,6 @@ class DataFrameTestsMixin:
         self.assertEqual(df.drop(col("name")).columns, ["age", "active"])
         self.assertEqual(df.drop(col("name"), col("age")).columns, ["active"])
         self.assertEqual(df.drop(col("name"), col("age"), col("random")).columns, ["active"])
-
-    def test_drop_notexistent_col(self):
-        df1 = self.spark.createDataFrame(
-            [("a", "b", "c")],
-            schema="colA string, colB string, colC string",
-        )
-        df2 = self.spark.createDataFrame(
-            [("c", "d", "e")],
-            schema="colC string, colD string, colE string",
-        )
-        df3 = df1.join(df2, df1["colC"] == df2["colC"]).withColumn(
-            "colB",
-            when(df1["colB"] == "b", concat(df1["colB"].cast("string"), lit("x"))).otherwise(
-                df1["colB"]
-            ),
-        )
-        df4 = df3.drop(df1["colB"])
-
-        self.assertEqual(df4.columns, ["colA", "colB", "colC", "colC", "colD", "colE"])
-        self.assertEqual(df4.count(), 1)
 
     def test_drop_col_from_different_dataframe(self):
         df1 = self.spark.range(10)
@@ -317,6 +260,20 @@ class DataFrameTestsMixin:
             exception=pe.exception,
             errorClass="NOT_EXPECTED_TYPE",
             messageParameters={"expected_type": "dict", "arg_name": "colsMap", "arg_type": "tuple"},
+        )
+
+    def test_sort_ascending_invalid_type(self):
+        df = self.spark.createDataFrame([("Alice", 10)], ["name", "age"])
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.sort("age", ascending="asc")
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "bool, int or list",
+                "arg_name": "ascending",
+                "arg_type": "str",
+            },
         )
 
     def test_with_columns_renamed_with_duplicated_names(self):
@@ -468,6 +425,40 @@ class DataFrameTestsMixin:
         # Type check
         self.assertRaises(TypeError, self.df.withColumns, ["key"])
         self.assertRaises(Exception, self.df.withColumns)
+
+    def test_with_columns_with_dependencies(self):
+        df = self.spark.range(3).withColumns(
+            {
+                "a": col("id") + 1,
+                "b": col("a") + 1,
+                "c": col("a") + col("b"),
+                "d": col("a") + col("b") + col("c"),
+            }
+        )
+
+        assertDataFrameEqual(
+            df,
+            [
+                Row(id=0, a=1, b=2, c=3, d=6),
+                Row(id=1, a=2, b=3, c=5, d=10),
+                Row(id=2, a=3, b=4, c=7, d=14),
+            ],
+        )
+
+        with self.assertRaises(AnalysisException) as pe:
+            self.spark.range(1).withColumns(
+                {
+                    "a": col("b") - 1,
+                    "b": col("id") + 1,
+                }
+            ).collect()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            messageParameters={"objectName": "`b`", "proposal": "`id`"},
+            query_context_type=QueryContextType.DataFrame,
+            fragment="col",
+        )
 
     def test_generic_hints(self):
         df1 = self.spark.range(10e10).toDF("id")

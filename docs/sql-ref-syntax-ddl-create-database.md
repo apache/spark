@@ -38,6 +38,9 @@ CREATE { DATABASE | SCHEMA } [ IF NOT EXISTS ] database_name
 
     Specifies the name of the database to be created.
 
+    > Note: avoid naming a database `session` or `builtin`; see
+    > [Reserved system names](sql-ref-identifier.html#reserved-system-names).
+
 * **IF NOT EXISTS**
 
     Creates a database with the given name if it does not exist. If a database with the same name already exists, nothing will happen.
@@ -85,3 +88,4 @@ DESCRIBE DATABASE EXTENDED customer_db;
 
 * [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
 * [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)
+* [Name Resolution](sql-ref-name-resolution.html)

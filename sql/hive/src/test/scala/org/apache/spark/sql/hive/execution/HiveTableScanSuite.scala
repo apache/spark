@@ -19,19 +19,18 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.{File, IOException}
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.sparkSession.implicits._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
 @SlowHiveTest
-class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestHiveSingleton {
+class HiveTableScanSuite extends HiveComparisonTest with QueryTest with TestHiveSingleton {
 
   createQueryTest("partition_based_table_scan_with_different_serde",
     """

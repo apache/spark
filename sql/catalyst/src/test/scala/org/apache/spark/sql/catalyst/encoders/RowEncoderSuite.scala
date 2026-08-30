@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.collection.mutable
 import scala.util.Random
 
-import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.{RandomDataGenerator, Row}
+import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.sql.{AnalysisException, RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, GenericArrayData, IntervalUtils}
@@ -381,6 +381,76 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     assert(readback.get(0) === localDateTime)
   }
 
+  test("SPARK-57033: encoding/decoding TimestampNTZNanosType to/from java.time.LocalDateTime") {
+    val inputs = Seq(
+      java.time.LocalDateTime.parse("2019-02-26T16:56:00.123456789"),
+      java.time.LocalDateTime.parse("1969-12-31T23:59:59.123456789"))
+    for (localDateTime <- inputs) {
+      for (p <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION) {
+        val schema = new StructType().add("t", TimestampNTZNanosType(p))
+        val encoder = ExpressionEncoder(schema).resolveAndBind()
+        val row = toRow(encoder, Row(localDateTime))
+        val expected = DateTimeUtils.localDateTimeToTimestampNanos(localDateTime, p)
+        assert(row.getTimestampNTZNanos(0) === expected)
+        val readback = fromRow(encoder, row)
+        assert(readback.get(0) === DateTimeUtils.timestampNanosToLocalDateTime(expected))
+      }
+    }
+  }
+
+  test("SPARK-57033: encoding/decoding TimestampLTZNanosType to/from java.time.Instant") {
+    val inputs = Seq(
+      java.time.Instant.parse("2019-02-26T16:56:00.123456789Z"),
+      java.time.Instant.parse("1969-12-31T23:59:59.123456789Z"))
+    for (instant <- inputs) {
+      for (p <- TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION) {
+        val schema = new StructType().add("t", TimestampLTZNanosType(p))
+        val encoder = ExpressionEncoder(schema).resolveAndBind()
+        val row = toRow(encoder, Row(instant))
+        val expected = DateTimeUtils.instantToTimestampNanos(instant, p)
+        assert(row.getTimestampLTZNanos(0) === expected)
+        val readback = fromRow(encoder, row)
+        assert(readback.get(0) === DateTimeUtils.timestampNanosToInstant(expected))
+      }
+    }
+  }
+
+  test("SPARK-57033: encoding/decoding TimestampLTZNanosType ignores java8 API flag") {
+    val instant = java.time.Instant.parse("2019-02-26T16:56:00.123456789Z")
+    val schema = new StructType().add("t", TimestampLTZNanosType())
+    Seq("true", "false").foreach { flag =>
+      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> flag) {
+        val encoder = ExpressionEncoder(schema).resolveAndBind()
+        val row = toRow(encoder, Row(instant))
+        assert(row.getTimestampLTZNanos(0) ===
+          DateTimeUtils.instantToTimestampNanos(instant, precision = 9))
+        val readback = fromRow(encoder, row)
+        assert(readback.get(0) === instant)
+      }
+    }
+  }
+
+  test("SPARK-57033: RowEncoder rejects nanos timestamp types when feature flag is off") {
+    Seq(
+      new StructType().add("t", TimestampNTZNanosType()),
+      new StructType().add("t", TimestampLTZNanosType())
+    ).foreach { schema =>
+      withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+        checkError(
+          exception = intercept[SparkException] {
+            ExpressionEncoder(schema)
+          },
+          condition = "FEATURE_NOT_ENABLED",
+          parameters = Map(
+            "featureName" -> "Nanosecond-precision timestamp types",
+            "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+            "configValue" -> "true"
+          )
+        )
+      }
+    }
+  }
+
   test("encoding/decoding DateType to/from java.time.LocalDate") {
     withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       val schema = new StructType().add("d", DateType)
@@ -520,40 +590,77 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     val row = encoder.createSerializer()(data)
   }
 
+  test("SPARK-58794: encoderFor rejects CHAR/VARCHAR when first-class types are off") {
+    Seq(CharType(4), VarcharType(6)).foreach { dt =>
+      val schema = new StructType().add("c", dt)
+      withSQLConf(
+          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            RowEncoder.encoderFor(schema)
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
+          sqlState = "0A000",
+          parameters = Map("dataType" -> s"\"${dt.sql}\"")
+        )
+        // Engine-produced result schemas still decode on the Connect client.
+        RowEncoder.encoderForResultSchema(schema)
+      }
+    }
+  }
+
   test("do not allow serializing too long strings into char/varchar") {
     Seq(CharType(5), VarcharType(5)).foreach { typ =>
-      withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
-        val schema = new StructType().add("c", typ)
-        val encoder = ExpressionEncoder(schema).resolveAndBind()
-        val value = "abcdef"
-        checkError(
-          exception = intercept[SparkRuntimeException]({
-            val row = toRow(encoder, Row(value))
-          }),
-          condition = "EXCEED_LIMIT_LENGTH",
-          parameters = Map("limit" -> "5")
-        )
+      Seq(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true").foreach { conf =>
+        withSQLConf(conf) {
+          val schema = new StructType().add("c", typ)
+          val encoder = ExpressionEncoder(schema).resolveAndBind()
+          val value = "abcdef"
+          checkError(
+            exception = intercept[SparkRuntimeException]({
+              val row = toRow(encoder, Row(value))
+            }),
+            condition = "EXCEED_LIMIT_LENGTH",
+            parameters = Map("limit" -> "5")
+          )
+        }
       }
     }
   }
 
   test("do not allow deserializing too long strings into char/varchar") {
     Seq(CharType(5), VarcharType(5)).foreach { typ =>
-      withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
-        val fromSchema = new StructType().add("c", StringType)
-        val fromEncoder = ExpressionEncoder(fromSchema).resolveAndBind()
-        val toSchema = new StructType().add("c", typ)
-        val toEncoder = ExpressionEncoder(toSchema).resolveAndBind()
-        val value = "abcdef"
-        val row = toRow(fromEncoder, Row(value))
-        checkError(
-          exception = intercept[SparkRuntimeException]({
-            val value = fromRow(toEncoder, row)
-          }),
-          condition = "EXCEED_LIMIT_LENGTH",
-          parameters = Map("limit" -> "5")
-        )
+      Seq(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true").foreach { conf =>
+        withSQLConf(conf) {
+          val fromSchema = new StructType().add("c", StringType)
+          val fromEncoder = ExpressionEncoder(fromSchema).resolveAndBind()
+          val toSchema = new StructType().add("c", typ)
+          val toEncoder = ExpressionEncoder(toSchema).resolveAndBind()
+          val value = "abcdef"
+          val row = toRow(fromEncoder, Row(value))
+          checkError(
+            exception = intercept[SparkRuntimeException]({
+              val value = fromRow(toEncoder, row)
+            }),
+            condition = "EXCEED_LIMIT_LENGTH",
+            parameters = Map("limit" -> "5")
+          )
+        }
       }
+    }
+  }
+
+  test("SPARK-58803: RowEncoder pads CHAR under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val schema = new StructType().add("c", CharType(5)).add("v", VarcharType(5))
+      val encoder = ExpressionEncoder(schema).resolveAndBind()
+      val row = toRow(encoder, Row("ab", "cd"))
+      assert(fromRow(encoder, row) === Row("ab   ", "cd"))
     }
   }
 }

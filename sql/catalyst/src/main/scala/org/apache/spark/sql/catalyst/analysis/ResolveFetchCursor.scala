@@ -34,7 +34,8 @@ class ResolveFetchCursor(val catalogManager: CatalogManager) extends Rule[Logica
   with ColumnResolutionHelper {
   // VariableResolution looks up both scripting local variables (via SqlScriptingContextManager)
   // and session variables (via tempVariableManager), checking local variables first.
-  private val variableResolution = new VariableResolution(catalogManager.tempVariableManager)
+  private val variableResolution =
+    new VariableResolution(catalogManager.tempVariableManager, catalogManager)
 
   /**
    * Checks for duplicate variable names and throws an exception if found.
@@ -63,7 +64,8 @@ class ResolveFetchCursor(val catalogManager: CatalogManager) extends Rule[Logica
           nameParts = u.nameParts
         ) match {
           case Some(variable) => variable.copy(canFold = false)
-          case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
+          case _ => throw unresolvedVariableError(
+            u.nameParts, variableResolution.searchPathEntriesForError, u.origin)
         }
 
       case other => throw SparkException.internalError(

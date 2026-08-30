@@ -657,7 +657,7 @@ Project [scalar-subquery#x [x#x] AS scalarsubquery(x)#x]
 :  +- WithCTE
 :     :- CTERelationDef xxxx, false
 :     :  +- SubqueryAlias q
-:     :     +- Project [outer(x#x)]
+:     :     +- Project [outer(x#x) AS x#x]
 :     :        +- OneRowRelation
 :     +- Project [x#x]
 :        +- SubqueryAlias q

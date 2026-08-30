@@ -24,23 +24,22 @@ import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan}
-import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode, SafeForKWayMerge, SQLExecution}
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode, SafeForKWayMerge}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
-trait DataSourceV2ScanExecBase extends LeafExecNode with SafeForKWayMerge {
+trait DataSourceV2ScanExecBase
+  extends LeafExecNode
+  with SafeForKWayMerge
+  with SupportsCustomDriverMetrics {
 
-  lazy val customMetrics = scan.supportedCustomMetrics().map { customMetric =>
-    customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
-  }.toMap
+  override lazy val customMetrics: Map[String, SQLMetric] =
+    createCustomMetrics(scan.supportedCustomMetrics())
 
-  override lazy val metrics = {
-    Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows")) ++
-      customMetrics
-  }
+  override protected lazy val sparkMetrics: Map[String, SQLMetric] =
+    Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   def scan: Scan
 
@@ -143,18 +142,6 @@ trait DataSourceV2ScanExecBase extends LeafExecNode with SafeForKWayMerge {
       numOutputRows += 1
       r
     }
-  }
-
-  protected def postDriverMetrics(): Unit = {
-    val driveSQLMetrics = scan.reportDriverMetrics().map(customTaskMetric => {
-      val metric = metrics(customTaskMetric.name())
-      metric.set(customTaskMetric.value())
-      metric
-    })
-
-    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
-      driveSQLMetrics.toImmutableArraySeq)
   }
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {

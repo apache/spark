@@ -228,7 +228,7 @@ case class FooAgg(s: Int) extends Aggregator[Row, Int, Int] {
   def outputEncoder: Encoder[Int] = Encoders.scalaInt
 }
 
-class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
+class DatasetAggregatorSuite extends SharedSparkSession {
   import testImplicits._
 
   private implicit val ordering: Ordering[AggData] = Ordering.by((c: AggData) => c.a -> c.b)

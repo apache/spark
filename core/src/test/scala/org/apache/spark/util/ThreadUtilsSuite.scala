@@ -26,7 +26,7 @@ import scala.util.Random
 
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite, SparkThrowable}
 
 class ThreadUtilsSuite extends SparkFunSuite {
 
@@ -228,5 +228,91 @@ class ThreadUtilsSuite extends SparkFunSuite {
     eventually(timeout(10.seconds)) {
       assert(!t.isAlive)
     }
+  }
+
+  test("awaitResult preserves SparkThrowable when flag is true") {
+    import java.io.IOException
+
+    val sparkThrowableEx = new RuntimeException("structured error") with SparkThrowable {
+      override def getCondition: String = "TEST_ERROR_CLASS"
+      override def getMessageParameters: java.util.Map[String, String] =
+        java.util.Collections.emptyMap()
+    }
+
+    // With preserveSparkThrowable=true, SparkThrowable is re-thrown directly.
+    val f1 = Future {
+      throw sparkThrowableEx
+    }(ThreadUtils.sameThread)
+    val caught1 = intercept[RuntimeException] {
+      ThreadUtils.awaitResult(f1, 1.seconds, preserveSparkThrowable = true)
+    }
+    assert(caught1.isInstanceOf[SparkThrowable])
+    assert(caught1.asInstanceOf[SparkThrowable].getCondition == "TEST_ERROR_CLASS")
+    assert(caught1.getSuppressed.nonEmpty)
+
+    // With preserveSparkThrowable=false (default), SparkThrowable is wrapped in SparkException.
+    val f2 = Future {
+      throw sparkThrowableEx
+    }(ThreadUtils.sameThread)
+    val caught2 = intercept[SparkException] {
+      ThreadUtils.awaitResult(f2, 1.seconds)
+    }
+    assert(caught2.getCause.isInstanceOf[SparkThrowable])
+
+    // Plain exceptions are always wrapped regardless of the flag.
+    val plainEx = new IOException("plain error")
+    val f3 = Future {
+      throw plainEx
+    }(ThreadUtils.sameThread)
+    val caught3 = intercept[SparkException] {
+      ThreadUtils.awaitResult(f3, 1.seconds, preserveSparkThrowable = true)
+    }
+    assert(caught3.getCause eq plainEx)
+  }
+
+  test("awaitResult (JFuture) preserves SparkThrowable when flag is true") {
+    val sparkThrowableEx = new RuntimeException("structured error") with SparkThrowable {
+      override def getCondition: String = "TEST_ERROR_CLASS"
+      override def getMessageParameters: java.util.Map[String, String] =
+        java.util.Collections.emptyMap()
+    }
+
+    // scalastyle:off sparkThreadPools
+    val jfuture = new java.util.concurrent.CompletableFuture[String]()
+    // scalastyle:on sparkThreadPools
+    jfuture.completeExceptionally(sparkThrowableEx)
+
+    val caught = intercept[RuntimeException] {
+      ThreadUtils.awaitResult(jfuture, 10.seconds, preserveSparkThrowable = true)
+    }
+    assert(caught.isInstanceOf[SparkThrowable])
+    assert(caught.asInstanceOf[SparkThrowable].getCondition == "TEST_ERROR_CLASS")
+    assert(caught.getSuppressed.nonEmpty)
+  }
+
+  test("parmap preserves SparkThrowable when flag is true") {
+    val sparkThrowableEx = new RuntimeException("structured error") with SparkThrowable {
+      override def getCondition: String = "TEST_ERROR_CLASS"
+      override def getMessageParameters: java.util.Map[String, String] =
+        java.util.Collections.emptyMap()
+    }
+
+    // With preserveSparkThrowable=true, the original SparkThrowable is re-thrown.
+    val caught1 = intercept[RuntimeException] {
+      ThreadUtils.parmap(Seq(1), "test", 1, preserveSparkThrowable = true) { _ =>
+        throw sparkThrowableEx
+      }
+    }
+    assert(caught1.isInstanceOf[SparkThrowable])
+    assert(caught1.asInstanceOf[SparkThrowable].getCondition == "TEST_ERROR_CLASS")
+    assert(caught1.getSuppressed.nonEmpty)
+
+    // With preserveSparkThrowable=false, it is wrapped in SparkException.
+    val caught2 = intercept[SparkException] {
+      ThreadUtils.parmap(Seq(1), "test", 1, preserveSparkThrowable = false) { _ =>
+        throw sparkThrowableEx
+      }
+    }
+    assert(caught2.getCause.isInstanceOf[SparkThrowable])
   }
 }

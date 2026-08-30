@@ -19,7 +19,6 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class FrameTruncateMixin:
@@ -116,7 +115,7 @@ class FrameTruncateMixin:
             psdf.truncate("C", "B", axis=1)
 
 
-class FrameTruncateTests(FrameTruncateMixin, PandasOnSparkTestCase, SQLTestUtils):
+class FrameTruncateTests(FrameTruncateMixin, PandasOnSparkTestCase):
     pass
 
 

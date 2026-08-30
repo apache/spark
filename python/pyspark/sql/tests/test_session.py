@@ -22,16 +22,16 @@ from io import StringIO
 
 from pyspark import SparkConf, SparkContext
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
-from pyspark.sql import SparkSession, SQLContext, Row
-from pyspark.sql.functions import col
-from pyspark.testing.connectutils import (
-    should_test_connect,
-    connect_requirement_message,
-)
 from pyspark.errors.exceptions.captured import SparkNoSuchElementException
+from pyspark.sql import Row, SparkSession, SQLContext
+from pyspark.sql.functions import col
 from pyspark.sql.profiler import Profile
+from pyspark.testing.connectutils import (
+    connect_requirement_message,
+    should_test_connect,
+)
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.testing.utils import PySparkTestCase, PySparkErrorTestUtils
+from pyspark.testing.utils import PySparkErrorTestUtils, PySparkTestCase
 
 
 class SparkSessionTests(ReusedSQLTestCase):
@@ -616,6 +616,32 @@ class SparkSessionBuilderCreateTests(unittest.TestCase, PySparkErrorTestUtils):
         finally:
             session2.stop()
 
+    def test_create_does_not_construct_spark_conf_when_session_exists(self):
+        """Ensure SparkConf() is not called when a valid session already exists."""
+        self.session = self._get_builder().create()
+        with unittest.mock.patch("pyspark.sql.session.SparkConf") as mock_spark_conf:
+            session2 = self._get_builder().create()
+            try:
+                mock_spark_conf.assert_not_called()
+                self.assertIs(session2.sparkContext, self.session.sparkContext)
+            finally:
+                session2.stop()
+
+    def test_create_applies_mutable_conf_to_second_session(self):
+        """
+        Ensure that mutable SQL configs passed to create() are applied per-session
+        even when a valid SparkSession already exists.
+        """
+        key = "spark.sql.shuffle.partitions"
+        self.session = self._get_builder().config(key, "5").create()
+        self.assertEqual(self.session.conf.get(key), "5")
+        session2 = self._get_builder().config(key, "7").create()
+        try:
+            self.assertEqual(session2.conf.get(key), "7")
+            self.assertIs(session2.sparkContext, self.session.sparkContext)
+        finally:
+            session2.stop()
+
 
 class SparkSessionProfileTests(unittest.TestCase, PySparkErrorTestUtils):
     def setUp(self):
@@ -711,6 +737,7 @@ class SparkExtensionsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         import glob
+
         from pyspark.find_spark_home import _find_spark_home
 
         SPARK_HOME = _find_spark_home()

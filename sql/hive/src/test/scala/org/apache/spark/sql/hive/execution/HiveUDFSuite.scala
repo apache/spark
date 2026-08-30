@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.{DataInput, DataOutput, File, PrintWriter}
+import java.sql.{Date, Timestamp}
 import java.util.{ArrayList, Arrays, Properties}
 
 import scala.jdk.CollectionConverters._
@@ -35,13 +36,17 @@ import org.apache.hadoop.io.{LongWritable, Writable}
 
 import org.apache.spark.{SparkException, SparkFiles, TestUtils}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
-import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, CodegenObjectFactoryMode, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions.{call_function, max}
+import org.apache.spark.sql.hive.HiveGenericUDF
+import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestUDTFJar}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.{TimestampType, TimeType}
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
@@ -57,9 +62,8 @@ case class ListStringCaseClass(l: Seq[String])
  * A test suite for Hive custom UDFs.
  */
 @SlowHiveTest
-class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
+class HiveUDFSuite extends QueryTest with TestHiveSingleton {
   import spark.implicits._
-  import testImplicits.castToImpl
 
   import spark.udf
 
@@ -291,8 +295,10 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     sql(s"CREATE TEMPORARY FUNCTION testUDFRawList " +
       s"AS '${classOf[UDFRawList].getName}'")
     val err = intercept[AnalysisException](sql("SELECT testUDFRawList(s) FROM inputTable"))
-    assert(err.getMessage.contains(
-      "Raw list type in java is unsupported because Spark cannot infer the element type."))
+    checkError(
+      exception = err.getCause.asInstanceOf[AnalysisException],
+      condition = "UNSUPPORTED_HIVE_FUNCTION_TYPE.RAW_LIST",
+      parameters = Map.empty)
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFRawList")
     hiveContext.reset()
@@ -305,8 +311,10 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     sql(s"CREATE TEMPORARY FUNCTION testUDFRawMap " +
       s"AS '${classOf[UDFRawMap].getName}'")
     val err = intercept[AnalysisException](sql("SELECT testUDFRawMap(s) FROM inputTable"))
-    assert(err.getMessage.contains(
-      "Raw map type in java is unsupported because Spark cannot infer key and value types."))
+    checkError(
+      exception = err.getCause.asInstanceOf[AnalysisException],
+      condition = "UNSUPPORTED_HIVE_FUNCTION_TYPE.RAW_MAP",
+      parameters = Map.empty)
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFRawMap")
     hiveContext.reset()
@@ -319,11 +327,28 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     sql(s"CREATE TEMPORARY FUNCTION testUDFWildcardList " +
       s"AS '${classOf[UDFWildcardList].getName}'")
     val err = intercept[AnalysisException](sql("SELECT testUDFWildcardList(s) FROM inputTable"))
-    assert(err.getMessage.contains(
-      "Collection types with wildcards (e.g. List<?> or Map<?, ?>) are unsupported " +
-        "because Spark cannot infer the data type for these type parameters."))
+    checkError(
+      exception = err.getCause.asInstanceOf[AnalysisException],
+      condition = "UNSUPPORTED_HIVE_FUNCTION_TYPE.WILDCARD",
+      parameters = Map.empty)
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFWildcardList")
+    hiveContext.reset()
+  }
+
+  test("UDFRawSet") {
+    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    testData.createOrReplaceTempView("inputTable")
+
+    sql(s"CREATE TEMPORARY FUNCTION testUDFRawSet " +
+      s"AS '${classOf[UDFRawSet].getName}'")
+    val err = intercept[AnalysisException](sql("SELECT testUDFRawSet(s) FROM inputTable"))
+    checkError(
+      exception = err.getCause.asInstanceOf[AnalysisException],
+      condition = "UNSUPPORTED_HIVE_FUNCTION_TYPE.UNKNOWN_TYPE",
+      parameters = Map("c" -> "interface java.util.Set"))
+
+    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFRawSet")
     hiveContext.reset()
   }
 
@@ -408,6 +433,22 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     }
   }
 
+  test("SPARK-57556: TIME type is unsupported as a Hive UDF argument") {
+    withUserDefinedFunction("testGenericUDFHash" -> true) {
+      sql(s"CREATE TEMPORARY FUNCTION testGenericUDFHash AS '${classOf[GenericUDFHash].getName}'")
+      // The Hive UDF resolver wraps the failure in CANNOT_INSTANTIATE_HIVE_FUNCTION and attaches
+      // the underlying failure as the cause, which clearly identifies the unsupported TIME type
+      // rather than surfacing a MatchError/internal error.
+      val e = intercept[AnalysisException] {
+        sql("SELECT testGenericUDFHash(TIME'12:01:02')").collect()
+      }
+      checkError(
+        exception = e.getCause.asInstanceOf[AnalysisException],
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = Map("typeName" -> s"\"${TimeType().sql}\""))
+    }
+  }
+
   test("Hive UDFs with insufficient number of input arguments should trigger an analysis error") {
     withTempView("testUDF") {
       Seq((1, 2)).toDF("a", "b").createOrReplaceTempView("testUDF")
@@ -415,10 +456,16 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       def testErrorMsgForFunc(funcName: String, className: String): Unit = {
         withUserDefinedFunction(funcName -> true) {
           sql(s"CREATE TEMPORARY FUNCTION $funcName AS '$className'")
-          val message = intercept[AnalysisException] {
-            sql(s"SELECT $funcName() FROM testUDF")
-          }.getMessage
-          assert(message.contains(s"No handler for UDF/UDAF/UDTF '$className'"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"SELECT $funcName() FROM testUDF")
+            },
+            condition = "CANNOT_INSTANTIATE_HIVE_FUNCTION",
+            parameters = Map("clazz" -> className),
+            context = ExpectedContext(
+              fragment = s"$funcName()",
+              start = 7,
+              stop = 6 + s"$funcName()".length))
         }
       }
 
@@ -679,15 +726,21 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         sql("SELECT testArraySum(array(1, 1.1, 1.2))"),
         Seq(Row(3.3)))
 
-      val msg = intercept[AnalysisException] {
-        sql("SELECT testArraySum(1)")
-      }.getMessage
-      assert(msg.contains(s"No handler for UDF/UDAF/UDTF '${classOf[ArraySumUDF].getName}'"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT testArraySum(1)")
+        },
+        condition = "CANNOT_INSTANTIATE_HIVE_FUNCTION",
+        parameters = Map("clazz" -> classOf[ArraySumUDF].getCanonicalName),
+        context = ExpectedContext(fragment = "testArraySum(1)", start = 7, stop = 21))
 
-      val msg2 = intercept[AnalysisException] {
-        sql("SELECT testArraySum(1, 2)")
-      }.getMessage
-      assert(msg2.contains(s"No handler for UDF/UDAF/UDTF '${classOf[ArraySumUDF].getName}'"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT testArraySum(1, 2)")
+        },
+        condition = "CANNOT_INSTANTIATE_HIVE_FUNCTION",
+        parameters = Map("clazz" -> classOf[ArraySumUDF].getCanonicalName),
+        context = ExpectedContext(fragment = "testArraySum(1, 2)", start = 7, stop = 24))
     }
   }
 
@@ -835,6 +888,75 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         s"""SELECT hive_concat(
            |         date_format(CAST(CURRENT_DATE() AS DATE), 'yyyyMMdd'),
            |         now())""".stripMargin).collect().length == 1)
+    }
+    hiveContext.reset()
+  }
+
+  test("SPARK-58792: copied HiveGenericUDF nodes must not share a mutable GenericUDF") {
+    val tsAttr = AttributeReference("ts", TimestampType, nullable = false)()
+    val constTs = Literal(
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2024-09-10 01:02:03")), TimestampType)
+    val original = HiveGenericUDF(
+      "default.date_add",
+      HiveFunctionWrapper(classOf[GenericUDFDateAdd].getName),
+      Seq(tsAttr, Literal(1)))
+    // Optimizer-created copies of a HiveGenericUDF (via withNewChildrenInternal) share
+    // one HiveFunctionWrapper, and used to share the single mutable GenericUDF
+    // instance cached inside it.
+    val constCopy = original.copy(children = Seq(constTs, Literal(1)))
+    assert(original.funcWrapper eq constCopy.funcWrapper)
+
+    val boundOriginal = BindReferences.bindReference(original, Seq(tsAttr))
+    val input = InternalRow(DateTimeUtils.fromJavaTimestamp(
+      Timestamp.valueOf("2023-12-25 10:00:00")))
+    // Interleave evaluation of the two copies the way a Project/Filter would. With a
+    // shared instance, the second evaluation of constCopy reuses the converters that
+    // the attribute copy's initialize() installed on the shared instance, and throws
+    // ClassCastException: TimestampWritable cannot be cast to java.sql.Timestamp.
+    (1 to 2).foreach { _ =>
+      assert(constCopy.eval(input) == DateTimeUtils.fromJavaDate(Date.valueOf("2024-09-11")))
+      assert(boundOriginal.eval(input) == DateTimeUtils.fromJavaDate(Date.valueOf("2023-12-26")))
+    }
+  }
+
+  test("SPARK-58792: inferred literal-binding conjunct must not corrupt a copied Hive UDF") {
+    // InferFiltersFromConstraints substitutes the pt = literal binding into the UDF
+    // conjunct and ANDs the substituted copy into the same Filter, so the Filter holds
+    // two copies of one UDF expression whose argument constness differs (literal vs.
+    // attribute). The conjunct is a bare boolean UDF call rather than a
+    // BinaryComparison, so ConstantPropagation (which substitutes into BinaryComparisons
+    // only) never rewrites the original conjunct into the same constant form, and the
+    // divergent pair reaches execution with stock rules - no rules excluded. A real
+    // table is used because a LocalRelation source lets the optimizer evaluate the
+    // Filter on the driver per-conjunct, which does not interleave the two copies.
+    // With a shared GenericUDF instance, the second row threw ClassCastException:
+    // TimestampWritable cannot be cast to java.sql.Timestamp.
+    withUserDefinedFunction("hive_gt" -> true) {
+      sql(s"CREATE TEMPORARY FUNCTION hive_gt AS '${classOf[GenericUDFOPGreaterThan].getName}'")
+      withTable("gt_table") {
+        sql("CREATE TABLE gt_table (id INT, pt DATE, created_at TIMESTAMP) STORED AS PARQUET")
+        sql("""
+          |INSERT INTO gt_table VALUES
+          |  (1, DATE '2024-09-10', TIMESTAMP '2024-09-01 00:00:00'),
+          |  (2, DATE '2024-09-10', TIMESTAMP '2024-09-05 00:00:00'),
+          |  (3, DATE '2024-09-10', TIMESTAMP '2024-09-15 00:00:00'),
+          |  (4, DATE '2024-09-11', TIMESTAMP '2024-09-01 00:00:00')
+          |""".stripMargin)
+        val df = sql("""
+          |SELECT id FROM gt_table
+          |WHERE pt = DATE '2024-09-10'
+          |  AND hive_gt(CAST(pt AS TIMESTAMP), created_at)
+          |ORDER BY id
+          |""".stripMargin)
+        // Guard against the test going silently vacuous: the optimized Filter must
+        // hold both copies, exactly one of them with a literal first argument.
+        val udfs = df.queryExecution.optimizedPlan.collect {
+          case f: Filter => f.condition.collect { case u: HiveGenericUDF => u }
+        }.flatten
+        assert(udfs.size == 2)
+        assert(udfs.count(_.children.head.isInstanceOf[Literal]) == 1)
+        checkAnswer(df, Row(1) :: Row(2) :: Nil)
+      }
     }
     hiveContext.reset()
   }

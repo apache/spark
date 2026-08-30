@@ -25,12 +25,14 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 
 /**
  * Test sorting. Many of the test cases generate random data and compares the sorted result with one
  * sorted by a reference implementation ([[ReferenceSort]]).
  */
-class SortSuite extends SparkPlanTest with SharedSparkSession {
+@ExtendedSQLTest
+class SortSuite extends SharedSparkSession {
   import testImplicits.newProductEncoder
   import testImplicits.localSeqToDatasetHolder
 

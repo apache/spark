@@ -77,4 +77,16 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with CommandSu
       checkAnswer(spark.table(t), Row(0, "") :: Row(1, null) :: Nil)
     }
   }
+
+  test("SHOW PARTITIONS AS JSON is not supported for V2 tables") {
+    withNamespaceAndTable("ns", "dateTable") { t =>
+      createDateTable(t)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SHOW PARTITIONS $t AS JSON")
+        },
+        condition = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
+        parameters = Map("cmd" -> "SHOW PARTITIONS AS JSON"))
+    }
+  }
 }

@@ -24,12 +24,12 @@ from pyspark.sql import Row
 from pyspark.sql.functions import col, lit
 from pyspark.sql.readwriter import DataFrameWriterV2
 from pyspark.sql.types import (
-    StructType,
-    StructField,
-    StringType,
-    BinaryType,
     ArrayType,
+    BinaryType,
     MapType,
+    StringType,
+    StructField,
+    StructType,
 )
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -313,6 +313,27 @@ class ReadwriterTestsMixin:
             ).changes("nonexistent_table")
         self.assertIn("changes", str(ctx.exception))
 
+    def test_option_none_is_filtered(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "data.csv")
+            with open(path, "w") as f:
+                f.write('"",val\n')
+            schema = "a STRING, b STRING"
+            expected = [Row(a=None, b="val")]
+            self.assertEqual(
+                self.spark.read.schema(schema).option("nullValue", None).csv(path).collect(),
+                expected,
+            )
+            self.assertEqual(
+                self.spark.read.schema(schema).options(nullValue=None).csv(path).collect(),
+                expected,
+            )
+
+    def test_writer_option_none_chains_safely(self):
+        df = self.spark.createDataFrame([(1,)], "x INT")
+        self.assertIsNotNone(df.write.option("foo", None).option("bar", "baz"))
+        self.assertIsNotNone(df.write.options(foo=None, bar="baz"))
+
 
 class ReadwriterV2TestsMixin:
     def test_api(self):
@@ -335,7 +356,8 @@ class ReadwriterV2TestsMixin:
 
     def check_partitioning_functions(self, tpe):
         import datetime
-        from pyspark.sql.functions.partitioning import years, months, days, hours, bucket
+
+        from pyspark.sql.functions.partitioning import bucket, days, hours, months, years
 
         df = self.spark.createDataFrame(
             [(1, datetime.datetime(2000, 1, 1), "foo")], ("id", "ts", "value")
@@ -353,7 +375,8 @@ class ReadwriterV2TestsMixin:
 
     def partitioning_functions_user_error(self):
         import datetime
-        from pyspark.sql.functions.partitioning import years, months, days, hours, bucket
+
+        from pyspark.sql.functions.partitioning import bucket, days, hours, months, years
 
         df = self.spark.createDataFrame(
             [(1, datetime.datetime(2000, 1, 1), "foo")], ("id", "ts", "value")
@@ -418,6 +441,11 @@ class ReadwriterV2TestsMixin:
             df.writeTo(table_name).using("parquet").clusterBy("x").create()
             self.assertEqual(get_cluster_by_cols(), ["x"])
             self.assertSetEqual(set(data), set(self.spark.table(table_name).collect()))
+
+    def test_v2_writer_option_none_chains_safely(self):
+        df = self.spark.createDataFrame([(1,)], "x INT")
+        self.assertIsNotNone(df.writeTo("notexist").option("foo", None).option("bar", "baz"))
+        self.assertIsNotNone(df.writeTo("notexist").options(foo=None, bar="baz"))
 
 
 class ReadwriterTests(ReadwriterTestsMixin, ReusedSQLTestCase):

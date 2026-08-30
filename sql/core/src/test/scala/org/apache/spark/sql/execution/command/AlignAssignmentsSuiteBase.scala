@@ -30,12 +30,13 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, ColumnDefaultValue, Identifier, SupportsRowLevelOperations, TableCapability, TableCatalog, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, ColumnDefaultValue, Identifier, SupportsRowLevelOperations, TableCapability, TableCatalog, TableContext, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
 
@@ -163,6 +164,10 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
     })
     when(newCatalog.loadTable(any(), any[java.util.Set[TableWritePrivilege]]()))
       .thenCallRealMethod()
+    // The options-aware overload runs the real default dispatch, which delegates to the
+    // stubbed overloads above.
+    when(newCatalog.loadTable(any(), any[TableContext](), any[CaseInsensitiveStringMap]()))
+      .thenCallRealMethod()
     when(newCatalog.name()).thenReturn("cat")
     newCatalog
   }
@@ -188,6 +193,16 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     when(manager.v2SessionCatalog).thenReturn(v2SessionCatalog)
     when(manager.tempVariableManager).thenReturn(tempVariableManager)
+    when(manager.sessionPathEntries).thenReturn(None)
+    val defaultPath = SQLConf.get.resolutionSearchPath(Seq(v2Catalog.name()))
+    when(manager.sqlResolutionPathEntries(
+      any[String], any[Seq[String]], any[String], any[Seq[String]]))
+      .thenReturn(defaultPath)
+    when(manager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
+      .thenReturn(defaultPath)
+    when(manager.resolutionPathEntriesForAnalysis(
+      any[Option[Seq[Seq[String]]]], any[Seq[String]]))
+      .thenReturn(defaultPath)
     manager
   }
 

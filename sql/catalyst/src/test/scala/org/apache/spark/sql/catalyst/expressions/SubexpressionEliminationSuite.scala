@@ -426,7 +426,8 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
   test("SPARK-38333: PlanExpression expression should skip addExprTree function in Executor") {
     try {
       // suppose we are in executor
-      val context1 = new TaskContextImpl(0, 0, 0, 0, 0, 1, null, new Properties, null, cpus = 0)
+      val context1 =
+        new TaskContextImpl(0, 0, 0, 0, 0, 1, null, new Properties, null, cpuAmount = 0)
       TaskContext.setTaskContext(context1)
 
       val equivalence = new EquivalentExpressions
@@ -493,6 +494,44 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     checkShortcut((And(equal, Literal(false))), 1)
     checkShortcut(Or(equal, Literal(true)), 1)
     checkShortcut(Not(And(equal, Literal(false))), 1)
+  }
+
+  test("SPARK-58211: shortcut eliminate operand past the first in a chained AND/OR") {
+    val add = Add(Literal(1), Literal(0))
+    val equal = EqualTo(add, add)
+
+    def checkShortcut(expr: Expression, numCommonExpr: Int): Unit = {
+      val e1 = If(expr, Literal(1), Literal(2))
+      val ee1 = new EquivalentExpressions(true)
+      ee1.addExprTree(e1)
+      assert(ee1.getCommonSubexpressions.size == numCommonExpr)
+
+      val e2 = expr
+      val ee2 = new EquivalentExpressions(true)
+      ee2.addExprTree(e2)
+      assert(ee2.getCommonSubexpressions.size == numCommonExpr)
+    }
+
+    // A left-deep chain `a AND b AND c` is `And(And(a, b), c)`. Only `a` is always evaluated;
+    // `b` and `c` are short-circuited, so their subexpressions must not be eliminated. Peeling
+    // a single operand would wrongly recurse into `b` and eliminate its inner subexpression.
+    checkShortcut(And(And(Literal(false), equal), Literal(true)), 0)
+    checkShortcut(Or(Or(Literal(true), equal), Literal(false)), 0)
+    checkShortcut(And(And(Literal(false), Literal(true)), equal), 0)
+    checkShortcut(Or(Or(Literal(true), Literal(false)), equal), 0)
+
+    // The always-evaluated leftmost operand is still eligible for elimination.
+    checkShortcut(And(And(equal, Literal(false)), Literal(true)), 1)
+    checkShortcut(Or(Or(equal, Literal(true)), Literal(false)), 1)
+
+    // Deeper chain `a AND b AND c AND d` = `And(And(And(a, b), c), d)`. The subexpression lives
+    // in a conditional operand (`c`), so it must not be eliminated no matter the nesting depth.
+    checkShortcut(And(And(And(Literal(false), Literal(true)), equal), Literal(true)), 0)
+
+    // Mixed nesting: the always-evaluated leaf `equal` is reached through a left spine of both
+    // `And` and `Or`. Its internal subexpression (`add`, which appears twice inside `equal`) is
+    // still eliminated, so the recursive peel is not over-conservative on the leaf.
+    checkShortcut(And(Or(equal, Literal(true)), equal), 1)
   }
 
   test("Equivalent ternary expressions have different children") {

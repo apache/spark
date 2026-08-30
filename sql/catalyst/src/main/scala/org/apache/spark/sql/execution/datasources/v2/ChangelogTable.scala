@@ -19,9 +19,11 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{EnumSet => JEnumSet, Set => JSet}
 
-import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo, Column, SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogContext, Column, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, MICRO_BATCH_READ}
 import org.apache.spark.sql.connector.read.ScanBuilder
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.{DataType, LongType, StringType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -33,7 +35,12 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 case class ChangelogTable(
     changelog: Changelog,
-    changelogInfo: ChangelogInfo) extends Table with SupportsRead {
+    changelogContext: ChangelogContext,
+    resolved: Boolean = false) extends Table with SupportsRead {
+
+  // Validate that the connector returned a schema with the required CDC metadata columns
+  // and correct types.
+  ChangelogTable.validateSchema(changelog)
 
   override def name: String = changelog.name
 
@@ -44,4 +51,53 @@ case class ChangelogTable(
   }
 
   override def capabilities: JSet[TableCapability] = JEnumSet.of(BATCH_READ, MICRO_BATCH_READ)
+}
+
+object ChangelogTable {
+
+  private[v2] def validateSchema(cl: Changelog): Unit = {
+    val byName = cl.columns.map(c => c.name -> c).toMap
+    def check(name: String, expected: DataType*): Unit = {
+      val col = byName.getOrElse(name,
+        throw QueryCompilationErrors.changelogMissingColumnError(cl.name, name))
+      if (expected.nonEmpty && col.dataType != expected.head) {
+        throw QueryCompilationErrors.changelogInvalidColumnTypeError(
+          cl.name, name, expected.head.sql, col.dataType.sql)
+      }
+    }
+    check("_change_type", StringType)
+    // `_commit_version` must be either `LongType` or `StringType`. Connectors must
+    // additionally guarantee that the column's natural ordering (numeric /
+    // lexicographic) matches commit order, because the netChanges post-processing path
+    // sorts rows by this column. These two types cover every realistic CDC source;
+    // broader atomic types like `IntegerType` are strict subsets of `LongType`, and
+    // `TimestampType` duplicates the role of `_commit_timestamp`. The narrower
+    // contract can always be relaxed later (relaxing is non-breaking; restricting is
+    // not).
+    val versionCol = byName.getOrElse("_commit_version",
+      throw QueryCompilationErrors.changelogMissingColumnError(cl.name, "_commit_version"))
+    if (versionCol.dataType != LongType && versionCol.dataType != StringType) {
+      throw QueryCompilationErrors.changelogInvalidColumnTypeError(
+        cl.name, "_commit_version", "BIGINT or STRING", versionCol.dataType.sql)
+    }
+    check("_commit_timestamp", TimestampType)
+
+    // Only call `rowId()` / `rowVersion()` when a capability requires them; a connector
+    // that advertises a capability without overriding the method surfaces the default
+    // UnsupportedOperationException directly.
+    val needsRowId = cl.containsCarryoverRows() ||
+      cl.representsUpdateAsDeleteAndInsert() ||
+      cl.containsIntermediateChanges()
+    if (needsRowId) {
+      val rowIds = cl.rowId()
+      if (rowIds == null || rowIds.isEmpty) {
+        throw QueryCompilationErrors.changelogMissingRowIdError(cl.name)
+      }
+    }
+    val needsRowVersion = cl.containsCarryoverRows() ||
+      cl.representsUpdateAsDeleteAndInsert()
+    if (needsRowVersion) {
+      cl.rowVersion()
+    }
+  }
 }

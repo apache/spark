@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 
-class DataFrameRangeSuite extends QueryTest with SharedSparkSession with Eventually {
+class DataFrameRangeSuite extends SharedSparkSession with Eventually {
 
   test("SPARK-7150 range api") {
     // numSlice is greater than length

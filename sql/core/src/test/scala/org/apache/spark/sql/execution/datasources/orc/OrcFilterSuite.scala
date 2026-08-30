@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.math.MathContext
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, LocalTime, Period, ZoneOffset}
 
 import scala.jdk.CollectionConverters._
 
@@ -32,6 +32,7 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.datasources.v2.ExtractV2Scan
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.functions.col
@@ -361,6 +362,100 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           Literal(localDateTimes(0)) >= $"_1",
           PredicateLeaf.Operator.LESS_THAN_EQUALS)
         checkFilterPredicate(Literal(localDateTimes(3)) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
+      }
+    }
+  }
+
+  test("SPARK-57571: filter pushdown - time") {
+    val times = Seq(
+      LocalTime.of(0, 0, 0),
+      LocalTime.of(1, 2, 3, 456000000),
+      LocalTime.of(12, 30, 45, 123456000),
+      LocalTime.of(23, 59, 59, 999999000))
+    withOrcFile(times.map(Tuple1(_))) { path =>
+      readFile(path) { implicit df =>
+        checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
+
+        checkFilterPredicate($"_1" === times(0), PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate($"_1" <=> times(0), PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+
+        checkFilterPredicate($"_1" < times(1), PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate($"_1" > times(2), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate($"_1" <= times(0), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate($"_1" >= times(3), PredicateLeaf.Operator.LESS_THAN)
+
+        checkFilterPredicate(Literal(times(0)) === $"_1", PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate(
+          Literal(times(0)) <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+        checkFilterPredicate(Literal(times(1)) > $"_1", PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(
+          Literal(times(2)) < $"_1",
+          PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(
+          Literal(times(0)) >= $"_1",
+          PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(Literal(times(3)) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
+      }
+    }
+  }
+
+  test("SPARK-57823: filter pushdown - nanosecond timestamp") {
+    // Wall clocks carry sub-microsecond digits. The literal is explicitly nanos-typed, so even a
+    // microsecond-aligned value would still exercise the nanos pushdown path; the extra digits
+    // exercise value preservation and comparison beyond microsecond precision.
+    val wallClocks = Seq(
+      LocalDateTime.of(1000, 1, 1, 1, 2, 3, 456789123),
+      LocalDateTime.of(1582, 10, 1, 0, 11, 22, 456789123),
+      LocalDateTime.of(1900, 1, 1, 23, 59, 59, 456789123),
+      LocalDateTime.of(2020, 5, 25, 10, 11, 12, 456789123))
+
+    // Builds a nanos-typed literal so the comparison against the nanos column needs no type
+    // coercion: NTZ uses the wall clock as a LocalDateTime, LTZ as the same instant at UTC.
+    def nanosLiteral(nanosType: DataType, wallClock: LocalDateTime): Expression = {
+      val external: Any = nanosType match {
+        case _: TimestampNTZNanosType => wallClock
+        case _: TimestampLTZNanosType => wallClock.toInstant(ZoneOffset.UTC)
+      }
+      Literal.create(external, nanosType)
+    }
+
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { precision =>
+        Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+          nanosType =>
+            val ts = wallClocks.map(nanosLiteral(nanosType, _))
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              nanosTimestampDf(nanosType, wallClocks).write.orc(path)
+              // Read back without an explicit schema: the nanos type is recovered from the ORC
+              // catalyst-type attribute, so the pushed-down column is nanos-typed.
+              readFile(path) { implicit df =>
+                assert(df("ts").expr.dataType === nanosType)
+
+                checkFilterPredicate($"ts".isNull, PredicateLeaf.Operator.IS_NULL)
+
+                checkFilterPredicate($"ts" === ts(0), PredicateLeaf.Operator.EQUALS)
+                checkFilterPredicate($"ts" <=> ts(0), PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+
+                checkFilterPredicate($"ts" < ts(1), PredicateLeaf.Operator.LESS_THAN)
+                checkFilterPredicate($"ts" > ts(2), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+                checkFilterPredicate($"ts" <= ts(0), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+                checkFilterPredicate($"ts" >= ts(3), PredicateLeaf.Operator.LESS_THAN)
+
+                checkFilterPredicate(ts(0) === $"ts", PredicateLeaf.Operator.EQUALS)
+                checkFilterPredicate(ts(0) <=> $"ts", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+                checkFilterPredicate(ts(1) > $"ts", PredicateLeaf.Operator.LESS_THAN)
+                checkFilterPredicate(ts(2) < $"ts", PredicateLeaf.Operator.LESS_THAN_EQUALS)
+                checkFilterPredicate(ts(0) >= $"ts", PredicateLeaf.Operator.LESS_THAN_EQUALS)
+                checkFilterPredicate(ts(3) <= $"ts", PredicateLeaf.Operator.LESS_THAN)
+
+                // In covers the per-value castLiteralValue path (values.map(...)) in
+                // buildLeafSearchArgument, exercising the nanos literal cast for every element.
+                checkFilterPredicate(
+                  In($"ts", Seq(ts(0), ts(2))), PredicateLeaf.Operator.IN)
+              }
+            }
+        }
       }
     }
   }

@@ -25,16 +25,16 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.HadoopFSUtils
 
 abstract class ParquetFileFormatSuite
-  extends QueryTest
-  with ParquetTest
+  extends ParquetTest
   with SharedSparkSession
   with CommonFileDataSourceSuite {
 
@@ -44,7 +44,7 @@ abstract class ParquetFileFormatSuite
 
   private def checkCannotReadFooterError(body: => Unit): Unit = {
     checkErrorMatchPVals(
-      exception = intercept[SparkException] { body }.getCause.asInstanceOf[SparkException],
+      exception = intercept[SparkException] { body },
       condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
       parameters = Map("path" -> "file:.*")
     )
@@ -97,10 +97,12 @@ abstract class ParquetFileFormatSuite
     }
 
     testReadFooters(true)
+    // With preserveSparkThrowable=true, the structured error class is thrown directly
+    // without being wrapped in a generic SparkException by awaitResult.
     checkErrorMatchPVals(
       exception = intercept[SparkException] {
         testReadFooters(false)
-      }.getCause.asInstanceOf[SparkException],
+      },
       condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
       parameters = Map("path" -> "file:.*")
     )
@@ -143,7 +145,7 @@ abstract class ParquetFileFormatSuite
       exception = intercept[SparkException] {
         ParquetFileFormat.readParquetFootersInParallel(
           conf, Seq(fakeStatus), ignoreCorruptFiles = false, ignoreMissingFiles = false)
-      }.getCause.asInstanceOf[SparkException],
+      },
       condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
       parameters = Map("path" -> s"${WrappingFNFLocalFileSystem.scheme}:.*")
     )
@@ -268,6 +270,7 @@ class ParquetFileFormatV1Suite extends ParquetFileFormatSuite {
       .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 }
 
+@ExtendedSQLTest
 class ParquetFileFormatV2Suite extends ParquetFileFormatSuite {
   override protected def sparkConf: SparkConf =
     super

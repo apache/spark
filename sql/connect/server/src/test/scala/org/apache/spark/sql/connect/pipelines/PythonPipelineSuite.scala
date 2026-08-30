@@ -29,15 +29,18 @@ import scala.util.Try
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
+import org.apache.spark.SparkConf
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.classic.ColumnConversions._
 import org.apache.spark.sql.connect.PythonTestDepsChecker
 import org.apache.spark.sql.connect.service.SparkConnectService
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, TableCatalog}
 import org.apache.spark.sql.pipelines.Language.Python
+import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.common.FlowStatus
-import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl, QueryOrigin, QueryOriginType}
+import org.apache.spark.sql.pipelines.graph.{AutoCdcFlow, AutoCdcMergeFlow, DataflowGraph, PipelineUpdateContextImpl, QueryOrigin, QueryOriginType}
 import org.apache.spark.sql.pipelines.logging.EventLevel
 import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
 import org.apache.spark.sql.types.StructType
@@ -51,10 +54,24 @@ class PythonPipelineSuite
     with TestPipelineUpdateContextMixin
     with EventVerificationTestHelpers {
 
-  def buildGraph(pythonText: String): DataflowGraph = {
+  // Register a V2 in-memory catalog so AutoCDC tests can exercise pipeline-default-catalog
+  // inheritance against a name that is never the session default `spark_catalog`. The V2 in-memory
+  // catalog doesn't support streaming reads, but the AutoCDC tests that touch it only run graph
+  // resolution -- not pipeline execution -- so this is sufficient.
+  override def sparkConf: SparkConf = super.sparkConf
+    .set("spark.sql.catalog.my_catalog", classOf[InMemoryTableCatalog].getName)
+
+  def buildGraph(
+      pythonText: String,
+      defaultCatalog: Option[String] = None,
+      defaultDatabase: Option[String] = None,
+      setupSql: Option[String] = None): DataflowGraph = {
     val indentedPythonText = pythonText.linesIterator.map("        " + _).mkString("\n")
     // create a unique identifier to allow identifying the session and dataflow graph
     val customSessionIdentifier = UUID.randomUUID().toString
+    val defaultCatalogPyExpr = defaultCatalog.map(c => s""""$c"""").getOrElse("None")
+    val defaultDatabasePyExpr = defaultDatabase.map(d => s""""$d"""").getOrElse("None")
+    val setupSqlLine = setupSql.map(stmt => s"""spark.sql(\"\"\"$stmt\"\"\")""").getOrElse("")
     val pythonCode =
       s"""
          |from pyspark.sql import SparkSession
@@ -76,10 +93,12 @@ class PythonPipelineSuite
          |    .config("spark.custom.identifier", "$customSessionIdentifier") \\
          |    .create()
          |
+         |$setupSqlLine
+         |
          |dataflow_graph_id = create_dataflow_graph(
          |    spark,
-         |    default_catalog=None,
-         |    default_database=None,
+         |    default_catalog=$defaultCatalogPyExpr,
+         |    default_database=$defaultDatabasePyExpr,
          |    sql_conf={},
          |)
          |
@@ -118,14 +137,16 @@ class PythonPipelineSuite
     TableIdentifier(catalog = Option("spark_catalog"), database = Option("default"), table = name)
   }
 
+  private def sessionCaseSensitive: Boolean = spark.sessionState.conf.caseSensitiveAnalysis
+
   test("basic") {
     val graph = buildGraph("""
         |@dp.table
         |def table1():
         |    return spark.readStream.format("rate").load()
         |""".stripMargin)
-      .resolve()
-      .validate()
+      .resolve(sessionCaseSensitive)
+      .validate(sessionCaseSensitive)
     assert(graph.flows.size == 1)
     assert(graph.tables.size == 1)
   }
@@ -151,7 +172,7 @@ class PythonPipelineSuite
           QueryOrigin(
             language = Option(Python()),
             filePath = Option("<string>"),
-            line = Option(34),
+            line = Option(36),
             objectName = Option("spark_catalog.default.table1"),
             objectType = Option(QueryOriginType.Flow.toString))),
       errorChecker = ex =>
@@ -161,6 +182,12 @@ class PythonPipelineSuite
   }
 
   test("flow progress events have correct python source code location") {
+    // `standalone_flow1` writes to its own dedicated streaming table `st2` (rather than appending
+    // to `table1`, which already has its own implicit flow). Two flows writing concurrently to the
+    // same file-based streaming table share a single `_spark_metadata` log and race on the batch 0
+    // commit (`ManifestFileCommitProtocol`: "Race while writing batch 0"), which made this test
+    // flaky. Keeping each flow on a separate destination removes the race without changing what the
+    // test verifies (source-code-location propagation for an append flow).
     val unresolvedGraph = buildGraph(pythonText = """
         |@dp.table(
         | comment = 'my table'
@@ -178,10 +205,12 @@ class PythonPipelineSuite
         |   return df.select("age")
         |
         |@dp.append_flow(
-        | target = 'table1'
+        | target = 'st2'
         |)
         |def standalone_flow1():
         |   return spark.readStream.table('mv2')
+        |
+        |dp.create_streaming_table('st2')
         |""".stripMargin)
 
     val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph, storageRoot)
@@ -203,7 +232,7 @@ class PythonPipelineSuite
             QueryOrigin(
               language = Option(Python()),
               filePath = Option("<string>"),
-              line = Option(40),
+              line = Option(42),
               objectName = Option("spark_catalog.default.mv2"),
               objectType = Option(QueryOriginType.Flow.toString))),
         expectedEventLevel = EventLevel.INFO)
@@ -217,7 +246,7 @@ class PythonPipelineSuite
             QueryOrigin(
               language = Option(Python()),
               filePath = Option("<string>"),
-              line = Option(44),
+              line = Option(46),
               objectName = Option("spark_catalog.default.mv"),
               objectType = Option(QueryOriginType.Flow.toString))),
         expectedEventLevel = EventLevel.INFO)
@@ -235,7 +264,7 @@ class PythonPipelineSuite
               QueryOrigin(
                 language = Option(Python()),
                 filePath = Option("<string>"),
-                line = Option(34),
+                line = Option(36),
                 objectName = Option("spark_catalog.default.table1"),
                 objectType = Option(QueryOriginType.Flow.toString))),
           expectedEventLevel = EventLevel.INFO)
@@ -249,7 +278,7 @@ class PythonPipelineSuite
               QueryOrigin(
                 language = Option(Python()),
                 filePath = Option("<string>"),
-                line = Option(49),
+                line = Option(51),
                 objectName = Option("spark_catalog.default.standalone_flow1"),
                 objectType = Option(QueryOriginType.Flow.toString))),
           expectedEventLevel = EventLevel.INFO)
@@ -275,7 +304,7 @@ class PythonPipelineSuite
         |def a():
         |  return spark.range(5)
         |""".stripMargin)
-    val resolvedGraph = graph.resolve().validate()
+    val resolvedGraph = graph.resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
     assert(resolvedGraph.tables.size == 4)
     assert(resolvedGraph.resolvedFlows.size == 4)
   }
@@ -289,7 +318,7 @@ class PythonPipelineSuite
       |@dp.append_flow(target = "a")
       |def supplement():
       |  return spark.readStream.format("rate").load()
-      |""".stripMargin).resolve().validate()
+      |""".stripMargin).resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
 
     assert(graph.tables.map(_.identifier.table).toSet == Set("a"))
     assert(graph.resolvedFlows.size == 2)
@@ -350,7 +379,7 @@ class PythonPipelineSuite
       |@dp.table
       |def d():
       |  return spark.sql("SELECT * FROM STREAM src")
-      |""".stripMargin).resolve().validate()
+      |""".stripMargin).resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
 
     assert(
       graph.table.keySet == Set(
@@ -397,7 +426,7 @@ class PythonPipelineSuite
         |@dp.table
         |def e():
         |  return spark.sql("SELECT * FROM STREAM spark_catalog.default.src")
-        |""".stripMargin).resolve().validate()
+        |""".stripMargin).resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
 
     assert(
       graph.tables.map(_.identifier).toSet == Set(
@@ -439,7 +468,7 @@ class PythonPipelineSuite
         |@dp.table
         |def e():
         |  return spark.sql("SELECT * FROM STREAM src")
-        |""".stripMargin).resolve()
+        |""".stripMargin).resolve(sessionCaseSensitive)
 
     assert(graph.resolutionFailedFlows.size == 5)
     graph.resolutionFailedFlows.foreach { flow =>
@@ -469,7 +498,7 @@ class PythonPipelineSuite
         |@dp.table
         |def e():
         |  return spark.sql("SELECT * FROM STREAM spark_catalog.default.src")
-        |""".stripMargin).resolve()
+        |""".stripMargin).resolve(sessionCaseSensitive)
     assert(graph.resolutionFailedFlows.size == 5)
     graph.resolutionFailedFlows.foreach { flow =>
       assert(flow.failure.head.getMessage.contains("[TABLE_OR_VIEW_NOT_FOUND]"))
@@ -490,7 +519,7 @@ class PythonPipelineSuite
         |@dp.materialized_view
         |def mv_from_read_table_df():
         |  return read_table_df
-        |""".stripMargin).resolve().validate()
+        |""".stripMargin).resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
 
     assert(
       graph.resolvedFlows.map(_.identifier).toSet == Set(
@@ -514,7 +543,7 @@ class PythonPipelineSuite
         |def mv_from_read_table_df():
         |  return read_table_df
         |
-        |""".stripMargin).resolve().validate()
+        |""".stripMargin).resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
     assert(
       graph.resolvedFlows.map(_.identifier).toSet == Set(
         graphIdentifier("mv_from_read_table_df"),
@@ -581,7 +610,7 @@ class PythonPipelineSuite
          |@dp.table(name = "schema_b.st_2")
          |def irrelevant_3():
          |  return spark.readStream.format("rate").load()
-         |""".stripMargin).resolve()
+         |""".stripMargin).resolve(sessionCaseSensitive)
 
     // validate these dataset are properly fully qualified
     assert(
@@ -632,7 +661,7 @@ class PythonPipelineSuite
            |@dp.table(name = "some_catalog.some_schema.st")
            |def irrelevant_2():
            |  return spark.readStream.format("rate").load()
-           |""".stripMargin).resolve()
+           |""".stripMargin).resolve(sessionCaseSensitive)
     }
     assert(graphTry.isSuccess)
     assert(
@@ -662,7 +691,7 @@ class PythonPipelineSuite
          |@dp.temporary_view(name= "view_3")
          |def irrelevant_2():
          |  return spark.read.table("view_1")
-         |""".stripMargin).resolve()
+         |""".stripMargin).resolve(sessionCaseSensitive)
     // views are temporary views, so they're not fully qualified.
     assert(
       Set("view_1", "view_2", "view_3").subsetOf(
@@ -698,7 +727,7 @@ class PythonPipelineSuite
            |@dp.append_flow(target = "default.a")
            |def supplement():
            |  return spark.readStream.format("rate").load()
-           |""".stripMargin).resolve().validate()
+           |""".stripMargin).resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
 
     assert(graph.tables.map(_.identifier) == Seq(graphIdentifier("a")))
     assert(
@@ -867,8 +896,8 @@ class PythonPipelineSuite
         |def table_with_string_schema():
         |    return spark.range(5).withColumn("name", lit("test"))
         |""".stripMargin)
-      .resolve()
-      .validate()
+      .resolve(sessionCaseSensitive)
+      .validate(sessionCaseSensitive)
 
     assert(graph.flows.size == 1)
     assert(graph.tables.size == 1)
@@ -890,8 +919,8 @@ class PythonPipelineSuite
         |def table_with_struct_schema():
         |    return spark.range(5).withColumn("name", lit("test"))
         |""".stripMargin)
-      .resolve()
-      .validate()
+      .resolve(sessionCaseSensitive)
+      .validate(sessionCaseSensitive)
 
     assert(graph.flows.size == 1)
     assert(graph.tables.size == 1)
@@ -909,9 +938,9 @@ class PythonPipelineSuite
         |def table_with_wrong_schema():
         |    return spark.range(5).withColumn("wrong_column", lit("test"))
         |""".stripMargin)
-      .resolve()
+      .resolve(sessionCaseSensitive)
 
-    val ex = intercept[AnalysisException] { graph.validate() }
+    val ex = intercept[AnalysisException] { graph.validate(sessionCaseSensitive) }
     assert(ex.getMessage.contains("has a user-specified schema that is incompatible"))
     assert(ex.getMessage.contains("table_with_wrong_schema"))
   }
@@ -928,11 +957,493 @@ class PythonPipelineSuite
         |def table_with_wrong_struct_schema():
         |    return spark.range(5).withColumn("different_column", lit("test"))
         |""".stripMargin)
-      .resolve()
+      .resolve(sessionCaseSensitive)
 
-    val ex = intercept[AnalysisException] { graph.validate() }
+    val ex = intercept[AnalysisException] { graph.validate(sessionCaseSensitive) }
     assert(ex.getMessage.contains("has a user-specified schema that is incompatible"))
     assert(ex.getMessage.contains("table_with_wrong_struct_schema"))
+  }
+
+  private def buildAutoCdcFlow(pipelineSource: String): AutoCdcFlow = {
+    val graph = buildGraph(pipelineSource)
+    graph.flows
+      .collectFirst { case f: AutoCdcFlow => f }
+      .getOrElse(fail(s"Expected an AutoCdcFlow in the graph, got: ${graph.flows}"))
+  }
+
+  test("AutoCDC API: minimal flow registers an AutoCdcFlow with default name and SCD1 default") {
+    val flow = buildAutoCdcFlow("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |)
+        |""".stripMargin)
+
+    assert(flow.identifier == graphIdentifier("target"))
+    assert(flow.destinationIdentifier == graphIdentifier("target"))
+    assert(flow.changeArgs.keys == Seq(UnqualifiedColumnName("value")))
+    assert(flow.changeArgs.sequencing.expr.sql == "timestamp")
+    assert(flow.changeArgs.deleteCondition.isEmpty)
+    assert(flow.changeArgs.columnSelection.isEmpty)
+    assert(flow.changeArgs.storedAsScdType == ScdType.Type1)
+  }
+
+  test("AutoCDC API: composite keys are forwarded to ChangeArgs in order") {
+    val flow = buildAutoCdcFlow("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value", "timestamp"],
+        |    sequence_by = "timestamp",
+        |)
+        |""".stripMargin)
+
+    assert(
+      flow.changeArgs.keys ==
+        Seq(UnqualifiedColumnName("value"), UnqualifiedColumnName("timestamp")))
+  }
+
+  test("AutoCDC API: apply_as_deletes is forwarded as a delete condition column") {
+    val flow = buildAutoCdcFlow("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    apply_as_deletes = "value % 2 = 0",
+        |)
+        |""".stripMargin)
+
+    val deleteCondition = flow.changeArgs.deleteCondition.getOrElse(
+      fail("expected apply_as_deletes to populate deleteCondition"))
+    assert(deleteCondition.expr.sql.contains("value"))
+    assert(deleteCondition.expr.sql.contains("0"))
+  }
+
+  test("AutoCDC API: column_list is forwarded as IncludeColumns") {
+    val flow = buildAutoCdcFlow("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    column_list = ["value", "timestamp"],
+        |)
+        |""".stripMargin)
+
+    assert(
+      flow.changeArgs.columnSelection.contains(ColumnSelection.IncludeColumns(
+        Seq(UnqualifiedColumnName("value"), UnqualifiedColumnName("timestamp")))))
+  }
+
+  test("AutoCDC API: except_column_list is forwarded as ExcludeColumns") {
+    val flow = buildAutoCdcFlow("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    except_column_list = ["timestamp"],
+        |)
+        |""".stripMargin)
+
+    assert(
+      flow.changeArgs.columnSelection.contains(
+        ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("timestamp")))))
+  }
+
+  test("AutoCDC API: explicit `name` is honored as the flow identifier") {
+    val flow = buildAutoCdcFlow("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    name = "my_flow",
+        |)
+        |""".stripMargin)
+
+    assert(flow.identifier == graphIdentifier("my_flow"))
+    assert(flow.destinationIdentifier == graphIdentifier("target"))
+  }
+
+  test("AutoCDC API: spark_conf is forwarded to the flow's sqlConf") {
+    val flow = buildAutoCdcFlow("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    spark_conf = {"spark.sql.shuffle.partitions": "8"},
+        |)
+        |""".stripMargin)
+
+    assert(flow.sqlConf == Map("spark.sql.shuffle.partitions" -> "8"))
+  }
+
+  test("AutoCDC API: multi-part `keys` column is rejected at flow registration") {
+    val ex = intercept[RuntimeException] {
+      buildAutoCdcFlow("""
+          |@dp.table
+          |def src():
+          |  return spark.readStream.format("rate").load()
+          |
+          |dp.create_streaming_table("target")
+          |
+          |dp.create_auto_cdc_flow(
+          |    target = "target",
+          |    source = "src",
+          |    keys = ["a.b"],
+          |    sequence_by = "timestamp",
+          |)
+          |""".stripMargin)
+    }
+    assert(ex.getMessage.contains("AUTOCDC_MULTIPART_COLUMN_IDENTIFIER"))
+  }
+
+  test("AutoCDC API: multi-part `column_list` entry is rejected at flow registration") {
+    val ex = intercept[RuntimeException] {
+      buildAutoCdcFlow("""
+          |@dp.table
+          |def src():
+          |  return spark.readStream.format("rate").load()
+          |
+          |dp.create_streaming_table("target")
+          |
+          |dp.create_auto_cdc_flow(
+          |    target = "target",
+          |    source = "src",
+          |    keys = ["value"],
+          |    sequence_by = "timestamp",
+          |    column_list = ["nested.field"],
+          |)
+          |""".stripMargin)
+    }
+    assert(ex.getMessage.contains("AUTOCDC_MULTIPART_COLUMN_IDENTIFIER"))
+  }
+
+  test("AutoCDC API: Column-object form of keys/sequence_by/apply_as_deletes is honored") {
+    val flow = buildAutoCdcFlow("""
+        |from pyspark.sql.functions import col, expr
+        |
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = [col("value")],
+        |    sequence_by = col("timestamp"),
+        |    apply_as_deletes = expr("value % 2 = 0"),
+        |)
+        |""".stripMargin)
+
+    assert(flow.changeArgs.keys == Seq(UnqualifiedColumnName("value")))
+    assert(flow.changeArgs.sequencing.expr.sql == "timestamp")
+    val deleteCondition = flow.changeArgs.deleteCondition.getOrElse(
+      fail("expected apply_as_deletes to populate deleteCondition"))
+    assert(deleteCondition.expr.sql.contains("value"))
+    assert(deleteCondition.expr.sql.contains("0"))
+  }
+
+  test("AutoCDC API: graph resolves with the source streaming table as the flow's input") {
+    val graph = buildGraph("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |)
+        |""".stripMargin).resolve(sessionCaseSensitive)
+
+    val resolvedFlow = graph.resolvedFlow(graphIdentifier("target"))
+    assert(resolvedFlow.inputs == Set(graphIdentifier("src")))
+  }
+
+  test("AutoCDC API: single-part `source` inherits the pipeline's default catalog and database") {
+    // Use `my_catalog` (registered in `sparkConf`) so the pipeline-default catalog differs from
+    // the session default (`spark_catalog`), and a non-default namespace `my_db` so the
+    // pipeline-default database differs from the session default (`default`). The CREATE NAMESPACE
+    // runs on the same Connect session that subsequently creates the dataflow graph, so the
+    // namespace is visible to that session's per-session V2 catalog instance.
+    val graph = buildGraph(
+      """
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |)
+        |""".stripMargin,
+      defaultCatalog = Some("my_catalog"),
+      defaultDatabase = Some("my_db"),
+      setupSql = Some("CREATE NAMESPACE IF NOT EXISTS my_catalog.my_db"))
+      .resolve(sessionCaseSensitive)
+
+    val resolvedFlow =
+      graph.resolvedFlow(TableIdentifier("target", Some("my_db"), Some("my_catalog")))
+    assert(
+      resolvedFlow.inputs ==
+        Set(TableIdentifier("src", Some("my_db"), Some("my_catalog"))))
+  }
+
+  test("AutoCDC API: multi-part `source` resolves to the corresponding qualified dataset") {
+    val graph = buildGraph("""
+        |@dp.table(name = "some_catalog.some_schema.src")
+        |def irrelevant():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table(name = "some_catalog.some_schema.target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "some_catalog.some_schema.target",
+        |    source = "some_catalog.some_schema.src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |)
+        |""".stripMargin).resolve(sessionCaseSensitive)
+
+    val targetIdent = TableIdentifier("target", Some("some_schema"), Some("some_catalog"))
+    val srcIdent = TableIdentifier("src", Some("some_schema"), Some("some_catalog"))
+    val resolvedFlow = graph.resolvedFlow(targetIdent)
+    assert(resolvedFlow.inputs == Set(srcIdent))
+  }
+
+  test("AutoCDC API: non-attribute expression in keys is rejected") {
+    val ex = intercept[RuntimeException] {
+      buildGraph("""
+          |from pyspark.sql.functions import expr
+          |
+          |@dp.table
+          |def src():
+          |  return spark.readStream.format("rate").load()
+          |
+          |dp.create_streaming_table("target")
+          |
+          |dp.create_auto_cdc_flow(
+          |    target = "target",
+          |    source = "src",
+          |    keys = [expr("value + 1")],
+          |    sequence_by = "timestamp",
+          |)
+          |""".stripMargin)
+    }
+    assert(ex.getMessage.contains("AUTOCDC_NON_COLUMN_IDENTIFIER"))
+  }
+
+  test("AutoCDC API: specifying both column_list and except_column_list is rejected") {
+    // The Python create_auto_cdc_flow API rejects the "at most one" violation client-side with a
+    // CANNOT_SET_TOGETHER PySparkValueError, so the request never reaches the server. The
+    // server-side defense (AUTOCDC_BOTH_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST) is exercised directly
+    // against a raw proto in SparkDeclarativePipelinesServerSuite.
+    val ex = intercept[RuntimeException] {
+      buildGraph("""
+          |@dp.table
+          |def src():
+          |  return spark.readStream.format("rate").load()
+          |
+          |dp.create_streaming_table("target")
+          |
+          |dp.create_auto_cdc_flow(
+          |    target = "target",
+          |    source = "src",
+          |    keys = ["value"],
+          |    sequence_by = "timestamp",
+          |    column_list = ["value"],
+          |    except_column_list = ["timestamp"],
+          |)
+          |""".stripMargin)
+    }
+    assert(ex.getMessage.contains("CANNOT_SET_TOGETHER"))
+  }
+
+  test("AutoCDC API: registered flow survives graph resolution and validation end-to-end") {
+    val graph = buildGraph("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    apply_as_deletes = "value % 2 = 0",
+        |    column_list = ["value", "timestamp"],
+        |)
+        |""".stripMargin).resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
+
+    val resolvedFlow = graph.resolvedFlow(graphIdentifier("target"))
+    assert(resolvedFlow.isInstanceOf[AutoCdcMergeFlow])
+    val mergeFlow = resolvedFlow.asInstanceOf[AutoCdcMergeFlow]
+    assert(mergeFlow.changeArgs.keys == Seq(UnqualifiedColumnName("value")))
+    assert(mergeFlow.changeArgs.sequencing.expr.sql == "timestamp")
+    assert(mergeFlow.changeArgs.deleteCondition.isDefined)
+    assert(
+      mergeFlow.changeArgs.columnSelection.contains(ColumnSelection.IncludeColumns(
+        Seq(UnqualifiedColumnName("value"), UnqualifiedColumnName("timestamp")))))
+    assert(mergeFlow.changeArgs.storedAsScdType == ScdType.Type1)
+  }
+
+  // SCD2 flows are only asserted at registration (via buildAutoCdcFlow) rather than through
+  // resolve().validate(): the engine's SCD2 execution path is still landing in a parallel
+  // workstream and rejects SCD2 during graph analysis. These tests pin the API-to-ChangeArgs
+  // contract those changes plug into.
+  test("AutoCDC API: SCD2 with track_history_column_list forwards to ChangeArgs") {
+    val flow = buildAutoCdcFlow("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    stored_as_scd_type = 2,
+        |    track_history_column_list = ["value"],
+        |)
+        |""".stripMargin)
+
+    assert(flow.changeArgs.storedAsScdType == ScdType.Type2)
+    assert(
+      flow.changeArgs.trackHistorySelection.contains(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("value")))))
+  }
+
+  test("AutoCDC API: SCD2 with track_history_except_column_list forwards to ChangeArgs") {
+    val flow = buildAutoCdcFlow("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    stored_as_scd_type = 2,
+        |    track_history_except_column_list = ["timestamp"],
+        |)
+        |""".stripMargin)
+
+    assert(flow.changeArgs.storedAsScdType == ScdType.Type2)
+    assert(
+      flow.changeArgs.trackHistorySelection.contains(
+        ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("timestamp")))))
+  }
+
+  test("AutoCDC API: SCD2 without track-history columns leaves selection unset") {
+    val flow = buildAutoCdcFlow("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    stored_as_scd_type = 2,
+        |)
+        |""".stripMargin)
+
+    assert(flow.changeArgs.storedAsScdType == ScdType.Type2)
+    assert(flow.changeArgs.trackHistorySelection.isEmpty)
+  }
+
+  test("AutoCDC API: specifying both track_history column lists is rejected") {
+    // The Python create_auto_cdc_flow API rejects the "at most one" violation client-side with a
+    // CANNOT_SET_TOGETHER PySparkValueError, so the request never reaches the server. The
+    // server-side defense (AUTOCDC_BOTH_TRACK_HISTORY_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST) is
+    // exercised directly against a raw proto in SparkDeclarativePipelinesServerSuite.
+    val ex = intercept[RuntimeException] {
+      buildGraph("""
+          |@dp.table
+          |def src():
+          |  return spark.readStream.format("rate").load()
+          |
+          |dp.create_streaming_table("target")
+          |
+          |dp.create_auto_cdc_flow(
+          |    target = "target",
+          |    source = "src",
+          |    keys = ["value"],
+          |    sequence_by = "timestamp",
+          |    stored_as_scd_type = 2,
+          |    track_history_column_list = ["value"],
+          |    track_history_except_column_list = ["timestamp"],
+          |)
+          |""".stripMargin)
+    }
+    assert(ex.getMessage.contains("CANNOT_SET_TOGETHER"))
   }
 
   /**

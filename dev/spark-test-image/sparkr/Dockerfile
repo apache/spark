@@ -29,6 +29,8 @@ ENV FULL_REFRESH_DATE=20260316
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
 
+RUN printf 'Types: deb\nURIs: https://mirrors.edge.kernel.org/ubuntu\nSuites: noble noble-updates noble-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n' > /etc/apt/sources.list.d/mirror.sources
+
 RUN apt-get update && apt-get install -y \
     build-essential \
     ca-certificates \
@@ -50,6 +52,7 @@ RUN apt-get update && apt-get install -y \
     libpython3-dev \
     libssl-dev \
     libtiff5-dev \
+    libuv1-dev \
     libwebp-dev \
     libxml2-dev \
     pandoc \
@@ -59,12 +62,13 @@ RUN apt-get update && apt-get install -y \
     software-properties-common \
     wget \
     zlib1g-dev \
+    zstd \
     && rm -rf /var/lib/apt/lists/*
 
-RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/' >> /etc/apt/sources.list
+RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu noble-cran40/' >> /etc/apt/sources.list
 RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
-RUN gpg -a --export E084DAB9 | apt-key add -
-RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/'
+RUN gpg -a --export E084DAB9 > /etc/apt/trusted.gpg.d/cran.asc
+RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu noble-cran40/'
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
 RUN Rscript -e "install.packages(c('remotes', 'knitr', 'markdown',  \

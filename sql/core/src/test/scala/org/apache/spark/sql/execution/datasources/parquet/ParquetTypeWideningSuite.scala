@@ -25,7 +25,7 @@ import org.apache.parquet.hadoop.ParquetOutputFormat
 import org.apache.parquet.hadoop.util.HadoopInputFile
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.functions.col
@@ -34,10 +34,11 @@ import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DecimalType.{ByteDecimal, IntDecimal, LongDecimal, ShortDecimal}
+import org.apache.spark.tags.ExtendedSQLTest
 
+@ExtendedSQLTest
 class ParquetTypeWideningSuite
-    extends QueryTest
-    with ParquetTest
+    extends ParquetTest
     with SharedSparkSession
     with AdaptiveSparkPlanHelper {
 

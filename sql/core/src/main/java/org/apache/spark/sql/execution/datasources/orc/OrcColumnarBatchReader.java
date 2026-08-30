@@ -182,7 +182,8 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       DataType dt = requiredFields[i].dataType();
       if (requestedPartitionColIds[i] != -1) {
         ConstantColumnVector partitionCol = new ConstantColumnVector(capacity, dt);
-        ColumnVectorUtils.populate(partitionCol, partitionValues, requestedPartitionColIds[i]);
+        ColumnVectorUtils.populate(
+            partitionCol, partitionValues, requestedPartitionColIds[i], memoryMode);
         orcVectorWrappers[i] = partitionCol;
       } else {
         int colId = requestedDataColIds[i];

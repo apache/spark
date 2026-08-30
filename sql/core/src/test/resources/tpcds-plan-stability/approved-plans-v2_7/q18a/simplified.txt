@@ -1,6 +1,6 @@
 TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,agg4,agg5,agg6,agg7]
-  Union
-    WholeStageCodegen (8)
+  WholeStageCodegen (36)
+    Union
       HashAggregate [i_item_id,ca_country,ca_state,ca_county,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count] [avg(agg1),avg(agg2),avg(agg3),avg(agg4),avg(agg5),avg(agg6),avg(agg7),agg1,agg2,agg3,agg4,agg5,agg6,agg7,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
         InputAdapter
           Exchange [i_item_id,ca_country,ca_state,ca_county] #1
@@ -69,11 +69,10 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                             ColumnarToRow
                               InputAdapter
                                 Scan parquet spark_catalog.default.item [i_item_sk,i_item_id]
-    WholeStageCodegen (16)
       HashAggregate [i_item_id,ca_country,ca_state,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count] [avg(agg1),avg(agg2),avg(agg3),avg(agg4),avg(agg5),avg(agg6),avg(agg7),county,agg1,agg2,agg3,agg4,agg5,agg6,agg7,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
         InputAdapter
           Exchange [i_item_id,ca_country,ca_state] #8
-            WholeStageCodegen (15)
+            WholeStageCodegen (14)
               HashAggregate [i_item_id,ca_country,ca_state,agg1,agg2,agg3,agg4,agg5,agg6,agg7] [sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
                 Project [i_item_id,ca_country,ca_state,cs_quantity,cs_list_price,cs_coupon_amt,cs_sales_price,cs_net_profit,c_birth_year,cd_dep_count]
                   BroadcastHashJoin [cs_item_sk,i_item_sk]
@@ -100,7 +99,7 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                   ReusedExchange [cd_demo_sk] #5
                             InputAdapter
                               BroadcastExchange #9
-                                WholeStageCodegen (12)
+                                WholeStageCodegen (11)
                                   Filter [ca_state,ca_address_sk]
                                     ColumnarToRow
                                       InputAdapter
@@ -109,11 +108,10 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                           ReusedExchange [d_date_sk] #2
                     InputAdapter
                       ReusedExchange [i_item_sk,i_item_id] #7
-    WholeStageCodegen (24)
       HashAggregate [i_item_id,ca_country,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count] [avg(agg1),avg(agg2),avg(agg3),avg(agg4),avg(agg5),avg(agg6),avg(agg7),ca_state,county,agg1,agg2,agg3,agg4,agg5,agg6,agg7,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
         InputAdapter
           Exchange [i_item_id,ca_country] #10
-            WholeStageCodegen (23)
+            WholeStageCodegen (21)
               HashAggregate [i_item_id,ca_country,agg1,agg2,agg3,agg4,agg5,agg6,agg7] [sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
                 Project [i_item_id,ca_country,cs_quantity,cs_list_price,cs_coupon_amt,cs_sales_price,cs_net_profit,c_birth_year,cd_dep_count]
                   BroadcastHashJoin [cs_item_sk,i_item_sk]
@@ -140,7 +138,7 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                   ReusedExchange [cd_demo_sk] #5
                             InputAdapter
                               BroadcastExchange #11
-                                WholeStageCodegen (20)
+                                WholeStageCodegen (18)
                                   Project [ca_address_sk,ca_country]
                                     Filter [ca_state,ca_address_sk]
                                       ColumnarToRow
@@ -150,11 +148,10 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                           ReusedExchange [d_date_sk] #2
                     InputAdapter
                       ReusedExchange [i_item_sk,i_item_id] #7
-    WholeStageCodegen (32)
       HashAggregate [i_item_id,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count] [avg(agg1),avg(agg2),avg(agg3),avg(agg4),avg(agg5),avg(agg6),avg(agg7),ca_country,ca_state,county,agg1,agg2,agg3,agg4,agg5,agg6,agg7,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
         InputAdapter
           Exchange [i_item_id] #12
-            WholeStageCodegen (31)
+            WholeStageCodegen (28)
               HashAggregate [i_item_id,agg1,agg2,agg3,agg4,agg5,agg6,agg7] [sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
                 Project [i_item_id,cs_quantity,cs_list_price,cs_coupon_amt,cs_sales_price,cs_net_profit,c_birth_year,cd_dep_count]
                   BroadcastHashJoin [cs_item_sk,i_item_sk]
@@ -181,7 +178,7 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                   ReusedExchange [cd_demo_sk] #5
                             InputAdapter
                               BroadcastExchange #13
-                                WholeStageCodegen (28)
+                                WholeStageCodegen (25)
                                   Project [ca_address_sk]
                                     Filter [ca_state,ca_address_sk]
                                       ColumnarToRow
@@ -191,11 +188,10 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                           ReusedExchange [d_date_sk] #2
                     InputAdapter
                       ReusedExchange [i_item_sk,i_item_id] #7
-    WholeStageCodegen (40)
       HashAggregate [sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count] [avg(agg1),avg(agg2),avg(agg3),avg(agg4),avg(agg5),avg(agg6),avg(agg7),i_item_id,ca_country,ca_state,county,agg1,agg2,agg3,agg4,agg5,agg6,agg7,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
         InputAdapter
           Exchange #14
-            WholeStageCodegen (39)
+            WholeStageCodegen (35)
               HashAggregate [agg1,agg2,agg3,agg4,agg5,agg6,agg7] [sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
                 Project [cs_quantity,cs_list_price,cs_coupon_amt,cs_sales_price,cs_net_profit,c_birth_year,cd_dep_count]
                   BroadcastHashJoin [cs_item_sk,i_item_sk]
@@ -226,7 +222,7 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                           ReusedExchange [d_date_sk] #2
                     InputAdapter
                       BroadcastExchange #15
-                        WholeStageCodegen (38)
+                        WholeStageCodegen (34)
                           Filter [i_item_sk]
                             ColumnarToRow
                               InputAdapter

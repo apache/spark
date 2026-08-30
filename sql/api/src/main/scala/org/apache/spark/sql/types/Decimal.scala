@@ -407,7 +407,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
           lv = roundMode match {
             case ROUND_FLOOR => if (lv < 0) -1L else 0L
             case ROUND_CEILING => if (lv > 0) 1L else 0L
-            case ROUND_HALF_UP | ROUND_HALF_EVEN => 0L
+            case ROUND_HALF_UP | ROUND_HALF_EVEN | ROUND_DOWN => 0L
             case _ => throw DataTypeErrors.unsupportedRoundingMode(roundMode)
           }
         } else {
@@ -433,6 +433,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
               if (doubled > pow10diff || doubled == pow10diff && lv % 2 != 0) {
                 lv += (if (droppedDigits < 0) -1L else 1L)
               }
+            case ROUND_DOWN =>
+            // Truncation toward zero: `lv /= pow10diff` already dropped the fractional part.
             case _ =>
               throw DataTypeErrors.unsupportedRoundingMode(roundMode)
           }
@@ -530,6 +532,15 @@ final class Decimal extends Ordered[Decimal] with Serializable {
           .divide(that.toJavaBigDecimal, DecimalType.MAX_SCALE + 1, MATH_CONTEXT.getRoundingMode))
     }
 
+  /**
+   * Divides `this` by `that` rounding the result to `scale` fractional digits with HALF_UP.
+   * Returns the same result as `this / that` followed by rounding to `scale`, but with a single
+   * division, which stays in the compact representation when the quotient fits in a Long.
+   */
+  def div(that: Decimal, scale: Int): Decimal =
+    if (that.isZero) null
+    else Decimal(toJavaBigDecimal.divide(that.toJavaBigDecimal, scale, RoundingMode.HALF_UP))
+
   def %(that: Decimal): Decimal =
     if (that.isZero) null
     else Decimal(toJavaBigDecimal.remainder(that.toJavaBigDecimal, MATH_CONTEXT))
@@ -569,6 +580,7 @@ object Decimal {
   val ROUND_HALF_EVEN = BigDecimal.RoundingMode.HALF_EVEN
   val ROUND_CEILING = BigDecimal.RoundingMode.CEILING
   val ROUND_FLOOR = BigDecimal.RoundingMode.FLOOR
+  val ROUND_DOWN = BigDecimal.RoundingMode.DOWN
 
   /** Maximum number of decimal digits an Int can represent */
   val MAX_INT_DIGITS = 9

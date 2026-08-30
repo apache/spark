@@ -42,6 +42,8 @@ private[sql] object SqlApiConfHelper {
     "spark.sql.parser.parserDfaCacheFlushThreshold"
   val PARSER_DFA_CACHE_FLUSH_RATIO_KEY: String = "spark.sql.parser.parserDfaCacheFlushRatio"
   val MANAGE_PARSER_CACHES_KEY: String = "spark.sql.parser.manageParserCaches"
+  val ALLOW_CREATING_UDT_FROM_STRING: String = "spark.sql.udt.allowCreatingUDTFromString"
+  val ALLOWED_DYNAMIC_UDT_CLASSES: String = "spark.sql.udt.allowedDynamicUDTClasses"
 
   val confGetter: AtomicReference[() => SqlApiConf] = {
     new AtomicReference[() => SqlApiConf](() => DefaultSqlApiConf)

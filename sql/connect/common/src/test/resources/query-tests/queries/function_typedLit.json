@@ -82,7 +82,6 @@
         },
         "dataType": {
           "string": {
-            "collation": "UTF8_BINARY"
           }
         }
       },
@@ -958,7 +957,6 @@
                   "name": "_2",
                   "dataType": {
                     "string": {
-                      "collation": "UTF8_BINARY"
                     }
                   },
                   "nullable": true
@@ -1023,7 +1021,6 @@
                   "name": "_2",
                   "dataType": {
                     "string": {
-                      "collation": "UTF8_BINARY"
                     }
                   },
                   "nullable": true
@@ -1106,7 +1103,6 @@
           "map": {
             "keyType": {
               "string": {
-                "collation": "UTF8_BINARY"
               }
             },
             "valueType": {
@@ -1157,7 +1153,6 @@
           "map": {
             "keyType": {
               "string": {
-                "collation": "UTF8_BINARY"
               }
             },
             "valueType": {
@@ -1202,7 +1197,6 @@
               "name": "_1",
               "dataType": {
                 "string": {
-                  "collation": "UTF8_BINARY"
                 }
               },
               "nullable": true
@@ -1545,7 +1539,6 @@
                   "name": "_2",
                   "dataType": {
                     "string": {
-                      "collation": "UTF8_BINARY"
                     }
                   },
                   "nullable": true
@@ -1555,7 +1548,6 @@
                     "array": {
                       "elementType": {
                         "string": {
-                          "collation": "UTF8_BINARY"
                         }
                       },
                       "containsNull": true
@@ -1629,7 +1621,6 @@
                   "name": "b",
                   "dataType": {
                     "string": {
-                      "collation": "UTF8_BINARY"
                     }
                   },
                   "nullable": true
@@ -1707,7 +1698,6 @@
               "map": {
                 "keyType": {
                   "string": {
-                    "collation": "UTF8_BINARY"
                   }
                 },
                 "valueType": {
@@ -1813,14 +1803,12 @@
               "map": {
                 "keyType": {
                   "string": {
-                    "collation": "UTF8_BINARY"
                   }
                 },
                 "valueType": {
                   "array": {
                     "elementType": {
                       "string": {
-                        "collation": "UTF8_BINARY"
                       }
                     },
                     "containsNull": true
@@ -1896,7 +1884,6 @@
               "map": {
                 "keyType": {
                   "string": {
-                    "collation": "UTF8_BINARY"
                   }
                 },
                 "valueType": {
@@ -1992,7 +1979,6 @@
                 "map": {
                   "keyType": {
                     "string": {
-                      "collation": "UTF8_BINARY"
                     }
                   },
                   "valueType": {
@@ -2010,7 +1996,6 @@
                     "name": "_1",
                     "dataType": {
                       "string": {
-                        "collation": "UTF8_BINARY"
                       }
                     },
                     "nullable": true
@@ -2024,7 +2009,6 @@
                         },
                         "valueType": {
                           "string": {
-                            "collation": "UTF8_BINARY"
                           }
                         },
                         "valueContainsNull": true

@@ -22,7 +22,7 @@ import scala.concurrent.Awaitable
 import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 
 private[spark] object SparkThreadUtils {
   // scalastyle:off awaitresult
@@ -41,6 +41,14 @@ private[spark] object SparkThreadUtils {
    */
   @throws(classOf[SparkException])
   def awaitResult[T](awaitable: Awaitable[T], atMost: Duration): T = {
+    awaitResult(awaitable, atMost, preserveSparkThrowable = false)
+  }
+
+  @throws(classOf[SparkException])
+  def awaitResult[T](
+      awaitable: Awaitable[T],
+      atMost: Duration,
+      preserveSparkThrowable: Boolean): T = {
     try {
       awaitResultNoSparkExceptionConversion(awaitable, atMost)
     } catch {
@@ -48,6 +56,15 @@ private[spark] object SparkThreadUtils {
         throw e.throwable
       // TimeoutException is thrown in the current thread, so not need to warp
       // the exception.
+      // Re-throw exceptions that already carry a structured condition (SparkThrowable)
+      // to avoid wrapping them in a generic SparkException and losing the SQL state.
+      case st: Exception with SparkThrowable
+          if preserveSparkThrowable
+            && !st.isInstanceOf[TimeoutException] && st.getCondition != null =>
+        // Attach the caller's stack trace so it's not lost when re-throwing from a worker thread.
+        st.addSuppressed(
+          new SparkException("Exception thrown in awaitResult", cause = null))
+        throw st
       case NonFatal(t)
         if !t.isInstanceOf[TimeoutException] =>
         throw new SparkException("Exception thrown in awaitResult: ", t)

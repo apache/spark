@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
+import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.internal.SQLConf
@@ -24,7 +24,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
-class ParquetFileMetadataStructRowIndexSuite extends QueryTest with SharedSparkSession {
+class ParquetFileMetadataStructRowIndexSuite extends SharedSparkSession {
   import testImplicits._
   import ParquetFileFormat.{ROW_INDEX, ROW_INDEX_TEMPORARY_COLUMN_NAME}
 

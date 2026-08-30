@@ -39,7 +39,7 @@ along with if you launch Spark's interactive shell -- either `bin/spark-shell` f
 
 <div data-lang="python"  markdown="1">
 
-Spark {{site.SPARK_VERSION}} works with Python 3.10+. It can use the standard CPython interpreter,
+Spark {{site.SPARK_VERSION}} works with Python 3.11+. It can use the standard CPython interpreter,
 so C libraries like NumPy can be used.
 
 Spark applications in Python can either be run with the `bin/spark-submit` script which includes Spark at runtime, or by including it in your setup.py as:
@@ -70,7 +70,7 @@ PySpark requires the same minor version of Python in both driver and workers. It
 you can specify which version of Python you want to use by `PYSPARK_PYTHON`, for example:
 
 {% highlight bash %}
-$ PYSPARK_PYTHON=python3.8 bin/pyspark
+$ PYSPARK_PYTHON=python3.11 bin/pyspark
 {% endhighlight %}
 
 </div>

@@ -1,0 +1,54 @@
+================================================================================================
+MergeRowsExec Codegen Benchmark
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+merge - matched update only:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+merge - matched update only wholestage off           4568           6037        1464          4.6         217.8       1.0X
+merge - matched update only wholestage on             832            843           7         25.2          39.7       5.5X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+merge - not matched insert only:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+merge - not matched insert only wholestage off           7799           7823          36          2.7         371.9       1.0X
+merge - not matched insert only wholestage on             853            862           9         24.6          40.7       9.1X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+merge - matched update + not matched insert:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------
+merge - matched update + not matched insert wholestage off           5918           5963          45          3.5         282.2       1.0X
+merge - matched update + not matched insert wholestage on            1031           1048          11         20.3          49.2       5.7X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+merge - matched delete:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+merge - matched delete wholestage off              3018           3033          14          6.9         143.9       1.0X
+merge - matched delete wholestage on                178            187           8        118.1           8.5      17.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+merge - conditional clauses:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+merge - conditional clauses wholestage off           5241           5280          51          4.0         249.9       1.0X
+merge - conditional clauses wholestage on            1053           1072          13         19.9          50.2       5.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+merge - matched + not matched + not matched by source:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------------------
+merge - matched + not matched + not matched by source wholestage off           4617           4658          43          4.5         220.2       1.0X
+merge - matched + not matched + not matched by source wholestage on             838            849           9         25.0          40.0       5.5X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+merge - split update (delete + insert):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------
+merge - split update (delete + insert) wholestage off           3479           3492          17          6.0         165.9       1.0X
+merge - split update (delete + insert) wholestage on            2151           2157           6          9.7         102.6       1.6X
+
+

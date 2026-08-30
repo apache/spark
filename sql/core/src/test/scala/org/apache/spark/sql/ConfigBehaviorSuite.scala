@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 
-class ConfigBehaviorSuite extends QueryTest with SharedSparkSession {
+class ConfigBehaviorSuite extends SharedSparkSession {
 
   import testImplicits._
 

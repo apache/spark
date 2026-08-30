@@ -22,7 +22,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
+class DataFrameToSchemaSuite extends SharedSparkSession {
   import testImplicits._
 
   test("reorder columns by name") {

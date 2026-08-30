@@ -84,6 +84,9 @@ object ConstantFolding extends Rule[LogicalPlan] {
     // object and running eval unnecessarily.
     case l: Literal => l
 
+    // This foldable expression carries planning identity that must survive later optimizer batches.
+    case p: PercentileFusionArray => p
+
     case Size(c: CreateArray, _) if c.children.forall(hasNoSideEffect) =>
       Literal(c.children.length)
     case Size(c: CreateMap, _) if c.children.forall(hasNoSideEffect) =>
@@ -1155,6 +1158,8 @@ object FoldablePropagation extends Rule[LogicalPlan] {
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
     _.containsPattern(CAST), ruleId) {
+    // Annotated STRING (flag off) is not unconstrained STRING. Dropping CAST(... AS STRING)
+    // would hide the type change. First-class CHAR/VARCHAR already fail e.dataType == StringType.
     case c @ Cast(e: NamedExpression, StringType, _, _)
       if e.dataType == StringType && e.metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY) => c
     case Cast(e, dataType, _, _) if e.dataType == dataType => e
@@ -1179,8 +1184,13 @@ object SimplifyCasts extends Rule[LogicalPlan] {
 
 
 /**
- * Removes the inner case conversion expressions that are unnecessary because
- * the inner conversion is overwritten by the outer one.
+ * Removes redundant same-case conversion expressions (e.g. UPPER(UPPER(x)) or LOWER(LOWER(x)))
+ * that are unnecessary because the case conversion operation is idempotent.
+ *
+ * Note: Cross-case conversions (UPPER(LOWER(x)) or LOWER(UPPER(x))) are NOT simplified
+ * because they are not semantics-preserving for some Unicode characters
+ * (e.g. U+0131 LATIN SMALL LETTER DOTLESS I, where LOWER(UPPER(U+0131)) yields 'i'
+ * while LOWER(U+0131) leaves the character unchanged).
  */
 object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
@@ -1188,8 +1198,6 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
     case q: LogicalPlan => q.transformExpressionsUpWithPruning(
       _.containsPattern(UPPER_OR_LOWER), ruleId) {
       case Upper(Upper(child)) => Upper(child)
-      case Upper(Lower(child)) => Upper(child)
-      case Lower(Upper(child)) => Lower(child)
       case Lower(Lower(child)) => Lower(child)
     }
   }
@@ -1207,7 +1215,7 @@ object SimplifyDateTimeConversions extends Rule[LogicalPlan] {
       // original string is in the same format.
       case DateFormatClass(
           GetTimestamp(
-            e @ DateFormatClass(_, pattern, timeZoneId),
+            e @ DateFormatClass(child, pattern, timeZoneId),
             pattern2,
             TimestampType,
             _,
@@ -1216,7 +1224,9 @@ object SimplifyDateTimeConversions extends Rule[LogicalPlan] {
           pattern3,
           timeZoneId3)
           if pattern.semanticEquals(pattern2) && pattern.semanticEquals(pattern3)
-            && timeZoneId == timeZoneId2 && timeZoneId == timeZoneId3 =>
+            && timeZoneId == timeZoneId2 && timeZoneId == timeZoneId3
+            && !child.dataType.isInstanceOf[TimeType]
+            && !child.dataType.isInstanceOf[AnyTimestampNanoType] =>
         e
 
       // Remove a timestamp to string conversion followed by a string to timestamp conversions if

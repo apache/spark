@@ -22,7 +22,7 @@ import java.lang.{Double => JDouble, Float => JFloat, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, Period, ZoneId}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period, ZoneId}
 import java.util.HashSet
 
 import scala.reflect.ClassTag
@@ -34,7 +34,7 @@ import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, Eq, Gt, GtEq, In => FilterIn, Lt, LtEq, NotEq, UserDefinedByInstance}
 import org.apache.parquet.hadoop.{ParquetFileReader, ParquetInputFormat, ParquetOutputFormat}
 import org.apache.parquet.hadoop.util.HadoopInputFile
-import org.apache.parquet.schema.MessageType
+import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql._
@@ -45,7 +45,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
 import org.apache.spark.sql.execution.ExplainMode
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelationWithTable, PushableColumnAndNestedColumn}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelationWithTable, PushableColumnAndNestedColumn, VariantMetadata}
 import org.apache.spark.sql.execution.datasources.v2.ExtractV2Scan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions._
@@ -76,19 +76,21 @@ import org.apache.spark.util.ArrayImplicits._
  * dependent on this configuration, don't forget you better explicitly set this configuration
  * within the test.
  */
-abstract class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSparkSession {
+abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
   import testImplicits.toRichColumn
 
   protected def createParquetFilters(
       schema: MessageType,
       caseSensitive: Option[Boolean] = None,
-      datetimeRebaseSpec: RebaseSpec = RebaseSpec(LegacyBehaviorPolicy.CORRECTED)
+      datetimeRebaseSpec: RebaseSpec = RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
+      variantExtractionSchema: Option[StructType] = None
     ): ParquetFilters =
     new ParquetFilters(schema, conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
       conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringPredicate,
       conf.parquetFilterPushDownInFilterThreshold,
       caseSensitive.getOrElse(conf.caseSensitiveAnalysis),
-      datetimeRebaseSpec)
+      datetimeRebaseSpec,
+      variantExtractionSchema = variantExtractionSchema)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -2273,6 +2275,556 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
             Seq(Row(resultFun(secs(2))), Row(resultFun(secs(3))), Row(resultFun(secs(4)))))
         }
       }
+    }
+  }
+
+  test("SPARK-57822: filter pushdown - nanosecond timestamps") {
+    // The value that reaches `ParquetFilters.createFilter` for a nanosecond timestamp column is
+    // the externalized Java time value (Instant for LTZ, LocalDateTime for NTZ), NOT a
+    // TimestampNanosVal. Both convert to the signed INT64 epoch-nanoseconds that
+    // `TimestampNanosParquetOps` writes, so every operator must produce a `long`-column filter.
+    // Threshold 1 so a 2-element `In` exceeds it and exercises the `makeInPredicate` nanos arm
+    // (below the threshold, `In` expands to an `Or` of `Eq`, which is covered by the `Eq` arm).
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> "1") {
+      Seq(7, 8, 9).foreach { p =>
+        // NTZ column: filter values are LocalDateTime. Use a sub-microsecond fraction so the
+        // epoch-nanos encoding (not truncated micros) is exercised.
+        val ntzSchema = new SparkToParquetSchemaConverter(conf)
+          .convert(new StructType().add("c", TimestampNTZNanosType(p)))
+        val ntzFilters = createParquetFilters(ntzSchema)
+        val ntz = LocalDateTime.parse("2020-01-01T12:34:56.000000123")
+        val ntzHi = LocalDateTime.parse("2020-01-01T12:34:57.000000123")
+        assert(ntzFilters.createFilter(sources.IsNull("c")).exists(_.isInstanceOf[Eq[_]]))
+        assert(ntzFilters.createFilter(sources.IsNotNull("c")).exists(_.isInstanceOf[NotEq[_]]))
+        assert(ntzFilters.createFilter(sources.EqualTo("c", ntz)).exists(_.isInstanceOf[Eq[_]]))
+        assert(ntzFilters.createFilter(sources.EqualNullSafe("c", ntz))
+          .exists(_.isInstanceOf[Eq[_]]))
+        assert(ntzFilters.createFilter(sources.Not(sources.EqualTo("c", ntz)))
+          .exists(_.isInstanceOf[NotEq[_]]))
+        assert(ntzFilters.createFilter(sources.LessThan("c", ntz)).exists(_.isInstanceOf[Lt[_]]))
+        assert(ntzFilters.createFilter(sources.LessThanOrEqual("c", ntz))
+          .exists(_.isInstanceOf[LtEq[_]]))
+        assert(ntzFilters.createFilter(sources.GreaterThan("c", ntz)).exists(_.isInstanceOf[Gt[_]]))
+        assert(ntzFilters.createFilter(sources.GreaterThanOrEqual("c", ntz))
+          .exists(_.isInstanceOf[GtEq[_]]))
+        assert(ntzFilters.createFilter(sources.In("c", Array[Any](ntz, ntzHi)))
+          .exists(_.isInstanceOf[FilterIn[_]]))
+
+        // LTZ column: filter values are Instant.
+        val ltzSchema = new SparkToParquetSchemaConverter(conf)
+          .convert(new StructType().add("c", TimestampLTZNanosType(p)))
+        val ltzFilters = createParquetFilters(ltzSchema)
+        val ltz = Instant.parse("2020-01-01T12:34:56.000000123Z")
+        val ltzHi = Instant.parse("2020-01-01T12:34:57.000000123Z")
+        assert(ltzFilters.createFilter(sources.IsNull("c")).exists(_.isInstanceOf[Eq[_]]))
+        assert(ltzFilters.createFilter(sources.IsNotNull("c")).exists(_.isInstanceOf[NotEq[_]]))
+        assert(ltzFilters.createFilter(sources.EqualTo("c", ltz)).exists(_.isInstanceOf[Eq[_]]))
+        assert(ltzFilters.createFilter(sources.EqualNullSafe("c", ltz))
+          .exists(_.isInstanceOf[Eq[_]]))
+        assert(ltzFilters.createFilter(sources.Not(sources.EqualTo("c", ltz)))
+          .exists(_.isInstanceOf[NotEq[_]]))
+        assert(ltzFilters.createFilter(sources.LessThan("c", ltz)).exists(_.isInstanceOf[Lt[_]]))
+        assert(ltzFilters.createFilter(sources.LessThanOrEqual("c", ltz))
+          .exists(_.isInstanceOf[LtEq[_]]))
+        assert(ltzFilters.createFilter(sources.GreaterThan("c", ltz)).exists(_.isInstanceOf[Gt[_]]))
+        assert(ltzFilters.createFilter(sources.GreaterThanOrEqual("c", ltz))
+          .exists(_.isInstanceOf[GtEq[_]]))
+        assert(ltzFilters.createFilter(sources.In("c", Array[Any](ltz, ltzHi)))
+          .exists(_.isInstanceOf[FilterIn[_]]))
+      }
+    }
+  }
+
+  test("SPARK-57822: don't push down nanosecond timestamp filters that would overflow int64") {
+    // Values outside the int64 epoch-nanoseconds range (~1677-09-21 .. 2262-04-11) must NOT be
+    // pushed down: encoding them would throw, and a truncated encoding could silently mis-skip a
+    // row group. Falling back to a full scan is always correct (SPARK-46092 rationale).
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val ntzSchema = new SparkToParquetSchemaConverter(conf)
+        .convert(new StructType().add("c", TimestampNTZNanosType(9)))
+      val ntzFilters = createParquetFilters(ntzSchema)
+      val ltzSchema = new SparkToParquetSchemaConverter(conf)
+        .convert(new StructType().add("c", TimestampLTZNanosType(9)))
+      val ltzFilters = createParquetFilters(ltzSchema)
+
+      // Out of range: must not push down.
+      val ntzOverflow = LocalDateTime.parse("2300-01-01T00:00:00")
+      val ltzOverflow = Instant.parse("2300-01-01T00:00:00Z")
+      Seq(
+        sources.LessThan("c", ntzOverflow),
+        sources.LessThanOrEqual("c", ntzOverflow),
+        sources.GreaterThan("c", ntzOverflow),
+        sources.GreaterThanOrEqual("c", ntzOverflow),
+        sources.EqualTo("c", ntzOverflow),
+        sources.EqualNullSafe("c", ntzOverflow),
+        sources.Not(sources.EqualTo("c", ntzOverflow)),
+        sources.In("c", Array[Any](ntzOverflow))
+      ).foreach { filter =>
+        assert(ntzFilters.createFilter(filter).isEmpty,
+          s"Row group filter $filter shouldn't be pushed down.")
+      }
+      Seq(
+        sources.LessThan("c", ltzOverflow),
+        sources.LessThanOrEqual("c", ltzOverflow),
+        sources.GreaterThan("c", ltzOverflow),
+        sources.GreaterThanOrEqual("c", ltzOverflow),
+        sources.EqualTo("c", ltzOverflow),
+        sources.EqualNullSafe("c", ltzOverflow),
+        sources.Not(sources.EqualTo("c", ltzOverflow)),
+        sources.In("c", Array[Any](ltzOverflow))
+      ).foreach { filter =>
+        assert(ltzFilters.createFilter(filter).isEmpty,
+          s"Row group filter $filter shouldn't be pushed down.")
+      }
+
+      // In range: must push down.
+      assert(ntzFilters.createFilter(
+        sources.LessThan("c", LocalDateTime.parse("2020-01-01T00:00:00"))).isDefined)
+      assert(ltzFilters.createFilter(
+        sources.LessThan("c", Instant.parse("2020-01-01T00:00:00Z"))).isDefined)
+    }
+  }
+
+  test("SPARK-57822: an In list mixing in-range and out-of-range nanos values isn't pushed down") {
+    // A mixed In list (in-range head, out-of-range tail) must fall back to a full scan, not crash
+    // filter creation. The In arm converts *every* element - per-element `makeEq` under the
+    // pushdown threshold, `makeInPredicate` above it - so a head-only guard would let the
+    // out-of-range tail reach the encoder, which throws (SPARK-46092: never throw, full scan
+    // instead). Both branches are exercised by setting the threshold below and above the list
+    // size. The list must lead with an in-range value so the fix is what rejects it, not the old
+    // head check.
+    Seq("1", "10").foreach { threshold =>
+      withSQLConf(
+          SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+          SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> threshold) {
+        val ntzFilters = createParquetFilters(new SparkToParquetSchemaConverter(conf)
+          .convert(new StructType().add("c", TimestampNTZNanosType(9))))
+        val ltzFilters = createParquetFilters(new SparkToParquetSchemaConverter(conf)
+          .convert(new StructType().add("c", TimestampLTZNanosType(9))))
+        val ntzIn = sources.In("c", Array[Any](
+          LocalDateTime.parse("2020-01-01T00:00:00"), LocalDateTime.parse("2300-01-01T00:00:00")))
+        val ltzIn = sources.In("c", Array[Any](
+          Instant.parse("2020-01-01T00:00:00Z"), Instant.parse("2300-01-01T00:00:00Z")))
+        // Must not throw, and must not push down (a single out-of-range element disqualifies the
+        // whole In).
+        assert(ntzFilters.createFilter(ntzIn).isEmpty,
+          s"Mixed-range NTZ In (threshold=$threshold) shouldn't be pushed down.")
+        assert(ltzFilters.createFilter(ltzIn).isEmpty,
+          s"Mixed-range LTZ In (threshold=$threshold) shouldn't be pushed down.")
+        // An all-in-range In of the same size still pushes down (the fix rejects only on a
+        // non-pushable element, it doesn't disable In pushdown wholesale).
+        assert(ntzFilters.createFilter(sources.In("c", Array[Any](
+          LocalDateTime.parse("2020-01-01T00:00:00"),
+          LocalDateTime.parse("2021-01-01T00:00:00")))).isDefined)
+        assert(ltzFilters.createFilter(sources.In("c", Array[Any](
+          Instant.parse("2020-01-01T00:00:00Z"),
+          Instant.parse("2021-01-01T00:00:00Z")))).isDefined)
+      }
+    }
+  }
+
+  // ----------------------------------------------------------------------------------------------
+  // Shredded-variant filter pushdown (SPARK-55817).
+  //
+  // PushVariantIntoScan rewrites variant_get(v, '$.a', 'bigint') > 999 into a struct-field access
+  // "v.`0`" > 999 where "0" carries VariantMetadata for path "$.a". ParquetFilters maps that
+  // logical path to the physical shredded leaf v.typed_value.a.typed_value and, for soundness,
+  // guards it so a row group is skipped only when the leaf cannot match AND every value for the
+  // path is provably in the leaf (see `makeShreddedFilter`).
+  // ----------------------------------------------------------------------------------------------
+
+  /** A variant-extraction StructField named by ordinal, carrying VariantMetadata for `path`. */
+  private def variantField(name: String, dt: DataType, path: String): StructField =
+    StructField(name, dt, metadata = VariantMetadata(path, failOnError = true, "UTC").toMetadata)
+
+  /**
+   * The variantExtractionSchema PushVariantIntoScan produces for a top-level variant column
+   * `colName` with the given extraction fields (each an ordinal-named field with VariantMetadata).
+   */
+  private def variantExtractionSchema(colName: String, fields: StructField*): StructType =
+    StructType(Seq(StructField(colName, StructType(fields))))
+
+  test("shredded variant filter: single-level bigint resolves to leaf with residual guards") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val extraction = variantExtractionSchema("v", variantField("0", LongType, "$.a"))
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema), variantExtractionSchema = Some(extraction))
+    val filter = pf.createFilter(sources.GreaterThan("v.`0`", 999L))
+    assert(filter.isDefined, "Expected shredded variant predicate to be created")
+    val s = filter.get.toString
+    // Guarded shape: or(gt(leaf), and(or(notEq(residual)...), eq(leaf, null))).
+    assert(s.contains("v.typed_value.a.typed_value"),
+      s"Expected leaf column v.typed_value.a.typed_value in $s")
+    assert(s.contains("v.typed_value.a.value"), s"Expected L1 residual guard in $s")
+    assert(s.contains("v.value"), s"Expected top-level residual guard in $s")
+    // The leaf-is-null arm must be present (this is what keeps the guard sound and effective).
+    assert(s.contains("eq(v.typed_value.a.typed_value, null)"),
+      s"Expected an isNull(leaf) guard arm in $s")
+  }
+
+  test("shredded variant filter: without variantExtractionSchema the logical path is unknown") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val pf = createParquetFilters(MessageTypeParser.parseMessageType(parquetSchema))
+    assert(pf.createFilter(sources.GreaterThan("v.`0`", 999L)).isEmpty)
+  }
+
+  test("shredded variant filter: string leaf and all comparison operators") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group b {
+        |        optional binary value;
+        |        optional binary typed_value (STRING);
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val extraction = variantExtractionSchema("v", variantField("0", StringType, "$.b"))
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema), variantExtractionSchema = Some(extraction))
+    Seq(
+      sources.EqualTo("v.`0`", "str"),
+      sources.LessThan("v.`0`", "str"),
+      sources.LessThanOrEqual("v.`0`", "str"),
+      sources.GreaterThan("v.`0`", "str"),
+      sources.GreaterThanOrEqual("v.`0`", "str")).foreach { f =>
+      val filter = pf.createFilter(f)
+      assert(filter.isDefined, s"Expected $f to push down")
+      val s = filter.get.toString
+      assert(s.contains("v.typed_value.b.typed_value"), s"Expected leaf column in $s for $f")
+      assert(s.contains("v.typed_value.b.value") && s.contains("v.value"),
+        s"Expected residual guards in $s for $f")
+    }
+  }
+
+  test("shredded variant filter: In pushes OR of guarded equalities") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val extraction = variantExtractionSchema("v", variantField("0", LongType, "$.a"))
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema), variantExtractionSchema = Some(extraction))
+    val filter = pf.createFilter(sources.In("v.`0`", Array[Any](1L, 2L, 3L)))
+    assert(filter.isDefined, "Expected In on shredded column to push down")
+    val s = filter.get.toString
+    assert(s.contains("v.typed_value.a.typed_value"), s"Expected leaf column in $s")
+    assert(s.contains("v.typed_value.a.value") && s.contains("v.value"),
+      s"Expected residual guards in $s")
+  }
+
+  test("shredded variant filter: multi-level path resolves with a residual per level") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional group typed_value {
+        |          optional group b {
+        |            optional binary value;
+        |            optional int64 typed_value;
+        |          }
+        |        }
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val extraction = variantExtractionSchema("v", variantField("0", LongType, "$.a.b"))
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema), variantExtractionSchema = Some(extraction))
+    val filter = pf.createFilter(sources.GreaterThan("v.`0`", 5L))
+    assert(filter.isDefined, "Expected multi-level shredded predicate to be created")
+    val s = filter.get.toString
+    assert(s.contains("v.typed_value.a.typed_value.b.typed_value"),
+      s"Expected multi-level leaf column in $s")
+    // Three residual guards: L0, L1 (a), and leaf-level sibling (b).
+    assert(s.contains("v.value"), s"Expected L0 residual guard in $s")
+    assert(s.contains("v.typed_value.a.value"), s"Expected L1 residual guard in $s")
+    assert(s.contains("v.typed_value.a.typed_value.b.value"),
+      s"Expected leaf-level residual guard in $s")
+  }
+
+  test("shredded variant filter: array-index path is rejected") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val extraction = variantExtractionSchema("v", variantField("0", LongType, "$.a[0]"))
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema), variantExtractionSchema = Some(extraction))
+    assert(pf.createFilter(sources.GreaterThan("v.`0`", 999L)).isEmpty,
+      "Array-index paths must not resolve to a shredded leaf")
+  }
+
+  test("shredded variant filter: synthetic fields (placeholder / companion) resolve to None") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val placeholder = variantField("0", BooleanType, "$.__placeholder_field__")
+    val pfPlaceholder = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema),
+      variantExtractionSchema = Some(variantExtractionSchema("v", placeholder)))
+    assert(pfPlaceholder.createFilter(sources.EqualTo("v.`0`", true)).isEmpty,
+      "Placeholder field must not resolve to a shredded leaf")
+
+    // Full-variant passthrough path "$" yields no keys -> None.
+    val passthrough = variantField("0", LongType, "$")
+    val pfPassthrough = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema),
+      variantExtractionSchema = Some(variantExtractionSchema("v", passthrough)))
+    assert(pfPassthrough.createFilter(sources.GreaterThan("v.`0`", 1L)).isEmpty,
+      "Full-variant passthrough must not resolve to a shredded leaf")
+  }
+
+  test("shredded variant filter: absent shredded field resolves to None") {
+    // The physical schema does not shred `a` (no typed_value.a subtree); the value lives entirely
+    // in the opaque residual. Nothing should be pushed.
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group c {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val extraction = variantExtractionSchema("v", variantField("0", LongType, "$.a"))
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema), variantExtractionSchema = Some(extraction))
+    assert(pf.createFilter(sources.GreaterThan("v.`0`", 999L)).isEmpty,
+      "A path not shredded in this file must not be pushed")
+  }
+
+  test("shredded variant filter: case-insensitive column name resolves; keys stay exact-case") {
+    // The top-level variant column name is a Spark identifier, matched case-insensitively.
+    // The object key is variant data, matched exact-case, so the physical key must equal the
+    // requested path's key exactly.
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group V {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    // Logical column name `v` differs in case from physical `V`; key `a` matches exactly.
+    val extraction = variantExtractionSchema("v", variantField("0", LongType, "$.a"))
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema),
+      caseSensitive = Some(false), variantExtractionSchema = Some(extraction))
+    val filter = pf.createFilter(sources.GreaterThan("v.`0`", 999L))
+    assert(filter.isDefined, "Case-insensitive column matching should resolve the shredded leaf")
+    assert(filter.get.toString.toLowerCase(java.util.Locale.ROOT).contains("typed_value"),
+      s"Expected a typed_value leaf predicate, got ${filter.get}")
+  }
+
+  test("shredded variant filter: object key is matched case-sensitively even when case-" +
+      "insensitive analysis") {
+    // Physical schema shreds a key `A` (uppercase). A request for `$.a` (lowercase) must NOT bind
+    // to `A`, because variant keys are data resolved exact-case by the reader. Binding to `A`
+    // would be unsound.
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group A {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val extraction = variantExtractionSchema("v", variantField("0", LongType, "$.a"))
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema),
+      caseSensitive = Some(false), variantExtractionSchema = Some(extraction))
+    assert(pf.createFilter(sources.GreaterThan("v.`0`", 999L)).isEmpty,
+      "Key `$.a` must not case-insensitively bind to the physical `A` subtree")
+  }
+
+  test("shredded variant filter: negated predicate is not pushed") {
+    // not(or(leaf, and(anyResidualNotNull, isNull(leaf)))) is rewritten by parquet-mr into
+    // and(not(leaf), or(and(eq(residual, null)...), notEq(leaf, null))), which is droppable once
+    // some residual has no nulls AND the leaf is entirely NULL -- an all-fallback row group. So a
+    // negated shredded predicate must not be pushed.
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val extraction = variantExtractionSchema("v", variantField("0", LongType, "$.a"))
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema), variantExtractionSchema = Some(extraction))
+    // != arrives as Not(EqualTo(...)); NOT IN as Not(In(...)); Not(GreaterThan(...)) likewise.
+    assert(pf.createFilter(sources.Not(sources.EqualTo("v.`0`", 700L))).isEmpty,
+      "Negated EqualTo on a shredded path must not be pushed")
+    assert(pf.createFilter(sources.Not(sources.In("v.`0`", Array[Any](1L, 2L)))).isEmpty,
+      "Negated In on a shredded path must not be pushed")
+    assert(pf.createFilter(sources.Not(sources.GreaterThan("v.`0`", 700L))).isEmpty,
+      "Negated GreaterThan on a shredded path must not be pushed")
+    // Still pushed inside an AND alongside a negated shredded predicate? The AND can push the
+    // non-negated side, but the negated shredded conjunct itself must be dropped.
+    val andFilter = pf.createFilter(
+      sources.And(sources.GreaterThan("v.`0`", 700L), sources.Not(sources.EqualTo("v.`0`", 900L))))
+    assert(andFilter.isDefined, "AND should still push its non-negated shredded conjunct")
+    assert(!andFilter.get.toString.contains("not("),
+      s"AND must not contain a negated shredded predicate, got ${andFilter.get}")
+  }
+
+  test("shredded variant filter: extraction type narrower than the leaf is not pushed") {
+    // Physical leaf is a plain int (INT32). A smallint extraction must NOT be pushed: the leaf
+    // min/max is over int values, so a row group holding only out-of-int16-range values would be
+    // wrongly skipped, turning an eager INVALID_VARIANT_CAST into an empty result.
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int32 typed_value (INTEGER(32,true));
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val narrower = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema),
+      variantExtractionSchema = Some(variantExtractionSchema("v", variantField("0", ShortType,
+        "$.a"))))
+    assert(narrower.createFilter(sources.GreaterThan("v.`0`", 5.toShort)).isEmpty,
+      "A smallint extraction against an int leaf must not be pushed")
+    // The exact type (int extraction against int leaf) is pushed.
+    val exact = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema),
+      variantExtractionSchema = Some(variantExtractionSchema("v", variantField("0", IntegerType,
+        "$.a"))))
+    assert(exact.createFilter(sources.GreaterThan("v.`0`", 5)).isDefined,
+      "An int extraction against an int leaf should be pushed")
+  }
+
+  test("shredded variant filter: extraction type wider than the leaf is pushed (safe widening)") {
+    // Physical leaf is a plain int (INT32); a bigint extraction is sound to push because every int
+    // value casts to bigint losslessly and ordering is preserved.
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int32 typed_value (INTEGER(32,true));
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema),
+      variantExtractionSchema = Some(variantExtractionSchema("v", variantField("0", LongType,
+        "$.a"))))
+    // A long literal within int range widens to the int leaf and is pushed.
+    val filter = pf.createFilter(sources.GreaterThan("v.`0`", 5L))
+    assert(filter.isDefined, "A bigint extraction over an int leaf should push (safe widening)")
+    assert(filter.get.toString.contains("v.typed_value.a.typed_value"),
+      s"Expected the int leaf column in ${filter.get}")
+    // A long literal outside int range is still rejected by valueMatchesParquetType.
+    assert(pf.createFilter(sources.GreaterThan("v.`0`", Int.MaxValue.toLong + 1L)).isEmpty,
+      "An out-of-int-range literal must not be pushed against an int leaf")
+  }
+
+  test("shredded variant filter: large In above threshold still pushes") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val extraction = variantExtractionSchema("v", variantField("0", LongType, "$.a"))
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> "2") {
+      val pf = createParquetFilters(
+        MessageTypeParser.parseMessageType(parquetSchema),
+        variantExtractionSchema = Some(extraction))
+      // 3 values > threshold 2: the regular path uses FilterApi.in; the shredded path must too,
+      // OR-ed with the residual guards, rather than returning None.
+      val filter = pf.createFilter(sources.In("v.`0`", Array[Any](1L, 2L, 3L)))
+      assert(filter.isDefined, "A large In on a shredded path should still push down")
+      val s = filter.get.toString
+      assert(s.contains("v.typed_value.a.typed_value"), s"Expected leaf column in $s")
+      assert(s.contains("v.typed_value.a.value") && s.contains("v.value"),
+        s"Expected residual guards in $s")
     }
   }
 }

@@ -15,33 +15,33 @@
 # limitations under the License.
 #
 
-import os
-import struct
-import sys
-import unittest
 import difflib
 import faulthandler
 import functools
-from decimal import Decimal
-from time import time, sleep
+import os
 import signal
+import struct
+import sys
+import unittest
+from decimal import Decimal
+from itertools import zip_longest
+from time import sleep, time
 from typing import (
     Any,
-    Optional,
-    Union,
+    Callable,
     Dict,
     List,
-    Callable,
+    Optional,
+    Union,
 )
-from itertools import zip_longest
 
 from pyspark import SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException, PySparkTypeError
 from pyspark.errors.exceptions.base import QueryContextType
-from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import Row
-from pyspark.sql.types import StructType, StructField, VariantVal
+from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import col, when
+from pyspark.sql.types import StructField, StructType, VariantVal
 
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
@@ -84,6 +84,9 @@ graphviz_requirement_message = "" if have_graphviz else "No module named 'graphv
 
 have_flameprof = have_package("flameprof")
 flameprof_requirement_message = "" if have_flameprof else "No module named 'flameprof'"
+
+have_grimp = have_package("grimp")
+grimp_requirement_message = "" if have_grimp else "No module named 'grimp'"
 
 have_jinja2 = have_package("jinja2")
 jinja2_requirement_message = "" if have_jinja2 else "No module named 'jinja2'"
@@ -294,8 +297,57 @@ class QuietTest:
 class PySparkBaseTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        if have_grimp and (path := os.environ.get("PYSPARK_CHANGED_FILES")):
+            # PYSPARK_CHANGED_FILES should only be used when ONLY pyspark files are changed.
+            # If other files (JVM for example) are changed, do NOT set this.
+            cls.skip_if_changed_files_irrelevant(path)
+
         if os.environ.get("PYSPARK_TEST_TIMEOUT"):
             faulthandler.register(signal.SIGTERM, file=sys.__stderr__, all_threads=True)
+
+    @classmethod
+    def skip_if_changed_files_irrelevant(cls, path: str) -> None:
+        module = cls.__module__
+        if module == "__main__":
+            mod = sys.modules["__main__"]
+            if mod.__spec__ and mod.__spec__.name:
+                module = mod.__spec__.name
+            else:
+                return
+
+        if not cls._is_module_relevant_to_changed_files(module, path):
+            raise unittest.SkipTest("Skipping test because changed files are irrelevant")
+
+    @staticmethod
+    @functools.cache
+    def _is_module_relevant_to_changed_files(module: str, path: str) -> bool:
+        import grimp
+
+        with open(path, "r") as f:
+            changed_files = f.read().strip().splitlines()
+
+        if not all(f.startswith("python/pyspark/") and f.endswith(".py") for f in changed_files):
+            # We have a wrong list of files, just run the test.
+            return True
+
+        changed_modules = [
+            f.removeprefix("python/").rsplit(".", 1)[0].replace(os.path.sep, ".")
+            for f in changed_files
+        ]
+
+        graph = grimp.build_graph("pyspark")
+
+        for changed_module in changed_modules:
+            if changed_module == module:
+                return True
+            try:
+                if graph.chain_exists(module, changed_module):
+                    return True
+            except Exception:
+                # Any exception, we just be conservative and run the test.
+                return True
+
+        return False
 
     @classmethod
     def tearDownClass(cls):
@@ -686,6 +738,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import pandas
+
     import pyspark.pandas
 
 
@@ -1091,7 +1144,6 @@ def assertDataFrameEqual(
         rows1: List[Row], rows2: List[Row], maxErrors: int = None, showOnlyDiff: bool = False
     ):
         __tracebackhide__ = True
-        zipped = list(zip_longest(rows1, rows2))
         diff_rows_cnt = 0
         diff_rows = []
         has_diff_rows = False
@@ -1099,28 +1151,86 @@ def assertDataFrameEqual(
         rows_str1 = ""
         rows_str2 = ""
 
-        # count different rows
-        for r1, r2 in zipped:
-            if not compare_rows(r1, r2):
-                diff_rows_cnt += 1
-                has_diff_rows = True
-                if includeDiffRows:
-                    diff_rows.append((r1, r2))
-                rows_str1 += str(r1) + "\n"
-                rows_str2 += str(r2) + "\n"
+        def record_diff(r1, r2):
+            nonlocal diff_rows_cnt, has_diff_rows
+            diff_rows_cnt += 1
+            has_diff_rows = True
+            if includeDiffRows:
+                diff_rows.append((r1, r2))
+
+        # SPARK-54090: For checkRowOrder=False, the input lists have already
+        # been sorted by str(x).  When their lengths differ, the original
+        # zip_longest pairing causes a single missing/extra row to cascade
+        # into a mismatch on every subsequent row -- inflating both the diff
+        # count and the reported percentage.  Walk sorted lists of different
+        # lengths as a merge so only truly missing/extra rows contribute.
+        # When the lengths match, zip_longest aligns positions correctly and
+        # is preserved to keep field-level diffs reported as paired rows.
+        use_merge_walk = not checkRowOrder and len(rows1) != len(rows2)
+
+        if not use_merge_walk:
+            zipped = list(zip_longest(rows1, rows2))
+            for r1, r2 in zipped:
+                if not compare_rows(r1, r2):
+                    record_diff(r1, r2)
+                    rows_str1 += str(r1) + "\n"
+                    rows_str2 += str(r2) + "\n"
+                    if maxErrors is not None and diff_rows_cnt >= maxErrors:
+                        break
+                elif not showOnlyDiff:
+                    rows_str1 += str(r1) + "\n"
+                    rows_str2 += str(r2) + "\n"
+            total = len(zipped)
+        else:
+            i = j = 0
+            len1, len2 = len(rows1), len(rows2)
+            while i < len1 or j < len2:
+                if i < len1 and j < len2:
+                    r1, r2 = rows1[i], rows2[j]
+                    if compare_rows(r1, r2):
+                        if not showOnlyDiff:
+                            rows_str1 += str(r1) + "\n"
+                            rows_str2 += str(r2) + "\n"
+                        i += 1
+                        j += 1
+                        continue
+                    s1, s2 = str(r1), str(r2)
+                    if s1 < s2:
+                        record_diff(r1, None)
+                        rows_str1 += str(r1) + "\n"
+                        i += 1
+                    elif s1 > s2:
+                        record_diff(None, r2)
+                        rows_str2 += str(r2) + "\n"
+                        j += 1
+                    else:
+                        # Equal str() but compare_rows said they differ (e.g.
+                        # float values outside tolerance that still str-sort
+                        # identically).  Treat as a paired mismatch.
+                        record_diff(r1, r2)
+                        rows_str1 += str(r1) + "\n"
+                        rows_str2 += str(r2) + "\n"
+                        i += 1
+                        j += 1
+                elif i < len1:
+                    record_diff(rows1[i], None)
+                    rows_str1 += str(rows1[i]) + "\n"
+                    i += 1
+                else:
+                    record_diff(None, rows2[j])
+                    rows_str2 += str(rows2[j]) + "\n"
+                    j += 1
                 if maxErrors is not None and diff_rows_cnt >= maxErrors:
                     break
-            elif not showOnlyDiff:
-                rows_str1 += str(r1) + "\n"
-                rows_str2 += str(r2) + "\n"
+            total = max(len1, len2)
 
         generated_diff = _context_diff(
-            actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=len(zipped)
+            actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=total
         )
 
         if has_diff_rows:
             error_msg = "Results do not match: "
-            percent_diff = (diff_rows_cnt / len(zipped)) * 100
+            percent_diff = (diff_rows_cnt / total) * 100 if total else 0
             error_msg += "( %.5f %% )" % percent_diff
             error_msg += "\n" + "\n".join(generated_diff)
             data = diff_rows if includeDiffRows else None
@@ -1173,8 +1283,9 @@ def assertDataFrameEqual(
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.testing.utils
+    from pyspark.sql import SparkSession
 
     globs = pyspark.testing.utils.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("testing.utils tests").getOrCreate()

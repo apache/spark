@@ -22,9 +22,8 @@ import java.io.File
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.sql.{DataFrame, Row, SaveMode}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.functions.struct
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -32,7 +31,7 @@ import org.apache.spark.sql.types.StructType
  * Specifically, it is used for Parquet and Orc testing. It can be used to write tests
  * that are shared between Parquet and Orc.
  */
-private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
+private[sql] trait FileBasedDataSourceTest extends QueryTest {
 
   // Defines the data source name to run the test.
   protected val dataSourceName: String

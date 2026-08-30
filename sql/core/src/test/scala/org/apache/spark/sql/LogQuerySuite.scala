@@ -27,7 +27,7 @@ import org.apache.spark.util.LogUtils.SPARK_LOG_SCHEMA
 /**
  * Test suite for querying Spark logs using SQL.
  */
-class LogQuerySuite extends QueryTest with SharedSparkSession with Logging {
+class LogQuerySuite extends SharedSparkSession with Logging {
 
   val logFile: File = {
     val pwd = new File(".").getCanonicalPath

@@ -19,40 +19,46 @@ package org.apache.spark.sql.connector
 
 import java.util.Collections
 
+import scala.jdk.CollectionConverters._
+
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{DataFrame, Encoders, QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, Encoders, Row}
 import org.apache.spark.sql.QueryTest.{sameRows, withQueryExecutionsCaptured}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.METADATA_COL_ATTR_KEY
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Delete, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, Insert, MetadataColumn, Operation, Reinsert, TableInfo, Update, Write}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Delete, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, Insert, MetadataColumn, Operation, Reinsert, RowLevelOperationWithOptions, Table, TableInfo, Txn, TxnTable, Update, Write}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.{InSubqueryExec, QueryExecution, SparkPlan}
+import org.apache.spark.sql.connector.write.RowLevelOperationTable
+import org.apache.spark.sql.execution.{InSubqueryExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructField, StructType}
-import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
 abstract class RowLevelOperationSuiteBase
-  extends QueryTest with SharedSparkSession with BeforeAndAfter with AdaptiveSparkPlanHelper {
+  extends SharedSparkSession with BeforeAndAfter with AdaptiveSparkPlanHelper {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   before {
     spark.conf.set("spark.sql.catalog.cat", classOf[InMemoryRowLevelOperationTableCatalog].getName)
+    spark.conf.set(
+      "spark.sql.catalog.cat.tableStateOptionKeys", "load-option,targetLoadOption")
   }
 
   after {
+    catalog.nextTxnRejectRegisteredScansAttempt = false
     spark.sessionState.catalogManager.reset()
     spark.sessionState.conf.unsetConf("spark.sql.catalog.cat")
+    spark.sessionState.conf.unsetConf("spark.sql.catalog.cat.tableStateOptionKeys")
   }
 
   protected final val PK_FIELD = StructField("pk", IntegerType, nullable = false)
@@ -82,10 +88,17 @@ abstract class RowLevelOperationSuiteBase
   protected val namespace: Array[String] = Array("ns1")
   protected val ident: Identifier = Identifier.of(namespace, "test_table")
   protected val tableNameAsString: String = "cat." + ident.toString
+  protected val sourceNameAsString: String = "cat.ns1.source_table"
 
   protected def extraTableProps: java.util.Map[String, String] = {
     Collections.emptyMap[String, String]
   }
+
+  /** True for the *NoMetadata* test variants - the writer doesn't request any required
+   * distribution / ordering and so MergeRowsExec / writer can run in the same stage as the
+   * preceding join. */
+  protected def noMetadata: Boolean =
+    extraTableProps.getOrDefault("no-metadata", "false") == "true"
 
   protected def catalog: InMemoryRowLevelOperationTableCatalog = {
     val catalog = spark.sessionState.catalogManager.catalog("cat")
@@ -93,7 +106,10 @@ abstract class RowLevelOperationSuiteBase
   }
 
   protected def table: InMemoryRowLevelOperationTable = {
-    catalog.loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
+    // Use liveTable, not loadTable, because loadTable returns a snapshot copy.
+    // Tests mutate state through this accessor (e.g., `table.increaseVersion()`) and need
+    // those mutations to be observable to subsequent loads.
+    catalog.liveTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
   }
 
   protected def createTable(schemaString: String): Unit = {
@@ -101,8 +117,17 @@ abstract class RowLevelOperationSuiteBase
     createTable(columns)
   }
 
+  protected def createTable(schemaString: String, transforms: Array[Transform]): Unit = {
+    val columns = CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString))
+    createTable(columns, transforms)
+  }
+
   protected def createTable(columns: Array[Column]): Unit = {
     val transforms = Array[Transform](identity(reference(Seq("dep"))))
+    createTable(columns, transforms)
+  }
+
+  protected def createTable(columns: Array[Column], transforms: Array[Transform]): Unit = {
     val tableInfo = new TableInfo.Builder()
       .withColumns(columns)
       .withPartitions(transforms)
@@ -135,22 +160,28 @@ abstract class RowLevelOperationSuiteBase
 
   // executes an operation and keeps the executed plan
   protected def executeAndKeepPlan(func: => Unit): SparkPlan = {
-    var executedPlan: SparkPlan = null
+    withQueryExecutionsCaptured(spark)(func) match {
+      case Seq(qe) => stripAQEPlan(qe.executedPlan)
+      case other => fail(s"expected only one query execution, but got ${other.size}")
+    }
+  }
 
-    val listener = new QueryExecutionListener {
-      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
-        executedPlan = qe.executedPlan
-      }
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+  protected def executeTransaction(func: => Unit): (Txn, Map[String, TxnTable]) = {
+    val tables = withQueryExecutionsCaptured(spark)(func).flatMap { qe =>
+      collectWithSubqueries(qe.executedPlan) {
+        case BatchScanExec(_, _, _, _, table: TxnTable, _) => table
+        case BatchScanExec(_, _, _, _, RowLevelOperationTable(table: TxnTable, _), _) => table
       }
     }
-    spark.listenerManager.register(listener)
+    (catalog.lastTransaction, indexByName(tables))
+  }
 
-    func
-
-    sparkContext.listenerBus.waitUntilEmpty()
-
-    stripAQEPlan(executedPlan)
+  protected def indexByName[T <: Table](tables: Seq[T]): Map[String, T] = {
+    tables.groupBy(_.name).map {
+      case (name, sameNameTables) =>
+        val Seq(table) = sameNameTables.distinct
+        name -> table
+    }
   }
 
   // executes an operation and extracts conditions from ReplaceData or WriteDelta
@@ -158,8 +189,54 @@ abstract class RowLevelOperationSuiteBase
     val Seq(qe) = withQueryExecutionsCaptured(spark)(func)
     qe.optimizedPlan.collectFirst {
       case rd: ReplaceData => (rd.condition, rd.groupFilterCondition)
-      case wd: WriteDelta => (wd.condition, None)
+      case wd: WriteDelta => (wd.condition, wd.groupFilterCondition)
     }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
+  }
+
+  // Asserts the given SQL options reached every V2 layer that should carry them: the target
+  // catalog load, the rewritten DataSourceV2Relation, the RowLevelOperationInfo passed to the
+  // operation builder, and the write builder's LogicalWriteInfo.
+  protected def checkRowLevelOperationOptions(
+      func: => Unit,
+      expectedOptions: (String, String)*): Unit = {
+    val Seq(qe) = withQueryExecutionsCaptured(spark)(func)
+    val writeRelation = qe.optimizedPlan.collectFirst {
+      case rd: ReplaceData => rd.table
+      case wd: WriteDelta => wd.table
+    }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
+      .asInstanceOf[DataSourceV2Relation]
+    assert(writeRelation.catalog.nonEmpty, "expected a catalog-backed V2 write relation")
+    assert(writeRelation.identifier.nonEmpty, "expected a catalog-backed V2 write identifier")
+    val operation = writeRelation.table.asInstanceOf[RowLevelOperationTable].operation
+      .asInstanceOf[RowLevelOperationWithOptions]
+    assertLastTransactionWriteLoadOptions(expectedOptions: _*)
+
+    expectedOptions.foreach { case (key, value) =>
+      assert(writeRelation.options.get(key) === value, s"relation option '$key'")
+      assert(operation.options.get(key) === value, s"row-level operation option '$key'")
+      assert(table.lastWriteInfo.options().get(key) === value, s"write option '$key'")
+    }
+  }
+
+  protected def assertLastTransactionWriteLoadOptions(
+      expectedOptions: (String, String)*): Unit = {
+    val stateKeys = catalog.tableStateOptionKeys().asScala
+    val expectedStateOptions = expectedOptions.filter { case (key, _) =>
+      stateKeys.exists(_.equalsIgnoreCase(key))
+    }
+    val targetLoads = catalog.lastTransaction.catalog.loadTableCalls.filter {
+      case (context, _) => !context.writePrivileges().isEmpty
+    }
+    assert(targetLoads.nonEmpty, "target loadTable did not receive write privileges")
+    targetLoads.foreach { case (_, options) =>
+      assert(options.size() === expectedStateOptions.size)
+      expectedStateOptions.foreach { case (key, value) =>
+        assert(options.get(key) === value, s"table-state option '$key'")
+      }
+      expectedOptions.diff(expectedStateOptions).foreach { case (key, _) =>
+        assert(options.get(key) === null, s"non-state load option '$key'")
+      }
+    }
   }
 
   protected def assertNoScanPlanning(plan: LogicalPlan): Unit = {

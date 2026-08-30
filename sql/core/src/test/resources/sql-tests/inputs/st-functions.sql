@@ -137,6 +137,33 @@ SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeomFromWKB(wkb, 4326)) <> wkb
 -- Error handling: invalid SRID.
 SELECT COUNT(*) FROM geodata WHERE ST_GeomFromWKB(wkb, 1);
 
+---- ST_AsBinary
+
+-- 1. Driver-level queries.
+SELECT ST_AsBinary(NULL);
+SELECT hex(ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040')));
+SELECT hex(ST_AsBinary(ST_GeogFromWKB(X'00000000013FF00000000000004000000000000000'), 'NDR'));
+SELECT hex(ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'), 'XDR'));
+SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040')));
+SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'00000000013FF00000000000004000000000000000'), 'NDR'));
+SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040'), 'XDR'));
+-- Error handling: invalid endianness.
+SELECT ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'), '');
+SELECT ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'), 'ABC');
+SELECT ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'), 'big-endian');
+
+-- 2. Table-level queries.
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb)) <> wkb;
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb), 'NDR') <> wkb;
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb), 'XDR') = wkb;
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeomFromWKB(wkb)) <> wkb;
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeomFromWKB(wkb), 'NDR') <> wkb;
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeomFromWKB(wkb), 'XDR') = wkb;
+-- Error handling: invalid endianness.
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb), '') IS NOT NULL;
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb), 'ABC') IS NOT NULL;
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb), 'big-endian') IS NOT NULL;
+
 ------ ST accessor expressions
 
 ---- ST_Srid

@@ -369,4 +369,23 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
     assert(!error.hasSparkThrowable)
     assert(error.getMessage == "Regular runtime exception")
   }
+
+  test("throwableToFetchErrorDetailsResponse with null getMessageParameters") {
+    // A SparkThrowable override that returns null from getMessageParameters (in violation
+    // of the interface's implicit non-null contract) must not crash the FetchErrorDetails
+    // RPC with a NullPointerException.
+    val testError = new Exception("error with null message params") with SparkThrowable {
+      override def getCondition: String = "NULL_PARAMS_ERROR"
+      override def getErrorClass: String = "NULL_PARAMS_ERROR"
+      override def getMessageParameters: java.util.Map[String, String] = null
+    }
+
+    val response =
+      ErrorUtils.throwableToFetchErrorDetailsResponse(testError, serverStackTraceEnabled = false)
+
+    assert(response.hasRootErrorIdx)
+    val sparkThrowableProto = response.getErrors(0).getSparkThrowable
+    assert(sparkThrowableProto.getErrorClass == "NULL_PARAMS_ERROR")
+    assert(sparkThrowableProto.getMessageParametersMap.isEmpty)
+  }
 }

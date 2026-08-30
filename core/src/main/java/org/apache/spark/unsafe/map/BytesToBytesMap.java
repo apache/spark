@@ -836,11 +836,19 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * @return whether there is enough space to allocate the new page.
    */
   private boolean acquireNewPage(long required) {
+    final MemoryBlock page;
     try {
-      currentPage = allocatePage(required);
+      page = allocatePage(required);
     } catch (SparkOutOfMemoryError e) {
       return false;
     }
+    // Retaining exact-fit minimum-retry pages would consume one page-table slot per map entry.
+    if (required < pageSizeBytes && page.size() == required &&
+        isPageAllocationFromMinimumRetry(page)) {
+      freePage(page);
+      return false;
+    }
+    currentPage = page;
     dataPages.add(currentPage);
     UnsafeAlignedOffset.putSize(currentPage.getBaseObject(), currentPage.getBaseOffset(), 0);
     pageCursor = UnsafeAlignedOffset.getUaoSize();

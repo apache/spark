@@ -303,6 +303,17 @@ object DataTypeUtils {
   }
 
   /**
+   * Returns true if the given data type contains any STRING/CHAR/VARCHAR with explicit collation
+   * (including explicit `UTF8_BINARY`), recursively checking nested types.
+   */
+  def hasNonDefaultStringCharOrVarcharType(dataType: DataType): Boolean = {
+    dataType.existsRecursively {
+      case st: StringType => !isDefaultStringCharOrVarcharType(st)
+      case _ => false
+    }
+  }
+
+  /**
    * Recursively replaces all STRING, CHAR and VARCHAR types that do not have an explicit collation
    * with the same type but with explicit `UTF8_BINARY` collation.
    *

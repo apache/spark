@@ -15,11 +15,14 @@
 # limitations under the License.
 #
 
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 from pyspark.pandas.tests.window.test_groupby_rolling import GroupByRollingTestingFuncMixin
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
 class GroupByRollingAdvMixin(GroupByRollingTestingFuncMixin):
+    def test_groupby_rolling_median(self):
+        self._test_groupby_rolling_func("median", lambda x: x.quantile(0.5, "lower"))
+
     def test_groupby_rolling_quantile(self):
         self._test_groupby_rolling_func(
             lambda x: x.quantile(0.5), lambda x: x.quantile(0.5, "lower")

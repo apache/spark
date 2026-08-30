@@ -28,10 +28,11 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{LateralJoin, LocalRelation, LogicalPlan, OneRowRelation, Project, Range, UnresolvedWith, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand._
-import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, MetadataBuilder, StructField, StructType}
 
 /**
  * The DDL command that creates a SQL function.
@@ -108,6 +109,18 @@ case class CreateSQLFunctionCommand(
         // Qualify the input parameters with the function name so that attributes referencing
         // the function input parameters can be resolved correctly.
         val qualifier = Seq(name.funcName)
+        // Mark scalar UDF parameter aliases as function input so name resolution can give a
+        // parameterless built-in function precedence over a same-named UDF parameter. Table UDF
+        // bodies reference parameters as outer references, where a parameterless function already
+        // wins via the pre-existing "function beats outer reference" precedence, so the marker is
+        // not applied (and would not be consumed) there.
+        val funcInputMetadata = if (isTableFunc) {
+          None
+        } else {
+          Some(new MetadataBuilder()
+            .putBoolean(SessionCatalog.SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY, true)
+            .build())
+        }
         val input = param.map(p => Alias(
           {
             val defaultExpr = p.getDefault()
@@ -130,7 +143,7 @@ case class CreateSQLFunctionCommand(
               }
               Cast(defaultPlan, p.dataType)
             }
-          }, p.name)(qualifier = qualifier))
+          }, p.name)(qualifier = qualifier, explicitMetadata = funcInputMetadata))
         Project(input, OneRowRelation())
       } else {
         OneRowRelation()
@@ -512,10 +525,23 @@ case class CreateSQLFunctionCommand(
     }
     val tempVars = ViewHelper.collectTemporaryVariables(analyzed)
 
+    // Capture the effective resolution path at function creation time so the function
+    // body resolves with the same path regardless of the caller's session path later.
+    val expandedPathEntries = CatalogManager.pathEntriesForPersistence(
+      manager, conf, stripSession = !isTemp)
+    val resolutionPathProps =
+      if (expandedPathEntries.nonEmpty) {
+        Map(SQLFunction.FUNCTION_RESOLUTION_PATH ->
+          CatalogManager.serializePathEntries(expandedPathEntries))
+      } else {
+        Map.empty[String, String]
+      }
+
     sqlConfigsToProps(conf, SQL_CONFIG_PREFIX) ++
       catalogAndNamespaceToProps(
         manager.currentCatalog.name,
         manager.currentNamespace.toIndexedSeq) ++
-      referredTempNamesToProps(tempViews, tempFunctions, tempVars)
+      referredTempNamesToProps(tempViews, tempFunctions, tempVars) ++
+      resolutionPathProps
   }
 }

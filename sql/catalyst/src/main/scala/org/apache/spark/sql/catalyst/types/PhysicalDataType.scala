@@ -17,21 +17,21 @@
 
 package org.apache.spark.sql.catalyst.types
 
-import scala.reflect.runtime.universe.TypeTag
-import scala.reflect.runtime.universe.typeTag
+import scala.reflect.ClassTag
+import scala.reflect.classTag
 
 import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, InterpretedOrdering, SortOrder}
 import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, GeographyType, GeometryType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
-import org.apache.spark.unsafe.types.{ByteArray, GeographyVal, GeometryVal, UTF8String, VariantVal}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, GeographyType, GeometryType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, VariantType, YearMonthIntervalType}
+import org.apache.spark.unsafe.types.{BinaryView, ByteArray, TimestampNanosVal, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
 sealed abstract class PhysicalDataType {
   private[sql] type InternalType
   private[sql] def ordering: Ordering[InternalType]
-  private[sql] val tag: TypeTag[InternalType]
+  private[sql] val tag: ClassTag[InternalType]
 }
 
 object PhysicalDataType {
@@ -58,13 +58,13 @@ object PhysicalDataType {
     case DayTimeIntervalType(_, _) => PhysicalLongType
     case YearMonthIntervalType(_, _) => PhysicalIntegerType
     case DateType => PhysicalIntegerType
-    case _: TimeType => PhysicalLongType
     case ArrayType(elementType, containsNull) => PhysicalArrayType(elementType, containsNull)
     case StructType(fields) => PhysicalStructType(fields)
     case MapType(keyType, valueType, valueContainsNull) =>
       PhysicalMapType(keyType, valueType, valueContainsNull)
-    case _: GeometryType => PhysicalGeometryType
-    case _: GeographyType => PhysicalGeographyType
+    // GEOMETRY and GEOGRAPHY are physically just an opaque chunk of bytes; they differ only
+    // at the logical-type level, so they share a single physical type.
+    case _: GeometryType | _: GeographyType => PhysicalBinaryViewType
     case VariantType => PhysicalVariantType
     case _ => UninitializedPhysicalType
   }
@@ -133,7 +133,7 @@ class PhysicalBinaryType() extends PhysicalDataType {
     (x: Array[Byte], y: Array[Byte]) => ByteArray.compareBinary(x, y)
 
   private[sql] type InternalType = Array[Byte]
-  @transient private[sql] lazy val tag = typeTag[InternalType]
+  @transient private[sql] lazy val tag = classTag[InternalType]
 }
 case object PhysicalBinaryType extends PhysicalBinaryType
 
@@ -143,14 +143,14 @@ class PhysicalBooleanType extends PhysicalDataType with PhysicalPrimitiveType {
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Boolean
   private[sql] val ordering = implicitly[Ordering[InternalType]]
-  @transient private[sql] lazy val tag = typeTag[InternalType]
+  @transient private[sql] lazy val tag = classTag[InternalType]
 }
 case object PhysicalBooleanType extends PhysicalBooleanType
 
 class PhysicalByteType() extends PhysicalIntegralType with PhysicalPrimitiveType {
   private[sql] type InternalType = Byte
   private[sql] val ordering = implicitly[Ordering[InternalType]]
-  @transient private[sql] lazy val tag = typeTag[InternalType]
+  @transient private[sql] lazy val tag = classTag[InternalType]
   private[sql] val numeric = implicitly[Numeric[Byte]]
   override private[sql] val exactNumeric = ByteExactNumeric
   private[sql] val integral = implicitly[Integral[Byte]]
@@ -162,14 +162,50 @@ class PhysicalCalendarIntervalType() extends PhysicalDataType {
     throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(
       "PhysicalCalendarIntervalType")
   override private[sql] type InternalType = Any
-  @transient private[sql] lazy val tag = typeTag[InternalType]
+  @transient private[sql] lazy val tag = classTag[InternalType]
 }
 case object PhysicalCalendarIntervalType extends PhysicalCalendarIntervalType
+
+/**
+ * Physical type for [[org.apache.spark.sql.types.TimestampNTZNanosType]]. Internal values are
+ * [[TimestampNanosVal]] (epoch micros + nanos within the micro). Stored in [[UnsafeRow]] via a
+ * 16-byte variable-length payload; see
+ * [[org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues]].
+ *
+ * Storage layout is identical to [[PhysicalTimestampLTZNanosType]]; both types exist so the
+ * NTZ/LTZ distinction propagates through the physical-type system to consumers that need it.
+ *
+ * Hash is not implemented yet and will be added in a follow-up issue.
+ */
+class PhysicalTimestampNTZNanosType() extends PhysicalDataType {
+  override private[sql] type InternalType = TimestampNanosVal
+  override private[sql] val ordering = implicitly[Ordering[InternalType]]
+  @transient private[sql] lazy val tag = classTag[InternalType]
+}
+case object PhysicalTimestampNTZNanosType extends PhysicalTimestampNTZNanosType
+
+/**
+ * Physical type for [[org.apache.spark.sql.types.TimestampLTZNanosType]]. Internal values are
+ * [[TimestampNanosVal]] (epoch micros + nanos within the micro). Stored in [[UnsafeRow]] via a
+ * 16-byte variable-length payload; see
+ * [[org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues]].
+ *
+ * Storage layout is identical to [[PhysicalTimestampNTZNanosType]]; both types exist so the
+ * NTZ/LTZ distinction propagates through the physical-type system to consumers that need it.
+ *
+ * Hash is not implemented yet and will be added in a follow-up issue.
+ */
+class PhysicalTimestampLTZNanosType() extends PhysicalDataType {
+  override private[sql] type InternalType = TimestampNanosVal
+  override private[sql] val ordering = implicitly[Ordering[InternalType]]
+  @transient private[sql] lazy val tag = classTag[InternalType]
+}
+case object PhysicalTimestampLTZNanosType extends PhysicalTimestampLTZNanosType
 
 case class PhysicalDecimalType(precision: Int, scale: Int) extends PhysicalFractionalType {
   private[sql] type InternalType = Decimal
   private[sql] val ordering = Decimal.DecimalIsFractional
-  @transient private[sql] lazy val tag = typeTag[InternalType]
+  @transient private[sql] lazy val tag = classTag[InternalType]
   private[sql] val numeric = Decimal.DecimalIsFractional
   override private[sql] def exactNumeric = DecimalExactNumeric
   private[sql] val fractional = Decimal.DecimalIsFractional
@@ -189,7 +225,7 @@ class PhysicalDoubleType() extends PhysicalFractionalType with PhysicalPrimitive
   private[sql] type InternalType = Double
   private[sql] val ordering =
     (x: Double, y: Double) => SQLOrderingUtil.compareDoubles(x, y)
-  @transient private[sql] lazy val tag = typeTag[InternalType]
+  @transient private[sql] lazy val tag = classTag[InternalType]
   private[sql] val numeric = implicitly[Numeric[Double]]
   override private[sql] def exactNumeric = DoubleExactNumeric
   private[sql] val fractional = implicitly[Fractional[Double]]
@@ -204,7 +240,7 @@ class PhysicalFloatType() extends PhysicalFractionalType with PhysicalPrimitiveT
   private[sql] type InternalType = Float
   private[sql] val ordering =
     (x: Float, y: Float) => SQLOrderingUtil.compareFloats(x, y)
-  @transient private[sql] lazy val tag = typeTag[InternalType]
+  @transient private[sql] lazy val tag = classTag[InternalType]
   private[sql] val numeric = implicitly[Numeric[Float]]
   override private[sql] def exactNumeric = FloatExactNumeric
   private[sql] val fractional = implicitly[Fractional[Float]]
@@ -218,7 +254,7 @@ class PhysicalIntegerType() extends PhysicalIntegralType with PhysicalPrimitiveT
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Int
   private[sql] val ordering = implicitly[Ordering[InternalType]]
-  @transient private[sql] lazy val tag = typeTag[InternalType]
+  @transient private[sql] lazy val tag = classTag[InternalType]
   private[sql] val numeric = implicitly[Numeric[Int]]
   override private[sql] val exactNumeric = IntegerExactNumeric
   private[sql] val integral = implicitly[Integral[Int]]
@@ -231,7 +267,7 @@ class PhysicalLongType() extends PhysicalIntegralType with PhysicalPrimitiveType
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Long
   private[sql] val ordering = implicitly[Ordering[InternalType]]
-  @transient private[sql] lazy val tag = typeTag[InternalType]
+  @transient private[sql] lazy val tag = classTag[InternalType]
   private[sql] val numeric = implicitly[Numeric[Long]]
   override private[sql] val exactNumeric = LongExactNumeric
   private[sql] val integral = implicitly[Integral[Long]]
@@ -243,7 +279,7 @@ case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContains
   // maps are not orderable, we use `ordering` just to support group by queries
   override private[sql] def ordering = interpretedOrdering
   override private[sql] type InternalType = MapData
-  @transient private[sql] lazy val tag = typeTag[InternalType]
+  @transient private[sql] lazy val tag = classTag[InternalType]
 
   @transient
   private[sql] lazy val interpretedOrdering: Ordering[MapData] = new Ordering[MapData] {
@@ -312,14 +348,14 @@ class PhysicalNullType() extends PhysicalDataType with PhysicalPrimitiveType {
   override private[sql] def ordering =
     implicitly[Ordering[Unit]].asInstanceOf[Ordering[Any]]
   override private[sql] type InternalType = Any
-  @transient private[sql] lazy val tag = typeTag[InternalType]
+  @transient private[sql] lazy val tag = classTag[InternalType]
 }
 case object PhysicalNullType extends PhysicalNullType
 
 class PhysicalShortType() extends PhysicalIntegralType with PhysicalPrimitiveType {
   private[sql] type InternalType = Short
   private[sql] val ordering = implicitly[Ordering[InternalType]]
-  @transient private[sql] lazy val tag = typeTag[InternalType]
+  @transient private[sql] lazy val tag = classTag[InternalType]
   private[sql] val numeric = implicitly[Numeric[Short]]
   override private[sql] val exactNumeric = ShortExactNumeric
   private[sql] val integral = implicitly[Integral[Short]]
@@ -332,7 +368,7 @@ case class PhysicalStringType(collationId: Int) extends PhysicalDataType {
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = UTF8String
   private[sql] val ordering = CollationFactory.fetchCollation(collationId).comparator.compare(_, _)
-  @transient private[sql] lazy val tag = typeTag[InternalType]
+  @transient private[sql] lazy val tag = classTag[InternalType]
 }
 object PhysicalStringType {
   def apply(collationId: Int): PhysicalStringType = new PhysicalStringType(collationId)
@@ -342,7 +378,7 @@ case class PhysicalArrayType(
     elementType: DataType, containsNull: Boolean) extends PhysicalDataType {
   override private[sql] type InternalType = ArrayData
   override private[sql] def ordering = interpretedOrdering
-  @transient private[sql] lazy val tag = typeTag[InternalType]
+  @transient private[sql] lazy val tag = classTag[InternalType]
 
   @transient
   private[sql] lazy val interpretedOrdering: Ordering[ArrayData] = new Ordering[ArrayData] {
@@ -389,7 +425,7 @@ case class PhysicalStructType(fields: Array[StructField]) extends PhysicalDataTy
   override private[sql] type InternalType = Any
   override private[sql] def ordering =
     forSchema(this.fields.map(_.dataType).toImmutableArraySeq).asInstanceOf[Ordering[InternalType]]
-  @transient private[sql] lazy val tag = typeTag[InternalType]
+  @transient private[sql] lazy val tag = classTag[InternalType]
 
   private[sql] def forSchema(dataTypes: Seq[DataType]): InterpretedOrdering = {
     new InterpretedOrdering(dataTypes.zipWithIndex.map {
@@ -400,7 +436,7 @@ case class PhysicalStructType(fields: Array[StructField]) extends PhysicalDataTy
 
 class PhysicalVariantType extends PhysicalDataType {
   private[sql] type InternalType = VariantVal
-  @transient private[sql] lazy val tag = typeTag[InternalType]
+  @transient private[sql] lazy val tag = classTag[InternalType]
 
   // TODO(SPARK-45891): Support comparison for the Variant type.
   override private[sql] def ordering =
@@ -415,21 +451,22 @@ object UninitializedPhysicalType extends PhysicalDataType {
     throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(
       "UninitializedPhysicalType")
   override private[sql] type InternalType = Any
-  @transient private[sql] lazy val tag = typeTag[InternalType]
+  @transient private[sql] lazy val tag = classTag[InternalType]
 }
 
-case class PhysicalGeographyType() extends PhysicalDataType {
-  private[sql] type InternalType = GeographyVal
-  @transient private[sql] lazy val tag = typeTag[InternalType]
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
+// Physical type for opaque, variable-length byte payloads that are addressed as a zero-copy
+// BinaryView into the row backing buffer. Today GEOMETRY and GEOGRAPHY share this physical
+// type; future opaque-bytes logical types can plug into it as well.
+//
+// The physical type defines the natural ordering of its storage: BinaryView has a meaningful
+// unsigned lexicographic compareTo, so we expose it here. Whether a logical type backed by this
+// physical type can actually be ordered is a separate, logical-level decision made by
+// `OrderUtils.isOrderable`, which rejects GEOMETRY / GEOGRAPHY so `ORDER BY <geo_col>` fails at
+// analysis time rather than silently producing a byte-order result.
+class PhysicalBinaryViewType extends PhysicalDataType {
+  private[sql] val ordering = (x: BinaryView, y: BinaryView) => x.compareTo(y)
+  private[sql] type InternalType = BinaryView
+  @transient private[sql] lazy val tag = classTag[InternalType]
 }
 
-object PhysicalGeographyType extends PhysicalGeographyType
-
-case class PhysicalGeometryType() extends PhysicalDataType {
-  private[sql] type InternalType = GeometryVal
-  @transient private[sql] lazy val tag = typeTag[InternalType]
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
-}
-
-object PhysicalGeometryType extends PhysicalGeometryType
+case object PhysicalBinaryViewType extends PhysicalBinaryViewType

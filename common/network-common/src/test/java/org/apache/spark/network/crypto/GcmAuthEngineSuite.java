@@ -90,13 +90,13 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
       // Capture the decrypted values and verify them
       ArgumentCaptor<ByteBuf> captorPlaintext = ArgumentCaptor.forClass(ByteBuf.class);
       decryptionHandler.channelRead(ctx, ciphertext);
-      verify(ctx, times(2))
+      verify(ctx, times(1))
               .fireChannelRead(captorPlaintext.capture());
-      ByteBuf lastPlaintextSegment = captorPlaintext.getValue();
-      assertEquals(plaintextSegmentSize/2,
-              lastPlaintextSegment.readableBytes());
+      ByteBuf plaintext = captorPlaintext.getValue();
+      assertEquals(plaintextSegmentSize + (plaintextSegmentSize / 2),
+              plaintext.readableBytes());
       assertEquals('c',
-              lastPlaintextSegment.getByte((plaintextSegmentSize/2) - 10));
+              plaintext.getByte(plaintext.readableBytes() - 10));
     }
   }
 
@@ -219,13 +219,11 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
       // Capture the decrypted values and verify them
       ArgumentCaptor<ByteBuf> captorPlaintext = ArgumentCaptor.forClass(ByteBuf.class);
       decryptionHandler.channelRead(ctx, ciphertext);
-      verify(ctx, times(2)).fireChannelRead(captorPlaintext.capture());
+      verify(ctx, times(1)).fireChannelRead(captorPlaintext.capture());
       ByteBuf plaintext = captorPlaintext.getValue();
-      // We expect this to be the last partial plaintext segment
-      int expectedLength = totalSize % plaintextSegmentSize;
-      assertEquals(expectedLength, plaintext.readableBytes());
-      // This will be the "remainder" segment that is filled to 'c'
-      assertEquals('c', plaintext.getByte(0));
+      assertEquals(totalSize, plaintext.readableBytes());
+      // 'c' starts at the second plaintext segment (offset plaintextSegmentSize)
+      assertEquals('c', plaintext.getByte(plaintextSegmentSize));
     }
   }
 
@@ -281,12 +279,501 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
       // Capture the decrypted values and verify them
       ArgumentCaptor<ByteBuf> captorPlaintext = ArgumentCaptor.forClass(ByteBuf.class);
       decryptionHandler.channelRead(ctx, mockCiphertext);
-      verify(ctx, times(2)).fireChannelRead(captorPlaintext.capture());
-      ByteBuf lastPlaintextSegment = captorPlaintext.getValue();
-      assertEquals(plaintextSegmentSize/2,
-              lastPlaintextSegment.readableBytes());
-      assertEquals('x',
-              lastPlaintextSegment.getByte((plaintextSegmentSize/2) - 10));
+      verify(ctx, times(1)).fireChannelRead(captorPlaintext.capture());
+      ByteBuf plaintext = captorPlaintext.getValue();
+      assertEquals(plaintextSize, plaintext.readableBytes());
+      assertEquals('x', plaintext.getByte(plaintextSize - 10));
+    }
+  }
+
+  /**
+   * Verifies that the same DecryptionHandler instance correctly decodes multiple independent
+   * GCM-encrypted messages sent over the same channel. This is the regression test for the
+   * bug where DecryptionHandler.completed was never reset, causing every message after the
+   * first to be silently dropped - which manifested as YARN container launch failures.
+   */
+  @Test
+  public void testMultipleMessages() throws Exception {
+    TransportConf gcmConf = getConf(2, false);
+    try (AuthEngine client = new AuthEngine("appId", "secret", gcmConf);
+         AuthEngine server = new AuthEngine("appId", "secret", gcmConf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+      TransportCipher cipher = server.sessionCipher();
+      assert (cipher instanceof GcmTransportCipher);
+      GcmTransportCipher gcmTransportCipher = (GcmTransportCipher) cipher;
+
+      GcmTransportCipher.EncryptionHandler encryptionHandler =
+              gcmTransportCipher.getEncryptionHandler();
+      GcmTransportCipher.DecryptionHandler decryptionHandler =
+              gcmTransportCipher.getDecryptionHandler();
+
+      ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+      ChannelPromise promise = mock(ChannelPromise.class);
+
+      // --- First message ---
+      byte[] data1 = new byte[1024];
+      Arrays.fill(data1, (byte) 'A');
+      ArgumentCaptor<GcmTransportCipher.GcmEncryptedMessage> captor1 =
+              ArgumentCaptor.forClass(GcmTransportCipher.GcmEncryptedMessage.class);
+      encryptionHandler.write(ctx, Unpooled.wrappedBuffer(data1), promise);
+      verify(ctx).write(captor1.capture(), eq(promise));
+      ByteBuffer ct1 = ByteBuffer.allocate((int) captor1.getValue().count());
+      captor1.getValue().transferTo(new ByteBufferWriteableChannel(ct1), 0);
+      ct1.flip();
+
+      ArgumentCaptor<ByteBuf> plaintextCaptor1 = ArgumentCaptor.forClass(ByteBuf.class);
+      decryptionHandler.channelRead(ctx, Unpooled.wrappedBuffer(ct1));
+      verify(ctx, atLeastOnce()).fireChannelRead(plaintextCaptor1.capture());
+      byte[] decrypted1 = new byte[data1.length];
+      int offset = 0;
+      for (ByteBuf segment : plaintextCaptor1.getAllValues()) {
+        int len = segment.readableBytes();
+        segment.readBytes(decrypted1, offset, len);
+        offset += len;
+      }
+      assertEquals(data1.length, offset);
+      assertArrayEquals(data1, decrypted1);
+
+      // --- Second message (same handler, different content) ---
+      reset(ctx);
+      byte[] data2 = new byte[2048];
+      Arrays.fill(data2, (byte) 'B');
+      ArgumentCaptor<GcmTransportCipher.GcmEncryptedMessage> captor2 =
+              ArgumentCaptor.forClass(GcmTransportCipher.GcmEncryptedMessage.class);
+      encryptionHandler.write(ctx, Unpooled.wrappedBuffer(data2), promise);
+      verify(ctx).write(captor2.capture(), eq(promise));
+      ByteBuffer ct2 = ByteBuffer.allocate((int) captor2.getValue().count());
+      captor2.getValue().transferTo(new ByteBufferWriteableChannel(ct2), 0);
+      ct2.flip();
+
+      ArgumentCaptor<ByteBuf> plaintextCaptor2 = ArgumentCaptor.forClass(ByteBuf.class);
+      decryptionHandler.channelRead(ctx, Unpooled.wrappedBuffer(ct2));
+      verify(ctx, atLeastOnce()).fireChannelRead(plaintextCaptor2.capture());
+      byte[] decrypted2 = new byte[data2.length];
+      offset = 0;
+      for (ByteBuf segment : plaintextCaptor2.getAllValues()) {
+        int len = segment.readableBytes();
+        segment.readBytes(decrypted2, offset, len);
+        offset += len;
+      }
+      assertEquals(data2.length, offset);
+      assertArrayEquals(data2, decrypted2);
+    }
+  }
+
+  /**
+   * Verifies that multiple GCM-encrypted messages delivered inside a single channelRead()
+   * call (TCP coalescing) are all decoded correctly. This is the regression test for the
+   * IllegalStateException("Invalid expected ciphertext length") observed under SparkSQL
+   * shuffle load: when Netty batches two messages into one ByteBuf, the old code released
+   * the buffer after the first message, discarding remaining bytes. The next channelRead()
+   * then read bytes from the middle of the second message as a length header.
+   */
+  @Test
+  public void testBatchedMessages() throws Exception {
+    TransportConf gcmConf = getConf(2, false);
+    try (AuthEngine client = new AuthEngine("appId", "secret", gcmConf);
+         AuthEngine server = new AuthEngine("appId", "secret", gcmConf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+      TransportCipher cipher = server.sessionCipher();
+      assert (cipher instanceof GcmTransportCipher);
+      GcmTransportCipher gcmTransportCipher = (GcmTransportCipher) cipher;
+
+      GcmTransportCipher.EncryptionHandler encryptionHandler =
+              gcmTransportCipher.getEncryptionHandler();
+      GcmTransportCipher.DecryptionHandler decryptionHandler =
+              gcmTransportCipher.getDecryptionHandler();
+
+      ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+      ChannelPromise promise = mock(ChannelPromise.class);
+
+      byte[] data1 = new byte[1024];
+      Arrays.fill(data1, (byte) 'A');
+      ArgumentCaptor<GcmTransportCipher.GcmEncryptedMessage> captor1 =
+              ArgumentCaptor.forClass(GcmTransportCipher.GcmEncryptedMessage.class);
+      encryptionHandler.write(ctx, Unpooled.wrappedBuffer(data1), promise);
+      verify(ctx).write(captor1.capture(), eq(promise));
+      ByteBuffer ct1 = ByteBuffer.allocate((int) captor1.getValue().count());
+      captor1.getValue().transferTo(new ByteBufferWriteableChannel(ct1), 0);
+      ct1.flip();
+
+      reset(ctx);
+      byte[] data2 = new byte[2048];
+      Arrays.fill(data2, (byte) 'B');
+      ArgumentCaptor<GcmTransportCipher.GcmEncryptedMessage> captor2 =
+              ArgumentCaptor.forClass(GcmTransportCipher.GcmEncryptedMessage.class);
+      encryptionHandler.write(ctx, Unpooled.wrappedBuffer(data2), promise);
+      verify(ctx).write(captor2.capture(), eq(promise));
+      ByteBuffer ct2 = ByteBuffer.allocate((int) captor2.getValue().count());
+      captor2.getValue().transferTo(new ByteBufferWriteableChannel(ct2), 0);
+      ct2.flip();
+
+      // Simulate TCP coalescing: deliver both ciphertexts in one channelRead() call.
+      reset(ctx);
+      ByteBuf batched = Unpooled.wrappedBuffer(ct1, ct2);
+      ArgumentCaptor<ByteBuf> plaintextCaptor = ArgumentCaptor.forClass(ByteBuf.class);
+      decryptionHandler.channelRead(ctx, batched);
+      verify(ctx, atLeastOnce()).fireChannelRead(plaintextCaptor.capture());
+
+      byte[] decrypted = new byte[data1.length + data2.length];
+      int offset = 0;
+      for (ByteBuf segment : plaintextCaptor.getAllValues()) {
+        int len = segment.readableBytes();
+        segment.readBytes(decrypted, offset, len);
+        offset += len;
+      }
+      assertEquals(data1.length + data2.length, offset);
+      assertArrayEquals(data1, Arrays.copyOfRange(decrypted, 0, data1.length));
+      assertArrayEquals(data2, Arrays.copyOfRange(decrypted, data1.length, decrypted.length));
+    }
+  }
+
+  /**
+   * Verifies that DecryptionHandler correctly handles a GCM message whose framing header
+   * is split across two channelRead() calls. This is the regression test for the
+   * IndexOutOfBoundsException in initializeDecrypter observed in benchmarking: when only
+   * 4 bytes of the 24-byte GCM internal header arrived in one Netty buffer,
+   * ByteBuf.readBytes(ByteBuffer) threw because it requires all dst.remaining() bytes to
+   * be available rather than performing a partial fill.
+   */
+  @Test
+  public void testSplitGcmHeader() throws Exception {
+    TransportConf gcmConf = getConf(2, false);
+    try (AuthEngine client = new AuthEngine("appId", "secret", gcmConf);
+         AuthEngine server = new AuthEngine("appId", "secret", gcmConf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+      TransportCipher cipher = server.sessionCipher();
+      assert (cipher instanceof GcmTransportCipher);
+      GcmTransportCipher gcmTransportCipher = (GcmTransportCipher) cipher;
+
+      GcmTransportCipher.EncryptionHandler encryptionHandler =
+              gcmTransportCipher.getEncryptionHandler();
+      GcmTransportCipher.DecryptionHandler decryptionHandler =
+              gcmTransportCipher.getDecryptionHandler();
+
+      ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+      ChannelPromise promise = mock(ChannelPromise.class);
+
+      byte[] data = new byte[1024];
+      Arrays.fill(data, (byte) 'X');
+      ArgumentCaptor<GcmTransportCipher.GcmEncryptedMessage> captor =
+              ArgumentCaptor.forClass(GcmTransportCipher.GcmEncryptedMessage.class);
+      encryptionHandler.write(ctx, Unpooled.wrappedBuffer(data), promise);
+      verify(ctx).write(captor.capture(), eq(promise));
+
+      ByteBuffer ciphertextBuffer = ByteBuffer.allocate((int) captor.getValue().count());
+      captor.getValue().transferTo(new ByteBufferWriteableChannel(ciphertextBuffer), 0);
+      ciphertextBuffer.flip();
+      byte[] ciphertext = new byte[ciphertextBuffer.remaining()];
+      ciphertextBuffer.get(ciphertext);
+
+      // Split in the middle of the 24-byte GCM internal header:
+      // chunk1 = [8-byte length field][4 bytes of GCM header]
+      // chunk2 = [remaining 20 bytes of GCM header][full ciphertext]
+      int splitPoint = 8 + 4;
+      ByteBuf chunk1 = Unpooled.wrappedBuffer(ciphertext, 0, splitPoint);
+      ByteBuf chunk2 = Unpooled.wrappedBuffer(
+              ciphertext, splitPoint, ciphertext.length - splitPoint);
+
+      decryptionHandler.channelRead(ctx, chunk1);
+      // Only a partial header was delivered; no plaintext should be emitted yet.
+      verify(ctx, never()).fireChannelRead(any());
+
+      ArgumentCaptor<ByteBuf> plaintextCaptor = ArgumentCaptor.forClass(ByteBuf.class);
+      decryptionHandler.channelRead(ctx, chunk2);
+      verify(ctx, atLeastOnce()).fireChannelRead(plaintextCaptor.capture());
+
+      byte[] decrypted = new byte[data.length];
+      int offset = 0;
+      for (ByteBuf segment : plaintextCaptor.getAllValues()) {
+        int len = segment.readableBytes();
+        segment.readBytes(decrypted, offset, len);
+        offset += len;
+      }
+      assertEquals(data.length, offset);
+      assertArrayEquals(data, decrypted);
+    }
+  }
+
+  /**
+   * Verifies that DecryptionHandler correctly handles a GCM message whose 8-byte Spark length
+   * prefix is split across two channelRead() calls. This exercises the partial-fill path in
+   * {@code initializeExpectedLength}: when fewer than 8 bytes of the length prefix arrive,
+   * the method narrows {@code expectedLengthBuffer}'s limit so that {@code readBytes()} does
+   * not throw, accumulates the partial result, and returns {@code false} to signal that the
+   * handler must wait for the rest. The second call completes the prefix and proceeds normally.
+   */
+  @Test
+  public void testSplitLengthPrefix() throws Exception {
+    TransportConf gcmConf = getConf(2, false);
+    try (AuthEngine client = new AuthEngine("appId", "secret", gcmConf);
+         AuthEngine server = new AuthEngine("appId", "secret", gcmConf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+      TransportCipher cipher = server.sessionCipher();
+      assert (cipher instanceof GcmTransportCipher);
+      GcmTransportCipher gcmTransportCipher = (GcmTransportCipher) cipher;
+
+      GcmTransportCipher.EncryptionHandler encryptionHandler =
+              gcmTransportCipher.getEncryptionHandler();
+      GcmTransportCipher.DecryptionHandler decryptionHandler =
+              gcmTransportCipher.getDecryptionHandler();
+
+      ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+      ChannelPromise promise = mock(ChannelPromise.class);
+
+      byte[] data = new byte[1024];
+      Arrays.fill(data, (byte) 'Y');
+      ArgumentCaptor<GcmTransportCipher.GcmEncryptedMessage> captor =
+              ArgumentCaptor.forClass(GcmTransportCipher.GcmEncryptedMessage.class);
+      encryptionHandler.write(ctx, Unpooled.wrappedBuffer(data), promise);
+      verify(ctx).write(captor.capture(), eq(promise));
+
+      ByteBuffer ciphertextBuffer = ByteBuffer.allocate((int) captor.getValue().count());
+      captor.getValue().transferTo(new ByteBufferWriteableChannel(ciphertextBuffer), 0);
+      ciphertextBuffer.flip();
+      byte[] ciphertext = new byte[ciphertextBuffer.remaining()];
+      ciphertextBuffer.get(ciphertext);
+
+      // Split in the middle of the 8-byte Spark length prefix:
+      // chunk1 = [4 bytes of length prefix]
+      // chunk2 = [remaining 4 bytes of length prefix][GCM header][ciphertext]
+      int splitPoint = 4;
+      ByteBuf chunk1 = Unpooled.wrappedBuffer(ciphertext, 0, splitPoint);
+      ByteBuf chunk2 = Unpooled.wrappedBuffer(
+              ciphertext, splitPoint, ciphertext.length - splitPoint);
+
+      decryptionHandler.channelRead(ctx, chunk1);
+      // Only a partial length prefix was delivered; no plaintext should be emitted yet.
+      verify(ctx, never()).fireChannelRead(any());
+
+      ArgumentCaptor<ByteBuf> plaintextCaptor = ArgumentCaptor.forClass(ByteBuf.class);
+      decryptionHandler.channelRead(ctx, chunk2);
+      verify(ctx, atLeastOnce()).fireChannelRead(plaintextCaptor.capture());
+
+      byte[] decrypted = new byte[data.length];
+      int offset = 0;
+      for (ByteBuf segment : plaintextCaptor.getAllValues()) {
+        int len = segment.readableBytes();
+        segment.readBytes(decrypted, offset, len);
+        offset += len;
+      }
+      assertEquals(data.length, offset);
+      assertArrayEquals(data, decrypted);
+    }
+  }
+
+  /**
+   * Regression test for the encryptedCount miscalculation that caused shuffle fetch stalls
+   * for plaintext sizes in (plaintextSegmentSize - getCiphertextOffset(), plaintextSegmentSize]
+   * = (32728, 32752].
+   *
+   * Root cause: encryptedCount was computed using {@code expectedCiphertextSize(P)} directly.
+   * Tink's formula internally adds {@code getCiphertextOffset()} = 24 to P before dividing by
+   * plaintextSegmentSize to count segments. For P in (32728, 32752] this predicted two
+   * ciphertext segments, but {@code transferTo()} writes the Tink header separately and passes
+   * all P bytes to a single {@code encryptSegment()} call, producing only one segment. The
+   * resulting encryptedCount was inflated by TAG_SIZE_IN_BYTES = 16, so
+   * {@code count() > transferred()} after all ciphertext was written. Subsequent
+   * {@code transferTo()} calls returned 0 and the receiver stalled waiting indefinitely for
+   * 16 bytes that were never sent.
+   */
+  @Test
+  public void testEncryptedCountBoundary() throws Exception {
+    TransportConf gcmConf = getConf(2, false);
+    try (AuthEngine client = new AuthEngine("appId", "secret", gcmConf);
+         AuthEngine server = new AuthEngine("appId", "secret", gcmConf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+      TransportCipher cipher = server.sessionCipher();
+      assert (cipher instanceof GcmTransportCipher);
+      GcmTransportCipher gcmTransportCipher = (GcmTransportCipher) cipher;
+
+      GcmTransportCipher.EncryptionHandler encryptionHandler =
+              gcmTransportCipher.getEncryptionHandler();
+      GcmTransportCipher.DecryptionHandler decryptionHandler =
+              gcmTransportCipher.getDecryptionHandler();
+
+      ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+      ChannelPromise promise = mock(ChannelPromise.class);
+
+      // plaintextSegmentSize = CIPHERTEXT_BUFFER_SIZE - TAG_SIZE = 32768 - 16 = 32752
+      // getCiphertextOffset() = 24 (Tink streaming header, written separately by transferTo)
+      // Buggy range: P in (32728, 32752] - test lower boundary, midpoint, and upper boundary.
+      int plaintextSegmentSize = GcmTransportCipher.CIPHERTEXT_BUFFER_SIZE - 16;
+      int[] plaintextSizes = {
+          plaintextSegmentSize - 23, // 32729: one above the lower boundary
+          plaintextSegmentSize - 12, // 32740: midpoint of the affected range
+          plaintextSegmentSize       // 32752: exactly one full segment (upper boundary)
+      };
+
+      for (int plaintextSize : plaintextSizes) {
+        reset(ctx);
+        byte[] data = new byte[plaintextSize];
+        Arrays.fill(data, (byte) 'Z');
+
+        ArgumentCaptor<GcmTransportCipher.GcmEncryptedMessage> encryptedCaptor =
+                ArgumentCaptor.forClass(GcmTransportCipher.GcmEncryptedMessage.class);
+        encryptionHandler.write(ctx, Unpooled.wrappedBuffer(data), promise);
+        verify(ctx).write(encryptedCaptor.capture(), eq(promise));
+
+        GcmTransportCipher.GcmEncryptedMessage encrypted = encryptedCaptor.getValue();
+        ByteBuffer ciphertextBuf = ByteBuffer.allocate((int) encrypted.count());
+        encrypted.transferTo(new ByteBufferWriteableChannel(ciphertextBuf), 0);
+
+        // Before the fix: count() was inflated by 16 bytes for these sizes, so
+        // transferred() < count() after all plaintext was consumed. The channel stalled
+        // because subsequent transferTo() calls returned 0 instead of completing.
+        assertEquals(encrypted.count(), encrypted.transferred(),
+                "count() != transferred() for plaintextSize=" + plaintextSize);
+
+        // Verify the full round-trip also decrypts correctly.
+        reset(ctx);
+        ciphertextBuf.flip();
+        ArgumentCaptor<ByteBuf> plaintextCaptor = ArgumentCaptor.forClass(ByteBuf.class);
+        decryptionHandler.channelRead(ctx, Unpooled.wrappedBuffer(ciphertextBuf));
+        verify(ctx, times(1)).fireChannelRead(plaintextCaptor.capture());
+        ByteBuf plaintext = plaintextCaptor.getValue();
+        assertEquals(plaintextSize, plaintext.readableBytes());
+        assertEquals('Z', plaintext.getByte(0));
+        assertEquals('Z', plaintext.getByte(plaintextSize - 1));
+      }
+    }
+  }
+
+  /**
+   * Regression test for the executor heartbeat timeout caused by per-segment
+   * {@code ctx.fireChannelRead()} calls in {@code DecryptionHandler}. The old code fired one
+   * EventLoop callback per 32 KB ciphertext segment; decoding a large shuffle block produced
+   * many synchronous callbacks inside a single {@code processSelectedKeys()} call,
+   * monopolising the Netty EventLoop and starving the executor-driver heartbeat task.
+   *
+   * The fix accumulates all decrypted segments into a {@code CompositeByteBuf} and reduce
+   * the number of {@code ctx.fireChannelRead()} calls. This test verifies that a
+   * multi-segment plaintext below the 1 MB accumulator threshold
+   * ({@code MAX_PLAINTEXT_BATCH_BYTES}) produces exactly one {@code fireChannelRead} call.
+   * Above that threshold the accumulator flushes mid-message; see
+   * {@code testLargeMessageBatchedFlush}.
+   */
+  @Test
+  public void testSingleFirePerMessage() throws Exception {
+    TransportConf gcmConf = getConf(2, false);
+    try (AuthEngine client = new AuthEngine("appId", "secret", gcmConf);
+         AuthEngine server = new AuthEngine("appId", "secret", gcmConf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+      TransportCipher cipher = server.sessionCipher();
+      assert (cipher instanceof GcmTransportCipher);
+      GcmTransportCipher gcmTransportCipher = (GcmTransportCipher) cipher;
+
+      GcmTransportCipher.EncryptionHandler encryptionHandler =
+              gcmTransportCipher.getEncryptionHandler();
+      GcmTransportCipher.DecryptionHandler decryptionHandler =
+              gcmTransportCipher.getDecryptionHandler();
+
+      ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+      ChannelPromise promise = mock(ChannelPromise.class);
+
+      // Use a 5-segment plaintext so the old per-segment fire (5 calls) is clearly
+      // distinguishable from the expected single-fire behaviour (1 call).
+      int plaintextSegmentSize = GcmTransportCipher.CIPHERTEXT_BUFFER_SIZE - 16;
+      int plaintextSize = plaintextSegmentSize * 5;
+      byte[] data = new byte[plaintextSize];
+      Arrays.fill(data, (byte) 'M');
+
+      ArgumentCaptor<GcmTransportCipher.GcmEncryptedMessage> encryptedCaptor =
+              ArgumentCaptor.forClass(GcmTransportCipher.GcmEncryptedMessage.class);
+      encryptionHandler.write(ctx, Unpooled.wrappedBuffer(data), promise);
+      verify(ctx).write(encryptedCaptor.capture(), eq(promise));
+
+      GcmTransportCipher.GcmEncryptedMessage encrypted = encryptedCaptor.getValue();
+      ByteBuffer ciphertextBuf = ByteBuffer.allocate((int) encrypted.count());
+      encrypted.transferTo(new ByteBufferWriteableChannel(ciphertextBuf), 0);
+      ciphertextBuf.flip();
+
+      reset(ctx);
+      ArgumentCaptor<ByteBuf> plaintextCaptor = ArgumentCaptor.forClass(ByteBuf.class);
+      decryptionHandler.channelRead(ctx, Unpooled.wrappedBuffer(ciphertextBuf));
+      // The old code fired once per 32 KB segment (5 times for this plaintext size).
+      // The fix must fire exactly once for the whole message.
+      verify(ctx, times(1)).fireChannelRead(plaintextCaptor.capture());
+      ByteBuf plaintext = plaintextCaptor.getValue();
+      assertEquals(plaintextSize, plaintext.readableBytes());
+      assertEquals('M', plaintext.getByte(0));
+      assertEquals('M', plaintext.getByte(plaintextSize - 1));
+    }
+  }
+
+  /**
+   * Verifies that DecryptionHandler flushes plaintext in multiple batches when the message
+   * plaintext exceeds {@code MAX_PLAINTEXT_BATCH_BYTES} (1 MB). The bounded accumulation
+   * prevents full on-heap materialisation of large shuffle blocks that route to disk via
+   * {@code spark.maxRemoteBlockSizeFetchToMem}. This test uses a 2 MB plaintext, which
+   * crosses the 1 MB threshold mid-message (triggering the first flush) and flushes once
+   * more at message completion, producing at least two {@code fireChannelRead} calls whose
+   * concatenated output must reproduce the original plaintext exactly.
+   */
+  @Test
+  public void testLargeMessageBatchedFlush() throws Exception {
+    TransportConf gcmConf = getConf(2, false);
+    try (AuthEngine client = new AuthEngine("appId", "secret", gcmConf);
+         AuthEngine server = new AuthEngine("appId", "secret", gcmConf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+      TransportCipher cipher = server.sessionCipher();
+      assert (cipher instanceof GcmTransportCipher);
+      GcmTransportCipher gcmTransportCipher = (GcmTransportCipher) cipher;
+
+      GcmTransportCipher.EncryptionHandler encryptionHandler =
+              gcmTransportCipher.getEncryptionHandler();
+      GcmTransportCipher.DecryptionHandler decryptionHandler =
+              gcmTransportCipher.getDecryptionHandler();
+
+      ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+      ChannelPromise promise = mock(ChannelPromise.class);
+
+      // 2 MB plaintext exceeds MAX_PLAINTEXT_BATCH_BYTES (1 MB): the accumulator flushes
+      // when the threshold is crossed (after ~33 segments) and again at completion,
+      // so at least two fireChannelRead() calls are expected rather than one.
+      int plaintextSize = 2 * GcmTransportCipher.MAX_PLAINTEXT_BATCH_BYTES;
+      byte[] data = new byte[plaintextSize];
+      Arrays.fill(data, (byte) 'L');
+
+      ArgumentCaptor<GcmTransportCipher.GcmEncryptedMessage> encryptedCaptor =
+              ArgumentCaptor.forClass(GcmTransportCipher.GcmEncryptedMessage.class);
+      encryptionHandler.write(ctx, Unpooled.wrappedBuffer(data), promise);
+      verify(ctx).write(encryptedCaptor.capture(), eq(promise));
+
+      GcmTransportCipher.GcmEncryptedMessage encrypted = encryptedCaptor.getValue();
+      ByteBuffer ciphertextBuf = ByteBuffer.allocate((int) encrypted.count());
+      encrypted.transferTo(new ByteBufferWriteableChannel(ciphertextBuf), 0);
+      ciphertextBuf.flip();
+
+      reset(ctx);
+      ArgumentCaptor<ByteBuf> plaintextCaptor = ArgumentCaptor.forClass(ByteBuf.class);
+      decryptionHandler.channelRead(ctx, Unpooled.wrappedBuffer(ciphertextBuf));
+      // At least two batches: one when the accumulator crosses 1 MB, one at completion.
+      verify(ctx, atLeast(2)).fireChannelRead(plaintextCaptor.capture());
+
+      byte[] decrypted = new byte[plaintextSize];
+      int offset = 0;
+      for (ByteBuf segment : plaintextCaptor.getAllValues()) {
+        int len = segment.readableBytes();
+        segment.readBytes(decrypted, offset, len);
+        offset += len;
+      }
+      assertEquals(plaintextSize, offset);
+      assertArrayEquals(data, decrypted);
     }
   }
 

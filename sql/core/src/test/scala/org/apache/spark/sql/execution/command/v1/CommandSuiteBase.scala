@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.test.SharedSparkSession
@@ -48,4 +49,14 @@ trait CommandSuiteBase extends SharedSparkSession {
     val location = information.split("\\r?\\n").filter(_.startsWith("Location:")).head
     assert(location.endsWith(expected))
   }
+
+  /** Return an ExpectedContext that is equivalent to the passed QueryContext. Used to no-op
+   * queryContext checks on error validation */
+  def toExpectedContext(actualQueryContext: QueryContext): ExpectedContext = ExpectedContext(
+    objectType = actualQueryContext.objectType(),
+    objectName = actualQueryContext.objectName(),
+    startIndex = actualQueryContext.startIndex(),
+    stopIndex = actualQueryContext.stopIndex(),
+    fragment = actualQueryContext.fragment()
+  )
 }

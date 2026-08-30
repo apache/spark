@@ -14,12 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import ClassVar, Type, TypeVar, Dict, List, Optional, Union, cast
+from decimal import Decimal
+from typing import Any, ClassVar, Dict, List, Optional, Type, TypeVar, Union, cast
 
-from pyspark.util import local_connect_and_auth
-from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
 from pyspark.errors import PySparkRuntimeError
 from pyspark.resource import ResourceInformation
+from pyspark.serializers import UTF8Deserializer, read_int, write_int, write_with_length
+from pyspark.util import local_connect_and_auth
 
 T = TypeVar("T", bound="TaskContext")
 
@@ -128,9 +129,10 @@ class TaskContext:
     _taskAttemptId: Optional[int] = None
     _localProperties: Optional[Dict[str, str]] = None
     _cpus: Optional[int] = None
+    _cpuAmount: Optional[Decimal] = None
     _resources: Optional[Dict[str, "ResourceInformation"]] = None
 
-    def __new__(cls: Type["TaskContext"], **kwargs: Dict) -> "TaskContext":
+    def __new__(cls: Type["TaskContext"], **kwargs: Any) -> "TaskContext":
         """
         Even if users construct :class:`TaskContext` instead of using get, give them the singleton.
         """
@@ -142,7 +144,7 @@ class TaskContext:
 
     def __init__(
         self,
-        **kwargs: Dict,
+        **kwargs: Any,
     ) -> None:
         # Set attributes only if they are passed in and not None
         # The kwargs are auto-mapped to the private attributes of TaskContext
@@ -161,7 +163,7 @@ class TaskContext:
         return cls._taskContext
 
     @classmethod
-    def _setTaskContext(cls: Type["TaskContext"], taskContext: "TaskContext") -> None:
+    def _setTaskContext(cls: Type["TaskContext"], taskContext: Optional["TaskContext"]) -> None:
         cls._taskContext = taskContext
 
     @classmethod
@@ -191,6 +193,7 @@ class TaskContext:
             attemptNumber=json["attemptNumber"],
             taskAttemptId=json["taskAttemptId"],
             cpus=json["cpus"],
+            cpuAmount=Decimal(json["cpuAmount"]) if "cpuAmount" in json else None,
             resources={
                 k: ResourceInformation(v["name"], v["addresses"])
                 for k, v in json["resources"].items()
@@ -263,7 +266,9 @@ class TaskContext:
 
     def cpus(self) -> int:
         """
-        CPUs allocated to the task.
+        CPUs allocated to the task, rounded up to a whole number when the exact
+        allocation is fractional. Use :meth:`TaskContext.cpuAmount` to get the exact,
+        possibly fractional, amount.
 
         Returns
         -------
@@ -271,6 +276,25 @@ class TaskContext:
             the number of CPUs.
         """
         return cast(int, self._cpus)
+
+    def cpuAmount(self) -> Decimal:
+        """
+        The exact amount of CPUs allocated to the task. This can be fractional when
+        ``spark.task.cpus`` or the task resource profile requests a fractional amount
+        (e.g. 0.5).
+
+        .. versionadded:: 4.3.0
+
+        Returns
+        -------
+        decimal.Decimal
+            the exact, possibly fractional amount of CPUs.
+
+        See Also
+        --------
+        TaskContext.cpus
+        """
+        return cast(Decimal, self._cpuAmount)
 
     def resources(self) -> Dict[str, "ResourceInformation"]:
         """
@@ -524,6 +548,7 @@ class BarrierTaskInfo:
 def _test() -> None:
     import doctest
     import sys
+
     from pyspark.sql import SparkSession
 
     globs = globals().copy()

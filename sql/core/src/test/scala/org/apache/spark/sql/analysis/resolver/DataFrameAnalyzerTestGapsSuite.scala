@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.analysis.resolver
 
-import org.apache.spark.sql.{Column, QueryTest, Row}
+import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Test cases that cover dataframe analyzer test gaps discovered during single-pass analyzer
  * development.
  */
-class DataFrameAnalyzerTestGapsSuite extends QueryTest with SharedSparkSession {
+class DataFrameAnalyzerTestGapsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("Implicit alias resolution") {
@@ -74,5 +74,13 @@ class DataFrameAnalyzerTestGapsSuite extends QueryTest with SharedSparkSession {
       finalQuery,
       Seq(Row(4), Row(6), Row(8))
     )
+  }
+
+  test("Stacked orderBy resolving hidden columns across levels") {
+    // Each orderBy resolves a dropped column from hidden output, widening an intermediate Project.
+    // The missing-input check runs on each such Project; a valid query must not trip it.
+    val table = Seq((1, 2, 3), (4, 5, 6)).toDF("col1", "col2", "col3")
+    val query = table.select($"col1").orderBy($"col2").orderBy($"col1").orderBy($"col2")
+    checkAnswer(query, Seq(Row(1), Row(4)))
   }
 }

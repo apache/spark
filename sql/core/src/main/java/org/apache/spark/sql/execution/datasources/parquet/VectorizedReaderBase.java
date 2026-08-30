@@ -27,6 +27,44 @@ import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
  */
 public class VectorizedReaderBase extends ValuesReader implements VectorizedValuesReader {
 
+  /**
+   * Encodes an unsigned long as a minimal big-endian two's-complement byte array
+   * compatible with {@link java.math.BigInteger} encoding, written into
+   * {@code scratch[start .. 8]} (length = 9 - start). {@code scratch} must have length >= 9.
+   *
+   * <p>This avoids the per-value overhead of
+   * {@code new BigInteger(Long.toUnsignedString(v)).toByteArray()} which allocates a
+   * String, a BigInteger, and a byte[] on every call.
+   */
+  static int encodeUnsignedLongBigEndian(long v, byte[] scratch) {
+    // Minimal BigInteger-compatible length is bitLength/8 + 1, so the
+    // encoding occupies scratch[start .. 8]; the loop runs once past the
+    // significant bytes, which writes the 0x00 sign byte when one is needed.
+    int start = 8 - (64 - Long.numberOfLeadingZeros(v)) / 8;
+    long x = v;
+    for (int i = 8; i >= start; i--) {
+      scratch[i] = (byte) x;
+      x >>>= 8;
+    }
+    return start;
+  }
+
+  /**
+   * Convenience: encodes an unsigned long and returns a new byte[] with the minimal
+   * BigInteger-compatible encoding. Use {@link #encodeUnsignedLongBigEndian(long, byte[])}
+   * with a reusable buffer in hot paths to avoid allocation.
+   */
+  static byte[] unsignedLongToBytesBigEndian(long v) {
+    int len = (64 - Long.numberOfLeadingZeros(v)) / 8 + 1;
+    byte[] out = new byte[len];
+    long x = v;
+    for (int i = len - 1; i >= 0 && x != 0; i--) {
+      out[i] = (byte) x;
+      x >>>= 8;
+    }
+    return out;
+  }
+
   @Override
   public void skip() {
     throw SparkUnsupportedOperationException.apply();

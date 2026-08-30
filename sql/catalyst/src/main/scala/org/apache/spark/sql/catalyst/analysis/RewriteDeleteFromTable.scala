@@ -20,12 +20,12 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Alias, EqualNullSafe, Expression, Literal, Not}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, Filter, LogicalPlan, Project, ReplaceData, WriteDelta}
+import org.apache.spark.sql.catalyst.trees.TreePattern.DELETE_FROM_TABLE
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.connector.catalog.{SupportsDeleteV2, SupportsRowLevelOperations, TruncatableTable}
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A rule that rewrites DELETE operations using plans that operate on individual or groups of rows.
@@ -37,7 +37,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 object RewriteDeleteFromTable extends RewriteRowLevelCommand {
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    _.containsPattern(DELETE_FROM_TABLE)) {
     case d @ DeleteFromTable(aliasedTable, cond) if d.resolved =>
       EliminateSubqueryAliases(aliasedTable) match {
         case ExtractV2Table(_: TruncatableTable) if cond == TrueLiteral =>
@@ -45,7 +46,7 @@ object RewriteDeleteFromTable extends RewriteRowLevelCommand {
           d
 
         case r @ ExtractV2Table(t: SupportsRowLevelOperations) =>
-          val table = buildOperationTable(t, DELETE, CaseInsensitiveStringMap.empty())
+          val table = buildOperationTable(t, DELETE, r.options)
           table.operation match {
             case _: SupportsDelta =>
               buildWriteDeltaPlan(r, table, cond)
@@ -86,7 +87,7 @@ object RewriteDeleteFromTable extends RewriteRowLevelCommand {
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
-    val query = addOperationColumn(WRITE_WITH_METADATA_OPERATION, remainingRowsPlan)
+    val query = addOperationColumn(COPY_OPERATION, remainingRowsPlan)
     val projections = buildReplaceDataProjections(query, relation.output, metadataAttrs)
     val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
     ReplaceData(writeRelation, cond, query, relation, projections, groupFilterCond)

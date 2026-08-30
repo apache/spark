@@ -22,10 +22,10 @@ from typing import Any, Optional, Union, cast, no_type_check
 import pandas as pd
 from pandas.api.types import is_hashable
 from pandas.tseries.offsets import DateOffset
-from pyspark._globals import _NoValue
 
-from pyspark.loose_version import LooseVersion
 from pyspark import pandas as ps
+from pyspark._globals import _NoValue
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas import DataFrame
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.missing.indexes import MissingPandasLikeDatetimeIndex
@@ -806,7 +806,7 @@ class DatetimeIndex(Index):
         psdf = psdf.pandas_on_spark.attach_id_column("distributed-sequence", id_column_name)
         with ps.option_context("compute.default_index_type", "distributed"):
             # The attached index in the statement below will be dropped soon,
-            # so we enforce “distributed” default index type
+            # so we enforce "distributed" default index type
             psdf = psdf.pandas_on_spark.apply_batch(pandas_between_time)
         return ps.Index(first_series(psdf).rename(self.name))
 
@@ -851,7 +851,7 @@ class DatetimeIndex(Index):
         psdf = psdf.pandas_on_spark.attach_id_column("distributed-sequence", id_column_name)
         with ps.option_context("compute.default_index_type", "distributed"):
             # The attached index in the statement below will be dropped soon,
-            # so we enforce “distributed” default index type
+            # so we enforce "distributed" default index type
             psdf = psdf.pandas_on_spark.apply_batch(pandas_at_time)
         return ps.Index(first_series(psdf).rename(self.name))
 
@@ -866,11 +866,12 @@ def disallow_nanoseconds(freq: Union[str, DateOffset]) -> None:
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.indexes.datetimes
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

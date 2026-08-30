@@ -41,6 +41,13 @@ class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase {
     }
   }
 
+  test("DROP TABLE IF EXISTS ... PURGE on a missing table is a no-op") {
+    // The default TableCatalog.purgeTable throws unconditionally, so without an upfront
+    // existence guard `IF EXISTS` would surface UNSUPPORTED_FEATURE.PURGE_TABLE for missing
+    // tables -- defeating the IF EXISTS contract on catalogs that do not support purge.
+    sql(s"DROP TABLE IF EXISTS $catalog.ns.never_existed PURGE")
+  }
+
   test("table qualified with the session catalog name") {
     withSQLConf(
       V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[InMemoryTableSessionCatalog].getName) {

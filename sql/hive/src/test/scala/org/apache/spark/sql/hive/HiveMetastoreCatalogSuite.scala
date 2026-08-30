@@ -24,10 +24,10 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
-import org.apache.spark.sql.test.{ExamplePointUDT, SQLTestUtils}
+import org.apache.spark.sql.test.ExamplePointUDT
 import org.apache.spark.sql.types._
 
-class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
+class HiveMetastoreCatalogSuite extends TestHiveSingleton with QueryTest {
   import spark.implicits._
 
   test("struct field should accept underscore in sub-column name") {
@@ -132,7 +132,7 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
 }
 
 class DataSourceWithHiveMetastoreCatalogSuite
-  extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  extends QueryTest with TestHiveSingleton {
   import hiveContext._
   import testImplicits._
 

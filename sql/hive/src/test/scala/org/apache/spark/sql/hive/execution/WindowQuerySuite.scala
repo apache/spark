@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.SlowHiveTest
 
 /**
@@ -27,7 +26,7 @@ import org.apache.spark.tags.SlowHiveTest
  * numerical differences or due semantic differences between Hive and Spark.
  */
 @SlowHiveTest
-class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+class WindowQuerySuite extends QueryTest with TestHiveSingleton {
 
   override def beforeAll(): Unit = {
     super.beforeAll()

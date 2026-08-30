@@ -607,3 +607,44 @@ struct<c1:int,c2:int,scalarsubquery(c1):bigint>
 -- !query output
 0	1	NULL
 1	2	NULL
+
+
+-- !query
+SELECT (SELECT t1.* FROM VALUES(2) AS t2(col1) LIMIT 1) FROM VALUES(1) AS t1(col1)
+-- !query schema
+struct<scalarsubquery(col1):int>
+-- !query output
+1
+
+
+-- !query
+SELECT (SELECT t1.s.* FROM VALUES(2) AS t2(col1) LIMIT 1)
+FROM (SELECT named_struct('a', 1) AS s) AS t1
+-- !query schema
+struct<scalarsubquery(s):int>
+-- !query output
+1
+
+
+-- !query
+SELECT (SELECT * FROM VALUES(2) AS t2(col1) LIMIT 1) FROM VALUES(1) AS t1(col1)
+-- !query schema
+struct<scalarsubquery():int>
+-- !query output
+2
+
+
+-- !query
+SELECT (SELECT t1.* FROM (SELECT 3 AS col1) AS t1 LIMIT 1) FROM VALUES(1) AS t1(col1)
+-- !query schema
+struct<scalarsubquery():int>
+-- !query output
+3
+
+
+-- !query
+SELECT (SELECT * FROM (SELECT t1.* FROM VALUES(2) AS t2(col1) LIMIT 1)) FROM VALUES(1) AS t1(col1)
+-- !query schema
+struct<scalarsubquery(col1):int>
+-- !query output
+1

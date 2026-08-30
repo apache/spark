@@ -23,12 +23,11 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 
 /**
  * Test suite to handle metadata cache related.
  */
-class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+class HiveMetadataCacheSuite extends QueryTest with TestHiveSingleton {
 
   test("SPARK-16337 temporary view refresh") {
     checkRefreshView(isTemp = true)

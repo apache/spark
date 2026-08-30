@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, 
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSession {
+class InlineTableParsingImprovementsSuite extends SharedSparkSession {
 
   /**
    * SQL parser.

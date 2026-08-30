@@ -23,7 +23,7 @@ import java.text.SimpleDateFormat
 
 import org.apache.spark.TestUtils
 import org.apache.spark.paths.SparkPath
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.FileSourceScanExec
@@ -33,7 +33,7 @@ import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType}
 
-class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
+class FileMetadataStructSuite extends SharedSparkSession {
 
   import testImplicits._
 

@@ -20,17 +20,17 @@ import uuid
 from datetime import datetime
 
 from pyspark import Row
+from pyspark.sql.functions import col, count, lit
 from pyspark.sql.streaming import StreamingQueryListener
 from pyspark.sql.streaming.listener import (
-    QueryStartedEvent,
     QueryProgressEvent,
+    QueryStartedEvent,
     QueryTerminatedEvent,
     SinkProgress,
     SourceProgress,
     StateOperatorProgress,
     StreamingQueryProgress,
 )
-from pyspark.sql.functions import count, col, lit
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -312,7 +312,12 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
         )
         self.assertEqual(
             get_number_of_public_methods("org.apache.spark.sql.streaming.StateOperatorProgress"),
-            27,
+            # SPARK-56537: bumped from 27 to 30 due to the new snapshotCustomMetricNames
+            # constructor parameter (getter + synthetic default) and the new internal
+            # copyForNoExecution() method on StateOperatorProgress. Both are non-public
+            # API (private[spark] / private[sql]) so they are not mirrored on the
+            # Python side; only the count needs updating.
+            30,
             msg,
         )
         self.assertEqual(

@@ -19,12 +19,23 @@ package org.apache.spark.sql.pipelines.graph
 
 import scala.util.Try
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{functions => F, AnalysisException, Column}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.classic.DataFrame
-import org.apache.spark.sql.pipelines.AnalysisWarning
-import org.apache.spark.sql.pipelines.util.InputReadOptions
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.pipelines.autocdc.{
+  AutoCdcReservedNames,
+  CaseSensitivityLabels,
+  ChangeArgs,
+  ColumnSelection,
+  Scd1BatchProcessor,
+  Scd2BatchProcessor,
+  ScdType
+}
+import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 /**
  * Contains the catalog and database context information for query execution.
@@ -99,8 +110,7 @@ case class FlowFunctionResult(
     streamingInputs: Set[ResolvedInput],
     usedExternalInputs: Set[TableIdentifier],
     dataFrame: Try[DataFrame],
-    sqlConf: Map[String, String],
-    analysisWarnings: Seq[AnalysisWarning] = Nil) {
+    sqlConf: Map[String, String]) {
 
   /**
    * Returns the names of all of the [[Input]]s used when resolving this [[Flow]]. If the
@@ -121,7 +131,21 @@ case class FlowFunctionResult(
 }
 
 /** A [[Flow]] whose output schema and dependencies aren't known. */
-case class UnresolvedFlow(
+sealed trait UnresolvedFlow extends Flow {
+  /** Returns a copy of this flow with the given SQL confs overriding the existing ones. */
+  def withSqlConf(newSqlConf: Map[String, String]): UnresolvedFlow
+}
+
+/**
+ * An [[UnresolvedFlow]] whose execution-type has not yet been determined.
+ *
+ * In some cases, we know the execution-type for an [[UnresolvedFlow]] even before flow analysis
+ * and resolution. For example, an [[AutoCdcFlow]] is a special unresolved-but-typed flow; we
+ * know a flow will be an AutoCDC flow immediately on construction, because it has its own
+ * special registration API. Such flows are considered "typed flows", but there isn't any
+ * semantic reason yet to explicitly introduce a `TypedFlow` trait/class.
+ */
+case class UntypedFlow(
     identifier: TableIdentifier,
     destinationIdentifier: TableIdentifier,
     func: FlowFunction,
@@ -129,7 +153,33 @@ case class UnresolvedFlow(
     sqlConf: Map[String, String],
     override val once: Boolean,
     override val origin: QueryOrigin
-) extends Flow
+) extends UnresolvedFlow {
+  override def withSqlConf(newSqlConf: Map[String, String]): UntypedFlow =
+    copy(sqlConf = newSqlConf)
+}
+
+/**
+ * An unresolved but typed flow that applies a CDC event stream to a target table via MERGE.
+ *
+ * [[AutoCdcFlow]] is a typed flow because it is only supported for streaming, and not as a once
+ * flow. Therefore by definition it is a streaming-type flow.
+ *
+ * In the future, support for once-mode [[AutoCdcFlow]] may be added.
+ */
+case class AutoCdcFlow(
+    identifier: TableIdentifier,
+    destinationIdentifier: TableIdentifier,
+    func: FlowFunction,
+    queryContext: QueryContext,
+    override val origin: QueryOrigin,
+    changeArgs: ChangeArgs,
+    sqlConf: Map[String, String] = Map.empty
+) extends UnresolvedFlow {
+  override val once: Boolean = false
+
+  override def withSqlConf(newSqlConf: Map[String, String]): AutoCdcFlow =
+    copy(sqlConf = newSqlConf)
+}
 
 /**
  * A [[Flow]] whose flow function has been invoked, meaning either:
@@ -167,7 +217,8 @@ trait ResolvedFlow extends ResolutionCompletedFlow with Input {
 
   /** Returns the schema of the output of this [[Flow]]. */
   def schema: StructType = df.schema
-  override def load(readOptions: InputReadOptions): DataFrame = df
+  override def load(asStreaming: Boolean): DataFrame = df
+
   def inputs: Set[TableIdentifier] = funcResult.inputs
 }
 
@@ -193,4 +244,253 @@ class AppendOnceFlow(
 ) extends ResolvedFlow {
 
   override val once = true
+}
+
+/**
+ * A resolved flow that applies a CDC event stream to a target table via MERGE, in accordance
+ * with the configured [[flow.changeArgs]].
+ */
+class AutoCdcMergeFlow(
+    val flow: AutoCdcFlow,
+    val funcResult: FlowFunctionResult,
+    sessionCaseSensitive: Boolean
+) extends ResolvedFlow {
+  private[graph] val effectiveResolver: Resolver = SchemaInferenceUtils.resolverFor(
+    SchemaInferenceUtils.effectiveCaseSensitivity(
+      tableIdentifier = destinationIdentifier,
+      flows = Seq(this),
+      sessionCaseSensitive = sessionCaseSensitive))
+
+  requireReservedPrefixAbsentInSourceColumns()
+  requireReservedFrameworkColumnsAbsentInSourceColumns()
+
+  def changeArgs: ChangeArgs = flow.changeArgs
+
+  /** The user-selected projection of [[df.schema]] (i.e. before the SCD metadata column). */
+  private val userSelectedSchema: StructType = {
+    val selectedSchema = ColumnSelection.applyToSchema(
+      schemaName = "changeDataFeed",
+      schema = df.schema,
+      columnSelection = changeArgs.columnSelection,
+      resolver = effectiveResolver
+    )
+    // AutoCDC flows require all key columns to be present in the user-selected source schema,
+    // so that they survive into the target table where SCD reconciliation needs them.
+    requireKeysPresentInSelectedSchema(selectedSchema)
+    selectedSchema
+  }
+
+  /** The DataType of the sequencing expression, derived once from the source change feed. */
+  private[graph] val sequencingType: DataType =
+    df.select(changeArgs.sequencing).schema.head.dataType
+
+  /**
+   * SCD2 only: the effective set of history-tracking column names for this flow, resolved from the
+   * [[userSelectedSchema]] (the user-selected source columns), not from the persisted/evolved
+   * target schema. This is the single source of truth for the tracked set:
+   *
+   *  - Resolving against [[userSelectedSchema]] means the tracked set follows the flow's own
+   *    selection. In particular, under default or `* EXCEPT` tracking, dropping a column from the
+   *    source (or from the `COLUMNS` selection) removes it from the tracked set -- rather than the
+   *    column lingering as tracked because it still exists in the (sticky) target schema.
+   *  - It is recorded on the auxiliary table and drift-checked across runs: a change to this set
+   *    reinterprets which transitions open a new SCD2 record, which cannot be applied to
+   *    already-reconciled history, so any change requires a full refresh (see
+   *    [[AutoCdcAuxiliaryTable.validateNoTrackHistoryDrift]]). Because the set is
+   *    selection-derived, adding or dropping a source column under default / `* EXCEPT` tracking
+   *    is such a change; this is an intended divergence from SCD1, where non-key schema evolution
+   *    needs no full refresh.
+   *
+   * Computing it here (rather than in the aux-table spec builder from the target schema) also
+   * validates the selection at construction time: an unresolvable or ineligible explicit
+   * `TRACK HISTORY ON` selection throws `AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA` here, before the
+   * first microbatch, rather than failing deep inside the SCD2 batch processor. `None` for SCD1.
+   */
+  private[graph] val trackHistoryColumnNames: Option[Seq[String]] =
+    changeArgs.storedAsScdType match {
+      case ScdType.Type2 =>
+        Some(Scd2BatchProcessor.computeTrackedHistoryColumns(
+          schema = userSelectedSchema,
+          changeArgs = changeArgs,
+          resolver = effectiveResolver))
+      case ScdType.Type1 => None
+    }
+
+  /**
+   * Returns the augmented output schema of this flow, which can differ from the schema of the
+   * source change-data-feed dataframe.
+   *
+   * The source dataframe's schema describes the incoming CDC events; the augmented schema here
+   * applies the user-specified [[ColumnSelection]] and appends the SCD-specific metadata
+   * columns that the AutoCDC MERGE engine projects onto the target table. Downstream
+   * dependencies in the pipeline see this augmented schema.
+   */
+  override val schema: StructType = changeArgs.storedAsScdType match {
+    case ScdType.Type1 =>
+      // SCD1 produces a target table with all the user-selected output columns and a projected
+      // CDC operational metadata column at the end.
+      StructType(
+        userSelectedSchema.fields :+ StructField(
+          AutoCdcReservedNames.cdcMetadataColName,
+          Scd1BatchProcessor.cdcMetadataColSchema(sequencingType),
+          nullable = false
+        )
+      )
+    case ScdType.Type2 =>
+      // SCD2 produces a target table with all the user-selected output columns followed by the
+      // SCD2 framework columns (in this exact order and nullability, matching what
+      // Scd2BatchProcessor.preprocessMicrobatch projects and the merges persist): the visible
+      // interval bounds __START_AT / __END_AT typed as the sequencing type, then the operational
+      // CDC metadata column.
+      StructType(
+        userSelectedSchema.fields ++ Seq(
+          StructField(Scd2BatchProcessor.startAtColName, sequencingType, nullable = true),
+          StructField(Scd2BatchProcessor.endAtColName, sequencingType, nullable = true),
+          StructField(
+            AutoCdcReservedNames.cdcMetadataColName,
+            Scd2BatchProcessor.cdcMetadataColSchema(sequencingType),
+            nullable = false
+          )
+        )
+      )
+  }
+
+  /**
+   * Returns an empty dataframe whose schema matches [[AutoCdcMergeFlow.schema]]. By construction,
+   * the returned dataframe will be a streaming dataframe.
+   *
+   * Today, [[AutoCdcMergeFlow.load]] is not actually ever called during graph analysis or
+   * execution. An AutoCdcMergeFlow can only be an input to a streaming table (not an MV or
+   * persisted/temp view), and streaming tables take a [[VirtualTableInput]] as input, not
+   * the producing [[Flow]] directly. [[VirtualTableInput]] overrides its own [[load]] to do
+   * schema inference on its input flows, rather than a transitive [[ResolvedFlow.load]].
+   *
+   * The implementation exists for API consistency and throws an internal error if invoked with
+   * `asStreaming = false`, or if the underlying source dataframe is not streaming, to surface
+   * a misuse loudly rather than silently producing a non-streaming dataframe.
+   */
+  override def load(asStreaming: Boolean): DataFrame = {
+    if (!asStreaming) {
+      throw SparkException.internalError(
+        "Attempted to load AutoCDC flow as a batch flow. AutoCDC flows are strictly streaming " +
+        "flows, and must be loaded as such."
+      )
+    }
+    if (!df.isStreaming) {
+      throw SparkException.internalError(
+        "AutoCDC source dataframe is not streaming. AutoCDC flows are strictly streaming flows, " +
+        "and must be backed by a streaming source."
+      )
+    }
+    changeArgs.storedAsScdType match {
+      case ScdType.Type1 =>
+        val userSelectedCols: Seq[Column] = userSelectedSchema.fieldNames.toSeq.map(F.col)
+        val emptyCdcMetadataCol: Column = Scd1BatchProcessor.constructCdcMetadataCol(
+          deleteSequence = F.lit(null),
+          upsertSequence = F.lit(null),
+          sequencingType = sequencingType
+        ).as(AutoCdcReservedNames.cdcMetadataColName)
+
+        df.select(userSelectedCols :+ emptyCdcMetadataCol: _*)
+      case ScdType.Type2 =>
+        val userSelectedCols: Seq[Column] = userSelectedSchema.fieldNames.toSeq.map(F.col)
+        // Mirror the SCD2 augmented schema: null interval bounds (cast to the sequencing type)
+        // and an empty CDC metadata struct, matching AutoCdcMergeFlow.schema's Type2 branch.
+        val emptyStartAtCol: Column =
+          F.lit(null).cast(sequencingType).as(Scd2BatchProcessor.startAtColName)
+        val emptyEndAtCol: Column =
+          F.lit(null).cast(sequencingType).as(Scd2BatchProcessor.endAtColName)
+        val emptyCdcMetadataCol: Column = Scd2BatchProcessor.constructCdcMetadataCol(
+          recordStartAt = F.lit(null),
+          sequencingType = sequencingType
+        ).as(AutoCdcReservedNames.cdcMetadataColName)
+
+        df.select(userSelectedCols ++ Seq(emptyStartAtCol, emptyEndAtCol, emptyCdcMetadataCol): _*)
+    }
+  }
+
+  /**
+   * Validate that the resolved source dataframe for the AutoCDC flow does not contain any column
+   * names that use the reserved Spark AutoCDC prefix.
+   */
+  private def requireReservedPrefixAbsentInSourceColumns(): Unit = {
+    val resolver = effectiveResolver
+    val reservedPrefix = AutoCdcReservedNames.prefix
+
+    def nameContainsReservedPrefix(name: String): Boolean = {
+      name.length >= reservedPrefix.length && resolver(
+        name.substring(0, reservedPrefix.length),
+        reservedPrefix
+      )
+    }
+
+    df.schema.fieldNames.find(nameContainsReservedPrefix).foreach { conflictingColumnName =>
+      throw new AnalysisException(
+        errorClass = "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT",
+        messageParameters = Map(
+          "caseSensitivity" -> CaseSensitivityLabels.of(resolver),
+          "columnName" -> conflictingColumnName,
+          "schemaName" -> "changeDataFeed",
+          "reservedColumnNamePrefix" -> reservedPrefix
+        )
+      )
+    }
+  }
+
+  /**
+   * Reject a source column that collides with an SCD2 reserved framework column not covered by
+   * [[requireReservedPrefixAbsentInSourceColumns]]: the prefix guard only rejects
+   * [[AutoCdcReservedNames.prefix]] names, but SCD2 also persists the non-prefixed
+   * [[Scd2BatchProcessor.startAtColName]] and [[Scd2BatchProcessor.endAtColName]]. Runs before
+   * [[schema]] is forced so the collision fails fast rather than being silently overwritten
+   * during preprocessing. No-op for SCD1, which has no such columns.
+   */
+  private def requireReservedFrameworkColumnsAbsentInSourceColumns(): Unit = {
+    val resolver = effectiveResolver
+    val reservedPrefix = AutoCdcReservedNames.prefix
+
+    // Only the non-prefixed reserved names need checking here; prefixed ones are already rejected
+    // by requireReservedPrefixAbsentInSourceColumns.
+    val reservedNames: Set[String] = changeArgs.storedAsScdType match {
+      case ScdType.Type2 =>
+        Scd2BatchProcessor.reservedFrameworkColNames.filterNot(_.startsWith(reservedPrefix))
+      case ScdType.Type1 =>
+        Set.empty
+    }
+
+    df.schema.fieldNames
+      .find(name => reservedNames.exists(resolver(_, name)))
+      .foreach { conflictingColumnName =>
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT",
+          messageParameters = Map(
+            "caseSensitivity" -> CaseSensitivityLabels.of(resolver),
+            "columnName" -> conflictingColumnName,
+            "schemaName" -> "changeDataFeed",
+            "scdType" -> changeArgs.storedAsScdType.label,
+            "reservedColumnNames" -> reservedNames.toSeq.sorted.mkString(", ")
+          )
+        )
+      }
+  }
+
+  /**
+   * Validate all keys specified in changeArgs are actually present in the user-selected schema.
+   */
+  private def requireKeysPresentInSelectedSchema(selectedSchema: StructType): Unit = {
+    val resolver = effectiveResolver
+
+    changeArgs.keys
+      .find(key => !selectedSchema.fieldNames.exists(name => resolver(name, key.name)))
+      .foreach { missingKey =>
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_KEY_NOT_IN_SELECTED_SCHEMA",
+          messageParameters = Map(
+            "caseSensitivity" -> CaseSensitivityLabels.of(resolver),
+            "keyColumnName" -> missingKey.name
+          )
+        )
+      }
+  }
+
 }

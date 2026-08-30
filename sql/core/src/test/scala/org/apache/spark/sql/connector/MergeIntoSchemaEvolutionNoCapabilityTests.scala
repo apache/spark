@@ -27,44 +27,6 @@ trait MergeIntoSchemaEvolutionNoCapabilityTests extends MergeIntoSchemaEvolution
 
   import testImplicits._
 
-  import org.apache.spark.sql.DataFrame
-  import org.apache.spark.sql.types.StructType
-
-  // scalastyle:off argcount
-  override protected def testEvolution(name: String)(
-      targetData: => DataFrame,
-      sourceData: => DataFrame,
-      cond: String = "t.pk = s.pk",
-      clauses: Seq[MergeClause] = Seq.empty,
-      expected: => DataFrame = null,
-      expectedWithoutEvolution: => DataFrame = null,
-      expectedSchema: StructType = null,
-      expectedSchemaWithoutEvolution: StructType = null,
-      expectErrorContains: String = null,
-      expectErrorWithoutEvolutionContains: String = null,
-      confs: Seq[(String, String)] = Seq.empty,
-      partitionCols: Seq[String] = Seq("dep"),
-      disableAutoSchemaEvolution: Boolean = false,
-      requiresNestedTypeCoercion: Boolean = false): Unit = {
-    super.testEvolution(name)(
-      targetData = targetData,
-      sourceData = sourceData,
-      cond = cond,
-      clauses = clauses,
-      expected = expected,
-      expectedWithoutEvolution = expectedWithoutEvolution,
-      expectedSchema = expectedSchema,
-      expectedSchemaWithoutEvolution = expectedSchemaWithoutEvolution,
-      expectErrorContains = expectErrorContains,
-      expectErrorWithoutEvolutionContains = expectErrorWithoutEvolutionContains,
-      confs = confs,
-      partitionCols = partitionCols,
-      disableAutoSchemaEvolution = disableAutoSchemaEvolution,
-      requiresNestedTypeCoercion = requiresNestedTypeCoercion
-    )
-  }
-  // scalastyle:on argcount
-
   // ---------------------------------------------------------------------------
   // Tests with auto-schema-evolution table property DISABLED
   // These test that evolution fails even with WITH SCHEMA EVOLUTION clause

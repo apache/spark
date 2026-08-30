@@ -160,6 +160,32 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(executor.pod.getSpec.getTerminationGracePeriodSeconds === 0L)
   }
 
+  test("Set allowPrivilegeEscalation to false on the executor container by default") {
+    initDefaultProfile(baseConf)
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+    assert(executor.container.getSecurityContext.getAllowPrivilegeEscalation === false)
+  }
+
+  test("Support spark.kubernetes.executor.securityContext.allowPrivilegeEscalation") {
+    baseConf.set(KUBERNETES_EXECUTOR_ALLOW_PRIVILEGE_ESCALATION, true)
+    initDefaultProfile(baseConf)
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+    assert(executor.container.getSecurityContext.getAllowPrivilegeEscalation === true)
+  }
+
+  test("executor allowPrivilegeEscalation falls back to the shared config") {
+    baseConf.set(KUBERNETES_ALLOW_PRIVILEGE_ESCALATION, true)
+    initDefaultProfile(baseConf)
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+    assert(executor.container.getSecurityContext.getAllowPrivilegeEscalation === true)
+  }
+
   test("basic executor pod with resources") {
     val fpgaResourceID = new ResourceID(SPARK_EXECUTOR_PREFIX, FPGA)
     val gpuExecutorResourceID = new ResourceID(SPARK_EXECUTOR_PREFIX, GPU)
@@ -326,11 +352,19 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       ENV_EXECUTOR_ATTRIBUTE_EXECUTOR_ID -> KubernetesTestConf.EXECUTOR_ID))
   }
 
-  test("SPARK-53944: Support spark.kubernetes.executor.useDriverPodIP") {
-    Seq((false, "localhost"), (true, "bindAddress")).foreach {
-      case (flag, address) =>
+  test("SPARK-53944, SPARK-58748: Support spark.kubernetes.executor.useDriverPodIP") {
+    Seq(
+      (false, "10.138.148.230", "localhost"),
+      (true, "10.138.148.230", "10.138.148.230"),
+      (true, "bindAddress", "bindAddress"),
+      (true, "2001:DB8:0:0::BEEF", "[2001:db8::beef]"),
+      (true, "0.0.0.0", "localhost"),
+      (true, "::", "localhost"),
+      (true, "[::]", "localhost"),
+      (true, "0:0:0:0:0:0:0:0", "localhost")).foreach {
+      case (flag, bindAddress, address) =>
         val conf = baseConf.clone()
-          .set(DRIVER_BIND_ADDRESS, "bindAddress")
+          .set(DRIVER_BIND_ADDRESS, bindAddress)
           .set(KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP, flag)
         val kconf = KubernetesTestConf.createExecutorConf(sparkConf = conf)
         val step = new BasicExecutorFeatureStep(kconf, new SecurityManager(conf), defaultProfile)
@@ -688,6 +722,27 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     executor = step.configurePod(SparkPod.initialPod())
     cores = executor.container.getEnv.asScala.find(_.getName == ENV_EXECUTOR_CORES).get.getValue
     assert(cores === "2")
+  }
+
+  test("SPARK-58192: recovery-mode ENV_EXECUTOR_CORES rounds fractional spark.task.cpus up") {
+    val rpb = new ResourceProfileBuilder()
+    val ereq = new ExecutorResourceRequests()
+    val treq = new TaskResourceRequests()
+    ereq.cores(4)
+    treq.cpus(0.5)
+    rpb.require(ereq).require(treq)
+    val rp = rpb.build()
+
+    baseConf.set(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED, true)
+    Seq("0.5" -> "1", "1.5" -> "2", "2.5" -> "3").foreach { case (taskCpus, expectedCores) =>
+      baseConf.set("spark.task.cpus", taskCpus)
+      val secMgr = new SecurityManager(baseConf)
+      val step = new BasicExecutorFeatureStep(newExecutorConf(), secMgr, rp)
+      val executor = step.configurePod(SparkPod.initialPod())
+      val cores =
+        executor.container.getEnv.asScala.find(_.getName == ENV_EXECUTOR_CORES).get.getValue
+      assert(cores === expectedCores, s"for spark.task.cpus = $taskCpus")
+    }
   }
 
   // There is always exactly one controller reference, and it points to the driver pod.

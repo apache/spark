@@ -28,7 +28,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 /**
  * Test suite to test Kryo custom registrators.
  */
-class DatasetSerializerRegistratorSuite extends QueryTest with SharedSparkSession {
+class DatasetSerializerRegistratorSuite extends SharedSparkSession {
   import testImplicits._
 
 

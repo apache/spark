@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistryBase, MultiInstanceRelation, UnresolvedAttribute, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistryBase, MultiInstanceRelation, UnresolvedAttribute, UnresolvedStar, WidenStatefulOpNullability}
 import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry.TableFunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Expression, ExpressionDescription, ExpressionInfo, JsonToStructs, PythonUDF, PythonUDTF}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -159,12 +159,15 @@ case class FlatMapGroupsInPandasWithState(
     timeout: GroupStateTimeout,
     child: LogicalPlan) extends UnaryNode {
 
-  override def output: Seq[Attribute] = outputAttrs
+  override def output: Seq[Attribute] =
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(outputAttrs)
+    else outputAttrs
 
   override def producedAttributes: AttributeSet = AttributeSet(outputAttrs)
 
   override protected def withNewChildInternal(
     newChild: LogicalPlan): FlatMapGroupsInPandasWithState = copy(child = newChild)
+  override def isStateful: Boolean = child.isStreaming
 }
 
 /**
@@ -205,7 +208,9 @@ case class TransformWithStateInPySpark(
 
   override def right: LogicalPlan = initialState
 
-  override def output: Seq[Attribute] = outputAttrs
+  override def output: Seq[Attribute] =
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(outputAttrs)
+    else outputAttrs
 
   override def producedAttributes: AttributeSet = AttributeSet(outputAttrs)
 
@@ -215,6 +220,7 @@ case class TransformWithStateInPySpark(
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): TransformWithStateInPySpark =
     copy(child = newLeft, initialState = newRight)
+  override def isStateful: Boolean = child.isStreaming
 
   def leftAttributes: Seq[Attribute] = {
     assert(resolved, "This method is expected to be called after resolution.")

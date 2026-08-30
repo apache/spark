@@ -731,7 +731,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       parser.parsePlan(sql).collect {
       case CreateTableLike(
           UnresolvedIdentifier(targetParts, _),
-          UnresolvedTableOrView(sourceParts, _, _),
+          UnresolvedTableOrView(sourceParts, _, _, _),
           loc, p, _, pr, e) =>
         (targetParts, sourceParts, loc, p, pr, e)
     }.head

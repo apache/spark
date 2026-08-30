@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionPredicateDeleteCatalog
 import org.apache.spark.sql.connector.expressions.PartitionFieldReference
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
@@ -32,8 +32,7 @@ import org.apache.spark.sql.util.QueryExecutionListener
  * Tests for metadata-only delete optimization using second-pass
  * PartitionPredicate (see SPARK-55596).
  */
-class DataSourceV2EnhancedDeleteFilterSuite
-  extends QueryTest with SharedSparkSession {
+class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession {
 
   private val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
   private val catalogName = "ppd_cat"

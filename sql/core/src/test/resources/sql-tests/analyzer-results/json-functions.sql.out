@@ -447,6 +447,30 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select schema_of_json(42)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"42\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"schema_of_json(42)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "schema_of_json(42)"
+  } ]
+}
+
+
+-- !query
 CREATE TEMPORARY VIEW jsonTable(jsonField, a) AS SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a')
 -- !query analysis
 CreateViewCommand `jsonTable`, [(jsonField,None), (a,None)], SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a'), false, false, LocalTempView, UNSUPPORTED, true
@@ -719,6 +743,172 @@ Project [json_object_keys([1, 2, 3]) AS json_object_keys([1, 2, 3])#x]
 
 
 -- !query
+select json_typeof()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`json_typeof`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "json_typeof()"
+  } ]
+}
+
+
+-- !query
+select json_typeof(null)
+-- !query analysis
+Project [json_typeof(null) AS json_typeof(NULL)#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof(200)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"200\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"json_typeof(200)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "json_typeof(200)"
+  } ]
+}
+
+
+-- !query
+select json_typeof('')
+-- !query analysis
+Project [json_typeof() AS json_typeof()#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('{}')
+-- !query analysis
+Project [json_typeof({}) AS json_typeof({})#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('{"key": 1, "arr": [1, 2]}')
+-- !query analysis
+Project [json_typeof({"key": 1, "arr": [1, 2]}) AS json_typeof({"key": 1, "arr": [1, 2]})#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('[]')
+-- !query analysis
+Project [json_typeof([]) AS json_typeof([])#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('[1, 2, 3]')
+-- !query analysis
+Project [json_typeof([1, 2, 3]) AS json_typeof([1, 2, 3])#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('"hello"')
+-- !query analysis
+Project [json_typeof("hello") AS json_typeof("hello")#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('123')
+-- !query analysis
+Project [json_typeof(123) AS json_typeof(123)#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('1.5')
+-- !query analysis
+Project [json_typeof(1.5) AS json_typeof(1.5)#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('-123')
+-- !query analysis
+Project [json_typeof(-123) AS json_typeof(-123)#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('-1.5')
+-- !query analysis
+Project [json_typeof(-1.5) AS json_typeof(-1.5)#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('true')
+-- !query analysis
+Project [json_typeof(true) AS json_typeof(true)#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('false')
+-- !query analysis
+Project [json_typeof(false) AS json_typeof(false)#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('null')
+-- !query analysis
+Project [json_typeof(null) AS json_typeof(null)#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('bad')
+-- !query analysis
+Project [json_typeof(bad) AS json_typeof(bad)#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('{"key": 45, "random_string"}')
+-- !query analysis
+Project [json_typeof({"key": 45, "random_string"}) AS json_typeof({"key": 45, "random_string"})#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('123 true')
+-- !query analysis
+Project [json_typeof(123 true) AS json_typeof(123 true)#x]
++- OneRowRelation
+
+
+-- !query
 DROP VIEW IF EXISTS jsonTable
 -- !query analysis
 DropTempViewCommand jsonTable, true
@@ -955,3 +1145,583 @@ GlobalLimit 1
 +- LocalLimit 1
    +- Project [from_json(StructField(time,TimeType(6),true), {"time": "14:30:45"}, Some(America/Los_Angeles), false) AS from_json({"time": "14:30:45"})#x]
       +- OneRowRelation
+
+
+-- !query
+select json_value('{"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}', '$.name')
+-- !query analysis
+Project [json_value({"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}, $.name, StringType, Null, Null, None, None, Some(America/Los_Angeles), true) AS JSON_VALUE({"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}, '$.name')#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('{"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}', '$.id' RETURNING INT)
+-- !query analysis
+Project [json_value({"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}, $.id, IntegerType, Null, Null, None, None, Some(America/Los_Angeles), true) AS JSON_VALUE({"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}, '$.id' RETURNING INT)#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('{"id":7,"name":"Ada"}', '$.id' RETURNING INT) + 1
+-- !query analysis
+Project [(json_value({"id":7,"name":"Ada"}, $.id, IntegerType, Null, Null, None, None, Some(America/Los_Angeles), true) + 1) AS (JSON_VALUE({"id":7,"name":"Ada"}, '$.id' RETURNING INT) + 1)#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('{"score":null}', '$.score')
+-- !query analysis
+Project [json_value({"score":null}, $.score, StringType, Null, Null, None, None, Some(America/Los_Angeles), true) AS JSON_VALUE({"score":null}, '$.score')#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('{"addr":{"city":"NYC"}}', '$.addr')
+-- !query analysis
+Project [json_value({"addr":{"city":"NYC"}}, $.addr, StringType, Null, Null, None, None, Some(America/Los_Angeles), true) AS JSON_VALUE({"addr":{"city":"NYC"}}, '$.addr')#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('{"tags":["x","y"]}', '$.tags')
+-- !query analysis
+Project [json_value({"tags":["x","y"]}, $.tags, StringType, Null, Null, None, None, Some(America/Los_Angeles), true) AS JSON_VALUE({"tags":["x","y"]}, '$.tags')#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('{"id":7}', '$.missing')
+-- !query analysis
+Project [json_value({"id":7}, $.missing, StringType, Null, Null, None, None, Some(America/Los_Angeles), true) AS JSON_VALUE({"id":7}, '$.missing')#x]
++- OneRowRelation
+
+
+-- !query
+select json_value(cast(null as string), '$.a')
+-- !query analysis
+Project [json_value(cast(null as string), $.a, StringType, Null, Null, None, None, Some(America/Los_Angeles), true) AS JSON_VALUE(CAST(NULL AS STRING), '$.a')#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('{"id":7}', '$.missing' DEFAULT '?' ON EMPTY)
+-- !query analysis
+Project [json_value({"id":7}, $.missing, StringType, Default, Null, Some(?), None, Some(America/Los_Angeles), true) AS JSON_VALUE({"id":7}, '$.missing' DEFAULT ? ON EMPTY)#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('{"id":7}', '$.missing' RETURNING INT DEFAULT 42 ON EMPTY)
+-- !query analysis
+Project [json_value({"id":7}, $.missing, IntegerType, Default, Null, Some(42), None, Some(America/Los_Angeles), true) AS JSON_VALUE({"id":7}, '$.missing' RETURNING INT DEFAULT 42 ON EMPTY)#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('{"id":7}', '$.missing' ERROR ON EMPTY)
+-- !query analysis
+Project [json_value({"id":7}, $.missing, StringType, Error, Null, None, None, Some(America/Los_Angeles), true) AS JSON_VALUE({"id":7}, '$.missing' ERROR ON EMPTY)#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('{"addr":{"city":"NYC"}}', '$.addr' DEFAULT 'n/a' ON ERROR)
+-- !query analysis
+Project [json_value({"addr":{"city":"NYC"}}, $.addr, StringType, Null, Default, None, Some(n/a), Some(America/Los_Angeles), true) AS JSON_VALUE({"addr":{"city":"NYC"}}, '$.addr' DEFAULT n/a ON ERROR)#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('not json', '$.a' DEFAULT 'bad' ON ERROR)
+-- !query analysis
+Project [json_value(not json, $.a, StringType, Null, Default, None, Some(bad), Some(America/Los_Angeles), true) AS JSON_VALUE(not json, '$.a' DEFAULT bad ON ERROR)#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('not json', '$.a' ERROR ON ERROR)
+-- !query analysis
+Project [json_value(not json, $.a, StringType, Null, Error, None, None, Some(America/Los_Angeles), true) AS JSON_VALUE(not json, '$.a' ERROR ON ERROR)#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('{"name":"Ada"}', '$.name' RETURNING INT)
+-- !query analysis
+Project [json_value({"name":"Ada"}, $.name, IntegerType, Null, Null, None, None, Some(America/Los_Angeles), true) AS JSON_VALUE({"name":"Ada"}, '$.name' RETURNING INT)#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('{"name":"Ada"}', '$.name' RETURNING INT ERROR ON ERROR)
+-- !query analysis
+Project [json_value({"name":"Ada"}, $.name, IntegerType, Null, Error, None, None, Some(America/Los_Angeles), true) AS JSON_VALUE({"name":"Ada"}, '$.name' RETURNING INT ERROR ON ERROR)#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('{"name":"Ada"}', '$.name' RETURNING INT DEFAULT -1 ON ERROR)
+-- !query analysis
+Project [json_value({"name":"Ada"}, $.name, IntegerType, Null, Default, None, Some(-1), Some(America/Los_Angeles), true) AS JSON_VALUE({"name":"Ada"}, '$.name' RETURNING INT DEFAULT -1 ON ERROR)#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('{"a":"x"}', '$.b' DEFAULT 'e' ON EMPTY DEFAULT 'r' ON ERROR)
+-- !query analysis
+Project [json_value({"a":"x"}, $.b, StringType, Default, Default, Some(e), Some(r), Some(America/Los_Angeles), true) AS JSON_VALUE({"a":"x"}, '$.b' DEFAULT e ON EMPTY DEFAULT r ON ERROR)#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('{"v":"3.14"}', '$.v' RETURNING DOUBLE)
+-- !query analysis
+Project [json_value({"v":"3.14"}, $.v, DoubleType, Null, Null, None, None, Some(America/Los_Angeles), true) AS JSON_VALUE({"v":"3.14"}, '$.v' RETURNING DOUBLE)#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('{"v":"true"}', '$.v' RETURNING BOOLEAN)
+-- !query analysis
+Project [json_value({"v":"true"}, $.v, BooleanType, Null, Null, None, None, Some(America/Los_Angeles), true) AS JSON_VALUE({"v":"true"}, '$.v' RETURNING BOOLEAN)#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('{"v":"2020-01-02"}', '$.v' RETURNING DATE)
+-- !query analysis
+Project [json_value({"v":"2020-01-02"}, $.v, DateType, Null, Null, None, None, Some(America/Los_Angeles), true) AS JSON_VALUE({"v":"2020-01-02"}, '$.v' RETURNING DATE)#x]
++- OneRowRelation
+
+
+-- !query
+select json_value('{"a":[1,2]}', '$.a[*]')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_PATH",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_value`",
+    "path" : "'$.a[*]'",
+    "sqlExpr" : "\"JSON_VALUE({\"a\":[1,2]}, '$.a[*]')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "json_value('{\"a\":[1,2]}', '$.a[*]')"
+  } ]
+}
+
+
+-- !query
+select json_value('{"a":1}', '$.a' RETURNING STRUCT<x:INT>)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_SCALAR_RETURNING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_value`",
+    "returningType" : "\"STRUCT<x: INT>\"",
+    "sqlExpr" : "\"JSON_VALUE({\"a\":1}, '$.a' RETURNING STRUCT<x: INT>)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 59,
+    "fragment" : "json_value('{\"a\":1}', '$.a' RETURNING STRUCT<x:INT>)"
+  } ]
+}
+
+
+-- !query
+select json_value('{}', '$.x' RETURNING INT DEFAULT array(1) ON EMPTY)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"JSON_VALUE({}, '$.x' RETURNING INT DEFAULT array(1) ON EMPTY)\"",
+    "srcType" : "\"ARRAY<INT>\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 70,
+    "fragment" : "json_value('{}', '$.x' RETURNING INT DEFAULT array(1) ON EMPTY)"
+  } ]
+}
+
+
+-- !query
+select json_exists('{"id":7,"addr":{"city":"NYC"},"score":null,"tags":["x","y"]}', '$.addr.city')
+-- !query analysis
+Project [json_exists({"id":7,"addr":{"city":"NYC"},"score":null,"tags":["x","y"]}, $.addr.city, False) AS JSON_EXISTS({"id":7,"addr":{"city":"NYC"},"score":null,"tags":["x","y"]}, '$.addr.city')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"score":null}', '$.score')
+-- !query analysis
+Project [json_exists({"score":null}, $.score, False) AS JSON_EXISTS({"score":null}, '$.score')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"addr":{"city":"NYC"}}', '$.addr.zip')
+-- !query analysis
+Project [json_exists({"addr":{"city":"NYC"}}, $.addr.zip, False) AS JSON_EXISTS({"addr":{"city":"NYC"}}, '$.addr.zip')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"addr":{"city":"NYC"}}', '$.addr')
+-- !query analysis
+Project [json_exists({"addr":{"city":"NYC"}}, $.addr, False) AS JSON_EXISTS({"addr":{"city":"NYC"}}, '$.addr')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"tags":["x","y"]}', '$.tags[0]')
+-- !query analysis
+Project [json_exists({"tags":["x","y"]}, $.tags[0], False) AS JSON_EXISTS({"tags":["x","y"]}, '$.tags[0]')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists(cast(null as string), '$.a')
+-- !query analysis
+Project [json_exists(cast(null as string), $.a, False) AS JSON_EXISTS(CAST(NULL AS STRING), '$.a')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('not json', '$.a')
+-- !query analysis
+Project [json_exists(not json, $.a, False) AS JSON_EXISTS(not json, '$.a')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('not json', '$.a' TRUE ON ERROR)
+-- !query analysis
+Project [json_exists(not json, $.a, True) AS JSON_EXISTS(not json, '$.a' TRUE ON ERROR)#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('not json', '$.a' FALSE ON ERROR)
+-- !query analysis
+Project [json_exists(not json, $.a, False) AS JSON_EXISTS(not json, '$.a')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('not json', '$.a' UNKNOWN ON ERROR)
+-- !query analysis
+Project [json_exists(not json, $.a, Unknown) AS JSON_EXISTS(not json, '$.a' UNKNOWN ON ERROR)#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('not json', '$.a' ERROR ON ERROR)
+-- !query analysis
+Project [json_exists(not json, $.a, Error) AS JSON_EXISTS(not json, '$.a' ERROR ON ERROR)#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"a":[1,2]}', '$.a[*]')
+-- !query analysis
+Project [json_exists({"a":[1,2]}, $.a[*], False) AS JSON_EXISTS({"a":[1,2]}, '$.a[*]')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"a":[]}', '$.a[*]')
+-- !query analysis
+Project [json_exists({"a":[]}, $.a[*], False) AS JSON_EXISTS({"a":[]}, '$.a[*]')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"a":5}', '$.a[*]')
+-- !query analysis
+Project [json_exists({"a":5}, $.a[*], False) AS JSON_EXISTS({"a":5}, '$.a[*]')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"a":[{"b":1},{"c":2}]}', '$.a[*].b')
+-- !query analysis
+Project [json_exists({"a":[{"b":1},{"c":2}]}, $.a[*].b, False) AS JSON_EXISTS({"a":[{"b":1},{"c":2}]}, '$.a[*].b')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"a":[1,2]}', '$.a[5]')
+-- !query analysis
+Project [json_exists({"a":[1,2]}, $.a[5], False) AS JSON_EXISTS({"a":[1,2]}, '$.a[5]')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"a":[{"b":1},{"b":2}]}', '$.a.b')
+-- !query analysis
+Project [json_exists({"a":[{"b":1},{"b":2}]}, $.a.b, False) AS JSON_EXISTS({"a":[{"b":1},{"b":2}]}, '$.a.b')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"addr":{"city":"NYC"}}', '$.*')
+-- !query analysis
+Project [json_exists({"addr":{"city":"NYC"}}, $.*, False) AS JSON_EXISTS({"addr":{"city":"NYC"}}, '$.*')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"a":1}', '$[')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_PATH",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_exists`",
+    "path" : "'$['",
+    "sqlExpr" : "\"JSON_EXISTS({\"a\":1}, '$[')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "json_exists('{\"a\":1}', '$[')"
+  } ]
+}
+
+
+-- !query
+select json_query('{"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}', '$.addr')
+-- !query analysis
+Project [json_query({"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}, $.addr, StringType, Without, Keep, Null, Null) AS JSON_QUERY({"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}, '$.addr')#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('{"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}', '$.tags')
+-- !query analysis
+Project [json_query({"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}, $.tags, StringType, Without, Keep, Null, Null) AS JSON_QUERY({"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}, '$.tags')#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('{"id":7}', '$.id')
+-- !query analysis
+Project [json_query({"id":7}, $.id, StringType, Without, Keep, Null, Null) AS JSON_QUERY({"id":7}, '$.id')#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('{"name":"Ada"}', '$.name')
+-- !query analysis
+Project [json_query({"name":"Ada"}, $.name, StringType, Without, Keep, Null, Null) AS JSON_QUERY({"name":"Ada"}, '$.name')#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('{"score":null}', '$.score')
+-- !query analysis
+Project [json_query({"score":null}, $.score, StringType, Without, Keep, Null, Null) AS JSON_QUERY({"score":null}, '$.score')#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('{"id":7}', '$.missing')
+-- !query analysis
+Project [json_query({"id":7}, $.missing, StringType, Without, Keep, Null, Null) AS JSON_QUERY({"id":7}, '$.missing')#x]
++- OneRowRelation
+
+
+-- !query
+select json_query(cast(null as string), '$.a')
+-- !query analysis
+Project [json_query(cast(null as string), $.a, StringType, Without, Keep, Null, Null) AS JSON_QUERY(CAST(NULL AS STRING), '$.a')#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('{"tags":["x","y"]}', '$.tags[0]' WITH ARRAY WRAPPER)
+-- !query analysis
+Project [json_query({"tags":["x","y"]}, $.tags[0], StringType, Unconditional, Keep, Null, Null) AS JSON_QUERY({"tags":["x","y"]}, '$.tags[0]' WITH UNCONDITIONAL ARRAY WRAPPER)#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('{"tags":["x","y"]}', '$.tags' WITH UNCONDITIONAL ARRAY WRAPPER)
+-- !query analysis
+Project [json_query({"tags":["x","y"]}, $.tags, StringType, Unconditional, Keep, Null, Null) AS JSON_QUERY({"tags":["x","y"]}, '$.tags' WITH UNCONDITIONAL ARRAY WRAPPER)#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('{"id":7}', '$.id' WITH ARRAY WRAPPER)
+-- !query analysis
+Project [json_query({"id":7}, $.id, StringType, Unconditional, Keep, Null, Null) AS JSON_QUERY({"id":7}, '$.id' WITH UNCONDITIONAL ARRAY WRAPPER)#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('{"id":7}', '$.id' WITH CONDITIONAL ARRAY WRAPPER)
+-- !query analysis
+Project [json_query({"id":7}, $.id, StringType, Conditional, Keep, Null, Null) AS JSON_QUERY({"id":7}, '$.id' WITH CONDITIONAL ARRAY WRAPPER)#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('{"addr":{"city":"NYC"}}', '$.addr' WITH CONDITIONAL ARRAY WRAPPER)
+-- !query analysis
+Project [json_query({"addr":{"city":"NYC"}}, $.addr, StringType, Conditional, Keep, Null, Null) AS JSON_QUERY({"addr":{"city":"NYC"}}, '$.addr' WITH CONDITIONAL ARRAY WRAPPER)#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('{"name":"Ada"}', '$.name' OMIT QUOTES)
+-- !query analysis
+Project [json_query({"name":"Ada"}, $.name, StringType, Without, Omit, Null, Null) AS JSON_QUERY({"name":"Ada"}, '$.name' OMIT QUOTES)#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('{"name":"Ada"}', '$.name' KEEP QUOTES)
+-- !query analysis
+Project [json_query({"name":"Ada"}, $.name, StringType, Without, Keep, Null, Null) AS JSON_QUERY({"name":"Ada"}, '$.name')#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('{"id":7}', '$.missing' EMPTY ARRAY ON EMPTY)
+-- !query analysis
+Project [json_query({"id":7}, $.missing, StringType, Without, Keep, EmptyArray, Null) AS JSON_QUERY({"id":7}, '$.missing' EMPTY ARRAY ON EMPTY)#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('{"id":7}', '$.missing' EMPTY OBJECT ON EMPTY)
+-- !query analysis
+Project [json_query({"id":7}, $.missing, StringType, Without, Keep, EmptyObject, Null) AS JSON_QUERY({"id":7}, '$.missing' EMPTY OBJECT ON EMPTY)#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('{"id":7}', '$.missing' ERROR ON EMPTY)
+-- !query analysis
+Project [json_query({"id":7}, $.missing, StringType, Without, Keep, Error, Null) AS JSON_QUERY({"id":7}, '$.missing' ERROR ON EMPTY)#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('not json', '$.a')
+-- !query analysis
+Project [json_query(not json, $.a, StringType, Without, Keep, Null, Null) AS JSON_QUERY(not json, '$.a')#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('not json', '$.a' EMPTY ARRAY ON ERROR)
+-- !query analysis
+Project [json_query(not json, $.a, StringType, Without, Keep, Null, EmptyArray) AS JSON_QUERY(not json, '$.a' EMPTY ARRAY ON ERROR)#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('not json', '$.a' EMPTY OBJECT ON ERROR)
+-- !query analysis
+Project [json_query(not json, $.a, StringType, Without, Keep, Null, EmptyObject) AS JSON_QUERY(not json, '$.a' EMPTY OBJECT ON ERROR)#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('not json', '$.a' ERROR ON ERROR)
+-- !query analysis
+Project [json_query(not json, $.a, StringType, Without, Keep, Null, Error) AS JSON_QUERY(not json, '$.a' ERROR ON ERROR)#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('{"addr":{"city":"NYC"}}', '$.addr' RETURNING STRING)
+-- !query analysis
+Project [json_query({"addr":{"city":"NYC"}}, $.addr, StringType, Without, Keep, Null, Null) AS JSON_QUERY({"addr":{"city":"NYC"}}, '$.addr')#x]
++- OneRowRelation
+
+
+-- !query
+select json_query('{"a":[1,2]}', '$.a[*]')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_PATH",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_query`",
+    "path" : "'$.a[*]'",
+    "sqlExpr" : "\"JSON_QUERY({\"a\":[1,2]}, '$.a[*]')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "json_query('{\"a\":[1,2]}', '$.a[*]')"
+  } ]
+}
+
+
+-- !query
+select json_query('{"a":1}', '$.a' RETURNING INT)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_QUERY_RETURNING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_query`",
+    "returningType" : "\"INT\"",
+    "sqlExpr" : "\"JSON_QUERY({\"a\":1}, '$.a' RETURNING INT)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 49,
+    "fragment" : "json_query('{\"a\":1}', '$.a' RETURNING INT)"
+  } ]
+}
+
+
+-- !query
+select json_query('{"name":"Ada"}', '$.name' WITH ARRAY WRAPPER OMIT QUOTES)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_QUERY_WRAPPER_AND_QUOTES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_query`",
+    "sqlExpr" : "\"JSON_QUERY({\"name\":\"Ada\"}, '$.name' WITH UNCONDITIONAL ARRAY WRAPPER OMIT QUOTES)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 76,
+    "fragment" : "json_query('{\"name\":\"Ada\"}', '$.name' WITH ARRAY WRAPPER OMIT QUOTES)"
+  } ]
+}

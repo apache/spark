@@ -218,7 +218,7 @@ private[spark] trait PagedTable[T] {
       }
     }
 
-    <div class="d-flex justify-content-between align-items-center">
+    <div class="d-flex justify-content-between align-items-center mb-3">
       <div class="d-flex align-items-center">
         <span class="pe-1">Page: </span>
         <ul class="pagination mb-0">

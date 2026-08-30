@@ -20,9 +20,11 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 import java.util.Locale
 
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion
 import org.apache.spark.sql.catalyst.plans.logical.Union
-import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, KeyedPartitioning, PartitioningCollection, UnknownPartitioning}
+import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.execution.{SparkPlan, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -34,8 +36,7 @@ import org.apache.spark.sql.test.SQLTestData.NullStrings
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
-class DataFrameSetOperationsSuite extends QueryTest
-  with SharedSparkSession with AdaptiveSparkPlanHelper {
+class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   test("except") {
@@ -1589,6 +1590,159 @@ class DataFrameSetOperationsSuite extends QueryTest
     }
   }
 
+  test("SPARK-58819: union outputPartitioning compares children in the union's attribute space") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTempView("t1", "t2") {
+        // `DISTRIBUTE BY id` resolves its key with the `t1` qualifier inside the subquery, but
+        // the outer `Project` exposes `id` with the subquery qualifier, so child 0's partitioning
+        // differs from its output in qualifier, not nullability. The branches overlap on `id = 1`,
+        // so a shared key's grouping depends on the union's co-location claim being honored
+        // (guarded by `checkAnswer(grouped, ...)` below).
+        Seq((Option(1), 10), (Option(2), 20)).toDF("id", "v").createOrReplaceTempView("t1")
+        Seq((Option(1), 30), (Option(3), 40)).toDF("id", "v").createOrReplaceTempView("t2")
+
+        val sqlText =
+          """
+            |SELECT id, v FROM (SELECT id, v FROM t1 DISTRIBUTE BY id) WHERE id IS NOT NULL
+            |UNION ALL
+            |SELECT id, sum(v) AS v FROM t2 GROUP BY id
+            |""".stripMargin
+        val union = spark.sql(sqlText)
+        val unionExec = union.queryExecution.executedPlan.collect { case u: UnionExec => u }
+        assert(unionExec.size == 1)
+
+        // Pin the discriminator to qualifier: child 0's partitioning references the same column
+        // (`id`) as its output, differing only in qualifier (`[t1]` vs the subquery qualifier),
+        // never nullability. The explicit nullability check rules out the nullability cause the
+        // DataFrame test below exercises; a future refactor leaking a nullability difference
+        // fails loudly instead of silently changing what the test covers.
+        val child0 = unionExec.head.children.head
+        val outputId = child0.output.head.asInstanceOf[AttributeReference]
+        val partitioningId =
+          child0.outputPartitioning.asInstanceOf[HashPartitioning].expressions.head
+            .asInstanceOf[AttributeReference]
+        assert(outputId.exprId == partitioningId.exprId,
+          s"expected the same column: $outputId vs $partitioningId")
+        assert(outputId.nullable == partitioningId.nullable,
+          s"nullability must match, qualifier is the sole difference: " +
+            s"$outputId vs $partitioningId")
+        assert(outputId.qualifier != partitioningId.qualifier,
+          s"expected a qualifier difference: $outputId vs $partitioningId")
+
+        // Child 0's `HashPartitioning` references `id` with the `t1` qualifier while its output
+        // `id` carries the subquery qualifier; remapping both to the union's output attributes
+        // still propagates the hash partitioning despite the qualifier difference. The propagated
+        // partitioning must be expressed in the union's own output attribute (the subquery
+        // qualifier), not child 0's `[t1]` attribute, since `toUnionOutput` was removed.
+        assert(unionExec.head.outputPartitioning.isInstanceOf[HashPartitioning],
+          s"expected a HashPartitioning pass-through but got ${unionExec.head.outputPartitioning}")
+        val hashPartitioning =
+          unionExec.head.outputPartitioning.asInstanceOf[HashPartitioning]
+        assert(hashPartitioning.expressions == Seq(unionExec.head.output.head))
+
+        // The two branches contribute one shuffle each (DISTRIBUTE BY and GROUP BY). The propagated
+        // HashPartitioning lets the downstream group-by reuse them instead of adding a third.
+        val unionShuffles = union.queryExecution.executedPlan.collect {
+          case s: ShuffleExchangeExec => s
+        }.size
+        val grouped = union.groupBy($"id").count()
+        val groupedShuffles = grouped.queryExecution.executedPlan.collect {
+          case s: ShuffleExchangeExec => s
+        }.size
+        assert(unionShuffles == 2, s"union should have 2 shuffles but got $unionShuffles")
+        assert(groupedShuffles == 2,
+          s"group-by should reuse the union's partitioning (expect 2 shuffles) but got " +
+            s"$groupedShuffles\n${grouped.queryExecution.executedPlan}")
+
+        // `UNION_OUTPUT_PARTITIONING=false` drops the pass-through so the group-by adds its own
+        // shuffle; that freshly-planned path is the oracle for both the raw union rows and the
+        // grouped result.
+        val (correctResult, correctGrouped) =
+          withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+            val baseline = spark.sql(sqlText)
+            (baseline.collect(), baseline.groupBy($"id").count().collect())
+          }
+        checkAnswer(union, correctResult)
+        checkAnswer(grouped, correctGrouped)
+      }
+    }
+  }
+
+  test("SPARK-58819: union outputPartitioning ignores partition key nullability") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+      // `.sample(1.0)` keeps `FilterExec` above the shuffle without disabling any rule:
+      // `PushPredicateThroughNonJoin.canPushThrough` has no `Sample` case, so `IsNotNull` stays
+      // above the `Sample`, which passes its child's output and partitioning through verbatim.
+      // The filter's output nullability is thus narrowed while its passed-through partitioning
+      // keeps the nullable key. `fraction = 1.0` passes every row, keeping counts deterministic.
+      val df1 = Seq((Option(1), 10L), (Option(2), 20L)).toDF("id", "v")
+        .repartition($"id").sample(withReplacement = false, fraction = 1.0, seed = 42)
+        .filter($"id".isNotNull)
+      val df2 = Seq((Option(1), 30L), (Option(3), 40L)).toDF("id", "v")
+        .groupBy($"id").agg(sum($"v").as("v"))
+
+      val union = df1.union(df2)
+      val unionExec = union.queryExecution.executedPlan.collect { case u: UnionExec => u }
+      assert(unionExec.size == 1)
+
+      // Pin the discriminator to nullability: child 0 is a `FilterExec` whose partitioning
+      // (passed through verbatim) references the same column as its `output`, differing only in
+      // nullability. The explicit qualifier check rules out the qualifier cause the SQL-variant
+      // test above exercises; a future refactor leaking a qualifier difference fails loudly
+      // instead of silently changing what the test covers.
+      val child0 = unionExec.head.children.head
+      val outputId = child0.output.head.asInstanceOf[AttributeReference]
+      val partitioningId =
+        child0.outputPartitioning.asInstanceOf[HashPartitioning].expressions.head
+          .asInstanceOf[AttributeReference]
+      assert(outputId.exprId == partitioningId.exprId,
+        s"expected the same column: $outputId vs $partitioningId")
+      assert(outputId.qualifier == partitioningId.qualifier,
+        s"qualifier must match (nullability is the sole difference): $outputId vs $partitioningId")
+      assert(outputId.nullable != partitioningId.nullable,
+        s"expected a nullability difference: $outputId vs $partitioningId")
+      assert(outputId.withNullability(partitioningId.nullable) == partitioningId,
+        s"only nullability should differ: $outputId vs $partitioningId")
+
+      // child1 (groupBy) is the well-behaved branch: its output and partitioning reference the
+      // same nullable group key, so the nullability mismatch is confined to child0's Filter.
+      val child1 = unionExec.head.children(1)
+      val child1OutputId = child1.output.head.asInstanceOf[AttributeReference]
+      val child1PartitioningId =
+        child1.outputPartitioning.asInstanceOf[HashPartitioning].expressions.head
+          .asInstanceOf[AttributeReference]
+      assert(child1OutputId.nullable, s"group key should be nullable: $child1OutputId")
+      assert(child1OutputId.exprId == child1PartitioningId.exprId,
+        s"child1 output and partitioning should reference the same column")
+      assert(child1OutputId.nullable == child1PartitioningId.nullable,
+        s"child1 has no nullability mismatch: $child1OutputId vs $child1PartitioningId")
+
+      // The union propagates the co-located HashPartitioning in its own output attribute space
+      // with the merged nullability (true, from child1's nullable group key). This also pins that
+      // the partitioning attribute is the union's output attribute, not a leaked child attribute.
+      assert(unionExec.head.outputPartitioning.isInstanceOf[HashPartitioning],
+        s"expected HashPartitioning pass-through but got ${unionExec.head.outputPartitioning}")
+      val unionPartitioning = unionExec.head.outputPartitioning.asInstanceOf[HashPartitioning]
+      assert(unionPartitioning.expressions == Seq(unionExec.head.output.head))
+
+      // Without the fix the union reports UnknownPartitioning and the downstream group-by adds a
+      // third shuffle; with it, the pass-through lets the group-by reuse the two existing ones.
+      val grouped = union.groupBy($"id").count()
+      val groupedShuffles = grouped.queryExecution.executedPlan.collect {
+        case s: ShuffleExchangeExec => s
+      }.size
+      assert(groupedShuffles == 2,
+        s"group-by should reuse the union's partitioning (expect 2 shuffles) but got " +
+          s"$groupedShuffles\n${grouped.queryExecution.executedPlan}")
+
+      // The two branches overlap on `id = 1`, so the correct count proves the co-location claim
+      // is actually honored (a false claim would split id = 1 into duplicate groups).
+      checkAnswer(grouped, Row(1, 2L) :: Row(2, 1L) :: Row(3, 1L) :: Nil)
+    }
+  }
+
   test("SPARK-52921: union partitioning - range partitioning") {
     val df1 = Seq((1, 2, 4), (1, 3, 5), (2, 2, 3), (2, 4, 5)).toDF("a", "b", "c")
     val df2 = Seq((4, 1, 5), (2, 4, 6), (1, 4, 2), (3, 5, 1)).toDF("d", "e", "f")
@@ -1618,6 +1772,233 @@ class DataFrameSetOperationsSuite extends QueryTest
     }
   }
 
+  test("SPARK-57881: union partitioning - keyed partitioning") {
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryCatalog].getName) {
+      sql("CREATE TABLE testcat.ns.t1 (id bigint, data string) PARTITIONED BY (id)")
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 'a1'), (2, 'a2')")
+      sql("CREATE TABLE testcat.ns.t2 (id bigint, data string) PARTITIONED BY (id)")
+      sql("INSERT INTO testcat.ns.t2 VALUES (2, 'b2'), (3, 'b3')")
+
+      def unionDF: DataFrame = sql(
+        """SELECT id, data FROM testcat.ns.t1
+          |UNION ALL
+          |SELECT id, data FROM testcat.ns.t2
+          |""".stripMargin)
+
+      val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+        unionDF.collect()
+      }
+
+      Seq(true, false).foreach { enabled =>
+        withSQLConf(
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+            SQLConf.UNION_OUTPUT_PARTITIONING.key -> enabled.toString) {
+          val union = unionDF
+          val unionExec = union.queryExecution.executedPlan.collect { case u: UnionExec => u }
+          assert(unionExec.size == 1)
+
+          val partitioning = unionExec.head.outputPartitioning
+          if (enabled) {
+            // The two children report compatible KeyedPartitionings (both identity(id)); the
+            // union merges their partition keys into a single KeyedPartitioning.
+            assert(partitioning.isInstanceOf[KeyedPartitioning],
+              "union of compatible KeyedPartitionings should report a merged KeyedPartitioning")
+          } else {
+            assert(partitioning.isInstanceOf[UnknownPartitioning])
+          }
+
+          checkAnswer(union, correctResult)
+        }
+      }
+    }
+  }
+
+  test("SPARK-58317: union partitioning - PartitioningCollection child intersects to single") {
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+      withTempView("t1", "t2", "t3", "t4") {
+        Seq((1, 2, 4), (1, 3, 5), (2, 2, 3)).toDF("c1", "c2", "c3").createOrReplaceTempView("t1")
+        Seq((1, 9), (2, 9)).toDF("c1", "x").createOrReplaceTempView("t2")
+        Seq((1, 2, 4), (2, 4, 5), (3, 6, 7)).toDF("c1", "c2", "c3").createOrReplaceTempView("t3")
+        Seq((1, 9), (3, 9)).toDF("c1", "y").createOrReplaceTempView("t4")
+
+        // The first branch is an inner shuffled-hash join and selects both join keys (t1.c1 and
+        // t2.c1), so its output partitioning is a PartitioningCollection(Hash(c1), Hash(c1#..))
+        // that a downstream ProjectExec cannot narrow to a single member. The second branch is a
+        // left join, whose output partitioning is a single HashPartitioning(c1). Referencing `k`
+        // in the group-by keeps the first branch's collection alive (otherwise ColumnPruning drops
+        // it and the join narrows to a single Hash(c1)); aliasing t4.c1 (the build side of the
+        // left join) keeps the second branch a single Hash(c1). The union intersects the two to a
+        // single HashPartitioning(c1) and lets the group-by skip a shuffle.
+        def unionDF: DataFrame = sql(
+          """SELECT c1, c2, c3, k, count(*) FROM (
+            |  SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1, t1.c2, t1.c3, t2.c1 AS k
+            |  FROM t1 JOIN t2 ON t1.c1 = t2.c1
+            |  UNION ALL
+            |  SELECT /*+ SHUFFLE_HASH(t4) */ t3.c1, t3.c2, t3.c3, t4.c1 AS k
+            |  FROM t3 LEFT JOIN t4 ON t3.c1 = t4.c1
+            |) GROUP BY c1, c2, c3, k
+            |""".stripMargin)
+
+        val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+          unionDF.collect()
+        }
+
+        val shuffleNums = Seq(true, false).map { enabled =>
+          withSQLConf(
+              SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+              SQLConf.UNION_OUTPUT_PARTITIONING.key -> enabled.toString) {
+            val union = unionDF
+            val unionExec = union.queryExecution.executedPlan.collect { case u: UnionExec => u }
+            assert(unionExec.size == 1)
+
+            val partitioning = unionExec.head.outputPartitioning
+            if (enabled) {
+              assert(partitioning.isInstanceOf[HashPartitioning],
+                s"expected a HashPartitioning pass-through but got $partitioning")
+            } else {
+              assert(partitioning.isInstanceOf[UnknownPartitioning])
+            }
+
+            checkAnswer(union, correctResult)
+            union.queryExecution.executedPlan.collect {
+              case s: ShuffleExchangeExec => s
+            }.size
+          }
+        }
+        // Enabling the pass-through removes the shuffle before the aggregate.
+        assert(shuffleNums.head + 1 == shuffleNums.last)
+      }
+    }
+  }
+
+  test("SPARK-58317: union partitioning - all PartitioningCollection children pass through") {
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+      withTempView("t1", "t2", "t3", "t4") {
+        Seq((1, 2), (2, 3)).toDF("c1", "c2").createOrReplaceTempView("t1")
+        Seq((1, 9), (2, 9)).toDF("c1", "x").createOrReplaceTempView("t2")
+        Seq((1, 2), (3, 4)).toDF("c1", "c2").createOrReplaceTempView("t3")
+        Seq((1, 9), (3, 9)).toDF("c1", "y").createOrReplaceTempView("t4")
+
+        // Both branches are inner shuffled-hash joins on a single key and select both sides' join
+        // key (t1.c1 and t2.c1 AS k), so a downstream ProjectExec cannot narrow either child's
+        // PartitioningCollection(Hash(c1), Hash(k)) to a single member. The union should intersect
+        // to a PartitioningCollection carrying both members.
+        def unionDF: DataFrame = sql(
+          """SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1, t2.c1 AS k
+            |FROM t1 JOIN t2 ON t1.c1 = t2.c1
+            |UNION ALL
+            |SELECT /*+ SHUFFLE_HASH(t4) */ t3.c1, t4.c1 AS k
+            |FROM t3 JOIN t4 ON t3.c1 = t4.c1
+            |""".stripMargin)
+
+        val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+          unionDF.collect()
+        }
+
+        Seq(true, false).foreach { enabled =>
+          withSQLConf(
+              SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+              SQLConf.UNION_OUTPUT_PARTITIONING.key -> enabled.toString) {
+            val union = unionDF
+            val unionExec = union.queryExecution.executedPlan.collect { case u: UnionExec => u }
+            assert(unionExec.size == 1)
+
+            val partitioning = unionExec.head.outputPartitioning
+            if (enabled) {
+              assert(partitioning.isInstanceOf[PartitioningCollection],
+                s"expected a PartitioningCollection pass-through but got $partitioning")
+              val members = partitioning.asInstanceOf[PartitioningCollection].partitionings
+              assert(members.forall(_.isInstanceOf[HashPartitioning]))
+              assert(members.size == 2)
+            } else {
+              assert(partitioning.isInstanceOf[UnknownPartitioning])
+            }
+
+            checkAnswer(union, correctResult)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-58317: union partitioning - empty intersection falls back") {
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+      withTempView("t1", "t2") {
+        Seq((1, 2, 4), (2, 3, 5)).toDF("c1", "c2", "c3").createOrReplaceTempView("t1")
+        Seq((1, 9), (2, 9)).toDF("c1", "x").createOrReplaceTempView("t2")
+
+        // First branch reports PartitioningCollection(Hash(c1), Hash(c1#..)); the second branch
+        // is repartitioned on a disjoint column, so the intersection is empty.
+        def unionDF: DataFrame = sql(
+          """SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1, t1.c2, t1.c3, t2.c1 AS k
+            |FROM t1 JOIN t2 ON t1.c1 = t2.c1
+            |UNION ALL
+            |SELECT c1, c2, c3, c2 AS k FROM t1 DISTRIBUTE BY c2
+            |""".stripMargin)
+
+        val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+          unionDF.collect()
+        }
+
+        Seq(true, false).foreach { enabled =>
+          withSQLConf(
+              SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+              SQLConf.UNION_OUTPUT_PARTITIONING.key -> enabled.toString) {
+            val union = unionDF
+            val unionExec = union.queryExecution.executedPlan.collect { case u: UnionExec => u }
+            assert(unionExec.size == 1)
+            assert(unionExec.head.outputPartitioning.isInstanceOf[UnknownPartitioning])
+            checkAnswer(union, correctResult)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-58317: union partitioning - PartitioningCollection pass-through under AQE") {
+    // AQE is enabled by default in production; the collection pass-through must produce correct
+    // results there too, where the union output flows through the coalesce-compatibility path.
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+      withTempView("t1", "t2", "t3", "t4") {
+        Seq((1, 2), (2, 3), (1, 4)).toDF("c1", "c2").createOrReplaceTempView("t1")
+        Seq((1, 9), (2, 9)).toDF("c1", "x").createOrReplaceTempView("t2")
+        Seq((1, 2), (3, 4)).toDF("c1", "c2").createOrReplaceTempView("t3")
+        Seq((1, 9), (3, 9)).toDF("c1", "y").createOrReplaceTempView("t4")
+
+        // Referencing `k` in the group-by keeps each branch's PartitioningCollection alive under
+        // AQE (otherwise ColumnPruning drops it and the join narrows to a single Hash(c1)).
+        def unionDF: DataFrame = sql(
+          """SELECT c1, k, count(*) FROM (
+            |  SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1, t2.c1 AS k
+            |  FROM t1 JOIN t2 ON t1.c1 = t2.c1
+            |  UNION ALL
+            |  SELECT /*+ SHUFFLE_HASH(t4) */ t3.c1, t4.c1 AS k
+            |  FROM t3 JOIN t4 ON t3.c1 = t4.c1
+            |) GROUP BY c1, k
+            |""".stripMargin)
+
+        val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+          unionDF.collect()
+        }
+
+        Seq(true, false).foreach { enabled =>
+          withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> enabled.toString) {
+            checkAnswer(unionDF, correctResult)
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-53550: union partitioning should compare canonicalized attributes") {
     withSQLConf(
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
@@ -1642,6 +2023,43 @@ class DataFrameSetOperationsSuite extends QueryTest
         checkAnswer(df, Row("jim", 20) :: Row("mike", 30) :: Nil)
       }
     }
+  }
+
+  test("SPARK-51262: exceptAll after dropDuplicates with subset should not throw") {
+    // Data where dropDuplicates(subset) produces deterministic results - to avoid test flakiness.
+    val df1 = spark.createDataFrame(Seq(
+      (1, "a", 100),
+      (2, "b", 200),
+      (3, "c", 300)
+    )).toDF("id", "name", "value")
+
+    val df2 = spark.createDataFrame(Seq(
+      (1, "a", 100)
+    )).toDF("id", "name", "value")
+
+    // dropDuplicates with subset - each (id, name) is already unique so output is deterministic
+    val deduped = df1.dropDuplicates("id", "name")
+
+    // exceptAll should work without INTERNAL_ERROR_ATTRIBUTE_NOT_FOUND
+    val result = deduped.exceptAll(df2)
+    assert(result.columns === Array("id", "name", "value"))
+    val rows = result.collect().sortBy(_.getInt(0))
+    assert(rows.length === 2)
+    assert(rows(0) === Row(2, "b", 200))
+    assert(rows(1) === Row(3, "c", 300))
+
+    // Also verify except (non-all) works and returns correct values
+    val result2 = deduped.except(df2)
+    val rows2 = result2.collect().sortBy(_.getInt(0))
+    assert(rows2.length === 2)
+    assert(rows2(0) === Row(2, "b", 200))
+    assert(rows2(1) === Row(3, "c", 300))
+
+    // intersectAll should also work and return the matching row
+    val result3 = deduped.intersectAll(df2)
+    val rows3 = result3.collect()
+    assert(rows3.length === 1)
+    assert(rows3.head === Row(1, "a", 100))
   }
 }
 

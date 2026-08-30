@@ -29,6 +29,8 @@ ENV FULL_REFRESH_DATE=20260210
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
 
+RUN printf 'Types: deb\nURIs: https://mirrors.edge.kernel.org/ubuntu\nSuites: noble noble-updates noble-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n' > /etc/apt/sources.list.d/mirror.sources
+
 RUN apt-get update && apt-get install -y \
     build-essential \
     ca-certificates \
@@ -47,6 +49,7 @@ RUN apt-get update && apt-get install -y \
     tzdata \
     software-properties-common \
     zlib1g-dev \
+    zstd \
     && apt-get autoremove --purge -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -56,11 +59,10 @@ ENV VIRTUAL_ENV=/opt/spark-venv
 RUN python3.12 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-ARG BASIC_PIP_PKGS="numpy pyarrow>=23.0.0 pandas==2.3.3 plotly<6.0.0 matplotlib openpyxl memory-profiler>=0.61.0 mlflow>=2.8.1 scipy scikit-learn>=1.3.2 pystack>=1.6.0 psutil"
-ARG TEST_PIP_PKGS="coverage unittest-xml-reporting"
+COPY --from=root pyproject.toml ./pyproject.toml
 
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
-RUN python3.12 -m pip install $BASIC_PIP_PKGS $TEST_PIP_PKGS && \
-    python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
-    python3.12 -m pip install deepspeed torcheval && \
+RUN python3.12 -m pip install -U pip
+
+RUN python3.12 -m pip install --group ml_torch --index-url https://download.pytorch.org/whl/cpu && \
+    python3.12 -m pip install --group ci_classic_standard && \
     python3.12 -m pip cache purge

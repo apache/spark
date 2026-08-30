@@ -27,7 +27,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
-class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSparkSession {
+class OptimizeMetadataOnlyQuerySuite extends SharedSparkSession {
   import testImplicits._
 
   override def beforeAll(): Unit = {

@@ -81,23 +81,6 @@ class Node @Since("1.2.0") (
   }
 
   /**
-   * Returns a deep copy of the subtree rooted at this node.
-   */
-  private[tree] def deepCopy(): Node = {
-    val leftNodeCopy = if (leftNode.isEmpty) {
-      None
-    } else {
-      Some(leftNode.get.deepCopy())
-    }
-    val rightNodeCopy = if (rightNode.isEmpty) {
-      None
-    } else {
-      Some(rightNode.get.deepCopy())
-    }
-    new Node(id, predict, impurity, isLeaf, split, leftNodeCopy, rightNodeCopy, stats)
-  }
-
-  /**
    * Get the number of nodes in tree below this node, including leaf nodes.
    * E.g., if this is a leaf, returns 0.  If both children are leaves, returns 2.
    */
@@ -158,12 +141,6 @@ class Node @Since("1.2.0") (
 private[spark] object Node {
 
   /**
-   * Return a node with the given node id (but nothing else set).
-   */
-  def emptyNode(nodeIndex: Int): Node = new Node(nodeIndex, new Predict(Double.MinValue), -1.0,
-    false, None, None, None, None)
-
-  /**
    * Construct a node with nodeIndex, predict, impurity and isLeaf parameters.
    * This is used in `DecisionTree.findBestSplits` to construct child nodes
    * after finding the best splits for parent nodes.
@@ -191,55 +168,5 @@ private[spark] object Node {
    * Return the index of the right child of this node.
    */
   def rightChildIndex(nodeIndex: Int): Int = (nodeIndex << 1) + 1
-
-  /**
-   * Get the parent index of the given node, or 0 if it is the root.
-   */
-  def parentIndex(nodeIndex: Int): Int = nodeIndex >> 1
-
-  /**
-   * Return the level of a tree which the given node is in.
-   */
-  def indexToLevel(nodeIndex: Int): Int = if (nodeIndex == 0) {
-    throw new IllegalArgumentException(s"0 is not a valid node index.")
-  } else {
-    java.lang.Integer.numberOfTrailingZeros(java.lang.Integer.highestOneBit(nodeIndex))
-  }
-
-  /**
-   * Returns true if this is a left child.
-   * Note: Returns false for the root.
-   */
-  def isLeftChild(nodeIndex: Int): Boolean = nodeIndex > 1 && nodeIndex % 2 == 0
-
-  /**
-   * Return the maximum number of nodes which can be in the given level of the tree.
-   * @param level  Level of tree (0 = root).
-   */
-  def maxNodesInLevel(level: Int): Int = 1 << level
-
-  /**
-   * Return the index of the first node in the given level.
-   * @param level  Level of tree (0 = root).
-   */
-  def startIndexInLevel(level: Int): Int = 1 << level
-
-  /**
-   * Traces down from a root node to get the node with the given node index.
-   * This assumes the node exists.
-   */
-  def getNode(nodeIndex: Int, rootNode: Node): Node = {
-    var tmpNode: Node = rootNode
-    var levelsToGo = indexToLevel(nodeIndex)
-    while (levelsToGo > 0) {
-      if ((nodeIndex & (1 << levelsToGo - 1)) == 0) {
-        tmpNode = tmpNode.leftNode.get
-      } else {
-        tmpNode = tmpNode.rightNode.get
-      }
-      levelsToGo -= 1
-    }
-    tmpNode
-  }
 
 }

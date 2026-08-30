@@ -15,50 +15,50 @@
 # limitations under the License.
 #
 
+import datetime
 import functools
+import io
+import logging
 import pydoc
 import shutil
-import tempfile
-import unittest
-import datetime
-import io
-import time
-from contextlib import redirect_stdout
-import logging
 import sys
+import tempfile
+import time
+import unittest
+from contextlib import redirect_stdout
 
-from pyspark.sql import SparkSession, Column, Row
-from pyspark.sql.functions import col, udf, assert_true, lit, rand
-from pyspark.sql.udf import UserDefinedFunction
+from pyspark.errors import AnalysisException, PySparkTypeError, PythonException
+from pyspark.logger import PySparkLogger
+from pyspark.sql import Column, Row, SparkSession
+from pyspark.sql.functions import assert_true, col, lit, rand, udf
 from pyspark.sql.types import (
-    StringType,
-    IntegerType,
+    ArrayType,
     BinaryType,
     BooleanType,
-    DoubleType,
-    LongType,
-    ArrayType,
-    MapType,
-    StructType,
-    StructField,
-    TimestampNTZType,
     DayTimeIntervalType,
+    DoubleType,
+    IntegerType,
+    LongType,
+    MapType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampNTZType,
     VariantType,
     VariantVal,
 )
-from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
-from pyspark.logger import PySparkLogger
+from pyspark.sql.udf import UserDefinedFunction
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     test_compiled,
     test_not_compiled_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual, timeout
+from pyspark.testing.utils import assertDataFrameEqual, eventually, timeout
 from pyspark.util import is_remote_only
 
 
-class BaseUDFTestsMixin(object):
+class BaseUDFTestsMixin:
     def test_udf_with_callable(self):
         data = self.spark.createDataFrame([(i, i**2) for i in range(10)], ["number", "squared"])
 
@@ -190,8 +190,9 @@ class BaseUDFTestsMixin(object):
             self.check_nondeterministic_udf_in_aggregate()
 
     def check_nondeterministic_udf_in_aggregate(self):
-        from pyspark.sql.functions import sum
         import random
+
+        from pyspark.sql.functions import sum
 
         udf_random_col = udf(lambda: int(100 * random.random()), "int").asNondeterministic()
         df = self.spark.range(10)
@@ -836,7 +837,7 @@ class BaseUDFTestsMixin(object):
     # SPARK-24721
     @unittest.skipIf(not test_compiled, test_not_compiled_message)
     def test_datasource_with_udf(self):
-        from pyspark.sql.functions import lit, col
+        from pyspark.sql.functions import col, lit
 
         path = tempfile.mkdtemp()
         shutil.rmtree(path)
@@ -1231,6 +1232,20 @@ class BaseUDFTestsMixin(object):
 
         with self.assertRaisesRegex(PythonException, "StopIteration"):
             self.spark.range(10).select(test_udf(col("id"))).show()
+
+    def test_udf_traceback_with_locals(self):
+        with self.sql_conf({"spark.sql.execution.pyspark.udf.tracebackWithLocals.enabled": True}):
+
+            @udf("int")
+            def test_udf(a):
+                local_marker = a + 1
+                if local_marker:
+                    raise ValueError("boom")
+                return local_marker
+
+            # The captured locals should include the local variable and its value.
+            with self.assertRaisesRegex(PythonException, "local_marker = 1"):
+                self.spark.range(1).select(test_udf(col("id"))).collect()
 
     def test_python_udf_segfault(self):
         with self.sql_conf({"spark.sql.execution.pyspark.udf.faulthandler.enabled": True}):
@@ -1692,20 +1707,23 @@ class BaseUDFTestsMixin(object):
                 [Row(result=str(i)) for i in range(2)],
             )
 
-            logs = self.spark.tvf.python_worker_logs()
+            @eventually(timeout=10, catch_assertions=True)
+            def check_logs():
+                logs = self.spark.tvf.python_worker_logs()
+                assertDataFrameEqual(
+                    logs.select("level", "msg", "context", "logger"),
+                    [
+                        Row(
+                            level="WARNING",
+                            msg="PySparkLogger test",
+                            context={"func_name": my_udf.__name__, "x": str(i)},
+                            logger="PySparkLogger",
+                        )
+                        for i in range(2)
+                    ],
+                )
 
-            assertDataFrameEqual(
-                logs.select("level", "msg", "context", "logger"),
-                [
-                    Row(
-                        level="WARNING",
-                        msg="PySparkLogger test",
-                        context={"func_name": my_udf.__name__, "x": str(i)},
-                        logger="PySparkLogger",
-                    )
-                    for i in range(2)
-                ],
-            )
+            check_logs()
 
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):

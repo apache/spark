@@ -26,16 +26,20 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Util
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaValidationMode
 import org.apache.spark.sql.util.SchemaValidationMode.ALLOW_NEW_FIELDS
 import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 
 private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
+  private type CurrentTableKey = (TableCatalog, Identifier, CaseInsensitiveStringMap)
+
   /**
    * Refreshes table metadata for tables in the plan.
    *
    * This method reloads table metadata from the catalog and validates:
    *  - Table identity: Ensures table ID has not changed
+   *  - Column IDs: Verifies column IDs have not changed
    *  - Data columns: Verifies captured columns align with the current schema
    *  - Metadata columns: Checks metadata column consistency
    *
@@ -62,6 +66,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
    *
    * This method reloads table metadata from the catalog and validates:
    *  - Table identity: Ensures table ID has not changed
+   *  - Column IDs: Verifies column IDs have not changed
    *  - Data columns: Verifies captured columns align with the current schema
    *  - Metadata columns: Checks metadata column consistency
    *
@@ -79,19 +84,20 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
       plan: LogicalPlan,
       versionedOnly: Boolean,
       schemaValidationMode: SchemaValidationMode): LogicalPlan = {
-    val currentTables = mutable.HashMap.empty[(TableCatalog, Identifier), Table]
+    val currentTables = mutable.HashMap.empty[CurrentTableKey, Table]
     plan transformWithSubqueries {
       case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
           if (r.isVersioned || !versionedOnly) && r.timeTravelSpec.isEmpty =>
-        val currentTable = currentTables.getOrElseUpdate((catalog, ident), {
+        val stateOptions = CatalogV2Util.extractTableStateOptions(catalog, r.options)
+        val currentTable = currentTables.getOrElseUpdate((catalog, ident, stateOptions), {
           val tableName = V2TableUtil.toQualifiedName(catalog, ident)
-          lookupCachedRelation(spark, catalog, ident, r.table) match {
+          lookupCachedRelation(spark, catalog, ident, r.table, r.options) match {
             case Some(cached) =>
               logDebug(s"Refreshing table metadata for $tableName using shared relation cache")
               cached.table
-            case None =>
+            case _ =>
               logDebug(s"Refreshing table metadata for $tableName using catalog")
-              catalog.loadTable(ident)
+              CatalogV2Util.getTable(catalog, ident, options = r.options)
           }
         })
         validateTableIdentity(currentTable, r)
@@ -105,8 +111,10 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
       spark: SparkSession,
       catalog: TableCatalog,
       ident: Identifier,
-      table: Table): Option[DataSourceV2Relation] = {
-    CatalogV2Util.lookupCachedRelation(spark.sharedState.relationCache, catalog, ident, table, conf)
+      table: Table,
+      options: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
+    CatalogV2Util.lookupCachedRelation(
+      spark.sharedState.relationCache, catalog, ident, table, options, conf)
   }
 
   // it is not safe to allow any schema changes in commands (e.g. CTAS, RTAS, MERGE)
@@ -119,19 +127,14 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
   }
 
   private def validateTableIdentity(currentTable: Table, relation: DataSourceV2Relation): Unit = {
-    if (relation.table.id != null && relation.table.id != currentTable.id) {
-      throw QueryCompilationErrors.tableIdChangedAfterAnalysis(
-        relation.name,
-        capturedTableId = relation.table.id,
-        currentTableId = currentTable.id)
-    }
+    V2TableUtil.validateTableId(relation.name, relation.table.id, currentTable)
   }
 
   private def validateDataColumns(
       currentTable: Table,
       relation: DataSourceV2Relation,
       mode: SchemaValidationMode): Unit = {
-    val errors = V2TableUtil.validateCapturedColumns(currentTable, relation, mode)
+    val errors = V2TableUtil.validateCapturedColumns(currentTable, relation, mode, checkIds = true)
     if (errors.nonEmpty) {
       throw QueryCompilationErrors.columnsChangedAfterAnalysis(relation.name, errors)
     }
@@ -141,7 +144,11 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
       currentTable: Table,
       relation: DataSourceV2Relation,
       mode: SchemaValidationMode): Unit = {
-    val errors = V2TableUtil.validateCapturedMetadataColumns(currentTable, relation, mode)
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      currentTable,
+      relation,
+      mode,
+      checkIds = true)
     if (errors.nonEmpty) {
       throw QueryCompilationErrors.metadataColumnsChangedAfterAnalysis(relation.name, errors)
     }

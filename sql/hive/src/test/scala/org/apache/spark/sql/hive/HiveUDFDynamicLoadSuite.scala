@@ -21,12 +21,11 @@ import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHiveUdfsJar}
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
-class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+class HiveUDFDynamicLoadSuite extends QueryTest with TestHiveSingleton {
 
   case class UDFTestInformation(
       identifier: String,

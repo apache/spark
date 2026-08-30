@@ -33,19 +33,16 @@
 
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=true
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false
---ONLY_IF spark
 
-CREATE TEMPORARY VIEW m AS SELECT * FROM VALUES
+CREATE TEMPORARY VIEW m(a, b) AS VALUES
   (null, 1.0),
   (2, 3.0),
-  (4, 5.0)
-  AS m(a, b);
+  (4, 5.0);
 
-CREATE TEMPORARY VIEW s AS SELECT * FROM VALUES
+CREATE TEMPORARY VIEW s(c, d) AS VALUES
   (null, 1.0),
   (2, 3.0),
-  (6, 7.0)
-  AS s(c, d);
+  (6, 7.0);
 
   -- Uncorrelated NOT IN Subquery test cases
   -- Case 1

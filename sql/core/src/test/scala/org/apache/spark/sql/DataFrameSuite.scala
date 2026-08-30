@@ -52,8 +52,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.ArrayImplicits._
 
 @SlowSQLTest
-class DataFrameSuite extends QueryTest
-  with SharedSparkSession
+class DataFrameSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 
@@ -629,6 +628,18 @@ class DataFrameSuite extends QueryTest
     val df = testData.toDF().withColumns(Map(
       "newCol1" -> (col("key") + 1), "newCol2" -> (col("key")  + 2)
     ))
+    checkAnswer(
+      df,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, value, key + 1, key + 2)
+      }.toSeq)
+    assert(df.schema.map(_.name) === Seq("key", "value", "newCol1", "newCol2"))
+  }
+
+  test("withColumns: internal method with dependent columns") {
+    val df = testData.toDF().withColumns(
+      Seq("newCol1", "newCol2"),
+      Seq(col("key") + 1, col("newCol1") + 1))
     checkAnswer(
       df,
       testData.collect().map { case Row(key: Int, value: String) =>
@@ -2572,6 +2583,7 @@ class DataFrameSuite extends QueryTest
   test("SPARK-41048: Improve output partitioning and ordering with AQE cache") {
     withSQLConf(
         SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true",
+        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "0",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val df1 = spark.range(10).selectExpr("cast(id as string) c1")
       val df2 = spark.range(10).selectExpr("cast(id as string) c2")
@@ -2785,6 +2797,17 @@ class DataFrameSuite extends QueryTest
     val df1 = df.select("a").orderBy("b").orderBy("all")
     checkAnswer(df1, Seq(Row(1), Row(4)))
   }
+
+  test("SPARK-57725: resolve columns when the input plan has a null-named attribute") {
+    // A null-named AttributeReference can reach the analyzer (e.g. via a StructField built with a
+    // null name). Selecting another column must still resolve through the full analyzer path
+    // instead of failing with an internal NullPointerException from the case-insensitive name
+    // maps in AttributeSeq.
+    val attrs = Seq(AttributeReference(null, IntegerType)(), AttributeReference("b", IntegerType)())
+    val relation = LocalRelation.fromExternalRows(attrs, Seq(Row(1, 2)))
+    val df = classic.Dataset.ofRows(spark, relation)
+    checkAnswer(df.select("b"), Row(2))
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
@@ -2811,5 +2834,3 @@ case class OutputListAwareConstraintsTestPlan(
 
   override def newInstance(): LogicalPlan = copy(outputList = outputList.map(_.newInstance()))
 }
-
-

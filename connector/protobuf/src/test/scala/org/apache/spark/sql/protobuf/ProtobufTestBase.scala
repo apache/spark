@@ -23,10 +23,10 @@ import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.DescriptorProtos.FileDescriptorSet
 
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.types.{DataType, StructType}
 
-trait ProtobufTestBase extends SQLTestUtils {
+trait ProtobufTestBase extends QueryTest {
 
   private val descriptorDir = getWorkspaceFilePath(
     "connector", "protobuf", "target", "generated-test-sources")

@@ -36,11 +36,10 @@ import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRe
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.execution.streaming.runtime.{ContinuousRecordPartitionOffset, LongOffset, StreamExecution}
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
-import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
+class TextSocketStreamSuite extends StreamTest {
 
   override def afterEach(): Unit = {
     sqlContext.streams.active.foreach(_.stop())

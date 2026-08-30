@@ -768,6 +768,76 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(isFailed)
   }
 
+  test("SPARK-57491: invokePostStatusUpdateListeners triggers PostStatusUpdateListener") {
+    // Basic invocation - listener is called when invokePostStatusUpdateListeners is invoked
+    val context1 = TaskContext.empty()
+    var invoked = false
+    context1.addPostStatusUpdateListener(new PostStatusUpdateListener {
+      override def onStatusUpdateSent(context: TaskContext): Unit = invoked = true
+    })
+    assert(!invoked)
+    context1.invokePostStatusUpdateListeners()
+    assert(invoked)
+
+    // Multiple listeners are called in reverse registration order
+    val context2 = TaskContext.empty()
+    val callOrder = ArrayBuffer.empty[String]
+    context2.addPostStatusUpdateListener(new PostStatusUpdateListener {
+      override def onStatusUpdateSent(context: TaskContext): Unit = callOrder += "first"
+    })
+    context2.addPostStatusUpdateListener(new PostStatusUpdateListener {
+      override def onStatusUpdateSent(context: TaskContext): Unit = callOrder += "second"
+    })
+    context2.invokePostStatusUpdateListeners()
+    assert(callOrder === Seq("second", "first"))
+
+    // Listener exception is wrapped in TaskCompletionListenerException
+    val context3 = TaskContext.empty()
+    context3.addPostStatusUpdateListener(new PostStatusUpdateListener {
+      override def onStatusUpdateSent(context: TaskContext): Unit =
+        throw new RuntimeException("post-status-update failure")
+    })
+    val e = intercept[TaskCompletionListenerException] {
+      context3.invokePostStatusUpdateListeners()
+    }
+    assert(e.getMessage.contains("post-status-update failure"))
+
+    // All listeners are called even if one throws (same behavior as completion listeners)
+    val context4 = TaskContext.empty()
+    val listener = mock(classOf[PostStatusUpdateListener])
+    context4.addPostStatusUpdateListener(new PostStatusUpdateListener {
+      override def onStatusUpdateSent(context: TaskContext): Unit =
+        throw new RuntimeException("bad listener")
+    })
+    context4.addPostStatusUpdateListener(listener)
+    context4.addPostStatusUpdateListener(new PostStatusUpdateListener {
+      override def onStatusUpdateSent(context: TaskContext): Unit =
+        throw new RuntimeException("another bad listener")
+    })
+
+    intercept[TaskCompletionListenerException] {
+      context4.invokePostStatusUpdateListeners()
+    }
+
+    verify(listener, times(1)).onStatusUpdateSent(any())
+
+    // invokePostStatusUpdateListeners is independent from TaskCompletionListener
+    // (completion listener should NOT be triggered by invokePostStatusUpdateListeners)
+    val context5 = TaskContext.empty()
+    var postStatusInvoked = false
+    var completionInvoked = false
+    context5.addPostStatusUpdateListener(new PostStatusUpdateListener {
+      override def onStatusUpdateSent(context: TaskContext): Unit = postStatusInvoked = true
+    })
+    context5.addTaskCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = completionInvoked = true
+    })
+
+    context5.invokePostStatusUpdateListeners()
+    assert(postStatusInvoked)
+    assert(!completionInvoked) // completion listener should NOT be triggered
+  }
+
   test("SPARK-46947: ensure the correct block manager is used to unroll memory for task") {
     import BlockManagerValidationPlugin._
     BlockManagerValidationPlugin.resetState()

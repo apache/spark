@@ -19,6 +19,7 @@ package org.apache.spark.sql.util
 
 import java.lang.{Long => JLong}
 import java.util.concurrent.{CopyOnWriteArrayList, CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -26,7 +27,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark._
 import org.apache.spark.internal.config.EXECUTOR_HEARTBEAT_INTERVAL
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerExecutorMetricsUpdate}
-import org.apache.spark.sql.{functions, Encoder, Encoders, QueryTest, Row}
+import org.apache.spark.sql.{functions, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.classic.Dataset
@@ -41,8 +42,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
 
-class DataFrameCallbackSuite extends QueryTest
-  with SharedSparkSession
+class DataFrameCallbackSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
   import functions._
@@ -399,6 +399,42 @@ class DataFrameCallbackSuite extends QueryTest
       assert(msgs.nonEmpty && !accumulatorIds.contains(accumulatorId))
     } finally {
       sparkContext.removeSparkListener(listener)
+    }
+  }
+
+  test("observed metrics reset last-attempt state between reused executions") {
+    val includeRows = new AtomicBoolean(true)
+    val includeRow = udf { _: Long => includeRows.get() }
+    val df = spark.range(0, 10, 1, 2)
+      .filter(includeRow($"id"))
+      .observe(name = "my_event", count(lit(1)).as("rows"))
+
+    val metricMaps = ArrayBuffer.empty[Map[String, Row]]
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+        metricMaps += qe.observedMetrics
+      }
+
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+        // No-op
+      }
+    }
+    spark.listenerManager.register(listener)
+    try {
+      assert(df.collect().length === 10)
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(metricMaps.size === 1)
+      assert(metricMaps.head("my_event") === Row(10L))
+      metricMaps.clear()
+
+      // Reuse the same Dataset while making the second execution produce no rows.
+      includeRows.set(false)
+      assert(df.collect().isEmpty)
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(metricMaps.size === 1)
+      assert(metricMaps.head("my_event") === Row(0L))
+    } finally {
+      spark.listenerManager.unregister(listener)
     }
   }
 

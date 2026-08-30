@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.exchange
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -86,8 +87,9 @@ case class EnsureRequirements(
                 // Find any KeyedPartitioning that satisfies via groupedSatisfies.
                 val satisfyingKeyedPartitioning =
                   groupedSatisfies.orElse(nonGroupedSatisfiesWhenGrouped).get
-                val attrs = satisfyingKeyedPartitioning.expressions.flatMap(_.collectLeaves())
-                  .map(_.asInstanceOf[Attribute])
+                // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees
+                // one attribute per partition expression.
+                val attrs = satisfyingKeyedPartitioning.expressions.flatMap(_.references)
                 val keyRowOrdering = RowOrdering.create(o.ordering, attrs)
                 val keyOrdering = keyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
                 if (satisfyingKeyedPartitioning.partitionKeys.sliding(2).forall {
@@ -247,13 +249,16 @@ case class EnsureRequirements(
           child
         case ((child, dist), idx) =>
           if (bestSpecOpt.isDefined && bestSpecOpt.get.isCompatibleWith(specs(idx))) {
-            bestSpecOpt match {
+            // If the child's partitioning is a `PartitioningCollection`, its spec is a
+            // `ShuffleSpecCollection` whose `createPartitioning` delegates to the head spec,
+            // so unwrap to the head spec to stay aligned with the re-shuffled side below.
+            unwrapSpecCollection(bestSpecOpt.get) match {
               // If `areChildrenCompatible` is false, we can still perform SPJ
               // by shuffling the other side based on join keys (see the else case below).
               // Hence we need to ensure that after this call, the outputPartitioning of the
               // partitioned side's BatchScanExec is grouped by join keys to match,
               // and we do that by pushing down the join keys
-              case Some(KeyedShuffleSpec(_, _, Some(joinKeyPositions))) =>
+              case KeyedShuffleSpec(_, _, Some(joinKeyPositions)) =>
                 withJoinKeyPositions(child, joinKeyPositions)
               case _ => child
             }
@@ -271,9 +276,9 @@ case class EnsureRequirements(
             }
 
             child match {
-              case ShuffleExchangeExec(_, c, so, ps) =>
-                ShuffleExchangeExec(newPartitioning, c, so, ps)
-              case GroupPartitionsExec(c, _, _, _, _) => ShuffleExchangeExec(newPartitioning, c)
+              case s: ShuffleExchangeExec =>
+                s.copy(outputPartitioning = newPartitioning)
+              case gpe: GroupPartitionsExec => ShuffleExchangeExec(newPartitioning, gpe.child)
               case _ => ShuffleExchangeExec(newPartitioning, child)
             }
           }
@@ -286,12 +291,48 @@ case class EnsureRequirements(
       if (SortOrder.orderingSatisfies(child.outputOrdering, requiredOrdering)) {
         child
       } else {
-        SortExec(requiredOrdering, global = false, child = child)
+        // Before adding a SortExec, check whether a GroupPartitionsExec anywhere in the child
+        // subtree can self-satisfy via sorted merge. tryEnableSortedMerge generates all alternative
+        // plans where one or more GPEs have sorted merge enabled; we take the first one whose
+        // outputOrdering satisfies the requirement.
+        tryEnableSortedMerge(child)
+          .find(newChild => SortOrder.orderingSatisfies(newChild.outputOrdering, requiredOrdering))
+          .getOrElse(SortExec(requiredOrdering, global = false, child = child))
       }
     }
 
     children
   }
+
+  private def hasKeyedPartitioning(p: Partitioning): Boolean = p match {
+    case e: Expression => e.exists(_.isInstanceOf[KeyedPartitioning])
+    case _ => false
+  }
+
+  // Generates all alternative plans in which one or more GroupPartitionsExec nodes in the subtree
+  // have sorted-merge enabled (every possible combination). Returns a LazyList so the caller can
+  // stop evaluating once a satisfying alternative is found.
+  //
+  // Pruning: traversal stops at SortExec (which reorders data, making sorted merge below it
+  // pointless) and at any node whose outputPartitioning no longer carries a KeyedPartitioning.
+  // This is a good heuristic, though not strictly equivalent to "ordering no longer propagates":
+  // partition-key expressions are constant within each coalesced partition and therefore usually
+  // prefix outputOrdering. When a node prunes the KeyedPartitioning (e.g. a Project that drops
+  // partition keys), it also prunes that ordering prefix. Since Spark has no notion of constant
+  // expressions in SortOrder, dropping a prefix invalidates the rest of the ordering too -- so in
+  // practice the two are always pruned together.
+  //
+  // At each GPE the rule emits [original, sorted-merge-enabled] alternatives (or just [original]
+  // when sorted merge cannot be enabled). multiTransformDownWithPruning then builds the Cartesian
+  // product across all GPEs in the subtree, giving every combination.
+  private[exchange] def tryEnableSortedMerge(plan: SparkPlan): LazyList[SparkPlan] =
+    plan.multiTransformDownWithPruning(
+      p => !p.isInstanceOf[SortExec] &&
+        hasKeyedPartitioning(p.asInstanceOf[SparkPlan].outputPartitioning)) {
+      case gpe: GroupPartitionsExec =>
+        // Include the original so that peer GPEs are still independently considered.
+        gpe +: gpe.tryEnableSortedMerge().toSeq
+    }
 
   private def reorder(
       leftKeys: IndexedSeq[Expression],
@@ -372,13 +413,17 @@ case class EnsureRequirements(
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, rightExpressions, rightKeys)
           .orElse(reorderJoinKeysRecursively(
             leftKeys, rightKeys, leftPartitioning, None))
-      case (Some(KeyedPartitioning(clustering, _, _)), _) =>
-        val leafExprs = clustering.flatMap(_.collectLeaves())
+      case (Some(KeyedPartitioning(clustering, _, _, _)), _) =>
+        // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
+        // attribute per partition expression.
+        val leafExprs = clustering.flatMap(_.references)
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, leftKeys)
             .orElse(reorderJoinKeysRecursively(
               leftKeys, rightKeys, None, rightPartitioning))
-      case (_, Some(KeyedPartitioning(clustering, _, _))) =>
-        val leafExprs = clustering.flatMap(_.collectLeaves())
+      case (_, Some(KeyedPartitioning(clustering, _, _, _))) =>
+        // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
+        // attribute per partition expression.
+        val leafExprs = clustering.flatMap(_.references)
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, rightKeys)
             .orElse(reorderJoinKeysRecursively(
               leftKeys, rightKeys, leftPartitioning, None))
@@ -476,7 +521,7 @@ case class EnsureRequirements(
       leftSpec.isCompatibleWith(rightSpec)
     if ((!isCompatible || conf.v2BucketingPartiallyClusteredDistributionEnabled) &&
         (conf.v2BucketingPushPartValuesEnabled ||
-          conf.v2BucketingAllowJoinKeysSubsetOfPartitionKeys)) {
+          conf.v2BucketingAllowKeysSubsetOfPartitionKeys)) {
       logInfo("Pushing common partition values for storage-partitioned join")
       isCompatible = leftSpec.areKeysCompatible(rightSpec)
 
@@ -719,6 +764,14 @@ case class EnsureRequirements(
     }
   }
 
+  // Unwraps a `ShuffleSpecCollection` (possibly nested) to the spec that its
+  // `createPartitioning` delegates to, i.e. the head spec.
+  @tailrec
+  private def unwrapSpecCollection(spec: ShuffleSpec): ShuffleSpec = spec match {
+    case ShuffleSpecCollection(specs) => unwrapSpecCollection(specs.head)
+    case other => other
+  }
+
   /**
    * Applies join key positions to a plan by wrapping or updating GroupPartitionsExec.
    */
@@ -741,18 +794,19 @@ case class EnsureRequirements(
       partitioning: Partitioning,
       distribution: ClusteredDistribution): Option[KeyedShuffleSpec] = {
     def tryCreate(partitioning: KeyedPartitioning): Option[KeyedShuffleSpec] = {
-      val attributes = partitioning.expressions.flatMap(_.collectLeaves())
-      val clustering = distribution.clustering
-
-      val satisfies = if (SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)) {
-        attributes.length == clustering.length && attributes.zip(clustering).forall {
-          case (l, r) => l.semanticEquals(r)
-        }
-      } else {
-        partitioning.satisfies(distribution)
+      // The config requires all the cluster keys to be covered by the partition keys, to avoid
+      // the skew of joining on keys that are coarser than the join keys. Key order and duplicated
+      // cluster keys don't matter.
+      def allClusterKeysCovered: Boolean = {
+        // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
+        // attribute per partition expression.
+        val attributes = partitioning.expressions.flatMap(_.references)
+        distribution.clustering.forall(c => attributes.exists(_.semanticEquals(c)))
       }
 
-      if (satisfies) {
+      if (partitioning.satisfies(distribution) &&
+          (!SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION) ||
+            allClusterKeysCovered)) {
         Some(partitioning.createShuffleSpec(distribution).asInstanceOf[KeyedShuffleSpec])
       } else {
         None
@@ -853,7 +907,7 @@ case class EnsureRequirements(
 
   def apply(plan: SparkPlan): SparkPlan = {
     val newPlan = plan.transformUp {
-      case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, shuffleOrigin, _)
+      case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, shuffleOrigin, _, _)
           if optimizeOutRepartition &&
             (shuffleOrigin == REPARTITION_BY_COL || shuffleOrigin == REPARTITION_BY_NUM) =>
         def hasSemanticEqualPartitioning(partitioning: Partitioning): Boolean = {

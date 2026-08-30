@@ -36,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
-import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String}
+import org.apache.spark.unsafe.types.{BinaryView, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 
@@ -59,6 +59,15 @@ object CatalystTypeConverters {
       case DoubleType => true
       case _ => false
     }
+  }
+
+  private def throwInvalidExternalValue(value: Any, dataType: String): Nothing = {
+    throw new SparkIllegalArgumentException(
+      errorClass = "INVALID_EXTERNAL_VALUE",
+      messageParameters = scala.collection.immutable.Map(
+        "other" -> value.toString,
+        "otherClass" -> value.getClass.getCanonicalName,
+        "dataType" -> dataType))
   }
 
   private def getConverterForType(dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
@@ -84,7 +93,6 @@ object CatalystTypeConverters {
         new GeometryConverter(g)
       case DateType if SQLConf.get.datetimeJava8ApiEnabled => LocalDateConverter
       case DateType => DateConverter
-      case _: TimeType => TimeConverter
       case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
       case TimestampType => TimestampConverter
       case TimestampNTZType => TimestampNTZConverter
@@ -297,12 +305,7 @@ object CatalystTypeConverters {
           idx += 1
         }
         new GenericInternalRow(ar)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> structType.catalogString))
+      case other => throwInvalidExternalValue(other, structType.catalogString)
     }
 
     override def toScala(row: InternalRow): Row = {
@@ -356,12 +359,7 @@ object CatalystTypeConverters {
       case utf8: UTF8String => utf8
       case chr: Char => UTF8String.fromString(chr.toString)
       case ac: Array[Char] => UTF8String.fromString(String.valueOf(ac))
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> StringType.sql))
+      case other => throwInvalidExternalValue(other, StringType.sql)
     }
     override def toScala(catalystValue: UTF8String): String =
       if (catalystValue == null) null else catalystValue.toString
@@ -378,18 +376,13 @@ object CatalystTypeConverters {
   }
 
   private class GeometryConverter(dataType: GeometryType)
-      extends CatalystTypeConverter[Any, org.apache.spark.sql.types.Geometry, GeometryVal] {
-    override def toCatalystImpl(scalaValue: Any): GeometryVal = scalaValue match {
+      extends CatalystTypeConverter[Any, org.apache.spark.sql.types.Geometry, BinaryView] {
+    override def toCatalystImpl(scalaValue: Any): BinaryView = scalaValue match {
       case g: org.apache.spark.sql.types.Geometry if SQLConf.get.geospatialEnabled =>
         STUtils.serializeGeomFromWKB(g, dataType)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> StringType.sql))
+      case other => throwInvalidExternalValue(other, StringType.sql)
     }
-    override def toScala(catalystValue: GeometryVal): org.apache.spark.sql.types.Geometry = {
+    override def toScala(catalystValue: BinaryView): org.apache.spark.sql.types.Geometry = {
       assertGeospatialEnabled()
       if (catalystValue == null) null
       else STUtils.deserializeGeom(catalystValue, dataType)
@@ -398,23 +391,18 @@ object CatalystTypeConverters {
     override def toScalaImpl(row: InternalRow, column: Int):
         org.apache.spark.sql.types.Geometry = {
       assertGeospatialEnabled()
-      STUtils.deserializeGeom(row.getGeometry(0), dataType)
+      STUtils.deserializeGeom(row.getBinaryView(0), dataType)
     }
   }
 
   private class GeographyConverter(dataType: GeographyType)
-      extends CatalystTypeConverter[Any, org.apache.spark.sql.types.Geography, GeographyVal] {
-    override def toCatalystImpl(scalaValue: Any): GeographyVal = scalaValue match {
+      extends CatalystTypeConverter[Any, org.apache.spark.sql.types.Geography, BinaryView] {
+    override def toCatalystImpl(scalaValue: Any): BinaryView = scalaValue match {
       case g: org.apache.spark.sql.types.Geography if SQLConf.get.geospatialEnabled =>
         STUtils.serializeGeogFromWKB(g, dataType)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> StringType.sql))
+      case other => throwInvalidExternalValue(other, StringType.sql)
     }
-    override def toScala(catalystValue: GeographyVal): org.apache.spark.sql.types.Geography = {
+    override def toScala(catalystValue: BinaryView): org.apache.spark.sql.types.Geography = {
       assertGeospatialEnabled()
       if (catalystValue == null) null
       else STUtils.deserializeGeog(catalystValue, dataType)
@@ -423,7 +411,7 @@ object CatalystTypeConverters {
     override def toScalaImpl(row: InternalRow, column: Int):
         org.apache.spark.sql.types.Geography = {
       assertGeospatialEnabled()
-      STUtils.deserializeGeog(row.getGeography(0), dataType)
+      STUtils.deserializeGeog(row.getBinaryView(0), dataType)
     }
   }
 
@@ -431,12 +419,7 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): Int = scalaValue match {
       case d: Date => DateTimeUtils.fromJavaDate(d)
       case l: LocalDate => DateTimeUtils.localDateToDays(l)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> DateType.sql))
+      case other => throwInvalidExternalValue(other, DateType.sql)
     }
     override def toScala(catalystValue: Any): Date =
       if (catalystValue == null) null else DateTimeUtils.toJavaDate(catalystValue.asInstanceOf[Int])
@@ -471,12 +454,7 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): Long = scalaValue match {
       case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
       case i: Instant => DateTimeUtils.instantToMicros(i)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> TimestampType.sql))
+      case other => throwInvalidExternalValue(other, TimestampType.sql)
     }
     override def toScala(catalystValue: Any): Timestamp =
       if (catalystValue == null) null
@@ -499,12 +477,7 @@ object CatalystTypeConverters {
     extends CatalystTypeConverter[Any, LocalDateTime, Any] {
     override def toCatalystImpl(scalaValue: Any): Any = scalaValue match {
       case l: LocalDateTime => DateTimeUtils.localDateTimeToMicros(l)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> TimestampNTZType.sql))
+      case other => throwInvalidExternalValue(other, TimestampNTZType.sql)
     }
 
     override def toScala(catalystValue: Any): LocalDateTime =
@@ -526,12 +499,7 @@ object CatalystTypeConverters {
         case d: JavaBigDecimal => Decimal(d)
         case d: JavaBigInteger => Decimal(d)
         case d: Decimal => d
-        case other => throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3219",
-          messageParameters = scala.collection.immutable.Map(
-            "other" -> other.toString,
-            "otherClass" -> other.getClass.getCanonicalName,
-            "dataType" -> dataType.catalogString))
+        case other => throwInvalidExternalValue(other, dataType.catalogString)
       }
       decimal.toPrecision(dataType.precision, dataType.scale, Decimal.ROUND_HALF_UP, nullOnOverflow)
     }
@@ -655,6 +623,9 @@ object CatalystTypeConverters {
     case ld: LocalDate => LocalDateConverter.toCatalyst(ld)
     case t: LocalTime => TimeConverter.toCatalyst(t)
     case t: Timestamp => TimestampConverter.toCatalyst(t)
+    // SPARK-57033: schema-less convertToCatalyst keeps bare `Instant` / `LocalDateTime` on the
+    // microsecond converters. The nanosecond path is schema-driven only - users opt in via an
+    // explicit `TimestampLTZNanosType` / `TimestampNTZNanosType` column in the schema.
     case i: Instant => InstantConverter.toCatalyst(i)
     case l: LocalDateTime => TimestampNTZConverter.toCatalyst(l)
     case d: BigDecimal =>
@@ -666,7 +637,7 @@ object CatalystTypeConverters {
     case r: Row => InternalRow(r.toSeq.map(convertToCatalyst): _*)
     case arr: Array[Byte] => arr
     case g: org.apache.spark.sql.types.Geometry => STUtils.stGeomFromWKB(g.getBytes, g.getSrid)
-    case g: org.apache.spark.sql.types.Geography => STUtils.stGeogFromWKB(g.getBytes)
+    case g: org.apache.spark.sql.types.Geography => STUtils.stGeogFromWKB(g.getBytes, g.getSrid)
     case arr: Array[Char] => StringConverter.toCatalyst(arr)
     case arr: Array[_] => new GenericArrayData(arr.map(convertToCatalyst))
     case map: Map[_, _] =>

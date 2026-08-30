@@ -27,15 +27,14 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{DataType, DateType, NumericType, StructType, TimestampType}
+import org.apache.spark.sql.types.{DataType, DateType, NumericType, StructType, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -189,7 +188,7 @@ private[sql] object JDBCRelation extends Logging {
         columnName, schema.simpleString(maxNumToStringFields))
     }
     column.dataType match {
-      case _: NumericType | DateType | TimestampType =>
+      case _: NumericType | DateType | TimestampType | TimestampNTZType =>
       case _ =>
         throw QueryCompilationErrors.invalidPartitionColumnTypeError(column)
     }
@@ -210,6 +209,7 @@ private[sql] object JDBCRelation extends Logging {
       case _: NumericType => value.toLong
       case DateType => parse(stringToDate).toLong
       case TimestampType => parse(stringToTimestamp(_, getZoneId(timeZoneId)))
+      case TimestampNTZType => parse(stringToTimestampWithoutTimeZone(_, allowTimeZone = false))
     }
   }
 
@@ -225,12 +225,17 @@ private[sql] object JDBCRelation extends Logging {
           val timestampFormatter = TimestampFormatter.getFractionFormatter(
             DateTimeUtils.getZoneId(timeZoneId))
           timestampFormatter.format(value)
+        case TimestampNTZType =>
+          // NTZ micros are zoneless wall-clock values; format in UTC so no zone shift is applied.
+          val timestampFormatter = TimestampFormatter.getFractionFormatter(
+            DateTimeUtils.getZoneId("UTC"))
+          timestampFormatter.format(value)
       }
       s"'$dateTimeStr'"
     }
     columnType match {
       case _: NumericType => value.toString
-      case DateType | TimestampType => dateTimeToString()
+      case DateType | TimestampType | TimestampNTZType => dateTimeToString()
     }
   }
 
@@ -314,7 +319,7 @@ private[sql] case class JDBCRelation(
       finalSchema: StructType,
       predicates: Array[Predicate],
       groupByColumns: Option[Array[String]],
-      tableSample: Option[TableSampleInfo],
+      tableSampleClause: Option[String],
       limit: Int,
       sortOrders: Array[String],
       offset: Int): RDD[Row] = {
@@ -328,7 +333,7 @@ private[sql] case class JDBCRelation(
       jdbcOptions,
       Some(finalSchema),
       groupByColumns,
-      tableSample,
+      tableSampleClause,
       limit,
       sortOrders,
       offset,

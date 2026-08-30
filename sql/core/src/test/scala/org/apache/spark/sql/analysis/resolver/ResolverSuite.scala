@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.analysis.resolver
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   LogicalPlanResolver,
@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Proje
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 
-class ResolverSuite extends QueryTest with SharedSparkSession {
+class ResolverSuite extends SharedSparkSession {
   private val col1Integer = AttributeReference("col1", IntegerType)()
 
   test("Node matched the extension") {

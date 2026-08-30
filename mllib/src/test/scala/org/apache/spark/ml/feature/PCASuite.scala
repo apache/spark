@@ -38,6 +38,20 @@ class PCASuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(model)
   }
 
+  test("PCAModel estimated size") {
+    val model = new PCA()
+      .setInputCol("features")
+      .setOutputCol("pca")
+      .setK(1)
+      .fit(Seq(
+        Tuple1(Vectors.dense(1.0, 0.0)),
+        Tuple1(Vectors.dense(0.0, 1.0))).toDF("features"))
+
+    val maxSize = 2 * 1024
+    assert(model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
+  }
+
   test("pca") {
     val data = Array(
       Vectors.sparse(5, Seq((1, 1.0), (3, 7.0))),

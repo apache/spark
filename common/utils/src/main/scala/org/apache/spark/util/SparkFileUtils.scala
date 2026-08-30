@@ -21,6 +21,8 @@ import java.net.{URI, URISyntaxException, URL}
 import java.nio.file.{Files, Path, StandardCopyOption}
 import java.nio.file.attribute.FileTime
 
+import scala.collection.mutable
+
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.network.util.JavaUtils
 
@@ -59,16 +61,29 @@ private[spark] trait SparkFileUtils extends Logging {
 
   /**
    * Lists files recursively.
+   *
+   * A directory that cannot be listed (`File.listFiles` returns null, e.g. an IO error or the
+   * directory being removed during the walk) is skipped with a warning rather than throwing, so
+   * the result may be partial when part of the tree is unreadable.
    */
   def recursiveList(f: File): Array[File] = {
     require(f.isDirectory)
-    val result = f.listFiles.toBuffer
-    val dirList = result.filter(_.isDirectory)
-    while (dirList.nonEmpty) {
-      val curDir = dirList.remove(0)
-      val files = curDir.listFiles()
-      result ++= files
-      dirList ++= files.filter(_.isDirectory)
+    val result = mutable.ArrayBuffer[File]()
+    // Use a queue with O(1) dequeue rather than removing from the head of a buffer (O(n)), so the
+    // walk stays linear in the number of entries.
+    val dirs = mutable.Queue[File](f)
+    while (dirs.nonEmpty) {
+      val dir = dirs.dequeue()
+      // `File.listFiles` returns null when the directory cannot be read (an IO error, or it was
+      // removed during the walk); skip it instead of throwing an NPE, but log it so a partial
+      // result is traceable.
+      val entries = dir.listFiles()
+      if (entries != null) {
+        result ++= entries
+        dirs ++= entries.filter(_.isDirectory)
+      } else {
+        logWarning(log"Failed to list directory ${MDC(LogKeys.PATH, dir)}; skipping it.")
+      }
     }
     result.toArray
   }

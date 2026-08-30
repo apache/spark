@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.test.SharedSparkSession
 
-class DataFrameImplicitsSuite extends QueryTest with SharedSparkSession {
+class DataFrameImplicitsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("RDD of tuples") {

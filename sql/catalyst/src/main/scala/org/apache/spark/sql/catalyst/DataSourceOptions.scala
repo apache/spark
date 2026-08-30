@@ -84,6 +84,10 @@ object DataSourceOptions {
   // the corrupt record will be dropped in DROPMALFORMED mode.
   val COLUMN_NAME_OF_CORRUPT_RECORD = "columnNameOfCorruptRecord"
 
+  // The JSON data source option for exploding an embedded top-level array into rows. See
+  // `JSONOptions.explodeEmbeddedArray` for details.
+  val EXPLODE_EMBEDDED_ARRAY = "explodeEmbeddedArray"
+
   // When `singleVariantColumn` is enabled and there is a user-specified schema, the schema must
   // either be a variant field, or a variant field plus a corrupt column field.
   def validateSingleVariantColumn(
@@ -107,6 +111,35 @@ object DataSourceOptions {
         }
         if (!valid) {
           throw QueryCompilationErrors.invalidSingleVariantColumn(schema)
+        }
+      case _ =>
+    }
+  }
+
+  // When `explodeEmbeddedArray` is enabled, a user-specified schema has the same requirement as
+  // `singleVariantColumn`, except that the variant field may have any name (the option value
+  // names the embedded array field, not the column): either a single variant field, or that plus
+  // a corrupt record field. Keep the logic in sync with `validateSingleVariantColumn`.
+  def validateExplodeEmbeddedArray(
+      options: CaseInsensitiveMap[String],
+      userSpecifiedSchema: Option[StructType]): Unit = {
+    (options.get(EXPLODE_EMBEDDED_ARRAY), userSpecifiedSchema) match {
+      case (Some(_), Some(schema)) =>
+        val corruptRecordColumnName = options.getOrElse(
+          COLUMN_NAME_OF_CORRUPT_RECORD, SQLConf.get.columnNameOfCorruptRecord)
+        var valid = schema.fields.count { f =>
+          f.dataType.isInstanceOf[VariantType] && f.name != corruptRecordColumnName && f.nullable
+        } == 1
+        schema.length match {
+          case 1 =>
+          case 2 =>
+            valid = valid && schema.fields.exists { f =>
+              f.dataType.isInstanceOf[StringType] && f.name == corruptRecordColumnName && f.nullable
+            }
+          case _ => valid = false
+        }
+        if (!valid) {
+          throw QueryCompilationErrors.invalidExplodeEmbeddedArraySchema(schema)
         }
       case _ =>
     }

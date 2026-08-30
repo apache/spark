@@ -20,7 +20,7 @@ package org.apache.spark.sql.collation
 import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -31,9 +31,9 @@ import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.{EqualTo, Filter, IsNotNull}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.ExtendedSQLTest
 
-abstract class CollatedFilterPushDownToParquetSuite extends QueryTest
-  with SharedSparkSession
+abstract class CollatedFilterPushDownToParquetSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
 
   val dataSource = "parquet"
@@ -249,6 +249,7 @@ class CollatedFilterPushDownToParquetV1Suite extends CollatedFilterPushDownToPar
   }
 }
 
+@ExtendedSQLTest
 class CollatedFilterPushDownToParquetV2Suite extends CollatedFilterPushDownToParquetSuite {
   override protected def sparkConf: SparkConf =
     super

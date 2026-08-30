@@ -49,7 +49,6 @@ import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNodeTag, TreePattern}
-import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.classic.ClassicConversions._
@@ -583,7 +582,11 @@ class Dataset[T] private[sql](
       }
 
       withTypedPlan[T] {
-        LogicalRDD.fromDataset(rdd = internalRdd, originDataset = this, isStreaming = isStreaming)
+        LogicalRDD.fromDataset(
+          rdd = internalRdd,
+          originDataset = this,
+          isStreaming = isStreaming,
+          fromCheckpoint = true)
       }
     }
   }
@@ -708,6 +711,11 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
+  def zip(other: sql.Dataset[_]): DataFrame = withPlan {
+    Zip(logicalPlan, other.logicalPlan)
+  }
+
+  /** @inheritdoc */
   def joinWith[U](other: sql.Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
     // Creates a Join node and resolve it first, to get join condition resolved, self-join resolved,
     // etc.
@@ -762,6 +770,66 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   def lateralJoin(right: sql.Dataset[_], joinExprs: Column, joinType: String): DataFrame = {
     lateralJoin(right, Some(joinExprs), LateralJoinType(joinType))
+  }
+
+  private[sql] def nearestByJoin(
+      right: sql.Dataset[_],
+      rankingExpression: Column,
+      numResults: Int,
+      joinType: JoinType,
+      approx: Boolean,
+      direction: NearestByDirection): DataFrame = {
+    if (numResults < 1 || numResults > NearestByJoin.MaxNumResults) {
+      throw new AnalysisException(
+        errorClass = "NEAREST_BY_JOIN.NUM_RESULTS_OUT_OF_RANGE",
+        messageParameters = Map(
+          "numResults" -> numResults.toString,
+          "min" -> "1",
+          "max" -> NearestByJoin.MaxNumResults.toString))
+    }
+    withPlan {
+      NearestByJoin(
+        logicalPlan,
+        right.logicalPlan,
+        joinType,
+        approx,
+        numResults,
+        rankingExpression.expr,
+        direction)
+    }
+  }
+
+  /** @inheritdoc */
+  def nearestByJoin(
+      right: sql.Dataset[_],
+      rankingExpression: Column,
+      numResults: Int,
+      mode: String,
+      direction: String): DataFrame = {
+    nearestByJoin(
+      right,
+      rankingExpression,
+      numResults,
+      Inner,
+      NearestByJoinMode(mode),
+      NearestByDirection(direction))
+  }
+
+  /** @inheritdoc */
+  def nearestByJoin(
+      right: sql.Dataset[_],
+      rankingExpression: Column,
+      numResults: Int,
+      mode: String,
+      direction: String,
+      joinType: String): DataFrame = {
+    nearestByJoin(
+      right,
+      rankingExpression,
+      numResults,
+      NearestByJoinType(joinType),
+      NearestByJoinMode(mode),
+      NearestByDirection(direction))
   }
 
   // TODO(SPARK-22947): Fix the DataFrame API.
@@ -1124,8 +1192,9 @@ class Dataset[T] private[sql](
       case Distinct(u: Union) =>
         Distinct(flattenUnion(u, isUnionDistinct = true))
       // Only handle distinct-like 'Deduplicate', where the keys == output
-      case Deduplicate(keys: Seq[Attribute], u: Union) if AttributeSet(keys) == u.outputSet =>
-        Deduplicate(keys, flattenUnion(u, isUnionDistinct = true))
+      case d @ Deduplicate(keys: Seq[Attribute], u: Union, _)
+          if AttributeSet(keys) == u.outputSet =>
+        d.copy(child = flattenUnion(u, isUnionDistinct = true))
       case u: Union =>
         flattenUnion(u, isUnionDistinct = false)
     }
@@ -1141,7 +1210,7 @@ class Dataset[T] private[sql](
         changed = true
         children
       // Only handle distinct-like 'Deduplicate', where the keys == output
-      case Deduplicate(keys: Seq[Attribute], child @ Union(children, byName, allowMissingCol))
+      case Deduplicate(keys: Seq[Attribute], child @ Union(children, byName, allowMissingCol), _)
           if AttributeSet(keys) == child.outputSet && isUnionDistinct && byName == u.byName &&
             allowMissingCol == u.allowMissingCol =>
         changed = true
@@ -1349,41 +1418,41 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
-  def dropDuplicates(): Dataset[T] = dropDuplicates(this.columns)
-
-  /** @inheritdoc */
-  def dropDuplicates(colNames: Seq[String]): Dataset[T] = withSameTypedPlan {
-    val groupCols = groupColsFromDropDuplicates(colNames)
-    Deduplicate(groupCols, logicalPlan)
+  def dropDuplicates(): Dataset[T] = withSameTypedPlan {
+    UnresolvedDeduplicate(
+      keySpec = DeduplicateAllColumnsAsKey,
+      withinWatermark = false,
+      viaSparkClassic = true,
+      child = logicalPlan)
   }
 
   /** @inheritdoc */
-  def dropDuplicatesWithinWatermark(): Dataset[T] = {
-    dropDuplicatesWithinWatermark(this.columns)
+  def dropDuplicates(colNames: Seq[String]): Dataset[T] = withSameTypedPlan {
+    UnresolvedDeduplicate(
+      keySpec = DeduplicateKeyColumns(colNames),
+      withinWatermark = false,
+      viaSparkClassic = true,
+      child = logicalPlan)
+  }
+
+  /** @inheritdoc */
+  def dropDuplicatesWithinWatermark(): Dataset[T] = withSameTypedPlan {
+    // UnsupportedOperationChecker will fail the query if this is called with batch Dataset.
+    UnresolvedDeduplicate(
+      keySpec = DeduplicateAllColumnsAsKey,
+      withinWatermark = true,
+      viaSparkClassic = true,
+      child = logicalPlan)
   }
 
   /** @inheritdoc */
   def dropDuplicatesWithinWatermark(colNames: Seq[String]): Dataset[T] = withSameTypedPlan {
-    val groupCols = groupColsFromDropDuplicates(colNames)
     // UnsupportedOperationChecker will fail the query if this is called with batch Dataset.
-    DeduplicateWithinWatermark(groupCols, logicalPlan)
-  }
-
-  private def groupColsFromDropDuplicates(colNames: Seq[String]): Seq[Attribute] = {
-    val resolver = sparkSession.sessionState.analyzer.resolver
-    val allColumns = queryExecution.analyzed.output
-    // SPARK-31990: We must keep `toSet.toSeq` here because of the backward compatibility issue
-    // (the Streaming's state store depends on the `groupCols` order).
-    colNames.toSet.toSeq.flatMap { (colName: String) =>
-      // It is possibly there are more than one columns with the same name,
-      // so we call filter instead of find.
-      val cols = allColumns.filter(col => resolver(col.name, colName))
-      if (cols.isEmpty) {
-        throw QueryCompilationErrors.cannotResolveColumnNameAmongAttributesError(
-          colName, schema.fieldNames.mkString(", "))
-      }
-      cols
-    }
+    UnresolvedDeduplicate(
+      keySpec = DeduplicateKeyColumns(colNames),
+      withinWatermark = true,
+      viaSparkClassic = true,
+      child = logicalPlan)
   }
 
   /** @inheritdoc */
@@ -1460,15 +1529,10 @@ class Dataset[T] private[sql](
       funcCol: Column,
       isBarrier: Boolean = false,
       profile: ResourceProfile = null): DataFrame = {
-    val func = funcCol.expr
     Dataset.ofRows(
       sparkSession,
-      MapInPandas(
-        func,
-        toAttributes(func.dataType.asInstanceOf[StructType]),
-        logicalPlan,
-        isBarrier,
-        Option(profile)))
+      sparkSession.sessionState.externalUDFPlanner.planPythonMapInPandas(
+        funcCol.expr, logicalPlan, isBarrier, Option(profile)))
   }
 
   /**
@@ -1480,15 +1544,10 @@ class Dataset[T] private[sql](
       funcCol: Column,
       isBarrier: Boolean = false,
       profile: ResourceProfile = null): DataFrame = {
-    val func = funcCol.expr
     Dataset.ofRows(
       sparkSession,
-      MapInArrow(
-        func,
-        toAttributes(func.dataType.asInstanceOf[StructType]),
-        logicalPlan,
-        isBarrier,
-        Option(profile)))
+      sparkSession.sessionState.externalUDFPlanner.planPythonMapInArrow(
+        funcCol.expr, logicalPlan, isBarrier, Option(profile)))
   }
 
   /** @inheritdoc */
@@ -2259,9 +2318,11 @@ class Dataset[T] private[sql](
    */
   private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
     SQLExecution.withNewExecutionId(qe, Some(name)) {
-      QueryExecution.withInternalError(s"""The "$name" action failed.""") {
-        qe.executedPlan.resetMetrics()
-        action(qe.executedPlan)
+      qe.withQueryExecutionId(sparkSession) {
+        QueryExecution.withInternalError(s"""The "$name" action failed.""") {
+          qe.executedPlan.resetMetrics()
+          action(qe.executedPlan)
+        }
       }
     }
   }

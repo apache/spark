@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.adaptive
 
 import java.util
-import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
+import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, LinkedBlockingQueue}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
@@ -32,6 +33,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.MessageWithContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, UnspecifiedDistribution}
@@ -76,6 +78,17 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val lock = new Object()
 
+  // Access is serialized by the execution context's stage lifecycle lock.
+  @transient private val uncancelledObsoleteStageIds = mutable.HashSet.empty[Int]
+
+  // Remember every local alias so cancellation and failure handling cover every stage ID.
+  @transient private val stageIdsByResult =
+    mutable.HashMap.empty[AtomicReference[Option[Any]], mutable.LinkedHashSet[Int]]
+
+  // A failed native cancellation can leave its exchange marked cancelled while its job still runs.
+  @transient private val failedStageCancellationResults =
+    mutable.HashSet.empty[AtomicReference[Option[Any]]]
+
   @transient private val logOnLevel: ( => MessageWithContext) => Unit =
     logBasedOnLevel(conf.adaptiveExecutionLogLevel)
 
@@ -101,7 +114,9 @@ case class AdaptiveSparkPlanExec(
     conf.getConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS) match {
       case Some(className) =>
         CostEvaluator.instantiate(className, context.session.sparkContext.getConf)
-      case _ => SimpleCostEvaluator(conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN))
+      case _ => SimpleCostEvaluator(
+        conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN),
+        conf.costEvaluatorCountLocalSortEnabled)
     }
 
   // A list of physical plan rules to be applied before creation of query stages. The physical
@@ -124,11 +139,26 @@ case class AdaptiveSparkPlanExec(
       InsertSortForLimitAndOffset,
       AdjustShuffleExchangePosition,
       ValidateSparkPlan,
+      // Must run before `ReplaceHashWithSortAgg`: converting a sort merge join to a shuffled hash
+      // join drops its child ordering, which `ReplaceHashWithSortAgg` would otherwise rely on to
+      // turn a hash aggregate into a sort aggregate.
+      ConvertSortMergeJoinToShuffledHashJoin(ensureRequirements),
+      // `PushDownLocalSort` pushes a wider local sort down onto a narrower one below it, so a
+      // single sort serves several operators' ordering requirements. It must run after
+      // `EnsureRequirements`, which is what inserts the local sorts it pushes down.
+      PushDownLocalSort,
+      // `CombineAdjacentAggregation` must run before `ReplaceHashWithSortAgg`: it combines a pair
+      // of adjacent partial and final aggregate into a single `Complete` mode aggregate, which
+      // `ReplaceHashWithSortAgg` can then replace with a sort aggregate when the ordering allows.
+      CombineAdjacentAggregation,
       ReplaceHashWithSortAgg,
-      RemoveRedundantSorts,
       RemoveRedundantWindowGroupLimits,
       DisableUnnecessaryBucketedScan,
-      OptimizeSkewedJoin(ensureRequirements)
+      OptimizeSkewedJoin(ensureRequirements),
+      // `RemoveRedundantSorts` runs after `OptimizeSkewedJoin` so that it can also clean up the
+      // local sort left dangling right below the extra shuffle that skew join optimization may
+      // insert between two joins.
+      RemoveRedundantSorts
     ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules
   }
 
@@ -196,15 +226,17 @@ case class AdaptiveSparkPlanExec(
     applyPhysicalRules(
       plan,
       context.session.sessionState.adaptiveRulesHolder.queryPostPlannerStrategyRules,
-      Some((planChangeLogger, "AQE Query Post Planner Strategy Rules"))
+      "AQE Query Post Planner Strategy Rules"
     )
   }
 
   @transient val initialPlan = context.session.withActive {
-    applyPhysicalRules(
-      applyQueryPostPlannerStrategyRules(inputPlan),
-      queryStagePreparationRules,
-      Some((planChangeLogger, "AQE Preparations")))
+    QueryPlanningTracker.withTracker(context.qe.tracker) {
+      applyPhysicalRules(
+        applyQueryPostPlannerStrategyRules(inputPlan),
+        queryStagePreparationRules,
+        "AQE Preparations")
+    }
   }
 
   @volatile private var currentPhysicalPlan = initialPlan
@@ -271,107 +303,130 @@ case class AdaptiveSparkPlanExec(
     // `plan.queryExecution.rdd`, we need to set active session here as new plan nodes can be
     // created in the middle of the execution.
     context.session.withActive {
-      val executionId = getExecutionId
-      // Use inputPlan logicalLink here in case some top level physical nodes may be removed
-      // during `initialPlan`
-      var currentLogicalPlan = inputPlan.logicalLink.get
-      var result = createQueryStages(fun, currentPhysicalPlan, firstRun = true)
-      val events = new LinkedBlockingQueue[StageMaterializationEvent]()
-      val errors = new mutable.ArrayBuffer[Throwable]()
-      var stagesToReplace = Seq.empty[QueryStageExec]
-      while (!result.allChildStagesMaterialized) {
-        currentPhysicalPlan = result.newPlan
-        if (result.newStages.nonEmpty) {
-          stagesToReplace = result.newStages ++ stagesToReplace
-          executionId.foreach(onUpdatePlan(_, result.newStages.map(_.plan)))
+      // Record this node's planning rules into the query's shared tracker. Subquery plans are
+      // planned on separate threads, so `recordRuleInvocation` is synchronized.
+      QueryPlanningTracker.withTracker(context.qe.tracker) {
+        val executionId = getExecutionId
+        // Use inputPlan logicalLink here in case some top level physical nodes may be removed
+        // during `initialPlan`
+        var currentLogicalPlan = inputPlan.logicalLink.get
+        var result = createQueryStages(fun, currentPhysicalPlan, firstRun = true)
+        val events = new LinkedBlockingQueue[StageMaterializationEvent]()
+        val errors = new mutable.ArrayBuffer[Throwable]()
+        val obsoleteCancelledStageIds = new mutable.HashSet[Int]
+        var stagesToReplace = Seq.empty[QueryStageExec]
+        while (!result.allChildStagesMaterialized) {
+          currentPhysicalPlan = result.newPlan
+          if (result.newStages.nonEmpty) {
+            stagesToReplace = result.newStages ++ stagesToReplace
+            executionId.foreach(onUpdatePlan(_, result.newStages.map(_.plan)))
 
-          // SPARK-33933: we should submit tasks of broadcast stages first, to avoid waiting
-          // for tasks to be scheduled and leading to broadcast timeout.
-          // This partial fix only guarantees the start of materialization for BroadcastQueryStage
-          // is prior to others, but because the submission of collect job for broadcasting is
-          // running in another thread, the issue is not completely resolved.
-          val reorderedNewStages = result.newStages
-            .sortWith {
-              case (_: BroadcastQueryStageExec, _: BroadcastQueryStageExec) => false
-              case (_: BroadcastQueryStageExec, _) => true
-              case _ => false
-            }
+            // SPARK-33933: we should submit tasks of broadcast stages first, to avoid waiting
+            // for tasks to be scheduled and leading to broadcast timeout.
+            // This partial fix only guarantees the start of materialization for BroadcastQueryStage
+            // is prior to others, but because the submission of collect job for broadcasting is
+            // running in another thread, the issue is not completely resolved.
+            val reorderedNewStages = result.newStages
+              .sortWith {
+                case (_: BroadcastQueryStageExec, _: BroadcastQueryStageExec) => false
+                case (_: BroadcastQueryStageExec, _) => true
+                case _ => false
+              }
 
-          // Start materialization of all new stages and fail fast if any stages failed eagerly
-          reorderedNewStages.foreach { stage =>
-            try {
-              stage.materialize().onComplete { res =>
-                if (res.isSuccess) {
-                  // record shuffle IDs for successful stages for cleanup
-                  stage.plan.collect {
-                    case s: ShuffleExchangeLike =>
-                      context.shuffleIds.put(s.shuffleId, true)
+            // Start materialization of all new stages and fail fast if any stages failed eagerly
+            reorderedNewStages.foreach { stage =>
+              try {
+                stage.materialize().onComplete { res =>
+                  if (res.isSuccess) {
+                    // record shuffle IDs for successful stages for cleanup
+                    stage.plan.collect {
+                      case s: ShuffleExchangeLike =>
+                        context.shuffleIds.put(s.shuffleId, true)
+                    }
+                    events.offer(StageSuccess(stage, res.get))
+                  } else {
+                    events.offer(StageFailure(stage, res.failed.get))
                   }
-                  events.offer(StageSuccess(stage, res.get))
-                } else {
-                  events.offer(StageFailure(stage, res.failed.get))
-                }
-                // explicitly clean up the resources in this stage
-                stage.cleanupResources()
-              }(AdaptiveSparkPlanExec.executionContext)
-            } catch {
-              case e: Throwable =>
-                stage.error.set(Some(e))
-                cleanUpAndThrowException(Seq(e), Some(stage.id))
+                  // explicitly clean up the resources in this stage
+                  stage.cleanupResources()
+                }(AdaptiveSparkPlanExec.executionContext)
+              } catch {
+                case e: Throwable =>
+                  stage.error.set(Some(e))
+                  cleanUpAndThrowException(Seq(e), Some(stage.id))
+              }
             }
           }
-        }
 
-        // Wait on the next completed stage, which indicates new stats are available and probably
-        // new stages can be created. There might be other stages that finish at around the same
-        // time, so we process those stages too in order to reduce re-planning.
-        val nextMsg = events.take()
-        val rem = new util.ArrayList[StageMaterializationEvent]()
-        events.drainTo(rem)
-        (Seq(nextMsg) ++ rem.asScala).foreach {
-          case StageSuccess(stage, res) =>
-            stage.resultOption.set(Some(res))
-          case StageFailure(stage, ex) =>
-            stage.error.set(Some(ex))
-            errors.append(ex)
-        }
+          // Wait on the next completed stage, which indicates new stats are available and probably
+          // new stages can be created. There might be other stages that finish at around the same
+          // time, so we process those stages too in order to reduce re-planning.
+          val nextMsg = events.take()
+          val rem = new util.ArrayList[StageMaterializationEvent]()
+          events.drainTo(rem)
+          (Seq(nextMsg) ++ rem.asScala).foreach {
+            case StageSuccess(stage, res) =>
+              stage.resultOption.set(Some(res))
+            case StageFailure(stage, ex) =>
+              stage.error.set(Some(ex))
+              if (!shouldIgnoreObsoleteStageFailure(stage, ex, obsoleteCancelledStageIds)) {
+                errors.append(ex)
+              }
+          }
 
-        // In case of errors, we cancel all running stages and throw exception.
-        if (errors.nonEmpty) {
-          cleanUpAndThrowException(errors.toSeq, None)
-        }
-        if (!currentPhysicalPlan.isInstanceOf[ResultQueryStageExec]) {
-          // Try re-optimizing and re-planning. Adopt the new plan if its cost is equal to or less
-          // than that of the current plan; otherwise keep the current physical plan together with
-          // the current logical plan since the physical plan's logical links point to the logical
-          // plan it has originated from.
-          // Meanwhile, we keep a list of the query stages that have been created since last plan
-          // update, which stands for the "semantic gap" between the current logical and physical
-          // plans. And each time before re-planning, we replace the corresponding nodes in the
-          // current logical plan with logical query stages to make it semantically in sync with
-          // the current physical plan. Once a new plan is adopted and both logical and physical
-          // plans are updated, we can clear the query stage list because at this point the two
-          // plans are semantically and physically in sync again.
-          val logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
-          val afterReOptimize = reOptimize(logicalPlan)
-          if (afterReOptimize.isDefined) {
-            val (newPhysicalPlan, newLogicalPlan) = afterReOptimize.get
-            val origCost = costEvaluator.evaluateCost(currentPhysicalPlan)
-            val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
-            if (newCost < origCost ||
-              (newCost == origCost && currentPhysicalPlan != newPhysicalPlan)) {
-              lazy val plans = sideBySide(
-                currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n")
-              logOnLevel(log"Plan changed:\n${MDC(QUERY_PLAN, plans)}")
-              cleanUpTempTags(newPhysicalPlan)
-              currentPhysicalPlan = newPhysicalPlan
-              currentLogicalPlan = newLogicalPlan
-              stagesToReplace = Seq.empty[QueryStageExec]
+          // In case of errors, we cancel all running stages and throw exception.
+          if (errors.nonEmpty) {
+            cleanUpAndThrowException(errors.toSeq, None)
+          }
+          val testTriggerForceCancellation = AQETestHelper.shouldForceCancellation(this)
+
+          if (!currentPhysicalPlan.isInstanceOf[ResultQueryStageExec]) {
+            // Try re-optimizing and re-planning. Adopt the new plan if its cost is equal to or less
+            // than that of the current plan; otherwise keep the current physical plan together with
+            // the current logical plan since the physical plan's logical links point to the logical
+            // plan it has originated from.
+            // Meanwhile, we keep a list of the query stages that have been created since last plan
+            // update, which stands for the "semantic gap" between the current logical and physical
+            // plans. And each time before re-planning, we replace the corresponding nodes in the
+            // current logical plan with logical query stages to make it semantically in sync with
+            // the current physical plan. Once a new plan is adopted and both logical and physical
+            // plans are updated, we can clear the query stage list because at this point the two
+            // plans are semantically and physically in sync again.
+            var logicalPlan =
+              replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
+            if (testTriggerForceCancellation) {
+              // Force unwrap all LogicalQueryStage so they get replanned.
+              logicalPlan = logicalPlan.transformDown {
+                case LogicalQueryStage(logical, _) => logical
+              }
+            }
+            val afterReOptimize = reOptimize(logicalPlan)
+            if (afterReOptimize.isDefined) {
+              val (newPhysicalPlan, newLogicalPlan) = afterReOptimize.get
+              val origCost = costEvaluator.evaluateCost(currentPhysicalPlan)
+              val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
+              if (newCost < origCost ||
+                (newCost == origCost && currentPhysicalPlan != newPhysicalPlan) ||
+                testTriggerForceCancellation) {
+                lazy val plans = sideBySide(
+                  currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n")
+                logOnLevel(log"Plan changed:\n${MDC(QUERY_PLAN, plans)}")
+                cleanUpTempTags(newPhysicalPlan)
+                obsoleteCancelledStageIds ++=
+                  cancelObsoleteStages(
+                    newPhysicalPlan, obsoleteStageCandidates(currentPhysicalPlan, stagesToReplace))
+                currentPhysicalPlan = newPhysicalPlan
+                currentLogicalPlan = newLogicalPlan
+                stagesToReplace = Seq.empty[QueryStageExec]
+              }
+            }
+            if (testTriggerForceCancellation) {
+              AQETestHelper.markForcedCancellationTriggeredForPlan(this)
             }
           }
+          // Now that some stages have finished, we can try creating new stages.
+          result = createQueryStages(fun, currentPhysicalPlan, firstRun = false)
         }
-        // Now that some stages have finished, we can try creating new stages.
-        result = createQueryStages(fun, currentPhysicalPlan, firstRun = false)
       }
     }
     _isFinalPlan = true
@@ -381,6 +436,204 @@ case class AdaptiveSparkPlanExec(
     // `withFinalPlanUpdate` and pass another result handler and we will create a new result stage.
     currentPhysicalPlan.asInstanceOf[ResultQueryStageExec].resultOption.getAndUpdate(_ => None)
       .get.asInstanceOf[T]
+  }
+
+  /** Include stages retained by earlier adopted plans as well as newly created query stages. */
+  private def obsoleteStageCandidates(
+      oldPhysicalPlan: SparkPlan,
+      stagesToReplace: Seq[QueryStageExec]): Seq[QueryStageExec] = {
+    val visitedStageIds = mutable.HashSet.empty[Int]
+    (oldPhysicalPlan.collect { case stage: QueryStageExec => stage } ++ stagesToReplace)
+      .filter(stage => visitedStageIds.add(stage.id))
+  }
+
+  /**
+   * Cancel unfinished exchange stages that are no longer referenced by the adopted plan.
+   *
+   * An unfinished stage cannot be hidden inside another stage's plan because parent stages are
+   * created only after all child stages have materialized. Results reused by another adaptive
+   * plan, such as a subquery, are separately protected by the context's shared-result tracking.
+   * A failed or unsafe cancellation leaves the stage cached until its eventual materialization
+   * event proves whether the stage is still required.
+   */
+  private def cancelObsoleteStages(
+      newPhysicalPlan: SparkPlan,
+      candidateStages: Seq[QueryStageExec]): Seq[Int] = {
+    val retainedStageIds = mutable.HashSet.empty[Int]
+    val retainedStageResults = mutable.HashSet.empty[AtomicReference[Option[Any]]]
+    newPhysicalPlan.foreach {
+      case stage: QueryStageExec =>
+        retainedStageIds += stage.id
+        retainedStageResults += stage.resultOption
+      case _ =>
+    }
+    val obsoleteStages = mutable.LinkedHashMap.empty[
+      AtomicReference[Option[Any]], mutable.ArrayBuffer[ExchangeQueryStageExec]]
+    candidateStages.foreach {
+      case stage: ExchangeQueryStageExec
+          if !retainedStageIds.contains(stage.id) &&
+            !retainedStageResults.contains(stage.resultOption) =>
+        obsoleteStages.getOrElseUpdate(stage.resultOption, mutable.ArrayBuffer.empty) += stage
+      case _ =>
+    }
+    obsoleteStages.values.toSeq.flatMap { stages =>
+      val stage = stages.head
+      val reservation = context.withStageLifecycleLock {
+        if (!stage.isMaterialized && !context.isSharedStageResult(stage.resultOption)) {
+          val recordedStageIds = stageIdsByResult.get(stage.resultOption).toSeq.flatten
+          val obsoleteStageIds = (recordedStageIds ++ stages.map(_.id)).distinct
+          if (failedStageCancellationResults.contains(stage.resultOption)) {
+            uncancelledObsoleteStageIds ++= obsoleteStageIds
+            None
+          } else {
+            context.reserveStageCancellation(stage.resultOption).map { cancellation =>
+              (cancellation, obsoleteStageIds)
+            }
+          }
+        } else {
+          None
+        }
+      }
+      reservation.toSeq.flatMap { case (cancellation, obsoleteStageIds) =>
+        try {
+          withShuffleCancellationLock(stage) {
+            val shouldCancel = context.withStageLifecycleLock {
+              if (stage.isMaterialized || context.isSharedStageResult(stage.resultOption)) {
+                false
+              } else if (canCancelStage(stage)) {
+                true
+              } else {
+                if (canTrackObsoleteStageFailure(stage)) {
+                  uncancelledObsoleteStageIds ++= obsoleteStageIds
+                }
+                false
+              }
+            }
+            if (shouldCancel) {
+              try {
+                recordSubmittedShuffleIds(stage)
+                stage.cancel(
+                  "The query stage is no longer referenced by the current adaptive plan.")
+                context.withStageLifecycleLock {
+                  removeStageFromCache(stage)
+                }
+                obsoleteStageIds
+              } catch {
+                case NonFatal(t) =>
+                  context.withStageLifecycleLock {
+                    failedStageCancellationResults += stage.resultOption
+                    uncancelledObsoleteStageIds ++= obsoleteStageIds
+                  }
+                  logError(s"Exception in cancelling obsolete query stage: ${stage.treeString}", t)
+                  Seq.empty
+              }
+            } else {
+              Seq.empty
+            }
+          }
+        } finally {
+          context.withStageLifecycleLock {
+            context.finishStageCancellation(stage.resultOption, cancellation)
+          }
+        }
+      }
+    }
+  }
+
+  /** Serialize shuffle eligibility and cancellation with the exchange's job submission. */
+  private def withShuffleCancellationLock[T](
+      stage: ExchangeQueryStageExec)(body: => T): T = stage match {
+    case shuffleStage: ShuffleQueryStageExec => shuffleStage.shuffle.synchronized(body)
+    case _ => body
+  }
+
+  /**
+   * Broadcast cancellation cannot prevent its supplier from submitting another job afterward.
+   * Delegating shuffles may conceal an already submitted job behind an empty futureAction, and
+   * submitted shuffle cancellation is asynchronous, so removing its files can race map writers.
+   */
+  private def canCancelStage(stage: ExchangeQueryStageExec): Boolean = stage match {
+    case _: BroadcastQueryStageExec => false
+    case shuffleStage: ShuffleQueryStageExec =>
+      val shuffle = shuffleStage.shuffle
+      val submitted = shuffle.futureAction.get().isDefined
+      (shuffle.isInstanceOf[ShuffleExchangeExec] || submitted) &&
+        (!submitted || context.qe.shuffleCleanupMode != RemoveShuffleFiles)
+    case _ => true
+  }
+
+  /** Opaque delegated shuffles can conceal submitted jobs and their required cleanup IDs. */
+  private def canTrackObsoleteStageFailure(stage: ExchangeQueryStageExec): Boolean = stage match {
+    case shuffleStage: ShuffleQueryStageExec =>
+      shuffleStage.shuffle.isInstanceOf[ShuffleExchangeExec] ||
+        shuffleStage.shuffle.futureAction.get().isDefined
+    case _ => true
+  }
+
+  /** Never hide fatal stage failures, even when their stage was cancelled as obsolete. */
+  private def shouldIgnoreObsoleteStageFailure(
+      stage: QueryStageExec,
+      error: Throwable,
+      obsoleteCancelledStageIds: scala.collection.Set[Int]): Boolean = {
+    !error.isInstanceOf[SparkFatalException] && NonFatal(error) &&
+      (obsoleteCancelledStageIds.contains(stage.id) || ignoreFailedObsoleteStageFailure(stage))
+  }
+
+  /**
+   * Suppress an uncancelled obsolete stage's later failure only while its result remains private
+   * and absent from the current physical plan. This covers failed cancellation and stages whose
+   * cancellation would be unsafe. Reused stages must still fail their consumers; otherwise, the
+   * failed cache entry can now be safely discarded.
+   */
+  private def ignoreFailedObsoleteStageFailure(stage: QueryStageExec): Boolean = stage match {
+    case exchangeStage: ExchangeQueryStageExec =>
+      context.withStageLifecycleLock {
+        if (!uncancelledObsoleteStageIds.remove(stage.id)) {
+          false
+        } else {
+          val stillReferenced = currentPhysicalPlan.exists {
+            case retainedStage: QueryStageExec =>
+              retainedStage.id == stage.id || retainedStage.resultOption.eq(stage.resultOption)
+            case _ => false
+          }
+          if (!stillReferenced && !context.isSharedStageResult(stage.resultOption)) {
+            recordSubmittedShuffleIds(exchangeStage)
+            removeStageFromCache(exchangeStage)
+            true
+          } else {
+            false
+          }
+        }
+      }
+    case _ => false
+  }
+
+  /** Record only submitted shuffles, avoiding initialization of an unsubmitted lazy dependency. */
+  private def recordSubmittedShuffleIds(stage: ExchangeQueryStageExec): Unit = {
+    def record(shuffle: ShuffleExchangeLike): Unit = {
+      if (shuffle.futureAction.get().isDefined) {
+        context.shuffleIds.put(shuffle.shuffleId, true)
+      }
+    }
+    stage match {
+      // A reuse instance wraps its exchange in ReusedExchangeExec, which is a leaf node.
+      case shuffleStage: ShuffleQueryStageExec => record(shuffleStage.shuffle)
+      case _ =>
+        stage.plan.foreach {
+          case shuffle: ShuffleExchangeLike => record(shuffle)
+          case _ =>
+        }
+    }
+  }
+
+  /** Remove the exact canonical exchange-cache entry only when it still owns this result. */
+  private def removeStageFromCache(stage: ExchangeQueryStageExec): Unit = {
+    val cacheKey = stage.plan.canonicalized
+    context.stageCache.get(cacheKey).foreach { cachedStage =>
+      if (cachedStage.resultOption.eq(stage.resultOption)) {
+        context.stageCache.remove(cacheKey)
+      }
+    }
   }
 
   // Use a lazy val to avoid this being called more than once.
@@ -586,16 +839,25 @@ case class AdaptiveSparkPlanExec(
   private def createNonResultQueryStages(plan: SparkPlan): CreateStageResult = plan match {
     case e: Exchange =>
       // First have a quick check in the `stageCache` without having to traverse down the node.
-      context.stageCache.get(e.canonicalized) match {
-        case Some(existingStage) if conf.exchangeReuseEnabled =>
-          val stage = reuseQueryStage(existingStage, e)
+      val reusedStage = if (conf.exchangeReuseEnabled) {
+        withStageCacheEntry(e.canonicalized) {
+          _.map { existingStage =>
+            reuseQueryStage(existingStage, e)
+          }
+        }
+      } else {
+        None
+      }
+
+      reusedStage match {
+        case Some(stage) =>
           val isMaterialized = stage.isMaterialized
           CreateStageResult(
             newPlan = stage,
             allChildStagesMaterialized = isMaterialized,
             newStages = if (isMaterialized) Seq.empty else Seq(stage))
 
-        case _ =>
+        case None =>
           val result = createNonResultQueryStages(e.child)
           val newPlan = e.withNewChildren(Seq(result.newPlan)).asInstanceOf[Exchange]
           // Create a query stage only when all the child query stages are ready.
@@ -605,10 +867,14 @@ case class AdaptiveSparkPlanExec(
               // Check the `stageCache` again for reuse. If a match is found, ditch the new stage
               // and reuse the existing stage found in the `stageCache`, otherwise update the
               // `stageCache` with the new stage.
-              val queryStage = context.stageCache.getOrElseUpdate(
-                newStage.plan.canonicalized, newStage)
-              if (queryStage.ne(newStage)) {
-                newStage = reuseQueryStage(queryStage, e)
+              val cacheKey = newStage.plan.canonicalized
+              withStageCacheEntry(cacheKey) {
+                case Some(queryStage) =>
+                  newStage = reuseQueryStage(queryStage, e)
+                case None =>
+                  context.registerStageOwner(newStage.resultOption, this)
+                  recordStageId(newStage)
+                  context.stageCache.put(cacheKey, newStage)
               }
             }
             val isMaterialized = newStage.isMaterialized
@@ -648,6 +914,26 @@ case class AdaptiveSparkPlanExec(
       }
   }
 
+  /** Wait for cancellation of this result without blocking unrelated exchange-cache access. */
+  @scala.annotation.tailrec
+  private def withStageCacheEntry[T](
+      cacheKey: SparkPlan)(
+      useStage: Option[ExchangeQueryStageExec] => T): T = {
+    val result: Either[CompletableFuture[Unit], T] = context.withStageLifecycleLock {
+      val cachedStage = context.stageCache.get(cacheKey)
+      cachedStage.flatMap(stage => context.pendingStageCancellation(stage.resultOption)) match {
+        case Some(cancellation) => Left(cancellation)
+        case None => Right(useStage(cachedStage))
+      }
+    }
+    result match {
+      case Left(cancellation) =>
+        cancellation.join()
+        withStageCacheEntry(cacheKey)(useStage)
+      case Right(value) => value
+    }
+  }
+
   private def newResultQueryStage(
       resultHandler: SparkPlan => Any,
       plan: SparkPlan): ResultQueryStageExec = {
@@ -655,7 +941,7 @@ case class AdaptiveSparkPlanExec(
     val optimizedRootPlan = applyPhysicalRules(
       optimizeQueryStage(plan, isFinalStage = true),
       postStageCreationRules(supportsColumnar),
-      Some((planChangeLogger, "AQE Post Stage Creation")))
+      "AQE Post Stage Creation")
     val resultStage = ResultQueryStageExec(currentStageId, optimizedRootPlan, resultHandler)
     currentStageId += 1
     setLogicalLinkForNewQueryStage(resultStage, plan)
@@ -669,7 +955,7 @@ case class AdaptiveSparkPlanExec(
         val newPlan = applyPhysicalRules(
           optimized,
           postStageCreationRules(outputsColumnar = plan.supportsColumnar),
-          Some((planChangeLogger, "AQE Post Stage Creation")))
+          "AQE Post Stage Creation")
         if (e.isInstanceOf[ShuffleExchangeLike]) {
           if (!newPlan.isInstanceOf[ShuffleExchangeLike]) {
             throw SparkException.internalError(
@@ -703,10 +989,17 @@ case class AdaptiveSparkPlanExec(
   private def reuseQueryStage(
       existing: ExchangeQueryStageExec,
       exchange: Exchange): ExchangeQueryStageExec = {
+    context.markSharedStageResult(existing.resultOption, this)
     val queryStage = existing.newReuseInstance(currentStageId, exchange.output)
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, exchange)
+    recordStageId(queryStage)
     queryStage
+  }
+
+  /** Track local reuse aliases whose materialization may report the same eventual failure. */
+  private def recordStageId(stage: ExchangeQueryStageExec): Unit = {
+    stageIdsByResult.getOrElseUpdate(stage.resultOption, mutable.LinkedHashSet.empty) += stage.id
   }
 
   /**
@@ -798,7 +1091,7 @@ case class AdaptiveSparkPlanExec(
       val newPlan = applyPhysicalRules(
         applyQueryPostPlannerStrategyRules(sparkPlan),
         preprocessingRules ++ queryStagePreparationRules,
-        Some((planChangeLogger, "AQE Replanning")))
+        "AQE Replanning")
 
       // When both enabling AQE and DPP, `PlanAdaptiveDynamicPruningFilters` rule will
       // add the `BroadcastExchangeExec` node manually in the DPP subquery,
@@ -852,10 +1145,9 @@ case class AdaptiveSparkPlanExec(
       context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveSQLMetricUpdates(
         executionId, newMetrics))
     } else {
-      val planDescriptionMode = ExplainMode.fromString(conf.uiExplainMode)
       context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
         executionId,
-        context.qe.explainString(planDescriptionMode),
+        SQLExecution.planDescription(context.qe, conf.uiExplainMode),
         SparkPlanInfo.fromSparkPlan(context.qe.executedPlan)))
     }
   }
@@ -927,19 +1219,8 @@ object AdaptiveSparkPlanExec {
   def applyPhysicalRules(
       plan: SparkPlan,
       rules: Seq[Rule[SparkPlan]],
-      loggerAndBatchName: Option[(PlanChangeLogger[SparkPlan], String)] = None): SparkPlan = {
-    if (loggerAndBatchName.isEmpty) {
-      rules.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
-    } else {
-      val (logger, batchName) = loggerAndBatchName.get
-      val newPlan = rules.foldLeft(plan) { case (sp, rule) =>
-        val result = rule.apply(sp)
-        logger.logRule(rule.ruleName, sp, result)
-        result
-      }
-      logger.logBatch(batchName, plan, newPlan)
-      newPlan
-    }
+      batchName: String): SparkPlan = {
+    new QueryExecution.PhysicalRuleExecutor(batchName, rules).execute(plan)
   }
 }
 
@@ -947,7 +1228,6 @@ object AdaptiveSparkPlanExec {
  * The execution context shared between the main query and all sub-queries.
  */
 case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
-
   /**
    * The subquery-reuse map shared across the entire query.
    */
@@ -959,6 +1239,84 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
    */
   val stageCache: TrieMap[SparkPlan, ExchangeQueryStageExec] =
     new TrieMap[SparkPlan, ExchangeQueryStageExec]()
+
+  private val stageLifecycleLock = new Object
+
+  /**
+   * Serialize exchange-cache lookup, reuse, and cancellation reservations across subqueries.
+   * Blocking cancellation and waits for a particular result happen outside this query-wide lock.
+   */
+  private[adaptive] def withStageLifecycleLock[T](body: => T): T = {
+    stageLifecycleLock.synchronized(body)
+  }
+
+  /** Stage-scoped reservations keep a cancelling result cached without blocking other stages. */
+  private val stageCancellationReservations =
+    new ConcurrentHashMap[AtomicReference[Option[Any]], CompletableFuture[Unit]]()
+
+  /** Claim a result before waiting for its shuffle monitor or cancelling its exchange. */
+  private[adaptive] def reserveStageCancellation(
+      resultOption: AtomicReference[Option[Any]]): Option[CompletableFuture[Unit]] = {
+    val cancellation = new CompletableFuture[Unit]()
+    if (stageCancellationReservations.putIfAbsent(resultOption, cancellation) == null) {
+      Some(cancellation)
+    } else {
+      None
+    }
+  }
+
+  /** Return the cancellation that a potential consumer of this particular result must await. */
+  private[adaptive] def pendingStageCancellation(
+      resultOption: AtomicReference[Option[Any]]): Option[CompletableFuture[Unit]] = {
+    Option(stageCancellationReservations.get(resultOption))
+  }
+
+  /** Publish the final cache state before allowing consumers of this result to retry lookup. */
+  private[adaptive] def finishStageCancellation(
+      resultOption: AtomicReference[Option[Any]],
+      cancellation: CompletableFuture[Unit]): Unit = {
+    stageCancellationReservations.remove(resultOption, cancellation)
+    cancellation.complete(())
+  }
+
+  /**
+   * The adaptive plan that first cached each result. Identity, rather than case-class equality,
+   * distinguishes independently planned subqueries with equivalent physical input plans.
+   */
+  private val stageResultOwners =
+    new ConcurrentHashMap[AtomicReference[Option[Any]], AdaptiveSparkPlanExec]()
+
+  /** Record the original owner atomically with exchange-cache insertion. */
+  private[adaptive] def registerStageOwner(
+      resultOption: AtomicReference[Option[Any]], owner: AdaptiveSparkPlanExec): Unit = {
+    stageResultOwners.putIfAbsent(resultOption, owner)
+  }
+
+  /**
+   * Results reused by another adaptive plan in this execution context. Cross-plan protection
+   * remains for the context's lifetime; aliases within one plan are not considered shared.
+   */
+  private val sharedStageResults =
+    new ConcurrentHashMap[AtomicReference[Option[Any]], Boolean]()
+
+  /** Conservatively protect a result whose owner is unknown or whose protection is test-forced. */
+  private[adaptive] def markSharedStageResult(resultOption: AtomicReference[Option[Any]]): Unit = {
+    sharedStageResults.put(resultOption, true)
+  }
+
+  /** Conservatively protect a result with unknown ownership or reuse by another adaptive plan. */
+  private[adaptive] def markSharedStageResult(
+      resultOption: AtomicReference[Option[Any]], owner: AdaptiveSparkPlanExec): Unit = {
+    val originalOwner = stageResultOwners.get(resultOption)
+    if (originalOwner == null || (originalOwner ne owner)) {
+      markSharedStageResult(resultOption)
+    }
+  }
+
+  /** Return whether this result is conservatively protected from obsolete-stage cancellation. */
+  private[adaptive] def isSharedStageResult(resultOption: AtomicReference[Option[Any]]): Boolean = {
+    sharedStageResults.containsKey(resultOption)
+  }
 
   val shuffleIds: ConcurrentHashMap[Int, Boolean] = new ConcurrentHashMap[Int, Boolean]()
 }

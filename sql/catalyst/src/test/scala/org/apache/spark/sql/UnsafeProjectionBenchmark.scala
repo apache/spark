@@ -130,5 +130,32 @@ object UnsafeProjectionBenchmark extends BenchmarkBase {
 
       benchmark.run()
     }
+
+    Seq(BooleanType, ByteType, ShortType, IntegerType, FloatType).foreach { dataType =>
+      val iters = 1024 * 4096
+      val numFields = 400
+      val caseName = s"single row with $numFields ${dataType.typeName} fields"
+
+      runBenchmark(s"wide unsafe projection on ${dataType.typeName} fields") {
+        val benchmark = new Benchmark(caseName, iters.toLong, output = output)
+
+        val schema = (1 to numFields).foldLeft(new StructType())(
+          (schema, i) => schema.add(s"c$i", dataType, false))
+        val attrs = DataTypeUtils.toAttributes(schema)
+        val row = generateRows(schema, 1).head
+        val projection = UnsafeProjection.create(attrs, attrs)
+
+        benchmark.addCase(caseName) { _ =>
+          var sum = 0L
+          var i = 0
+          while (i < iters) {
+            sum += projection(row).getLong(0)
+            i += 1
+          }
+        }
+
+        benchmark.run()
+      }
+    }
   }
 }

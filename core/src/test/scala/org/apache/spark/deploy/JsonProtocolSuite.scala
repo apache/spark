@@ -23,10 +23,11 @@ import com.fasterxml.jackson.core.JsonParseException
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.{JsonTestUtils, SparkFunSuite}
+import org.apache.spark.{JsonTestUtils, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master.{ApplicationInfo, RecoveryState, WorkerInfo}
 import org.apache.spark.deploy.worker.ExecutorRunner
+import org.apache.spark.util.Utils
 
 class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
 
@@ -38,6 +39,18 @@ class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
     assertValidDataInJson(output, JsonMethods.parse(JsonConstants.appInfoJsonStr))
   }
 
+  test("SPARK-59055: writeApplicationInfo with the hold status") {
+    val appInfo = createAppInfo()
+    appInfo.holdSupported = true
+    appInfo.held = true
+    val output = JsonProtocol.writeApplicationInfo(appInfo)
+    assertValidJson(output)
+    assert(output \ "holdsupported" === JBool(true))
+    assert(output \ "held" === JBool(true))
+    // The application has no executor left, so its hold is complete.
+    assert(output \ "draining" === JInt(0))
+  }
+
   test("writeWorkerInfo") {
     val output = JsonProtocol.writeWorkerInfo(createWorkerInfo())
     assertValidJson(output)
@@ -45,7 +58,7 @@ class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
   }
 
   test("writeApplicationDescription") {
-    val output = JsonProtocol.writeApplicationDescription(createAppDesc())
+    val output = JsonProtocol.writeApplicationDescription(createAppDesc(), new SparkConf())
     assertValidJson(output)
     assertValidDataInJson(output, JsonMethods.parse(JsonConstants.appDescJsonStr))
   }
@@ -105,6 +118,38 @@ class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
     assertValidDataInJson(output, JsonMethods.parse(JsonConstants.workerStateJsonStr))
   }
 
+  test("SPARK-57098: secrets in executor command are redacted in worker JSON endpoint") {
+    val conf = new SparkConf()
+    val secretEnv = Map(
+      "HADOOP_CREDSTORE_PASSWORD" -> "topsecret",
+      "JAVA_HOME" -> "/usr/lib/jvm/default",
+      "AWS_SECRET_ACCESS_KEY" -> "aws-secret-value")
+    val secretJavaOpts = Seq(
+      "-Dspark.ssl.keyStorePassword=ssl-secret",
+      "-Dspark.executorEnv.PASSWORD=env-secret",
+      "-Xmx2g")
+    val cmd = new Command(
+      "mainClass", List("arg1"), secretEnv, Seq(), Seq(), secretJavaOpts)
+    val appDesc = new ApplicationDescription(
+      "name", Some(4), cmd, "appUiUrl", defaultResourceProfile)
+
+    val output = JsonProtocol.writeApplicationDescription(appDesc, conf)
+    val commandStr = (output \ "command") match {
+      case JString(s) => s
+      case other => fail(s"Expected JString for 'command', got: $other")
+    }
+
+    // Sensitive values are scrubbed.
+    assert(!commandStr.contains("topsecret"))
+    assert(!commandStr.contains("ssl-secret"))
+    assert(!commandStr.contains("env-secret"))
+    assert(!commandStr.contains("aws-secret-value"))
+    assert(commandStr.contains(Utils.REDACTION_REPLACEMENT_TEXT))
+    // Non-sensitive values pass through.
+    assert(commandStr.contains("/usr/lib/jvm/default"))
+    assert(commandStr.contains("-Xmx2g"))
+  }
+
   test("SPARK-46883: writeClusterUtilization") {
     val workers = Array(createWorkerInfo(), createWorkerInfo())
     val activeApps = Array(createAppInfo())
@@ -158,7 +203,9 @@ object JsonConstants {
       |"resourcesperslave":[{"name":"fpga",
       |"amount":3},{"name":"gpu","amount":3}],
       |"submitdate":"%s",
-      |"state":"WAITING","duration":%d}
+      |"state":"WAITING",
+      |"holdsupported":false,"held":false,"draining":0,
+      |"duration":%d}
     """.format(System.getProperty("user.name", "<unknown>"),
         submitDate.toString, currTimeInMillis - appInfoStartTime).stripMargin
 

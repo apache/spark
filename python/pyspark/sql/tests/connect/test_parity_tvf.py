@@ -19,7 +19,7 @@ from pyspark.sql.tests.test_tvf import TVFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class TVFParityTestsMixin(TVFTestsMixin, ReusedConnectTestCase):
+class TVFParityTests(TVFTestsMixin, ReusedConnectTestCase):
     pass
 
 

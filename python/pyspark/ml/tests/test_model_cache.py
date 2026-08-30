@@ -33,13 +33,13 @@ class ModelCacheTests(SparkSessionTestCase):
         for uuid in uuids:
             ModelCache.add(uuid, predict_fn)
 
-        self.assertTrue(len(ModelCache._models) == 3)
-        self.assertTrue(list(ModelCache._models.keys()) == uuids[7:10])
+        self.assertEqual(len(ModelCache._models), 3)
+        self.assertEqual(list(ModelCache._models.keys()), uuids[7:10])
 
         # get item, expect it to become most recently used
         _ = ModelCache.get(uuids[8])
         expected_uuids = uuids[7:8] + uuids[9:10] + [uuids[8]]
-        self.assertTrue(list(ModelCache._models.keys()) == expected_uuids)
+        self.assertEqual(list(ModelCache._models.keys()), expected_uuids)
 
 
 if __name__ == "__main__":

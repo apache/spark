@@ -56,4 +56,44 @@ public class ArrayWrappersSuite {
    assertTrue(ArrayWrappers.forArray(s1).compareTo(ArrayWrappers.forArray(s2)) > 0);
   }
 
+  @Test
+  public void testIntArrayCompareNoOverflow() {
+    // Large opposite-sign values overflow a subtraction-based comparison, so these
+    // assertions fail unless compareTo uses Integer.compare.
+    Comparable<Object> min = ArrayWrappers.forArray(new int[] { Integer.MIN_VALUE });
+    Comparable<Object> max = ArrayWrappers.forArray(new int[] { Integer.MAX_VALUE });
+    Comparable<Object> negOne = ArrayWrappers.forArray(new int[] { -1 });
+
+    assertTrue(min.compareTo(max) < 0);
+    assertTrue(max.compareTo(min) > 0);
+    assertTrue(max.compareTo(negOne) > 0);
+    assertTrue(negOne.compareTo(max) < 0);
+
+    // Ordering must stay correct beyond the first element as well.
+    Comparable<Object> a = ArrayWrappers.forArray(new int[] { 0, Integer.MIN_VALUE });
+    Comparable<Object> b = ArrayWrappers.forArray(new int[] { 0, Integer.MAX_VALUE });
+    assertTrue(a.compareTo(b) < 0);
+    assertTrue(b.compareTo(a) > 0);
+  }
+
+  @Test
+  public void testLongArrayCompareNoOverflow() {
+    // Large opposite-sign values overflow a subtraction-based comparison, so these
+    // assertions fail unless compareTo uses Long.compare.
+    Comparable<Object> min = ArrayWrappers.forArray(new long[] { Long.MIN_VALUE });
+    Comparable<Object> max = ArrayWrappers.forArray(new long[] { Long.MAX_VALUE });
+    Comparable<Object> negOne = ArrayWrappers.forArray(new long[] { -1L });
+
+    assertTrue(min.compareTo(max) < 0);
+    assertTrue(max.compareTo(min) > 0);
+    assertTrue(max.compareTo(negOne) > 0);
+    assertTrue(negOne.compareTo(max) < 0);
+
+    // Ordering must stay correct beyond the first element as well.
+    Comparable<Object> a = ArrayWrappers.forArray(new long[] { 0L, Long.MIN_VALUE });
+    Comparable<Object> b = ArrayWrappers.forArray(new long[] { 0L, Long.MAX_VALUE });
+    assertTrue(a.compareTo(b) < 0);
+    assertTrue(b.compareTo(a) > 0);
+  }
+
 }

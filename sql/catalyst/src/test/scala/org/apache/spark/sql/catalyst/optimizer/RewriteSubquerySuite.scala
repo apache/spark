@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Cast, IsNull, ListQuery, Not}
+import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, Exists, InSubquery, IsNull, ListQuery, Literal, Not, Or}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.LongType
 
@@ -72,6 +72,33 @@ class RewriteSubquerySuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-58365: NOT-IN nested in OR deduplicates conflicting attrs on the join right side") {
+    // Nesting the NOT-IN under an OR routes it through rewriteExistentialExprWithAttrs,
+    // whose join condition must be built from the deduplicated subquery output. Build the
+    // colliding-attribute plan directly: the analyzer's DeduplicateRelations would renew
+    // the shared exprId before the optimizer runs, hiding the rule's behavior.
+    val a = $"a".int
+    val b = $"b".int
+    val relation = LocalRelation(a, b)
+    // The subquery reuses `a`, so its output conflicts with the outer plan by exprId.
+    val subquery = relation.select(a)
+    val query = Filter(
+      Or(EqualTo(b, Literal(1)), Not(InSubquery(Seq(a), ListQuery(subquery, numCols = 1)))),
+      relation)
+
+    val optimized = Optimize.execute(query)
+
+    val join = optimized.collectFirst { case j: Join => j }.get
+    // dedupSubqueryOnSelfJoin aliases the conflicting attr to a fresh exprId, so the join
+    // is duplicate-resolved regardless. The real check: the condition must reference that
+    // deduplicated right-side attr. The pre-fix code zips against the stale pre-dedup
+    // output, so the condition only touches the outer side and the right side dangles.
+    assert(join.duplicateResolved)
+    assert(join.condition.get.references.intersect(join.right.outputSet).nonEmpty,
+      s"join condition ${join.condition.get} must reference the right child output " +
+        s"${join.right.outputSet}")
+  }
+
   test("SPARK-34598: Filters without subquery must not be modified by RewritePredicateSubquery") {
     val relation = LocalRelation($"a".int, $"b".int, $"c".int, $"d".int)
     val query = relation.where(($"a" === 1 || $"b" === 2)
@@ -95,5 +122,43 @@ class RewriteSubquerySuite extends PlanTest {
         Some($"_aggregateexpression" === $"c3"))
       .select($"exists".as("(sum(col2) IN (listquery()))")).analyze
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-57005: No None.get when correlated predicates are eliminated") {
+    // When BooleanSimplification in PullupCorrelatedPredicates eliminates all correlated
+    // predicates (e.g., FALSE AND correlated_pred -> FALSE), the Exists node ends up with
+    // outerAttrs non-empty but joinCond empty. RewritePredicateSubquery must handle this.
+    object OptimizeWithPullup extends RuleExecutor[LogicalPlan] {
+      val batches =
+        Batch("Pullup Correlated Expressions", Once,
+          PullupCorrelatedPredicates) ::
+        Batch("Rewrite Subquery", FixedPoint(1),
+          RewritePredicateSubquery,
+          PruneFilters,
+          PropagateEmptyRelation,
+          ColumnPruning,
+          CollapseProject,
+          RemoveNoopOperators) :: Nil
+    }
+
+    val outer = LocalRelation($"a".int, $"b".int)
+    val inner = LocalRelation($"x".int, $"y".int)
+
+    // NOT EXISTS with FALSE AND correlated_pred: subquery is always empty,
+    // so NOT EXISTS is always true and the filter is eliminated.
+    // Since outer is an empty LocalRelation, the result is also empty.
+    val notExistsQuery = outer.where(
+      Not(Exists(inner.where(Literal.FalseLiteral && $"a" === $"x")))).select($"a")
+    val notExistsOptimized = OptimizeWithPullup.execute(notExistsQuery.analyze)
+    val notExistsExpected = LocalRelation(notExistsQuery.analyze.output).analyze
+    comparePlans(notExistsOptimized, notExistsExpected)
+
+    // EXISTS with FALSE AND correlated_pred: subquery is always empty,
+    // so EXISTS is always false and no rows pass the filter.
+    val existsQuery = outer.where(
+      Exists(inner.where(Literal.FalseLiteral && $"a" === $"x"))).select($"a")
+    val existsOptimized = OptimizeWithPullup.execute(existsQuery.analyze)
+    val existsExpected = LocalRelation(existsQuery.analyze.output).analyze
+    comparePlans(existsOptimized, existsExpected)
   }
 }

@@ -20,13 +20,13 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, EqualNullSafe, Expression, If, Literal, MetadataAttribute, Not, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Expand, Filter, LogicalPlan, Project, ReplaceData, Union, UpdateTable, WriteDelta}
+import org.apache.spark.sql.catalyst.trees.TreePattern.UPDATE_TABLE
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.types.IntegerType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A rule that rewrites UPDATE operations using plans that operate on individual or groups of rows.
@@ -35,13 +35,15 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 object RewriteUpdateTable extends RewriteRowLevelCommand {
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    _.containsPattern(UPDATE_TABLE)) {
     case u @ UpdateTable(aliasedTable, assignments, cond)
         if u.resolved && u.rewritable && u.aligned =>
 
       EliminateSubqueryAliases(aliasedTable) match {
         case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
-          val table = buildOperationTable(tbl, UPDATE, CaseInsensitiveStringMap.empty())
+          checkNoGeneratedColumns(r, UPDATE)
+          val table = buildOperationTable(tbl, UPDATE, r.options)
           val updateCond = cond.getOrElse(TrueLiteral)
           table.operation match {
             case _: SupportsDelta =>
@@ -72,12 +74,10 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
 
     // build a plan with updated and copied over records
-    val updatedAndRemainingRowsPlan = buildReplaceDataUpdateProjection(
-      readRelation, assignments, cond)
+    val query = buildReplaceDataUpdateProjection(readRelation, assignments, cond)
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
-    val query = addOperationColumn(WRITE_WITH_METADATA_OPERATION, updatedAndRemainingRowsPlan)
     val projections = buildReplaceDataProjections(query, relation.output, metadataAttrs)
     val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
     ReplaceData(writeRelation, cond, query, relation, projections, groupFilterCond)
@@ -105,14 +105,14 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // build a plan that contains unmatched rows in matched groups that must be copied over
     val remainingRowFilter = Not(EqualNullSafe(cond, Literal.TrueLiteral))
-    val remainingRowsPlan = Filter(remainingRowFilter, readRelation)
+    val remainingRowsPlan = addOperationColumn(COPY_OPERATION,
+      Filter(remainingRowFilter, readRelation))
 
     // the new state is a union of updated and copied over records
-    val updatedAndRemainingRowsPlan = Union(updatedRowsPlan, remainingRowsPlan)
+    val query = Union(updatedRowsPlan, remainingRowsPlan)
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
-    val query = addOperationColumn(WRITE_WITH_METADATA_OPERATION, updatedAndRemainingRowsPlan)
     val projections = buildReplaceDataProjections(query, relation.output, metadataAttrs)
     val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
     ReplaceData(writeRelation, cond, query, relation, projections, groupFilterCond)
@@ -143,7 +143,9 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       }
     }
 
-    Project(updatedValues, plan)
+    val writeOp = If(cond, Literal(UPDATE_OPERATION), Literal(COPY_OPERATION))
+    val operationCol = Alias(writeOp, OPERATION_COLUMN)()
+    Project(operationCol +: updatedValues, plan)
   }
 
   // build a rewrite plan for sources that support row deltas
@@ -174,7 +176,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     // build a plan to write the row delta to the table
     val writeRelation = relation.copy(table = operationTable)
     val projections = buildWriteDeltaProjections(rowDeltaPlan, rowAttrs, rowIdAttrs, metadataAttrs)
-    WriteDelta(writeRelation, cond, rowDeltaPlan, relation, projections)
+    val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
+    WriteDelta(writeRelation, cond, rowDeltaPlan, relation, projections, groupFilterCond)
   }
 
   // this method assumes the assignments have been already aligned before

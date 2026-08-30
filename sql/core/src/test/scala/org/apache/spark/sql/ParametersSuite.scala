@@ -20,17 +20,19 @@ package org.apache.spark.sql
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
+import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, ExpressionWithUnresolvedIdentifier, NameParameterizedQuery, PlanWithUnresolvedIdentifier, UnresolvedInsertTarget, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.Limit
+import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTEInChildren, InsertIntoStatement, Limit, ReplaceTableAsSelect, UnresolvedInsert, WithCTE}
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
+import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{CharType, DataType, DecimalType, StructField, VarcharType}
 
-class ParametersSuite extends QueryTest with SharedSparkSession {
+class ParametersSuite extends SharedSparkSession {
 
   // Helper function to check CHAR/VARCHAR types (similar to CharVarcharTestSuite)
   private def checkColType(f: StructField, dt: DataType): Unit = {
@@ -70,6 +72,16 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       spark.sql("""SELECT contains('Spark \'SQL\'', ?)""", Array("SQL")),
       Row(true))
+  }
+
+  test("SPARK-58341: bind 5 or more positional parameters in order") {
+    checkAnswer(
+      spark.sql("SELECT ?, ?, ?, ?, ?, ?", Array(1, 2, 3, 4, 5, 6)),
+      Row(1, 2, 3, 4, 5, 6))
+
+    checkAnswer(
+      spark.sql("SELECT ? + ?, ? * ?, ? - ?", Array(1, 2, 30, 4, 500, 6)),
+      Row(3, 120, 494))
   }
 
   test("parameter binding is case sensitive") {
@@ -1998,6 +2010,25 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("SET PATH with named parameter in IDENTIFIER (PATH feature enabled)") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      // current_path() resolves via system.builtin; include it when PATH is not DEFAULT_PATH.
+      spark.sql("SET PATH = spark_catalog.IDENTIFIER(:ns), system.builtin", Map("ns" -> "default"))
+      val pathStr = spark.sql("SELECT current_path()").collect().head.getString(0)
+      assert(pathStr.contains("spark_catalog") && pathStr.contains("default"),
+        s"SET PATH + IDENTIFIER(:ns); got: $pathStr")
+    }
+  }
+
+  test("SET PATH with positional parameter in IDENTIFIER (PATH feature enabled)") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      spark.sql("SET PATH = spark_catalog.IDENTIFIER(?), system.builtin", Array("default"))
+      val pathStr = spark.sql("SELECT current_path()").collect().head.getString(0)
+      assert(pathStr.contains("spark_catalog") && pathStr.contains("default"),
+        s"SET PATH + IDENTIFIER(?); got: $pathStr")
+    }
+  }
+
   test("IDENTIFIER clause with parameter marker - table reference") {
     // Test IDENTIFIER clause with parameter marker in table references
     withTable("test_table") {
@@ -2440,5 +2471,276 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       spark.sql("SELECT 1", Array.empty[Any]),
       Row(1))
+  }
+
+  // SPARK-46625: WITH ... <write-with-IDENTIFIER> SELECT ... FROM cte
+  // The placeholder stays inside a CTEInChildren command at parse time, so CTESubstitution never
+  // produces a WithCTE around the command itself.
+  private def assertNoWithCTEAroundCTEInChildren(df: DataFrame): Unit = {
+    df.queryExecution.analyzed.foreach {
+      case WithCTE(_: CTEInChildren, _) =>
+        fail(s"Found invalid WithCTE(CTEInChildren, _) shape:\n${df.queryExecution.analyzed}")
+      case _ =>
+    }
+  }
+
+  test("SPARK-46625: WITH ... INSERT OVERWRITE TABLE IDENTIFIER(:p) SELECT ... FROM cte") {
+    withTable("t_cte_overwrite") {
+      sql("CREATE TABLE t_cte_overwrite (a INT) USING PARQUET")
+      sql("INSERT INTO t_cte_overwrite VALUES (10)")
+      val df = spark.sql(
+        """WITH transformation AS (SELECT 1 AS a)
+          |INSERT OVERWRITE TABLE IDENTIFIER(:tname)
+          |SELECT * FROM transformation""".stripMargin,
+        Map("tname" -> "t_cte_overwrite"))
+      assertNoWithCTEAroundCTEInChildren(df)
+      checkAnswer(spark.table("t_cte_overwrite"), Row(1))
+    }
+  }
+
+  test("SPARK-46625: WITH ... INSERT INTO IDENTIFIER(:p) SELECT ... FROM cte") {
+    withTable("t_cte_into") {
+      sql("CREATE TABLE t_cte_into (a INT) USING PARQUET")
+      val df = spark.sql(
+        """WITH transformation AS (SELECT 7 AS a)
+          |INSERT INTO IDENTIFIER(:tname)
+          |SELECT * FROM transformation""".stripMargin,
+        Map("tname" -> "t_cte_into"))
+      assertNoWithCTEAroundCTEInChildren(df)
+      checkAnswer(spark.table("t_cte_into"), Row(7))
+    }
+  }
+
+  test("INSERT target is not substituted by a same-named CTE") {
+    withTable("t_cte_target") {
+      sql("CREATE TABLE t_cte_target (a INT) USING PARQUET")
+      sql(
+        """WITH t_cte_target AS (SELECT 99 AS a)
+          |INSERT INTO IDENTIFIER(lower('T_CTE_TARGET'))
+          |SELECT 1 AS a""".stripMargin)
+      checkAnswer(spark.table("t_cte_target"), Row(1))
+    }
+  }
+
+  test("SPARK-46625: CREATE TABLE IDENTIFIER(:p) AS WITH ... SELECT ... FROM cte") {
+    withTable("t_cte_ctas") {
+      val df = spark.sql(
+        """CREATE TABLE IDENTIFIER(:tname) USING PARQUET AS
+          |WITH transformation AS (SELECT 3 AS a)
+          |SELECT * FROM transformation""".stripMargin,
+        Map("tname" -> "t_cte_ctas"))
+      assertNoWithCTEAroundCTEInChildren(df)
+      checkAnswer(spark.table("t_cte_ctas"), Row(3))
+    }
+  }
+
+  // The unresolved binary node exposes the target to analyzer traversal and keeps CTE definitions
+  // on the input query.
+  test("SPARK-46625: WITH ... INSERT INTO IDENTIFIER(:p) REPLACE WHERE ... parser") {
+    // Use a non-literal-string expression so `withIdentClause` produces
+    // `PlanWithUnresolvedIdentifier` rather than short-circuiting to `UnresolvedInsertTarget`.
+    val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+      """WITH transformation AS (SELECT 99 AS a)
+        |INSERT INTO IDENTIFIER('some' || '_table') REPLACE WHERE a = 10
+        |SELECT * FROM transformation""".stripMargin)
+    val insert = parsedPlan.collectFirst { case i: UnresolvedInsert => i }.getOrElse(
+      fail(s"Expected UnresolvedInsert in parsed plan:\n$parsedPlan"))
+    assert(insert.table.isInstanceOf[PlanWithUnresolvedIdentifier],
+      s"Expected UnresolvedInsert.table to be PlanWithUnresolvedIdentifier, " +
+        s"got ${insert.table.getClass.getSimpleName}:\n$parsedPlan")
+    assert(insert.children === Seq(insert.table, insert.query))
+
+    val substituted = CTESubstitution.apply(parsedPlan)
+    val substitutedInsert = substituted.collectFirst { case i: UnresolvedInsert => i }.getOrElse(
+      fail(s"Expected UnresolvedInsert after CTE substitution:\n$substituted"))
+    assert(!substitutedInsert.table.exists(_.isInstanceOf[WithCTE]),
+      s"CTE definitions must not wrap the target table:\n$substituted")
+    substituted.foreach {
+      case WithCTE(_: CTEInChildren, _) =>
+        fail(s"Found invalid WithCTE(CTEInChildren, _) shape after CTESubstitution:\n$substituted")
+      case _ =>
+    }
+  }
+
+  test("parsed INSERT targets use an unresolved binary plan") {
+    val regularInsert = spark.sessionState.sqlParser
+      .parsePlan("INSERT INTO target_table SELECT 1")
+      .asInstanceOf[UnresolvedInsert]
+    assert(regularInsert.table.isInstanceOf[UnresolvedInsertTarget])
+    assert(regularInsert.children === Seq(regularInsert.table, regularInsert.query))
+
+    val identifierInsert = spark.sessionState.sqlParser
+      .parsePlan("INSERT INTO IDENTIFIER(lower('TESTCAT.NS.TARGET_TABLE')) SELECT 1")
+      .asInstanceOf[UnresolvedInsert]
+    assert(identifierInsert.table.isInstanceOf[PlanWithUnresolvedIdentifier])
+    assert(identifierInsert.children === Seq(identifierInsert.table, identifierInsert.query))
+
+    val lowered = spark.sessionState.analyzer.resolveUnresolvedInsert(identifierInsert)
+      .asInstanceOf[InsertIntoStatement]
+    assert(lowered.table.asInstanceOf[UnresolvedRelation].multipartIdentifier ===
+      Seq("testcat", "ns", "target_table"))
+    assert(lowered.children === Seq(lowered.query))
+  }
+
+  // BindParameters reaches a dynamic target through normal child traversal.
+  test("SPARK-46625: BindParameters visits UnresolvedInsert.table") {
+    val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+      """INSERT INTO IDENTIFIER(:tname) REPLACE WHERE a = 10
+        |SELECT 1 AS a""".stripMargin)
+    val insert = parsedPlan.collectFirst { case i: UnresolvedInsert => i }.getOrElse(
+      fail(s"Expected UnresolvedInsert in parsed plan:\n$parsedPlan"))
+    assert(insert.containsPattern(PARAMETER),
+      "UnresolvedInsert must propagate the table child's PARAMETER bit")
+
+    val bound = BindParameters.apply(
+      NameParameterizedQuery(parsedPlan, Seq("tname"), Seq(Literal("foo_table"))))
+    val boundInsert = bound.collectFirst { case i: UnresolvedInsert => i }.getOrElse(
+      fail(s"Expected UnresolvedInsert in bound plan:\n$bound"))
+    assert(!boundInsert.table.containsPattern(PARAMETER),
+      s"Expected :tname inside UnresolvedInsert.table to be bound, got:\n$boundInsert")
+  }
+
+  test("BindParameters binds IDENTIFIER(:p) in the table slot for REPLACE WHERE with a column " +
+      "list and preserves the column list") {
+    val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+      """INSERT INTO IDENTIFIER(:tname) (id, name) REPLACE WHERE id = 1
+        |SELECT 1 AS id, 'x' AS name""".stripMargin)
+    val insert = parsedPlan.collectFirst { case i: UnresolvedInsert => i }.getOrElse(
+      fail(s"Expected UnresolvedInsert in parsed plan:\n$parsedPlan"))
+    assert(insert.containsPattern(PARAMETER),
+      "UnresolvedInsert must expose the table child's PARAMETER bit for pruning")
+
+    val bound = BindParameters.apply(
+      NameParameterizedQuery(parsedPlan, Seq("tname"), Seq(Literal("foo_table"))))
+
+    val boundInsert = bound.collectFirst { case i: UnresolvedInsert => i }.getOrElse(
+      fail(s"Expected UnresolvedInsert in bound plan:\n$bound"))
+    assert(!boundInsert.table.containsPattern(PARAMETER),
+      s"Expected :tname inside UnresolvedInsert.table to be bound, got:\n$boundInsert")
+    assert(boundInsert.userSpecifiedCols === Seq("id", "name"),
+      s"Expected the column list to survive table-slot binding, got: " +
+        s"${boundInsert.userSpecifiedCols}")
+  }
+
+  test("ResolveFunctions resolves expressions in an UnresolvedInsert target") {
+    val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+      """INSERT INTO IDENTIFIER(lower(regexp_replace(
+        |  'TESTCAT.PLACEHOLDER', 'PLACEHOLDER', 'TAB'))) REPLACE WHERE id = 1
+        |SELECT 1 AS id""".stripMargin)
+    val insert = parsedPlan.asInstanceOf[UnresolvedInsert]
+
+    val resolvedInsert = spark.sessionState.analyzer.ResolveFunctions(insert)
+      .asInstanceOf[UnresolvedInsert]
+    assert(resolvedInsert.table.asInstanceOf[PlanWithUnresolvedIdentifier]
+      .identifierExpr.resolved)
+  }
+
+  // Normal child traversal resolves a SQL variable in the target IDENTIFIER expression.
+  test("SPARK-46625: INSERT INTO IDENTIFIER(<sql-variable>) resolves variable in table slot") {
+    withTable("t_var_insert") {
+      sql("CREATE TABLE t_var_insert (a INT) USING PARQUET")
+      sql("DECLARE OR REPLACE VARIABLE target_table STRING")
+      try {
+        sql("SET VAR target_table = 't_var_insert'")
+        sql("INSERT INTO IDENTIFIER(target_table) SELECT 42 AS a")
+        checkAnswer(spark.table("t_var_insert"), Row(42))
+      } finally {
+        sql("DROP TEMPORARY VARIABLE IF EXISTS target_table")
+      }
+    }
+  }
+
+  // The identifier leaf has no children, so a colliding query output column is out of scope and
+  // variable resolution remains the last resort.
+  test("SPARK-46625: INSERT INTO IDENTIFIER(<sql-variable>) ignores colliding query columns") {
+    withTable("t_shadow") {
+      sql("CREATE TABLE t_shadow (a INT) USING PARQUET")
+      sql("DECLARE OR REPLACE VARIABLE a STRING DEFAULT 't_shadow'")
+      try {
+        sql("INSERT INTO IDENTIFIER(a) SELECT 42 AS a")
+        checkAnswer(spark.table("t_shadow"), Row(42))
+      } finally {
+        sql("DROP TEMPORARY VARIABLE IF EXISTS a")
+      }
+    }
+  }
+
+  // SPARK-46625: `CacheTableAsSelect.tempViewName` is an `Expression` slot, so an
+  // `IDENTIFIER(<non-literal>)` produces an `ExpressionWithUnresolvedIdentifier` there instead of
+  // wrapping the entire command in a `PlanWithUnresolvedIdentifier`. Verify on the parsed plan
+  // that the name slot holds the expression placeholder and no `WithCTE(CTEInChildren, _)` shape
+  // survives `CTESubstitution` (running the cache through full analysis would require the temp
+  // view machinery, so this is a parser-level test).
+  test("SPARK-46625: CACHE TABLE IDENTIFIER(...) AS WITH ... SELECT ... parser") {
+    val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+      """CACHE TABLE IDENTIFIER('some' || '_view') AS
+        |WITH transformation AS (SELECT 4 AS a)
+        |SELECT * FROM transformation""".stripMargin)
+    val ctas = parsedPlan.collectFirst { case c: CacheTableAsSelect => c }.getOrElse(
+      fail(s"Expected CacheTableAsSelect in parsed plan:\n$parsedPlan"))
+    assert(ctas.tempViewName.isInstanceOf[ExpressionWithUnresolvedIdentifier],
+      s"Expected CacheTableAsSelect.tempViewName to be ExpressionWithUnresolvedIdentifier, " +
+        s"got ${ctas.tempViewName.getClass.getSimpleName}:\n$parsedPlan")
+    val substituted = CTESubstitution.apply(parsedPlan)
+    substituted.foreach {
+      case WithCTE(_: CTEInChildren, _) =>
+        fail(s"Found invalid WithCTE(CTEInChildren, _) shape after CTESubstitution:\n$substituted")
+      case _ =>
+    }
+  }
+
+  // SPARK-46625: Regression for the `if c.tempViewName.resolved` guard in CheckAnalysis. When
+  // the IDENTIFIER expression itself fails to resolve (e.g. references an unresolved column),
+  // the guard skips the invariant-validation case so the catch-all `LogicalPlan` case can
+  // produce `UNRESOLVED_COLUMN`. Without the guard, the invariant case would pre-empt this
+  // path and throw a `SparkException internal error` instead.
+  test("SPARK-46625: CACHE TABLE IDENTIFIER(<unresolved-col>) reports UNRESOLVED_COLUMN") {
+    val ex = intercept[AnalysisException] {
+      spark.sql("CACHE TABLE IDENTIFIER(unresolved_col) AS SELECT 1 AS a")
+    }
+    assert(ex.getCondition != null && ex.getCondition.startsWith("UNRESOLVED_COLUMN"),
+      s"Expected UNRESOLVED_COLUMN.*, got ${ex.getCondition}: ${ex.getMessage}")
+    assert(!ex.getMessage.contains("CacheTableAsSelect.tempViewName must be"),
+      s"Internal-error message leaked into user-facing error: ${ex.getMessage}")
+  }
+
+  // SPARK-46625: End-to-end CACHE TABLE IDENTIFIER(:p) AS WITH ... SELECT ... -- exercises the
+  // `tempViewNameString` extraction in `DataSourceV2Strategy` and the `CheckAnalysis` invariant
+  // case for `CacheTableAsSelect.tempViewName`. The parser-level test above already verifies
+  // the placement and CTE shape; this one drives the full analysis + execution path.
+  test("SPARK-46625: CACHE TABLE IDENTIFIER(:p) AS WITH ... SELECT ...") {
+    withTempView("t_cte_cache") {
+      val df = spark.sql(
+        """CACHE TABLE IDENTIFIER(:tname) AS
+          |WITH transformation AS (SELECT 21 AS a)
+          |SELECT * FROM transformation""".stripMargin,
+        Map("tname" -> "t_cte_cache"))
+      assertNoWithCTEAroundCTEInChildren(df)
+      checkAnswer(spark.table("t_cte_cache"), Row(21))
+    }
+  }
+
+  // SPARK-46625: RTAS mirrors CTAS -- the placeholder goes into `ReplaceTableAsSelect.name`
+  // at parse time. Verify on the parsed plan that the placeholder lives in that slot and that
+  // no `WithCTE(CTEInChildren, _)` shape survives `CTESubstitution`. Running RTAS through full
+  // analysis would require a v2 catalog, so this is a parser-level test.
+  test("SPARK-46625: REPLACE TABLE IDENTIFIER(...) AS WITH ... SELECT ... parser") {
+    // Use a non-literal-string expression so `withIdentClause` produces
+    // `PlanWithUnresolvedIdentifier` rather than short-circuiting to `UnresolvedIdentifier`.
+    val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+      """REPLACE TABLE IDENTIFIER('some' || '_table') USING PARQUET AS
+        |WITH transformation AS (SELECT 5 AS a)
+        |SELECT * FROM transformation""".stripMargin)
+    val rtas = parsedPlan.collectFirst { case r: ReplaceTableAsSelect => r }.getOrElse(
+      fail(s"Expected ReplaceTableAsSelect in parsed plan:\n$parsedPlan"))
+    assert(rtas.name.isInstanceOf[PlanWithUnresolvedIdentifier],
+      s"Expected ReplaceTableAsSelect.name to be PlanWithUnresolvedIdentifier, " +
+        s"got ${rtas.name.getClass.getSimpleName}:\n$parsedPlan")
+    val substituted = CTESubstitution.apply(parsedPlan)
+    substituted.foreach {
+      case WithCTE(_: CTEInChildren, _) =>
+        fail(s"Found invalid WithCTE(CTEInChildren, _) shape after CTESubstitution:\n$substituted")
+      case _ =>
+    }
   }
 }

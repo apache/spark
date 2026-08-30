@@ -26,7 +26,6 @@ from pyspark.errors import PySparkValueError
 from pyspark.loose_version import LooseVersion
 from pyspark.pandas.config import option_context
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 # This file contains test cases for 'Reindexing / Selection / Label manipulation'
@@ -960,7 +959,6 @@ class FrameReindexingMixin:
 class FrameReidexingTests(
     FrameReindexingMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

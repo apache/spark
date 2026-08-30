@@ -63,6 +63,21 @@ object SelectedField {
   }
 
   /**
+   * Builds the selected root field for `expr` while substituting a narrower projected data type.
+   * This lets a lambda field access establish the required scan type of its array argument, even
+   * though the lambda variable is not itself rooted at a data source attribute.
+   */
+  private[catalyst] def withDataType(
+      expr: Expression,
+      dataType: DataType): Option[StructField] = {
+    val unaliased = expr match {
+      case Alias(child, _) => child
+      case expression => expression
+    }
+    selectField(unaliased, Some(dataType))
+  }
+
+  /**
    * Convert an expression into the parts of the schema (the field) it accesses.
    */
   @scala.annotation.tailrec
@@ -70,7 +85,7 @@ object SelectedField {
     expr match {
       case a: Attribute =>
         dataTypeOpt.map { dt =>
-          StructField(a.name, dt, a.nullable)
+          StructField(a.name, dt, a.nullable, a.metadata)
         }
       case c: GetStructField =>
         val field = c.childSchema(c.ordinal)
@@ -94,7 +109,7 @@ object SelectedField {
             // This should not happen.
             throw QueryCompilationErrors.dataTypeUnsupportedByClassError(x, "GetArrayStructFields")
         }
-        val newField = StructField(field.name, newFieldDataType, field.nullable)
+        val newField = StructField(field.name, newFieldDataType, field.nullable, field.metadata)
         selectField(child, Option(ArrayType(struct(newField), containsNull)))
       case GetMapValue(child, key) if key.foldable =>
         // GetMapValue does not select a field from a struct (i.e. prune the struct) so it can't be
@@ -148,6 +163,26 @@ object SelectedField {
             val opt = dataTypeOpt.map(dt => MapType(keyType, dt, valueContainsNull))
             selectField(left, opt)
         }
+      case ArrayFilter(argument, _: LambdaFunction) =>
+        selectField(argument, dataTypeOpt)
+      case ArraySort(argument, _: LambdaFunction, _) =>
+        selectField(argument, dataTypeOpt)
+      case Reverse(child) =>
+        selectField(child, dataTypeOpt)
+      case Shuffle(child, _) =>
+        selectField(child, dataTypeOpt)
+      case Slice(x, start, length) if start.foldable && length.foldable =>
+        selectField(x, dataTypeOpt)
+      case KnownNotContainsNull(child) =>
+        val ArrayType(_, containsNull) = child.dataType
+        val opt = dataTypeOpt.map {
+          case ArrayType(dataType, _) => ArrayType(dataType, containsNull)
+          case x =>
+            // This should not happen.
+            throw QueryCompilationErrors.dataTypeUnsupportedByClassError(
+              x, "KnownNotContainsNull")
+        }
+        selectField(child, opt)
       case _ =>
         None
     }

@@ -15,12 +15,11 @@
 # limitations under the License.
 #
 
-from pyspark.pandas.config import set_option, reset_option
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.pandas.config import reset_option, set_option
 from pyspark.pandas.tests.diff_frames_ops.test_groupby_expanding import (
     GroupByExpandingTestingFuncMixin,
 )
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class GroupByExpandingAdvMixin(GroupByExpandingTestingFuncMixin):
@@ -44,7 +43,6 @@ class GroupByExpandingAdvMixin(GroupByExpandingTestingFuncMixin):
 class GroupByExpandingAdvTests(
     GroupByExpandingAdvMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

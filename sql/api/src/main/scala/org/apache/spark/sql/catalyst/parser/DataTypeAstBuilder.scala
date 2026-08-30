@@ -28,9 +28,9 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
 import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
-import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryParsingErrors}
+import org.apache.spark.sql.errors.{DataTypeErrors, DataTypeErrorsBase, QueryParsingErrors}
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, GeographyType, GeometryType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, GeographyType, GeometryType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
 
 /**
  * AST builder for parsing data type definitions and table schemas.
@@ -311,12 +311,12 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
                 ctx)
 
             case (Some(length), None) =>
-              CharType(length.getText.toInt)
+              CharType(parseIntTypeParameter(length.getText, "length", "CHAR"))
 
             case (Some(length), Some(collate)) =>
               val collationId =
                 CollationFactory.fullyQualifiedNameToId(visitCollateClause(collate).toArray)
-              CharType(length.getText.toInt, collationId)
+              CharType(parseIntTypeParameter(length.getText, "length", "CHAR"), collationId)
           }
         case VARCHAR =>
           (Option(currentCtx.length), Option(currentCtx.collateClause)) match {
@@ -326,20 +326,22 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
                 ctx)
 
             case (Some(length), None) =>
-              VarcharType(length.getText.toInt)
+              VarcharType(parseIntTypeParameter(length.getText, "length", "VARCHAR"))
 
             case (Some(length), Some(collate)) =>
               val collationId =
                 CollationFactory.fullyQualifiedNameToId(visitCollateClause(collate).toArray)
-              VarcharType(length.getText.toInt, collationId)
+              VarcharType(parseIntTypeParameter(length.getText, "length", "VARCHAR"), collationId)
           }
         case DECIMAL | DEC | NUMERIC =>
           if (currentCtx.precision == null) {
             DecimalType.USER_DEFAULT
           } else if (currentCtx.scale == null) {
-            DecimalType(currentCtx.precision.getText.toInt, 0)
+            DecimalType(parseDecimalPrecision(currentCtx.precision.getText), 0)
           } else {
-            DecimalType(currentCtx.precision.getText.toInt, currentCtx.scale.getText.toInt)
+            DecimalType(
+              parseDecimalPrecision(currentCtx.precision.getText),
+              parseIntTypeParameter(currentCtx.scale.getText, "scale", "DECIMAL"))
           }
         case INTERVAL =>
           if (currentCtx.fromDayTime != null) {
@@ -350,21 +352,53 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
             CalendarIntervalType
           }
         case TIMESTAMP if currentCtx.withLocalTimeZone() != null =>
-          TimestampType
+          if (currentCtx.precision == null) {
+            TimestampType
+          } else {
+            parseTimestampLtzNanosPrecision(currentCtx.precision.getText)
+          }
         case TIMESTAMP if currentCtx.withoutTimeZone() != null =>
-          TimestampNTZType
+          if (currentCtx.precision == null) {
+            TimestampNTZType
+          } else {
+            parseTimestampNtzNanosPrecision(currentCtx.precision.getText)
+          }
         case TIMESTAMP =>
-          SqlApiConf.get.timestampType
+          if (currentCtx.precision == null) {
+            SqlApiConf.get.timestampType
+          } else {
+            SqlApiConf.get.timestampType match {
+              case TimestampType =>
+                parseTimestampLtzNanosPrecision(currentCtx.precision.getText)
+              case TimestampNTZType =>
+                parseTimestampNtzNanosPrecision(currentCtx.precision.getText)
+              case other =>
+                throw SparkException.internalError(s"Unexpected default timestamp type: $other")
+            }
+          }
+        case TIMESTAMP_LTZ =>
+          if (currentCtx.precision == null) {
+            TimestampType
+          } else {
+            parseTimestampLtzNanosPrecision(currentCtx.precision.getText)
+          }
+        case TIMESTAMP_NTZ =>
+          if (currentCtx.precision == null) {
+            TimestampNTZType
+          } else {
+            parseTimestampNtzNanosPrecision(currentCtx.precision.getText)
+          }
         case TIME =>
           val precision = if (currentCtx.precision == null) {
             TimeType.DEFAULT_PRECISION
           } else {
-            currentCtx.precision.getText.toInt
+            parseTimePrecision(currentCtx.precision.getText)
           }
           TimeType(precision)
         case GEOGRAPHY =>
-          // Unparameterized geometry type isn't supported and will be caught by the default branch.
-          // Here, we only handle the parameterized GEOGRAPHY type syntax, which comes in two forms:
+          // Unparameterized geography type isn't supported and will be caught by the default
+          // branch. Here, we only handle the parameterized GEOGRAPHY type syntax, which comes in
+          // two forms:
           if (currentCtx.any != null) {
             // The special parameterized GEOGRAPHY type syntax uses a single "ANY" string value.
             // This implies a mixed GEOGRAPHY type, with potentially different SRIDs across rows.
@@ -372,7 +406,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
           } else {
             // The explicitly parameterzied GEOGRAPHY syntax uses a specified integer SRID value.
             // This implies a fixed GEOGRAPHY type, with a single fixed SRID value across all rows.
-            GeographyType(currentCtx.srid.getText.toInt)
+            GeographyType(parseSrid(currentCtx.srid.getText))
           }
         case GEOMETRY =>
           // Unparameterized geometry type isn't supported and will be caught by the default branch.
@@ -384,7 +418,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
           } else {
             // The explicitly parameterzied GEOMETRY type syntax has a single integer SRID value.
             // This implies a fixed GEOMETRY type, with a single fixed SRID value across all rows.
-            GeometryType(currentCtx.srid.getText.toInt)
+            GeometryType(parseSrid(currentCtx.srid.getText))
           }
       }
     } else if (typeCtx.trivialPrimitiveType != null) {
@@ -398,18 +432,19 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
         case FLOAT | REAL => FloatType
         case DOUBLE => DoubleType
         case DATE => DateType
-        case TIMESTAMP_LTZ => TimestampType
-        case TIMESTAMP_NTZ => TimestampNTZType
         case BINARY => BinaryType
         case VOID => NullType
         case VARIANT => VariantType
       }
     } else {
       val badType = typeCtx.unsupportedType.getText
+      // Render the raw token text for the error message rather than routing through
+      // `getIntegerValue` (which parses to `Int`): the type is unsupported regardless, and a huge
+      // parameter such as `FOO(9999999999)` must not leak a raw `NumberFormatException` here.
       val params = typeCtx
         .integerValue()
         .asScala
-        .map(getIntegerValue(_).toString)
+        .map(_.getText)
         .toList
       val dtStr =
         if (params.nonEmpty) s"$badType(${params.mkString(",")})"
@@ -446,6 +481,88 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
     } else {
       DayTimeIntervalType(start)
     }
+  }
+
+  // Parses an integer data-type parameter (CHAR/VARCHAR length or DECIMAL scale). The grammar
+  // backs these with `INTEGER_VALUE : DIGIT+` (an unbounded digit run), so a value outside the
+  // 32-bit integer range surfaces a proper Spark error instead of a raw `NumberFormatException`.
+  private def parseIntTypeParameter(text: String, parameter: String, typeName: String): Int = {
+    try text.toInt
+    catch {
+      case _: NumberFormatException =>
+        throw DataTypeErrors.datatypeParameterValueOutOfRangeError(parameter, text, typeName)
+    }
+  }
+
+  // Parses a DECIMAL precision, reusing DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION: a value outside
+  // the 32-bit integer range is, a fortiori, beyond the maximum decimal precision.
+  private def parseDecimalPrecision(text: String): Int = {
+    try text.toInt
+    catch {
+      case _: NumberFormatException =>
+        throw DataTypeErrors.decimalPrecisionExceedsMaxPrecisionError(
+          text,
+          DecimalType.MAX_PRECISION)
+    }
+  }
+
+  // Parses a TIME precision, reusing UNSUPPORTED_TIME_PRECISION: a value outside the 32-bit
+  // integer range is out of the supported precision range.
+  private def parseTimePrecision(text: String): Int = {
+    try text.toInt
+    catch {
+      case _: NumberFormatException =>
+        throw DataTypeErrors.unsupportedTimePrecisionError(text)
+    }
+  }
+
+  // Parses a GEOMETRY/GEOGRAPHY SRID, reusing ST_INVALID_SRID_VALUE: a value outside the 32-bit
+  // integer range is an unsupported SRID, matching the error an in-range but unsupported SRID
+  // already produces.
+  private def parseSrid(text: String): Int = {
+    try text.toInt
+    catch {
+      case _: NumberFormatException =>
+        throw DataTypeErrors.stInvalidSridValueError(text)
+    }
+  }
+
+  private def parseTimestampLtzNanosPrecision(precision: String): DataType = {
+    val p =
+      try precision.toInt
+      catch {
+        case _: NumberFormatException =>
+          throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_LTZ")
+      }
+    // Precision 6 (microseconds) maps to the GA type and is accepted regardless of the
+    // nanos timestamp types preview flag.
+    if (p == 6) return TimestampType
+    // Reject out-of-range precisions before the feature-flag check so the error is always
+    // INVALID_TIMESTAMP_PRECISION, not FEATURE_NOT_ENABLED.
+    if (p < TimestampLTZNanosType.MIN_PRECISION || p > TimestampLTZNanosType.MAX_PRECISION) {
+      throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_LTZ")
+    }
+    DataTypeErrors.checkTimestampNanosTypesEnabled()
+    TimestampLTZNanosType(p)
+  }
+
+  private def parseTimestampNtzNanosPrecision(precision: String): DataType = {
+    val p =
+      try precision.toInt
+      catch {
+        case _: NumberFormatException =>
+          throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_NTZ")
+      }
+    // Precision 6 (microseconds) maps to the GA type and is accepted regardless of the
+    // nanos timestamp types preview flag.
+    if (p == 6) return TimestampNTZType
+    // Reject out-of-range precisions before the feature-flag check so the error is always
+    // INVALID_TIMESTAMP_PRECISION, not FEATURE_NOT_ENABLED.
+    if (p < TimestampNTZNanosType.MIN_PRECISION || p > TimestampNTZNanosType.MAX_PRECISION) {
+      throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_NTZ")
+    }
+    DataTypeErrors.checkTimestampNanosTypesEnabled()
+    TimestampNTZNanosType(p)
   }
 
   /**
@@ -548,7 +665,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
    * @param dataType
    *   The data type of column defined as IDENTITY column. Used for verification.
    * @return
-   *   Tuple containing start, step and allowExplicitInsert.
+   *   IdentityColumnSpec containing start, step and allowExplicitInsert.
    */
   protected def visitIdentityColumn(
       ctx: IdentityColumnContext,

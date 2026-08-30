@@ -16,15 +16,17 @@
 #
 from pyspark.pipelines.api import (
     append_flow,
+    create_auto_cdc_flow,
+    create_sink,
     create_streaming_table,
     materialized_view,
     table,
     temporary_view,
-    create_sink,
 )
 
 __all__ = [
     "append_flow",
+    "create_auto_cdc_flow",
     "create_streaming_table",
     "materialized_view",
     "table",

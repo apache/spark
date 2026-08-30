@@ -44,7 +44,7 @@ Usage:
     python dev/generate_srs_registry.py
 
     # Generate from a specific PROJ version:
-    python dev/generate_srs_registry.py --proj-version 9.7.1
+    python dev/generate_srs_registry.py --proj-version 9.8.1
 
     # Verify the generated files:
     wc -l sql/api/src/main/resources/org/apache/spark/sql/srs_registry.csv
@@ -65,7 +65,7 @@ import sys
 import urllib.request
 
 # Default PROJ version to download SQL files from.
-DEFAULT_PROJ_VERSION = "9.7.1"
+DEFAULT_PROJ_VERSION = "9.8.1"
 # PLEASE ENSURE THIS IS UPDATED TO A VALID PROJ VERSION TAG WHEN UPGRADING!
 
 # Default timeout (in seconds) for downloading SQL files from GitHub.

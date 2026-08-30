@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.{Closeable, FileNotFoundException}
+import java.io.{Closeable, File, FileNotFoundException, IOException}
 import java.time.ZoneId
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -27,7 +27,7 @@ import scala.util.{Failure, Try}
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, GlobPattern, Path}
 import org.apache.hadoop.mapred.FileSplit
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
@@ -37,18 +37,19 @@ import org.apache.parquet.format.converter.ParquetMetadataConverter.SKIP_ROW_GRO
 import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.util.HadoopInputFile
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{PATH, SCHEMA}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, RebaseDateTime}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, RebaseDateTime}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
 import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.internal.SQLConf._
@@ -60,8 +61,13 @@ class ParquetFileFormat
   extends FileFormat
   with DataSourceRegister
   with SessionStateHelper
+  with SupportsArchiveFormat
   with Logging
   with Serializable {
+
+  // Reads every archive entry, matching a directory scan (Parquet part-files are often
+  // extensionless).
+  override protected def archiveEntryFilter(name: String): Boolean = true
 
   override def shortName(): String = "parquet"
 
@@ -112,6 +118,10 @@ class ParquetFileFormat
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {
+    val parquetOptions = new ParquetOptions(options, getSqlConf(sparkSession))
+    if (parquetOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
+      return false
+    }
     true
   }
 
@@ -149,6 +159,9 @@ class ParquetFileFormat
     hadoopConf.setBoolean(
       SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
       sqlConf.legacyParquetNanosAsLong)
+    hadoopConf.setBoolean(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key,
+      sqlConf.timestampNanosTypesEnabled)
     hadoopConf.setBoolean(
       SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.key,
       sqlConf.parquetReaderRespectUnknownTypeAnnotation)
@@ -197,9 +210,22 @@ class ParquetFileFormat
     val pushDownStringPredicate = sqlConf.parquetFilterPushDownStringPredicate
     val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
+    // When shredded-variant predicate pushdown is enabled and `requiredSchema` actually carries a
+    // variant-extraction struct produced by PushVariantIntoScan, passing it lets ParquetFilters map
+    // logical paths like "v.`0`" to the physical shredded columns for row-group skipping. The
+    // `isVariantStruct` check keeps the per-file ParquetFilters construction free of any shredded
+    // traversal for the common case of scans with no variant-extraction columns.
+    val variantExtractionSchema =
+      if (sqlConf.getConf(SQLConf.VARIANT_SHREDDED_PREDICATE_PUSHDOWN_ENABLED) &&
+          requiredSchema.existsRecursively(VariantMetadata.isVariantStruct)) {
+        Some(requiredSchema)
+      } else {
+        None
+      }
     val parquetOptions = new ParquetOptions(options, sqlConf)
     val datetimeRebaseModeInRead = parquetOptions.datetimeRebaseModeInRead
     val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
+    val archiveFormatEnabled = parquetOptions.archiveFormatEnabled
 
     // Should always be set by FileSourceScanExec creating this.
     // Check conf before checking option, to allow working around an issue by changing conf.
@@ -215,7 +241,7 @@ class ParquetFileFormat
       assert(supportBatch(sparkSession, resultSchema))
     }
 
-    (file: PartitionedFile) => {
+    val readSingleFile: PartitionedFile => Iterator[InternalRow] = (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
 
       val split = new FileSplit(file.toPath, file.start, file.length, Array.empty[String])
@@ -252,7 +278,8 @@ class ParquetFileFormat
             pushDownStringPredicate,
             pushDownInFilterThreshold,
             isCaseSensitive,
-            datetimeRebaseSpec)
+            datetimeRebaseSpec,
+            variantExtractionSchema = variantExtractionSchema)
           filters
             // Collects all converted Parquet filter predicates. Notice that not all predicates
             // can be converted (`ParquetFilters.createFilter` returns an `Option`). That's why
@@ -302,6 +329,23 @@ class ParquetFileFormat
         if (shouldCloseInputStream.get) {
           openedFooter.inputStreamOpt.ifPresent(Utils.closeQuietly)
         }
+      }
+    }
+
+    // An archive is read by unpacking each Parquet entry to a local temp file and reading it with
+    // the plain reader (readSingleFile); readLocalizedEntries owns the unpack/iterate/cleanup.
+    def readArchiveFile(file: PartitionedFile): Iterator[InternalRow] =
+      readLocalizedEntries(
+          file, broadcastedHadoopConf.value.value, "parquet-archive",
+          parquetOptions.archivePathFilterPattern) {
+        entryFile => readSingleFile(entryFile)
+      }
+
+    (file: PartitionedFile) => {
+      if (archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(file.toPath)) {
+        readArchiveFile(file)
+      } else {
+        readSingleFile(file)
       }
     }
   }
@@ -411,7 +455,12 @@ class ParquetFileFormat
     }
   }
 
-  override def supportDataType(dataType: DataType): Boolean = dataType match {
+  override def supportDataType(dataType: DataType): Boolean =
+    // Types Framework: framework FIRST, original match as fallback.
+    ParquetTypeOps(dataType).map(_.supportDataType)
+      .getOrElse(supportDataTypeDefault(dataType))
+
+  private def supportDataTypeDefault(dataType: DataType): Boolean = dataType match {
     // GeoSpatial data types in Parquet are limited only to types with supported SRIDs.
     case g: GeometryType => GeometryType.isSridSupported(g.srid)
     case g: GeographyType => GeographyType.isSridSupported(g.srid)
@@ -455,6 +504,7 @@ object ParquetFileFormat extends Logging {
       sqlConf.isParquetINT96AsTimestamp,
       inferTimestampNTZ = sqlConf.parquetInferTimestampNTZEnabled,
       nanosAsLong = sqlConf.legacyParquetNanosAsLong,
+      timestampNanosTypesEnabled = sqlConf.timestampNanosTypesEnabled,
       respectUnknownTypeAnnotation =
         sqlConf.parquetReaderRespectUnknownTypeAnnotation)
 
@@ -516,26 +566,78 @@ object ParquetFileFormat extends Logging {
       partFiles: Seq[FileStatus],
       ignoreCorruptFiles: Boolean,
       ignoreMissingFiles: Boolean = false): Seq[Footer] = {
-    ThreadUtils.parmap(partFiles, "readingParquetFooters", 8) { currentFile =>
+    val archiveEnabled = SQLConf.get.getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED)
+    // This signature is shared with `SchemaMergeUtils.mergeSchemasInParallel`'s `schemaReader`, so
+    // the glob comes from `conf`, which that caller builds with the user options via
+    // `newHadoopConfWithOptions`.
+    val archivePathFilter = Option(conf.get(FileSourceOptions.ARCHIVE_PATH_FILTER))
+      .filter(_.nonEmpty).map(FileSourceOptions.compileArchivePathFilter)
+    ThreadUtils.parmap(partFiles, "readingParquetFooters", 8,
+        preserveSparkThrowable = true) { currentFile =>
       try {
         // Skips row group information since we only need the schema.
         // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
         // when it can't read the footer.
-        Some(new Footer(currentFile.getPath,
-          ParquetFooterReader.readFooter(
-            HadoopInputFile.fromStatus(currentFile, conf), SKIP_ROW_GROUPS)))
+        if (archiveEnabled && SupportsArchiveFormat.isArchivePath(currentFile.getPath)) {
+          // An archive is one file here; read each of its Parquet entries' footers (the archive is
+          // atomic under ignoreCorruptFiles, see readArchiveFooters).
+          readArchiveFooters(conf, currentFile, archivePathFilter)
+        } else {
+          Seq(new Footer(currentFile.getPath,
+            ParquetFooterReader.readFooter(
+              HadoopInputFile.fromStatus(currentFile, conf), SKIP_ROW_GROUPS)))
+        }
       } catch {
         case e: Exception if ignoreMissingFiles &&
             ExceptionUtils.getThrowables(e).exists(_.isInstanceOf[FileNotFoundException]) =>
           logWarning(log"Skipped missing file: ${MDC(PATH, currentFile)}", e)
-          None
+          Seq.empty
         case e: RuntimeException if ignoreCorruptFiles =>
           logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, currentFile)}", e)
-          None
+          Seq.empty
+        // A corrupt archive's failure arrives wrapped, not as a bare RuntimeException; a missing
+        // file (FileNotFoundException) is excluded since ignoreMissingFiles governs it.
+        case e: Exception if ignoreCorruptFiles &&
+            archiveEnabled && SupportsArchiveFormat.isArchivePath(currentFile.getPath) && {
+              val root = Utils.getRootCause(e)
+              root.isInstanceOf[IOException] && !root.isInstanceOf[FileNotFoundException]
+            } =>
+          logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, currentFile)}", e)
+          Seq.empty
         case e: Exception =>
           throw QueryExecutionErrors.cannotReadFooterForFileError(currentFile.getPath, e)
       }
     }.flatten
+  }
+
+  /** Reads every Parquet entry's footer in one archive. */
+  private def readArchiveFooters(
+      conf: Configuration,
+      archive: FileStatus,
+      archivePathFilter: Option[GlobPattern]): Seq[Footer] = {
+    val tempDir = Utils.createTempDir(Utils.getLocalDir(SparkEnv.get.conf), "parquet-archive-infer")
+    // localizeEntries eagerly opens/copies the first entry, so build it inside the try -- a corrupt
+    // archive throws there and the finally must still delete tempDir.
+    var entries: Iterator[(String, File)] = Iterator.empty
+    try {
+      entries = SupportsArchiveFormat.localizeEntries(
+        archive.getPath, conf, tempDir, _ => true, archivePathFilter)
+      entries.map { case (_, entryFile) =>
+        try {
+          val status = new FileStatus(entryFile.length(), false, 0, 0, entryFile.lastModified(),
+            0, null, null, null, new Path(entryFile.toURI))
+          new Footer(archive.getPath,
+            ParquetFooterReader.readFooter(HadoopInputFile.fromStatus(status, conf),
+              SKIP_ROW_GROUPS))
+        } finally entryFile.delete()
+      }.toList
+    } finally {
+      entries match {
+        case c: Closeable => c.close()
+        case _ =>
+      }
+      Utils.deleteRecursively(tempDir)
+    }
   }
 
   /**
@@ -561,6 +663,7 @@ object ParquetFileFormat extends Logging {
     val assumeInt96IsTimestamp = sqlConf.isParquetINT96AsTimestamp
     val inferTimestampNTZ = sqlConf.parquetInferTimestampNTZEnabled
     val nanosAsLong = sqlConf.legacyParquetNanosAsLong
+    val timestampNanosTypesEnabled = sqlConf.timestampNanosTypesEnabled
     val respectUnknownTypeAnnotation =
       sqlConf.parquetReaderRespectUnknownTypeAnnotation
 
@@ -572,7 +675,13 @@ object ParquetFileFormat extends Logging {
         assumeInt96IsTimestamp = assumeInt96IsTimestamp,
         inferTimestampNTZ = inferTimestampNTZ,
         nanosAsLong = nanosAsLong,
+        timestampNanosTypesEnabled = timestampNanosTypesEnabled,
         respectUnknownTypeAnnotation = respectUnknownTypeAnnotation)
+
+      // readParquetFootersInParallel reads archivePathFilter from the conf (its signature is fixed
+      // by SchemaMergeUtils' schemaReader type), so put the option there.
+      new FileSourceOptions(CaseInsensitiveMap(parameters)).archivePathFilter.foreach(
+        conf.set(FileSourceOptions.ARCHIVE_PATH_FILTER, _))
 
       readParquetFootersInParallel(conf, files, ignoreCorruptFiles, ignoreMissingFiles)
         .map(ParquetFileFormat.readSchemaFromFooter(_, converter))

@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, QualifiedTableName, TableIden
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, GetStructField}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
@@ -45,12 +46,12 @@ import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelationWithTable}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{ArrayType, CharType, IntegerType, LongType, StringType, StructField, StructType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
@@ -136,6 +137,44 @@ abstract class DataSourceV2SQLSuite
       val tableWithTsPattern = raw"$t\s+TIMESTAMP\s+AS\s+OF\s+$ts"
       val relationPattern = raw".*RelationV2\[[^]]*]\s$tableWithTsPattern$$".r
       checkExplain(s"SELECT * FROM $t TIMESTAMP AS OF '2019-01-29 00:37:58'", relationPattern)
+    }
+  }
+
+  test("nested partition source column receives a DPP runtime filter") {
+    val fact = s"${catalogAndNamespace}fact_nested_runtime_filter"
+    val dim = s"${catalogAndNamespace}dim_nested_runtime_filter"
+    withTable(fact, dim) {
+      sql(s"CREATE TABLE $fact " +
+        "(id INT, derives STRUCT<toStr: STRING, other: STRING>) USING " +
+        s"$v2Format PARTITIONED BY (derives.toStr)")
+      sql(s"INSERT INTO $fact VALUES " +
+        "(1, named_struct('toStr', 'AA', 'other', 'a')), " +
+        "(2, named_struct('toStr', 'BB', 'other', 'b')), " +
+        "(3, named_struct('toStr', 'CC', 'other', 'c'))")
+      sql(s"CREATE TABLE $dim (value STRING, selected INT) USING $v2Format")
+      sql(s"INSERT INTO $dim VALUES ('AA', 0), ('BB', 1)")
+
+      withSQLConf(
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
+        val df = sql(
+          s"""SELECT f.id FROM $fact f JOIN $dim d
+             |ON f.derives.toStr = d.value WHERE d.selected = 1""".stripMargin)
+        checkAnswer(df, Row(2))
+
+        val batchScans = collect(df.queryExecution.executedPlan) {
+          case b: BatchScanExec if b.runtimeFilters.nonEmpty => b
+        }
+        assert(batchScans.nonEmpty,
+          s"expected a scan with runtime filters, got ${df.queryExecution}")
+        val batchScan = batchScans.head
+        assert(batchScan.runtimeFilters.exists(_.exists(_.isInstanceOf[GetStructField])),
+          s"expected a runtime filter on derives.toStr, got ${batchScan.runtimeFilters}")
+        assert(batchScan.partitions.size === 3)
+        assert(batchScan.filteredPartitions.flatten.size === 1,
+          s"expected 1 partition after pruning, got ${batchScan.filteredPartitions.flatten.size}")
+      }
     }
   }
 
@@ -439,6 +478,7 @@ class DataSourceV2SQLSuiteV1Filter
     Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
       case (catalog, identifier) =>
         spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT id, data FROM source")
+        checkInsertMetrics(identifier, numInsertedRows = 3)
 
         val table = catalog.loadTable(Identifier.of(Array(), "table_name"))
 
@@ -453,6 +493,44 @@ class DataSourceV2SQLSuiteV1Filter
         checkAnswer(spark.internalCreateDataFrame(rdd,
           CatalogV2Util.v2ColumnsToStructType(table.columns)),
           spark.table("source"))
+    }
+  }
+
+  test("CreateTableAsSelect: field IDs in query schema are not propagated to table columns") {
+    val basicCatalog = catalog("testcat").asTableCatalog
+    val atomicCatalog = catalog("testcat_atomic").asTableCatalog
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+
+    // Use a non-numeric marker so it can never clash with InMemoryTable's sequential numeric IDs.
+    val sourceId = "source-id"
+    val nestedType = new StructType(Array(StructField("value", LongType).withId(sourceId)))
+    val schema = new StructType(Array(
+      StructField("id", LongType).withId(sourceId),
+      StructField("nested", nestedType).withId(sourceId)))
+    val sourceWithIds = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(1L, Row(42L)), Row(2L, Row(43L)))), schema)
+
+    withTempView("source_with_ids") {
+      sourceWithIds.createOrReplaceTempView("source_with_ids")
+      Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
+        case (cat, identifier) =>
+          withTable(identifier) {
+            spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT * FROM source_with_ids")
+            val table = cat.loadTable(Identifier.of(Array(), "table_name"))
+            table.columns.foreach { col =>
+              assert(col.metadataInJSON == null)
+              assert(col.id != sourceId)
+              col.dataType match {
+                case s: StructType =>
+                  s.fields.foreach { f =>
+                    assert(f.id.forall(_ != sourceId))
+                  }
+                case _ =>
+              }
+            }
+          }
+      }
     }
   }
 
@@ -611,6 +689,44 @@ class DataSourceV2SQLSuiteV1Filter
           spark.internalCreateDataFrame(rdd,
             CatalogV2Util.v2ColumnsToStructType(replacedTable.columns)),
           spark.table("source").select("id"))
+    }
+  }
+
+  test("ReplaceTableAsSelect: field IDs in query schema are not propagated to table columns") {
+    val basicCatalog = catalog("testcat").asTableCatalog
+    val atomicCatalog = catalog("testcat_atomic").asTableCatalog
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+
+    val sourceId = "source-id"
+    val nestedType = new StructType(Array(StructField("value", LongType).withId(sourceId)))
+    val schema = new StructType(Array(
+      StructField("id", LongType).withId(sourceId),
+      StructField("nested", nestedType).withId(sourceId)))
+    val sourceWithIds = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(1L, Row(42L)), Row(2L, Row(43L)))), schema)
+
+    withTempView("source_with_ids") {
+      sourceWithIds.createOrReplaceTempView("source_with_ids")
+      Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
+        case (cat, identifier) =>
+          withTable(identifier) {
+            spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT * FROM source_with_ids")
+            spark.sql(s"REPLACE TABLE $identifier USING foo AS SELECT * FROM source_with_ids")
+            val table = cat.loadTable(Identifier.of(Array(), "table_name"))
+            table.columns.foreach { col =>
+              assert(col.metadataInJSON == null)
+              assert(col.id != sourceId)
+              col.dataType match {
+                case s: StructType =>
+                  s.fields.foreach { f =>
+                    assert(f.id.forall(_ != sourceId))
+                  }
+                case _ =>
+              }
+            }
+          }
+      }
     }
   }
 
@@ -1357,8 +1473,8 @@ class DataSourceV2SQLSuiteV1Filter
   test("ShowViews: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
     checkError(
       exception = analysisException("SHOW VIEWS FROM a.b"),
-      condition = "_LEGACY_ERROR_TEMP_1126",
-      parameters = Map("catalog" -> "a.b"))
+      condition = "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG",
+      parameters = Map("namespace" -> "`a`.`b`"))
   }
 
   test("ShowViews: using v2 catalog, command not supported.") {
@@ -1675,49 +1791,61 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("SPARK-41290: Generated column expression must be valid generation expression") {
+  test("SPARK-41290: generation expression with an unresolved function fails") {
     val tblName = "my_tab"
-    def checkUnsupportedGenerationExpression(
-        expr: String,
-        expectedReason: String,
-        genColType: String = "INT",
-        customTableDef: Option[String] = None): Unit = {
-      val tableDef =
-        s"CREATE TABLE testcat.$tblName(a INT, b $genColType GENERATED ALWAYS AS ($expr)) USING foo"
-      withTable(s"testcat.$tblName") {
-        checkError(
-          exception = analysisException(customTableDef.getOrElse(tableDef)),
-          condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
-          parameters = Map(
-            "fieldName" -> "b",
-            "expressionStr" -> expr,
-            "reason" -> expectedReason)
-        )
-      }
-    }
-
-    // Expression cannot be resolved since it doesn't exist
-    checkUnsupportedGenerationExpression(
+    checkUnresolvedRoutineExceptionForCreate(
+      tblName,
       "not_a_function(a)",
-      "failed to resolve `not_a_function` to a built-in function"
+      "`not_a_function`"
     )
+  }
 
-    // Expression cannot be resolved since it's not a built-in function
+  test("SPARK-41290: generation expression with a non-built-in function fails") {
+    val tblName = "my_tab"
     spark.udf.register("timesTwo", (x: Int) => x * 2)
-    checkUnsupportedGenerationExpression(
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "timesTwo(a)",
       "failed to resolve `timesTwo` to a built-in function"
     )
+  }
 
-    // Generated column can't reference itself
-    checkUnsupportedGenerationExpression(
+  test("SPARK-41290: generation expression with a persistent SQL function fails") {
+    val tblName = "my_tab"
+    // A persistent SQL function is not a built-in function either. It is rejected earlier in
+    // analysis with UNSUPPORTED_SQL_UDF_USAGE, since SQL functions are not allowed in a
+    // CreateTable plan node.
+    withUserDefinedFunction("timesThree" -> false) {
+      sql("CREATE FUNCTION timesThree(x INT) RETURNS INT RETURN x * 3")
+      val expr = "timesThree(a)"
+      val tableDef =
+        s"CREATE TABLE testcat.$tblName(a INT, b INT GENERATED ALWAYS AS ($expr)) USING foo"
+      val start = tableDef.indexOf(expr)
+      withTable(s"testcat.$tblName") {
+        checkError(
+          exception = analysisException(tableDef),
+          condition = "UNSUPPORTED_SQL_UDF_USAGE",
+          parameters = Map(
+            "functionName" -> "`spark_catalog`.`default`.`timesthree`",
+            "nodeName" -> "CreateTable"),
+          context = ExpectedContext(fragment = expr, start = start, stop = start + expr.length - 1)
+        )
+      }
+    }
+  }
+
+  test("SPARK-41290: generation expression cannot reference itself") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "b + 1",
       "generation expression cannot reference itself"
     )
     // Obeys case sensitivity when intercepting the error message
     // Intercepts when case-insensitive
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      checkUnsupportedGenerationExpression(
+      checkUnsupportedGenerationExpressionForCreate(
+        tblName,
         "B + 1",
         "generation expression cannot reference itself"
       )
@@ -1725,12 +1853,15 @@ class DataSourceV2SQLSuiteV1Filter
     // Doesn't intercept when case-sensitive
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withTable(s"testcat.$tblName") {
+        val sql = s"CREATE TABLE testcat.$tblName(a INT, " +
+          "b INT GENERATED ALWAYS AS (B + 1)) USING foo"
+        // "B" appears at position 62 in the SQL string
+        val bPosition = sql.indexOf("(B + 1)") + 1
         checkError(
-          exception = analysisException(s"CREATE TABLE testcat.$tblName(a INT, " +
-              "b INT GENERATED ALWAYS AS (B + 1)) USING foo"),
+          exception = analysisException(sql),
           condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-          parameters = Map("objectName" -> "`B`", "proposal" -> "`a`"),
-          context = ExpectedContext(fragment = "B", start = 0, stop = 0)
+          parameters = Map("objectName" -> "`B`", "proposal" -> "`a`, `b`"),
+          context = ExpectedContext(fragment = "B", start = bPosition, stop = bPosition)
         )
       }
     }
@@ -1742,9 +1873,12 @@ class DataSourceV2SQLSuiteV1Filter
         assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
       }
     }
+  }
 
-    // Generated column can't reference other generated columns
-    checkUnsupportedGenerationExpression(
+  test("SPARK-41290: generation expression cannot reference other generated columns") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "c + 1",
       "generation expression cannot reference another generated column",
       customTableDef = Some(
@@ -1754,7 +1888,8 @@ class DataSourceV2SQLSuiteV1Filter
     )
     // Respects case-insensitivity
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      checkUnsupportedGenerationExpression(
+      checkUnsupportedGenerationExpressionForCreate(
+        tblName,
         "C + 1",
         "generation expression cannot reference another generated column",
         customTableDef = Some(
@@ -1762,7 +1897,8 @@ class DataSourceV2SQLSuiteV1Filter
             "b INT GENERATED ALWAYS AS (C + 1), c INT GENERATED ALWAYS AS (a + 1)) USING foo"
         )
       )
-      checkUnsupportedGenerationExpression(
+      checkUnsupportedGenerationExpressionForCreate(
+        tblName,
         "c + 1",
         "generation expression cannot reference another generated column",
         customTableDef = Some(
@@ -1779,26 +1915,37 @@ class DataSourceV2SQLSuiteV1Filter
         assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
       }
     }
+  }
 
-    // Generated column can't reference non-existent column
+  test("SPARK-41290: generation expression cannot reference a non-existent column") {
+    val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
+      val sql = s"CREATE TABLE testcat.$tblName(a INT, " +
+        "b INT GENERATED ALWAYS AS (c + 1)) USING foo"
+      val cPosition = sql.indexOf("(c + 1)") + 1
       checkError(
-        exception = analysisException(s"CREATE TABLE testcat.$tblName(a INT, b INT GENERATED " +
-          s"ALWAYS AS (c + 1)) USING foo"),
+        exception = analysisException(sql),
         condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        parameters = Map("objectName" -> "`c`", "proposal" -> "`a`"),
-        context = ExpectedContext(fragment = "c", start = 0, stop = 0)
+        parameters = Map("objectName" -> "`c`", "proposal" -> "`a`, `b`"),
+        context = ExpectedContext(fragment = "c", start = cPosition, stop = cPosition)
       )
     }
+  }
 
-    // Expression must be deterministic
-    checkUnsupportedGenerationExpression(
+  test("SPARK-41290: generation expression must be deterministic") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "rand()",
       "generation expression is not deterministic"
     )
+  }
 
+  test("SPARK-41290: generation expression data type must be compatible with the column type") {
+    val tblName = "my_tab"
     // Data type is incompatible
-    checkUnsupportedGenerationExpression(
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "a + 1",
       "generation expression data type int is incompatible with column data type boolean",
       "BOOLEAN"
@@ -1808,31 +1955,208 @@ class DataSourceV2SQLSuiteV1Filter
       sql(s"CREATE TABLE testcat.$tblName(a INT, b LONG GENERATED ALWAYS AS (a + 1)) USING foo")
       assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
     }
+  }
 
-    // No subquery expressions
-    checkUnsupportedGenerationExpression(
+  test("SPARK-41290: generation expression cannot contain a subquery") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "(SELECT 1)",
       "subquery expressions are not allowed for generated columns"
     )
-    checkUnsupportedGenerationExpression(
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "(SELECT (SELECT 2) + 1)", // nested
       "subquery expressions are not allowed for generated columns"
     )
-    checkUnsupportedGenerationExpression(
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "(SELECT 1) + a", // refers to another column
       "subquery expressions are not allowed for generated columns"
     )
     withTable("other") {
       sql("create table other(x INT) using parquet")
-      checkUnsupportedGenerationExpression(
+      checkUnsupportedGenerationExpressionForCreate(
+        tblName,
         "(select min(x) from other)", // refers to another table
         "subquery expressions are not allowed for generated columns"
       )
     }
-    checkUnsupportedGenerationExpression(
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "(select min(x) from faketable)", // refers to a non-existent table
       "subquery expressions are not allowed for generated columns"
     )
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression with an unresolved function fails") {
+    val tblName = "my_tab"
+    checkUnresolvedRoutineExceptionForReplace(
+      tblName,
+      "not_a_function(a)",
+      "`not_a_function`"
+    )
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression with a non-built-in function fails") {
+    val tblName = "my_tab"
+    spark.udf.register("timesTwo", (x: Int) => x * 2)
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "timesTwo(a)",
+      "failed to resolve `timesTwo` to a built-in function"
+    )
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression with a persistent SQL function fails") {
+    val tblName = "my_tab"
+    // A persistent SQL function is not a built-in function either. It is rejected earlier in
+    // analysis with UNSUPPORTED_SQL_UDF_USAGE, since SQL functions are not allowed in a
+    // ReplaceTable plan node.
+    withUserDefinedFunction("timesThree" -> false) {
+      sql("CREATE FUNCTION timesThree(x INT) RETURNS INT RETURN x * 3")
+      val expr = "timesThree(a)"
+      val tableDef =
+        s"REPLACE TABLE testcat.$tblName(a INT, b INT GENERATED ALWAYS AS ($expr)) USING foo"
+      val start = tableDef.indexOf(expr)
+      withTable(s"testcat.$tblName") {
+        sql(s"CREATE TABLE testcat.$tblName(dummy INT) USING foo")
+        checkError(
+          exception = analysisException(tableDef),
+          condition = "UNSUPPORTED_SQL_UDF_USAGE",
+          parameters = Map(
+            "functionName" -> "`spark_catalog`.`default`.`timesthree`",
+            "nodeName" -> "ReplaceTable"),
+          context = ExpectedContext(fragment = expr, start = start, stop = start + expr.length - 1)
+        )
+      }
+    }
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression cannot reference itself") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "b + 1",
+      "generation expression cannot reference itself"
+    )
+    // Obeys case sensitivity when intercepting the error message
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      checkUnsupportedGenerationExpressionForReplace(
+        tblName,
+        "B + 1",
+        "generation expression cannot reference itself"
+      )
+    }
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression cannot reference " +
+    "other generated columns") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "c + 1",
+      "generation expression cannot reference another generated column",
+      customTableDef = Some(
+        s"REPLACE TABLE testcat.$tblName(a INT, " +
+          "b INT GENERATED ALWAYS AS (c + 1), c INT GENERATED ALWAYS AS (a + 1)) USING foo"
+      )
+    )
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression cannot reference a " +
+    "non-existent column") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"CREATE TABLE testcat.$tblName(dummy INT) USING foo")
+      val replaceSql = s"REPLACE TABLE testcat.$tblName(a INT, " +
+        "b INT GENERATED ALWAYS AS (c + 1)) USING foo"
+      val cPosition = replaceSql.indexOf("(c + 1)") + 1
+      checkError(
+        exception = analysisException(replaceSql),
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> "`c`", "proposal" -> "`a`, `b`"),
+        context = ExpectedContext(fragment = "c", start = cPosition, stop = cPosition)
+      )
+    }
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression must be deterministic") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "rand()",
+      "generation expression is not deterministic"
+    )
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression data type must be " +
+    "compatible with the column type") {
+    val tblName = "my_tab"
+    // Data type is incompatible
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "a + 1",
+      "generation expression data type int is incompatible with column data type boolean",
+      "BOOLEAN"
+    )
+    // But we allow valid up-casts
+    withTable(s"testcat.$tblName") {
+      sql(s"CREATE TABLE testcat.$tblName(dummy INT) USING foo")
+      sql(s"REPLACE TABLE testcat.$tblName(a INT, b LONG GENERATED ALWAYS AS (a + 1)) USING foo")
+      assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
+    }
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression cannot contain a subquery") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "(SELECT 1)",
+      "subquery expressions are not allowed for generated columns"
+    )
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "(SELECT (SELECT 2) + 1)", // nested
+      "subquery expressions are not allowed for generated columns"
+    )
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "(SELECT 1) + a", // refers to another column
+      "subquery expressions are not allowed for generated columns"
+    )
+    withTable("other") {
+      sql("create table other(x INT) using parquet")
+      checkUnsupportedGenerationExpressionForReplace(
+        tblName,
+        "(select min(x) from other)", // refers to another table
+        "subquery expressions are not allowed for generated columns"
+      )
+    }
+  }
+
+  test("SPARK-57360: generation expression cannot reference temporary variables") {
+    val tblName = "my_tab"
+    withSessionVariable("my_var") {
+      sql("DECLARE OR REPLACE VARIABLE my_var INT DEFAULT 1")
+      checkUnsupportedGenerationExpressionForCreate(
+        tblName,
+        "a + my_var",
+        "generation expression cannot reference temporary variables"
+      )
+    }
+  }
+
+  test("SPARK-57360: REPLACE TABLE - generation expression cannot reference temporary variables") {
+    val tblName = "my_tab"
+    withSessionVariable("my_var") {
+      sql("DECLARE OR REPLACE VARIABLE my_var INT DEFAULT 1")
+      checkUnsupportedGenerationExpressionForReplace(
+        tblName,
+        "a + my_var",
+        "generation expression cannot reference temporary variables"
+      )
+    }
   }
 
   test("SPARK-44313: generation expression validation passes when there is a char/varchar column") {
@@ -2885,6 +3209,386 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-54831: COMMENT ON COLUMN") {
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
+
+    // Session catalog (V1) table.
+    withTable("t") {
+      sql("CREATE TABLE t(k int COMMENT 'original comment', v string) USING json")
+
+      assert(columnComment("t", "k") === Some("original comment"))
+
+      // Update an existing comment.
+      sql("COMMENT ON COLUMN t.k IS 'new comment'")
+      assert(columnComment("t", "k") === Some("new comment"))
+
+      // IS NULL removes the comment entirely, so it becomes genuinely absent (not an empty string).
+      sql("COMMENT ON COLUMN t.k IS NULL")
+      assert(columnComment("t", "k").isEmpty)
+
+      // Setting back to literal 'NULL' must keep the string value.
+      sql("COMMENT ON COLUMN t.k IS 'NULL'")
+      assert(columnComment("t", "k") === Some("NULL"))
+
+      // Empty string sets an empty comment, which is distinct from removing it.
+      sql("COMMENT ON COLUMN t.k IS ''")
+      assert(columnComment("t", "k") === Some(""))
+
+      // Add comment to a column that didn't have one.
+      sql("COMMENT ON COLUMN t.v IS 'comment for v'")
+      assert(columnComment("t", "v") === Some("comment for v"))
+    }
+
+    // V2 non-session catalog table.
+    withTable("testcat.ns1.ns2.t") {
+      sql("CREATE TABLE testcat.ns1.ns2.t(k int COMMENT 'original', v string) USING foo")
+      assert(columnComment("testcat.ns1.ns2.t", "k") === Some("original"))
+
+      sql("COMMENT ON COLUMN testcat.ns1.ns2.t.k IS 'updated comment'")
+      assert(columnComment("testcat.ns1.ns2.t", "k") === Some("updated comment"))
+
+      // IS NULL removes the comment entirely.
+      sql("COMMENT ON COLUMN testcat.ns1.ns2.t.k IS NULL")
+      assert(columnComment("testcat.ns1.ns2.t", "k").isEmpty)
+
+      // IS '' sets an empty comment, which remains present.
+      sql("COMMENT ON COLUMN testcat.ns1.ns2.t.k IS ''")
+      assert(columnComment("testcat.ns1.ns2.t", "k") === Some(""))
+    }
+
+    // COMMENT ON COLUMN with only one identifier part is rejected.
+    val sql1 = "COMMENT ON COLUMN onlyone IS 'x'"
+    checkError(
+      exception = intercept[ParseException](sql(sql1)),
+      condition = "INVALID_SQL_SYNTAX.COMMENT_ON_COLUMN_INCORRECT_IDENTIFIER",
+      parameters = Map.empty,
+      context = ExpectedContext(fragment = sql1, start = 0, stop = sql1.length - 1))
+
+    // Unknown column is reported as an UNRESOLVED_COLUMN error.
+    withTable("t2") {
+      sql("CREATE TABLE t2(k int) USING json")
+      val sql2 = "COMMENT ON COLUMN t2.nonexistent IS 'test'"
+      checkError(
+        exception = analysisException(sql2),
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> "`nonexistent`", "proposal" -> "`k`"),
+        context = ExpectedContext(fragment = sql2, start = 0, stop = sql2.length - 1))
+    }
+
+    // Different qualification levels for the session catalog: table.column and
+    // database.table.column (matching the examples in the
+    // COMMENT_ON_COLUMN_INCORRECT_IDENTIFIER error message).
+    withDatabase("comment_test_db") {
+      sql("CREATE DATABASE comment_test_db")
+      sql("USE comment_test_db")
+      withTable("comment_test_db.qualified_test") {
+        sql("CREATE TABLE qualified_test(x int, y string, z int) USING json")
+
+        // table.column
+        sql("COMMENT ON COLUMN qualified_test.x IS 'with table.column'")
+        assert(columnComment("qualified_test", "x") === Some("with table.column"))
+
+        // database.table.column
+        sql("COMMENT ON COLUMN comment_test_db.qualified_test.y IS 'with db.table.column'")
+        assert(columnComment("qualified_test", "y") === Some("with db.table.column"))
+
+        // catalog.database.table.column
+        sql(
+          "COMMENT ON COLUMN spark_catalog.comment_test_db.qualified_test.z IS " +
+            "'with catalog.db.table.column'")
+        assert(columnComment("qualified_test", "z") === Some("with catalog.db.table.column"))
+      }
+    }
+
+    // catalog.database.table.column against a V2 non-session catalog.
+    withTable("testcat.ns1.ns2.qualified") {
+      sql("CREATE TABLE testcat.ns1.ns2.qualified(c int) USING foo")
+      sql("COMMENT ON COLUMN testcat.ns1.ns2.qualified.c IS 'v2 catalog.db.table.column'")
+      assert(columnComment("testcat.ns1.ns2.qualified", "c") === Some("v2 catalog.db.table.column"))
+    }
+
+    // A view target is rejected: COMMENT ON COLUMN only supports tables.
+    withView("v") {
+      sql("CREATE VIEW v AS SELECT 1 AS c")
+      val sql3 = "COMMENT ON COLUMN v.c IS 'test'"
+      checkError(
+        exception = analysisException(sql3),
+        condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        parameters = Map(
+          "viewName" -> "`spark_catalog`.`default`.`v`",
+          "operation" -> "COMMENT ON COLUMN"),
+        context = ExpectedContext(fragment = sql3, start = 0, stop = sql3.length - 1))
+    }
+
+    // The single-column `COMMENT ON COLUMN` form cannot address a nested field: the last
+    // identifier part is always taken as the (top-level) column name and everything before it as
+    // the table path. So `t.point.x` is parsed as table `testcat.ns1.ns2.t.point`, column `x`,
+    // and fails to find that table. Nested fields must use the `COMMENT ON TABLE ... COLUMN (...)`
+    // form instead (covered below).
+    withTable("testcat.ns1.ns2.nested") {
+      sql("CREATE TABLE testcat.ns1.ns2.nested(point struct<x: double, y: double>) USING foo")
+      val sql4 = "COMMENT ON COLUMN testcat.ns1.ns2.nested.point.x IS 'x field'"
+      checkError(
+        exception = analysisException(sql4),
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`testcat`.`ns1`.`ns2`.`nested`.`point`"),
+        context = ExpectedContext(fragment = sql4, start = 0, stop = sql4.length - 1))
+    }
+  }
+
+  test("SPARK-54831: COMMENT ON TABLE ... COLUMN supports multiple columns and nested fields") {
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
+
+    withTable("testcat.ns1.ns2.t") {
+      sql(
+        "CREATE TABLE testcat.ns1.ns2.t(id int, data string, " +
+          "point struct<x: double, y: double>) USING foo")
+
+      sql(
+        """COMMENT ON TABLE testcat.ns1.ns2.t COLUMN (
+          | id IS 'id col',
+          | data IS 'data col',
+          | point IS 'point col')""".stripMargin)
+
+      assert(columnComment("testcat.ns1.ns2.t", "id") === Some("id col"))
+      assert(columnComment("testcat.ns1.ns2.t", "data") === Some("data col"))
+      assert(columnComment("testcat.ns1.ns2.t", "point") === Some("point col"))
+
+      // Nested fields must be commented in a separate statement because the analyzer rejects
+      // commenting on a parent column and its nested fields in the same command
+      // (NOT_SUPPORTED_CHANGE_SAME_COLUMN).
+      sql(
+        """COMMENT ON TABLE testcat.ns1.ns2.t COLUMN (
+          | point.x IS 'x field',
+          | point.y IS 'y field')""".stripMargin)
+
+      val pointField = spark.table("testcat.ns1.ns2.t").schema("point")
+      val struct = pointField.dataType.asInstanceOf[StructType]
+      assert(struct("x").getComment().contains("x field"))
+      assert(struct("y").getComment().contains("y field"))
+
+      // IS NULL removes a column comment, making it genuinely absent.
+      sql("COMMENT ON TABLE testcat.ns1.ns2.t COLUMN (id IS NULL)")
+      assert(columnComment("testcat.ns1.ns2.t", "id").isEmpty)
+
+      // A nested field comment can likewise be removed with IS NULL.
+      sql("COMMENT ON TABLE testcat.ns1.ns2.t COLUMN (point.x IS NULL)")
+      val pointAfter = spark.table("testcat.ns1.ns2.t").schema("point")
+        .dataType.asInstanceOf[StructType]
+      assert(pointAfter("x").getComment().isEmpty)
+      assert(pointAfter("y").getComment().contains("y field"))
+    }
+
+    // Deeply nested fields (struct within struct) can be commented via the COLUMN (...) form.
+    // A parent field and its descendant cannot be changed in the same command
+    // (NOT_SUPPORTED_CHANGE_SAME_COLUMN), so comment them in separate statements.
+    withTable("testcat.ns1.ns2.deep") {
+      sql(
+        "CREATE TABLE testcat.ns1.ns2.deep(" +
+          "outer struct<inner: struct<leaf: int>>) USING foo")
+
+      sql("COMMENT ON TABLE testcat.ns1.ns2.deep COLUMN (outer.inner IS 'inner struct')")
+      sql("COMMENT ON TABLE testcat.ns1.ns2.deep COLUMN (outer.inner.leaf IS 'leaf field')")
+
+      val outerField = spark.table("testcat.ns1.ns2.deep").schema("outer")
+      val outerStruct = outerField.dataType.asInstanceOf[StructType]
+      assert(outerStruct("inner").getComment().contains("inner struct"))
+      val innerStruct = outerStruct("inner").dataType.asInstanceOf[StructType]
+      assert(innerStruct("leaf").getComment().contains("leaf field"))
+    }
+
+    // A nested field inside an array element (`points.element.y`) can be commented and removed,
+    // matching the reach of `ALTER TABLE ... ALTER COLUMN points.element.y COMMENT`.
+    withTable("testcat.ns1.ns2.arr") {
+      sql(
+        "CREATE TABLE testcat.ns1.ns2.arr(" +
+          "id int, points array<struct<x: double, y: double>>) USING foo")
+
+      def yField(): StructField = {
+        val elem = spark.table("testcat.ns1.ns2.arr").schema("points")
+          .dataType.asInstanceOf[ArrayType].elementType.asInstanceOf[StructType]
+        elem("y")
+      }
+
+      sql("COMMENT ON TABLE testcat.ns1.ns2.arr COLUMN (points.element.y IS 'y in array')")
+      assert(yField().getComment().contains("y in array"))
+
+      // IS NULL removes the array-element field comment.
+      sql("COMMENT ON TABLE testcat.ns1.ns2.arr COLUMN (points.element.y IS NULL)")
+      assert(yField().getComment().isEmpty)
+    }
+  }
+
+  test("SPARK-54831: COMMENT ON TABLE ... COLUMN works on the session catalog (V1 table)") {
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
+
+    // Multiple top-level columns and nested fields work on an ordinary managed table, routed
+    // through the shared V2 execution path rather than the single-column V1 command.
+    withTable("t") {
+      sql("CREATE TABLE t(id int, data string, point struct<x: double, y: double>) USING json")
+
+      // Multiple top-level columns at once.
+      sql(
+        """COMMENT ON TABLE t COLUMN (
+          | id IS 'id col',
+          | data IS 'data col')""".stripMargin)
+      assert(columnComment("t", "id") === Some("id col"))
+      assert(columnComment("t", "data") === Some("data col"))
+
+      // Nested fields.
+      sql(
+        """COMMENT ON TABLE t COLUMN (
+          | point.x IS 'x field',
+          | point.y IS 'y field')""".stripMargin)
+      val struct = spark.table("t").schema("point").dataType.asInstanceOf[StructType]
+      assert(struct("x").getComment().contains("x field"))
+      assert(struct("y").getComment().contains("y field"))
+
+      // A single nested field via COMMENT ON TABLE ... COLUMN.
+      sql("COMMENT ON TABLE t COLUMN (point.x IS 'updated x')")
+      val struct2 = spark.table("t").schema("point").dataType.asInstanceOf[StructType]
+      assert(struct2("x").getComment().contains("updated x"))
+
+      // IS NULL removes comments (top-level and nested) on the session catalog too.
+      sql("COMMENT ON TABLE t COLUMN (id IS NULL, point.y IS NULL)")
+      assert(columnComment("t", "id").isEmpty)
+      val struct3 = spark.table("t").schema("point").dataType.asInstanceOf[StructType]
+      assert(struct3("y").getComment().isEmpty)
+
+      // The new comment is visible immediately via DESCRIBE (the relation cache is refreshed).
+      sql("COMMENT ON TABLE t COLUMN (data IS 'fresh comment')")
+      checkAnswer(
+        sql("DESCRIBE t data").filter("info_name = 'comment'").select("info_value"),
+        Row("fresh comment"))
+
+      // The table target accepts an IDENTIFIER(...) clause, like COMMENT ON TABLE ... IS.
+      sql("COMMENT ON TABLE IDENTIFIER('t') COLUMN (id IS 'via identifier')")
+      assert(columnComment("t", "id") === Some("via identifier"))
+    }
+
+    // char/varchar columns keep their declared type while their comment is updated.
+    withTable("t") {
+      sql("CREATE TABLE t(c char(5), v varchar(6)) USING parquet")
+      sql("COMMENT ON TABLE t COLUMN (c IS 'char comment', v IS 'varchar comment')")
+      assert(columnComment("t", "c") === Some("char comment"))
+      assert(columnComment("t", "v") === Some("varchar comment"))
+      val raw = spark.sessionState.catalog.getTableRawMetadata(
+        TableIdentifier("t", Some("default")))
+      assert(raw.schema("c").dataType === CharType(5))
+      assert(raw.schema("v").dataType === VarcharType(6))
+    }
+
+    // A parent field and its nested field still cannot be changed in the same command.
+    withTable("t") {
+      sql("CREATE TABLE t(point struct<x: double, y: double>) USING json")
+      val sqlText =
+        """COMMENT ON TABLE t COLUMN (
+          | point IS 'point col',
+          | point.x IS 'x field')""".stripMargin
+      checkError(
+        exception = intercept[AnalysisException](sql(sqlText)),
+        condition = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
+        parameters = Map(
+          "table" -> "`spark_catalog`.`default`.`t`",
+          "fieldName" -> "`point`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
+    }
+
+    // An unknown column is still reported as UNRESOLVED_COLUMN on the session catalog.
+    withTable("t") {
+      sql("CREATE TABLE t(id int) USING json")
+      val sqlText = "COMMENT ON TABLE t COLUMN (id IS 'x', nope IS 'y')"
+      checkError(
+        exception = analysisException(sqlText),
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> "`nope`", "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
+    }
+
+    // Commenting a partition column is rejected.
+    withTable("t") {
+      sql("CREATE TABLE t(id int, p string) USING json PARTITIONED BY (p)")
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("COMMENT ON TABLE t COLUMN (id IS 'id col', p IS 'part col')")),
+        condition = "CANNOT_ALTER_PARTITION_COLUMN",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "columnName" -> "`p`"))
+    }
+  }
+
+  test("SPARK-54831: session-catalog V1 comment routing is scoped to COMMENT ON ... COLUMN") {
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
+
+    // The dedicated V1 comment command only handles the `COMMENT ON ... COLUMN` syntax. The
+    // equivalent bulk / nested-field `ALTER TABLE ... ALTER COLUMN ... COMMENT` forms build the
+    // same `AlterColumns` plan but keep their pre-existing UNSUPPORTED_FEATURE.TABLE_OPERATION
+    // error on the session catalog, so this PR does not silently change ALTER TABLE behavior.
+    withTable("t") {
+      sql("CREATE TABLE t(id int, data string, point struct<x: double, y: double>) USING json")
+
+      // Bulk ALTER COLUMN comment change (multiple columns) is still unsupported on V1.
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("ALTER TABLE t ALTER COLUMN id COMMENT 'id col', data COMMENT 'data col'")),
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        sqlState = "0A000",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "operation" -> "ALTER COLUMN in bulk"))
+      assert(columnComment("t", "id").isEmpty)
+      assert(columnComment("t", "data").isEmpty)
+
+      // Nested-field ALTER COLUMN comment change is still unsupported on V1.
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("ALTER TABLE t ALTER COLUMN point.x COMMENT 'x field'")),
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        sqlState = "0A000",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "operation" -> "ALTER COLUMN with qualified column"))
+      val struct = spark.table("t").schema("point").dataType.asInstanceOf[StructType]
+      assert(struct("x").getComment().isEmpty)
+
+      // The single-column, top-level ALTER COLUMN comment change keeps working on V1.
+      sql("ALTER TABLE t ALTER COLUMN id COMMENT 'id col'")
+      assert(columnComment("t", "id") === Some("id col"))
+    }
+  }
+
+  test("SPARK-54831: COMMENT ON TABLE ... COLUMN cannot change parent and child fields in the " +
+    "same command") {
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
+
+    withTable("testcat.ns1.ns2.t") {
+      sql(
+        "CREATE TABLE testcat.ns1.ns2.t(id int, " +
+          "point struct<x: double, y: double>) USING foo")
+
+      val sqlText =
+        """COMMENT ON TABLE testcat.ns1.ns2.t COLUMN (
+          | point IS 'point col',
+          | point.x IS 'x field')""".stripMargin
+      checkError(
+        exception = intercept[AnalysisException](sql(sqlText)),
+        condition = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
+        parameters = Map(
+          "table" -> "`testcat`.`ns1`.`ns2`.`t`",
+          "fieldName" -> "`point`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
+    }
+  }
+
+  // Returns the comment of a top-level column as stored in the table schema. Reads it from the
+  // StructField metadata (not DESCRIBE, which renders both an absent and an empty comment as the
+  // same empty string) so callers can distinguish a removed comment (None) from an empty one
+  // (Some("")).
+  private def columnComment(tableName: String, columnName: String): Option[String] = {
+    spark.table(tableName).schema(columnName).getComment()
+  }
+
   test("SPARK-31015: star expression should work for qualified column names for v2 tables") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -2966,13 +3670,13 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("View commands are not supported in v2 catalogs") {
+  test("View commands are not supported in v2 catalogs that don't implement ViewCatalog") {
     def validateViewCommand(sqlStatement: String): Unit = {
       val e = analysisException(sqlStatement)
       checkError(
         e,
-        condition = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
-        parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
+        condition = "MISSING_CATALOG_ABILITY.VIEWS",
+        parameters = Map("plugin" -> "testcat"))
     }
 
     validateViewCommand("DROP VIEW testcat.v")
@@ -3656,6 +4360,123 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("time travel with at syntax") {
+    sql("use testcat")
+    val t1 = "testcat.tSnapshot123456789"
+    val t2 = "testcat.t2345678910"
+    withTable(t1, t2) {
+      sql(s"CREATE TABLE $t1 (id int) USING foo")
+      sql(s"CREATE TABLE $t2 (id int) USING foo")
+      sql(s"INSERT INTO $t1 VALUES (1), (2)")
+      sql(s"INSERT INTO $t2 VALUES (3), (4)")
+
+      checkAnswer(sql("SELECT * FROM t@v2345678910"), Seq(Row(3), Row(4)))
+      checkAnswer(sql("SELECT * FROM t@V2345678910"), Seq(Row(3), Row(4)))
+      checkAnswer(sql("SELECT * FROM t@v'Snapshot123456789'"), Seq(Row(1), Row(2)))
+      checkAnswer(spark.read.table("t@v2345678910"), Seq(Row(3), Row(4)))
+      checkAnswer(spark.table("t@v2345678910"), Seq(Row(3), Row(4)))
+
+      checkError(
+        exception = intercept[ParseException] {
+          sql("SELECT * FROM t@v2345678910 VERSION AS OF 1")
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty,
+        context = ExpectedContext(fragment = "VERSION AS OF 1", start = 28, stop = 42))
+      checkError(
+        exception = intercept[ParseException] {
+          sql("SELECT * FROM t@v2345678910 TIMESTAMP AS OF '2019-01-29'")
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty,
+        context = ExpectedContext(
+          fragment = "TIMESTAMP AS OF '2019-01-29'", start = 28, stop = 55))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.option("versionAsOf", "2345678910").table("t@v2345678910").collect()
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.option("timestampAsOf", "2019-01-29").table("t@v2345678910").collect()
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM t@v2345678910 WITH ('timestampAsOf' = '2019-01-29')")
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+
+      withSQLConf(SQLConf.TIME_TRAVEL_AT_SYNTAX_ENABLED.key -> "false") {
+        checkError(
+          exception = intercept[ParseException] {
+            sql("SELECT * FROM t@v2345678910")
+          },
+          condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL_AT_SYNTAX",
+          parameters = Map("config" -> "\"spark.sql.timeTravel.atSyntax.enabled\""),
+          context = ExpectedContext(fragment = "t@v2345678910", start = 14, stop = 26))
+        intercept[ParseException](spark.read.table("t@v2345678910"))
+      }
+    }
+
+    val ts1 = DateTimeUtils.stringToTimestampAnsi(
+      UTF8String.fromString("2019-01-29 00:37:58"),
+      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+    val t3 = s"testcat.t$ts1"
+    withTable(t3) {
+      sql(s"CREATE TABLE $t3 (id int) USING foo")
+      sql(s"INSERT INTO $t3 VALUES (5), (6)")
+
+      checkAnswer(sql("SELECT * FROM t@20190129003758000"), Seq(Row(5), Row(6)))
+      checkAnswer(spark.read.table("t@20190129003758000"), Seq(Row(5), Row(6)))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.option("versionAsOf", "1").table("t@20190129003758000").collect()
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.option("timestampAsOf", "2019-01-29").table("t@20190129003758000").collect()
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM t@20190129003758000 WITH ('timestampAsOf' = '2019-01-29')")
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+    }
+
+    intercept[ParseException](sql("SELECT * FROM t@foo"))
+    intercept[ParseException](spark.read.table("t@foo"))
+    withTable("testcat.`weird@v1`") {
+      sql("CREATE TABLE testcat.`weird@v1` (id int) USING foo")
+      sql("INSERT INTO testcat.`weird@v1` VALUES (42)")
+      checkAnswer(sql("SELECT * FROM `weird@v1`"), Row(42))
+      checkAnswer(spark.read.table("`weird@v1`"), Row(42))
+    }
+
+    withTempView("v") {
+      spark.range(1).createOrReplaceTempView("v")
+      checkError(
+        exception = analysisException("SELECT * FROM v@v1"),
+        condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+        sqlState = None,
+        parameters = Map("relationId" -> "`v`"))
+    }
+    checkError(
+      exception = analysisException("WITH x AS (SELECT 1) SELECT * FROM x@v1"),
+      condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+      sqlState = None,
+      parameters = Map("relationId" -> "`x`"))
+  }
+
   test("SPARK-37827: put build-in properties into V1Table.properties to adapt v2 command") {
     val t = "tbl"
     withTable(t) {
@@ -3738,6 +4559,29 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("Session variable in INSERT REPLACE WHERE") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      spark.sql("DECLARE OR REPLACE VARIABLE replacement_id BIGINT DEFAULT 2")
+      try {
+        spark.sql(
+          s"""
+             |INSERT INTO $t
+             |  REPLACE WHERE id = replacement_id
+             |  VALUES (2, 'bb')
+             |""".stripMargin)
+
+        checkAnswer(
+          spark.table(t),
+          Seq(Row(1L, "a"), Row(2L, "bb"), Row(3L, "c")))
+      } finally {
+        spark.sql("DROP TEMPORARY VARIABLE IF EXISTS replacement_id")
+      }
+    }
+  }
+
   test("Selective Overwrite: REPLACE WHERE with BY NAME - column reordering") {
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
@@ -3758,6 +4602,161 @@ class DataSourceV2SQLSuiteV1Filter
       checkAnswer(
         spark.table(s"$t"),
         Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    }
+  }
+
+  test("Selective Overwrite: REPLACE WHERE with column list - maps source columns by position") {
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val df2 = spark.createDataFrame(Seq(("d", 4L), ("e", 5L), ("f", 6L))).toDF("data", "id")
+    df2.createOrReplaceTempView("source2")
+
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+
+      spark.sql(s"INSERT INTO $t (data, id) REPLACE WHERE id = 3 SELECT * FROM source2")
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    }
+  }
+
+  test("Selective Overwrite: REPLACE WHERE with column list - omitted column becomes null") {
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val df2 = spark.createDataFrame(Seq(Tuple1(4L), Tuple1(5L))).toDF("id")
+    df2.createOrReplaceTempView("source2_ids")
+
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+
+      spark.sql(s"INSERT INTO $t (id) REPLACE WHERE id = 3 SELECT * FROM source2_ids")
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, null), Row(5L, null)))
+    }
+  }
+
+  test("Selective Overwrite: REPLACE WHERE with column list - too few data columns") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      checkError(
+        exception = analysisException(
+          s"INSERT INTO $t (id, data) REPLACE WHERE id = 1 SELECT 1"),
+        condition = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`testcat`.`tbl`",
+          "tableColumns" -> "`id`, `data`",
+          "dataColumns" -> "`1`"))
+    }
+  }
+
+  test("Selective Overwrite: REPLACE WHERE with column list - too many data columns") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      checkError(
+        exception = analysisException(
+          s"INSERT INTO $t (id) REPLACE WHERE id = 1 SELECT 1, 'a'"),
+        condition = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`testcat`.`tbl`",
+          "tableColumns" -> "`id`",
+          "dataColumns" -> "`1`, `a`"))
+    }
+  }
+
+  test("Selective Overwrite: REPLACE WHERE with column list - unknown target column") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      checkError(
+        exception = analysisException(
+          s"INSERT INTO $t (id, nonexistent) REPLACE WHERE id = 1 SELECT 1, 'a'"),
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map(
+          "objectName" -> "`nonexistent`",
+          "proposal" -> "`id`, `data`"),
+        context = ExpectedContext(
+          fragment = s"INSERT INTO $t (id, nonexistent) REPLACE WHERE id = 1",
+          start = 0,
+          stop = 50 + t.length))
+    }
+  }
+
+  test("Selective Overwrite: REPLACE WHERE with column list - duplicate columns") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      checkError(
+        exception = analysisException(
+          s"INSERT INTO $t (id, id) REPLACE WHERE id = 1 SELECT 1, 2"),
+        condition = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`id`"))
+    }
+  }
+
+  test("Selective Overwrite: REPLACE WHERE with column list passes write options to the write") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+      // The in-memory table fails the write only if the option reaches the write path.
+      intercept[IllegalStateException] {
+        spark.sql(
+          s"INSERT INTO $t WITH (`${InMemoryBaseTable.SIMULATE_FAILED_WRITE_OPTION}` = true) " +
+            "(data, id) REPLACE WHERE id = 3 SELECT 'z', 3")
+      }
+      checkAnswer(
+        spark.table(t),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+    }
+  }
+
+  test("Selective Overwrite: REPLACE WHERE with column list maps struct fields by position") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, info struct<x: int, y: int>) USING foo PARTITIONED BY (id)")
+      spark.sql(
+        s"INSERT INTO $t VALUES (1, named_struct('x', 10, 'y', 20)), " +
+          "(2, named_struct('x', 30, 'y', 40))")
+
+      // Column list reorders top-level columns; struct fields still map by position, so the
+      // source's ('y', 'x') order lands in the target's (x, y).
+      spark.sql(
+        s"INSERT INTO $t (info, id) REPLACE WHERE id = 1 " +
+          "SELECT named_struct('y', 100, 'x', 200), 1")
+      checkAnswer(
+        spark.sql(s"SELECT id, info.x, info.y FROM $t ORDER BY id"),
+        Seq(Row(1L, 100, 200), Row(2L, 30, 40)))
+    }
+  }
+
+  test("Selective Overwrite: WITH SCHEMA EVOLUTION with column list widens the reordered column") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id int, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // The column list reorders to (data, id) and supplies a BIGINT for id at position 1.
+      // Schema evolution must widen `id` (not `data`) to BIGINT.
+      spark.sql(
+        s"INSERT WITH SCHEMA EVOLUTION INTO $t (data, id) " +
+          "REPLACE WHERE id = 1 SELECT 'a', CAST(100 AS BIGINT)")
+
+      assert(spark.table(t).schema("id").dataType === LongType)
+      checkAnswer(
+        spark.table(t).orderBy("data"),
+        Seq(Row(100L, "a"), Row(2L, "b")))
     }
   }
 
@@ -3912,8 +4911,8 @@ class DataSourceV2SQLSuiteV1Filter
         QueryTest.checkAnswer(
           descriptionDf.filter(
             "!(col_name in ('Catalog', 'Created Time', 'Created By', 'Database', " +
-              "'index', 'Location', 'Name', 'Owner', 'Provider', 'Table', 'Table Properties', " +
-              "'Type', '_partition', ''))"),
+              "'index', 'Location', 'Name', 'Namespace', 'Owner', 'Provider', 'Table', " +
+              "'Table Properties', 'Type', '_partition', ''))"),
           Seq(
             Row("# Detailed Table Information", "", ""),
             Row("# Column Default Values", "", ""),
@@ -4249,6 +5248,65 @@ class DataSourceV2SQLSuiteV1Filter
     checkWriteOperations("read_only_cat")
   }
 
+  test("SPARK-58370: read-only catalog, write whose query reads the target table") {
+    def assertPrivilegeError(f: => Unit, privileges: String): Unit = {
+      val e = intercept[RuntimeException](f)
+      assert(e.getMessage == s"cannot write with $privileges")
+    }
+
+    def checkWritesReadingTheTarget(catalog: String): Unit = {
+      withSQLConf(s"spark.sql.catalog.$catalog" -> classOf[ReadOnlyCatalog].getName) {
+        val tbl = s"$catalog.default.t"
+        withTable(tbl) {
+          sql(s"CREATE TABLE $tbl (i INT)")
+
+          // The write target is resolved after its query, so it used to find the query's
+          // relation in the per-query relation cache and skip `loadTable(ident, writePrivileges)`.
+          assertPrivilegeError(sql(s"INSERT INTO $tbl SELECT * FROM $tbl"), "INSERT")
+          assertPrivilegeError(
+            sql(s"INSERT OVERWRITE $tbl SELECT * FROM $tbl"), "DELETE,INSERT")
+          assertPrivilegeError(
+            sql(s"INSERT OVERWRITE $tbl SELECT * FROM $tbl WHERE 1 = 0"), "DELETE,INSERT")
+          assertPrivilegeError(
+            sql(s"INSERT INTO $tbl REPLACE WHERE i = 0 SELECT * FROM $tbl"), "DELETE,INSERT")
+          // The reference to the target can be anywhere in the query.
+          assertPrivilegeError(
+            sql(s"INSERT INTO $tbl SELECT i FROM (SELECT i FROM $tbl) x"), "INSERT")
+          assertPrivilegeError(
+            sql(s"WITH c AS (SELECT i FROM $tbl) INSERT INTO $tbl SELECT i FROM c"), "INSERT")
+
+          // `DataFrameWriterV2` passes the unanalyzed query plan, so its target is resolved in the
+          // same analyzer run as the query's reference to the same table.
+          assertPrivilegeError(sql(s"SELECT * FROM $tbl").writeTo(tbl).append(), "INSERT")
+          assertPrivilegeError(
+            sql(s"SELECT * FROM $tbl").writeTo(tbl).overwritePartitions(), "DELETE,INSERT")
+          assertPrivilegeError(sql(s"SELECT * FROM $tbl").write.insertInto(tbl), "INSERT")
+
+          // Row-level operations resolve the target before the source / subquery, so these were
+          // already checked; they are here to keep both orders covered.
+          assertPrivilegeError(
+            sql(s"UPDATE $tbl SET i = 0 WHERE i IN (SELECT i FROM $tbl)"), "UPDATE")
+          assertPrivilegeError(
+            sql(s"DELETE FROM $tbl WHERE i IN (SELECT i FROM $tbl)"), "DELETE")
+          assertPrivilegeError(
+            sql(
+              s"""
+                 |MERGE INTO $tbl USING (SELECT i FROM $tbl) AS source
+                 |ON source.i = $tbl.i
+                 |WHEN MATCHED THEN UPDATE SET *
+                 |""".stripMargin),
+            "UPDATE")
+        }
+      }
+    }
+
+    // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
+    // configure a new implementation.
+    spark.sessionState.catalogManager.reset()
+    checkWritesReadingTheTarget(SESSION_CATALOG_NAME)
+    checkWritesReadingTheTarget("read_only_self_ref_cat")
+  }
+
   test("StagingTableCatalog without atomic support") {
     withSQLConf("spark.sql.catalog.fakeStagedCat" -> classOf[FakeStagedTableCatalog].getName) {
       withTable("fakeStagedCat.t") {
@@ -4302,6 +5360,28 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-56587: Show table names for V2 write nodes in UI") {
+    val t1 = s"testcat.ns1.ns2.table_name"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
+      val df1 = sql(s"INSERT INTO $t1 VALUES (1, 'a')")
+      val executed1 = df1.queryExecution.executedPlan
+      assert(executed1.collect {
+        case org.apache.spark.sql.execution.CommandResultExec(
+            _, w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec, _) => w
+        case w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec => w
+      }.head.nodeName.contains("testcat.ns1.ns2.table_name"))
+
+      val df2 = sql(s"INSERT OVERWRITE $t1 VALUES (2, 'b')")
+      val executed2 = df2.queryExecution.executedPlan
+      assert(executed2.collect {
+        case org.apache.spark.sql.execution.CommandResultExec(
+            _, w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec, _) => w
+        case w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec => w
+      }.head.nodeName.contains("testcat.ns1.ns2.table_name"))
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
@@ -4312,12 +5392,93 @@ class DataSourceV2SQLSuiteV1Filter
       sqlState = "0A000",
       parameters = Map("cmd" -> expectedArgument.getOrElse(sqlCommand)))
   }
+
+  private def checkUnsupportedGenerationExpression(
+      tblName: String,
+      tableDef: String,
+      expr: String,
+      expectedReason: String,
+      createFirst: Boolean): Unit = {
+    withTable(s"testcat.$tblName") {
+      if (createFirst) {
+        sql(s"CREATE TABLE testcat.$tblName(dummy INT) USING foo")
+      }
+      checkError(
+        exception = analysisException(tableDef),
+        condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+        parameters = Map(
+          "fieldName" -> "b",
+          "expressionStr" -> expr,
+          "reason" -> expectedReason))
+    }
+  }
+
+  private def checkUnsupportedGenerationExpressionForCreate(
+      tblName: String,
+      expr: String,
+      expectedReason: String,
+      genColType: String = "INT",
+      customTableDef: Option[String] = None): Unit = {
+    val tableDef = customTableDef.getOrElse(
+      s"CREATE TABLE testcat.$tblName(a INT, b $genColType GENERATED ALWAYS AS ($expr)) USING foo")
+    checkUnsupportedGenerationExpression(
+      tblName, tableDef, expr, expectedReason, createFirst = false)
+  }
+
+  private def checkUnsupportedGenerationExpressionForReplace(
+      tblName: String,
+      expr: String,
+      expectedReason: String,
+      genColType: String = "INT",
+      customTableDef: Option[String] = None): Unit = {
+    val tableDef = customTableDef.getOrElse(
+      s"REPLACE TABLE testcat.$tblName(a INT, b $genColType " +
+        s"GENERATED ALWAYS AS ($expr)) USING foo")
+    checkUnsupportedGenerationExpression(
+      tblName, tableDef, expr, expectedReason, createFirst = true)
+  }
+
+  private def checkUnresolvedRoutineException(
+      tblName: String,
+      tableDef: String,
+      expr: String,
+      routineName: String,
+      createFirst: Boolean): Unit = {
+    val start = tableDef.indexOf(expr)
+    withTable(s"testcat.$tblName") {
+      if (createFirst) {
+        sql(s"CREATE TABLE testcat.$tblName(dummy INT) USING foo")
+      }
+      checkError(
+        exception = analysisException(tableDef),
+        condition = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> routineName,
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+        context = ExpectedContext(fragment = expr, start = start, stop = start + expr.length - 1))
+    }
+  }
+
+  private def checkUnresolvedRoutineExceptionForCreate(
+      tblName: String,
+      expr: String,
+      routineName: String): Unit = {
+    val tableDef =
+      s"CREATE TABLE testcat.$tblName(a INT, b INT GENERATED ALWAYS AS ($expr)) USING foo"
+    checkUnresolvedRoutineException(tblName, tableDef, expr, routineName, createFirst = false)
+  }
+
+  private def checkUnresolvedRoutineExceptionForReplace(
+      tblName: String,
+      expr: String,
+      routineName: String): Unit = {
+    val tableDef =
+      s"REPLACE TABLE testcat.$tblName(a INT, b INT GENERATED ALWAYS AS ($expr)) USING foo"
+    checkUnresolvedRoutineException(tblName, tableDef, expr, routineName, createFirst = true)
+  }
 }
 
 class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
-  import org.apache.spark.sql.catalyst.expressions.DynamicPruning
-  import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
-
   override protected val catalogAndNamespace = "testv2filter.ns1.ns2."
 
   test("SPARK-56467: scalar subquery filters on partition columns are pushed into runtimeFilters") {
@@ -4351,6 +5512,47 @@ class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
       val numPartitions = batchScan.filteredPartitions.count(_.isDefined)
       assert(numPartitions == 1,
         s"Expected 1 partition after scalar subquery pruning, got $numPartitions")
+    }
+  }
+
+  test("SPARK-58207: non-deterministic scalar subquery filters are not pushed into " +
+    "runtimeFilters") {
+    val tbl = s"${catalogAndNamespace}tbl"
+    val dim = s"${catalogAndNamespace}dim"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Format PARTITIONED BY (part)")
+      for (i <- 0 until 10) {
+        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
+      }
+
+      sql(s"CREATE TABLE $dim (val INT) USING $v2Format")
+      sql(s"INSERT INTO $dim VALUES (3)")
+
+      // `part = (subquery) OR rand() < 0.5` references only the partition column and holds a
+      // scalar subquery, so it is a candidate for runtime pushdown, but it is non-deterministic.
+      // Routing it would push it to the source for pruning while the FilterExec above the scan
+      // re-evaluates it, and a partition the source dropped on its own evaluation could not be
+      // recovered.
+      val df = sql(
+        s"SELECT * FROM $tbl WHERE part = (SELECT max(val) FROM $dim) OR rand() < 0.5")
+      df.collect()
+
+      val batchScan = collect(df.queryExecution.executedPlan) {
+        case b: BatchScanExec => b
+      }.head
+      assert(batchScan.runtimeFilters.isEmpty,
+        s"Expected no runtime filters for a non-deterministic filter, " +
+          s"got ${batchScan.runtimeFilters}")
+
+      // No pruning at the source, and the filter is still evaluated by Spark after the scan.
+      val numPartitions = batchScan.filteredPartitions.count(_.isDefined)
+      assert(numPartitions == 10,
+        s"Expected all 10 partitions to be retained, got $numPartitions")
+      val postScanConditions = collect(df.queryExecution.executedPlan) {
+        case f: FilterExec => f.condition
+      }
+      assert(postScanConditions.exists(!_.deterministic),
+        s"Expected the non-deterministic filter above the scan, got $postScanConditions")
     }
   }
 }

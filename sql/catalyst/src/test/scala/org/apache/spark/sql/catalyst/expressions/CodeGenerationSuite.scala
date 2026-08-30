@@ -442,6 +442,48 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ctx2.mutableStateInitCode.size == CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT + 10)
   }
 
+  test("SPARK-58437: declare generic mutable state arrays with raw array creation") {
+    val ctx = new CodegenContext
+    val samplerType =
+      "org.apache.spark.util.random.BernoulliCellSampler" +
+        "<org.apache.spark.sql.catalyst.expressions.UnsafeRow>"
+    for (_ <- 1 to CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD + 1) {
+      ctx.addMutableState(samplerType, "sampler")
+    }
+
+    val states = ctx.declareMutableStates()
+    assert(states.contains(s"private $samplerType[]"))
+    assert(!states.contains(s"new $samplerType["))
+    assert(states.contains("new org.apache.spark.util.random.BernoulliCellSampler["))
+  }
+
+  test("SPARK-58437: generate javac-compatible source for collection expressions") {
+    val intArray =
+      BoundReference(0, ArrayType(IntegerType, containsNull = false), nullable = false)
+    val intArray2 =
+      BoundReference(1, ArrayType(IntegerType, containsNull = false), nullable = false)
+    val collectionExprs = Seq(
+      ArrayDistinct(intArray),
+      ArrayUnion(intArray, intArray2),
+      ArrayIntersect(intArray, intArray2),
+      ArrayExcept(intArray, intArray2))
+
+    collectionExprs.foreach { expr =>
+      val ctx = new CodegenContext
+      val exprCode = expr.genCode(ctx).code.toString
+      val code = exprCode + "\n" + ctx.declareAddedFunctions()
+      assert(!code.contains("ArrayBuilder$ofInt"))
+      assert(code.contains("ArrayBuilder.ofInt"))
+    }
+
+    val sequence = new Sequence(
+      BoundReference(0, IntegerType, nullable = false),
+      BoundReference(1, IntegerType, nullable = false),
+      BoundReference(2, IntegerType, nullable = false))
+    val sequenceCode = sequence.genCode(new CodegenContext).code.toString
+    assert(!sequenceCode.contains("final int[]"))
+  }
+
   test("SPARK-22750: addImmutableStateIfNotExists") {
     val ctx = new CodegenContext
     val mutableState1 = "field1"
@@ -626,7 +668,11 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
         |}
         |""".stripMargin
 
-    CodeGenerator.compile(new CodeAndComment(code, Map.empty))
+    // Pin the Janino backend: this guards a Janino-specific compiler bug and must keep
+    // exercising Janino whatever spark.sql.codegen.compiler is set to.
+    withSQLConf(SQLConf.CODEGEN_COMPILER.key -> "janino") {
+      CodeGenerator.compile(new CodeAndComment(code, Map.empty))
+    }
   }
 }
 

@@ -187,6 +187,13 @@ class ColumnNodeSuite extends SparkFunSuite {
     testNormalization(InvokeInlineUserDefinedFunction(
       simpleUdf,
       Seq(attribute("a", 2))))
+    // `ds` is not part of the normalization contract (it is a plan, not a ColumnNode, and is
+    // compared by reference), so a stable null reference is enough to exercise origin stripping
+    // for SCALAR/EXISTS and the recursive normalization of IN(values).
+    testNormalization(SubqueryExpression(null, SubqueryType.SCALAR))
+    testNormalization(SubqueryExpression(null, SubqueryType.EXISTS))
+    testNormalization(
+      SubqueryExpression(null, SubqueryType.IN(Seq(attribute("a", 2), attribute("b", 3)))))
   }
 
   private def testNormalization(generate: => ColumnNode): Unit = {

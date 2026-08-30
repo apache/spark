@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.13</artifactId>
-    <version>4.2.0-SNAPSHOT</version>
+    <version>5.0.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -34,9 +34,7 @@
   </description>
   <properties>
     <sbt.project.name>hadoop-cloud</sbt.project.name>
-    <okhttp.version>3.12.12</okhttp.version>
-    <okio.version>1.17.6</okio.version>
-    <wildfly-openssl.version>2.2.5.Final</wildfly-openssl.version>
+    <wildfly-openssl.version>2.3.0.Final</wildfly-openssl.version>
   </properties>
 
   <dependencies>
@@ -94,6 +92,11 @@
       <version>${wildfly-openssl.version}</version>
     </dependency>
     <dependency>
+      <groupId>org.wildfly.openssl</groupId>
+      <artifactId>wildfly-openssl-macosx-aarch64</artifactId>
+      <version>${wildfly-openssl.version}</version>
+    </dependency>
+    <dependency>
       <groupId>software.amazon.awssdk</groupId>
       <artifactId>bundle</artifactId>
       <version>${aws.java.sdk.v2.version}</version>
@@ -134,7 +137,6 @@
     <dependency>
       <groupId>com.fasterxml.jackson.dataformat</groupId>
       <artifactId>jackson-dataformat-cbor</artifactId>
-      <version>${fasterxml.jackson.version}</version>
     </dependency>
     <!--Explicit declaration to force in Spark version into transitive dependencies -->
     <dependency>
@@ -153,12 +155,6 @@
       <artifactId>hadoop-azure</artifactId>
       <version>${hadoop.version}</version>
       <scope>${hadoop.deps.scope}</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-huaweicloud</artifactId>
-      <version>${hadoop.version}</version>
-      <scope>${huaweicloud.deps.scope}</scope>
     </dependency>
     <!--
     There's now a hadoop-cloud-storage which transitively pulls in the store JARs,
@@ -193,23 +189,15 @@
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-tos</artifactId>
         </exclusion>
+        <!--
+          SPARK-58671: Exclude `hadoop-huaweicloud` to keep the vulnerable okhttp 3.x
+          dependency off the classpath.
+        -->
         <exclusion>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-huaweicloud</artifactId>
         </exclusion>
       </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>com.squareup.okhttp3</groupId>
-      <artifactId>okhttp</artifactId>
-      <version>${okhttp.version}</version>
-      <scope>${huaweicloud.deps.scope}</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.squareup.okio</groupId>
-      <artifactId>okio</artifactId>
-      <version>${okio.version}</version>
-      <scope>${huaweicloud.deps.scope}</scope>
     </dependency>
   </dependencies>
 
@@ -238,12 +226,6 @@
   </build>
 
   <profiles>
-    <profile>
-      <id>huaweicloud-provided</id>
-      <properties>
-        <huaweicloud.deps.scope>provided</huaweicloud.deps.scope>
-      </properties>
-    </profile>
     <profile>
       <id>integration-test</id>
       <build>

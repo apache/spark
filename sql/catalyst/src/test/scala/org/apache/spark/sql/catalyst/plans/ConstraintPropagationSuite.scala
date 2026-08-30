@@ -19,16 +19,16 @@ package org.apache.spark.sql.catalyst.plans
 
 import java.util.TimeZone
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType, StringType}
 
-class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
+class ConstraintPropagationSuite extends PlanTest {
 
   private def resolveColumn(tr: LocalRelation, columnName: String): Expression =
     resolveColumn(tr.analyze, columnName)
@@ -427,5 +427,153 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
       assert(aliasedRelation.analyze.constraints.isEmpty)
     }
+  }
+
+  test("infer range constraints by substituting attr=literal bindings") {
+    // When a.pt = '20260610' (modeled as a.k = 5) and b.v >= a.k are both present,
+    // inferConstraintsFromLiteralBindings should emit b.v >= 5.
+    val tr = LocalRelation($"k".int, $"v".int)
+    val a = resolveColumn(tr, "k")
+    val b = resolveColumn(tr, "v")
+
+    val constraints = ExpressionSet(Seq(
+      EqualTo(a, Literal(5)),
+      GreaterThanOrEqual(b, a),
+      LessThanOrEqual(b, Add(a, Literal(10)))))
+
+    val helper = new ConstraintHelper {}
+    val inferred = helper.inferConstraintsFromLiteralBindings(constraints)
+
+    // b >= 5 must be inferred
+    assert(inferred.exists {
+      case GreaterThanOrEqual(attr: Attribute, Literal(v, IntegerType)) =>
+        attr.semanticEquals(b) && v == 5
+      case _ => false
+    }, s"Expected b >= 5 in inferred constraints; got: $inferred")
+
+    // b <= 15 must be inferred (a + 10 with a=5, i.e. Add(Literal(5), Literal(10)))
+    assert(inferred.exists {
+      case LessThanOrEqual(attr: Attribute, rhs) if attr.semanticEquals(b) =>
+        // rhs is either Literal(15) or Add(Literal(5), Literal(10)) - both are foldable
+        rhs.foldable && rhs.eval(null) == 15
+      case _ => false
+    }, s"Expected b <= 15 in inferred constraints; got: $inferred")
+  }
+
+  test("infer range constraints: literal on left side of EqualTo") {
+    val tr = LocalRelation($"k".int, $"v".int)
+    val a = resolveColumn(tr, "k")
+    val b = resolveColumn(tr, "v")
+
+    // Literal appears on the left: 5 = a.k
+    val constraints = ExpressionSet(Seq(
+      EqualTo(Literal(5), a),
+      GreaterThanOrEqual(b, a)))
+
+    val helper = new ConstraintHelper {}
+    val inferred = helper.inferConstraintsFromLiteralBindings(constraints)
+
+    assert(inferred.exists {
+      case GreaterThanOrEqual(attr: Attribute, Literal(v, IntegerType)) =>
+        attr.semanticEquals(b) && v == 5
+      case _ => false
+    }, s"Expected b >= 5 in inferred constraints; got: $inferred")
+  }
+
+  test("infer constraints by substituting attr=literal bindings into EqualTo expressions") {
+    val tr = LocalRelation($"k".int, $"v".int)
+    val a = resolveColumn(tr, "k")
+    val b = resolveColumn(tr, "v")
+
+    val constraints = ExpressionSet(Seq(
+      EqualTo(a, Literal(5)),
+      EqualTo(b, Add(a, Literal(1)))))
+
+    val helper = new ConstraintHelper {}
+    val inferred = helper.inferConstraintsFromLiteralBindings(constraints)
+
+    // b = a + 1 with a = 5 should infer b = 5 + 1 (foldable to 6)
+    assert(inferred.exists {
+      case EqualTo(attr: Attribute, rhs) if attr.semanticEquals(b) =>
+        rhs.foldable && rhs.eval(null) == 6
+      case _ => false
+    }, s"Expected b = 6 in inferred constraints; got: $inferred")
+  }
+
+  test("non-deterministic constraints inferred from literal substitution are filtered out") {
+    val tr = LocalRelation($"k".int, $"v".int)
+    val a = resolveColumn(tr, "k")
+    val b = resolveColumn(tr, "v")
+
+    // b >= a.k + Rand(); after substituting a.k=5 the result is non-deterministic.
+    // inferConstraintsFromLiteralBindings may emit it, but the plan-level constraints
+    // filter must drop it.
+    val randExpr = Add(a, Cast(Rand(0L), IntegerType))
+    val condition = EqualTo(a, Literal(5)) && GreaterThanOrEqual(b, randExpr)
+    val plan = Filter(condition, tr.analyze)
+
+    assert(!plan.analyze.constraints.exists {
+      case GreaterThanOrEqual(attr: Attribute, _) => attr.semanticEquals(b)
+      case _ => false
+    }, s"Should not keep non-deterministic constraint in plan constraints; " +
+      s"got: ${plan.analyze.constraints}")
+  }
+
+  test("do not infer constraints by substituting non-binary-stable collated attributes") {
+    // a is UTF8_LCASE (case-insensitive). a = 'hello' only tells us a is case-insensitively
+    // equal to 'hello'; it could still be 'HELLO'. Substituting a with 'hello' into a
+    // UTF8_BINARY comparison like b >= a would infer b >= 'hello', which is wrong.
+    val a = AttributeReference("a", StringType(CollationFactory.UTF8_LCASE_COLLATION_ID))()
+    val b = AttributeReference("b", StringType)()
+    val hello = Literal("hello")
+
+    val constraints = ExpressionSet(Seq(
+      EqualTo(a, hello),
+      GreaterThanOrEqual(b, a)))
+
+    val helper = new ConstraintHelper {}
+    val inferred = helper.inferConstraintsFromLiteralBindings(constraints)
+
+    assert(!inferred.exists {
+      case GreaterThanOrEqual(attr: Attribute, lit: Literal) =>
+        attr.semanticEquals(b) && lit.semanticEquals(hello)
+      case _ => false
+    }, s"Should not infer b >= 'hello' for non-binary-stable collation; got: $inferred")
+  }
+
+  test("do not substitute attr=literal bindings into EqualNullSafe or attr-attr EqualTo targets") {
+    // EqualNullSafe and attribute-attribute EqualTo are excluded from substitution targets:
+    //  - Substituting into EqualNullSafe(b, a) would yield b <=> 5, a structurally distinct form
+    //    that subquery-reuse matching treats differently from b = 5, causing duplicate subqueries
+    //    (the q78 regression root).
+    //  - Substituting into EqualTo(c, a) would duplicate the transitivity already handled by
+    //    inferAdditionalConstraints, which derives c = 5 from c = a and a = 5.
+    val tr = LocalRelation($"k".int, $"v".int, $"w".int)
+    val a = resolveColumn(tr, "k")
+    val b = resolveColumn(tr, "v")
+    val c = resolveColumn(tr, "w")
+
+    val constraints = ExpressionSet(Seq(
+      EqualTo(a, Literal(5)),
+      EqualNullSafe(b, a),
+      EqualTo(c, a)))
+
+    val helper = new ConstraintHelper {}
+    val inferred = helper.inferConstraintsFromLiteralBindings(constraints)
+
+    // No b <=> 5 should be synthesized from the EqualNullSafe target.
+    assert(!inferred.exists {
+      case EqualNullSafe(attr: Attribute, lit: Literal) =>
+        attr.semanticEquals(b) && lit.semanticEquals(Literal(5))
+      case _ => false
+    }, s"Should not infer b <=> 5 from EqualNullSafe target; got: $inferred")
+
+    // No c = 5 should be synthesized from the attr-attr EqualTo target; that derivation
+    // belongs to inferAdditionalConstraints, not literal substitution.
+    assert(!inferred.exists {
+      case EqualTo(attr: Attribute, lit: Literal) =>
+        attr.semanticEquals(c) && lit.semanticEquals(Literal(5))
+      case _ => false
+    }, s"Should not infer c = 5 from attr-attr EqualTo target; got: $inferred")
   }
 }

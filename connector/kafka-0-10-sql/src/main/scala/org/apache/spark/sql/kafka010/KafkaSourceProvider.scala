@@ -274,6 +274,15 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       if (p <= 0) throw new IllegalArgumentException("minPartitions must be positive")
     }
 
+    if (params.contains(PARTITION_METADATA_CACHE_TTL_MS)) {
+      val v = params(PARTITION_METADATA_CACHE_TTL_MS).toLong
+      if (v != -1 && v <= 0) {
+        throw new IllegalArgumentException(
+          "Option 'partition.metadata.cache.ttl.ms' must be a positive number of milliseconds, " +
+          "or -1 to disable caching")
+      }
+    }
+
     if (params.contains(MAX_RECORDS_PER_PARTITION_OPTION_KEY)) {
       val p = params(MAX_RECORDS_PER_PARTITION_OPTION_KEY).toLong
       if (p <= 0) {
@@ -366,10 +375,10 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       case LatestOffsetRangeLimit =>
         throw new IllegalArgumentException("starting offset can't be latest " +
           "for batch queries on Kafka")
-      case SpecificOffsetRangeLimit(partitionOffsets) =>
-        partitionOffsets.foreach {
-          case (tp, off) if off == KafkaOffsetRangeLimit.LATEST =>
-            throw new IllegalArgumentException(s"startingOffsets for $tp can't " +
+      case SpecificOffsetRangeLimit(partitionOffsets, topicOffsets) =>
+        (partitionOffsets.map { case (tp, off) => tp.toString -> off } ++ topicOffsets).foreach {
+          case (name, off) if off == KafkaOffsetRangeLimit.LATEST =>
+            throw new IllegalArgumentException(s"startingOffsets for $name can't " +
               "be latest for batch queries on Kafka")
           case _ => // ignore
         }
@@ -384,10 +393,10 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         throw new IllegalArgumentException("ending offset can't be earliest " +
           "for batch queries on Kafka")
       case LatestOffsetRangeLimit => // good to go
-      case SpecificOffsetRangeLimit(partitionOffsets) =>
-        partitionOffsets.foreach {
-          case (tp, off) if off == KafkaOffsetRangeLimit.EARLIEST =>
-            throw new IllegalArgumentException(s"ending offset for $tp can't be " +
+      case SpecificOffsetRangeLimit(partitionOffsets, topicOffsets) =>
+        (partitionOffsets.map { case (tp, off) => tp.toString -> off } ++ topicOffsets).foreach {
+          case (name, off) if off == KafkaOffsetRangeLimit.EARLIEST =>
+            throw new IllegalArgumentException(s"ending offset for $name can't be " +
               "earliest for batch queries on Kafka")
           case _ => // ignore
         }
@@ -577,6 +586,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private[kafka010] val DEFAULT_MAX_TRIGGER_DELAY = "15m"
   private[kafka010] val FETCH_OFFSET_NUM_RETRY = "fetchoffset.numretries"
   private[kafka010] val FETCH_OFFSET_RETRY_INTERVAL_MS = "fetchoffset.retryintervalms"
+  private[kafka010] val PARTITION_METADATA_CACHE_TTL_MS = "partition.metadata.cache.ttl.ms"
   private[kafka010] val CONSUMER_POLL_TIMEOUT = "kafkaconsumer.polltimeoutms"
   private[kafka010] val STARTING_OFFSETS_BY_TIMESTAMP_STRATEGY_KEY =
     "startingoffsetsbytimestampstrategy"
@@ -630,19 +640,25 @@ private[kafka010] object KafkaSourceProvider extends Logging {
     startOffset match {
       case start: SpecificOffsetRangeLimit if endOffset.isInstanceOf[SpecificOffsetRangeLimit] =>
         val end = endOffset.asInstanceOf[SpecificOffsetRangeLimit]
-        if (start.partitionOffsets.keySet != end.partitionOffsets.keySet) {
+        // Topic-level offsets are only expanded once the partitions are discovered, so with them
+        // the two sides can legitimately enumerate different topic-partitions here. Matching them
+        // up is then left to the offset readers, which see the assigned partitions.
+        val enumeratesAllPartitions = start.topicOffsets.isEmpty && end.topicOffsets.isEmpty
+        if (enumeratesAllPartitions &&
+            start.partitionOffsets.keySet != end.partitionOffsets.keySet) {
           throw KafkaExceptions.unmatchedTopicPartitionsBetweenOffsets(
             start.partitionOffsets.keySet, end.partitionOffsets.keySet
           )
         }
         start.partitionOffsets.foreach {
-          case (tp, startOffset) =>
+          case (tp, startOffset) if end.partitionOffsets.contains(tp) =>
             checkStartOffsetNotGreaterThanEndOffset(
               startOffset,
               end.partitionOffsets(tp),
               tp,
               KafkaExceptions.unresolvedStartOffsetGreaterThanEndOffset
             )
+          case _ => // the offsets of this partition are not comparable before resolution
         }
 
       case start: SpecificTimestampRangeLimit
@@ -701,7 +717,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
           LatestOffsetRangeLimit
         case Some(offset) if offset.toLowerCase(Locale.ROOT) == "earliest" =>
           EarliestOffsetRangeLimit
-        case Some(json) => SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json))
+        case Some(json) => JsonUtils.specificOffsets(json)
         case None => defaultOffsets
       }
     }

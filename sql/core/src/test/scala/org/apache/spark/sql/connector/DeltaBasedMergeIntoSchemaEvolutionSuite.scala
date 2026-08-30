@@ -34,7 +34,8 @@ class DeltaBasedMergeIntoSchemaEvolutionSQLSuite
 // Scala/DataFrame API-based tests for delta-based row-level operations
 class DeltaBasedMergeIntoSchemaEvolutionScalaSuite
   extends MergeIntoSchemaEvolutionScalaSuiteBase
-  with MergeIntoSchemaEvolutionTests {
+  with MergeIntoSchemaEvolutionTests
+  with MergeIntoSchemaEvolutionExtraScalaTests {
 
   override protected lazy val extraTableProps: java.util.Map[String, String] = {
     val props = new java.util.HashMap[String, String]()

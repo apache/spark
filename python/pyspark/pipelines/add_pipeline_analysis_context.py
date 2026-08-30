@@ -15,10 +15,9 @@
 # limitations under the License.
 #
 from contextlib import contextmanager
-from typing import Generator, Optional
-from pyspark.sql import SparkSession
+from typing import Any, Generator, Optional, cast
 
-from typing import Any, cast
+from pyspark.sql import SparkSession
 
 
 @contextmanager
@@ -34,8 +33,9 @@ def add_pipeline_analysis_context(
     # Likely related to SPARK-47544.
     client = cast(Any, spark).client
     try:
-        import pyspark.sql.connect.proto as pb2
         from google.protobuf import any_pb2
+
+        import pyspark.sql.connect.proto as pb2
 
         analysis_context = pb2.PipelineAnalysisContext(
             dataflow_graph_id=dataflow_graph_id, flow_name=flow_name
@@ -45,4 +45,7 @@ def add_pipeline_analysis_context(
         extension_id = client.add_threadlocal_user_context_extension(extension)
         yield
     finally:
-        client.remove_user_context_extension(extension_id)
+        # extension_id stays None if registering the extension above failed; skip cleanup in that
+        # case so we don't call remove_user_context_extension(None) and mask the original error.
+        if extension_id is not None:
+            client.remove_user_context_extension(extension_id)

@@ -424,6 +424,26 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     assert(!RangeShuffleSpec(10, distribution).canCreatePartitioning)
   }
 
+  test("SPARK-59022: canCreatePartitioning: KeyedShuffleSpec requires grouped partition keys") {
+    val a = $"a".int
+    val distribution = ClusteredDistribution(Seq(a))
+    def keyedSpec(keys: Seq[Int]): KeyedShuffleSpec = KeyedShuffleSpec(
+      KeyedPartitioning(Seq(a), keys.map(k => InternalRow(k))), distribution)
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val grouped = keyedSpec(Seq(2, 1))
+      assert(grouped.partitioning.isGrouped)
+      assert(grouped.canCreatePartitioning,
+        "unsorted keys are fine, the shuffle follows the declared order")
+
+      // Duplicate keys mean one key spans several partitions, which a KeyGroupedPartitioner cannot
+      // reproduce, so this spec must not be the target for shuffling the other child.
+      val ungrouped = keyedSpec(Seq(1, 1, 2))
+      assert(!ungrouped.partitioning.isGrouped)
+      assert(!ungrouped.canCreatePartitioning)
+    }
+  }
+
   test("createPartitioning: HashShuffleSpec") {
     checkCreatePartitioning(
       HashShuffleSpec(HashPartitioning(Seq($"a"), 10), ClusteredDistribution(Seq($"a", $"b"))),
@@ -450,6 +470,66 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         ClusteredDistribution(Seq($"a", $"d", $"a", $"d"))),
       ClusteredDistribution(Seq($"a", $"b", $"c", $"d")),
       HashPartitioning(Seq($"a", $"b"), 10)
+    )
+  }
+
+  test("compatibility: NullAwareHashShuffleSpec") {
+    val spreadAB = ClusteredDistribution(Seq($"a", $"b"), allowNullKeySpreading = true)
+    val spreadCD = ClusteredDistribution(Seq($"c", $"d"), allowNullKeySpreading = true)
+    val regularAB = ClusteredDistribution(Seq($"a", $"b"))
+
+    val nullAwareAB = NullAwareHashShuffleSpec(
+      NullAwareHashPartitioning(Seq($"a", $"b"), 10), spreadAB)
+    val nullAwareCD = NullAwareHashShuffleSpec(
+      NullAwareHashPartitioning(Seq($"c", $"d"), 10), spreadCD)
+    val regularABSpec = HashShuffleSpec(
+      HashPartitioning(Seq($"a", $"b"), 10), regularAB)
+    val spreadABHashSpec = HashShuffleSpec(
+      HashPartitioning(Seq($"a", $"b"), 10), spreadAB)
+
+    checkCompatible(nullAwareAB, nullAwareCD, expected = true)
+    checkCompatible(nullAwareAB, SinglePartitionShuffleSpec, expected = false)
+    checkCompatible(
+      NullAwareHashShuffleSpec(NullAwareHashPartitioning(Seq($"a", $"b"), 1), spreadAB),
+      SinglePartitionShuffleSpec,
+      expected = true)
+    checkCompatible(nullAwareAB, regularABSpec, expected = false)
+    checkCompatible(nullAwareAB, spreadABHashSpec, expected = true)
+    checkCompatible(spreadABHashSpec, nullAwareAB, expected = true)
+  }
+
+  test("canCreatePartitioning: NullAwareHashShuffleSpec") {
+    val spreadDistribution =
+      ClusteredDistribution(Seq($"a", $"b"), allowNullKeySpreading = true)
+    val partialSpec = NullAwareHashShuffleSpec(
+      NullAwareHashPartitioning(Seq($"a"), 10), spreadDistribution)
+    val fullSpec = NullAwareHashShuffleSpec(
+      NullAwareHashPartitioning(Seq($"a", $"b"), 10), spreadDistribution)
+
+    withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+      assert(partialSpec.canCreatePartitioning)
+    }
+    withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "true") {
+      assert(!partialSpec.canCreatePartitioning)
+      assert(fullSpec.canCreatePartitioning)
+    }
+  }
+
+  test("createPartitioning: NullAwareHashShuffleSpec") {
+    checkCreatePartitioning(
+      NullAwareHashShuffleSpec(
+        NullAwareHashPartitioning(Seq($"a"), 10),
+        ClusteredDistribution(Seq($"a", $"b"), allowNullKeySpreading = true)),
+      ClusteredDistribution(Seq($"c", $"d"), allowNullKeySpreading = true),
+      NullAwareHashPartitioning(Seq($"c"), 10)
+    )
+
+    checkCreatePartitioning(
+      HashShuffleSpec(
+        HashPartitioning(Seq($"a"), 10),
+        ClusteredDistribution(Seq($"a", $"b"), allowNullKeySpreading = true)),
+      ClusteredDistribution(Seq($"c", $"d"), allowNullKeySpreading = true),
+      NullAwareHashPartitioning(Seq($"c"), 10)
     )
   }
 

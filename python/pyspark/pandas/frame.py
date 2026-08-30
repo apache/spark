@@ -19,24 +19,26 @@
 A wrapper class for Spark DataFrame to behave like pandas DataFrame.
 """
 
-from collections import defaultdict, namedtuple
-from collections.abc import Mapping
-import re
-import warnings
+import datetime
 import inspect
 import json
-import types
-from functools import partial, reduce, wraps
+import re
 import sys
-from itertools import zip_longest, chain
+import types
+import warnings
+from collections import defaultdict, namedtuple
+from collections.abc import Mapping
+from functools import partial, reduce, wraps
+from itertools import chain, zip_longest
 from types import TracebackType
 from typing import (
+    IO,
+    TYPE_CHECKING,
     Any,
     Callable,
     ClassVar,
     Dict,
     Generic,
-    IO,
     Iterable,
     Iterator,
     List,
@@ -49,16 +51,14 @@ from typing import (
     Union,
     cast,
     no_type_check,
-    TYPE_CHECKING,
 )
-import datetime
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import (
     is_bool_dtype,
-    is_list_like,
     is_dict_like,
+    is_list_like,
     is_scalar,
 )
 from pandas.tseries.frequencies import DateOffset, to_offset  # type: ignore[attr-defined]
@@ -66,34 +66,15 @@ from pandas.tseries.frequencies import DateOffset, to_offset  # type: ignore[att
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
 
-from pandas.core.dtypes.common import infer_dtype_from_object  # type: ignore[attr-defined]
 from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
+from pandas.core.dtypes.common import infer_dtype_from_object  # type: ignore[attr-defined]
 from pandas.core.dtypes.inference import is_sequence  # type: ignore[attr-defined]
 
-from pyspark._globals import _NoValue, _NoValueType
-from pyspark.loose_version import LooseVersion
-from pyspark.errors import PySparkValueError
 from pyspark import StorageLevel
-from pyspark.sql import Column as PySparkColumn, DataFrame as PySparkDataFrame, functions as F
-from pyspark.sql.functions import pandas_udf
-from pyspark.sql.internal import InternalFunction as SF
-from pyspark.sql.types import (
-    ArrayType,
-    BooleanType,
-    DataType,
-    DoubleType,
-    NumericType,
-    Row,
-    StringType,
-    StructField,
-    StructType,
-    DecimalType,
-    TimestampType,
-    TimestampNTZType,
-    NullType,
-)
-from pyspark.sql.window import Window
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark._globals import _NoValue, _NoValueType
+from pyspark.errors import PySparkValueError
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas._typing import (
     Axis,
     DataFrameOrSeries,
@@ -104,15 +85,38 @@ from pyspark.pandas._typing import (
     T,
 )
 from pyspark.pandas.accessors import PandasOnSparkFrameMethods
-from pyspark.pandas.config import option_context, get_option
+from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.correlation import (
-    compute,
-    CORRELATION_VALUE_1_COLUMN,
-    CORRELATION_VALUE_2_COLUMN,
     CORRELATION_CORR_OUTPUT_COLUMN,
     CORRELATION_COUNT_OUTPUT_COLUMN,
+    CORRELATION_VALUE_1_COLUMN,
+    CORRELATION_VALUE_2_COLUMN,
+    compute,
 )
-from pyspark.pandas.spark.accessors import SparkFrameMethods, CachedSparkFrameMethods
+from pyspark.pandas.generic import Frame
+from pyspark.pandas.internal import (
+    HIDDEN_COLUMNS,
+    NATURAL_ORDER_COLUMN_NAME,
+    SPARK_DEFAULT_INDEX_NAME,
+    SPARK_DEFAULT_SERIES_NAME,
+    SPARK_INDEX_NAME_FORMAT,
+    SPARK_INDEX_NAME_PATTERN,
+    InternalField,
+    InternalFrame,
+)
+from pyspark.pandas.missing.frame import MissingPandasLikeDataFrame
+from pyspark.pandas.plot import PandasOnSparkPlotAccessor
+from pyspark.pandas.spark.accessors import CachedSparkFrameMethods, SparkFrameMethods
+from pyspark.pandas.typedef.typehints import (
+    DataFrameType,
+    ScalarType,
+    SeriesType,
+    as_spark_type,
+    create_tuple_for_frame_type,
+    infer_return_type,
+    pandas_on_spark_type,
+    spark_type_to_pandas_dtype,
+)
 from pyspark.pandas.utils import (
     align_diff_frames,
     ansi_mode_context,
@@ -123,6 +127,7 @@ from pyspark.pandas.utils import (
     is_name_like_tuple,
     is_name_like_value,
     is_testing,
+    log_advice,
     name_like_string,
     same_anchor,
     scol_for,
@@ -132,39 +137,35 @@ from pyspark.pandas.utils import (
     validate_how,
     validate_mode,
     verify_temp_column_name,
-    log_advice,
 )
-from pyspark.pandas.generic import Frame
-from pyspark.pandas.internal import (
-    InternalField,
-    InternalFrame,
-    HIDDEN_COLUMNS,
-    NATURAL_ORDER_COLUMN_NAME,
-    SPARK_INDEX_NAME_FORMAT,
-    SPARK_DEFAULT_INDEX_NAME,
-    SPARK_DEFAULT_SERIES_NAME,
-    SPARK_INDEX_NAME_PATTERN,
+from pyspark.sql import Column as PySparkColumn
+from pyspark.sql import DataFrame as PySparkDataFrame
+from pyspark.sql import functions as F
+from pyspark.sql.functions import pandas_udf
+from pyspark.sql.internal import InternalFunction as SF
+from pyspark.sql.types import (
+    ArrayType,
+    BooleanType,
+    DataType,
+    DecimalType,
+    DoubleType,
+    NullType,
+    NumericType,
+    Row,
+    StringType,
+    StructField,
+    StructType,
+    TimestampNTZType,
+    TimestampType,
 )
-from pyspark.pandas.missing.frame import MissingPandasLikeDataFrame
-from pyspark.pandas.typedef.typehints import (
-    as_spark_type,
-    infer_return_type,
-    pandas_on_spark_type,
-    spark_type_to_pandas_dtype,
-    DataFrameType,
-    SeriesType,
-    ScalarType,
-    create_tuple_for_frame_type,
-)
-from pyspark.pandas.plot import PandasOnSparkPlotAccessor
+from pyspark.sql.window import Window
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import OptionalPrimitiveType
-
     from pyspark.pandas.groupby import DataFrameGroupBy
-    from pyspark.pandas.resample import DataFrameResampler
     from pyspark.pandas.indexes import Index
+    from pyspark.pandas.resample import DataFrameResampler
     from pyspark.pandas.series import Series
+    from pyspark.sql._typing import OptionalPrimitiveType
 
 
 # These regular expression patterns are compiled and defined here to avoid compiling the same
@@ -2633,8 +2634,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             By default the value will be read from the pandas config module. When set to False
             prevents from escaping latex special characters in column names.
         encoding : str, optional
-            A string representing the encoding to use in the output file, defaults to 'ascii' on
-            Python 2 and 'utf-8' on Python 3.
+            A string representing the encoding to use in the output file, defaults to 'utf-8'.
         decimal : str, default '.'
             Character recognized as decimal separator, e.g. ',' in Europe.
         multicolumn : bool, default True
@@ -2719,6 +2719,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # but PlanMetrics/PlanObservedMetrics objects from Spark Connect are not
         # JSON serializable. We filter these internal attrs only for affected versions.
         import pyarrow as pa
+
         from pyspark.loose_version import LooseVersion
 
         if LooseVersion(pa.__version__) >= LooseVersion("22.0.0"):
@@ -3584,8 +3585,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         self._update_internal_frame(self.drop(columns=item)._internal)
         return result
 
-    # TODO(SPARK-46158): add axis parameter can work when '1' or 'columns'
-    def xs(self, key: Name, axis: Axis = 0, level: Optional[int] = None) -> DataFrameOrSeries:
+    def xs(
+        self, key: Name, axis: Axis = 0, level: Optional[Union[int, Name]] = None
+    ) -> DataFrameOrSeries:
         """
         Return cross-section from the DataFrame.
 
@@ -3596,9 +3598,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ----------
         key : label or tuple of label
             Label contained in the index, or partially in a MultiIndex.
-        axis : 0 or 'index', default 0
+        axis : {0 or 'index', 1 or 'columns'}, default 0
             Axis to retrieve cross-section on.
-            currently only support 0 or 'index'
         level : object, defaults to first n levels (n=1 or len(key))
             In case of a key partially contained in a MultiIndex, indicate
             which levels are used. Levels can be referred by label or position.
@@ -3660,6 +3661,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                            num_legs  num_wings
         class  locomotion
         mammal walks              4          0
+
+        Get values at specified column
+
+        >>> df.xs('num_legs', axis=1)  # doctest: +NORMALIZE_WHITESPACE
+        class   animal   locomotion
+        mammal  cat      walks         4
+                dog      walks         4
+                bat      flies         2
+        bird    penguin  walks         2
+        Name: num_legs, dtype: int64
         """
         from pyspark.pandas.series import first_series
 
@@ -3670,8 +3681,85 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             raise KeyError(key)
 
         axis = validate_axis(axis)
-        if axis != 0:
-            raise NotImplementedError('axis should be either 0 or "index" currently.')
+        if axis == 1:
+            column_level = self._internal.column_labels_level
+            if column_level == 1:
+                if level is not None:
+                    raise TypeError("Index must be a MultiIndex")
+                if is_name_like_tuple(key):
+                    raise KeyError(key)
+
+            column_key = cast(Label, key if is_name_like_tuple(key) else (key,))
+            if len(column_key) > column_level:
+                raise KeyError(
+                    "Key length ({}) exceeds index depth ({})".format(len(column_key), column_level)
+                )
+
+            if level is None:
+                level_idx = 0
+            elif isinstance(level, int):
+                level_idx = level
+            else:
+                level_name = cast(Label, level if is_name_like_tuple(level) else (level,))
+                try:
+                    level_idx = self._internal.column_label_names.index(level_name)
+                except ValueError:
+                    raise KeyError("Level {} not found".format(name_like_string(level_name)))
+
+            original_level_idx = level_idx
+            if level_idx < 0:
+                level_idx += column_level
+                if level_idx < 0:
+                    raise IndexError(
+                        "Too many levels: Index has only {} levels, "
+                        "{} is not a valid level number".format(column_level, original_level_idx)
+                    )
+            if level_idx >= column_level:
+                raise IndexError(
+                    "Too many levels: Index has only {} levels, not {}".format(
+                        column_level, level_idx + 1
+                    )
+                )
+
+            drop_levels = range(level_idx, level_idx + len(column_key))
+            selected = [
+                (label, scol, field)
+                for label, scol, field in zip(
+                    self._internal.column_labels,
+                    self._internal.data_spark_columns,
+                    self._internal.data_fields,
+                )
+                if tuple(label[i] for i in drop_levels) == column_key
+            ]
+            if not selected:
+                raise KeyError(key)
+
+            selected_column_labels, data_spark_columns, data_fields = zip(*selected)
+            # Match pandas by dropping the selected column levels from the result.
+            new_column_labels = [
+                tuple(label[i] for i in range(column_level) if i not in drop_levels)
+                for label in selected_column_labels
+            ]
+            if len(new_column_labels[0]) == 0:
+                if len(selected_column_labels) == 1:
+                    return self._psser_for(selected_column_labels[0])
+                else:
+                    new_column_labels = list(selected_column_labels)
+                    column_label_names = self._internal.column_label_names
+            else:
+                column_label_names = [
+                    name
+                    for i, name in enumerate(self._internal.column_label_names)
+                    if i not in drop_levels
+                ]
+
+            internal = self._internal.copy(
+                column_labels=list(new_column_labels),
+                data_spark_columns=list(data_spark_columns),
+                data_fields=list(data_fields),
+                column_label_names=list(column_label_names),
+            )
+            return DataFrame(internal)
 
         if not is_name_like_tuple(key):
             key = (key,)
@@ -3682,10 +3770,25 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 )
             )
         if level is None:
-            level = 0
+            index_level = 0
+        elif isinstance(level, int):
+            index_level = level
+        else:
+            level_name = cast(Label, level if is_name_like_tuple(level) else (level,))
+            if self._internal.index_names.count(level_name) > 1:
+                raise ValueError(
+                    "The name {} occurs multiple times, use a level number".format(
+                        name_like_string(level_name)
+                    )
+                )
+            try:
+                index_level = self._internal.index_names.index(level_name)
+            except ValueError:
+                raise KeyError("Level {} not found".format(name_like_string(level_name)))
 
         rows = [
-            self._internal.index_spark_columns[lvl] == index for lvl, index in enumerate(key, level)
+            self._internal.index_spark_columns[lvl] == index
+            for lvl, index in enumerate(key, index_level)
         ]
         internal = self._internal.with_filter(reduce(lambda x, y: x & y, rows))
 
@@ -3700,11 +3803,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 return first_series(DataFrame(pdf.transpose()))
         else:
             index_spark_columns = (
-                internal.index_spark_columns[:level]
-                + internal.index_spark_columns[level + len(key) :]
+                internal.index_spark_columns[:index_level]
+                + internal.index_spark_columns[index_level + len(key) :]
             )
-            index_names = internal.index_names[:level] + internal.index_names[level + len(key) :]
-            index_fields = internal.index_fields[:level] + internal.index_fields[level + len(key) :]
+            index_names = (
+                internal.index_names[:index_level] + internal.index_names[index_level + len(key) :]
+            )
+            index_fields = (
+                internal.index_fields[:index_level]
+                + internal.index_fields[index_level + len(key) :]
+            )
 
             internal = internal.copy(
                 index_spark_columns=index_spark_columns,
@@ -4840,7 +4948,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             lambda psser: psser._shift(periods, fill_value), should_resolve=True
         )
 
-    # TODO(SPARK-46161): axis should support 1 or 'columns' either at this moment
     def diff(self, periods: int = 1, axis: Axis = 0) -> "DataFrame":
         """
         First discrete difference of element.
@@ -4848,7 +4955,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Calculates the difference of a DataFrame element compared with another element in the
         DataFrame (default is the element in the same column of the previous row).
 
-        .. note:: the current implementation of diff uses Spark's Window without
+        .. note:: When ``axis=0``, the current implementation of diff uses Spark's Window without
             specifying partition specification. This leads to moving all data into
             a single partition in a single machine and could cause serious
             performance degradation. Avoid this method with very large datasets.
@@ -4857,8 +4964,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ----------
         periods : int, default 1
             Periods to shift for calculating difference, accepts negative values.
-        axis : int, default 0 or 'index'
-            Can only be set to 0 now.
+        axis : {0 or 'index', 1 or 'columns'}, default 0
+            Take difference over rows (0) or columns (1).
 
         Returns
         -------
@@ -4908,12 +5015,41 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3 -1.0 -2.0  -9.0
         4 -1.0 -3.0 -11.0
         5  NaN  NaN   NaN
+
+        Difference with previous column
+
+        >>> df.diff(axis=1)
+            a  b   c
+        0 NaN  0   0
+        1 NaN -1   3
+        2 NaN -1   7
+        3 NaN -1  13
+        4 NaN  0  20
+        5 NaN  2  28
         """
         axis = validate_axis(axis)
-        if axis != 0:
-            raise NotImplementedError('axis should be either 0 or "index" currently.')
-
-        return self._apply_series_op(lambda psser: psser._diff(periods), should_resolve=True)
+        if axis == 0:
+            return self._apply_series_op(lambda psser: psser._diff(periods), should_resolve=True)
+        else:
+            if not isinstance(periods, int):
+                raise TypeError(
+                    "periods should be an int; however, got [%s]" % type(periods).__name__
+                )
+            column_labels = self._internal.column_labels
+            data_col_names = self._internal.data_spark_column_names
+            new_columns: list[PySparkColumn] = []
+            for i, label in enumerate(column_labels):
+                prev_idx = i - periods
+                if 0 <= prev_idx < len(column_labels):
+                    prev_label = column_labels[prev_idx]
+                    cur_col = self._internal.spark_column_for(label)
+                    prev_col = self._internal.spark_column_for(prev_label)
+                    new_columns.append(cur_col - prev_col)
+                else:
+                    col_type = self._internal.spark_type_for(label)
+                    new_columns.append(F.lit(None).cast(col_type).alias(data_col_names[i]))
+            internal = self._internal.with_new_columns(new_columns)
+            return DataFrame(internal)
 
     def nunique(
         self,
@@ -7988,7 +8124,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             first puts NaNs at the beginning, last puts NaNs at the end. Not implemented for
             MultiIndex.
         ignore_index : bool, default False
-            If True, the resulting axis will be labeled 0, 1, …, n - 1.
+            If True, the resulting axis will be labeled 0, 1, ..., n - 1.
 
             .. versionadded:: 3.4.0
 
@@ -9646,7 +9782,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         random_state : int, optional
             Seed for the random number generator (if int).
         ignore_index : bool, default False
-            If True, the resulting index will be labeled 0, 1, …, n - 1.
+            If True, the resulting index will be labeled 0, 1, ..., n - 1.
 
             .. versionadded:: 3.4.0
 
@@ -10249,7 +10385,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         inplace : boolean, default False
             Whether to drop duplicates in place or to return a copy.
         ignore_index : boolean, default False
-            If True, the resulting axis will be labeled 0, 1, …, n - 1.
+            If True, the resulting axis will be labeled 0, 1, ..., n - 1.
 
         Returns
         -------
@@ -13351,7 +13487,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         column : str or tuple
             Column to explode.
         ignore_index : bool, default False
-            If True, the resulting index will be labeled 0, 1, …, n - 1.
+            If True, the resulting index will be labeled 0, 1, ..., n - 1.
 
         Returns
         -------
@@ -14207,6 +14343,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         _f = self._build_fallback_method("set_axis")
         return _f(*args, **kwargs)
 
+    def _combine_fallback(self, *args: Any, **kwargs: Any) -> "DataFrame":
+        _f = self._build_fallback_method("combine")
+        return _f(*args, **kwargs)
+
     def __getattr__(self, key: str) -> Any:
         if key.startswith("__"):
             raise AttributeError(key)
@@ -14260,7 +14400,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     # NDArray Compat
     def __array_ufunc__(
         self, ufunc: Callable, method: str, *inputs: Any, **kwargs: Any
-    ) -> "DataFrame":
+    ) -> Union["DataFrame", Tuple["DataFrame", "DataFrame"]]:
         # TODO: is it possible to deduplicate it with '_map_series_op'?
         if all(isinstance(inp, DataFrame) for inp in inputs) and any(
             not same_anchor(inp, inputs[0]) for inp in inputs
@@ -14289,14 +14429,25 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # DataFrame and Series
             this = inputs[0]
             assert all(inp is this for inp in inputs if isinstance(inp, DataFrame))
-            applied = [
+            column_labels = this._internal.column_labels
+            outputs = [
                 ufunc(
                     *[inp[label] if isinstance(inp, DataFrame) else inp for inp in inputs], **kwargs
-                ).rename(label)
-                for label in this._internal.column_labels
+                )
+                for label in column_labels
             ]
-            internal = this._internal.with_new_columns(applied)
-            return DataFrame(internal)
+            if outputs and isinstance(outputs[0], tuple):
+                # A multi-output ufunc (for example np.modf) yields a two-element tuple per
+                # column; regroup into one DataFrame per output, matching numpy/pandas.
+                first_cols = [out[0].rename(label) for out, label in zip(outputs, column_labels)]
+                second_cols = [out[1].rename(label) for out, label in zip(outputs, column_labels)]
+                first_df: DataFrame = DataFrame(this._internal.with_new_columns(first_cols))
+                second_df: DataFrame = DataFrame(this._internal.with_new_columns(second_cols))
+                return first_df, second_df
+            else:
+                applied = [out.rename(label) for out, label in zip(outputs, column_labels)]
+                internal = this._internal.with_new_columns(applied)
+                return DataFrame(internal)
 
     def __class_getitem__(cls, params: Any) -> object:
         # See https://github.com/python/typing/issues/193
@@ -14371,14 +14522,15 @@ class CachedDataFrame(DataFrame):
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import shutil
     import sys
     import tempfile
     import uuid
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.frame
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

@@ -28,7 +28,7 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
+import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_FILE_UPLOAD_PATH
 import org.apache.spark.internal.Logging
@@ -44,8 +44,9 @@ import org.apache.spark.util.Utils.{getHadoopFileSystem, uploadFileToHadoopCompa
  *
  * A utility class used for K8s operations internally and for implementing ExternalClusterManagers.
  */
-@Unstable
+@Stable
 @DeveloperApi
+@Since("2.3.0")
 object KubernetesUtils extends Logging {
 
   private val systemClock = new SystemClock()

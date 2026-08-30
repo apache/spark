@@ -1,3 +1,6 @@
+--SET spark.sql.analyzer.singlePassResolver.enabledTentatively=false
+--SET spark.sql.analyzer.singlePassResolver.dualRunWithLegacy=false
+
 CREATE OR REPLACE TEMPORARY VIEW v1 AS SELECT * FROM VALUES
   (1, 2),
   (3, 5),

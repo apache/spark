@@ -258,4 +258,20 @@ select * from (
 where t.c2 is not null;
 
 -- SPARK-43838: Subquery on single table with having clause
-SELECT c1, c2, (SELECT count(*) cnt FROM t1 t2 WHERE t1.c1 = t2.c1 HAVING cnt = 0) FROM t1
+SELECT c1, c2, (SELECT count(*) cnt FROM t1 t2 WHERE t1.c1 = t2.c1 HAVING cnt = 0) FROM t1;
+
+-- Outer star expansion in scalar subquery
+SELECT (SELECT t1.* FROM VALUES(2) AS t2(col1) LIMIT 1) FROM VALUES(1) AS t1(col1);
+
+-- Outer struct star expansion in scalar subquery
+SELECT (SELECT t1.s.* FROM VALUES(2) AS t2(col1) LIMIT 1)
+FROM (SELECT named_struct('a', 1) AS s) AS t1;
+
+-- Untargeted star in subquery should NOT expand from outer scope
+SELECT (SELECT * FROM VALUES(2) AS t2(col1) LIMIT 1) FROM VALUES(1) AS t1(col1);
+
+-- Inner scope wins when star target matches both inner and outer scope
+SELECT (SELECT t1.* FROM (SELECT 3 AS col1) AS t1 LIMIT 1) FROM VALUES(1) AS t1(col1);
+
+-- Outer star expansion through a derived table wrapper
+SELECT (SELECT * FROM (SELECT t1.* FROM VALUES(2) AS t2(col1) LIMIT 1)) FROM VALUES(1) AS t1(col1);

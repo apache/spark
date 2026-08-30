@@ -22,9 +22,7 @@ from collections import namedtuple
 
 # To avoid adding a new direct dependency, we import markdown from within mkdocs.
 from mkdocs.structure.pages import markdown
-
 from pyspark.java_gateway import launch_gateway
-
 
 ExpressionInfo = namedtuple("ExpressionInfo", "name usage examples group")
 
@@ -36,7 +34,8 @@ groups = {
     "bitwise_funcs", "conversion_funcs", "csv_funcs",
     "xml_funcs", "lambda_funcs", "collection_funcs",
     "url_funcs", "hash_funcs", "struct_funcs",
-    "table_funcs", "variant_funcs", "protobuf_funcs", "sketch_funcs"
+    "table_funcs", "variant_funcs", "protobuf_funcs", "sketch_funcs",
+    "st_funcs"
 }
 
 
@@ -242,6 +241,8 @@ def generate_functions_examples_html(jvm, jspark, html_output_dir):
     """
     print("Enabling TIME data type")
     jspark.sql("SET spark.sql.timeType.enabled = true")
+    print("Enabling parse_sql function")
+    jspark.sql("SET spark.sql.function.parseSql.enabled = true")
     print("Running SQL examples to generate formatted output.")
     for key, infos in _list_grouped_function_infos(jvm):
         examples = _make_pretty_examples(jspark, infos)

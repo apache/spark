@@ -117,6 +117,13 @@ trait CodegenSupport extends SparkPlan {
    *     # call consume(), which will call parent.doConsume()
    *      if (shouldStop()) return;
    *   }
+   *
+   * If the emitted code depends on the partition index, read it from
+   * `ctx.currentPartitionIndexVar` rather than hard-coding the field name
+   * `partitionIndex`. `UnionExec` rebinds `currentPartitionIndexVar` per
+   * fused child so that each child sees its own child-local index; a
+   * hard-coded reference would silently observe the global `UnionRDD` index
+   * under fusion.
    */
   protected def doProduce(ctx: CodegenContext): String
 
@@ -237,11 +244,11 @@ trait CodegenSupport extends SparkPlan {
    * Returns arguments for calling method and method definition parameters of the consume function.
    * And also returns the list of `ExprCode` for the parameters.
    */
-  private def constructConsumeParameters(
+  protected def constructConsumeParameters(
       ctx: CodegenContext,
       attributes: Seq[Attribute],
       variables: Seq[ExprCode],
-      row: String): (Seq[String], Seq[String], Seq[ExprCode]) = {
+      row: String = null): (Seq[String], Seq[String], Seq[ExprCode]) = {
     val arguments = mutable.ArrayBuffer[String]()
     val parameters = mutable.ArrayBuffer[String]()
     val paramVars = mutable.ArrayBuffer[ExprCode]()

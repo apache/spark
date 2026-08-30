@@ -18,12 +18,12 @@
 package org.apache.spark.sql.collation
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
+class CollationTypePrecedenceSuite extends SharedSparkSession {
 
   val dataSource: String = "parquet"
   val UNICODE_COLLATION_NAME = "SYSTEM.BUILTIN.UNICODE"
@@ -51,6 +51,22 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
   private def assertQuerySchema(df: => DataFrame, expectedSchema: DataType): Unit = {
     val querySchema = df.schema.fields.head.dataType
     assert(DataType.equalsIgnoreNullability(querySchema, expectedSchema))
+  }
+
+  private def testFixedPointAndSinglePass(testName: String)(testBody: => Unit): Unit = {
+    test(s"$testName (fixed-point analyzer)") {
+      withSQLConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        testBody
+      }
+    }
+
+    test(s"$testName (single-pass analyzer)") {
+      withSQLConf(
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "true",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        testBody
+      }
+    }
   }
 
   test("explicit collation propagates up") {
@@ -228,7 +244,7 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("in subquery expression") {
+  testFixedPointAndSinglePass("in subquery expression") {
     val tableName = "subquery_tbl"
     withTable(tableName) {
       sql(s"""
@@ -284,7 +300,7 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("scalar subquery") {
+  testFixedPointAndSinglePass("scalar subquery") {
     val tableName = "scalar_subquery_tbl"
     withTable(tableName) {
       sql(s"""

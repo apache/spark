@@ -32,7 +32,7 @@ import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.types.variant.VariantUtil._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
-class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
+class VariantEndToEndSuite extends SharedSparkSession {
   import testImplicits._
 
   test("parse_json/to_json round-trip") {
@@ -185,6 +185,39 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     checkAnswer(variantDF, Seq(Row(expected)))
   }
 
+  test("SPARK-56654: parse_json/from_json reject unpaired UTF-16 surrogates by default") {
+    val invalidJson = "\"\\uD835\""
+    val df = Seq(invalidJson).toDF("j")
+    checkAnswer(df.selectExpr("try_parse_json(j)"), Seq(Row(null)))
+    checkAnswer(df.selectExpr("from_json(j, 'variant')"), Seq(Row(null)))
+    val parseJsonError = intercept[SparkException] {
+      df.selectExpr("parse_json(j)").collect()
+    }
+    checkError(
+      exception = parseJsonError,
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map("badRecord" -> invalidJson, "failFastMode" -> "FAILFAST")
+    )
+
+    val fromJsonFailFast = intercept[SparkException] {
+      df.selectExpr("from_json(j, 'variant', map('mode', 'FAILFAST'))").collect()
+    }
+    checkError(
+      exception = fromJsonFailFast,
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
+    )
+
+    withSQLConf(SQLConf.VARIANT_VALIDATE_UNICODE_IN_JSON_PARSING.key -> "false") {
+      val parsed = df.selectExpr("parse_json(j)").collect()
+      assert(parsed.length == 1 && parsed.head.get(0) != null,
+        "legacy mode should accept unpaired surrogates")
+      val tryParsed = df.selectExpr("try_parse_json(j)").collect()
+      assert(tryParsed.length == 1 && tryParsed.head.get(0) != null,
+        "legacy mode should accept unpaired surrogates via try_parse_json")
+    }
+  }
+
   test("to_variant_object - Codegen Support") {
     Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
@@ -209,6 +242,31 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
           Row(new VariantVal(v3.getValue, v3.getMetadata)),
           Row(new VariantVal(v4.getValue, v4.getMetadata)))
         sameRows(variantDF.collect().toSeq, expected)
+      }
+    }
+  }
+
+  test("variant_from_arrays and variant_from_entries - Codegen Support") {
+    Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+        val entryType = StructType(Array(
+          StructField("k", StringType), StructField("v", IntegerType)))
+        val schema = StructType(Array(
+          StructField("keys", ArrayType(StringType)),
+          StructField("values", ArrayType(IntegerType)),
+          StructField("entries", ArrayType(entryType))))
+        // Source non-foldable rows so the operators' doGenCode is actually exercised under codegen.
+        val data = Seq(Row(Seq("a", "b"), Seq(1, 2), Seq(Row("a", 1), Row("b", 2))))
+        val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+        val arraysDF = df.select(variant_from_arrays(col("keys"), col("values")).cast("string"))
+        val entriesDF = df.select(variant_from_entries(col("entries")).cast("string"))
+        val wholeStage = codegenMode == "CODEGEN_ONLY"
+        assert(arraysDF.queryExecution.executedPlan.exists(
+          _.isInstanceOf[WholeStageCodegenExec]) == wholeStage)
+        assert(entriesDF.queryExecution.executedPlan.exists(
+          _.isInstanceOf[WholeStageCodegenExec]) == wholeStage)
+        checkAnswer(arraysDF, Row("""{"a":1,"b":2}"""))
+        checkAnswer(entriesDF, Row("""{"a":1,"b":2}"""))
       }
     }
   }

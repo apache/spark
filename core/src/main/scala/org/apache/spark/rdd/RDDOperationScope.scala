@@ -130,6 +130,22 @@ private[spark] object RDDOperationScope extends Logging {
       name: String,
       allowNesting: Boolean,
       ignoreParent: Boolean)(body: => T): T = {
+    withScope(sc, name, allowNesting, ignoreParent,
+      nextScopeId().toString)(body)
+  }
+
+  /**
+   * Execute the given body such that all RDDs created in this body
+   * will have the same scope, with an explicit scope ID.
+   *
+   * Note: Return statements are NOT allowed in body.
+   */
+  private[spark] def withScope[T](
+      sc: SparkContext,
+      name: String,
+      allowNesting: Boolean,
+      ignoreParent: Boolean,
+      rddScopeId: String)(body: => T): T = {
     // Save the old scope to restore it later
     val scopeKey = SparkContext.RDD_SCOPE_KEY
     val noOverrideKey = SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY
@@ -139,10 +155,12 @@ private[spark] object RDDOperationScope extends Logging {
     try {
       if (ignoreParent) {
         // Ignore all parent settings and scopes and start afresh with our own root scope
-        sc.setLocalProperty(scopeKey, new RDDOperationScope(name).toJson)
+        sc.setLocalProperty(scopeKey,
+          new RDDOperationScope(name, None, rddScopeId).toJson)
       } else if (sc.getLocalProperty(noOverrideKey) == null) {
         // Otherwise, set the scope only if the higher level caller allows us to do so
-        sc.setLocalProperty(scopeKey, new RDDOperationScope(name, oldScope).toJson)
+        sc.setLocalProperty(scopeKey,
+          new RDDOperationScope(name, oldScope, rddScopeId).toJson)
       }
       // Optionally disallow the child body to override our scope
       if (!allowNesting) {

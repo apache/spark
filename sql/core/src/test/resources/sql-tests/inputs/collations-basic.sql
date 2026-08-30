@@ -217,3 +217,232 @@ drop table t1;
 drop table t2;
 drop table t3;
 drop table t4;
+
+-- ============================================================================
+-- Collate returns proper type
+-- ============================================================================
+select 'aaa' collate utf8_binary;
+select 'aaa' collate utf8_lcase;
+select 'aaa' collate unicode;
+select 'aaa' collate unicode_ci;
+
+-- collation name is case insensitive
+select 'aaa' collate uTf8_BiNaRy;
+select 'aaa' collate uNicOde;
+select 'aaa' collate UNICODE_ci;
+select 'aaa' collate UtF8_lCaSE_rtRIM;
+
+-- ============================================================================
+-- Collation expression returns name of collation
+-- ============================================================================
+select collation('aaa' collate utf8_binary);
+select collation('aaa' collate utf8_lcase);
+select collation('aaa' collate unicode);
+select collation('aaa' collate unicode_ci);
+select collation('aaa' collate unicode_ci_rtrim);
+select collation('aaa' collate utf8_lcase_rtrim);
+select collation('aaa' collate utf8_binary_rtrim);
+
+-- collation expression returns default collation
+select collation('aaa');
+
+-- ============================================================================
+-- Collate function syntax
+-- ============================================================================
+select collate('aaa', 'utf8_binary');
+select collate('aaa', 'utf8_lcase');
+select collate('aaa', 'utf8_binary_rtrim');
+select collate('aaa', 'utf8_lcase_rtrim');
+
+-- ============================================================================
+-- Equality check respects collation
+-- ============================================================================
+select 'aaa' collate utf8_binary = 'AAA' collate utf8_binary;
+select 'aaa' collate utf8_binary = 'aaa' collate utf8_binary;
+select 'aaa' collate utf8_binary_rtrim = 'AAA' collate utf8_binary_rtrim;
+select 'aaa' collate utf8_binary_rtrim = 'aaa  ' collate utf8_binary_rtrim;
+select 'aaa' collate utf8_lcase = 'aaa' collate utf8_lcase;
+select 'aaa' collate utf8_lcase = 'AAA' collate utf8_lcase;
+select 'aaa' collate utf8_lcase = 'bbb' collate utf8_lcase;
+select 'aaa' collate utf8_lcase_rtrim = 'AAA  ' collate utf8_lcase_rtrim;
+select 'aaa' collate utf8_lcase_rtrim = 'bbb' collate utf8_lcase_rtrim;
+select 'aaa' collate unicode = 'aaa' collate unicode;
+select 'aaa' collate unicode = 'AAA' collate unicode;
+select 'aaa  ' collate unicode_rtrim = 'aaa ' collate unicode_rtrim;
+select 'aaa' collate unicode_rtrim = 'AAA' collate unicode_rtrim;
+select 'aaa' collate unicode_CI = 'aaa' collate unicode_CI;
+select 'aaa' collate unicode_CI = 'AAA' collate unicode_CI;
+select 'aaa' collate unicode_CI = 'bbb' collate unicode_CI;
+select 'aaa' collate unicode_CI_rtrim = 'aaa' collate unicode_CI_rtrim;
+select 'aaa ' collate unicode_CI_rtrim = 'AAA  ' collate unicode_CI_rtrim;
+select 'aaa' collate unicode_CI_rtrim = 'bbb' collate unicode_CI_rtrim;
+-- equality with collate function syntax
+select collate('aaa', 'utf8_binary') = collate('AAA', 'utf8_binary');
+select collate('aaa', 'utf8_lcase') = collate('AAA', 'utf8_lcase');
+select collate('aaa', 'unicode_CI') = collate('bbb', 'unicode_CI');
+
+-- ============================================================================
+-- Comparisons respect collation
+-- ============================================================================
+select 'AAA' collate utf8_binary < 'aaa' collate utf8_binary;
+select 'aaa' collate utf8_binary < 'aaa' collate utf8_binary;
+select 'aaa' collate utf8_binary < 'BBB' collate utf8_binary;
+select 'aaa ' collate utf8_binary_rtrim < 'aaa  ' collate utf8_binary_rtrim;
+select 'aaa' collate utf8_lcase < 'aaa' collate utf8_lcase;
+select 'AAA' collate utf8_lcase < 'aaa' collate utf8_lcase;
+select 'aaa' collate utf8_lcase < 'bbb' collate utf8_lcase;
+select 'AAA  ' collate utf8_lcase_rtrim < 'aaa' collate utf8_lcase_rtrim;
+select 'aaa' collate unicode < 'aaa' collate unicode;
+select 'aaa' collate unicode < 'AAA' collate unicode;
+select 'aaa' collate unicode < 'BBB' collate unicode;
+select 'aaa ' collate unicode_rtrim < 'aaa' collate unicode_rtrim;
+select 'aaa' collate unicode_CI < 'aaa' collate unicode_CI;
+select 'aaa' collate unicode_CI < 'AAA' collate unicode_CI;
+select 'aaa' collate unicode_CI < 'bbb' collate unicode_CI;
+select 'aaa ' collate unicode_CI_rtrim < 'aaa' collate unicode_CI_rtrim;
+-- comparisons with collate function syntax
+select collate('AAA', 'utf8_binary') < collate('aaa', 'utf8_binary');
+select collate('aaa', 'utf8_lcase') < collate('bbb', 'utf8_lcase');
+
+-- ============================================================================
+-- Aggregates count respects collation
+-- ============================================================================
+select count(*), c from (select collate(col1, 'utf8_binary') as c from values ('AAA'), ('aaa')) t group by c order by c;
+select count(*), c from (select collate(col1, 'utf8_binary') as c from values ('aaa'), ('aaa')) t group by c order by c;
+select count(*), c from (select collate(col1, 'utf8_binary') as c from values ('aaa'), ('bbb')) t group by c order by c;
+select count(*), c from (select collate(col1, 'utf8_binary_rtrim') as c from values ('aaa'), ('aaa ')) t group by c order by c;
+select count(*), c from (select collate(col1, 'utf8_lcase') as c from values ('aaa'), ('aaa')) t group by c order by c;
+select count(*), c from (select collate(col1, 'utf8_lcase') as c from values ('AAA'), ('aaa')) t group by c order by c;
+select count(*), c from (select collate(col1, 'utf8_lcase') as c from values ('aaa'), ('bbb')) t group by c order by c;
+select count(*), c from (select collate(col1, 'utf8_lcase_rtrim') as c from values ('aaa'), ('AAA  ')) t group by c order by c;
+select count(*), c from (select collate(col1, 'unicode') as c from values ('AAA'), ('aaa')) t group by c order by c;
+select count(*), c from (select collate(col1, 'unicode') as c from values ('aaa'), ('aaa')) t group by c order by c;
+select count(*), c from (select collate(col1, 'unicode') as c from values ('aaa'), ('bbb')) t group by c order by c;
+select count(*), c from (select collate(col1, 'unicode_rtrim') as c from values ('aaa'), ('aaa ')) t group by c order by c;
+select count(*), c from (select collate(col1, 'unicode_CI') as c from values ('aaa'), ('aaa')) t group by c order by c;
+select count(*), c from (select collate(col1, 'unicode_CI') as c from values ('AAA'), ('aaa')) t group by c order by c;
+select count(*), c from (select collate(col1, 'unicode_CI') as c from values ('aaa'), ('bbb')) t group by c order by c;
+select count(*), c from (select collate(col1, 'unicode_CI_rtrim') as c from values ('aaa'), ('AAA ')) t group by c order by c;
+
+-- ============================================================================
+-- Cast expressions for collations
+-- ============================================================================
+SELECT collation(cast('a' as string collate utf8_lcase));
+SELECT collation('a' :: string collate utf8_lcase);
+SELECT cast(1 as string);
+SELECT cast('A' as string);
+
+-- ============================================================================
+-- Operations on complex types containing collated strings
+-- ============================================================================
+select reverse('abc' collate utf8_lcase);
+select reverse(array('a' collate utf8_lcase, 'b' collate utf8_lcase));
+select array_join(array('a' collate utf8_lcase, 'b' collate utf8_lcase), ', ' collate utf8_lcase);
+select array_join(array('a' collate utf8_lcase, 'b' collate utf8_lcase, null), ', ' collate utf8_lcase, 'c' collate utf8_lcase);
+select concat('a' collate utf8_lcase, 'b' collate utf8_lcase);
+select concat(array('a' collate utf8_lcase, 'b' collate utf8_lcase));
+select map('a' collate utf8_lcase, 1, 'b' collate utf8_lcase, 2)['A' collate utf8_lcase];
+select map('a' collate utf8_lcase, 1, 'b' collate utf8_lcase, 2)['A'];
+
+-- ============================================================================
+-- SR_AI vs SR_Latn_AI collation differences
+-- ============================================================================
+-- scalastyle:off nonascii
+SELECT 'c' = 'ć' COLLATE SR_Latn_AI;
+SELECT 'c' = 'ć' COLLATE SR_AI;
+SELECT 'ć' = 'č' COLLATE SR_Latn_AI;
+SELECT 'ć' = 'č' COLLATE SR_AI;
+SELECT 'C' = 'Ć' COLLATE SR_Latn_AI;
+SELECT 'C' = 'Ć' COLLATE SR_AI;
+SELECT 's' = 'š' COLLATE SR_Latn_AI;
+SELECT 's' = 'š' COLLATE SR_AI;
+SELECT 'z' = 'ž' COLLATE SR_Latn_AI;
+SELECT 'z' = 'ž' COLLATE SR_AI;
+-- scalastyle:on nonascii
+
+-- ============================================================================
+-- Fully qualified collation names
+-- ============================================================================
+SELECT collation('a' collate system.builtin.UTF8_BINARY);
+SELECT collation('a' collate system.builtin.UTF8_LCASE);
+SELECT collation('a' collate system.builtin.UNICODE);
+SELECT collation('a' collate system.builtin.UNICODE_CI_AI);
+SELECT 'a' collate sYstEm.bUiltIn.utf8_lCAse = 'A';
+SELECT contains('a' collate system.builtin.UTF8_LCASE, 'A' collate UTF8_LCASE);
+SELECT startswith('a' collate system.builtin.UNICODE_CI, 'A' collate UNICODE_CI);
+SELECT endswith('abc' collate system.builtin.UNICODE_CI, 'C' collate UNICODE_CI);
+
+-- ============================================================================
+-- ArrayAppend and CreateMap coercion
+-- ============================================================================
+SELECT array_append(array('a', 'b'), 'c' COLLATE UNICODE);
+SELECT typeof(array('a' COLLATE UNICODE, 'b')[1]);
+select map('a' COLLATE UTF8_LCASE, 'b', 'c', 'c');
+
+-- ============================================================================
+-- Error: invalid collation name
+-- ============================================================================
+select 'aaa' collate UTF8_BS;
+
+-- ============================================================================
+-- Error: collate function syntax invalid arg count
+-- ============================================================================
+select collate('aaa', 'a', 'b');
+select collate('aaa');
+select collate();
+
+-- ============================================================================
+-- Error: collate function invalid collation data type
+-- ============================================================================
+select collate('abc', 123);
+
+-- ============================================================================
+-- Error: NULL as collation name
+-- ============================================================================
+select collate('abc', cast(null as string));
+
+-- ============================================================================
+-- Error: collate function invalid input data type
+-- ============================================================================
+select collate(1, 'UTF8_BINARY');
+
+-- ============================================================================
+-- Error: collation mismatch for string functions
+-- ============================================================================
+SELECT contains(collate('abc', 'UNICODE_CI'), collate('b', 'UNICODE'));
+SELECT startsWith(collate('abc', 'UNICODE_CI'), collate('a', 'UNICODE'));
+SELECT endsWith(collate('abc', 'UNICODE_CI'), collate('c', 'UNICODE'));
+
+-- ============================================================================
+-- Error: explicit collation mismatch
+-- ============================================================================
+SELECT COLLATE('a', 'UTF8_BINARY') = COLLATE('a', 'UNICODE');
+
+-- ============================================================================
+-- Error: array collation mismatch
+-- ============================================================================
+SELECT array('A', 'a' COLLATE UNICODE) == array('b' COLLATE UNICODE_CI);
+SELECT array('A', 'a' COLLATE UNICODE) == array('b' COLLATE UNICODE_CI_RTRIM);
+SELECT array_join(array('a', 'b' collate UNICODE), 'c' collate UNICODE_CI);
+
+-- ============================================================================
+-- Error: invalid fully qualified collation names
+-- ============================================================================
+SELECT 'a' COLLATE system.builtin2.UTF8_BINARY;
+SELECT 'a' COLLATE system.UTF8_BINARY;
+SELECT 'a' COLLATE builtin.UTF8_LCASE;
+
+-- ============================================================================
+-- Error: conflicting collations in inline table
+-- ============================================================================
+SELECT * FROM VALUES ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE) AS T(c1);
+
+-- ============================================================================
+-- Error: map creation with collation mismatch
+-- ============================================================================
+select map('a' COLLATE UTF8_LCASE, 'b', 'c' COLLATE UNICODE, 'c');
+
+-- ============================================================================
+-- Error: map creation with wrong number of args
+-- ============================================================================
+select map('a' COLLATE UTF8_LCASE, 'b', 'c');

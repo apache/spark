@@ -20,10 +20,12 @@ package org.apache.spark.deploy
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master._
 import org.apache.spark.deploy.worker.ExecutorRunner
 import org.apache.spark.resource.{ResourceInformation, ResourceRequirement}
+import org.apache.spark.util.Utils
 
 private[deploy] object JsonProtocol {
 
@@ -93,6 +95,9 @@ private[deploy] object JsonProtocol {
    *         `resourcesperexecutor` minimal resources required to each executor
    *         `submitdate` time in Date that the application is submitted
    *         `state` state of the application, see [[ApplicationState]]
+   *         `holdsupported` whether the driver reported that it can be held
+   *         `held` whether the application is currently held; always false once it finishes
+   *         `draining` the number of executors still draining while the application is held
    *         `duration` time in milliseconds that the application has been running
    * For compatibility also returns the deprecated `memoryperslave` & `resourcesperslave` fields.
    */
@@ -110,6 +115,9 @@ private[deploy] object JsonProtocol {
       .toList.map(writeResourceRequirement)) ~
     ("submitdate" -> obj.submitDate.toString) ~
     ("state" -> obj.state.toString) ~
+    ("holdsupported" -> obj.holdSupported) ~
+    ("held" -> obj.isHeld) ~
+    ("draining" -> obj.numDrainingExecutors) ~
     ("duration" -> obj.duration)
   }
 
@@ -123,10 +131,16 @@ private[deploy] object JsonProtocol {
    *         `memoryperexecutor` minimal memory in MB required to each executor
    *         `resourcesperexecutor` minimal resources required to each executor
    *         `user` name of the user who submitted the application
-   *         `command` the command string used to submit the application
+   *         `command` the command string used to submit the application, with secret-bearing
+   *         fields (`environment`, `javaOpts`) redacted using `spark.redaction.regex`
    * For compatibility also returns the deprecated `memoryperslave` & `resourcesperslave` fields.
    */
-  def writeApplicationDescription(obj: ApplicationDescription): JObject = {
+  def writeApplicationDescription(obj: ApplicationDescription, conf: SparkConf): JObject = {
+    val redactedEnvironment = Utils.redact(conf, obj.command.environment.toSeq).toMap
+    val redactedJavaOpts = Utils.redactCommandLineArgs(conf, obj.command.javaOpts)
+    val redactedCommand = obj.command.copy(
+      environment = redactedEnvironment,
+      javaOpts = redactedJavaOpts)
     ("name" -> obj.name) ~
     ("cores" -> obj.maxCores.getOrElse(0)) ~
     ("memoryperexecutor" -> obj.memoryPerExecutorMB) ~
@@ -134,7 +148,7 @@ private[deploy] object JsonProtocol {
     ("memoryperslave" -> obj.memoryPerExecutorMB) ~
     ("resourcesperslave" -> obj.resourceReqsPerExecutor.toList.map(writeResourceRequirement)) ~
     ("user" -> obj.user) ~
-    ("command" -> obj.command.toString)
+    ("command" -> redactedCommand.toString)
   }
 
   /**
@@ -154,7 +168,7 @@ private[deploy] object JsonProtocol {
     ("memory" -> obj.memory) ~
     ("resources" -> writeResourcesInfo(obj.resources)) ~
     ("appid" -> obj.appId) ~
-    ("appdesc" -> writeApplicationDescription(obj.appDesc))
+    ("appdesc" -> writeApplicationDescription(obj.appDesc, obj.conf))
   }
 
   /**

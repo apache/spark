@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -50,6 +51,13 @@ import org.apache.spark.util.Utils
  */
 @ExpressionDescription(
   usage = "_FUNC_(class, method[, arg1[, arg2 ..]]) - Calls a method with reflection.",
+  arguments = """
+    Arguments:
+      * class - A literal string with the fully qualified name of the class.
+      * method - A literal string with the name of the static method to call.
+      * argN - Optional arguments passed to the method. Only primitive and string
+          types are supported, and each argument is matched to the method signature.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('java.util.UUID', 'randomUUID');
@@ -126,6 +134,14 @@ case class CallMethodViaReflection(
 
       unexpectedParameter match {
         case Some(mismatch) => mismatch
+        case _ if !methodAllowed =>
+          DataTypeMismatch(
+            errorSubClass = "METHOD_NOT_ALLOWED",
+            messageParameters = Map(
+              "methodName" -> methodName,
+              "className" -> className,
+              "config" -> toSQLConf(StaticSQLConf.REFLECT_ALLOW_LIST.key))
+          )
         case _ if !classExists =>
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_CLASS_TYPE",
@@ -175,6 +191,17 @@ case class CallMethodViaReflection(
 
   /** Name of the method */
   @transient private lazy val methodName = children(1).eval(null).asInstanceOf[UTF8String].toString
+
+  /**
+   * True if the canonical `class.method` name fully matches one of the regular expressions in
+   * the allow list configured by [[StaticSQLConf.REFLECT_ALLOW_LIST]]. An empty list (the default)
+   * allows every call.
+   */
+  @transient private lazy val methodAllowed: Boolean = {
+    val allowList = SQLConf.get.getConf(StaticSQLConf.REFLECT_ALLOW_LIST)
+    val canonicalName = s"$className.$methodName"
+    allowList.isEmpty || allowList.exists(canonicalName.matches)
+  }
 
   /** The reflection method. */
   @transient lazy val method: Method = CallMethodViaReflection

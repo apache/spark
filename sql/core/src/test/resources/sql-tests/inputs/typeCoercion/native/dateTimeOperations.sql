@@ -58,3 +58,9 @@ select cast('1' as binary) - interval 2 day;
 select cast(1 as boolean) - interval 2 day;
 select cast('2017-12-11 09:30:00.0' as timestamp) - interval 2 day;
 select cast('2017-12-11 09:30:00' as date) - interval 2 day;
+
+-- TIME +/- day-time interval and TIME - TIME
+select cast('12:34:56' as time) + interval '02:00:00' hour to second;
+select interval '02:00:00' hour to second + cast('12:34:56' as time);
+select cast('12:34:56' as time) - interval '02:00:00' hour to second;
+select cast('12:34:56' as time) - cast('10:00:00' as time);

@@ -14,27 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Dict
-from typing import Optional, Union, List, overload, Tuple, cast, Callable
-from typing import TYPE_CHECKING
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union, cast, overload
 
-from pyspark.sql.connect.plan import (
-    Read,
-    RelationChanges,
-    DataSource,
-    LogicalPlan,
-    WriteOperation,
-    WriteOperationV2,
-    Parse,
-)
 import pyspark.sql.connect.proto as proto
-from pyspark.sql.types import StructType
-from pyspark.sql.utils import to_str
-from pyspark.sql.readwriter import (
-    DataFrameWriter as PySparkDataFrameWriter,
-    DataFrameReader as PySparkDataFrameReader,
-    DataFrameWriterV2 as PySparkDataFrameWriterV2,
-)
 from pyspark.errors import (
     AnalysisException,
     PySparkAttributeError,
@@ -42,10 +25,30 @@ from pyspark.errors import (
     PySparkValueError,
 )
 from pyspark.sql.connect.functions import builtin as F
+from pyspark.sql.connect.plan import (
+    DataSource,
+    LogicalPlan,
+    Parse,
+    Read,
+    RelationChanges,
+    WriteOperation,
+    WriteOperationV2,
+)
+from pyspark.sql.readwriter import (
+    DataFrameReader as PySparkDataFrameReader,
+)
+from pyspark.sql.readwriter import (
+    DataFrameWriter as PySparkDataFrameWriter,
+)
+from pyspark.sql.readwriter import (
+    DataFrameWriterV2 as PySparkDataFrameWriterV2,
+)
+from pyspark.sql.types import StructType
+from pyspark.sql.utils import to_str
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect._typing import ColumnOrName, OptionalPrimitiveType
+    from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.metrics import ExecutionInfo
 
@@ -55,7 +58,10 @@ PathOrPaths = Union[str, List[str]]
 TupleOrListOfString = Union[List[str], Tuple[str, ...]]
 
 
-class OptionUtils:
+class OptionUtils(ABC):
+    @abstractmethod
+    def option(self, key: str, value: "OptionalPrimitiveType") -> Any: ...
+
     def _set_opts(
         self,
         schema: Optional[Union[StructType, str]] = None,
@@ -68,7 +74,7 @@ class OptionUtils:
             self.schema(schema)  # type: ignore[attr-defined]
         for k, v in options.items():
             if v is not None:
-                self.option(k, v)  # type: ignore[attr-defined]
+                self.option(k, v)
 
 
 class DataFrameReader(OptionUtils):
@@ -130,15 +136,17 @@ class DataFrameReader(OptionUtils):
             self.schema(schema)
         self.options(**options)
 
-        paths = path
+        paths: Optional[List[str]]
         if isinstance(path, str):
             paths = [path]
+        else:
+            paths = path
 
         plan = DataSource(
             format=self._format,
             schema=self._schema,
             options=self._options,
-            paths=paths,  # type: ignore[arg-type]
+            paths=paths,
         )
         return self._df(plan)
 
@@ -602,6 +610,8 @@ class DataFrameWriter(OptionUtils):
     format.__doc__ = PySparkDataFrameWriter.format.__doc__
 
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataFrameWriter":
+        if value is None:
+            return self
         self._write.options[key] = to_str(value)
         return self
 
@@ -609,7 +619,7 @@ class DataFrameWriter(OptionUtils):
 
     def options(self, **options: "OptionalPrimitiveType") -> "DataFrameWriter":
         for k in options:
-            self._write.options[k] = to_str(options[k])
+            self.option(k, options[k])
         return self
 
     options.__doc__ = PySparkDataFrameWriter.options.__doc__
@@ -978,6 +988,8 @@ class DataFrameWriterV2(OptionUtils):
     using.__doc__ = PySparkDataFrameWriterV2.using.__doc__
 
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataFrameWriterV2":
+        if value is None:
+            return self
         self._write.options[key] = to_str(value)
         return self
 
@@ -985,7 +997,7 @@ class DataFrameWriterV2(OptionUtils):
 
     def options(self, **options: "OptionalPrimitiveType") -> "DataFrameWriterV2":
         for k in options:
-            self._write.options[k] = to_str(options[k])
+            self.option(k, options[k])
         return self
 
     options.__doc__ = PySparkDataFrameWriterV2.options.__doc__
@@ -1066,11 +1078,12 @@ class DataFrameWriterV2(OptionUtils):
 
 
 def _test() -> None:
-    import sys
-    import os
     import doctest
-    from pyspark.sql import SparkSession as PySparkSession
+    import os
+    import sys
+
     import pyspark.sql.connect.readwriter
+    from pyspark.sql import SparkSession as PySparkSession
 
     globs = pyspark.sql.connect.readwriter.__dict__.copy()
 

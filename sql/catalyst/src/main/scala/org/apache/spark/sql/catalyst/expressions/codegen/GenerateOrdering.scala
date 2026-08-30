@@ -88,16 +88,35 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], BaseOrdering] with
     val comparisons = rowAKeys.zip(rowBKeys).zipWithIndex.map { case ((l, r), i) =>
       val dt = ordering(i).child.dataType
       val asc = ordering(i).isAscending
-      val nullOrdering = ordering(i).nullOrdering
-      val lRetValue = nullOrdering match {
-        case NullsFirst => "-1"
-        case NullsLast => "1"
-      }
-      val rRetValue = nullOrdering match {
-        case NullsFirst => "1"
-        case NullsLast => "-1"
-      }
-      s"""
+      val compareCode =
+        s"""
+          |int comp = ${ctx.genComp(dt, l.value, r.value)};
+          |if (comp != 0) {
+          |  return ${if (asc) "comp" else "-comp"};
+          |}
+        """.stripMargin
+      if (l.isNull == FalseLiteral && r.isNull == FalseLiteral) {
+        // The order key is statically non-nullable, so the three null-handling branches
+        // are dead. Emit only the value comparison, wrapped in a block so that `comp` is
+        // scoped when `splitExpressions` concatenates multiple comparisons.
+        s"""
+          |${l.code}
+          |${r.code}
+          |{
+          |  ${compareCode.trim}
+          |}
+        """.stripMargin
+      } else {
+        val nullOrdering = ordering(i).nullOrdering
+        val lRetValue = nullOrdering match {
+          case NullsFirst => "-1"
+          case NullsLast => "1"
+        }
+        val rRetValue = nullOrdering match {
+          case NullsFirst => "1"
+          case NullsLast => "-1"
+        }
+        s"""
           |${l.code}
           |${r.code}
           |if (${l.isNull} && ${r.isNull}) {
@@ -107,12 +126,10 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], BaseOrdering] with
           |} else if (${r.isNull}) {
           |  return $rRetValue;
           |} else {
-          |  int comp = ${ctx.genComp(dt, l.value, r.value)};
-          |  if (comp != 0) {
-          |    return ${if (asc) "comp" else "-comp"};
-          |  }
+          |  ${compareCode.trim}
           |}
-      """.stripMargin
+        """.stripMargin
+      }
     }
 
     val code = ctx.splitExpressions(

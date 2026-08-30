@@ -116,6 +116,7 @@ final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
   }
 
   private def executeWriteOperation(mode: proto.WriteOperationV2.Mode): Unit = {
+    builder.setWithSchemaEvolution(_withSchemaEvolution)
     val command = proto.Command
       .newBuilder()
       .setWriteOperationV2(builder.setMode(mode))

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -18,25 +17,25 @@
 
 import contextlib
 import copy
-import functools
 import faulthandler
+import functools
 import gc
 import itertools
 import os
 import re
+import socket
 import sys
 import threading
 import traceback
 import typing
-import socket
 import warnings
 from contextlib import contextmanager
 from types import TracebackType
 from typing import (
+    IO,
     Any,
     Callable,
     Generator,
-    IO,
     Iterator,
     List,
     Optional,
@@ -48,11 +47,11 @@ from typing import (
 
 from pyspark.errors import PySparkRuntimeError
 from pyspark.serializers import (
-    write_int,
-    read_int,
-    write_with_length,
     SpecialLengths,
     UTF8Deserializer,
+    read_int,
+    write_int,
+    write_with_length,
 )
 
 __all__: List[str] = []
@@ -64,40 +63,48 @@ if typing.TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
 
     from pyspark._typing import NonUDFType
-    from pyspark.sql.pandas._typing import (
-        PandasScalarUDFType,
-        PandasGroupedMapUDFType,
-        PandasGroupedAggUDFType,
-        PandasWindowAggUDFType,
-        PandasScalarIterUDFType,
-        PandasMapIterUDFType,
-        PandasCogroupedMapUDFType,
-        ArrowMapIterUDFType,
-        PandasGroupedMapUDFWithStateType,
-        ArrowGroupedMapUDFType,
-        ArrowGroupedMapIterUDFType,
-        ArrowCogroupedMapUDFType,
-        PandasGroupedMapIterUDFType,
-        PandasGroupedAggIterUDFType,
-        PandasGroupedMapUDFTransformWithStateType,
-        PandasGroupedMapUDFTransformWithStateInitStateType,
-        GroupedMapUDFTransformWithStateType,
-        GroupedMapUDFTransformWithStateInitStateType,
-        ArrowScalarUDFType,
-        ArrowScalarIterUDFType,
-        ArrowGroupedAggUDFType,
-        ArrowGroupedAggIterUDFType,
-        ArrowWindowAggUDFType,
-    )
-    from pyspark.sql._typing import (
-        SQLArrowBatchedUDFType,
-        SQLArrowTableUDFType,
-        SQLBatchedUDFType,
-        SQLTableUDFType,
-        SQLArrowUDTFType,
-    )
     from pyspark.serializers import Serializer
     from pyspark.sql import SparkSession
+    from pyspark.sql._typing import (
+        SQLArrowBatchedUDFType,
+        SQLArrowElementwiseUDFType,
+        SQLArrowTableUDFType,
+        SQLArrowUDTFType,
+        SQLBatchedUDFType,
+        SQLScalarArrowElementwiseUDFType,
+        SQLScalarArrowIterElementwiseUDFType,
+        SQLScalarPandasElementwiseUDFType,
+        SQLScalarPandasIterElementwiseUDFType,
+        SQLTableUDFType,
+    )
+    from pyspark.sql.pandas._typing import (
+        ArrowCogroupedMapUDFType,
+        ArrowGroupedAggIncrementalFinalUDFType,
+        ArrowGroupedAggIncrementalPartialUDFType,
+        ArrowGroupedAggIterUDFType,
+        ArrowGroupedAggUDFType,
+        ArrowGroupedMapIterUDFType,
+        ArrowGroupedMapUDFType,
+        ArrowMapIterUDFType,
+        ArrowScalarIterUDFType,
+        ArrowScalarUDFType,
+        ArrowWindowAggIncrementalUDFType,
+        ArrowWindowAggUDFType,
+        GroupedMapUDFTransformWithStateInitStateType,
+        GroupedMapUDFTransformWithStateType,
+        PandasCogroupedMapUDFType,
+        PandasGroupedAggIterUDFType,
+        PandasGroupedAggUDFType,
+        PandasGroupedMapIterUDFType,
+        PandasGroupedMapUDFTransformWithStateInitStateType,
+        PandasGroupedMapUDFTransformWithStateType,
+        PandasGroupedMapUDFType,
+        PandasGroupedMapUDFWithStateType,
+        PandasMapIterUDFType,
+        PandasScalarIterUDFType,
+        PandasScalarUDFType,
+        PandasWindowAggUDFType,
+    )
 
 
 JVM_BYTE_MIN: int = -(1 << 7)
@@ -443,9 +450,10 @@ def inheritable_thread_target(f: Union[Callable, "SparkSession"]) -> Callable:
         return outer
 
     # Non Spark Connect with SparkSession or Callable
-    from pyspark.sql import SparkSession
-    from pyspark import SparkContext
     from py4j.clientserver import ClientServer
+
+    from pyspark import SparkContext
+    from pyspark.sql import SparkSession
 
     if isinstance(SparkContext._gateway, ClientServer):
         # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
@@ -527,12 +535,19 @@ def handle_worker_exception(
     def format_exception() -> str:
         if hide_traceback:
             return "".join(traceback.format_exception_only(type(e), e))
+        tb = sys.exc_info()[-1]
         if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
-            tb = try_simplify_traceback(sys.exc_info()[-1])  # type: ignore[arg-type]
-            if tb is not None:
+            simplified_tb = try_simplify_traceback(tb)  # type: ignore[arg-type]
+            if simplified_tb is not None:
+                tb = simplified_tb
                 e.__cause__ = None
-                return "".join(traceback.format_exception(type(e), e, tb))
-        return traceback.format_exc()
+        # We only set SPARK_TRACEBACK_WITH_LOCALS=1 for now. This equivalent to a
+        # check for the existence of the environment variable.
+        capture_locals = bool(os.environ.get("SPARK_TRACEBACK_WITH_LOCALS", False))
+        te = traceback.TracebackException(
+            type(e), e, tb, compact=True, capture_locals=capture_locals
+        )
+        return "".join(te.format())
 
     try:
         exc_info = format_exception()
@@ -590,8 +605,9 @@ class InheritableThread(threading.Thread):
             super().__init__(target=copy_local_properties, *args, **kwargs)  # type: ignore[misc]
         else:
             # Non Spark Connect
-            from pyspark import SparkContext
             from py4j.clientserver import ClientServer
+
+            from pyspark import SparkContext
 
             self._session = session  # type: ignore[assignment]
             if isinstance(SparkContext._gateway, ClientServer):
@@ -626,8 +642,9 @@ class InheritableThread(threading.Thread):
             self._tags = set(thread_local.tags)
         else:
             # Non Spark Connect
-            from pyspark import SparkContext
             from py4j.clientserver import ClientServer
+
+            from pyspark import SparkContext
 
             if isinstance(SparkContext._gateway, ClientServer):
                 # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
@@ -656,6 +673,11 @@ class PythonEvalType:
 
     SQL_BATCHED_UDF: "SQLBatchedUDFType" = 100
     SQL_ARROW_BATCHED_UDF: "SQLArrowBatchedUDFType" = 101
+    SQL_ARROW_ELEMENTWISE_UDF: "SQLArrowElementwiseUDFType" = 102
+    SQL_SCALAR_PANDAS_ELEMENTWISE_UDF: "SQLScalarPandasElementwiseUDFType" = 103
+    SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF: "SQLScalarPandasIterElementwiseUDFType" = 104
+    SQL_SCALAR_ARROW_ELEMENTWISE_UDF: "SQLScalarArrowElementwiseUDFType" = 105
+    SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF: "SQLScalarArrowIterElementwiseUDFType" = 106
 
     SQL_SCALAR_PANDAS_UDF: "PandasScalarUDFType" = 200
     SQL_GROUPED_MAP_PANDAS_UDF: "PandasGroupedMapUDFType" = 201
@@ -682,6 +704,17 @@ class PythonEvalType:
     SQL_GROUPED_AGG_ARROW_UDF: "ArrowGroupedAggUDFType" = 252
     SQL_WINDOW_AGG_ARROW_UDF: "ArrowWindowAggUDFType" = 253
     SQL_GROUPED_AGG_ARROW_ITER_UDF: "ArrowGroupedAggIterUDFType" = 254
+
+    # Incremental (partial + final) Arrow aggregator. See ``pyspark.sql.aggregator``.
+    # PARTIAL folds input rows into a per-group buffer via ``Aggregator.reduce`` on the map side;
+    # FINAL merges partial buffers via ``Aggregator.merge`` and produces output via
+    # ``Aggregator.finish`` after the shuffle.
+    SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF: "ArrowGroupedAggIncrementalPartialUDFType" = 255
+    SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF: "ArrowGroupedAggIncrementalFinalUDFType" = 256
+
+    # Window aggregation with an incremental ``Aggregator``. A window has no shuffle, so each
+    # frame's rows are folded with ``reduce`` (from ``zero``) and finished with ``finish``.
+    SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF: "ArrowWindowAggIncrementalUDFType" = 257
 
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
@@ -972,7 +1005,7 @@ class _FaulthandlerHelper:
         self._log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
         if self._log_path:
             self._log_path = os.path.join(self._log_path, str(os.getpid()))
-            self._log_file = open(self._log_path, "w")
+            self._log_file = open(self._log_path, "w", encoding="utf-8")
 
             faulthandler.enable(file=self._log_file)
 
@@ -1041,6 +1074,7 @@ enable_faulthandler = _faulthandler_helper.enable_faulthandler
 
 if __name__ == "__main__":
     import doctest
+
     import pyspark.util
     from pyspark.core.context import SparkContext
 

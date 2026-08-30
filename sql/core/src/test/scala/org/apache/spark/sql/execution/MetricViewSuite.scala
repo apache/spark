@@ -19,14 +19,14 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.metricview.serde.{AssetSource, Column, DimensionExpression, MeasureExpression, MetricView, MetricViewFactory, SQLSource}
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 
 class SimpleMetricViewSuite extends MetricViewSuite with SharedSparkSession
 
 /**
  * A suite for testing metric view related functionality.
  */
-abstract class MetricViewSuite extends QueryTest with SQLTestUtils {
+abstract class MetricViewSuite extends QueryTest {
   import testImplicits._
 
   protected val testMetricViewName = "test_metric_view"

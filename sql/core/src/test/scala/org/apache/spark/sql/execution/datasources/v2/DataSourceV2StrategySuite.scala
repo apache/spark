@@ -21,12 +21,14 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
+import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, VariantGet => V2VariantGet}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2StrategySuite extends SharedSparkSession {
@@ -818,6 +820,195 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
         FieldReference("cdouble"))))
   }
 
+  test("VariantGet translates to V2VariantGet connector expression") {
+    val ref = AttributeReference("v", VariantType)()
+    val path = Literal.create("$.city", StringType)
+    val expr = VariantGet(ref, path, StringType, failOnError = true)
+    val gt = GreaterThan(expr, Literal.create("NYC", StringType))
+    val result = new V2ExpressionBuilder(gt, isPredicate = true).build()
+    result match {
+      case Some(v2pred: Predicate) if v2pred.name() == ">" =>
+        v2pred.children()(0) match {
+          case vg: V2VariantGet =>
+            assert(vg.path() == "$.city")
+            assert(vg.targetType() == StringType)
+            assert(vg.failOnError())
+            assert(vg.timeZoneId() == null)
+            assert(vg.children().length == 1)
+            assert(vg.children()(0) == FieldReference("v"))
+          case other => fail(s"expected V2VariantGet, got ${other.getClass.getName}")
+        }
+      case _ => fail("expected predicate with name '>'")
+    }
+  }
+
+  test("try_variant_get translates with failOnError=false") {
+    val ref = AttributeReference("v", VariantType)()
+    val path = Literal.create("$.city", StringType)
+    val expr = VariantGet(ref, path, StringType, failOnError = false)
+    val gt = GreaterThan(expr, Literal.create("NYC", StringType))
+    val result = new V2ExpressionBuilder(gt, isPredicate = true).build()
+    result match {
+      case Some(v2pred: Predicate) if v2pred.name() == ">" =>
+        v2pred.children()(0) match {
+          case vg: V2VariantGet =>
+            assert(!vg.failOnError())
+            assert(vg.path() == "$.city")
+          case other => fail(s"expected V2VariantGet, got ${other.getClass.getName}")
+        }
+      case _ => fail("expected predicate with name '>'")
+    }
+  }
+
+  test("VariantGet predicate is translated by translateFilterV2") {
+    val ref = AttributeReference("v", VariantType)()
+    val path = Literal.create("$.city", StringType)
+    val expr = VariantGet(ref, path, StringType, failOnError = true)
+    val gt = GreaterThan(expr, Literal.create("NYC", StringType))
+    val result = DataSourceV2Strategy.translateFilterV2(gt)
+    assert(result.isDefined)
+    result.get.children()(0) match {
+      case vg: V2VariantGet =>
+        assert(vg.path() == "$.city")
+        assert(vg.targetType() == StringType)
+        assert(vg.failOnError())
+      case other =>
+        fail(s"expected V2VariantGet in translated predicate, got " +
+          s"${other.getClass.getName}")
+    }
+  }
+
+  test("VariantGet with integer targetType preserves type") {
+    val ref = AttributeReference("v", VariantType)()
+    val path = Literal.create("$.count", StringType)
+    val expr = VariantGet(ref, path, IntegerType, failOnError = true)
+    val gt = GreaterThan(expr, Literal(100))
+    val result = new V2ExpressionBuilder(gt, isPredicate = true).build()
+    assert(result.isDefined)
+    result.get.children()(0) match {
+      case vg: V2VariantGet =>
+        assert(vg.path() == "$.count")
+        assert(vg.targetType() == IntegerType)
+      case other => fail(s"expected V2VariantGet, got ${other.getClass.getName}")
+    }
+  }
+
+  test("VariantGet with non-foldable path returns None") {
+    val ref = AttributeReference("v", VariantType)()
+    val s = AttributeReference("s", StringType)()
+    val expr = VariantGet(ref, s, StringType, failOnError = true)
+    val result = new V2ExpressionBuilder(expr).build()
+    assert(result.isEmpty, "non-foldable path should not translate")
+  }
+
+  test("VariantGet with foldable null path returns None") {
+    val ref = AttributeReference("v", VariantType)()
+    val nullPath = Literal.create(null, StringType)
+    val expr = VariantGet(ref, nullPath, StringType, failOnError = true)
+    val result = new V2ExpressionBuilder(expr).build()
+    assert(result.isEmpty, "null path should not translate (graceful, no NPE)")
+  }
+
+  test("VariantGet with non-column child returns None") {
+    val lit = Literal("v")
+    val path = Literal.create("$.a", StringType)
+    val expr = VariantGet(lit, path, StringType, failOnError = true)
+    val result = new V2ExpressionBuilder(expr).build()
+    assert(result.isEmpty, "non-column child should not translate")
+  }
+
+  test("VariantGet boolean targetType wraps in BOOLEAN_EXPRESSION predicate when isPredicate") {
+    val ref = AttributeReference("v", VariantType)()
+    val path = Literal.create("$.flag", StringType)
+    val expr = VariantGet(ref, path, BooleanType, failOnError = true)
+    val result = new V2ExpressionBuilder(expr, isPredicate = true).build()
+    result match {
+      case Some(p: Predicate) if p.name() == "BOOLEAN_EXPRESSION" =>
+        p.children()(0) match {
+          case vg: V2VariantGet =>
+            assert(vg.targetType() == BooleanType)
+          case other =>
+            fail(s"expected V2VariantGet inside BOOLEAN_EXPRESSION, got " +
+              s"${other.getClass.getName}")
+        }
+      case _ => fail(s"expected BOOLEAN_EXPRESSION predicate, got $result")
+    }
+  }
+
+  test("VariantGet boolean targetType does not crash under Or (isPredicate path)") {
+    val ref = AttributeReference("v", VariantType)()
+    val path = Literal.create("$.flag", StringType)
+    val boolExpr = VariantGet(ref, path, BooleanType, failOnError = true)
+    val x = AttributeReference("x", IntegerType)()
+    val orExpr = Or(boolExpr, GreaterThan(x, Literal(0)))
+    // A boolean-typed VariantGet in predicate position must translate to a V2Predicate, or the
+    // enclosing And/Or's `isInstanceOf[V2Predicate]` assert crashes planning;
+    // the BOOLEAN_EXPRESSION predicate provides that.
+    val result = new V2ExpressionBuilder(orExpr, isPredicate = true).build()
+    assert(result.isDefined, "Or with boolean VariantGet should translate without AssertionError")
+    result.get match {
+      case p: Predicate => // expected
+      case other => fail(s"expected a Predicate, got ${other.getClass.getName}")
+    }
+  }
+
+  test("VariantGet boolean targetType is scalar when not isPredicate") {
+    val ref = AttributeReference("v", VariantType)()
+    val path = Literal.create("$.flag", StringType)
+    val expr = VariantGet(ref, path, BooleanType, failOnError = true)
+    val result = new V2ExpressionBuilder(expr, isPredicate = false).build()
+    result match {
+      case Some(vg: V2VariantGet) =>
+        assert(vg.targetType() == BooleanType)
+      case _ => fail(s"expected V2VariantGet scalar when isPredicate=false, got $result")
+    }
+  }
+
+  test("V2VariantGet toString renders as variant_get SQL") {
+    val ref = AttributeReference("v", VariantType)()
+    val vg = new V2VariantGet(FieldReference("v"), "$.city", StringType, true, null)
+    assert(vg.toString == "variant_get(v, '$.city', string)")
+  }
+
+  test("V2VariantGet toString renders as try_variant_get with timezone") {
+    val vg = new V2VariantGet(FieldReference("v"), "$.ts", TimestampType, false, "UTC")
+    assert(vg.toString == "try_variant_get(v, '$.ts', timestamp, tz=UTC)")
+  }
+
+  test("VariantGet with resolved timeZoneId passes it through the builder") {
+    val ref = AttributeReference("v", VariantType)()
+    val path = Literal.create("$.ts", StringType)
+    val expr = VariantGet(ref, path, TimestampType, failOnError = true, timeZoneId = Some("UTC"))
+    val gt = GreaterThan(expr, Literal.create(null, TimestampType))
+    val result = new V2ExpressionBuilder(gt, isPredicate = true).build()
+    assert(result.isDefined)
+    result.get.children()(0) match {
+      case vg: V2VariantGet =>
+        assert(vg.timeZoneId() == "UTC")
+        assert(vg.targetType() == TimestampType)
+      case other => fail(s"expected V2VariantGet, got ${other.getClass.getName}")
+    }
+  }
+
+  test("VariantGet with struct-nested variant column translates to nested FieldReference") {
+    val structType = StructType(Seq(StructField("v", VariantType)))
+    val parentRef = AttributeReference("s", structType)()
+    val nestedVariant = GetStructField(parentRef, 0)
+    val path = Literal.create("$.city", StringType)
+    val expr = VariantGet(nestedVariant, path, StringType, failOnError = true)
+    val gt = GreaterThan(expr, Literal.create("NYC", StringType))
+    val result = new V2ExpressionBuilder(gt, isPredicate = true).build()
+    assert(result.isDefined)
+    result.get.children()(0) match {
+      case vg: V2VariantGet =>
+        assert(vg.children()(0) == FieldReference(Seq("s", "v")))
+        assert(vg.path() == "$.city")
+        assert(vg.targetType() == StringType)
+      case other => fail(s"expected V2VariantGet with nested FieldReference, got " +
+        s"${other.getClass.getName}")
+    }
+  }
+
   test("Current Like functions are not supported") {
     val currentFunctions = Seq(
       CurrentDate(),
@@ -836,11 +1027,30 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     val expr = Abs(Literal(-5), failOnError = true)
     checkV2Conversion(expr, LiteralValue(5, IntegerType))
 
-    withSQLConf(SQLConf.DATA_SOURCE_V2_EXPR_FOLDING.key -> "false") {
+    withSQLConf("spark.sql.optimizer.datasourceV2ExprFolding" -> "false") {
       // when spark.sql.optimizer.datasourceV2ExprFolding = false
       // expression will be converted to V2 expressions, but not folded
       checkV2Conversion(expr,
         new GeneralScalarExpression("ABS", Array(LiteralValue(-5, IntegerType))))
+    }
+  }
+
+  test("SPARK-58428: translating an expression that failed to evaluate does not loop forever") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // `coalesce(c, 1 div 0) = 1`. Constant folding defers the divide by zero error because the
+      // failing expression sits in a conditional branch, so it is tagged FAILED_TO_EVALUATE and
+      // left as is. `div` returns BIGINT, so `c` is LONG to keep the `coalesce` inputs equal.
+      val c = AttributeReference("c", LongType)()
+      val predicate =
+        EqualTo(Coalesce(Seq(c, IntegralDivide(Literal(1), Literal(0)))), Literal(1L))
+      val folded = ConstantFolding.constantFolding(predicate)
+      assert(
+        folded.exists(_.containsTag(ConstantFolding.FAILED_TO_EVALUATE)),
+        "expected the divide by zero branch to be tagged FAILED_TO_EVALUATE")
+
+      // Translating such an expression used to recurse forever. Note that a regression hangs
+      // this test instead of failing it, as the recursion is in tail position.
+      assert(new V2ExpressionBuilder(folded, isPredicate = true).build().isEmpty)
     }
   }
 

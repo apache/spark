@@ -17,17 +17,18 @@
 # limitations under the License.
 #
 
-import warnings
-import traceback
 import os
 import sys
+import traceback
+import warnings
 from argparse import ArgumentParser
+
+import sparktestsupport.modules as modules
 from sparktestsupport.utils import (
     determine_modules_for_files,
     determine_modules_to_test,
     identify_changed_files_from_git_commits,
 )
-import sparktestsupport.modules as modules
 
 
 def parse_opts():
@@ -64,6 +65,14 @@ def main():
     elif os.environ.get("GITHUB_PREV_SHA"):
         changed_files = identify_changed_files_from_git_commits(
             os.environ["GITHUB_SHA"], target_ref=os.environ["GITHUB_PREV_SHA"]
+        )
+
+    rejected = [f for f in changed_files if f.endswith(".jar") or f.endswith(".class")]
+    if rejected:
+        sys.exit(
+            "Cannot add .jar or .class files to the repository "
+            f"({', '.join(rejected)}). "
+            "Generate them dynamically at test time instead."
         )
 
     changed_modules = determine_modules_to_test(

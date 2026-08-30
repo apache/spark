@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper._
-import org.apache.spark.sql.execution.streaming.state.{DropLastNFieldsStatePartitionKeyExtractor, KeyStateEncoderSpec, NoopStatePartitionKeyExtractor, NoPrefixKeyStateEncoderSpec, StatePartitionKeyExtractor, StateSchemaBroadcast, StateStore, StateStoreCheckpointInfo, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors, StateStoreId, StateStoreMetrics, StateStoreProvider, StateStoreProviderId, SupportsFineGrainedReplay, TimestampAsPostfixKeyStateEncoderSpec, TimestampAsPrefixKeyStateEncoderSpec, TimestampKeyStateEncoder}
+import org.apache.spark.sql.execution.streaming.state.{DropLastNFieldsStatePartitionKeyExtractor, KeyStateEncoderSpec, NoopStatePartitionKeyExtractor, NoPrefixKeyStateEncoderSpec, RangeScanBoundaryUtils, ReadStateStore, StatePartitionKeyExtractor, StateSchemaBroadcast, StateStore, StateStoreCheckpointInfo, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors, StateStoreId, StateStoreMetrics, StateStoreProvider, StateStoreProviderId, SupportsFineGrainedReplay, TimestampAsPostfixKeyStateEncoderSpec, TimestampAsPrefixKeyStateEncoderSpec, TimestampKeyStateEncoder}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, LongType, NullType, StructField, StructType}
 import org.apache.spark.util.NextIterator
@@ -184,15 +184,28 @@ trait SupportsEvictByCondition { self: SymmetricHashJoinStateManager =>
 trait SupportsEvictByTimestamp { self: SymmetricHashJoinStateManager =>
   import SymmetricHashJoinStateManager._
 
-  /** Evict the state by timestamp. Returns the number of values evicted. */
-  def evictByTimestamp(endTimestamp: Long): Long
+  /**
+   * Evict the state by timestamp. Returns the number of values evicted.
+   *
+   * @param endTimestamp Inclusive upper bound: evicts entries with timestamp <= endTimestamp.
+   * @param startTimestamp Exclusive lower bound: entries with timestamp <= startTimestamp are
+   *   assumed to have been evicted already (e.g. from the previous batch). When provided,
+   *   the scan starts from startTimestamp + 1.
+   */
+  def evictByTimestamp(endTimestamp: Long, startTimestamp: Option[Long] = None): Long
 
   /**
    * Evict the state by timestamp and return the evicted key-value pairs.
    *
    * It is caller's responsibility to consume the whole iterator.
+   *
+   * @param endTimestamp Inclusive upper bound: evicts entries with timestamp <= endTimestamp.
+   * @param startTimestamp Exclusive lower bound: entries with timestamp <= startTimestamp are
+   *   assumed to have been evicted already (e.g. from the previous batch). When provided,
+   *   the scan starts from startTimestamp + 1.
    */
-  def evictAndReturnByTimestamp(endTimestamp: Long): Iterator[KeyToValuePair]
+  def evictAndReturnByTimestamp(
+      endTimestamp: Long, startTimestamp: Option[Long] = None): Iterator[KeyToValuePair]
 }
 
 /**
@@ -226,7 +239,8 @@ class SymmetricHashJoinStateManagerV4(
     useStateStoreCoordinator: Boolean = true,
     snapshotOptions: Option[SnapshotOptions] = None,
     joinStoreGenerator: JoinStateManagerStoreGenerator,
-    joinKeyOrdinalForWatermark: Option[Int] = None)
+    joinKeyOrdinalForWatermark: Option[Int] = None,
+    readOnly: Boolean = false)
   extends SymmetricHashJoinStateManager with SupportsEvictByTimestamp with Logging {
 
   // TODO: [SPARK-55729] Once the new state manager is integrated to stream-stream join operator,
@@ -306,23 +320,69 @@ class SymmetricHashJoinStateManagerV4(
 
   private var stateStoreProvider: StateStoreProvider = _
 
+  private var _stateStore: StateStore = _
+  private var _readStateStore: ReadStateStore = _
+
+  /**
+   * Writable store. Access fails fast when in read-only mode.
+   */
+  private def stateStore: StateStore = {
+    require(!readOnly,
+      "Writable stateStore is not available on a read-only V4 join state manager")
+    _stateStore
+  }
+
+  /** Read view of the loaded store. Safe to use in either mode. */
+  private def readStateStore: ReadStateStore =
+    if (readOnly) _readStateStore else _stateStore
+
+  /**
+   * Register a column family on the loaded store. In read-only mode this is the read-safe
+   * in-memory registration ([[ReadStateStore.registerColFamily]]); in write mode it is the
+   * writable [[StateStore.createColFamilyIfAbsent]] (which forces a snapshot for a new family).
+   */
+  private def registerColFamily(
+      colFamilyName: String,
+      keySchema: StructType,
+      valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useMultipleValuesPerKey: Boolean = false,
+      isInternal: Boolean = false): Unit = {
+    if (readOnly) {
+      readStateStore.registerColFamily(colFamilyName, keySchema, valueSchema,
+        keyStateEncoderSpec, useMultipleValuesPerKey, isInternal)
+    } else {
+      stateStore.createColFamilyIfAbsent(colFamilyName, keySchema, valueSchema,
+        keyStateEncoderSpec, useMultipleValuesPerKey, isInternal)
+    }
+  }
+
   // We will use the dummy schema for the default CF since we will register CF separately.
-  private val stateStore = getStateStore(
+  initializeStateStore(
     dummySchema, dummySchema, useVirtualColumnFamilies = true,
     NoPrefixKeyStateEncoderSpec(dummySchema), useMultipleValuesPerKey = false
   )
 
-  private def getStateStore(
+  /**
+   * Load the state store and populate `_stateStore` (when !readOnly) or `_readStateStore`
+   * (when readOnly). Subclasses invoke this for the side effect during construction;
+   * afterwards, the [[stateStore]] / [[readStateStore]] accessors return the right view.
+   */
+  private def initializeStateStore(
       keySchema: StructType,
       valueSchema: StructType,
       useVirtualColumnFamilies: Boolean,
       keyStateEncoderSpec: KeyStateEncoderSpec,
-      useMultipleValuesPerKey: Boolean): StateStore = {
+      useMultipleValuesPerKey: Boolean): Unit = {
     val storeName = StateStoreId.DEFAULT_STORE_NAME
     val storeProviderId = StateStoreProviderId(stateInfo.get, partitionId, storeName)
-    val store = if (useStateStoreCoordinator) {
+    val handle: ReadStateStore = if (useStateStoreCoordinator) {
       assert(handlerSnapshotOptions.isEmpty, "Should not use state store coordinator " +
         "when reading state as data source.")
+      // JoinStateManagerStoreGenerator only exposes a writable getStore. Read-only mode is
+      // only ever used with useStateStoreCoordinator=false (data source reads).
+      require(!readOnly,
+        "readOnly mode is not supported with useStateStoreCoordinator=true")
       joinStoreGenerator.getStore(
         storeProviderId, keySchema, valueSchema, keyStateEncoderSpec,
         stateInfo.get.storeVersion, stateStoreCkptId, None, useVirtualColumnFamilies,
@@ -335,24 +395,43 @@ class SymmetricHashJoinStateManagerV4(
         storeConf, hadoopConf, useMultipleValuesPerKey = useMultipleValuesPerKey,
         stateSchemaProvider = None)
       if (handlerSnapshotOptions.isDefined) {
+        // Fine-grained snapshot replay (state data source with snapshotStartBatchId).
         if (!stateStoreProvider.isInstanceOf[SupportsFineGrainedReplay]) {
           throw StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
             stateStoreProvider.getClass.toString)
         }
         val opts = handlerSnapshotOptions.get
-        stateStoreProvider.asInstanceOf[SupportsFineGrainedReplay]
-          .replayStateFromSnapshot(
+        val replayer = stateStoreProvider.asInstanceOf[SupportsFineGrainedReplay]
+        if (readOnly) {
+          replayer.replayReadStateFromSnapshot(
             opts.snapshotVersion,
             opts.endVersion,
-            readOnly = true,
             opts.startStateStoreCkptId,
             opts.endStateStoreCkptId)
+        } else {
+          replayer.replayStateFromSnapshot(
+            opts.snapshotVersion,
+            opts.endVersion,
+            readOnly = false,
+            opts.startStateStoreCkptId,
+            opts.endStateStoreCkptId)
+        }
       } else {
-        stateStoreProvider.getStore(stateInfo.get.storeVersion, stateStoreCkptId)
+        // No snapshot options: open the store at its committed version normally.
+        if (readOnly) {
+          stateStoreProvider.getReadStore(stateInfo.get.storeVersion, stateStoreCkptId)
+        } else {
+          stateStoreProvider.getStore(stateInfo.get.storeVersion, stateStoreCkptId)
+        }
       }
     }
-    logInfo(log"Loaded store ${MDC(STATE_STORE_ID, store.id)}")
-    store
+    if (readOnly) {
+      _readStateStore = handle
+      logInfo(log"Loaded read-only store ${MDC(STATE_STORE_ID, handle.id)}")
+    } else {
+      _stateStore = handle.asInstanceOf[StateStore]
+      logInfo(log"Loaded store ${MDC(STATE_STORE_ID, handle.id)}")
+    }
   }
 
   private val keyWithTsToValues = new KeyWithTsToValuesStore
@@ -519,11 +598,11 @@ class SymmetricHashJoinStateManagerV4(
     }
   }
 
-  override def evictByTimestamp(endTimestamp: Long): Long = {
+  override def evictByTimestamp(endTimestamp: Long, startTimestamp: Option[Long] = None): Long = {
     require(hasEventTime,
       "evictByTimestamp requires event time; secondary index was not populated")
     var removed = 0L
-    tsWithKey.scanEvictedKeys(endTimestamp).foreach { evicted =>
+    tsWithKey.scanEvictedKeys(endTimestamp, startTimestamp).foreach { evicted =>
       val key = evicted.key
       val timestamp = evicted.timestamp
       val numValues = evicted.numValues
@@ -537,12 +616,13 @@ class SymmetricHashJoinStateManagerV4(
     removed
   }
 
-  override def evictAndReturnByTimestamp(endTimestamp: Long): Iterator[KeyToValuePair] = {
+  override def evictAndReturnByTimestamp(
+      endTimestamp: Long, startTimestamp: Option[Long] = None): Iterator[KeyToValuePair] = {
     require(hasEventTime,
       "evictAndReturnByTimestamp requires event time; secondary index was not populated")
     val reusableKeyToValuePair = KeyToValuePair()
 
-    tsWithKey.scanEvictedKeys(endTimestamp).flatMap { evicted =>
+    tsWithKey.scanEvictedKeys(endTimestamp, startTimestamp).flatMap { evicted =>
       val key = evicted.key
       val timestamp = evicted.timestamp
       val values = keyWithTsToValues.get(key, timestamp)
@@ -563,7 +643,9 @@ class SymmetricHashJoinStateManagerV4(
   }
 
   override def abortIfNeeded(): Unit = {
-    if (!stateStore.hasCommitted) {
+    if (readOnly) {
+      readStateStore.release()
+    } else if (!stateStore.hasCommitted) {
       logInfo(log"Aborted store ${MDC(STATE_STORE_ID, stateStore.id)}")
       stateStore.abort()
     }
@@ -612,8 +694,7 @@ class SymmetricHashJoinStateManagerV4(
     private val attachTimestampProjection: UnsafeProjection =
       TimestampKeyStateEncoder.getAttachTimestampProjection(keySchema)
 
-    // Create the specific column family in the store for this join side's KeyWithTsToValuesStore.
-    stateStore.createColFamilyIfAbsent(
+    registerColFamily(
       colFamilyName,
       keySchema,
       valueRowConverter.valueAttributes.toStructType,
@@ -645,7 +726,7 @@ class SymmetricHashJoinStateManagerV4(
     }
 
     def get(key: UnsafeRow, timestamp: Long): Iterator[ValueAndMatchPair] = {
-      stateStore.valuesIterator(createKeyRow(key, timestamp), colFamilyName).map { valueRow =>
+      readStateStore.valuesIterator(createKeyRow(key, timestamp), colFamilyName).map { valueRow =>
         valueRowConverter.convertValue(valueRow)
       }
     }
@@ -663,14 +744,33 @@ class SymmetricHashJoinStateManagerV4(
 
     /**
      * Returns entries where minTs <= timestamp <= maxTs (both inclusive), grouped by timestamp.
-     * Skips entries before minTs and stops iterating past maxTs (timestamps are sorted).
+     * When maxTs is bounded (< Long.MaxValue), uses rangeScanWithMultiValues for efficient
+     * range access; falls back to prefixScan otherwise to stay within the key's scope.
+     *
+     * When prefixScan is used (maxTs == Long.MaxValue), entries outside [minTs, maxTs] are
+     * filtered out so both code paths produce identical results.
      */
     def getValuesInRange(
         key: UnsafeRow, minTs: Long, maxTs: Long): Iterator[GetValuesResult] = {
       val reusableGetValuesResult = new GetValuesResult()
+      // Only use rangeScan when maxTs < Long.MaxValue, since rangeScan requires
+      // an exclusive end key (maxTs + 1) which would overflow at Long.MaxValue.
+      val useRangeScan = maxTs < Long.MaxValue
 
       new NextIterator[GetValuesResult] {
-        private val iter = stateStore.prefixScanWithMultiValues(key, colFamilyName)
+        private val iter = if (useRangeScan) {
+          // startKey must be copied because the second createKeyRow call below reuses
+          // the same projection buffer and would otherwise overwrite its contents.
+          // endKey does not need a copy: rangeScanWithMultiValues encodes both bounds
+          // to independent byte arrays eagerly at call time, and the scope of endKey
+          // ends with the call of rangeScanWithMultiValues.
+          val startKey = createKeyRow(key, minTs).copy()
+          // rangeScanWithMultiValues endKey is exclusive, so use maxTs + 1
+          val endKey = Some(createKeyRow(key, maxTs + 1))
+          readStateStore.rangeScanWithMultiValues(Some(startKey), endKey, colFamilyName)
+        } else {
+          readStateStore.prefixScanWithMultiValues(key, colFamilyName)
+        }
 
         private var currentTs = -1L
         private var pastUpperBound = false
@@ -696,6 +796,11 @@ class SymmetricHashJoinStateManagerV4(
           } else {
             val unsafeRowPair = iter.next()
             val ts = TimestampKeyStateEncoder.extractTimestamp(unsafeRowPair.key)
+
+            if (useRangeScan && (ts < minTs || ts > maxTs)) {
+              throw StateStoreErrors.streamStreamJoinRangeScanTimestampOutOfRange(
+                ts, minTs, maxTs)
+            }
 
             if (ts > maxTs) {
               pastUpperBound = true
@@ -725,7 +830,7 @@ class SymmetricHashJoinStateManagerV4(
     }
 
     def iterator(): Iterator[KeyAndTsToValuePair] = {
-      val iter = stateStore.iteratorWithMultiValues(colFamilyName)
+      val iter = readStateStore.iteratorWithMultiValues(colFamilyName)
       val reusableKeyAndTsToValuePair = KeyAndTsToValuePair()
       iter.map { kv =>
         val keyRow = detachTimestampProjection(kv.key)
@@ -762,9 +867,8 @@ class SymmetricHashJoinStateManagerV4(
     private val attachTimestampProjection: UnsafeProjection =
       TimestampKeyStateEncoder.getAttachTimestampProjection(keySchema)
 
-    // Create the specific column family in the store for this join side's TsWithKeyStore.
     // Mark as internal so that numKeys counts only primary data, not the secondary index.
-    stateStore.createColFamilyIfAbsent(
+    registerColFamily(
       colFamilyName,
       keySchema,
       valueStructType,
@@ -773,6 +877,8 @@ class SymmetricHashJoinStateManagerV4(
       isInternal = true
     )
 
+    // Returns an UnsafeRow backed by a reused projection buffer. Callers that need to
+    // hold the row beyond the immediate state store call must invoke copy() on the result.
     private def createKeyRow(key: UnsafeRow, timestamp: Long): UnsafeRow = {
       TimestampKeyStateEncoder.attachTimestamp(
         attachTimestampProjection, keySchemaWithTimestamp, key, timestamp)
@@ -788,9 +894,61 @@ class SymmetricHashJoinStateManagerV4(
 
     case class EvictedKeysResult(key: UnsafeRow, timestamp: Long, numValues: Int)
 
-    // NOTE: This assumes we consume the whole iterator to trigger completion.
-    def scanEvictedKeys(endTimestamp: Long): Iterator[EvictedKeysResult] = {
-      val evictIterator = stateStore.iteratorWithMultiValues(colFamilyName)
+    // Reusable default key row for scan boundary construction; see
+    // [[RangeScanBoundaryUtils]] for rationale. Safe to reuse because createKeyRow
+    // only reads this row (via BoundReference evaluations) and writes to the
+    // projection's own internal buffer. Correctness relies on real stored entries
+    // never having internally-null key fields, which is preserved by join-key
+    // expressions being evaluated via the user's expression encoder. Preserve this
+    // invariant if you change how entries are written.
+    private lazy val defaultKey: UnsafeRow = RangeScanBoundaryUtils.defaultUnsafeRow(keySchema)
+
+    /**
+     * Build a scan boundary row for rangeScan. The TsWithKeyTypeStore uses
+     * TimestampAsPrefixKeyStateEncoder, which encodes the row as [timestamp][key_fields].
+     * We need a full-schema row (not just the timestamp) because the encoder expects all
+     * key columns to be present. Default values are used for the key fields since only the
+     * timestamp matters for ordering in the prefix encoder.
+     */
+    private def createScanBoundaryRow(timestamp: Long): UnsafeRow = {
+      createKeyRow(defaultKey, timestamp).copy()
+    }
+
+    /**
+     * Scan keys eligible for eviction within the timestamp range.
+     *
+     * This assumes we consume the whole iterator to trigger completion.
+     *
+     * @param endTimestamp Inclusive upper bound: entries with timestamp <= endTimestamp are
+     *   eligible for eviction.
+     * @param startTimestamp Exclusive lower bound: entries with timestamp <= startTimestamp
+     *   are assumed to have been evicted already. The scan starts from startTimestamp + 1.
+     */
+    def scanEvictedKeys(
+        endTimestamp: Long,
+        startTimestamp: Option[Long] = None): Iterator[EvictedKeysResult] = {
+      // If startTimestamp == Long.MaxValue, everything has already been evicted;
+      // nothing can match, so return immediately.
+      if (startTimestamp.contains(Long.MaxValue)) {
+        return Iterator.empty
+      }
+
+      // rangeScanWithMultiValues: startKey is inclusive, endKey is exclusive.
+      // startTimestamp is exclusive (already evicted), so we seek from st + 1.
+      val startKeyRow = startTimestamp.map { st =>
+        createScanBoundaryRow(st + 1)
+      }
+      // endTimestamp is inclusive, so we use endTimestamp + 1 as the exclusive upper bound.
+      // When endTimestamp == Long.MaxValue we cannot add 1, so endKeyRow is None. This is
+      // safe because rangeScanWithMultiValues with no end key uses the column-family prefix
+      // as the upper bound, naturally scoping the scan within this column family.
+      val endKeyRow = if (endTimestamp < Long.MaxValue) {
+        Some(createScanBoundaryRow(endTimestamp + 1))
+      } else {
+        None
+      }
+      val evictIterator =
+        readStateStore.rangeScanWithMultiValues(startKeyRow, endKeyRow, colFamilyName)
       new NextIterator[EvictedKeysResult]() {
         var currentKeyRow: UnsafeRow = null
         var currentEventTime: Long = -1L
@@ -934,7 +1092,8 @@ abstract class SymmetricHashJoinStateManagerBase(
     skippedNullValueCount: Option[SQLMetric] = None,
     useStateStoreCoordinator: Boolean = true,
     snapshotOptions: Option[SnapshotOptions] = None,
-    joinStoreGenerator: JoinStateManagerStoreGenerator)
+    joinStoreGenerator: JoinStateManagerStoreGenerator,
+    readOnly: Boolean = false)
   extends SymmetricHashJoinStateManager
   with SupportsEvictByCondition
   with SupportsIndexedKeys
@@ -1431,8 +1590,43 @@ abstract class SymmetricHashJoinStateManagerBase(
       handlerSnapshotOptions: Option[HandlerSnapshotOptions] = None) extends Logging {
     private var stateStoreProvider: StateStoreProvider = _
 
-    /** StateStore that the subclasses of this class is going to operate on */
-    protected def stateStore: StateStore
+    // Exactly one is populated by initializeStateStore -- readOnly decides which.
+    private var _stateStore: StateStore = _
+    private var _readStateStore: ReadStateStore = _
+
+    /**
+     * Writable store. Access fails fast when in read-only mode.
+     */
+    protected def stateStore: StateStore = {
+      require(!readOnly,
+        "Writable stateStore is not available on a read-only state store handler")
+      _stateStore
+    }
+
+    /** Read view of the loaded store. Safe to use in either mode. */
+    protected def readStateStore: ReadStateStore =
+      if (readOnly) _readStateStore else _stateStore
+
+    /**
+     * Register a column family on the loaded store. In read-only mode this is the read-safe
+     * in-memory registration ([[ReadStateStore.registerColFamily]]); in write mode it is the
+     * writable [[StateStore.createColFamilyIfAbsent]] (which forces a snapshot for a new family).
+     */
+    protected def registerColFamily(
+        colFamilyName: String,
+        keySchema: StructType,
+        valueSchema: StructType,
+        keyStateEncoderSpec: KeyStateEncoderSpec,
+        useMultipleValuesPerKey: Boolean = false,
+        isInternal: Boolean = false): Unit = {
+      if (readOnly) {
+        readStateStore.registerColFamily(colFamilyName, keySchema, valueSchema,
+          keyStateEncoderSpec, useMultipleValuesPerKey, isInternal)
+      } else {
+        stateStore.createColFamilyIfAbsent(colFamilyName, keySchema, valueSchema,
+          keyStateEncoderSpec, useMultipleValuesPerKey, isInternal)
+      }
+    }
 
     def commit(): Unit = {
       stateStore.commit()
@@ -1440,7 +1634,9 @@ abstract class SymmetricHashJoinStateManagerBase(
     }
 
     def abortIfNeeded(): Unit = {
-      if (!stateStore.hasCommitted) {
+      if (readOnly) {
+        readStateStore.release()
+      } else if (!stateStore.hasCommitted) {
         logInfo(log"Aborted store ${MDC(STATE_STORE_ID, stateStore.id)}")
         stateStore.abort()
       }
@@ -1453,24 +1649,33 @@ abstract class SymmetricHashJoinStateManagerBase(
 
     def metrics: StateStoreMetrics = stateStore.metrics
 
-    def getLatestCheckpointInfo(): StateStoreCheckpointInfo = {
+    def getLatestCheckpointInfo(): StateStoreCheckpointInfo =
       stateStore.getStateStoreCheckpointInfo()
-    }
 
-    /** Get the StateStore with the given schema */
-    protected def getStateStore(
+    /**
+     * Load the state store for this handler and populate `_stateStore` (when !readOnly)
+     * or `_readStateStore` (when readOnly). Subclasses invoke this for the side effect
+     * during construction; afterwards, the [[stateStore]] / [[readStateStore]] accessors
+     * return the right view based on mode.
+     */
+    protected def initializeStateStore(
         keySchema: StructType,
         valueSchema: StructType,
-        useVirtualColumnFamilies: Boolean): StateStore = {
+        useVirtualColumnFamilies: Boolean): Unit = {
       val storeName = if (useVirtualColumnFamilies) {
         StateStoreId.DEFAULT_STORE_NAME
       } else {
         getStateStoreName(joinSide, stateStoreType)
       }
       val storeProviderId = StateStoreProviderId(stateInfo.get, partitionId, storeName)
-      val store = if (useStateStoreCoordinator) {
+      val handle: ReadStateStore = if (useStateStoreCoordinator) {
         assert(handlerSnapshotOptions.isEmpty, "Should not use state store coordinator " +
           "when reading state as data source.")
+        // JoinStateManagerStoreGenerator only exposes a writable getStore. Read-only
+        // mode is only ever used with useStateStoreCoordinator=false (data source reads),
+        // so this branch must not be reached with readOnly=true.
+        require(!readOnly,
+          "readOnly mode is not supported with useStateStoreCoordinator=true")
         joinStoreGenerator.getStore(
           storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
           stateInfo.get.storeVersion, stateStoreCkptId, None, useVirtualColumnFamilies,
@@ -1482,24 +1687,44 @@ abstract class SymmetricHashJoinStateManagerBase(
           useColumnFamilies = useVirtualColumnFamilies, storeConf, hadoopConf,
           useMultipleValuesPerKey = false, stateSchemaProvider = None)
         if (handlerSnapshotOptions.isDefined) {
+          // Fine-grained snapshot replay (state data source with snapshotStartBatchId).
           if (!stateStoreProvider.isInstanceOf[SupportsFineGrainedReplay]) {
             throw StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
               stateStoreProvider.getClass.toString)
           }
           val opts = handlerSnapshotOptions.get
-          stateStoreProvider.asInstanceOf[SupportsFineGrainedReplay]
-            .replayStateFromSnapshot(
+          val replayer = stateStoreProvider.asInstanceOf[SupportsFineGrainedReplay]
+          if (readOnly) {
+            replayer.replayReadStateFromSnapshot(
               opts.snapshotVersion,
               opts.endVersion,
-              readOnly = true,
               opts.startStateStoreCkptId,
               opts.endStateStoreCkptId)
+          } else {
+            replayer.replayStateFromSnapshot(
+              opts.snapshotVersion,
+              opts.endVersion,
+              readOnly = false,
+              opts.startStateStoreCkptId,
+              opts.endStateStoreCkptId)
+          }
         } else {
-          stateStoreProvider.getStore(stateInfo.get.storeVersion, stateStoreCkptId)
+          // No snapshot options: open the store at its committed version normally.
+          // readOnly mode must not write to the checkpoint path; use the read-only store.
+          if (readOnly) {
+            stateStoreProvider.getReadStore(stateInfo.get.storeVersion, stateStoreCkptId)
+          } else {
+            stateStoreProvider.getStore(stateInfo.get.storeVersion, stateStoreCkptId)
+          }
         }
       }
-      logInfo(log"Loaded store ${MDC(STATE_STORE_ID, store.id)}")
-      store
+      if (readOnly) {
+        _readStateStore = handle
+        logInfo(log"Loaded read-only store ${MDC(STATE_STORE_ID, handle.id)}")
+      } else {
+        _stateStore = handle.asInstanceOf[StateStore]
+        logInfo(log"Loaded store ${MDC(STATE_STORE_ID, handle.id)}")
+      }
     }
   }
 
@@ -1526,8 +1751,7 @@ abstract class SymmetricHashJoinStateManagerBase(
     private val longValueSchema = new StructType().add("value", "long")
     private val longToUnsafeRow = UnsafeProjection.create(longValueSchema)
     private val valueRow = longToUnsafeRow(new SpecificInternalRow(longValueSchema))
-    protected val stateStore: StateStore =
-      getStateStore(keySchema, longValueSchema, useVirtualColumnFamilies)
+    initializeStateStore(keySchema, longValueSchema, useVirtualColumnFamilies)
 
     // Set up virtual column family name in the store if it is being used
     private val colFamilyName = if (useVirtualColumnFamilies) {
@@ -1538,7 +1762,7 @@ abstract class SymmetricHashJoinStateManagerBase(
 
     // Create the specific column family in the store for this join side's KeyToNumValuesStore
     if (useVirtualColumnFamilies) {
-      stateStore.createColFamilyIfAbsent(
+      registerColFamily(
         colFamilyName,
         keySchema,
         longValueSchema,
@@ -1549,7 +1773,7 @@ abstract class SymmetricHashJoinStateManagerBase(
 
     /** Get the number of values the key has */
     def get(key: UnsafeRow): Long = {
-      val longValueRow = stateStore.get(key, colFamilyName)
+      val longValueRow = readStateStore.get(key, colFamilyName)
       if (longValueRow != null) longValueRow.getLong(0) else 0L
     }
 
@@ -1566,7 +1790,7 @@ abstract class SymmetricHashJoinStateManagerBase(
 
     def iterator: Iterator[KeyAndNumValues] = {
       val keyAndNumValues = new KeyAndNumValues()
-      stateStore.iterator(colFamilyName).map { pair =>
+      readStateStore.iterator(colFamilyName).map { pair =>
         keyAndNumValues.withNew(pair.key, pair.value.getLong(0))
       }
     }
@@ -1636,7 +1860,7 @@ abstract class SymmetricHashJoinStateManagerBase(
     private val valueRowConverter = StreamingSymmetricHashJoinValueRowConverter
       .create(inputValueAttributes, stateFormatVersion)
 
-    protected val stateStore = getStateStore(keyWithIndexSchema,
+    initializeStateStore(keyWithIndexSchema,
       valueRowConverter.valueAttributes.toStructType, useVirtualColumnFamilies)
 
     // Set up virtual column family name in the store if it is being used
@@ -1648,7 +1872,7 @@ abstract class SymmetricHashJoinStateManagerBase(
 
     // Create the specific column family in the store for this join side's KeyWithIndexToValueStore
     if (useVirtualColumnFamilies) {
-      stateStore.createColFamilyIfAbsent(
+      registerColFamily(
         colFamilyName,
         keyWithIndexSchema,
         valueRowConverter.valueAttributes.toStructType,
@@ -1658,7 +1882,7 @@ abstract class SymmetricHashJoinStateManagerBase(
 
     def get(key: UnsafeRow, valueIndex: Long): ValueAndMatchPair = {
       valueRowConverter.convertValue(
-        stateStore.get(keyWithIndexRow(key, valueIndex), colFamilyName)
+        readStateStore.get(keyWithIndexRow(key, valueIndex), colFamilyName)
       )
     }
 
@@ -1676,7 +1900,7 @@ abstract class SymmetricHashJoinStateManagerBase(
           while (hasMoreValues) {
             val keyWithIndex = keyWithIndexRow(key, index)
             val valuePair =
-              valueRowConverter.convertValue(stateStore.get(keyWithIndex, colFamilyName))
+              valueRowConverter.convertValue(readStateStore.get(keyWithIndex, colFamilyName))
             if (valuePair == null) {
               handleNullValuePair(key, index, numValues)
               skippedNullValueCount.foreach(_ += 1L)
@@ -1722,7 +1946,7 @@ abstract class SymmetricHashJoinStateManagerBase(
 
     def iterator: Iterator[KeyWithIndexAndValue] = {
       val keyWithIndexAndValue = new KeyWithIndexAndValue()
-      stateStore.iterator(colFamilyName).map { pair =>
+      readStateStore.iterator(colFamilyName).map { pair =>
         val valuePair = valueRowConverter.convertValue(pair.value)
         keyWithIndexAndValue.withNew(
           keyRowGenerator(pair.key), pair.key.getLong(indexOrdinalInKeyWithIndexRow), valuePair)
@@ -1760,12 +1984,13 @@ class SymmetricHashJoinStateManagerV1(
     skippedNullValueCount: Option[SQLMetric] = None,
     useStateStoreCoordinator: Boolean = true,
     snapshotOptions: Option[SnapshotOptions] = None,
-    joinStoreGenerator: JoinStateManagerStoreGenerator)
+    joinStoreGenerator: JoinStateManagerStoreGenerator,
+    readOnly: Boolean = false)
   extends SymmetricHashJoinStateManagerBase(
     joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
     partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
     stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotOptions,
-    joinStoreGenerator) {
+    joinStoreGenerator, readOnly) {
 
   /** Commit all the changes to all the state stores */
   override def commit(): Unit = {
@@ -1840,12 +2065,13 @@ class SymmetricHashJoinStateManagerV2(
     skippedNullValueCount: Option[SQLMetric] = None,
     useStateStoreCoordinator: Boolean = true,
     snapshotOptions: Option[SnapshotOptions] = None,
-    joinStoreGenerator: JoinStateManagerStoreGenerator)
+    joinStoreGenerator: JoinStateManagerStoreGenerator,
+    readOnly: Boolean = false)
   extends SymmetricHashJoinStateManagerBase(
     joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
     partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
     stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotOptions,
-    joinStoreGenerator) {
+    joinStoreGenerator, readOnly) {
 
   /** Commit all the changes to the state store */
   override def commit(): Unit = {
@@ -1952,29 +2178,28 @@ object SymmetricHashJoinStateManager {
       useStateStoreCoordinator: Boolean = true,
       snapshotOptions: Option[SnapshotOptions] = None,
       joinStoreGenerator: JoinStateManagerStoreGenerator,
-      joinKeyOrdinalForWatermark: Option[Int] = None): SymmetricHashJoinStateManager = {
+      joinKeyOrdinalForWatermark: Option[Int] = None,
+      readOnly: Boolean = false): SymmetricHashJoinStateManager = {
     if (stateFormatVersion == 4) {
-      require(SQLConf.get.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_V4_ENABLED),
-        "State format version 4 is under development.")
       new SymmetricHashJoinStateManagerV4(
         joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
         partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
         stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotOptions,
-        joinStoreGenerator, joinKeyOrdinalForWatermark
+        joinStoreGenerator, joinKeyOrdinalForWatermark, readOnly
       )
     } else if (stateFormatVersion == 3) {
       new SymmetricHashJoinStateManagerV2(
         joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
         partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
         stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotOptions,
-        joinStoreGenerator
+        joinStoreGenerator, readOnly
       )
     } else {
       new SymmetricHashJoinStateManagerV1(
         joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
         partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
         stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotOptions,
-        joinStoreGenerator
+        joinStoreGenerator, readOnly
       )
     }
   }

@@ -24,7 +24,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.BooleanType
 
-class ReplaceNullWithFalseInPredicateEndToEndSuite extends QueryTest with SharedSparkSession {
+class ReplaceNullWithFalseInPredicateEndToEndSuite extends SharedSparkSession {
   import testImplicits._
 
   private def checkPlanIsEmptyLocalScan(df: DataFrame): Unit =

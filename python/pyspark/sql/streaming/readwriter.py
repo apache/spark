@@ -18,24 +18,25 @@
 import re
 import sys
 from collections.abc import Iterator
-from typing import cast, overload, Any, Callable, List, Optional, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Union, cast, overload
 
+from pyspark.errors import (
+    PySparkAttributeError,
+    PySparkRuntimeError,
+    PySparkTypeError,
+    PySparkValueError,
+)
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.streaming.query import StreamingQuery
 from pyspark.sql.types import Row, StructType
 from pyspark.sql.utils import ForeachBatchFunction
-from pyspark.errors import (
-    PySparkTypeError,
-    PySparkValueError,
-    PySparkAttributeError,
-    PySparkRuntimeError,
-)
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
-    from pyspark.sql.session import SparkSession
-    from pyspark.sql._typing import SupportsProcess, OptionalPrimitiveType
+
+    from pyspark.sql._typing import OptionalPrimitiveType, SupportsProcess
     from pyspark.sql.dataframe import DataFrame
+    from pyspark.sql.session import SparkSession
 
 __all__ = ["DataStreamReader", "DataStreamWriter"]
 
@@ -207,6 +208,8 @@ class DataStreamReader(OptionUtils):
         >>> time.sleep(3)
         >>> q.stop()
         """
+        if value is None:
+            return self
         self._jreader = self._jreader.option(key, to_str(value))
         return self
 
@@ -242,8 +245,9 @@ class DataStreamReader(OptionUtils):
         >>> time.sleep(3)
         >>> q.stop()
         """
-        for k in options:
-            self._jreader = self._jreader.option(k, to_str(options[k]))
+        for k, v in options.items():
+            if v is not None:
+                self._jreader = self._jreader.option(k, to_str(v))
         return self
 
     def name(self, source_name: str) -> "DataStreamReader":
@@ -1143,6 +1147,8 @@ class DataStreamWriter:
         >>> time.sleep(3)
         >>> q.stop()
         """
+        if value is None:
+            return self
         self._jwrite = self._jwrite.option(key, to_str(value))
         return self
 
@@ -1179,8 +1185,9 @@ class DataStreamWriter:
         >>> time.sleep(3)
         >>> q.stop()
         """
-        for k in options:
-            self._jwrite = self._jwrite.option(k, to_str(options[k]))
+        for k, v in options.items():
+            if v is not None:
+                self._jwrite = self._jwrite.option(k, to_str(v))
         return self
 
     @overload
@@ -1442,8 +1449,8 @@ class DataStreamWriter:
         elif once is not None:
             if once is not True:
                 raise PySparkValueError(
-                    errorClass="VALUE_NOT_TRUE",
-                    messageParameters={"arg_name": "once", "arg_value": str(once)},
+                    errorClass="VALUE_NOT_ALLOWED",
+                    messageParameters={"arg_name": "once", "allowed_values": "[True]"},
                 )
 
             jTrigger = getattr(
@@ -1473,8 +1480,8 @@ class DataStreamWriter:
         else:
             if availableNow is not True:
                 raise PySparkValueError(
-                    errorClass="VALUE_NOT_TRUE",
-                    messageParameters={"arg_name": "availableNow", "arg_value": str(availableNow)},
+                    errorClass="VALUE_NOT_ALLOWED",
+                    messageParameters={"arg_name": "availableNow", "allowed_values": "[True]"},
                 )
             jTrigger = getattr(
                 self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger"
@@ -1681,7 +1688,7 @@ class DataStreamWriter:
         """
 
         from pyspark.core.rdd import _wrap_function
-        from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
+        from pyspark.serializers import AutoBatchedSerializer, CPickleSerializer
 
         func = self._construct_foreach_function(f)
         serializer = AutoBatchedSerializer(CPickleSerializer())
@@ -1732,6 +1739,7 @@ class DataStreamWriter:
         >>> # if in Spark Connect, my_value = -1, else my_value = 100
         """
         from py4j.java_gateway import java_import
+
         from pyspark.java_gateway import ensure_callback_server_started
 
         gw = self._spark._sc._gateway
@@ -1928,8 +1936,9 @@ class DataStreamWriter:
 def _test() -> None:
     import doctest
     import os
-    from pyspark.sql import SparkSession
+
     import pyspark.sql.streaming.readwriter
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

@@ -42,6 +42,32 @@ import org.apache.spark.sql.streaming.SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
 
 /**
  * Information about updates made to stateful operators in a [[StreamingQuery]] during a trigger.
+ *
+ * @param operatorName
+ *   Name of the stateful operator this progress describes.
+ * @param numRowsTotal
+ *   Number of state rows held by the operator after this trigger.
+ * @param numRowsUpdated
+ *   Number of state rows updated during this trigger.
+ * @param allUpdatesTimeMs
+ *   Time taken, in milliseconds, to apply all state updates in this trigger.
+ * @param numRowsRemoved
+ *   Number of state rows removed during this trigger.
+ * @param allRemovalsTimeMs
+ *   Time taken, in milliseconds, to remove all evicted state rows in this trigger.
+ * @param commitTimeMs
+ *   Time taken, in milliseconds, to commit the state changes of this trigger.
+ * @param memoryUsedBytes
+ *   Memory used, in bytes, by the operator's state store.
+ * @param numRowsDroppedByWatermark
+ *   Number of input rows dropped because their event time was older than the watermark.
+ * @param numShufflePartitions
+ *   Number of shuffle partitions the operator ran with.
+ * @param numStateStoreInstances
+ *   Number of state store instances backing the operator.
+ * @param customMetrics
+ *   Custom metrics specific to the stateful operator or state store implementation, keyed by
+ *   metric name.
  */
 @Evolving
 class StateOperatorProgress private[spark] (
@@ -56,7 +82,10 @@ class StateOperatorProgress private[spark] (
     val numRowsDroppedByWatermark: Long,
     val numShufflePartitions: Long,
     val numStateStoreInstances: Long,
-    val customMetrics: ju.Map[String, JLong] = new ju.HashMap())
+    val customMetrics: ju.Map[String, JLong] = new ju.HashMap(),
+    // Names of customMetrics entries treated as snapshots of state-store status;
+    // preserved by copyForNoExecution() and not surfaced in JSON output.
+    private[spark] val snapshotCustomMetricNames: Set[String] = Set.empty)
     extends Serializable {
 
   /** The compact JSON representation of this progress. */
@@ -81,7 +110,34 @@ class StateOperatorProgress private[spark] (
       numRowsDroppedByWatermark = newNumRowsDroppedByWatermark,
       numShufflePartitions = numShufflePartitions,
       numStateStoreInstances = numStateStoreInstances,
-      customMetrics = customMetrics)
+      customMetrics = customMetrics,
+      snapshotCustomMetricNames = snapshotCustomMetricNames)
+
+  /**
+   * Returns a copy of this progress suitable for a no-data trigger event. Per-batch fields (row
+   * counts, time-Ms fields, and customMetrics entries not in `snapshotCustomMetricNames`) are
+   * zeroed; snapshot fields and snapshot customMetrics entries are preserved.
+   */
+  private[sql] def copyForNoExecution(): StateOperatorProgress = {
+    val newCustomMetrics = new ju.HashMap[String, JLong](customMetrics.size())
+    customMetrics.forEach { (k, v) =>
+      newCustomMetrics.put(k, if (snapshotCustomMetricNames.contains(k)) v else 0L)
+    }
+    new StateOperatorProgress(
+      operatorName = operatorName,
+      numRowsTotal = numRowsTotal,
+      numRowsUpdated = 0L,
+      allUpdatesTimeMs = 0L,
+      numRowsRemoved = 0L,
+      allRemovalsTimeMs = 0L,
+      commitTimeMs = 0L,
+      memoryUsedBytes = memoryUsedBytes,
+      numRowsDroppedByWatermark = 0L,
+      numShufflePartitions = numShufflePartitions,
+      numStateStoreInstances = numStateStoreInstances,
+      customMetrics = newCustomMetrics,
+      snapshotCustomMetricNames = snapshotCustomMetricNames)
+  }
 
   private[sql] def jsonValue: JValue = {
     ("operatorName" -> JString(operatorName)) ~
@@ -142,6 +198,8 @@ class StateOperatorProgress private[spark] (
  *   Information about operators in the query that store state.
  * @param sources
  *   detailed statistics on data being read from each of the streaming sources.
+ * @param sink
+ *   detailed statistics on data being written to the sink.
  * @since 2.1.0
  */
 @Evolving
@@ -320,10 +378,12 @@ class SourceProgress protected[spark] (
  * trigger. See [[StreamingQueryProgress]] for more information.
  *
  * @param description
- *   Description of the source corresponding to this status.
+ *   Description of the sink corresponding to this status.
  * @param numOutputRows
  *   Number of rows written to the sink or -1 for Continuous Mode (temporarily) or Sink V1 (until
  *   decommissioned).
+ * @param metrics
+ *   Sink-specific metrics reported for this trigger, keyed by metric name.
  * @since 2.1.0
  */
 @Evolving

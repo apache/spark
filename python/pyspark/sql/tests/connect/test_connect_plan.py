@@ -14,46 +14,55 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
-import uuid
 import datetime
 import decimal
 import math
+import unittest
+import uuid
+from unittest.mock import MagicMock
 
+from pyspark.errors import PySparkValueError
 from pyspark.testing.connectutils import (
     PlanOnlyTestFixture,
-    should_test_connect,
     connect_requirement_message,
+    should_test_connect,
 )
-from pyspark.errors import PySparkValueError
-
-from unittest.mock import MagicMock
 
 if should_test_connect:
     import pyspark.sql.connect.proto as proto
     from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql.connect.plan import (
-        WriteOperation,
-        Read,
-        Join,
-        SetOperation,
-        CollectMetrics,
-        LogicalPlan,
+    from pyspark.sql.connect.expressions import LiteralExpression
+    from pyspark.sql.connect.functions import (
+        bitmap_and,
+        bitmap_andnot,
+        bitmap_or,
+        bitmap_xor,
+        col,
+        lit,
+        max,
+        min,
+        sum,
     )
     from pyspark.sql.connect.observation import Observation
+    from pyspark.sql.connect.plan import (
+        CollectMetrics,
+        Join,
+        LogicalPlan,
+        Read,
+        SetOperation,
+        WriteOperation,
+    )
     from pyspark.sql.connect.readwriter import DataFrameReader
-    from pyspark.sql.connect.expressions import LiteralExpression
-    from pyspark.sql.connect.functions import col, lit, max, min, sum
     from pyspark.sql.connect.types import pyspark_types_to_proto_types
     from pyspark.sql.types import (
-        StringType,
-        StructType,
-        StructField,
-        IntegerType,
-        MapType,
         ArrayType,
         DoubleType,
+        IntegerType,
+        MapType,
+        StringType,
+        StructField,
+        StructType,
     )
 
 
@@ -70,6 +79,20 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         plan = self.connect.readTable(table_name=self.tbl_name)._plan.to_proto(self.connect)
         self.assertIsNotNone(plan.root, "Root relation must be set")
         self.assertIsNotNone(plan.root.read)
+
+    def test_bitmap_scalar_functions(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.select(
+            bitmap_and(col("bytes"), col("bytes")),
+            bitmap_or(col("bytes"), col("bytes")),
+            bitmap_andnot(col("bytes"), col("bytes")),
+            bitmap_xor(col("bytes"), col("bytes")),
+        )._plan.to_proto(self.connect)
+        function_names = [
+            expression.unresolved_function.function_name
+            for expression in plan.root.project.expressions
+        ]
+        self.assertEqual(function_names, ["bitmap_and", "bitmap_or", "bitmap_andnot", "bitmap_xor"])
 
     def test_join_using_columns(self):
         left_input = self.connect.readTable(table_name=self.tbl_name)
@@ -110,6 +133,20 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(
             crossJoin_plan.root.join.join_type,
             join_plan.root.join.join_type,
+        )
+
+    def test_zip(self):
+        left_input = self.connect.readTable(table_name=self.tbl_name)
+        right_input = self.connect.readTable(table_name=self.tbl_name)
+        plan = left_input.zip(right_input)._plan.to_proto(self.connect)
+        self.assertIsNotNone(plan.root.zip)
+        self.assertEqual(
+            plan.root.zip.left.read.named_table.unparsed_identifier,
+            self.tbl_name,
+        )
+        self.assertEqual(
+            plan.root.zip.right.read.named_table.unparsed_identifier,
+            self.tbl_name,
         )
 
     def test_filter(self):
@@ -232,7 +269,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             .unpivot(["id"], None, "variable", "value")
             ._plan.to_proto(self.connect)
         )
-        self.assertTrue(len(plan.root.unpivot.ids) == 1)
+        self.assertEqual(len(plan.root.unpivot.ids), 1)
         self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
         self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
         self.assertEqual(plan.root.unpivot.HasField("values"), False)
@@ -264,11 +301,11 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             .melt(["id"], [], "variable", "value")
             ._plan.to_proto(self.connect)
         )
-        self.assertTrue(len(plan.root.unpivot.ids) == 1)
+        self.assertEqual(len(plan.root.unpivot.ids), 1)
         self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
         self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
         self.assertEqual(plan.root.unpivot.HasField("values"), True)
-        self.assertTrue(len(plan.root.unpivot.values.values) == 0)
+        self.assertEqual(len(plan.root.unpivot.values.values), 0)
         self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
         self.assertEqual(plan.root.unpivot.value_column_name, "value")
 
@@ -279,7 +316,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         df = self.connect.readTable(table_name=self.tbl_name)
 
         def checkRelations(relations: List["DataFrame"]):
-            self.assertTrue(len(relations) == 3)
+            self.assertEqual(len(relations), 3)
 
             plan = relations[0]._plan.to_proto(self.connect)
             self.assertEqual(plan.root.sample.lower_bound, 0.0)
@@ -343,11 +380,6 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         from pyspark.sql.connect.observation import Observation
 
         class MockDF(DataFrame):
-            def __new__(cls, df: DataFrame) -> "DataFrame":
-                self = object.__new__(cls)
-                self.__init__(df)  # type: ignore[misc]
-                return self
-
             def __init__(self, df: DataFrame):
                 super().__init__(df._plan, df._session)
 

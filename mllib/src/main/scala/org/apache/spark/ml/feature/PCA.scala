@@ -51,7 +51,7 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(inputCol), SQLDataTypes.VectorType)
     require(!schema.fieldNames.contains($(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
     SchemaUtils.updateAttributeGroupSize(schema, $(outputCol), $(k))
@@ -131,6 +131,17 @@ class PCAModel private[ml] (
 
   // For ml connect only
   private[ml] def this() = this("", Matrices.empty, Vectors.empty)
+
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (pc != null) {
+      size += pc.getSizeInBytes
+    }
+    if (explainedVariance != null) {
+      size += explainedVariance.getSizeInBytes
+    }
+    size
+  }
 
   /** @group setParam */
   @Since("1.5.0")

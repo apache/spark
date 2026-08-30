@@ -30,6 +30,7 @@ import org.apache.spark.sql.streaming.{OutputMode, Trigger}
  * rule [[ResolveStreamWrite]].
  *
  * @param userSpecifiedName  Query name optionally specified by the user.
+ * @param userSpecifiedSinkName  Sink name optionally specified by the user for sink evolution.
  * @param userSpecifiedCheckpointLocation  Checkpoint location optionally specified by the user.
  * @param useTempCheckpointLocation  Whether to use a temporary checkpoint location when the user
  *                                   has not specified one. If false, then error will be thrown.
@@ -47,6 +48,7 @@ import org.apache.spark.sql.streaming.{OutputMode, Trigger}
  */
 case class WriteToStreamStatement(
     userSpecifiedName: Option[String],
+    userSpecifiedSinkName: Option[String],
     userSpecifiedCheckpointLocation: Option[String],
     useTempCheckpointLocation: Boolean,
     recoverFromCheckpointLocation: Boolean,

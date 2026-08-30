@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
@@ -25,19 +26,25 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * Catalog methods for working with Tables.
+ * Catalog API for connectors that expose tables.
+ * <p>
+ * Connectors that expose <i>only</i> tables implement this interface. Connectors that expose
+ * both tables and views must implement {@link RelationCatalog} (which extends both this
+ * interface and {@link ViewCatalog} and adds the cross-cutting contract for the combined
+ * case); the methods on this interface remain table-only -- they do not interact with views.
  * <p>
  * TableCatalog implementations may be case-sensitive or case-insensitive. Spark will pass
  * {@link Identifier table identifiers} without modification. Field names passed to
- * {@link #alterTable(Identifier, TableChange...)} will be normalized to match the case used in the
- * table schema when updating, renaming, or dropping existing columns when catalyst analysis is
- * case-insensitive.
+ * {@link #alterTable(Identifier, TableChange...)} will be normalized to match the case used in
+ * the table schema when updating, renaming, or dropping existing columns when catalyst
+ * analysis is case-insensitive.
  *
  * @since 3.0.0
  */
@@ -98,9 +105,27 @@ public interface TableCatalog extends CatalogPlugin {
   default Set<TableCatalogCapability> capabilities() { return Set.of(); }
 
   /**
-   * List the tables in a namespace from the catalog.
+   * Returns the connector-specific option keys that select the table state (such as a branch, tag,
+   * snapshot, or version) and therefore must be known when the table is loaded. Keys that Spark
+   * parses and handles itself, such as time travel, must not be listed here.
    * <p>
-   * If the catalog supports views, this must return identifiers for only tables and not views.
+   * Spark may need to resolve the same table more than once while analyzing or refreshing a query.
+   * Spark reuses one table instance only for references whose table-state options match and passes
+   * only the declared options to {@code loadTable}. The complete user option map remains on each
+   * resolved relation for subsequent scan and write planning.
+   * <p>
+   * The default implementation returns an empty set, treating all options as unable to select a
+   * different table state. Option key matching is case-insensitive, while option values remain
+   * case-sensitive.
+   *
+   * @return a non-null set of case-insensitive option keys
+   *
+   * @since 4.3.0
+   */
+  default Set<String> tableStateOptionKeys() { return Set.of(); }
+
+  /**
+   * List the tables in a namespace from the catalog.
    *
    * @param namespace a multi-part namespace
    * @return an array of Identifiers for tables
@@ -111,11 +136,14 @@ public interface TableCatalog extends CatalogPlugin {
   /**
    * List the table summaries in a namespace from the catalog.
    * <p>
-   * This method should return all tables entities from a catalog regardless of type (i.e. views
-   * should be listed as well).
+   * Returns one summary per entry returned by {@link #listTables}. Each {@link TableSummary}
+   * carries the entry's {@code tableType}.
+   * <p>
+   * The default implementation enumerates via {@link #listTables} + {@link #loadTable}.
+   * Catalogs that can fetch summaries in a single round-trip should override.
    *
    * @param namespace a multi-part namespace
-   * @return an array of Identifiers for tables
+   * @return an array of summaries for tables in the namespace
    * @throws NoSuchNamespaceException If the namespace does not exist (optional).
    * @throws NoSuchTableException If certain table listed by listTables API does not exist.
    */
@@ -139,27 +167,21 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * Load table metadata by {@link Identifier identifier} from the catalog.
-   * <p>
-   * If the catalog supports views and contains a view for the identifier and not a table, this
-   * must throw {@link NoSuchTableException}.
    *
    * @param ident a table identifier
    * @return the table's metadata
-   * @throws NoSuchTableException If the table doesn't exist or is a view
+   * @throws NoSuchTableException If the table doesn't exist
    */
   Table loadTable(Identifier ident) throws NoSuchTableException;
 
   /**
    * Load table metadata by {@link Identifier identifier} from the catalog. Spark will write data
    * into this table later.
-   * <p>
-   * If the catalog supports views and contains a view for the identifier and not a table, this
-   * must throw {@link NoSuchTableException}.
    *
    * @param ident a table identifier
    * @param writePrivileges
    * @return the table's metadata
-   * @throws NoSuchTableException If the table doesn't exist or is a view
+   * @throws NoSuchTableException If the table doesn't exist
    *
    * @since 3.5.3
    */
@@ -171,14 +193,11 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * Load table metadata of a specific version by {@link Identifier identifier} from the catalog.
-   * <p>
-   * If the catalog supports views and contains a view for the identifier and not a table, this
-   * must throw {@link NoSuchTableException}.
    *
    * @param ident a table identifier
    * @param version version of the table
    * @return the table's metadata
-   * @throws NoSuchTableException If the table doesn't exist or is a view
+   * @throws NoSuchTableException If the table doesn't exist
    */
   default Table loadTable(Identifier ident, String version) throws NoSuchTableException {
     throw QueryCompilationErrors.noSuchTableError(name(), ident);
@@ -186,37 +205,84 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * Load table metadata at a specific time by {@link Identifier identifier} from the catalog.
-   * <p>
-   * If the catalog supports views and contains a view for the identifier and not a table, this
-   * must throw {@link NoSuchTableException}.
    *
    * @param ident a table identifier
    * @param timestamp timestamp of the table, which is microseconds since 1970-01-01 00:00:00 UTC
    * @return the table's metadata
-   * @throws NoSuchTableException If the table doesn't exist or is a view
+   * @throws NoSuchTableException If the table doesn't exist
    */
   default Table loadTable(Identifier ident, long timestamp) throws NoSuchTableException {
     throw QueryCompilationErrors.noSuchTableError(name(), ident);
   }
 
   /**
+   * Load table metadata by {@link Identifier identifier} from the catalog, forwarding the
+   * user-specified options that may affect table state.
+   * <p>
+   * The default implementation ignores {@code stateOptions} and delegates to the existing
+   * {@code loadTable} overloads based on {@code context}. Catalogs that want to receive the user
+   * options while loading a table for a read or write must override
+   * {@link #tableStateOptionKeys()} and this method.
+   * Spark passes only the options declared by {@link #tableStateOptionKeys()}. Spark retains the
+   * complete user option map on the resolved relation for subsequent scan and write planning.
+   * <p>
+   * An override replaces that dispatch and must honor {@code context} itself: apply the time
+   * travel in {@link TableContext#timeTravel()}, and authorize the requested
+   * {@link TableContext#writePrivileges()} as it would in {@link #loadTable(Identifier, Set)}.
+   * Spark does not re-check either afterwards.
+   *
+   * @param ident a table identifier
+   * @param context the parsed load parameters (time travel, write privileges)
+   * @param stateOptions options declared to affect table state; Spark-parsed state such as time
+   *                     travel is provided through {@code context} instead
+   * @return the table's metadata
+   * @throws NoSuchTableException If the table doesn't exist
+   *
+   * @since 4.3.0
+   */
+  default Table loadTable(
+      Identifier ident,
+      TableContext context,
+      CaseInsensitiveStringMap stateOptions) throws NoSuchTableException {
+    if (context.timeTravel().isPresent()) {
+      TimeTravel timeTravel = context.timeTravel().get();
+      if (timeTravel instanceof TimeTravel.AsOfVersion v) {
+        return loadTable(ident, v.version());
+      } else if (timeTravel instanceof TimeTravel.AsOfTimestamp ts) {
+        return loadTable(ident, ts.micros());
+      } else {
+        throw new SparkIllegalArgumentException(
+            "INTERNAL_ERROR",
+            Map.of("message", "Unsupported time travel spec: " + timeTravel));
+      }
+    } else if (!context.writePrivileges().isEmpty()) {
+      return loadTable(ident, context.writePrivileges());
+    } else {
+      return loadTable(ident);
+    }
+  }
+
+  /**
    * Load a {@link Changelog} for the given table, representing the row-level changes within the
-   * range specified by {@code changelogInfo}.
+   * range specified by {@code context}.
    * <p>
    * The default implementation throws an analysis exception indicating that the catalog does
    * not support CDC. Catalogs that support CDC must override this method.
    *
    * @param ident a table identifier
-   * @param changelogInfo the CDC query parameters (range, deduplication mode, etc.)
+   * @param context the CDC query context (range, deduplication mode, etc.)
+   * @param options all options passed to the changelog query, including the CDC-recognized
+   *                keys (range, deduplication mode, etc.) that are also parsed into {@code context}
    * @return a Changelog instance for the requested table and range
    * @throws NoSuchTableException If the table doesn't exist
    *
    * @since 4.2.0
    */
-  default Changelog loadChangelog(Identifier ident, ChangelogInfo changelogInfo)
-      throws NoSuchTableException {
-    throw new UnsupportedOperationException(
-        name() + " does not support Change Data Capture (CDC)");
+  default Changelog loadChangelog(
+      Identifier ident,
+      ChangelogContext context,
+      CaseInsensitiveStringMap options) throws NoSuchTableException {
+    throw new UnsupportedOperationException(name() + " does not support Change Data Capture (CDC)");
   }
 
   /**
@@ -232,12 +298,9 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * Test whether a table exists using an {@link Identifier identifier} from the catalog.
-   * <p>
-   * If the catalog supports views and contains a view for the identifier and not a table, this
-   * must return false.
    *
    * @param ident a table identifier
-   * @return true if the table exists, false otherwise
+   * @return true if a table exists at {@code ident}, false otherwise
    */
   default boolean tableExists(Identifier ident) {
     try {
@@ -281,11 +344,14 @@ public interface TableCatalog extends CatalogPlugin {
    * Create a table in the catalog.
    *
    * @param ident a table identifier
-   * @param tableInfo information about the table.
+   * @param tableInfo information about the table
    * @return metadata for the new table. This can be null if getting the metadata for the new table
-   *         is expensive. Spark will call {@link #loadTable(Identifier)} if needed (e.g. CTAS).
+   *         is expensive. Spark will call
+   *         {@link #loadTable(Identifier, TableContext, CaseInsensitiveStringMap)} if needed
+   *         (e.g. CTAS), forwarding the catalog-declared table-state options and required
+   *         privileges.
    *
-   * @throws TableAlreadyExistsException If a table or view already exists for the identifier
+   * @throws TableAlreadyExistsException If a table already exists for the identifier
    * @throws UnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    * @since 4.1.0
@@ -317,7 +383,7 @@ public interface TableCatalog extends CatalogPlugin {
    *                    or other custom state from this object to clone additional metadata
    * @return metadata for the new table
    *
-   * @throws TableAlreadyExistsException If a table or view already exists for the identifier
+   * @throws TableAlreadyExistsException If a table already exists for the identifier
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    * @throws UnsupportedOperationException If the catalog does not support CREATE TABLE LIKE
    * @since 4.2.0
@@ -343,16 +409,13 @@ public interface TableCatalog extends CatalogPlugin {
    * changes should be applied to the table.
    * <p>
    * The requested changes must be applied in the order given.
-   * <p>
-   * If the catalog supports views and contains a view for the identifier and not a table, this
-   * must throw {@link NoSuchTableException}.
    *
    * @param ident a table identifier
    * @param changes changes to apply to the table
    * @return updated metadata for the table. This can be null if getting the metadata for the
    *         updated table is expensive. Spark always discard the returned table here.
    *
-   * @throws NoSuchTableException If the table doesn't exist or is a view
+   * @throws NoSuchTableException If the table doesn't exist
    * @throws IllegalArgumentException If any change is rejected by the implementation.
    */
   Table alterTable(
@@ -361,9 +424,6 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * Drop a table in the catalog.
-   * <p>
-   * If the catalog supports views and contains a view for the identifier and not a table, this
-   * must not drop the view and must return false.
    *
    * @param ident a table identifier
    * @return true if a table was deleted, false if no table exists for the identifier
@@ -373,9 +433,6 @@ public interface TableCatalog extends CatalogPlugin {
   /**
    * Drop a table in the catalog and completely remove its data by skipping a trash even if it is
    * supported.
-   * <p>
-   * If the catalog supports views and contains a view for the identifier and not a table, this
-   * must not drop the view and must return false.
    * <p>
    * If the catalog supports to purge a table, this method should be overridden.
    * The default implementation throws {@link UnsupportedOperationException}.
@@ -393,17 +450,13 @@ public interface TableCatalog extends CatalogPlugin {
   /**
    * Renames a table in the catalog.
    * <p>
-   * If the catalog supports views and contains a view for the old identifier and not a table, this
-   * throws {@link NoSuchTableException}. Additionally, if the new identifier is a table or a view,
-   * this throws {@link TableAlreadyExistsException}.
-   * <p>
    * If the catalog does not support table renames between namespaces, it throws
    * {@link UnsupportedOperationException}.
    *
    * @param oldIdent the table identifier of the existing table to rename
    * @param newIdent the new table identifier of the table
-   * @throws NoSuchTableException If the table to rename doesn't exist or is a view
-   * @throws TableAlreadyExistsException If the new table name already exists or is a view
+   * @throws NoSuchTableException If the table to rename doesn't exist
+   * @throws TableAlreadyExistsException If the new table name already exists
    * @throws UnsupportedOperationException If the namespaces of old and new identifiers do not
    *                                       match (optional)
    */

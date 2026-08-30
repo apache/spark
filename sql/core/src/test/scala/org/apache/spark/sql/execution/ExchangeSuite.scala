@@ -19,11 +19,11 @@ package org.apache.spark.sql.execution
 
 import scala.util.Random
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityBroadcastMode, SinglePartition}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityBroadcastMode, NullAwareHashPartitioning, SinglePartition}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
 import org.apache.spark.sql.internal.SQLConf
@@ -45,7 +45,7 @@ case class ColumnarExchange(child: SparkPlan) extends Exchange {
     copy(child = newChild)
 }
 
-class ExchangeSuite extends SparkPlanTest with SharedSparkSession {
+class ExchangeSuite extends SharedSparkSession {
   import testImplicits._
 
   setupTestData()
@@ -57,6 +57,39 @@ class ExchangeSuite extends SparkPlanTest with SharedSparkSession {
       plan => ShuffleExchangeExec(SinglePartition, plan),
       input.map(Row.fromTuple)
     )
+  }
+
+  test("null-aware hash shuffle spreads identical NULL keys from one mapper") {
+    val input = Seq.fill(64)(Tuple1(null.asInstanceOf[Integer])).toDF("k").coalesce(1)
+    val plan = input.queryExecution.executedPlan
+    val exchange = ShuffleExchangeExec(NullAwareHashPartitioning(plan.output, 4), plan)
+    val partitionSizes = exchange.execute().collectPartitions().map(_.length)
+
+    assert(partitionSizes.sorted === Array(16, 16, 16, 16))
+  }
+
+  test("null-aware hash shuffle preserves retry determinism with local sorting") {
+    withSQLConf(SQLConf.SORT_BEFORE_REPARTITION.key -> "true") {
+      val input = spark.range(64).repartition(4).selectExpr("CAST(NULL AS INT) AS k")
+      val plan = input.queryExecution.executedPlan
+      val exchange = ShuffleExchangeExec(NullAwareHashPartitioning(plan.output, 4), plan)
+
+      assert(plan.execute().outputDeterministicLevel == DeterministicLevel.UNORDERED)
+      assert(exchange.shuffleDependency.rdd.outputDeterministicLevel !=
+        DeterministicLevel.INDETERMINATE)
+    }
+  }
+
+  test("null-aware hash shuffle marks unsorted repartitioning as order-sensitive") {
+    withSQLConf(SQLConf.SORT_BEFORE_REPARTITION.key -> "false") {
+      val input = spark.range(64).repartition(4).selectExpr("CAST(NULL AS INT) AS k")
+      val plan = input.queryExecution.executedPlan
+      val exchange = ShuffleExchangeExec(NullAwareHashPartitioning(plan.output, 4), plan)
+
+      assert(plan.execute().outputDeterministicLevel == DeterministicLevel.UNORDERED)
+      assert(exchange.shuffleDependency.rdd.outputDeterministicLevel ==
+        DeterministicLevel.INDETERMINATE)
+    }
   }
 
   test("BroadcastMode.canonicalized") {
@@ -203,6 +236,34 @@ class ExchangeSuite extends SparkPlanTest with SharedSparkSession {
       assert(reusedExchangeIds2.size == 2, "Whole plan exchange reusing not working correctly")
       assert(reusedExchangeIds2.forall(exchangeIds2.contains(_)),
         "ReusedExchangeExec should reuse an existing exchange")
+    }
+  }
+
+  test("ShuffleExchangeExec string args show `pipelined` only when it is set") {
+    val plan = spark.range(10).selectExpr("id % 4 AS key").queryExecution.executedPlan
+    val partitioning = HashPartitioning(Seq(Literal(1)), 4)
+
+    // The default: nothing about pipelining is printed, so plan output (and every golden file that
+    // captures it) is unchanged by the existence of the field.
+    val nonPipelined = ShuffleExchangeExec(partitioning, plan).simpleString(10)
+    assert(!nonPipelined.contains("pipelined") && !nonPipelined.contains("false"),
+      s"a non-pipelined exchange should not mention pipelining, but was: $nonPipelined")
+
+    // When set, it is printed with a name rather than as a bare positional `true`.
+    val pipelined = ShuffleExchangeExec(partitioning, plan, pipelined = true).simpleString(10)
+    assert(pipelined.contains("isPipelined=true"),
+      s"a pipelined exchange should report it, but was: $pipelined")
+
+    // `stringArgs` drops `pipelined` by position, so it must stay the last constructor field --
+    // otherwise a newly added field would be dropped instead and the bare `false` would come back.
+    val exchange = ShuffleExchangeExec(partitioning, plan)
+    assert(exchange.productElementName(exchange.productArity - 1) == "pipelined",
+      "`pipelined` must remain the last constructor field of ShuffleExchangeExec, because " +
+        "stringArgs drops it positionally")
+
+    // Exchange's plan_id suffix is re-appended by the override and must survive.
+    Seq(nonPipelined, pipelined).foreach { s =>
+      assert(s.contains("[plan_id="), s"the plan_id suffix should be preserved, but was: $s")
     }
   }
 }

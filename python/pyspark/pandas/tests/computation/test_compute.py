@@ -18,10 +18,9 @@
 import numpy as np
 import pandas as pd
 
-from pyspark.sql import functions as sf
 from pyspark import pandas as ps
+from pyspark.sql import functions as sf
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 # This file contains test cases for 'Computations / Descriptive Stats'
@@ -199,9 +198,14 @@ class FrameComputeMixin:
         msg = "should be an int"
         with self.assertRaisesRegex(TypeError, msg):
             psdf.diff(1.5)
-        msg = 'axis should be either 0 or "index" currently.'
-        with self.assertRaisesRegex(NotImplementedError, msg):
-            psdf.diff(axis=1)
+
+        # axis=1: difference across columns
+        self.assert_eq(pdf.diff(axis=1), psdf.diff(axis=1))
+        self.assert_eq(pdf.diff(periods=2, axis=1), psdf.diff(periods=2, axis=1))
+        self.assert_eq(pdf.diff(periods=-1, axis=1), psdf.diff(periods=-1, axis=1))
+
+        with self.assertRaisesRegex(TypeError, msg):
+            psdf.diff(1.5, axis=1)
 
         # multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "Col1"), ("x", "Col2"), ("y", "Col3")])
@@ -570,7 +574,6 @@ class FrameComputeMixin:
 class FrameComputeTests(
     FrameComputeMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

@@ -15,14 +15,15 @@
 # limitations under the License.
 #
 
-import os
 import json
-import sys
+import os
 import random
+import sys
 import warnings
 from collections.abc import Iterable
-from functools import reduce, cached_property
+from functools import cached_property, reduce
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -35,53 +36,57 @@ from typing import (
     Union,
     cast,
     overload,
-    TYPE_CHECKING,
 )
 
 from pyspark import _NoValue
-from pyspark.resource import ResourceProfile
 from pyspark._globals import _NoValueType
 from pyspark.errors import (
     AnalysisException,
+    PySparkAttributeError,
+    PySparkIndexError,
     PySparkTypeError,
     PySparkValueError,
-    PySparkIndexError,
-    PySparkAttributeError,
 )
+from pyspark.resource import ResourceProfile
+from pyspark.serializers import BatchedSerializer, CPickleSerializer, UTF8Deserializer
+from pyspark.sql.classic.column import _to_java_column, _to_list, _to_seq
+from pyspark.sql.column import Column
+from pyspark.sql.dataframe import (
+    DataFrame as ParentDataFrame,
+)
+from pyspark.sql.dataframe import (
+    DataFrameNaFunctions as ParentDataFrameNaFunctions,
+)
+from pyspark.sql.dataframe import (
+    DataFrameStatFunctions as ParentDataFrameStatFunctions,
+)
+from pyspark.sql.functions import builtin as F
+from pyspark.sql.merge import MergeIntoWriter
+from pyspark.sql.pandas.conversion import PandasConversionMixin
+from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
+from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
+from pyspark.sql.streaming import DataStreamWriter
+from pyspark.sql.table_arg import TableArg
+from pyspark.sql.types import (
+    Row,
+    StructType,
+    _parse_datatype_json_string,
+)
+from pyspark.sql.utils import get_active_spark_context, to_java_array, to_scala_map
+from pyspark.storagelevel import StorageLevel
+from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.util import (
     _load_from_socket,
     _local_iterator_from_socket,
 )
-from pyspark.serializers import BatchedSerializer, CPickleSerializer, UTF8Deserializer
-from pyspark.storagelevel import StorageLevel
-from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.sql.column import Column
-from pyspark.sql.functions import builtin as F
-from pyspark.sql.classic.column import _to_seq, _to_list, _to_java_column
-from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
-from pyspark.sql.merge import MergeIntoWriter
-from pyspark.sql.streaming import DataStreamWriter
-from pyspark.sql.types import (
-    StructType,
-    Row,
-    _parse_datatype_json_string,
-)
-from pyspark.sql.dataframe import (
-    DataFrame as ParentDataFrame,
-    DataFrameNaFunctions as ParentDataFrameNaFunctions,
-    DataFrameStatFunctions as ParentDataFrameStatFunctions,
-)
-from pyspark.sql.utils import get_active_spark_context, to_java_array, to_scala_map
-from pyspark.sql.pandas.conversion import PandasConversionMixin
-from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
-from pyspark.sql.table_arg import TableArg
 
 if TYPE_CHECKING:
-    from py4j.java_gateway import JavaObject
     import pyarrow as pa
-    from pyspark.core.rdd import RDD
-    from pyspark.core.context import SparkContext
+    from py4j.java_gateway import JavaObject
+
     from pyspark._typing import PrimitiveType
+    from pyspark.core.context import SparkContext
+    from pyspark.core.rdd import RDD
     from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
     from pyspark.sql._typing import (
         ColumnOrName,
@@ -89,27 +94,30 @@ if TYPE_CHECKING:
         LiteralType,
         OptionalPrimitiveType,
     )
+    from pyspark.sql.context import SQLContext
+    from pyspark.sql.group import GroupedData
+    from pyspark.sql.metrics import ExecutionInfo
+    from pyspark.sql.observation import Observation
     from pyspark.sql.pandas._typing import (
-        PandasMapIterFunction,
         ArrowMapIterFunction,
+        PandasMapIterFunction,
+    )
+    from pyspark.sql.pandas._typing import (
         DataFrameLike as PandasDataFrameLike,
     )
-    from pyspark.sql.context import SQLContext
+    from pyspark.sql.plot import PySparkPlotAccessor
     from pyspark.sql.session import SparkSession
-    from pyspark.sql.group import GroupedData
-    from pyspark.sql.observation import Observation
-    from pyspark.sql.metrics import ExecutionInfo
 
 
 class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def __new__(
         cls,
-        jdf: "JavaObject",
-        sql_ctx: Union["SQLContext", "SparkSession"],
+        *args: Any,
+        **kwargs: Any,
     ) -> "DataFrame":
-        self = object.__new__(cls)
-        self.__init__(jdf, sql_ctx)  # type: ignore[misc]
-        return self
+        # ParentDataFrame by default calls DataFrame.__new__ for backward compatibility.
+        # We have to do an explicit object.__new__ to avoid infinite recursion.
+        return object.__new__(cls)
 
     def __init__(
         self,
@@ -646,7 +654,14 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(self._jdf.distinct(), self.sparkSession)
 
     @overload
-    def sample(self, fraction: float, seed: Optional[int] = ...) -> ParentDataFrame: ...
+    def sample(
+        self, *, withReplacement: Optional[bool] = None, fraction: float, seed: Optional[int] = ...
+    ) -> ParentDataFrame: ...
+
+    @overload
+    def sample(
+        self, withReplacement: float, fraction: Optional[int] = ..., /
+    ) -> ParentDataFrame: ...
 
     @overload
     def sample(
@@ -656,7 +671,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         seed: Optional[int] = ...,
     ) -> ParentDataFrame: ...
 
-    def sample(  # type: ignore[misc]
+    def sample(
         self,
         withReplacement: Optional[Union[float, bool]] = None,
         fraction: Optional[Union[int, float]] = None,
@@ -769,6 +784,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         jdf = self._jdf.crossJoin(other._jdf)
         return DataFrame(jdf, self.sparkSession)
 
+    def zip(self, other: ParentDataFrame) -> ParentDataFrame:
+        return DataFrame(self._jdf.zip(other._jdf), self.sparkSession)
+
     def join(
         self,
         other: ParentDataFrame,
@@ -811,6 +829,21 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             jdf = self._jdf.lateralJoin(other._jdf, on._jc)
         else:
             jdf = self._jdf.lateralJoin(other._jdf, on._jc, how)
+        return DataFrame(jdf, self.sparkSession)
+
+    def nearestByJoin(
+        self,
+        other: ParentDataFrame,
+        rankingExpression: Column,
+        numResults: int,
+        mode: str,
+        direction: str,
+        *,
+        joinType: str = "inner",
+    ) -> ParentDataFrame:
+        jdf = self._jdf.nearestByJoin(
+            other._jdf, rankingExpression._jc, int(numResults), mode, direction, joinType
+        )
         return DataFrame(jdf, self.sparkSession)
 
     # TODO(SPARK-22947): Fix the DataFrame API.
@@ -1330,8 +1363,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     ) -> ParentDataFrame:
         if how is not None and how not in ["any", "all"]:
             raise PySparkValueError(
-                errorClass="VALUE_NOT_ANY_OR_ALL",
-                messageParameters={"arg_name": "how", "arg_type": how},
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={"arg_name": "how", "allowed_values": "['any', 'all']"},
             )
 
         if subset is None:
@@ -1413,6 +1446,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def replace(
         self,
         to_replace: Dict["LiteralType", "OptionalPrimitiveType"],
+        *,
         subset: Optional[List[str]] = ...,
     ) -> ParentDataFrame: ...
 
@@ -1424,7 +1458,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         subset: Optional[List[str]] = ...,
     ) -> ParentDataFrame: ...
 
-    def replace(  # type: ignore[misc]
+    def replace(
         self,
         to_replace: Union[
             "LiteralType", List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]
@@ -1667,8 +1701,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             method = "pearson"
         if not method == "pearson":
             raise PySparkValueError(
-                errorClass="VALUE_NOT_PEARSON",
-                messageParameters={"arg_name": "method", "arg_value": method},
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={"arg_name": "method", "allowed_values": "['pearson']"},
             )
         return self._jdf.stat().corr(col1, col2, method)
 
@@ -1919,9 +1953,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None
     ) -> "PandasOnSparkDataFrame":
-        from pyspark.pandas.namespace import _get_index_map
         from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
         from pyspark.pandas.internal import InternalFrame
+        from pyspark.pandas.namespace import _get_index_map
 
         index_spark_columns, index_names = _get_index_map(self, index_col)
         internal = InternalFrame(
@@ -1983,7 +2017,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         )
 
     @property
-    def plot(self) -> "PySparkPlotAccessor":  # type: ignore[name-defined] # noqa: F821
+    def plot(self) -> "PySparkPlotAccessor":
         from pyspark.sql.plot import PySparkPlotAccessor
 
         return PySparkPlotAccessor(self)
@@ -2096,8 +2130,9 @@ class DataFrameStatFunctions(ParentDataFrameStatFunctions):
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.sql.dataframe
+    from pyspark.sql import SparkSession
     from pyspark.testing.utils import have_pandas, have_pyarrow
 
     # It inherits docstrings but doctests cannot detect them so we run
@@ -2114,6 +2149,7 @@ def _test() -> None:
         del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
     else:
         import pyarrow as pa
+
         from pyspark.loose_version import LooseVersion
 
         if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):

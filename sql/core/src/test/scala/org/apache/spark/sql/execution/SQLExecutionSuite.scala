@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.classic
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.Utils.REDACTION_REPLACEMENT_TEXT
@@ -350,6 +351,7 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
           event match {
             case e: SparkListenerSQLExecutionStart =>
               sqlJobTags = e.jobTags
+            case _ =>
           }
         }
       })
@@ -382,6 +384,7 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
           event match {
             case e: SparkListenerSQLExecutionStart =>
               sqlJobGroupIdOpt = e.jobGroupId
+            case _ =>
           }
         }
       })
@@ -393,6 +396,30 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
       assert(sqlJobGroupIdOpt.contains(JobGroupId))
     } finally {
       spark.sparkContext.clearJobGroup()
+      spark.stop()
+    }
+  }
+
+  test("SQL execution description should respect spark.sql.redaction.string.regex") {
+    val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
+    try {
+      withSQLConf(SQLConf.SQL_STRING_REDACTION_PATTERN.key -> "password=([^\\s]+)") {
+        var sqlExecutionDescription: String = null
+        spark.sparkContext.addSparkListener(new SparkListener {
+          override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+            case e: SparkListenerSQLExecutionStart =>
+              sqlExecutionDescription = e.description
+            case _ =>
+          }
+        })
+
+        val sqlStatement = "SELECT 'password=secret123'"
+        spark.sparkContext.setJobDescription(sqlStatement)
+        spark.sql(sqlStatement).collect()
+        spark.sparkContext.listenerBus.waitUntilEmpty()
+        assert(sqlExecutionDescription === s"SELECT '$REDACTION_REPLACEMENT_TEXT")
+      }
+    } finally {
       spark.stop()
     }
   }

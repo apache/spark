@@ -829,10 +829,7 @@ object SparkSession extends SparkSessionCompanion {
     }
 
   private[this] def lookupCompanion(name: String): SparkSessionCompanion = {
-    val cls = SparkClassUtils.classForName(name)
-    val mirror = scala.reflect.runtime.currentMirror
-    val module = mirror.classSymbol(cls).companion.asModule
-    mirror.reflectModule(module).instance.asInstanceOf[SparkSessionCompanion]
+    SparkClassUtils.getCompanionObject(name).asInstanceOf[SparkSessionCompanion]
   }
 
   /** @inheritdoc */
@@ -913,7 +910,7 @@ object SparkSession extends SparkSessionCompanion {
     /**
      * Make the builder create a Classic SparkSession.
      */
-    def classic(): this.type = mode(CONNECT_COMPANION)
+    def classic(): this.type = mode(CLASSIC_COMPANION)
 
     /**
      * Make the builder create a Connect SparkSession.
@@ -1167,8 +1164,6 @@ private[sql] abstract class SparkSessionBuilder {
    * Sets a config option. Options set using this method are automatically propagated to both
    * `SparkConf` and SparkSession's own configuration.
    *
-   * @note
-   *   this is only supported in Connect mode.
    * @since 2.0.0
    */
   def config(key: String, value: String): this.type = safePutConfig(key, value)

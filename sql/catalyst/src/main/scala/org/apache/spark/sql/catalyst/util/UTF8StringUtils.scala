@@ -23,7 +23,7 @@ import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, LongType, Sh
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Helper functions for casting string to numeric values.
+ * Helper functions for casting string to primitive values under ANSI mode.
  */
 object UTF8StringUtils {
 
@@ -38,6 +38,12 @@ object UTF8StringUtils {
 
   def toByteExact(s: UTF8String, context: QueryContext): Byte =
     withException(s.toByteExact, context, ByteType, s)
+
+  def toBooleanExact(s: UTF8String, context: QueryContext): Boolean = {
+    if (StringUtils.isTrueString(s)) true
+    else if (StringUtils.isFalseString(s)) false
+    else throw QueryExecutionErrors.invalidInputSyntaxForBooleanError(s, context)
+  }
 
   private def withException[A](
       f: => A,

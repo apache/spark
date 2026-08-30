@@ -320,6 +320,50 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-57564: Check TIME type write compatibility") {
+    // Expectations are derived from the policy-bound `canCast` (canUpCast for the strict suite,
+    // canANSIStoreAssign for the ANSI suite), so this single test stays correct under both
+    // subclasses: strict allows only TIME -> identical TIME, while ANSI additionally allows
+    // writes across datetime types and across TIME precisions.
+    def checkPair(write: DataType, read: DataType): Unit = {
+      if (canCast(write, read)) {
+        assertAllowed(write, read, "t",
+          s"Should allow writing $write to $read because cast is safe")
+      } else {
+        val errs = new mutable.ArrayBuffer[String]()
+        checkError(
+          exception = intercept[AnalysisException] (
+            DataTypeUtils.canWrite("", write, read, true, analysis.caseSensitiveResolution,
+              "t", storeAssignmentPolicy, errMsg => errs += errMsg)
+          ),
+          condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> "``",
+            "colName" -> "`t`",
+            "srcType" -> toSQLType(write),
+            "targetType" -> toSQLType(read)
+          )
+        )
+      }
+    }
+
+    val timeTypes = Seq(TimeType(0), TimeType(3), TimeType(6))
+    // TIME -> TIME across all precision combinations (both directions via full cross product).
+    timeTypes.foreach { w =>
+      timeTypes.foreach { r =>
+        checkPair(w, r)
+      }
+    }
+    // TIME <-> other datetime types, both directions.
+    val otherDateTimeTypes = Seq(DateType, TimestampType, TimestampNTZType)
+    timeTypes.foreach { t =>
+      otherDateTimeTypes.foreach { o =>
+        checkPair(t, o)
+        checkPair(o, t)
+      }
+    }
+  }
+
   test("Check struct types: missing required field") {
     val missingRequiredField = StructType(Seq(StructField("x", FloatType, nullable = false)))
     val errs = new mutable.ArrayBuffer[String]()

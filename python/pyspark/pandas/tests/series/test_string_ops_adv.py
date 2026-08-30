@@ -14,14 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import pandas as pd
-import numpy as np
 import re
+
+import numpy as np
+import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesStringOpsAdvMixin:
@@ -236,7 +236,6 @@ class SeriesStringOpsAdvMixin:
 class SeriesStringOpsAdvTests(
     SeriesStringOpsAdvMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

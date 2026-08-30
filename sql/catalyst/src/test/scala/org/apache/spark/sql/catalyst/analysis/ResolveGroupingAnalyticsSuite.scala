@@ -130,12 +130,10 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
         Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))
     checkAnalysis(originalPlan, expected)
 
+    // CUBE() over no columns is a single empty grouping set, i.e. a grand total, so it lowers
+    // to a global Aggregate (no Expand) and returns one row even over empty input.
     val originalPlan2 = Aggregate(Seq(Cube(Seq())), Seq(UnresolvedAlias(count(unresolved_c))), r1)
-    val expected2 = Aggregate(Seq(gid), Seq(count(c).as("count(c)")),
-      Expand(
-        Seq(Seq(a, b, c, 0L)),
-        Seq(a, b, c, gid),
-        Project(Seq(a, b, c), r1)))
+    val expected2 = Aggregate(Seq.empty[Expression], Seq(count(c).as("count(c)")), r1)
     checkAnalysis(originalPlan2, expected2)
   }
 
@@ -149,12 +147,10 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
         Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))
     checkAnalysis(originalPlan, expected)
 
+    // ROLLUP() over no columns is a single empty grouping set, i.e. a grand total, so it lowers
+    // to a global Aggregate (no Expand) and returns one row even over empty input.
     val originalPlan2 = Aggregate(Seq(Rollup(Seq())), Seq(UnresolvedAlias(count(unresolved_c))), r1)
-    val expected2 = Aggregate(Seq(gid), Seq(count(c).as("count(c)")),
-      Expand(
-        Seq(Seq(a, b, c, 0L)),
-        Seq(a, b, c, gid),
-        Project(Seq(a, b, c), r1)))
+    val expected2 = Aggregate(Seq.empty[Expression], Seq(count(c).as("count(c)")), r1)
     checkAnalysis(originalPlan2, expected2)
   }
 

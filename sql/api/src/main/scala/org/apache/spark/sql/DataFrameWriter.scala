@@ -20,7 +20,7 @@ import java.util.{Locale, Map, Properties}
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.annotation.Stable
+import org.apache.spark.annotation.{Experimental, Stable}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.CompilationErrors
 
@@ -217,6 +217,18 @@ abstract class DataFrameWriter[T] {
   }
 
   /**
+   * Enable automatic schema evolution for this write. The target table must declare the
+   * `AUTOMATIC_SCHEMA_EVOLUTION` capability.
+   *
+   * @since 4.2.0
+   */
+  @Experimental
+  def withSchemaEvolution(): this.type = {
+    this._withSchemaEvolution = true
+    this
+  }
+
+  /**
    * Saves the content of the `DataFrame` at the specified path.
    *
    * @since 1.4.0
@@ -224,7 +236,7 @@ abstract class DataFrameWriter[T] {
   def save(path: String): Unit
 
   /**
-   * Saves the content of the `DataFrame` as the specified table.
+   * Saves the content of the `DataFrame`.
    *
    * @since 1.4.0
    */
@@ -255,7 +267,9 @@ abstract class DataFrameWriter[T] {
    *    +---+---+
    * }}}
    *
-   * Because it inserts data to an existing table, format or options will be ignored.
+   * Because it inserts data to an existing table, the format is ignored. For data source V2
+   * tables, catalog-declared table-state options are forwarded to the table load and all options
+   * are forwarded to the write; for V1 tables the options are ignored.
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit
@@ -515,4 +529,6 @@ abstract class DataFrameWriter[T] {
   protected var sortColumnNames: Option[Seq[String]] = None
 
   protected var clusteringColumns: Option[Seq[String]] = None
+
+  protected var _withSchemaEvolution: Boolean = false
 }

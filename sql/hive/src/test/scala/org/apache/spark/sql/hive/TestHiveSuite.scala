@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHiveSparkSession}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 
 
-class TestHiveSuite extends TestHiveSingleton with SQLTestUtils {
+class TestHiveSuite extends TestHiveSingleton with QueryTest {
   test("load test table based on case sensitivity") {
     val testHiveSparkSession = spark.asInstanceOf[TestHiveSparkSession]
 

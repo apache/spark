@@ -261,18 +261,18 @@ Examples:
     $0 -m -t testing build
 
   - Build PySpark docker image
-    $0 -r docker.io/myrepo -t v4.0.0 -p kubernetes/dockerfiles/spark/bindings/python/Dockerfile build
+    $0 -r docker.io/myrepo -t v5.0.0 -p kubernetes/dockerfiles/spark/bindings/python/Dockerfile build
 
-  - Build and push image with tag "v4.0.0" to docker.io/myrepo
-    $0 -r docker.io/myrepo -t v4.0.0 build
-    $0 -r docker.io/myrepo -t v4.0.0 push
+  - Build and push image with tag "v5.0.0" to docker.io/myrepo
+    $0 -r docker.io/myrepo -t v5.0.0 build
+    $0 -r docker.io/myrepo -t v5.0.0 push
 
-  - Build and push Java17-based image with tag "v4.0.0" to docker.io/myrepo
-    $0 -r docker.io/myrepo -t v4.0.0 -b java_image_tag=17 build
-    $0 -r docker.io/myrepo -t v4.0.0 push
+  - Build and push Java21-based image with tag "v5.0.0" to docker.io/myrepo
+    $0 -r docker.io/myrepo -t v5.0.0 -b java_image_tag=21 build
+    $0 -r docker.io/myrepo -t v5.0.0 push
 
   - Build and push image for multiple archs to docker.io/myrepo
-    $0 -r docker.io/myrepo -t v4.0.0 -X build
+    $0 -r docker.io/myrepo -t v5.0.0 -X build
     # Note: buildx, which does cross building, needs to do the push during build
     # So there is no separate push step with -X
 

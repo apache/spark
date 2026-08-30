@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowHiveTest
 
@@ -149,7 +148,7 @@ object ArrayDataAgg extends Aggregator[Array[Double], Array[Double], Array[Doubl
   def outputEncoder: Encoder[Array[Double]] = ExpressionEncoder[Array[Double]]()
 }
 
-abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+abstract class UDAQuerySuite extends QueryTest with TestHiveSingleton {
   import testImplicits._
 
   override def beforeAll(): Unit = {

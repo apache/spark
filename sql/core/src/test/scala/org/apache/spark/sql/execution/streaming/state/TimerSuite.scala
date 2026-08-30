@@ -60,6 +60,33 @@ class TimerSuite extends StateVariableSuiteBase {
     }
   }
 
+  testWithTimeMode("reusable expired timer iterator resumes from prior threshold") { timeMode =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      assert(store.isInstanceOf[SupportsReusableIterator])
+
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      val timerState = new TimerStateImpl(store, timeMode, stringEncoder)
+      timerState.registerTimer(1000L)
+      timerState.registerTimer(3000L)
+
+      assert(timerState.getExpiredTimersReusable(1500L).toSeq ===
+        Seq(("test_key", 1000L)))
+
+      timerState.deleteTimer(1000L)
+      // The refreshed iterator resumes at the prior 1500 ms threshold, so it does not revisit
+      // the backdated timer at 500 ms.
+      timerState.registerTimer(500L)
+      timerState.registerTimer(1500L)
+      timerState.registerTimer(2000L)
+
+      assert(timerState.getExpiredTimersReusable(2500L).toSeq ===
+        Seq(("test_key", 1500L), ("test_key", 2000L)))
+      assert(timerState.getExpiredTimers(2500L).toSeq ===
+        Seq(("test_key", 500L), ("test_key", 1500L), ("test_key", 2000L)))
+    }
+  }
+
   testWithTimeMode("multiple instances with single key") { timeMode =>
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
@@ -166,6 +193,70 @@ class TimerSuite extends StateVariableSuiteBase {
       assert(timerState1.getExpiredTimers(Long.MinValue).toSeq === Seq.empty)
       assert(timerState1.getExpiredTimers(8000L).toSeq.map(_._2) ===
         (timerTimestamps1 ++ timerTimestamps2 ++ timerTimerStamps3).sorted.takeWhile(_ <= 8000L))
+    }
+  }
+
+  // Guards against the UnsafeRow byte-order bug where a scan boundary row with a
+  // null grouping-key struct encodes larger than a real entry (null-bitmap bit = 1),
+  // making seek() silently skip boundary entries.
+  testWithTimeMode("SPARK-56400: getExpiredTimers with prevExpiryTimestampMs - " +
+    "boundary at prev+1 must be included") { timeMode =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      val timerState = new TimerStateImpl(store, timeMode, stringEncoder)
+
+      timerState.registerTimer(1001L)
+      timerState.registerTimer(1500L)
+      timerState.registerTimer(2000L)
+
+      assert(
+        timerState
+          .getExpiredTimers(expiryTimestampMs = 2000L, prevExpiryTimestampMs = Some(1000L))
+          .toSeq === Seq(("test_key", 1001L), ("test_key", 1500L), ("test_key", 2000L)),
+        "timer at exactly prevExpiryTimestampMs + 1 must be returned")
+
+      assert(
+        timerState
+          .getExpiredTimers(expiryTimestampMs = 2000L, prevExpiryTimestampMs = Some(1001L))
+          .toSeq === Seq(("test_key", 1500L), ("test_key", 2000L)),
+        "timer at prevExpiryTimestampMs must be excluded")
+
+      ImplicitGroupingKeyTracker.removeImplicitKey()
+    }
+  }
+
+  // Same bug as above, but across multiple grouping keys of varying length so the
+  // remaining-key portion of the encoded scan boundary differs from stored entries.
+  testWithTimeMode("SPARK-56400: getExpiredTimers with prevExpiryTimestampMs - " +
+    "boundary at prev+1 with multiple grouping keys") { timeMode =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+
+      Seq("key_a", "key_bb", "key_ccc").foreach { k =>
+        ImplicitGroupingKeyTracker.setImplicitKey(k)
+        val ts = new TimerStateImpl(store, timeMode, stringEncoder)
+        ts.registerTimer(1001L)
+        ts.registerTimer(1500L)
+        ImplicitGroupingKeyTracker.removeImplicitKey()
+      }
+
+      ImplicitGroupingKeyTracker.setImplicitKey("key_a")
+      val timerState = new TimerStateImpl(store, timeMode, stringEncoder)
+
+      val expired = timerState
+        .getExpiredTimers(expiryTimestampMs = 2000L, prevExpiryTimestampMs = Some(1000L))
+        .toSeq
+        .sortBy { case (k, t) => (t, k.asInstanceOf[String]) }
+
+      assert(
+        expired === Seq(
+          ("key_a", 1001L), ("key_bb", 1001L), ("key_ccc", 1001L),
+          ("key_a", 1500L), ("key_bb", 1500L), ("key_ccc", 1500L)),
+        "all timers at prev+1 must be returned regardless of grouping key encoding")
+
+      ImplicitGroupingKeyTracker.removeImplicitKey()
     }
   }
 

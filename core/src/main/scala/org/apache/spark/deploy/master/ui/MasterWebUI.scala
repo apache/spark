@@ -28,6 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{HOSTS, NUM_REMOVED_WORKERS}
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.internal.config.UI.MASTER_UI_DECOMMISSION_ALLOW_MODE
+import org.apache.spark.internal.config.UI.UI_HOLD_ENABLED
 import org.apache.spark.internal.config.UI.UI_KILL_ENABLED
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
@@ -45,6 +46,7 @@ class MasterWebUI(
 
   val masterEndpointRef = master.self
   val killEnabled = master.conf.get(UI_KILL_ENABLED)
+  val holdEnabled = master.conf.get(UI_HOLD_ENABLED)
   val decommissionEnabled = master.conf.get(DECOMMISSION_ENABLED)
   val decommissionAllowMode = master.conf.get(MASTER_UI_DECOMMISSION_ALLOW_MODE)
 
@@ -69,13 +71,20 @@ class MasterWebUI(
       attachHandler(createRedirectHandler(
         "/driver/kill", "/", masterPage.handleDriverKillRequest, httpMethods = Set("POST")))
     }
+    if (holdEnabled) {
+      attachHandler(createRedirectHandler(
+        "/app/hold", "/", masterPage.handleAppHoldRequest, httpMethods = Set("POST")))
+      attachHandler(createRedirectHandler(
+        "/app/resume", "/", masterPage.handleAppResumeRequest, httpMethods = Set("POST")))
+    }
     if (decommissionEnabled) {
       attachHandler(createServletHandler("/workers/kill", new HttpServlet {
         override def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+          if (!master.securityMgr.checkModifyPermissions(req.getRemoteUser)) return
           val hostnames: Seq[String] = Option(req.getParameterValues("host"))
             .getOrElse(Array[String]()).toImmutableArraySeq
           if (!isDecommissioningRequestAllowed(req)) {
-            resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
+            resp.sendError(HttpServletResponse.SC_FORBIDDEN)
           } else {
             val removedWorkers = masterEndpointRef.askSync[Integer](
               DecommissionWorkersOnHosts(hostnames))

@@ -26,7 +26,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession {
+class DataFrameSessionWindowingSuite extends SharedSparkSession {
 
   import testImplicits._
 

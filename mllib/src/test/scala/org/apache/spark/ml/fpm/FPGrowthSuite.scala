@@ -154,6 +154,14 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     ParamsSuite.checkParams(model)
   }
 
+  test("FPGrowthModel estimated size") {
+    val model = new FPGrowth().setMinSupport(0.5).fit(dataset)
+    val maxSize = 1024 * 16
+    assert(
+      model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
+  }
+
   test("read/write") {
     def checkModelData(model: FPGrowthModel, model2: FPGrowthModel): Unit = {
       assert(model.freqItemsets.collect().toSet.equals(

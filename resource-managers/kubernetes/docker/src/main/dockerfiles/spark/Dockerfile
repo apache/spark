@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-ARG java_image_name=azul/zulu-openjdk
-ARG java_image_tag=21-jre
+ARG java_image_name=eclipse-temurin
+ARG java_image_tag=25-jre
 
 FROM ${java_image_name}:${java_image_tag}
 LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
@@ -36,7 +36,7 @@ ARG spark_uid=185
 RUN set -ex && \
     apt-get update && \
     ln -s /lib /lib64 && \
-    apt install -y --no-install-recommends bash tini libc6 libpam-modules krb5-user libnss3 procps net-tools logrotate libssl-dev && \
+    apt install -y --no-install-recommends bash tini libc6 libjemalloc2 libpam-modules krb5-user libnss3 procps net-tools logrotate libssl-dev && \
     mkdir -p /opt/spark && \
     mkdir -p /opt/spark/examples && \
     mkdir -p /opt/spark/work-dir && \

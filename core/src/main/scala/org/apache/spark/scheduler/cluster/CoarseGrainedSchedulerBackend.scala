@@ -25,11 +25,10 @@ import scala.collection.mutable.{HashMap, HashSet, Queue}
 import scala.concurrent.Future
 
 import com.google.common.cache.CacheBuilder
-import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.{ExecutorAllocationClient, SparkEnv, TaskState}
+import org.apache.spark.{ExecutorAllocationClient, SparkEnv, TaskState, VersionedCredentials}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.security.HadoopDelegationTokenManager
+import org.apache.spark.deploy.security.UserCredentialManager
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorLogUrlHandler
 import org.apache.spark.internal.{config, Logging}
@@ -37,7 +36,7 @@ import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.{CpuAmount, ResourceProfile}
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -56,7 +55,8 @@ import org.apache.spark.util.ArrayImplicits._
  */
 private[spark]
 class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: RpcEnv)
-  extends ExecutorAllocationClient with SchedulerBackend with Logging {
+  extends ExecutorAllocationClient with SchedulerBackend
+    with SupportsDelegationToken with Logging {
 
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   protected val totalCoreCount = new AtomicInteger(0)
@@ -107,6 +107,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Executors which are being decommissioned. Maps from executorId to ExecutorDecommissionInfo.
   protected val executorsPendingDecommission = new HashMap[String, ExecutorDecommissionInfo]
 
+  // Whether the executors are held (see `SparkContext.holdExecutors()`). While true, newly
+  // registered executors are decommissioned immediately, so that executors the cluster manager
+  // granted before the hold cannot outlive it.
+  @volatile private var executorsHeld = false
+
+  // Whether an executor total was ever explicitly requested (through requestExecutors or
+  // requestTotalExecutors), as opposed to the bookkeeping seed that `adjustExecutors` writes
+  // when killing an executor that was started by default.
+  @GuardedBy("CoarseGrainedSchedulerBackend.this")
+  private var explicitExecutorRequest = false
+
   // Unknown Executors which are being decommissioned. This could be caused by unregistered executor
   // This executor should be decommissioned after registration.
   // Maps from executorId to (ExecutorDecommissionInfo, adjustTargetNumExecutors,
@@ -133,8 +144,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Current set of delegation tokens to send to executors.
   private val delegationTokens = new AtomicReference[Array[Byte]]()
 
-  // The token manager used to create security tokens.
-  private var delegationTokenManager: Option[HadoopDelegationTokenManager] = None
+  // UserCredentialManager for OIDC credential propagation (if enabled).
+  private var userCredentialManager: Option[UserCredentialManager] = None
 
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
@@ -224,6 +235,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case UpdateDelegationTokens(newDelegationTokens) =>
         updateDelegationTokens(newDelegationTokens)
 
+      case UpdateUserCredentials(version, newCredentials) =>
+        updateUserCredentials(version, newCredentials)
+
       case RemoveExecutor(executorId, reason) =>
         // We will remove the executor's state and cannot restore it. However, the connection
         // between the driver and the executor may be still alive so that the executor won't exit
@@ -236,7 +250,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case LaunchedExecutor(executorId) =>
         executorDataMap.get(executorId).foreach { data =>
-          data.freeCores = data.totalCores
+          data.freeCores = CpuAmount.normalize(BigDecimal(data.totalCores))
         }
         makeOffers(executorId)
 
@@ -318,6 +332,22 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               decommissionExecutors(Array((executorId, v._1)), v._2, v._3)
               unknownExecutorsPendingDecommission.invalidate(executorId)
             })
+          if (executorsHeld) {
+            // The executors are held; drain this late-registered executor immediately. Note
+            // that ExecutorMonitor cannot be told here: it builds its state asynchronously
+            // from the SparkListenerExecutorAdded event posted above, so this executor is not
+            // tracked there yet and its decommissioning is under-reported in the metrics.
+            // The monitor's own executor-removal handling covers the eventual exit.
+            decommissionExecutors(
+              Array((executorId, ExecutorDecommissionInfo("Executors are held"))),
+              adjustTargetNumExecutors = false,
+              triggeredByExecutor = false)
+            // The cluster manager granted this executor against a stale requirement (e.g. a
+            // restarted AM using its own initial target, or a lost response to an earlier
+            // request), so re-assert the zero requirement, or it would keep granting
+            // replacements that churn through this drain.
+            reassertHeldRequirement()
+          }
           context.reply(true)
         }
 
@@ -362,6 +392,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           sparkProperties,
           SparkEnv.get.securityManager.getIOEncryptionKey(),
           Option(delegationTokens.get()),
+          Option(SparkEnv.get.userCredentials.get()).map(vc => (vc.version, vc.bytes)),
           rp,
           currentLogLevel)
         context.reply(reply)
@@ -620,27 +651,33 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     executorsToDecommission.toImmutableArraySeq
   }
 
-  override def start(): Unit = {
-    if (UserGroupInformation.isSecurityEnabled()) {
-      delegationTokenManager = createTokenManager()
-      delegationTokenManager.foreach { dtm =>
-        val ugi = UserGroupInformation.getCurrentUser()
-        val tokens = if (dtm.renewalEnabled) {
-          dtm.start()
-        } else {
-          val creds = ugi.getCredentials()
-          dtm.obtainDelegationTokens(creds)
-          if (creds.numberOfTokens() > 0 || creds.numberOfSecretKeys() > 0) {
-            SparkHadoopUtil.get.serialize(creds)
-          } else {
-            null
-          }
-        }
-        if (tokens != null) {
-          updateDelegationTokens(tokens)
-        }
-      }
+  override def decommissionExecutorsIfIdle(
+      executorsAndDecomInfo: Array[(String, ExecutorDecommissionInfo)],
+      adjustTargetNumExecutors: Boolean): Seq[String] = withLock {
+    val idleExecutors = executorsAndDecomInfo.distinctBy(_._1).filter { case (executorId, _) =>
+      isExecutorActive(executorId) && !scheduler.isExecutorBusy(executorId)
     }
+    if (idleExecutors.isEmpty) {
+      Seq.empty
+    } else {
+      // Keep both locks until the existing path marks these executors pending decommission.
+      // Use virtual dispatch so cluster-manager overrides receive only the filtered IDs.
+      decommissionExecutors(idleExecutors, adjustTargetNumExecutors, triggeredByExecutor = false)
+    }
+  }
+
+  override def start(): Unit = {
+    setupTokenManager()
+    setupUserCredentialManager()
+    if (conf.get(DIRECT_CREDENTIAL_PROVIDERS_ENABLED) && delegationTokenManager.isEmpty) {
+      logWarning("spark.security.directCredentialProviders.enabled is set but " +
+        "this cluster manager does not support credential distribution. " +
+        "No tokens will be collected or renewed.")
+    }
+  }
+
+  override protected def tokenManagerRequired(): Boolean = {
+    super.tokenManagerRequired() || conf.get(DIRECT_CREDENTIAL_PROVIDERS_ENABLED)
   }
 
   protected def createDriverEndpoint(): DriverEndpoint = new DriverEndpoint()
@@ -661,7 +698,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     reviveThread.shutdownNow()
     cleanupService.foreach(_.shutdownNow())
     stopExecutors()
-    delegationTokenManager.foreach(_.stop())
+    stopTokenManager()
+    stopUserCredentialManager()
     try {
       if (driverEndpoint != null) {
         driverEndpoint.askSync[Boolean](StopDriver)
@@ -685,7 +723,19 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * */
   protected[scheduler] def reset(): Unit = {
     val executors: Set[String] = synchronized {
-      requestedTotalExecutorsPerResourceProfile.clear()
+      if (executorsHeld) {
+        // Keep the requested totals so that resume can restore them, and re-assert the zero
+        // requirement so the restarted cluster manager AM does not allocate executors
+        // against its own initial target while the executors are held. Do not await the
+        // response: this may run inside the cluster manager's RPC handler.
+        publishTotals()
+      } else {
+        requestedTotalExecutorsPerResourceProfile.clear()
+        // Clear the explicit-request record with the totals it describes, so that a later
+        // resume does not republish an empty map, which YARN would treat as cancelling
+        // every target.
+        explicitExecutorRequest = false
+      }
       executorDataMap.keys.toSet
     }
 
@@ -743,6 +793,117 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     executorDataMap.keySet.toSeq
   }
 
+  /**
+   * Whether this backend can hold its executors gracefully: publish an all-zero executor
+   * requirement to the cluster manager, and let the executors that are already running finish
+   * their tasks and exit on their own instead of being terminated.
+   *
+   * False by default so that a backend has to opt in: the base `doRequestTotalExecutors` does
+   * not acknowledge the published requirement at all, and a cluster manager that terminates
+   * running executors once the requirement drops to zero cannot drain them gracefully.
+   */
+  private[spark] def supportsExecutorHold: Boolean = false
+
+  /** See `SparkContext.holdExecutors()`. */
+  private[spark] def setExecutorsHeld(held: Boolean): Unit = {
+    executorsHeld = held
+  }
+
+  /**
+   * Report the hold status of the application to the cluster manager, so that it can show the
+   * status on its own UI. Called once the application is fully started and again on every
+   * transition. Ignored by default: only Standalone renders it today.
+   */
+  private[spark] def reportExecutorHoldStatus(supported: Boolean, held: Boolean): Unit = {}
+
+  /** Whether an executor total was ever explicitly requested. Visible for testing only. */
+  private[spark] def hasExplicitExecutorRequests: Boolean = synchronized {
+    explicitExecutorRequest
+  }
+
+  /** The number of executors that are neither being removed nor decommissioned. */
+  private[spark] def activeExecutorCount: Int = synchronized {
+    executorDataMap.keys.count(isExecutorActive)
+  }
+
+  /**
+   * Whether the tracked totals are only killExecutors' bookkeeping seed: present, but never
+   * explicitly requested. Read atomically, so that a concurrent `reset()` cannot split the
+   * decision.
+   */
+  private[spark] def hasKillSeededTotalsOnly: Boolean = synchronized {
+    !explicitExecutorRequest && requestedTotalExecutorsPerResourceProfile.nonEmpty
+  }
+
+  /**
+   * Republish the explicitly requested totals and await the acknowledgment, or None when
+   * there are none: never explicitly requested, or cleared by a concurrent `reset()`. The
+   * check and the publish are atomic, and an empty map is never published, since some
+   * cluster managers treat it as cancelling every target.
+   */
+  private[spark] def republishExplicitTotals(): Option[Boolean] = {
+    val response = synchronized {
+      if (explicitExecutorRequest && requestedTotalExecutorsPerResourceProfile.nonEmpty) {
+        Some(publishTotals())
+      } else {
+        None
+      }
+    }
+    response.map(defaultAskTimeout.awaitResult(_))
+  }
+
+  /**
+   * Publish the given totals once, without recording them, and await the acknowledgment.
+   * Used to restore a requirement the application never explicitly requested (in particular
+   * Standalone's unbounded default on resume): recording it would flip `adjustExecutors`'
+   * empty-map seeding and mark the totals explicit, changing how `killExecutors` and a later
+   * hold behave for the rest of the application's life.
+   */
+  private[spark] def publishTotalsWithoutRecording(
+      totals: Map[ResourceProfile, Int]): Boolean = {
+    val response = synchronized {
+      doRequestTotalExecutors(totals)
+    }
+    defaultAskTimeout.awaitResult(response)
+  }
+
+  /**
+   * Re-assert the zero executor requirement of a held application without awaiting the
+   * response and without touching the requested totals. The held flag is re-checked under
+   * the lock: a concurrent `resumeExecutors()` lifts the flag before restoring the
+   * requirement, so a stale re-assertion cannot overwrite a restored one.
+   */
+  private[spark] def reassertHeldRequirement(): Unit = synchronized {
+    if (executorsHeld) {
+      publishTotals()
+    }
+  }
+
+  /**
+   * Publish the current executor totals (all-zero while the executors are held) and await
+   * the acknowledgment.
+   */
+  private[spark] def republishRequestedTotals(): Boolean = {
+    defaultAskTimeout.awaitResult(publishTotals())
+  }
+
+  /**
+   * Publish the executor totals to the cluster manager: the requested totals normally, or
+   * all-zero totals while the executors are held, so that requirements recorded during a
+   * hold are retained but nothing is allocated until resume.
+   *
+   * @return a future whose evaluation indicates whether the request is acknowledged.
+   */
+  private def publishTotals(): Future[Boolean] = synchronized {
+    val totals = if (executorsHeld) {
+      requestedTotalExecutorsPerResourceProfile.map { case (rp, _) => (rp, 0) }.toMap +
+        (scheduler.sc.resourceProfileManager.defaultResourceProfile -> 0)
+    } else {
+      requestedTotalExecutorsPerResourceProfile.toMap
+    }
+    doRequestTotalExecutors(totals)
+  }
+
   def getExecutorsWithRegistrationTs(): Map[String, Long] = synchronized {
     executorDataMap.toMap.transform((_, v) => v.registrationTs)
   }
@@ -770,7 +931,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         .values.toArray.map { executor =>
           (
             executor.resourceProfileId,
-            executor.totalCores,
+            CpuAmount.normalize(BigDecimal(executor.totalCores)),
             executor.resourcesInfo.map { case (name, rInfo) =>
               (name, rInfo.totalAddressesAmount)
             }
@@ -788,7 +949,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   // this function is for testing only
   private[spark] def getExecutorAvailableCpus(
-      executorId: String): Option[Int] = synchronized {
+      executorId: String): Option[BigDecimal] = synchronized {
     executorDataMap.get(executorId).map(_.freeCores)
   }
 
@@ -796,6 +957,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   def getExecutorResourceProfileId(executorId: String): Int = synchronized {
     val execDataOption = executorDataMap.get(executorId)
     execDataOption.map(_.resourceProfileId).getOrElse(ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
+  }
+
+  // this function is for testing only
+  private[spark] def getRequestedTotalExecutors(): Map[ResourceProfile, Int] = synchronized {
+    requestedTotalExecutorsPerResourceProfile.toMap
   }
 
   /**
@@ -814,12 +980,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       log"executor(s) from the cluster manager")
 
     val response = synchronized {
+      explicitExecutorRequest = true
       val defaultProf = scheduler.sc.resourceProfileManager.defaultResourceProfile
       val numExisting = requestedTotalExecutorsPerResourceProfile.getOrElse(defaultProf, 0)
-      requestedTotalExecutorsPerResourceProfile(defaultProf) = numExisting + numAdditionalExecutors
+      // Saturate instead of overflowing when the current requirement is already huge (e.g.
+      // Int.MaxValue after an unbounded `requestTotalExecutors`).
+      val newTotal =
+        math.min(numExisting.toLong + numAdditionalExecutors, Int.MaxValue.toLong).toInt
+      requestedTotalExecutorsPerResourceProfile(defaultProf) = newTotal
       // Account for executors pending to be added or removed
-      updateExecRequestTime(defaultProf.id, numAdditionalExecutors)
-      doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
+      updateExecRequestTime(defaultProf.id, newTotal - numExisting)
+      publishTotals()
     }
 
     defaultAskTimeout.awaitResult(response)
@@ -857,6 +1028,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       (scheduler.sc.resourceProfileManager.resourceProfileFromId(rpid), num)
     }
     val response = synchronized {
+      explicitExecutorRequest = true
       val oldResourceProfileToNumExecutors = requestedTotalExecutorsPerResourceProfile.map {
         case (rp, num) =>
           (rp.id, num)
@@ -866,7 +1038,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       this.numLocalityAwareTasksPerResourceProfileId = numLocalityAwareTasksPerResourceProfileId
       this.rpHostToLocalTaskCount = hostToLocalTaskCount
       updateExecRequestTimes(oldResourceProfileToNumExecutors, resourceProfileIdToNumExecutors)
-      doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
+      publishTotals()
     }
     defaultAskTimeout.awaitResult(response)
   }
@@ -939,7 +1111,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
         }
       }
-      doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
+      publishTotals()
     } else {
       Future.successful(true)
     }
@@ -1047,18 +1219,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   /**
-   * Create the delegation token manager to be used for the application. This method is called
-   * once during the start of the scheduler backend (so after the object has already been
-   * fully constructed), only if security is enabled in the Hadoop configuration.
-   */
-  protected def createTokenManager(): Option[HadoopDelegationTokenManager] = None
-
-  /**
    * Called when a new set of delegation tokens is sent to the driver. Child classes can override
    * this method but should always call this implementation, which handles token distribution to
    * executors.
    */
-  protected def updateDelegationTokens(tokens: Array[Byte]): Unit = {
+  override protected def updateDelegationTokens(tokens: Array[Byte]): Unit = {
     SparkHadoopUtil.get.addDelegationTokens(tokens, conf)
     delegationTokens.set(tokens)
     executorDataMap.values.foreach { ed =>
@@ -1067,6 +1232,45 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   protected def currentDelegationTokens: Array[Byte] = delegationTokens.get()
+
+  /**
+   * Update user credentials and broadcast to all registered executors.
+   * Called from the DriverEndpoint receive loop (thread-safe access to executorDataMap).
+   */
+  private def updateUserCredentials(version: Long, credentials: Array[Byte]): Unit = {
+    VersionedCredentials.updateIfNewer(SparkEnv.get.userCredentials, version, credentials)
+    executorDataMap.values.foreach { ed =>
+      ed.executorEndpoint.send(UpdateUserCredentials(version, credentials))
+    }
+  }
+
+  /**
+   * Start the UserCredentialManager if OIDC credential propagation is enabled.
+   * Called from start(), independently of Kerberos/HadoopDelegationTokenManager.
+   */
+  private def setupUserCredentialManager(): Unit = {
+    userCredentialManager = UserCredentialManager.create(conf, { (version, credentials) =>
+      // Send to DriverEndpoint to ensure thread-safe access to executorDataMap.
+      // This mirrors HadoopDelegationTokenManager's pattern of sending
+      // UpdateDelegationTokens via schedulerRef.
+      driverEndpoint.send(UpdateUserCredentials(version, credentials))
+    })
+    userCredentialManager.foreach { manager =>
+      val (version, initialCredentials) = manager.start()
+      // Store initial credentials synchronously so they are available for SparkAppConfig
+      // (late-registering executors) and TaskDescription (task dispatch) immediately.
+      // Note: the onCredentialsUpdate callback above also triggers an async
+      // UpdateUserCredentials message that will redundantly call updateIfNewer.
+      // The synchronous set here ensures no null window before the async message
+      // is processed by DriverEndpoint.
+      VersionedCredentials.updateIfNewer(
+        SparkEnv.get.userCredentials, version, initialCredentials)
+    }
+  }
+
+  private def stopUserCredentialManager(): Unit = {
+    userCredentialManager.foreach(_.stop())
+  }
 
   /**
    * Checks whether the executor is excluded due to failure(s). This is called when the executor

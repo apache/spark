@@ -15,53 +15,54 @@
 # limitations under the License.
 #
 
-import decimal
 import datetime
+import decimal
 
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.types import (
-    Row,
-    StructField,
-    StructType,
+    BinaryType,
+    BooleanType,
+    ByteType,
+    DateType,
+    DayTimeIntervalType,
+    DecimalType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
     MapType,
     NullType,
-    DateType,
-    TimeType,
-    TimestampType,
-    TimestampNTZType,
-    ByteType,
-    BinaryType,
+    Row,
     ShortType,
-    IntegerType,
-    FloatType,
-    DayTimeIntervalType,
     StringType,
-    DoubleType,
-    LongType,
-    DecimalType,
-    BooleanType,
+    StructField,
+    StructType,
+    TimestampNTZType,
+    TimestampType,
+    TimeType,
 )
-from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.testing import assertDataFrameEqual
-from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
+from pyspark.testing.connectutils import ReusedMixedTestCase, should_test_connect
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 if should_test_connect:
     import pandas as pd
+
+    from pyspark.errors.exceptions.connect import SparkConnectException
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
     from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.expressions import DistributedSequenceID, LiteralExpression
     from pyspark.util import (
-        JVM_BYTE_MIN,
         JVM_BYTE_MAX,
-        JVM_SHORT_MIN,
-        JVM_SHORT_MAX,
-        JVM_INT_MIN,
+        JVM_BYTE_MIN,
         JVM_INT_MAX,
-        JVM_LONG_MIN,
+        JVM_INT_MIN,
         JVM_LONG_MAX,
+        JVM_LONG_MIN,
+        JVM_SHORT_MAX,
+        JVM_SHORT_MIN,
     )
-    from pyspark.errors.exceptions.connect import SparkConnectException
 
 
 class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
@@ -144,6 +145,28 @@ class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
                 "arg_type": "float",
             },
         )
+
+    def test_select_column_replaced_by_withcolumn(self):
+        from pyspark.errors.exceptions.connect import AnalysisException
+
+        # Selecting the original DataFrame's column after `withColumn` replaces it
+        # with a cast: the plan-id-tagged reference must resolve to the overwritten
+        # alias rather than the inner column. With non-strict DataFrame column
+        # resolution, the analyzer falls back to name-based resolution for the
+        # tagged attribute and the query succeeds.
+        with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": False}):
+            df = self.connect.sql("SELECT 123 AS c")
+            df.withColumn("c", CF.col("c").cast("string")).select(df["c"]).collect()
+
+        # Under strict DataFrame column resolution (the default), the tagged
+        # reference cannot be resolved: the resolved attribute from the original
+        # plan is filtered out at the shadowing `withColumn` Project, and
+        # name-based fallback is disabled, so analysis fails with
+        # CANNOT_RESOLVE_DATAFRAME_COLUMN.
+        with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": True}):
+            df = self.connect.sql("SELECT 123 AS c")
+            with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
+                df.withColumn("c", CF.col("c").cast("string")).select(df["c"]).collect()
 
     def test_column_with_null(self):
         # SPARK-41751: test isNull, isNotNull, eqNullSafe

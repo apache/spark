@@ -133,4 +133,25 @@ class KafkaSourceProviderSuite extends SparkFunSuite {
     val provider = new KafkaSourceProvider()
     provider.getTable(options).newScanBuilder(options).build()
   }
+
+  test("SPARK-49442: partition.metadata.cache.ttl.ms validation") {
+    val sparkEnv = mock(classOf[SparkEnv])
+    when(sparkEnv.conf).thenReturn(new SparkConf())
+    SparkEnv.set(sparkEnv)
+
+    // -1 (disabled) and positive values are valid; validation fires inside toMicroBatchStream
+    Seq("-1", "1", "30000").foreach { v =>
+      val options = buildKafkaSourceCaseInsensitiveStringMap(
+        KafkaSourceProvider.PARTITION_METADATA_CACHE_TTL_MS -> v)
+      getKafkaDataSourceScan(options).toMicroBatchStream("dummy")
+    }
+    // 0 and other non-positive values (except -1) are invalid
+    Seq("0", "-2", "-100").foreach { v =>
+      val options = buildKafkaSourceCaseInsensitiveStringMap(
+        KafkaSourceProvider.PARTITION_METADATA_CACHE_TTL_MS -> v)
+      intercept[IllegalArgumentException] {
+        getKafkaDataSourceScan(options).toMicroBatchStream("dummy")
+      }
+    }
+  }
 }

@@ -15,36 +15,36 @@
 # limitations under the License.
 #
 
-import os
-import platform
-import shutil
-import warnings
 import gc
+import heapq
 import itertools
 import operator
+import os
+import platform
 import random
+import shutil
 import sys
-import heapq
+import warnings
 from typing import (
+    IO,
+    TYPE_CHECKING,
     Any,
     Callable,
     Generic,
     Hashable,
-    IO,
     Iterable,
     Iterator,
     Optional,
-    TYPE_CHECKING,
     TypeVar,
     Union,
 )
 
 from pyspark.serializers import (
+    AutoBatchedSerializer,
     BatchedSerializer,
+    CompressedSerializer,
     CPickleSerializer,
     FlattenedValuesSerializer,
-    CompressedSerializer,
-    AutoBatchedSerializer,
     Serializer,
 )
 from pyspark.util import fail_on_stopiteration
@@ -80,7 +80,7 @@ def get_used_memory() -> int:
 
     else:
         if platform.system() == "Linux":
-            for line in open("/proc/self/status"):
+            for line in open("/proc/self/status", encoding="utf-8"):
                 if line.startswith("VmRSS:"):
                     return int(line.split()[1]) >> 10
 
@@ -101,12 +101,7 @@ def _get_local_dirs(sub: str) -> list[str]:
     path = os.environ.get("SPARK_LOCAL_DIRS", "/tmp")
     dirs = path.split(",")
     if len(dirs) > 1:
-        if sys.version_info < (3, 11):
-            # different order in different processes and instances
-            rnd = random.Random(os.getpid() + id(dirs))
-            random.shuffle(dirs, rnd.random)
-        else:
-            random.shuffle(dirs)
+        random.shuffle(dirs)
     return [os.path.join(d, "python", str(os.getpid()), sub) for d in dirs]
 
 
