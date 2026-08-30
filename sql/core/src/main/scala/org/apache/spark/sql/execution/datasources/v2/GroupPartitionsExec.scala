@@ -41,9 +41,12 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  * storage-partitioned joins to align partitions from different sides of the join.
  *
  * @param child The child plan providing bucketed/partitioned input
- * @param joinKeyPositions Optional projection to select a subset of the partitioning key
- *                         for join compatibility (e.g., when join keys are a subset of
- *                         partition keys)
+ * @param joinKeyPositions Optional projection selecting a subset of the partitioning key positions,
+ *                         so that partitions sharing the projected key are coalesced. Used whenever
+ *                         the operation's keys are a subset of the partition keys, either the join
+ *                         keys of a storage-partitioned join or the `PARTITION BY` and grouping
+ *                         keys of a single-child operator. The name is historical, the projection
+ *                         is not join-specific.
  * @param expectedPartitionKeys Optional sequence of expected partition key values and their
  *                              split counts
  * @param reducers Optional reducers to apply to partition keys for grouping compatibility
