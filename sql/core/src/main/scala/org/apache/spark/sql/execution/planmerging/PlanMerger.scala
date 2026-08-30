@@ -65,7 +65,7 @@ case class MergeResult(
 case class MergedPlan(
     plan: LogicalPlan,
     merged: Boolean,
-    projectionSensitiveReads: Map[LogicalPlan, Seq[Set[String]]] = Map.empty)
+    projectionSensitiveReads: Map[LogicalPlan, Seq[Set[String]]])
 
 object PlanMerger {
   // Marker tag placed on Filter nodes that were produced by filter propagation. Its presence

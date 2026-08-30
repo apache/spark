@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
-import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
+import org.apache.spark.sql.execution.{FileSourceScanExec, FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileDataSourceV2, FileTable}
 import org.apache.spark.sql.functions._
@@ -3733,18 +3733,31 @@ class AvroV1Suite extends AvroSuite {
       .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
 
   test("SPARK-59107: positionalFieldMatching makes an avro read projection-sensitive") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      spark.range(0, 5).selectExpr("id AS a", "id * 10 AS b").write.format("avro").save(path)
-      withTempView("t") {
-        spark.read.option("positionalFieldMatching", "true").format("avro").load(path)
-          .createOrReplaceTempView("t")
-        // Positional matching pairs a column with the Avro field at its position in the projected
-        // schema, so a scan of b alone reads the first Avro field and answers 10, while a scan
-        // shared with sum(a) reads both fields, pairs them by coincidence and answers 100. The 10
-        // is wrong against the file, which is SPARK-59108; what merging must not do is make one
-        // subquery's value depend on what the other one projects.
-        checkAnswer(sql("SELECT (SELECT sum(a) FROM t), (SELECT sum(b) FROM t)"), Row(10L, 10L))
+    // Strictness pinned rather than inherited, so that positional matching is the only reason the
+    // read is projection-sensitive. AQE off because `AdaptiveSparkPlanExec` is a leaf node, so with
+    // it on the scans underneath it are not reachable from the executed plan.
+    withSQLConf(
+        SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
+        SQLConf.IGNORE_MISSING_FILES.key -> "false",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(0, 5).selectExpr("id AS a", "id * 10 AS b").write.format("avro").save(path)
+        withTempView("t") {
+          spark.read.option("positionalFieldMatching", "true").format("avro").load(path)
+            .createOrReplaceTempView("t")
+          val df = sql("SELECT (SELECT sum(a) FROM t), (SELECT sum(b) FROM t)")
+          df.collect()
+          val scanColumns = df.queryExecution.executedPlan
+            .collectWithSubqueries { case s: FileSourceScanExec => s }
+            .map(_.requiredSchema.fieldNames.sorted.toSeq)
+            .sortBy(_.mkString(","))
+          // Positional matching pairs a column with the Avro field at its position in the read
+          // schema, so which field a subquery reads depends on what it projects. One entry per
+          // column means the two subqueries kept their own scans; sharing one would make each
+          // subquery's value depend on what the other projects.
+          assert(scanColumns === Seq(Seq("a"), Seq("b")))
+        }
       }
     }
   }
