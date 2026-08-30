@@ -91,9 +91,8 @@ class MinHashLSHSuite extends MLTest with DefaultReadWriteTest {
 
   test("hashFunction: empty vector") {
     val model = new MinHashLSHModel("mh", randCoefficients = Array((0, 1), (1, 2), (3, 0)))
-    intercept[IllegalArgumentException] {
-      model.hashFunction(Vectors.sparse(10, Seq()))
-    }
+    val res = model.hashFunction(Vectors.sparse(10, Seq()))
+    assert(res.isEmpty)
   }
 
   test("keyDistance") {

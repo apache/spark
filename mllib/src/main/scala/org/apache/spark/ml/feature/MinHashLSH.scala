@@ -222,15 +222,19 @@ object MinHashLSHModel extends MLReadable[MinHashLSHModel] {
   private def hashFunction(
       elems: Vector,
       randCoefficients: Array[(Int, Int)]): Array[Vector] = {
-    require(elems.nonZeroIterator.nonEmpty, "Must have at least 1 non zero entry.")
-    val hashValues = randCoefficients.map { case (a, b) =>
-      elems.nonZeroIterator.map { case (i, _) =>
-        ((1L + i) * a + b) % MinHashLSH.HASH_PRIME
-      }.min.toDouble
+    if (elems.nonZeroIterator.isEmpty) {
+      Array.empty[Vector]
+    } else {
+      val hashValues = randCoefficients.map { case (a, b) =>
+        elems.nonZeroIterator.map { case (i, _) =>
+          ((1L + i) * a + b) % MinHashLSH.HASH_PRIME
+        }.min.toDouble
+      }
+      // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
+      hashValues.map(Vectors.dense(_))
     }
-    // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
-    hashValues.map(Vectors.dense(_))
   }
+
 
   private[ml] case class Data(randCoefficients: Array[Int])
 
