@@ -401,6 +401,7 @@ class SparkConnectClientRetriesTestCase(unittest.TestCase):
         self.assertIsNone(d.clone_session)
         self.assertIsNone(d.get_status)
         self.assertIsNone(d.fetch_error_details)
+        self.assertIsNone(d.release_relation)
 
     def test_rpc_deadlines_defaults_are_set(self):
         """RpcDeadlines() default instance should have documented timeout values."""
@@ -416,6 +417,16 @@ class SparkConnectClientRetriesTestCase(unittest.TestCase):
         self.assertEqual(d.clone_session, 10 * 60)
         self.assertEqual(d.get_status, 10 * 60)
         self.assertEqual(d.fetch_error_details, 10 * 60)
+        self.assertEqual(d.release_relation, 60)
+
+    def test_rpc_deadlines_preserves_existing_positional_arguments(self):
+        """New deadline fields should not shift existing positional arguments."""
+        d = RpcDeadlines(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+        self.assertEqual(d.artifact_status, 8)
+        self.assertEqual(d.clone_session, 9)
+        self.assertEqual(d.get_status, 10)
+        self.assertEqual(d.fetch_error_details, 11)
+        self.assertEqual(d.release_relation, 60)
 
     def test_rpc_deadlines_rejects_non_positive_values(self):
         """RpcDeadlines should raise ValueError for any non-None field that is <= 0."""

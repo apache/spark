@@ -939,30 +939,22 @@ class AstBuilder extends DataTypeAstBuilder
       query: LogicalPlan,
       queryAliasCtx: TableAliasContext): LogicalPlan = withOrigin(ctx) {
     ctx match {
-      // For all `InsertIntoStatement`-producing branches, build the `table` slot directly via
-      // `buildWriteTableSlot` so that any `PlanWithUnresolvedIdentifier` lives *inside* the
-      // command's identifier slot. This preserves the `CTEInChildren` shape and lets
-      // `CTESubstitution` place `WithCTE` on the command's children correctly (SPARK-46625).
       case table: InsertIntoTableContext =>
         val insertParams = visitInsertIntoTable(table)
-        val privileges = Set(TableWritePrivilege.INSERT)
-        createInsertIntoStatement(
+        createUnresolvedInsert(
           insertParams = insertParams,
-          tableSlot = buildWriteTableSlot(
-            insertParams.relationCtx, insertParams.options, privileges),
           query = query,
           overwrite = false,
-          withSchemaEvolution = table.EVOLUTION() != null)
+          withSchemaEvolution = table.EVOLUTION() != null,
+          writePrivileges = Set(TableWritePrivilege.INSERT))
       case table: InsertOverwriteTableContext =>
         val insertParams = visitInsertOverwriteTable(table)
-        val privileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
-        createInsertIntoStatement(
+        createUnresolvedInsert(
           insertParams = insertParams,
-          tableSlot = buildWriteTableSlot(
-            insertParams.relationCtx, insertParams.options, privileges),
           query = query,
           overwrite = true,
-          withSchemaEvolution = table.EVOLUTION() != null)
+          withSchemaEvolution = table.EVOLUTION() != null,
+          writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
       case ctx: InsertIntoReplaceBooleanCondContext =>
         // Although REPLACE WHERE and REPLACE ON share a unified grammar rule, they have
         // different SQL semantics:
@@ -973,17 +965,14 @@ class AstBuilder extends DataTypeAstBuilder
         val isInsertReplaceWhere = ctx.WHERE() != null
         if (isInsertReplaceWhere) {
           val insertParams = visitInsertIntoReplaceWhere(ctx)
-          val privileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
-          createInsertIntoStatement(
+          createUnresolvedInsert(
             insertParams = insertParams,
-            tableSlot = buildWriteTableSlot(
-              insertParams.relationCtx, insertParams.options, privileges),
             query = query,
             overwrite = true,
-            withSchemaEvolution = ctx.EVOLUTION() != null)
+            withSchemaEvolution = ctx.EVOLUTION() != null,
+            writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
         } else {
           val insertParams = visitInsertIntoReplaceOn(ctx)
-          val privileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
           val finalQuery = {
             val queryAliasOpt =
               getTableAliasWithoutColumnAlias(queryAliasCtx, "INSERT REPLACE ON")
@@ -993,24 +982,21 @@ class AstBuilder extends DataTypeAstBuilder
               }
             }.getOrElse(query)
           }
-          createInsertIntoStatement(
+          createUnresolvedInsert(
             insertParams = insertParams,
-            tableSlot = buildWriteTableSlot(
-              insertParams.relationCtx, insertParams.options, privileges),
             query = finalQuery,
             overwrite = true,
-            withSchemaEvolution = ctx.EVOLUTION() != null)
+            withSchemaEvolution = ctx.EVOLUTION() != null,
+            writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
         }
       case ctx: InsertIntoReplaceUsingContext =>
         val insertParams = visitInsertIntoReplaceUsing(ctx)
-        val privileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
-        createInsertIntoStatement(
+        createUnresolvedInsert(
           insertParams = insertParams,
-          tableSlot = buildWriteTableSlot(
-            insertParams.relationCtx, insertParams.options, privileges),
           query = query,
           overwrite = true,
-          withSchemaEvolution = ctx.EVOLUTION() != null)
+          withSchemaEvolution = ctx.EVOLUTION() != null,
+          writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
       case dir: InsertOverwriteDirContext =>
         val (isLocal, storage, provider) = visitInsertOverwriteDir(dir)
         InsertIntoDir(isLocal, storage, provider, query, overwrite = true)
@@ -1170,17 +1156,16 @@ class AstBuilder extends DataTypeAstBuilder
       replaceCriteriaOpt = replaceCriteriaOpt)
   }
 
-  /**
-   * Creates an [[InsertIntoStatement]] from [[InsertTableParams]].
-   */
-  private def createInsertIntoStatement(
+  /** Creates an unresolved INSERT plan from [[InsertTableParams]]. */
+  private def createUnresolvedInsert(
       insertParams: InsertTableParams,
-      tableSlot: LogicalPlan,
       query: LogicalPlan,
       overwrite: Boolean,
-      withSchemaEvolution: Boolean): InsertIntoStatement = {
-    InsertIntoStatement(
-      table = tableSlot,
+      withSchemaEvolution: Boolean,
+      writePrivileges: Set[TableWritePrivilege]): UnresolvedInsert = {
+    UnresolvedInsert(
+      table = buildWriteTableSlot(
+        insertParams.relationCtx, insertParams.options, writePrivileges),
       partitionSpec = insertParams.partitionSpec,
       userSpecifiedCols = insertParams.userSpecifiedCols,
       query = query,
@@ -1192,24 +1177,18 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Build the `table` slot of a write command. If the identifier reference is a constant string,
-   * returns an [[UnresolvedRelation]] directly; otherwise returns a
-   * [[PlanWithUnresolvedIdentifier]] that materializes into an [[UnresolvedRelation]] once the
-   * identifier expression is resolved. Both branches produce a [[NamedRelation]], which occupies
-   * the `InsertIntoStatement.table` slot (a general `LogicalPlan` slot, since `NamedRelation`
-   * extends `LogicalPlan`).
-   *
-   * Placing the placeholder in the identifier slot (rather than wrapping the entire write command)
-   * preserves the `CTEInChildren` shape at parse time, so `CTESubstitution` places `WithCTE` on the
-   * command's children correctly. See SPARK-46625.
+   * Build the target of an INSERT. An `IDENTIFIER` expression receives normal analyzer traversal.
+   * A resolved identifier is kept in `UnresolvedInsertTarget` rather than `UnresolvedRelation` so
+   * CTE substitution cannot interpret the target as a source.
    */
   private def buildWriteTableSlot(
       ctx: IdentifierReferenceContext,
       optionsClause: Option[OptionsClauseContext],
-      writePrivileges: Set[TableWritePrivilege]): NamedRelation = {
-    withIdentClause(ctx, parts =>
-      createUnresolvedRelation(ctx, parts, optionsClause, writePrivileges, isStreaming = false))
-      .asInstanceOf[NamedRelation]
+      writePrivileges: Set[TableWritePrivilege]): LogicalPlan = {
+    val options = withOrigin(ctx) { resolveOptions(optionsClause) }
+    withIdentClause(ctx, parts => withOrigin(ctx) {
+      UnresolvedInsertTarget(parts, options, writePrivileges)
+    })
   }
 
   /**

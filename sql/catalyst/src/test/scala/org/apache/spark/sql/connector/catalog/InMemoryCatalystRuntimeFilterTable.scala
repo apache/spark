@@ -23,8 +23,9 @@ import InMemoryCatalystRuntimeFilterTable._
 
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
-import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference, SortOrder, Transform}
+import org.apache.spark.sql.connector.expressions.{NamedReference, SortOrder, Transform}
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -90,29 +91,23 @@ class InMemoryCatalystRuntimeFilterTable(
       .map(_.split(",").map(_.trim).toSet)
       .getOrElse(Set.empty)
 
-    /**
-     * The partition columns, each named by the top level read schema column it lives under, the
-     * form both interface methods require. Columns pruned out of the read schema are dropped,
-     * since neither method may name one. Examples:
-     *   - `PARTITIONED BY (part)` -> `"part"`
-     *   - `PARTITIONED BY (s.nested)` -> `"s"`, the struct column holding the partition field
-     */
-    private def partitionAttrNames: Array[String] = {
-      val scanFields = readSchema.fields.map(_.name).toSet
-      partitioning.flatMap(_.references()).map(_.fieldNames.head).distinct
-        .filter(scanFields.contains)
+    /** Partition source columns that are present in the scan read schema. */
+    private def partitionAttrs: Array[NamedReference] = {
+      partitioning.flatMap(_.references()).distinct
+        .filter(ref => readSchema.findNestedField(
+          ref.fieldNames.toImmutableArraySeq, resolver = SQLConf.get.resolver).isDefined)
     }
 
     override def filterAttributes(): Array[NamedReference] = {
-      partitionAttrNames
-        .filter(name => restrictedFilterAttrs.forall(_.contains(name)))
-        .map(FieldReference.column)
+      partitionAttrs.filter { ref =>
+        restrictedFilterAttrs.forall(_.contains(ref.fieldNames.mkString(".")))
+      }
     }
 
     // Not intersected with `filterAttributes()`, so a table can declare a fully pushed attribute
     // that is not a filter attribute, a combination the interface forbids.
     override def fullyPushedFilterAttributes(): Array[NamedReference] = {
-      partitionAttrNames.filter(fullyPushedFilterAttrs.contains).map(FieldReference.column)
+      partitionAttrs.filter(ref => fullyPushedFilterAttrs.contains(ref.fieldNames.mkString(".")))
     }
   }
 }

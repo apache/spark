@@ -365,6 +365,15 @@ class NumPyCompatTestsMixin:
     def test_floor_divide_func(self):
         from pyspark.pandas.numpy_compat import _floor_divide_func
 
+        def floor_divided(pdf):
+            psdf = ps.from_pandas(pdf)
+            return (
+                psdf.spark.frame()
+                .select(_floor_divide_func(F.col("x1"), F.col("x2")).alias("result"))
+                .toPandas()["result"]
+                .rename(None)
+            )
+
         for pdf in (
             pd.DataFrame(
                 {
@@ -419,14 +428,39 @@ class NumPyCompatTestsMixin:
                 }
             ),
         ):
-            psdf = ps.from_pandas(pdf)
-            result = (
-                psdf.spark.frame()
-                .select(_floor_divide_func(F.col("x1"), F.col("x2")).alias("result"))
-                .toPandas()["result"]
-                .rename(None)
-            )
-            self.assert_eq(result, np.floor_divide(pdf.x1, pdf.x2), almost=True)
+            self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2), almost=True)
+
+        # Divisors binary cannot represent exactly, where the quotient rounds up across an
+        # integer: 1.0 / 0.1 rounds to 10.0, so flooring it gives 10 instead of 9. Compared
+        # exactly, since almost=True would accept an off-by-one on the large values below.
+        pdf = pd.DataFrame(
+            {
+                "x1": [1.0, 10.0, 2.0, 0.5, 7.0, -1.0, -10.0, 3.0],
+                "x2": [0.1, 0.1, 0.2, 0.1, 0.7, 0.1, 0.1, 7.0],
+            }
+        )
+        self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2))
+
+        # Integral operands above 2**53, where casting an operand to double would drop its
+        # low bits: -9007199254740993 // 2 is -4503599627370497, not -4503599627370496.
+        pdf = pd.DataFrame(
+            {
+                "x1": [9007199254740993, -9007199254740993, 4611686018427387905, 7, -7],
+                "x2": [1, 2, 3, 3, 3],
+            }
+        )
+        self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2).astype("float64"))
+
+        # The most negative long divided by -1, whose quotient a long cannot hold. NumPy wraps
+        # around, while Spark's integer division raises.
+        pdf = pd.DataFrame({"x1": [-(2**63), -(2**63)], "x2": [-1, 2]})
+        self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2).astype("float64"))
+
+        # Finite operands whose quotient overflows to an infinity, which is its own floor.
+        pdf = pd.DataFrame(
+            {"x1": [1e300, -1e300, 1e300, -1e300], "x2": [1e-300, 1e-300, -1e-300, -1e-300]}
+        )
+        self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2))
 
     def test_np_logaddexp(self):
         for pdf in (
@@ -501,6 +535,60 @@ class NumPyCompatTestsMixin:
                     [np.signbit(np_func(x1, x2)) for x1, x2 in zip(pdf.x1, pdf.x2)]
                 )
                 self.assert_eq(np.signbit(result.to_pandas()), expected_signbit)
+
+    def test_np_fmax_fmin_integer_precision(self):
+        # The result keeps the operands' type, so an integral pair stays exact past 2^53,
+        # where a double result rounds to the nearest even value. The last row also pins the
+        # tie branch, which returns an operand rather than a comparison; it is an equal
+        # non-zero pair, so no signed-zero tie arises and the test needs no skip.
+        pdf = pd.DataFrame(
+            {
+                "x1": [2**53 + 1, -(2**53 + 1), 2**53 + 1],
+                "x2": [2, -2, 2**53 + 1],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        for np_func in (np.fmax, np.fmin):
+            self.assert_eq(np_func(psdf.x1, psdf.x2), np_func(pdf.x1, pdf.x2))
+
+    def test_np_fmax_fmin_non_default_dtypes(self):
+        # Both helpers select an operand, so the result keeps the operands' type for every
+        # dtype NumPy also preserves. Tie rows are equal non-zero pairs, since the signed-zero
+        # tie is the one case where NumPy's own answer varies; keep them that way so this test
+        # needs no skip either.
+        for dtype in ("int8", "int16", "int32", "float32"):
+            with self.subTest(dtype=dtype):
+                pdf = pd.DataFrame(
+                    {
+                        "x1": np.array([-2, 1, 3], dtype=dtype),
+                        "x2": np.array([2, -1, 3], dtype=dtype),
+                    }
+                )
+                psdf = ps.from_pandas(pdf)
+
+                for np_func in (np.fmax, np.fmin):
+                    self.assert_eq(np_func(psdf.x1, psdf.x2), np_func(pdf.x1, pdf.x2))
+
+        for pdf in (
+            pd.DataFrame({"x1": [True, False, True], "x2": [False, False, True]}),
+            pd.DataFrame(
+                {
+                    "x1": [Decimal("7.5"), Decimal("-2.5"), Decimal("3.0")],
+                    "x2": [Decimal("2.0"), Decimal("-9.0"), Decimal("3.0")],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "x1": pd.to_datetime(["2020-01-01", "2021-06-01"]),
+                    "x2": pd.to_datetime(["2020-06-01", "2021-01-01"]),
+                }
+            ),
+        ):
+            psdf = ps.from_pandas(pdf)
+
+            for np_func in (np.fmax, np.fmin):
+                self.assert_eq(np_func(psdf.x1, psdf.x2), np_func(pdf.x1, pdf.x2))
 
     def test_np_copysign(self):
         for pdf in (

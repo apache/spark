@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.expressions.Expressions._
 import org.apache.spark.sql.execution.{
   ExtendedMode,
   FormattedMode,
+  ProjectExec,
   RDDScanExec,
   SimpleMode,
   SortExec,
@@ -1741,6 +1742,134 @@ class KeyGroupedPartitioningSuite
         SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
         val df = createJoinTestDF(Seq("id" -> "item_id"))
         checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(3, "bb", 10.0, 19.5)))
+      }
+    }
+  }
+
+  test("SPARK-59054: shuffle one side: partition keys with binary type") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, Array(
+      Column.create("id", BinaryType),
+      Column.create("name", StringType),
+      Column.create("price", DoubleType)), items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(X'0101', 'aa', 40.0), " +
+      "(X'0202', 'bb', 10.0), " +
+      "(X'0303', 'cc', 15.5), " +
+      "(X'0404', 'dd', 20.0)")
+
+    createTable(purchases, Array(
+      Column.create("item_id", BinaryType),
+      Column.create("price", DoubleType)), Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(X'0101', 42.0), (X'0101', 44.0), (X'0202', 11.0), (X'0202', 19.5), " +
+      "(X'0303', 26.0), (X'0303', 30.0), (X'0404', 50.0), (X'0404', 60.0)")
+
+    Seq(true, false).foreach { shuffle =>
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> shuffle.toString) {
+        val df = createJoinTestDF(Seq("id" -> "item_id"))
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        if (shuffle) {
+          assert(shuffles.size == 1, "only shuffle one side not report partitioning")
+        } else {
+          assert(shuffles.size == 2, "should add two side shuffle when bucketing shuffle one " +
+            "side is not enabled")
+        }
+
+        checkAnswer(df, Seq(
+          Row(Array[Byte](1, 1), "aa", 40.0, 42.0),
+          Row(Array[Byte](1, 1), "aa", 40.0, 44.0),
+          Row(Array[Byte](2, 2), "bb", 10.0, 11.0),
+          Row(Array[Byte](2, 2), "bb", 10.0, 19.5),
+          Row(Array[Byte](3, 3), "cc", 15.5, 26.0),
+          Row(Array[Byte](3, 3), "cc", 15.5, 30.0),
+          Row(Array[Byte](4, 4), "dd", 20.0, 50.0),
+          Row(Array[Byte](4, 4), "dd", 20.0, 60.0)))
+      }
+    }
+  }
+
+  test("SPARK-59054: shuffle one side: struct partition keys with different field names") {
+    // Struct equality ignores field names, so joining STRUCT<a:INT> with STRUCT<b:INT> is legal
+    // and SPJ stays eligible. The shuffled side's lookup keys carry its own schema while the
+    // partitioner's map keys come from the keyed side, so key comparison must not depend on
+    // the field names.
+    val items_partitions = Array(identity("id"))
+    createTable(items, Array(
+      Column.create("id", new StructType().add("a", IntegerType)),
+      Column.create("name", StringType),
+      Column.create("price", DoubleType)), items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(named_struct('a', 1), 'aa', 40.0), " +
+      "(named_struct('a', 2), 'bb', 10.0), " +
+      "(named_struct('a', 3), 'cc', 15.5), " +
+      "(named_struct('a', 4), 'dd', 20.0)")
+
+    createTable(purchases, Array(
+      Column.create("item_id", new StructType().add("b", IntegerType)),
+      Column.create("price", DoubleType)), Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(named_struct('b', 1), 42.0), (named_struct('b', 2), 19.5), " +
+      "(named_struct('b', 3), 26.0), (named_struct('b', 4), 50.0)")
+
+    Seq(true, false).foreach { shuffle =>
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> shuffle.toString) {
+        val df = createJoinTestDF(Seq("id" -> "item_id"))
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        if (shuffle) {
+          assert(shuffles.size == 1, "only shuffle one side not report partitioning")
+        } else {
+          assert(shuffles.size == 2, "should add two side shuffle when bucketing shuffle one " +
+            "side is not enabled")
+        }
+
+        checkAnswer(df, Seq(
+          Row(Row(1), "aa", 40.0, 42.0),
+          Row(Row(2), "bb", 10.0, 19.5),
+          Row(Row(3), "cc", 15.5, 26.0),
+          Row(Row(4), "dd", 20.0, 50.0)))
+      }
+    }
+  }
+
+  test("SPARK-59054: shuffle one side: partition transform collapsing -0.0 and 0.0") {
+    withFunction(UnboundSignedZerosFunction) {
+      // `signed_zeros` maps id 1 to -0.0 and id 2 to 0.0: two partition keys that are equal
+      // under SQL semantics but distinct bitwise, which the grouped side collapses into one
+      // partition. Rows of both forms on the shuffled side must land in that partition.
+      val items_partitions = Array(
+        Expressions.apply("signed_zeros", Expressions.column("id")))
+      createTable(items, itemsColumns, items_partitions)
+
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+      createTable(purchases, purchasesColumns, Array.empty)
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 19.5, cast('2020-02-01' as timestamp)), " +
+        "(3, 26.0, cast('2023-01-01' as timestamp))")
+
+      Seq(true, false).foreach { shuffle =>
+        withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> shuffle.toString) {
+          val df = createJoinTestDF(Seq("id" -> "item_id"))
+          val shuffles = collectShuffles(df.queryExecution.executedPlan)
+          if (shuffle) {
+            assert(shuffles.size == 1, "only shuffle one side not report partitioning")
+          } else {
+            assert(shuffles.size == 2, "should add two side shuffle when bucketing shuffle one " +
+              "side is not enabled")
+          }
+
+          checkAnswer(df, Seq(
+            Row(1, "aa", 40.0, 42.0),
+            Row(2, "bb", 10.0, 19.5),
+            Row(3, "cc", 15.5, 26.0)))
+        }
       }
     }
   }
@@ -4738,6 +4867,84 @@ class KeyGroupedPartitioningSuite
     val shuffles = collectShuffles(df.queryExecution.executedPlan)
     assert(shuffles.isEmpty, "should not contain any shuffle")
     checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(2, "bb", 10.0, 19.5)))
+  }
+
+  test("SPARK-58974: the narrowing skew guard applies regardless of requireAllClusterKeys") {
+    // Same shape as "SPARK-46367: narrowing projection requires allowKeysSubsetOfPartitionKeys":
+    // items is partitioned by (id, name) and id=1 maps to two of its partitions, so projecting
+    // `name` away narrows [id, name] to [id] and collapses the keys to [1, 1, 2].
+    //
+    // The narrowing guard describes a skew risk that does not depend on which key sets count as
+    // matching, so it must apply for either value of `requireAllClusterKeys`. It used to sit inside
+    // the `requireAllClusterKeys = false` arm of `groupedSatisfies`, so with that setting enabled
+    // such a partitioning was grouped anyway -- taking exactly the exposure
+    // `allowKeysSubsetOfPartitionKeys` exists to gate, with nobody opting in.
+    createTable(items, itemsColumns, Array(identity("id"), identity("name")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      s"(1, 'bb', 41.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'cc', 10.0, cast('2020-01-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array(identity("item_id")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 11.0, cast('2020-01-01' as timestamp))")
+
+    val query =
+      s"""
+         |${selectWithMergeJoinHint("sub", "p")}
+         |sub.id, p.price AS purchase_price
+         |FROM (SELECT id FROM testcat.ns.$items WHERE name >= 'aa') sub
+         |JOIN testcat.ns.$purchases p
+         |ON sub.id = p.item_id
+         |""".stripMargin
+    val expected = Seq(Row(1, 42.0), Row(1, 42.0), Row(2, 11.0))
+
+    for {
+      requireAll <- Seq(true, false)
+      allowSubset <- Seq(true, false)
+      keyedShuffle <- Seq(true, false)
+    } {
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key -> requireAll.toString,
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> keyedShuffle.toString,
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
+            allowSubset.toString) {
+        val settings = s"requireAllClusterKeys=$requireAll, v2BucketingShuffle=$keyedShuffle"
+        val df = sql(query)
+        val plan = df.queryExecution.executedPlan
+
+        val narrowed = collect(plan) { case p: ProjectExec => p }
+          .map(_.outputPartitioning)
+          .collect { case kp: physical.KeyedPartitioning if kp.isNarrowed => kp }
+        assert(narrowed.exists(!_.isGrouped),
+          "this test needs a narrowed, ungrouped partitioning to be meaningful")
+
+        // Count over the whole plan, so a shuffle or a grouping anywhere in it is caught, not
+        // only the ones inside the join subtree.
+        val groupPartitions = collectAllGroupPartitions(plan)
+        val shuffles = collectAllShuffles(plan)
+        if (allowSubset) {
+          // The opt-in is the only way to keep the coalescing, and it must work for either value
+          // of `requireAllClusterKeys` -- before the fix it was reachable only for `false`.
+          assert(groupPartitions.nonEmpty, s"$settings: the opt-in must restore the coalescing")
+          assert(shuffles.isEmpty, s"$settings: the opt-in must avoid the shuffles")
+        } else {
+          // `requireAllClusterKeys` says which key sets count as matching; it does not authorise
+          // coalescing a narrowed partitioning, so the guard behaves the same either way.
+          assert(groupPartitions.isEmpty,
+            s"$settings must not coalesce a narrowed partitioning without " +
+              "allowKeysSubsetOfPartitionKeys")
+          // Both sides are shuffled, unless `v2BucketingShuffleEnabled` lets the refused side be
+          // laid out on the other side's declared partition keys.
+          val expectedShuffles = if (keyedShuffle) 1 else 2
+          assert(shuffles.size == expectedShuffles,
+            s"$settings must shuffle instead, on $expectedShuffles side(s)")
+        }
+        checkAnswer(df, expected)
+      }
+    }
   }
 }
 

@@ -208,6 +208,7 @@ abstract class InMemoryBaseTable(
     case _: SortedBucketTransform =>
     case _: ClusterByTransform =>
     case NamedTransform("truncate", Seq(_: NamedReference, _: V2Literal[_])) =>
+    case NamedTransform("signed_zeros", Seq(_: NamedReference)) =>
     case t if !allowUnsupportedTransforms =>
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")
   }
@@ -320,6 +321,15 @@ abstract class InMemoryBaseTable(
         extractor(ref.fieldNames, cleanedSchema, row) match {
           case (str: UTF8String, StringType) =>
             str.substring(0, length.value.asInstanceOf[Int])
+          case (v, t) =>
+            throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
+        }
+      // the result should be consistent with SignedZerosFunction defined at
+      // transformFunctions.scala
+      case NamedTransform("signed_zeros", Seq(ref: NamedReference)) =>
+        extractor(ref.fieldNames, cleanedSchema, row) match {
+          case (value: Long, LongType) =>
+            if (value == 1L) -0.0d else if (value == 2L) 0.0d else value.toDouble
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
@@ -770,7 +780,9 @@ abstract class InMemoryBaseTable(
     private def partitionAttributes: Seq[(Seq[String], AttributeReference)] = {
       partitioning.flatMap(_.references()).flatMap { ref =>
         val path = ref.fieldNames.toImmutableArraySeq
-        readSchema.findNestedField(path).orElse(tableSchema.findNestedField(path)).map {
+        val resolver = SQLConf.get.resolver
+        readSchema.findNestedField(path, resolver = resolver)
+          .orElse(tableSchema.findNestedField(path, resolver = resolver)).map {
           case (_, f) =>
             path -> AttributeReference(ref.fieldNames.mkString("."), f.dataType, f.nullable)()
         }
@@ -827,9 +839,9 @@ abstract class InMemoryBaseTable(
     var pushedFilters: Array[Filter] = Array.empty
 
     override def filterAttributes(): Array[NamedReference] = {
-      val scanFields = readSchema.fields.map(_.name).toSet
       partitioning.flatMap(_.references)
-        .filter(ref => scanFields.contains(ref.fieldNames.mkString(".")))
+        .filter(ref => readSchema.findNestedField(
+          ref.fieldNames.toImmutableArraySeq, resolver = SQLConf.get.resolver).isDefined)
     }
 
     override def filter(filters: Array[Filter]): Unit = {

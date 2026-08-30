@@ -132,7 +132,7 @@ object SqlStatementCodes {
   def classify(plan: LogicalPlan): SqlStatementClassification = plan match {
     case UnresolvedWith(child, _, _) => classify(child)
     case _: CompoundBody => BeginEnd
-    case _: InsertIntoStatement => Insert
+    case _: UnresolvedInsert => Insert
     case _: DeleteFromTable | _: DeleteFromTableWithFilters => DeleteWhere
     case _: UpdateTable => UpdateWhere
     case _: MergeIntoTable => Merge
