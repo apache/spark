@@ -96,7 +96,7 @@ public class SparkLogger {
   }
 
   public void error(String msg, MDC... mdcs) {
-    if (mdcs == null || mdcs.length == 0) {
+    if (isNullOrEmpty(mdcs)) {
       slf4jLogger.error(msg);
     } else if (slf4jLogger.isErrorEnabled()) {
       withLogContext(msg, mdcs, null, mt -> slf4jLogger.error(mt.message));
@@ -104,7 +104,7 @@ public class SparkLogger {
   }
 
   public void error(String msg, Throwable throwable, MDC... mdcs) {
-    if (mdcs == null || mdcs.length == 0) {
+    if (isNullOrEmpty(mdcs)) {
       slf4jLogger.error(msg, throwable);
     } else if (slf4jLogger.isErrorEnabled()) {
       withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.error(mt.message, mt.throwable));
@@ -124,7 +124,7 @@ public class SparkLogger {
   }
 
   public void warn(String msg, MDC... mdcs) {
-    if (mdcs == null || mdcs.length == 0) {
+    if (isNullOrEmpty(mdcs)) {
       slf4jLogger.warn(msg);
     } else if (slf4jLogger.isWarnEnabled()) {
       withLogContext(msg, mdcs, null, mt -> slf4jLogger.warn(mt.message));
@@ -132,7 +132,7 @@ public class SparkLogger {
   }
 
   public void warn(String msg, Throwable throwable, MDC... mdcs) {
-    if (mdcs == null || mdcs.length == 0) {
+    if (isNullOrEmpty(mdcs)) {
       slf4jLogger.warn(msg, throwable);
     } else if (slf4jLogger.isWarnEnabled()) {
       withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.warn(mt.message, mt.throwable));
@@ -152,7 +152,7 @@ public class SparkLogger {
   }
 
   public void info(String msg, MDC... mdcs) {
-    if (mdcs == null || mdcs.length == 0) {
+    if (isNullOrEmpty(mdcs)) {
       slf4jLogger.info(msg);
     } else if (slf4jLogger.isInfoEnabled()) {
       withLogContext(msg, mdcs, null, mt -> slf4jLogger.info(mt.message));
@@ -160,7 +160,7 @@ public class SparkLogger {
   }
 
   public void info(String msg, Throwable throwable, MDC... mdcs) {
-    if (mdcs == null || mdcs.length == 0) {
+    if (isNullOrEmpty(mdcs)) {
       slf4jLogger.info(msg, throwable);
     } else if (slf4jLogger.isInfoEnabled()) {
       withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.info(mt.message, mt.throwable));
@@ -213,6 +213,10 @@ public class SparkLogger {
 
   public void trace(String msg, Throwable throwable) {
     slf4jLogger.trace(msg, throwable);
+  }
+
+  private boolean isNullOrEmpty(MDC[] mdcs) {
+    return mdcs == null || mdcs.length == 0;
   }
 
   private void withLogContext(

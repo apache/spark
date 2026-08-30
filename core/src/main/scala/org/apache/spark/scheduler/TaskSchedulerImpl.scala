@@ -193,6 +193,29 @@ private[spark] class TaskSchedulerImpl(
     }.sum
   }
 
+  /**
+   * Whether any live task set belongs to a pipelined group (see `TaskSet.isPipelined`). Such a
+   * group's shuffle data is transient and lives only on its executors, so a caller about to
+   * disturb the executors needs to know that a group is running.
+   *
+   * Zombie (superseded) attempts are skipped: their tasks are no longer scheduled, so a stale
+   * pipelined attempt left in the map must not make the scheduler look like it still has a
+   * pipelined group in flight. Matches the !isZombie filtering used elsewhere on this map.
+   *
+   * Best-effort: this reports what the TASK scheduler currently holds, which is narrower than "a
+   * pipelined job is active". It is false before the group's first task set is submitted, and
+   * false again once the last member's TaskSetManager has gone zombie but the DAGScheduler has
+   * not yet processed the final completion event.
+   *
+   * Synchronized like every other access to this map, so it is safe to call from any thread --
+   * including off the DAGScheduler event loop (e.g. SparkContext, on a user thread).
+   */
+  private[spark] def hasPipelinedTaskSets: Boolean = synchronized {
+    taskSetsByStageIdAndAttempt.values.exists(_.values.exists { tsm =>
+      !tsm.isZombie && tsm.taskSet.isPipelined
+    })
+  }
+
   // The set of executors we have on each host; this is used to compute hostsAlive, which
   // in turn is used to decide when we can attain data locality on a given host
   protected val hostToExecutors = new HashMap[String, HashSet[String]]

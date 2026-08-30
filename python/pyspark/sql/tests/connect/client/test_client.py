@@ -18,30 +18,31 @@
 import unittest
 import uuid
 from collections.abc import Generator
-from typing import Optional, Any, Union
+from typing import Any, Optional, Union
 
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
 from pyspark.testing.utils import eventually
 
 if should_test_connect:
-    import grpc
     import google.protobuf.any_pb2 as any_pb2
     import google.protobuf.wrappers_pb2 as wrappers_pb2
-    from google.rpc import status_pb2
-    from google.rpc.error_details_pb2 import ErrorInfo
+    import grpc
     import pandas as pd
     import pyarrow as pa
-    from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
-    from pyspark.sql.connect.client.core import RpcDeadlines
-    from pyspark.sql.connect.client.retries import (
-        Retrying,
-        DefaultPolicy,
-    )
-    from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
-    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+    from google.rpc import status_pb2
+    from google.rpc.error_details_pb2 import ErrorInfo
+
+    import pyspark.sql.connect.proto as proto
     from pyspark.errors import PySparkRuntimeError
     from pyspark.errors.exceptions.connect import SparkConnectGrpcException
-    import pyspark.sql.connect.proto as proto
+    from pyspark.sql.connect.client import DefaultChannelBuilder, SparkConnectClient
+    from pyspark.sql.connect.client.core import RpcDeadlines
+    from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
+    from pyspark.sql.connect.client.retries import (
+        DefaultPolicy,
+        Retrying,
+    )
+    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
     class TestPolicy(DefaultPolicy):
         def __init__(self):
@@ -113,16 +114,22 @@ if should_test_connect:
             self.release_calls = 0
             self.release_until_calls = 0
             self.attach_calls = 0
+            self.execute_metadata = []
+            self.attach_metadata = []
+            self.release_metadata = []
 
         def ExecutePlan(self, *args, **kwargs):
             self.execute_calls += 1
+            self.execute_metadata.append(kwargs.get("metadata"))
             return self._execute_ops
 
         def ReattachExecute(self, *args, **kwargs):
             self.attach_calls += 1
+            self.attach_metadata.append(kwargs.get("metadata"))
             return self._attach_ops
 
         def ReleaseExecute(self, req: proto.ReleaseExecuteRequest, *args, **kwargs):
+            self.release_metadata.append(kwargs.get("metadata"))
             if req.HasField("release_all"):
                 self.release_calls += 1
             elif req.HasField("release_until"):
@@ -149,6 +156,7 @@ if should_test_connect:
         def __init__(self, session_id: str, operation_statuses=None):
             self._session_id = session_id
             self.req = None
+            self.metadata = None
             self.client_user_context_extensions = []
             if operation_statuses is None:
                 operation_statuses = self.DEFAULT_OPERATION_STATUSES
@@ -156,6 +164,7 @@ if should_test_connect:
 
         def ExecutePlan(self, req: proto.ExecutePlanRequest, metadata, timeout=None):
             self.req = req
+            self.metadata = metadata
             self.client_user_context_extensions = list(req.user_context.extensions)
             resp = proto.ExecutePlanResponse()
             resp.session_id = self._session_id
@@ -296,6 +305,30 @@ class SparkConnectClientTestCase(unittest.TestCase):
         )
 
         self.assertEqual(client._user_id, "abc")
+
+    def test_channel_builder_metadata_is_filtered_per_call(self):
+        class CustomChannelBuilder(DefaultChannelBuilder):
+            def __init__(self):
+                super().__init__("sc://foo/")
+                self.metadata_calls = 0
+
+            def metadata(self):
+                self.metadata_calls += 1
+                return iter(
+                    [
+                        ("authorization", f"token-{self.metadata_calls}"),
+                        ("spark-connect-operation-id", "ignored"),
+                    ]
+                )
+
+        builder = CustomChannelBuilder()
+        client = SparkConnectClient(builder, use_reattachable_execute=False)
+        try:
+            self.assertEqual(client._artifact_manager._metadata, [("authorization", "token-1")])
+            self.assertEqual(client._builder_metadata(), [("authorization", "token-2")])
+            self.assertEqual(client._builder_metadata(), [("authorization", "token-3")])
+        finally:
+            client.close()
 
     def test_user_context_extension(self):
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
@@ -551,6 +584,21 @@ class SparkConnectClientTestCase(unittest.TestCase):
         try:
             req = client._execute_plan_request_with_metadata()
             uuid.UUID(req.operation_id)
+        finally:
+            client.close()
+
+    def test_execute_plan_sends_operation_id_metadata(self):
+        client = SparkConnectClient(
+            "sc://foo/;spark-connect-operation-id=ignored", use_reattachable_execute=False
+        )
+        mock = MockService(client._session_id)
+        client._stub = mock
+        try:
+            req = client._execute_plan_request_with_metadata()
+            client._execute(req)
+            self.assertIsNotNone(mock.metadata)
+            values = [v for k, v in mock.metadata if k == "spark-connect-operation-id"]
+            self.assertEqual(values, [req.operation_id])
         finally:
             client.close()
 
@@ -920,6 +968,49 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client._get_operation_statuses()
         self.assertEqual(mock.captured_timeouts["GetStatus"], 55.0)
 
+    def test_remove_cached_relation_uses_release_relation_deadline(self):
+        """CachedRemoteRelation.__del__ must bound its release RPC with the release_relation
+        deadline.
+
+        Regression test: the RemoveRemoteCachedRelation cleanup is a blocking, non-reattachable
+        ExecutePlan call issued from a finalizer with no other timeout at any layer. Without a
+        client-side deadline it can hang forever if the response is never delivered, which on the
+        foreachBatch Connect path stalls the streaming query indefinitely (the Python worker never
+        sends its completion signal and the driver JVM blocks on the per-batch read).
+        """
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        from pyspark.sql.connect.plan import CachedRemoteRelation
+
+        def make_relation(deadlines):
+            client = SparkConnectClient(
+                "sc://foo/",
+                use_reattachable_execute=False,
+                rpc_deadlines=deadlines,
+                retry_policy=dict(max_retries=0),
+            )
+            captured = {}
+
+            def fake_call(req, metadata=None, timeout="unset"):
+                captured["timeout"] = timeout
+                return proto.ExecutePlanResponse()
+
+            client._channel = MagicMock()
+            client._channel.unary_unary.return_value = fake_call
+            rel = CachedRemoteRelation("df-id-123", spark_session=SimpleNamespace(client=client))
+            return rel, captured
+
+        # A configured deadline is forwarded as the gRPC call timeout.
+        rel, captured = make_relation(RpcDeadlines(release_relation=44.0))
+        rel.__del__()
+        self.assertEqual(captured["timeout"], 44.0)
+
+        # Disabled deadlines forward None (opt out; rely on transport/server-side timeouts).
+        rel, captured = make_relation(RpcDeadlines.disabled())
+        rel.__del__()
+        self.assertIsNone(captured["timeout"])
+
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectClientReattachTestCase(unittest.TestCase):
@@ -951,6 +1042,21 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             self.assertEqual(1, stub.release_until_calls)
             self.assertEqual(1, stub.release_calls)
             self.assertEqual(1, stub.execute_calls)
+
+        eventually(timeout=1, catch_assertions=True)(check_all)()
+
+    def test_operation_id_metadata_is_sent_on_all_rpcs(self):
+        metadata = [("spark-connect-operation-id", "operation-id")]
+        stub = self._stub_with([self.response], [self.finished])
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, metadata)
+        for _ in ite:
+            pass
+
+        def check_all():
+            self.assertEqual(stub.execute_metadata, [metadata])
+            self.assertEqual(stub.attach_metadata, [metadata])
+            self.assertTrue(stub.release_metadata)
+            self.assertTrue(all(value == metadata for value in stub.release_metadata))
 
         eventually(timeout=1, catch_assertions=True)(check_all)()
 

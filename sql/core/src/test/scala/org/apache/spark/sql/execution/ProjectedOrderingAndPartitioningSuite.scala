@@ -491,6 +491,38 @@ class ProjectedOrderingAndPartitioningSuite
     }
   }
 
+  test("SPARK-58974: the narrowing guard applies for either value of requireAllClusterKeys") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+
+    // The projected keys have duplicates (x-values: 1, 1, 2), so grouping this partitioning merges
+    // two partitions that held distinct keys. `requireAllClusterKeys` decides which key sets count
+    // as matching; it does not authorise that merge, so the guard must answer the same either way.
+    val keys = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 1))
+    val project = ProjectExec(Seq(x),
+      DummyLeafExecWithPartitioning(output = Seq(x, y),
+        partitioning = KeyedPartitioning(Seq(x, y), keys)))
+    val kp = project.outputPartitioning.asInstanceOf[KeyedPartitioning]
+    assert(kp.isNarrowed && !kp.isGrouped)
+
+    Seq(true, false).foreach { requireAll =>
+      // Both values on purpose: the whole claim of the fix is that the guard answers the same
+      // either way, so the `false` iteration is the control that must keep behaving as before.
+      // The required clustering is exactly this partitioning's single key, so the
+      // `requireAllClusterKeys` branch on its own would accept it.
+      val required = ClusteredDistribution(Seq(x), requireAllClusterKeys = requireAll)
+      withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "false") {
+        assert(!kp.groupedSatisfies(required),
+          s"requireAllClusterKeys=$requireAll must not group a narrowed partitioning whose keys " +
+            "are no longer distinct")
+      }
+      withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+        assert(kp.groupedSatisfies(required),
+          s"requireAllClusterKeys=$requireAll: the opt-in must allow the grouping")
+      }
+    }
+  }
+
   test("SPARK-46367: isNarrowed is sticky across chained PartitioningPreservingUnaryExecNodes") {
     val x = AttributeReference("x", IntegerType)()
     val y = AttributeReference("y", IntegerType)()

@@ -1324,15 +1324,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "namespaceB" -> toSQLId(namespaceB)))
   }
 
-  def cannotCreateTableWithBothProviderAndSerdeError(
-      provider: Option[String], maybeSerdeInfo: Option[SerdeInfo]): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1058",
-      messageParameters = Map(
-        "provider" -> provider.toString,
-        "serDeInfo" -> maybeSerdeInfo.get.describe))
-  }
-
   def invalidFileFormatForStoredAsError(serdeInfo: SerdeInfo): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1059",
@@ -1459,7 +1450,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def tableNotSpecifyLocationUriError(identifier: TableIdentifier): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1081",
+      errorClass = "TABLE_LOCATION_URI_NOT_SPECIFIED",
       messageParameters = Map("identifier" -> identifier.toString))
   }
 
@@ -2445,6 +2436,23 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "functionList" -> groupAggPandasUDFNames.map(toSQLId).mkString(", ")))
   }
 
+  def invalidPythonAggregatePlacementError(
+      pythonAggregateNames: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_PYTHON_UDF_PLACEMENT",
+      messageParameters = Map(
+        "functionList" -> pythonAggregateNames.map(toSQLId).mkString(", ")))
+  }
+
+  def invalidIncrementalPythonAggregatorBufferError(
+      name: String, bufferType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_PYTHON_AGGREGATOR_BUFFER_SCHEMA",
+      messageParameters = Map(
+        "functionName" -> toSQLId(name),
+        "bufferType" -> Option(bufferType).map(toSQLType).getOrElse("NULL")))
+  }
+
   def ambiguousAttributesInSelfJoinError(
       ambiguousAttrs: Seq[AttributeReference]): Throwable = {
     new AnalysisException(
@@ -3019,6 +3027,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1214",
       messageParameters = Map("windowExpressions" -> windowExpressions.toString()))
+  }
+
+  def multiplePythonUDFTypesInWindowError(functionNames: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.MULTIPLE_PYTHON_UDF_TYPES_IN_WINDOW",
+      messageParameters = Map("functionList" -> functionNames.map(toSQLId).mkString(", ")))
   }
 
   def escapeCharacterInTheMiddleError(pattern: String, char: String): Throwable = {
@@ -4638,6 +4652,46 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(),
       cause = Some(cause)
     )
+  }
+
+  def cannotResolveDataSourceRuntimeFilterAttributeError(
+      attribute: Array[String],
+      method: String,
+      scanClass: String,
+      relationOutput: StructType,
+      cause: AnalysisException): AnalysisException = {
+    invalidDataSourceRuntimeFilterAttributeError(
+      attribute, method, scanClass, relationOutput, "CANNOT_RESOLVE", Some(cause))
+  }
+
+  def nestedDataSourceFullyPushedRuntimeFilterAttributeError(
+      attribute: Array[String],
+      scanClass: String,
+      relationOutput: StructType): AnalysisException = {
+    invalidDataSourceRuntimeFilterAttributeError(
+      attribute,
+      "fullyPushedFilterAttributes()",
+      scanClass,
+      relationOutput,
+      "NOT_TOP_LEVEL",
+      None)
+  }
+
+  private def invalidDataSourceRuntimeFilterAttributeError(
+      attribute: Array[String],
+      method: String,
+      scanClass: String,
+      relationOutput: StructType,
+      errorSubClass: String,
+      cause: Option[AnalysisException]): AnalysisException = {
+    new AnalysisException(
+      errorClass = s"DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE.$errorSubClass",
+      messageParameters = Map(
+        "attribute" -> toSQLId(attribute.toImmutableArraySeq),
+        "method" -> method,
+        "scanClass" -> scanClass,
+        "relationOutput" -> toSQLType(relationOutput)),
+      cause = cause)
   }
 
   def foundMultipleXMLDataSourceError(provider: String,

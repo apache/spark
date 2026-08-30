@@ -1798,6 +1798,37 @@ class JsonFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58707: json pruning keeps the corrupt record column populated") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        // `b` is a type mismatch rather than a structural malformation, so it only fails when the
+        // parser is asked for it. Pruning the schema down to the corrupt record column alone left
+        // the parser nothing to convert, so the record was reported as clean.
+        val df = Seq("""{"a": 1, "b": "bad"}""").toDS()
+          .selectExpr("from_json(value, 'a int, b int, _corrupt_record string') as p")
+          .selectExpr("p._corrupt_record")
+
+        checkAnswer(df, Row("""{"a": 1, "b": "bad"}"""))
+      }
+    }
+  }
+
+  test("SPARK-58707: named_struct keeps the corrupt record column populated") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        // The two from_json calls are written inline so that CollapseProject does not keep them
+        // behind an alias, which would stop the rule from firing at all.
+        val fromJson = "from_json(value, 'a int, b int, _corrupt_record string')"
+        val df = Seq("""{"a": 1, "b": "bad"}""").toDS()
+          .selectExpr(
+            s"named_struct('a', $fromJson.a, '_corrupt_record', $fromJson._corrupt_record) as s")
+          .selectExpr("s.a", "s._corrupt_record")
+
+        checkAnswer(df, Row(1, """{"a": 1, "b": "bad"}"""))
+      }
+    }
+  }
+
   test("SPARK-33907: json pruning optimization with corrupt record field") {
     Seq("true", "false").foreach { enabled =>
       withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
@@ -1806,6 +1837,9 @@ class JsonFunctionsSuite extends SharedSparkSession {
           .add("b", IntegerType)
         val badRec = """{"a" 1, "b": 11}"""
 
+        // Since SPARK-58707 the rule no longer prunes to the corrupt record column, so both
+        // iterations run the same plan. The record here is structurally malformed, which fails at
+        // tokenization whatever schema is requested, so the answer never depended on the pruning.
         val df = Seq(badRec, """{"a": 2, "b": 12}""").toDS()
           .selectExpr("from_json(value, 'a int, b int, _corrupt_record string') as parsed")
           .selectExpr("parsed._corrupt_record")

@@ -17,6 +17,7 @@
 package org.apache.spark.ml.feature
 
 import java.io.{DataInputStream, DataOutputStream}
+import java.util.{HashMap => JHashMap}
 
 import org.apache.hadoop.fs.Path
 
@@ -31,10 +32,9 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SizeEstimator
-import org.apache.spark.util.collection.{OpenHashMap, Utils}
+import org.apache.spark.util.collection.OpenHashMap
 
 /**
  * Params for [[CountVectorizer]] and [[CountVectorizerModel]].
@@ -192,61 +192,43 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     }
 
     val vocSize = $(vocabSize)
-    val input = dataset.select($(inputCol)).rdd.map(_.getSeq[String](0))
-    val countingRequired = $(minDF) < 1.0 || $(maxDF) < 1.0
-    val maybeInputSize = if (countingRequired) {
-      if (dataset.storageLevel == StorageLevel.NONE) {
-        input.persist(StorageLevel.MEMORY_AND_DISK)
-      }
-      Some(input.count())
-    } else {
-      None
-    }
-    val minDf = if ($(minDF) >= 1.0) {
-      $(minDF)
-    } else {
-      $(minDF) * maybeInputSize.get
-    }
-    val maxDf = if ($(maxDF) >= 1.0) {
-      $(maxDF)
-    } else {
-      $(maxDF) * maybeInputSize.get
-    }
-    require(maxDf >= minDf, "maxDF must be >= minDF.")
-    val allWordCounts = input.flatMap { tokens =>
-      val wc = new OpenHashMap[String, Long]
-      tokens.foreach { w =>
-        wc.changeValue(w, 1L, _ + 1L)
-      }
-      wc.map { case (word, count) => (word, (count, 1)) }
-    }.reduceByKey { (wcdf1, wcdf2) =>
-      (wcdf1._1 + wcdf2._1, wcdf1._2 + wcdf2._2)
-    }
-
+    val input = dataset.select($(inputCol))
+    val inputSizeCol = input.select(count(lit(0))).scalar()
+    val rawMinDfCol = if ($(minDF) >= 1.0) lit($(minDF)) else inputSizeCol * lit($(minDF))
+    val rawMaxDfCol = if ($(maxDF) >= 1.0) lit($(maxDF)) else inputSizeCol * lit($(maxDF))
+    val invalidDfRangeError = raise_error(lit("maxDF must be >= minDF."))
+    val minDfCol = when(rawMaxDfCol >= rawMinDfCol, rawMinDfCol).otherwise(invalidDfRangeError)
+    val maxDfCol = when(rawMaxDfCol >= rawMinDfCol, rawMaxDfCol).otherwise(invalidDfRangeError)
     val filteringRequired = isSet(minDF) || isSet(maxDF)
-    val maybeFilteredWordCounts = if (filteringRequired) {
-      allWordCounts.filter { case (_, (_, df)) => df >= minDf && df <= maxDf }
+    val wordCounts = if (filteringRequired) {
+      input
+        .select(
+          monotonically_increasing_id().as("docId"),
+          col($(inputCol)).as("doc"))
+        .select(
+          col("docId"),
+          explode(col("doc")).as("word"))
+        .groupBy("docId", "word")
+        .agg(count(lit(0)).as("wordCountInDoc"))
+        .groupBy("word")
+        .agg(
+          sum("wordCountInDoc").as("count"),
+          count(lit(0)).as("docCount"))
+        .filter(minDfCol <= col("docCount") && col("docCount") <= maxDfCol)
+        .select("word", "count")
     } else {
-      allWordCounts
+      input
+        .select(explode(col($(inputCol))).as("word"))
+        .groupBy("word")
+        .agg(count(lit(0)).as("count"))
     }
-
-    val wordCounts = maybeFilteredWordCounts
-      .map { case (word, (count, _)) => (word, count) }
-      .persist(StorageLevel.MEMORY_AND_DISK)
-
-    val fullVocabSize = wordCounts.count()
-
-    val ordering = Ordering.Tuple2(Ordering.Long, Ordering.String.reverse)
-      .on[(String, Long)] { case (word, count) => (count, word) }
 
     val vocab = wordCounts
-      .top(math.min(fullVocabSize, vocSize).toInt)(ordering)
-      .map(_._1)
-
-    if (input.getStorageLevel != StorageLevel.NONE) {
-      input.unpersist()
-    }
-    wordCounts.unpersist()
+      .orderBy(col("count").desc, col("word").asc)
+      .limit(vocSize)
+      .select("word")
+      .collect()
+      .map(_.getString(0))
 
     if (vocab.isEmpty) {
       this.logWarning("The vocabulary size is empty. " +
@@ -316,38 +298,44 @@ class CountVectorizerModel(
   def setBinary(value: Boolean): this.type = set(binary, value)
 
   /** Dictionary created from [[vocabulary]] and its indices, broadcast once for [[transform()]] */
-  private var broadcastDict: Option[Broadcast[Map[String, Int]]] = None
+  private var broadcastDict: Option[Broadcast[JHashMap[String, Integer]]] = None
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
     if (broadcastDict.isEmpty) {
-      val dict = Utils.toMapWithIndex(vocabulary)
+      val dict = new JHashMap[String, Integer](math.ceil(vocabulary.length / 0.75).toInt)
+      var index = 0
+      while (index < vocabulary.length) {
+        dict.put(vocabulary(index), index)
+        index += 1
+      }
       broadcastDict = Some(dataset.sparkSession.sparkContext.broadcast(dict))
     }
     val dictBr = broadcastDict.get
-    // SPARK-48837: capture parameter values here so that we only evaulate once-per-transform
-    // rather than once-per-row:
-    val minTf = $(minTF)
-    val isBinary = $(binary)
+    val localMinTF = $(minTF)
+    val localBinary = $(binary)
     val vectorizer = udf { document: Seq[String] =>
-      val termCounts = new OpenHashMap[Int, Double]
+      val dict = dictBr.value
+      val dictSize = dict.size()
+      val termCounts = new OpenHashMap[Int, Int]
       var tokenCount = 0L
       document.foreach { term =>
-        dictBr.value.get(term) match {
-          case Some(index) => termCounts.changeValue(index, 1.0, _ + 1.0)
-          case None => // ignore terms not in the vocabulary
+        val index = dict.get(term)
+        if (index != null) {
+          termCounts.changeValue(index.intValue(), 1, _ + 1)
         }
         tokenCount += 1
       }
-      val effectiveMinTF = if (minTf >= 1.0) minTf else tokenCount * minTf
-      val effectiveCounts = if (isBinary) {
-        termCounts.filter(_._2 >= effectiveMinTF).map(p => (p._1, 1.0)).toSeq
+      val effectiveMinTF = if (localMinTF >= 1.0) localMinTF else tokenCount * localMinTF
+      val effectiveCounts = if (localBinary) {
+        termCounts.iterator.filter(_._2 >= effectiveMinTF).map(p => (p._1, 1.0)).toSeq
       } else {
-        termCounts.filter(_._2 >= effectiveMinTF).toSeq
+        termCounts.iterator
+          .filter(_._2 >= effectiveMinTF).map(p => (p._1, p._2.toDouble)).toSeq
       }
 
-      Vectors.sparse(dictBr.value.size, effectiveCounts)
+      Vectors.sparse(dictSize, effectiveCounts)
     }
     dataset.withColumn($(outputCol), vectorizer(col($(inputCol))),
       outputSchema($(outputCol)).metadata)

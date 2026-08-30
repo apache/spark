@@ -17,6 +17,7 @@
 
 # $example on$
 from pyspark.ml.regression import LinearRegression
+
 # $example off$
 from pyspark.sql import SparkSession
 

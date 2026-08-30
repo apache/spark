@@ -49,12 +49,17 @@
 | org.apache.spark.sql.catalyst.expressions.Between | between | SELECT 0.5 between 0.1 AND 1.0 | struct<between(0.5, 0.1, 1.0):boolean> |
 | org.apache.spark.sql.catalyst.expressions.Bin | bin | SELECT bin(13) | struct<bin(13):string> |
 | org.apache.spark.sql.catalyst.expressions.BitLength | bit_length | SELECT bit_length('Spark SQL') | struct<bit_length(Spark SQL):int> |
+| org.apache.spark.sql.catalyst.expressions.BitmapAnd | bitmap_and | SELECT substring(hex(bitmap_and(X 'F0', X '70')), 0, 2) | struct<substring(hex(bitmap_and(X'F0', X'70')), 0, 2):string> |
 | org.apache.spark.sql.catalyst.expressions.BitmapAndAgg | bitmap_and_agg | SELECT substring(hex(bitmap_and_agg(col)), 0, 6) FROM VALUES (X 'F0'), (X '70'), (X '30') AS tab(col) | struct<substring(hex(bitmap_and_agg(col)), 0, 6):string> |
+| org.apache.spark.sql.catalyst.expressions.BitmapAndNot | bitmap_andnot | SELECT substring(hex(bitmap_andnot(X 'F0', X '70')), 0, 2) | struct<substring(hex(bitmap_andnot(X'F0', X'70')), 0, 2):string> |
 | org.apache.spark.sql.catalyst.expressions.BitmapBitPosition | bitmap_bit_position | SELECT bitmap_bit_position(1) | struct<bitmap_bit_position(1):bigint> |
 | org.apache.spark.sql.catalyst.expressions.BitmapBucketNumber | bitmap_bucket_number | SELECT bitmap_bucket_number(123) | struct<bitmap_bucket_number(123):bigint> |
 | org.apache.spark.sql.catalyst.expressions.BitmapConstructAgg | bitmap_construct_agg | SELECT substring(hex(bitmap_construct_agg(bitmap_bit_position(col))), 0, 6) FROM VALUES (1), (2), (3) AS tab(col) | struct<substring(hex(bitmap_construct_agg(bitmap_bit_position(col))), 0, 6):string> |
 | org.apache.spark.sql.catalyst.expressions.BitmapCount | bitmap_count | SELECT bitmap_count(X '1010') | struct<bitmap_count(X'1010'):bigint> |
+| org.apache.spark.sql.catalyst.expressions.BitmapOr | bitmap_or | SELECT substring(hex(bitmap_or(X '10', X '20')), 0, 2) | struct<substring(hex(bitmap_or(X'10', X'20')), 0, 2):string> |
 | org.apache.spark.sql.catalyst.expressions.BitmapOrAgg | bitmap_or_agg | SELECT substring(hex(bitmap_or_agg(col)), 0, 6) FROM VALUES (X '10'), (X '20'), (X '40') AS tab(col) | struct<substring(hex(bitmap_or_agg(col)), 0, 6):string> |
+| org.apache.spark.sql.catalyst.expressions.BitmapXor | bitmap_xor | SELECT substring(hex(bitmap_xor(X 'F0', X '70')), 0, 2) | struct<substring(hex(bitmap_xor(X'F0', X'70')), 0, 2):string> |
+| org.apache.spark.sql.catalyst.expressions.BitmapXorAgg | bitmap_xor_agg | SELECT substring(hex(bitmap_xor_agg(col)), 0, 6) FROM VALUES (X'10'), (X'30'), (X'40') AS tab(col) | struct<substring(hex(bitmap_xor_agg(col)), 0, 6):string> |
 | org.apache.spark.sql.catalyst.expressions.BitwiseAnd | & | SELECT 3 & 5 | struct<(3 & 5):int> |
 | org.apache.spark.sql.catalyst.expressions.BitwiseCount | bit_count | SELECT bit_count(0) | struct<bit_count(0):int> |
 | org.apache.spark.sql.catalyst.expressions.BitwiseGet | bit_get | SELECT bit_get(11, 0) | struct<bit_get(11, 0):tinyint> |
@@ -274,6 +279,7 @@
 | org.apache.spark.sql.catalyst.expressions.OctetLength | octet_length | SELECT octet_length('Spark SQL') | struct<octet_length(Spark SQL):int> |
 | org.apache.spark.sql.catalyst.expressions.Or | or | SELECT true or false | struct<(true OR false):boolean> |
 | org.apache.spark.sql.catalyst.expressions.Overlay | overlay | SELECT overlay('Spark SQL' PLACING '_' FROM 6) | struct<overlay(Spark SQL, _, 6, -1):string> |
+| org.apache.spark.sql.catalyst.expressions.ParseSql | parse_sql | SELECT parse_sql('SELECT a, b FROM t') | struct<parse_sql(SELECT a, b FROM t):string> |
 | org.apache.spark.sql.catalyst.expressions.ParseToDate | to_date | SELECT to_date('2009-07-30 04:17:52') | struct<to_date(2009-07-30 04:17:52):date> |
 | org.apache.spark.sql.catalyst.expressions.ParseToTimestamp | to_timestamp | SELECT to_timestamp('2016-12-31 00:12:00') | struct<to_timestamp(2016-12-31 00:12:00):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.ParseToTimestampLTZExpressionBuilder | to_timestamp_ltz | SELECT to_timestamp_ltz('2016-12-31 00:12:00') | struct<to_timestamp_ltz(2016-12-31 00:12:00):timestamp> |
@@ -392,6 +398,7 @@
 | org.apache.spark.sql.catalyst.expressions.ToUnixTimestamp | to_unix_timestamp | SELECT to_unix_timestamp('2016-04-08', 'yyyy-MM-dd') | struct<to_unix_timestamp(2016-04-08, yyyy-MM-dd):bigint> |
 | org.apache.spark.sql.catalyst.expressions.TransformKeys | transform_keys | SELECT transform_keys(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + 1) | struct<transform_keys(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), lambdafunction((namedlambdavariable() + 1), namedlambdavariable(), namedlambdavariable())):map<int,int>> |
 | org.apache.spark.sql.catalyst.expressions.TransformValues | transform_values | SELECT transform_values(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> v + 1) | struct<transform_values(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), lambdafunction((namedlambdavariable() + 1), namedlambdavariable(), namedlambdavariable())):map<int,int>> |
+| org.apache.spark.sql.catalyst.expressions.TrimArray | trim_array | SELECT trim_array(array(1, 2, 3, 4, 5), 2) | struct<trim_array(array(1, 2, 3, 4, 5), 2):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.TruncDate | trunc | SELECT trunc('2019-08-04', 'week') | struct<trunc(2019-08-04, week):date> |
 | org.apache.spark.sql.catalyst.expressions.TruncTimestamp | date_trunc | SELECT date_trunc('YEAR', '2015-03-05T09:32:05.359') | struct<date_trunc(YEAR, 2015-03-05T09:32:05.359):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.Truncate | truncate | SELECT truncate(1234.5678, 2) | struct<truncate(1234.5678, 2):decimal(7,2)> |

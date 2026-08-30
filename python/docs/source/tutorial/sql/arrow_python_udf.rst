@@ -479,21 +479,18 @@ SQL boolean expressions do not short-circuit: in ``WHERE cond AND udf(x)``, the 
 called on all rows regardless of ``cond``. If the function can fail on certain input values
 (e.g., division by zero), handle those cases inside the function itself.
 
-The same holds for a Python UDF used inside a higher-order function's lambda, such as
-``transform(values, lambda x: udf(x))`` or ``array_sort(values, lambda a, b: udf(a, b))``.
-The UDF is not evaluated element by element inside the lambda; it is applied once to the whole
-array outside the lambda, and the lambda reads the precomputed result. As a result the UDF runs
-over *every* element (for ``array_sort`` with a two-argument comparator, over every pair of
-elements), even ones a lambda would otherwise skip, such as the elements after ``exists`` finds a
-match or the branch of a ``when`` that is not taken. If the function can fail on some input,
-handle those cases inside the function itself. This path is enabled by
-``spark.sql.execution.pythonUDF.inHigherOrderFunction.enabled`` (default ``true``); set it to
-``false`` to reject such queries at analysis instead.
-
-This works for a plain Python UDF as well as for a vectorized scalar UDF - a scalar pandas UDF
-(``pandas_udf``), a scalar Arrow UDF (``arrow_udf``), and their iterator variants. A vectorized
-UDF still receives its native batch (a ``pandas.Series`` / ``pyarrow.Array``, or an iterator of
-them) over the flattened array elements, and one output value is produced per input element.
+The same holds for a Python UDF inside a higher-order function's lambda -- a plain, scalar pandas
+(``pandas_udf``), scalar Arrow (``arrow_udf``) or iterator UDF. It is not evaluated element by
+element inside the lambda; it is applied once, outside the lambda, and the lambda reads the
+precomputed result. So the UDF runs over *every* element, even ones a lambda would otherwise skip
+(the elements after ``exists`` matches, or the untaken branch of a ``when``) -- if it can fail on
+some input, handle that inside the function. This covers ``transform``, ``filter``, ``exists``,
+``forall``, ``zip_with``, ``array_sort`` and the map functions, as well as *nested* lambdas
+(``transform(matrix, lambda row: transform(row, lambda x: udf(x)))``, including ones that capture
+the enclosing variable). A UDF inside ``aggregate`` / ``reduce`` is not supported, because the fold
+is sequential and cannot be applied once to the whole array. Toggle with
+``spark.sql.execution.pythonUDF.inHigherOrderFunction.enabled`` (default ``true``; set ``false`` to
+reject at analysis).
 
 The Arrow data type of the returned ``pyarrow.Array`` should match the declared ``returnType``.
 When there is a mismatch, Spark will attempt to convert the returned data to the expected type

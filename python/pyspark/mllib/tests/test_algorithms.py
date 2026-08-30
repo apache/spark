@@ -141,14 +141,14 @@ class ListTests(MLlibTestCase):
         self.assertAlmostEqual((gmm1.weights - gmm2.weights).sum(), 0.0)
 
     def test_classification(self):
-        from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes
+        from pyspark.mllib.classification import LogisticRegressionWithSGD, NaiveBayes, SVMWithSGD
         from pyspark.mllib.tree import (
             DecisionTree,
             DecisionTreeModel,
-            RandomForest,
-            RandomForestModel,
             GradientBoostedTrees,
             GradientBoostedTreesModel,
+            RandomForest,
+            RandomForestModel,
         )
 
         data = [
@@ -232,11 +232,11 @@ class ListTests(MLlibTestCase):
 
     def test_regression(self):
         from pyspark.mllib.regression import (
-            LinearRegressionWithSGD,
             LassoWithSGD,
+            LinearRegressionWithSGD,
             RidgeRegressionWithSGD,
         )
-        from pyspark.mllib.tree import DecisionTree, RandomForest, GradientBoostedTrees
+        from pyspark.mllib.tree import DecisionTree, GradientBoostedTrees, RandomForest
 
         data = [
             LabeledPoint(-1.0, [0, -1]),

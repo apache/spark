@@ -19,9 +19,9 @@ User-defined table function related classes and functions
 """
 
 import warnings
-from typing import List, Type, TYPE_CHECKING, Optional, Union, Any
+from typing import TYPE_CHECKING, Any, List, Optional, Type, Union
 
-from pyspark.util import PythonEvalType
+from pyspark.errors import PySparkAttributeError, PySparkRuntimeError, PySparkTypeError
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import ColumnReference, Expression, NamedArgumentExpression
 from pyspark.sql.connect.plan import (
@@ -31,11 +31,11 @@ from pyspark.sql.connect.plan import (
 from pyspark.sql.connect.table_arg import TableArg
 from pyspark.sql.connect.types import UnparsedDataType
 from pyspark.sql.connect.utils import get_python_ver
-from pyspark.sql.pandas.utils import require_minimum_pyarrow_version, require_minimum_pandas_version
-from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
-from pyspark.sql.udtf import UDTFRegistration as PySparkUDTFRegistration, _validate_udtf_handler
+from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import DataType, StructType
-from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkAttributeError
+from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult, _validate_udtf_handler  # noqa: F401
+from pyspark.sql.udtf import UDTFRegistration as PySparkUDTFRegistration
+from pyspark.util import PythonEvalType
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
@@ -196,8 +196,8 @@ class UserDefinedTableFunction:
         )
 
     def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> "DataFrame":
-        from pyspark.sql.connect.session import SparkSession
         from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.connect.session import SparkSession
 
         session = SparkSession.active()
 

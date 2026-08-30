@@ -28,6 +28,7 @@ import scala.io.Source
 import scala.jdk.CollectionConverters._
 
 import kafka.log.LogManager
+import kafka.security.authorizer.AclAuthorizer
 import kafka.server.{HostedPartition, KafkaConfig, KafkaServer}
 import kafka.server.checkpoints.OffsetCheckpointFile
 import kafka.zk.KafkaZkClient
@@ -37,10 +38,14 @@ import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.admin._
 import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.acl.{AccessControlEntry, AclBinding, AclOperation, AclPermissionType}
 import org.apache.kafka.common.config.SaslConfigs
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.requests.FetchRequest
+import org.apache.kafka.common.resource.{PatternType, Resource, ResourcePattern, ResourceType}
+import org.apache.kafka.common.security.auth.KafkaPrincipal
 import org.apache.kafka.common.security.auth.SecurityProtocol.{PLAINTEXT, SASL_PLAINTEXT}
+import org.apache.kafka.common.security.token.delegation.TokenInformation
 import org.apache.kafka.common.serialization.StringSerializer
 import org.apache.kafka.common.utils.Time
 import org.apache.zookeeper.client.ZKClientConfig
@@ -95,7 +100,10 @@ class KafkaTestUtils(
   private var brokerConf: KafkaConfig = _
 
   private val brokerServiceName = "kafka"
-  private val clientUser = s"client/$localCanonicalHostName"
+  private val brokerUser = s"$brokerServiceName/$localCanonicalHostName"
+  private var brokerKeytabFile: File = _
+  private val clientShortName = "client"
+  private val clientUser = s"$clientShortName/$localCanonicalHostName"
   private var clientKeytabFile: File = _
 
   // Kafka broker server
@@ -136,6 +144,16 @@ class KafkaTestUtils(
     assert(kdcReady, "KDC should be set up beforehand")
     clientKeytabFile.getAbsolutePath()
   }
+
+  /** The Kafka principal for `user`, i.e. `User:<user>`. */
+  def kafkaPrincipal(user: String): KafkaPrincipal =
+    new KafkaPrincipal(KafkaPrincipal.USER_TYPE, user)
+
+  /**
+   * The Kafka principal the client keytab authenticates as. The broker derives it from
+   * `client/<host>@<realm>` with the default `sasl.kerberos.principal.to.local.rules`.
+   */
+  def clientKafkaPrincipal: String = kafkaPrincipal(clientShortName).toString
 
   private def setUpMiniKdc(): Unit = {
     val kdcDir = Utils.createTempDir()
@@ -197,10 +215,9 @@ class KafkaTestUtils(
     kdc.createPrincipal(zkClientKeytabFile, zkClientUser)
     logDebug(s"Created keytab file: ${zkClientKeytabFile.getAbsolutePath()}")
 
-    val kafkaServerUser = s"kafka/$localCanonicalHostName"
-    val kafkaServerKeytabFile = new File(baseDir, "kafka.keytab")
-    kdc.createPrincipal(kafkaServerKeytabFile, kafkaServerUser)
-    logDebug(s"Created keytab file: ${kafkaServerKeytabFile.getAbsolutePath()}")
+    brokerKeytabFile = new File(baseDir, "kafka.keytab")
+    kdc.createPrincipal(brokerKeytabFile, brokerUser)
+    logDebug(s"Created keytab file: ${brokerKeytabFile.getAbsolutePath()}")
 
     clientKeytabFile = new File(baseDir, "client.keytab")
     kdc.createPrincipal(clientKeytabFile, clientUser)
@@ -235,8 +252,8 @@ class KafkaTestUtils(
       |  serviceName="$brokerServiceName"
       |  useKeyTab=true
       |  storeKey=true
-      |  keyTab="${kafkaServerKeytabFile.getAbsolutePath()}"
-      |  principal="$kafkaServerUser@$realm";
+      |  keyTab="${brokerKeytabFile.getAbsolutePath()}"
+      |  principal="$brokerUser@$realm";
       |};
       """.stripMargin.trim
     Files.writeString(file.toPath, content)
@@ -276,8 +293,12 @@ class KafkaTestUtils(
     brokerReady = true
   }
 
-  /** setup the whole embedded servers, including Zookeeper and Kafka brokers */
-  def setup(): Unit = {
+  /**
+   * Setup the whole embedded servers, including Zookeeper and Kafka brokers. In secure mode,
+   * `extraAcls` are created together with the client principal's allow-all ACLs.
+   */
+  def setup(extraAcls: Seq[AclBinding] = Nil): Unit = {
+    assert(secure || extraAcls.isEmpty, "ACLs require the cluster to be set up in secure mode")
     // Set up a KafkaTestUtils leak detector so that we can see where the leak KafkaTestUtils is
     // created.
     val exception = new SparkException("It was created at: ")
@@ -299,7 +320,44 @@ class KafkaTestUtils(
     eventually(timeout(1.minute)) {
       assert(zkClient.getAllBrokersInCluster.nonEmpty, "Broker was not up in 60 seconds")
     }
+    if (secure) {
+      createAcls(allowAllAcls(clientKafkaPrincipal) ++ extraAcls)
+    }
   }
+
+  /** All the ACLs granting `principal` unrestricted access to the cluster. */
+  def allowAllAcls(principal: String): Seq[AclBinding] = {
+    val entry = new AccessControlEntry(principal, "*", AclOperation.ALL, AclPermissionType.ALLOW)
+    def wildcard(resourceType: ResourceType): ResourcePattern =
+      new ResourcePattern(resourceType, ResourcePattern.WILDCARD_RESOURCE, PatternType.LITERAL)
+    Seq(
+      wildcard(ResourceType.TOPIC),
+      wildcard(ResourceType.GROUP),
+      wildcard(ResourceType.TRANSACTIONAL_ID),
+      new ResourcePattern(ResourceType.CLUSTER, Resource.CLUSTER_NAME, PatternType.LITERAL)
+    ).map(new AclBinding(_, entry))
+  }
+
+  /**
+   * Add ACLs as a super user. The single zk-mode broker updates its authorizer cache before
+   * completing the request, so the ACLs are enforced once this returns.
+   */
+  def createAcls(bindings: Seq[AclBinding]): Unit = {
+    assert(secure, "ACLs are only enforced when the cluster is set up in secure mode")
+    val props = new Properties()
+    props.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, brokerAddress)
+    addSaslClientProps(props, brokerKeytabFile, s"$brokerUser@${kdc.getRealm()}")
+    val superuserAdminClient = AdminClient.create(props)
+    try {
+      superuserAdminClient.createAcls(bindings.asJava).all().get()
+    } finally {
+      superuserAdminClient.close()
+    }
+  }
+
+  /** All delegation tokens the broker knows, as seen by the client principal. */
+  def describeDelegationTokens(): Seq[TokenInformation] =
+    adminClient.describeDelegationToken().delegationTokens().get().asScala.toSeq.map(_.tokenInfo())
 
   /** Teardown the whole servers, including Kafka broker and Zookeeper */
   def teardown(): Unit = {
@@ -501,6 +559,13 @@ class KafkaTestUtils(
       props.put("inter.broker.listener.name", "SASL_PLAINTEXT")
       props.put("delegation.token.master.key", UUID.randomUUID().toString)
       props.put("sasl.enabled.mechanisms", "GSSAPI,SCRAM-SHA-512")
+      // Enforce ACLs so that delegation token authorization can be tested. The broker
+      // authenticates to itself as `kafka/<host>@<realm>`, which the default
+      // principal-to-local rules map to `User:kafka`, and it must stay unrestricted.
+      // `setup` grants the client principal full access, so tests which do not care about
+      // ACLs are unaffected.
+      props.put("authorizer.class.name", classOf[AclAuthorizer].getName)
+      props.put("super.users", kafkaPrincipal(brokerServiceName).toString)
     }
 
     props.putAll(withBrokerProps.asJava)
@@ -542,11 +607,14 @@ class KafkaTestUtils(
 
   private def setAuthenticationConfigIfNeeded(props: Properties): Unit = {
     if (secure) {
-      val jaasParams = KafkaTokenUtil.getKeytabJaasParams(
-        clientKeytabFile.getAbsolutePath, clientPrincipal, brokerServiceName)
-      props.put(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
-      props.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, SASL_PLAINTEXT.name)
+      addSaslClientProps(props, clientKeytabFile, clientPrincipal)
     }
+  }
+
+  private def addSaslClientProps(props: Properties, keytabFile: File, principal: String): Unit = {
+    props.put(SaslConfigs.SASL_JAAS_CONFIG, KafkaTokenUtil.getKeytabJaasParams(
+      keytabFile.getAbsolutePath, principal, brokerServiceName))
+    props.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, SASL_PLAINTEXT.name)
   }
 
   /** Verify topic is deleted in all places, e.g, brokers, zookeeper. */

@@ -1723,7 +1723,7 @@ package object config {
       .doc("Whether to enable OIDC credential propagation. When enabled, the driver reads an " +
         "identity token from a file, exchanges it for short-lived service credentials via " +
         "CredentialProvider implementations, and propagates those credentials to executors.")
-      .version("4.3.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
@@ -1733,7 +1733,7 @@ package object config {
       .doc("Path to the OIDC identity token file on the driver. Required when " +
         "spark.security.oidc.enabled is true. The file should contain a JWT token " +
         "(e.g., a Kubernetes projected service account token).")
-      .version("4.3.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf
       .createOptional
@@ -1742,7 +1742,7 @@ package object config {
     ConfigBuilder("spark.security.oidc.renewal.safetyMargin")
       .doc("How long before credential expiry to trigger renewal. Credentials are refreshed " +
         "at min(identity token expiry, service credential expiry) minus this margin.")
-      .version("4.3.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(_ > 0, "The safety margin must be a positive time value.")
@@ -1752,7 +1752,7 @@ package object config {
     ConfigBuilder("spark.security.oidc.renewal.minInterval")
       .doc("Minimum interval between credential renewal attempts. This prevents tight renewal " +
         "loops when credentials have very short TTLs or when failures cause rapid retries.")
-      .version("4.3.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(_ > 0, "The minimum renewal interval must be a positive time value.")
@@ -1947,6 +1947,18 @@ package object config {
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .longConf
       .createWithDefault(50)
+
+  private[spark] val STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT_MS =
+    ConfigBuilder("spark.shuffle.streaming.writerConnectionTimeout")
+      .doc("Maximum time a streaming shuffle writer waits for each reader to connect. " +
+        "Set to -1 to wait indefinitely.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(
+        timeoutMs => timeoutMs == -1 || timeoutMs > 0,
+        "The reader connection timeout must be positive or -1 to wait indefinitely.")
+      .createWithDefaultString("1h")
 
   private[spark] val STREAMING_SHUFFLE_WRITER_MAX_MEMORY =
     ConfigBuilder("spark.shuffle.streaming.writerMaxMemory")

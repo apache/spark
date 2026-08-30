@@ -71,15 +71,15 @@ import decimal
 import unittest
 
 from pyspark.loose_version import LooseVersion
-from pyspark.testing.utils import (
-    have_pyarrow,
-    have_pandas,
-    have_numpy,
-    pyarrow_requirement_message,
-    pandas_requirement_message,
-    numpy_requirement_message,
-)
 from pyspark.testing.goldenutils import GoldenFileTestMixin
+from pyspark.testing.utils import (
+    have_numpy,
+    have_pandas,
+    have_pyarrow,
+    numpy_requirement_message,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 
 if have_pandas:
     import pandas as pd
@@ -120,9 +120,10 @@ class _PyArrowFromPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
         as a golden-file cell, returning ``ERR@<ExceptionClass>`` if the conversion raises.
         """
         try:
-            return self.repr_from_pandas_result(pa.Array.from_pandas(series, **from_pandas_kwargs))
+            result = pa.Array.from_pandas(series, **from_pandas_kwargs)
         except Exception as e:
             return f"ERR@{type(e).__name__}"
+        return self.repr_from_pandas_result(result)
 
     def _numpy_backed_sources(self):
         """
@@ -186,6 +187,14 @@ class _PyArrowFromPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
         sources["struct:nullable"] = pd.Series([{"a": 1, "b": "x"}, None])
         sources["struct<struct>:standard"] = pd.Series([{"a": {"b": 1}}])
         sources["struct<list<int64>>:standard"] = pd.Series([{"a": [1, 2]}])
+
+        # These feed the nested type tests (non_default): a child value that overflows a
+        # narrower element type, and homogeneous-value dicts, which infer as ``struct`` but
+        # convert to ``map`` when the requested type asks for one.
+        sources["list<int64>:overflow"] = pd.Series([[300, 2], [3]])
+        sources["struct:overflow"] = pd.Series([{"a": 300, "b": "x"}])
+        sources["struct<int64>:standard"] = pd.Series([{"a": 1, "b": 2}])
+        sources["struct<int64>:overflow"] = pd.Series([{"a": 300, "b": 2}])
 
         # =====================================================================
         # Temporal types
@@ -296,6 +305,12 @@ class _PyArrowFromPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
         sources["string[pyarrow]:standard"] = pd.Series(["hello", "world"], dtype="string[pyarrow]")
         sources["string[pyarrow]:nullable"] = pd.Series(["hello", None], dtype="string[pyarrow]")
         sources["string[pyarrow]:empty"] = pd.Series([], dtype="string[pyarrow]")
+        # Binary is not auto-promoted to large_binary the way string is, so large_binary
+        # has to be requested explicitly.  This is the binary counterpart of the string
+        # rows, and lets the type tests exercise the binary half of SPARK-46776.
+        sources["large_binary[pyarrow]:standard"] = pd.Series(
+            [b"hello", b"world"], dtype="large_binary[pyarrow]"
+        )
         sources["timestamp[us][pyarrow]:standard"] = pd.Series(
             [datetime.datetime(2024, 1, 1, 12, 0, 0)], dtype="timestamp[us][pyarrow]"
         )

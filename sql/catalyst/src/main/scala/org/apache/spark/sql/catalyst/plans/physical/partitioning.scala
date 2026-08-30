@@ -446,18 +446,25 @@ case class CoalescedNullAwareHashPartitioning(
  *    because data sources produce them that way and `GroupPartitionsExec` sorts while grouping.
  *    Sorted order is not a hard requirement, but it is a useful property: when both sides of a
  *    storage-partitioned join report sorted keys, `EnsureRequirements` can often match them
- *    without inserting an additional `GroupPartitionsExec`. After a narrowing projection through
- *    `PartitioningPreservingUnaryExecNode`, the projected keys may no longer be sorted; this is
- *    acceptable because `EnsureRequirements` can always reconcile both sides via
- *    `GroupPartitionsExec` with `expectedPartitionKeys`.
+ *    without inserting an additional `GroupPartitionsExec`. The keys may no longer be sorted after
+ *    a narrowing projection through `PartitioningPreservingUnaryExecNode` or after `UnionExec`
+ *    concatenates its children's keys; `EnsureRequirements` reconciles both sides either via
+ *    `GroupPartitionsExec` with `expectedPartitionKeys`, or -- when the chosen shuffle spec is a
+ *    `KeyedShuffleSpec` and the other child's spec is not compatible with it -- by shuffling that
+ *    other child onto these keys in the order given here.
  *
  * 2. '''In KeyedShuffleSpec''': When used within `KeyedShuffleSpec`, the `partitionKeys` may not
- *    be in sorted order. `EnsureRequirements` handles this by building a common ordered set of
- *    keys and pushing them down to `GroupPartitionsExec` on both sides.
+ *    be in sorted order, and consumers must not assume otherwise.
  *
  * == Partition Keys ==
  * - `partitionKeys`: The partition keys, one per partition. May contain duplicates initially
  *   (ungrouped state), but becomes unique after `GroupPartitionsExec` applies grouping.
+ *
+ * `partitionKeys` is a physical layout indexed by partition id, not a set: partition `i` holds key
+ * `partitionKeys(i)`. A consumer must therefore treat the given order as authoritative rather than
+ * re-derive one. In particular `ShuffleExchangeExec` builds its `KeyGroupedPartitioner` from this
+ * order, so that a side shuffled onto a `KeyedPartitioning` lands in the same partitions as the
+ * side that declared it.
  *
  * == Grouping State ==
  * A KeyedPartitioning can be in two states:
@@ -471,15 +478,23 @@ case class CoalescedNullAwareHashPartitioning(
  *   unique partition keys, or (2) `GroupPartitionsExec` coalesces partitions with duplicate keys.
  *
  * == Distribution Satisfaction and Grouping ==
- * Besides the default `satisfies()`, `KeyedPartitioning` exposes two additional methods used by
- * `EnsureRequirements` to handle grouped and non-grouped KPs separately:
+ * Besides the default `satisfies()`, `KeyedPartitioning` exposes two additional methods:
  *
- * - `nonGroupedSatisfies()`: called on non-grouped KPs to check as-is satisfaction (without
- *   inserting `GroupPartitionsExec`).
- * - `groupedSatisfies()`: called on non-grouped KPs to check whether inserting
- *   `GroupPartitionsExec` would satisfy the distribution. When it returns true, the distribution
- *   is NOT yet satisfied -- `EnsureRequirements` will insert `GroupPartitionsExec` to coalesce
- *   duplicate partition keys.
+ * - `nonGroupedSatisfies()`: as-is satisfaction (without inserting `GroupPartitionsExec`). It is
+ *   the default `Partitioning` implementation, so for a `ClusteredDistribution` it is always false.
+ * - `groupedSatisfies()`: whether the distribution would be satisfied once the duplicate partition
+ *   keys are coalesced. It has two callers, and they ask different questions:
+ *   - `EnsureRequirements` calls it on non-grouped KPs to ask whether inserting a
+ *     `GroupPartitionsExec` would help. When it returns true, the distribution is NOT yet
+ *     satisfied -- `EnsureRequirements` will insert one to coalesce the duplicate keys.
+ *   - `satisfies0()` calls it on grouped KPs. Since `nonGroupedSatisfies()` is false for a
+ *     `ClusteredDistribution`, this is the only route by which a grouped KP satisfies one, and no
+ *     grouping is involved: the keys are already unique.
+ *
+ * That second caller is why the narrowing guard in `groupedSatisfies()` is a conjunction with
+ * `!isGrouped`. A narrowed KP whose projected keys stayed distinct is grouped, and dropping the
+ * `!isGrouped` term would stop it from satisfying a `ClusteredDistribution` and cost it a shuffle,
+ * even though grouping it would merge nothing.
  *
  * For `OrderedDistribution`, `GroupPartitionsExec` must also sort the partition keys to meet the
  * ordering requirement.
@@ -514,11 +529,15 @@ case class CoalescedNullAwareHashPartitioning(
  * @param isGrouped Whether partition keys are unique (no duplicates). Computed on first
  *                  creation, then preserved through copy operations to avoid recomputation.
  * @param isNarrowed Whether this partitioning was derived from a finer-grained one by dropping key
- *                   positions (e.g. via `PartitioningPreservingUnaryExecNode`). When true,
- *                   `GroupPartitionsExec` will merge partitions that shared distinct keys in the
- *                   original partitioning, carrying the same skew risk as
- *                   `allowKeysSubsetOfPartitionKeys`. Such a partitioning will not satisfy
- *                   `ClusteredDistribution` unless that config is enabled.
+ *                   positions (e.g. via `PartitioningPreservingUnaryExecNode`). When true and the
+ *                   keys are no longer unique, `GroupPartitionsExec` may merge partitions that held
+ *                   distinct keys in the original partitioning, carrying the same skew risk as
+ *                   `allowKeysSubsetOfPartitionKeys`. "May", because the condition is a proxy: the
+ *                   duplicate keys can also come from a source that reports several splits per
+ *                   partition key, in which case grouping merges only same-key partitions. Such a
+ *                   partitioning can only satisfy `ClusteredDistribution` by being grouped, and
+ *                   `groupedSatisfies` refuses that unless the config is enabled, regardless of
+ *                   `requireAllClusterKeysForDistribution`.
  */
 case class KeyedPartitioning(
     expressions: Seq[Expression],
@@ -538,7 +557,7 @@ case class KeyedPartitioning(
   @transient lazy val expressionDataTypes: Seq[DataType] = expressions.map(_.dataType)
 
   @transient lazy val keyRowOrdering =
-    RowOrdering.createNaturalAscendingOrdering(expressionDataTypes)
+    KeyedPartitioning.groupedKeyRowOrdering(expressionDataTypes)
 
   @transient lazy val keyOrdering = keyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
 
@@ -572,7 +591,24 @@ case class KeyedPartitioning(
   def groupedSatisfies(required: Distribution): Boolean = {
     required match {
       case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
-        if (requireAllClusterKeys) {
+        // Both branches below are gated by the same switch, so read it once.
+        val allowKeysSubsetOfPartitionKeys =
+          SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys
+
+        if (isNarrowed && !isGrouped && !allowKeysSubsetOfPartitionKeys) {
+          // A narrowed, non-grouped partitioning carries the same skew risk as using a subset of
+          // partition keys for a join: GroupPartitionsExec may merge partitions that held distinct
+          // keys in the original finer-grained partitioning. Require the same config to opt in.
+          //
+          // Checked before the `requireAllClusterKeys` branch, because the risk is independent of
+          // which key sets count as matching (SPARK-58974).
+          //
+          // The `!isGrouped` term is required, not redundant: a narrowing projection whose
+          // projected keys stayed distinct is grouped, and `satisfies0` routes such a partitioning
+          // through here (`nonGroupedSatisfies` is false for a `ClusteredDistribution`). Grouping
+          // it would merge nothing, so refusing it would only cost a shuffle.
+          false
+        } else if (requireAllClusterKeys) {
           // Checks whether this partitioning is partitioned on exactly same clustering keys of
           // `ClusteredDistribution`.
           c.areAllClusterKeysMatched(expressions)
@@ -580,17 +616,11 @@ case class KeyedPartitioning(
           // We'll need to find leaf attributes from the partition expressions first.
           lazy val attributes = AttributeSet.fromAttributeSets(expressions.map(_.references))
 
-          if (SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys) {
+          if (allowKeysSubsetOfPartitionKeys) {
             // check that operation keys (required clustering keys)
             // overlap with partition keys (KeyedPartitioning attributes)
             requiredClustering.exists(x => attributes.exists(_.semanticEquals(x))) &&
               expressions.forall(_.references.size == 1)
-          } else if (isNarrowed && !isGrouped) {
-            // A narrowed, non-grouped partitioning carries the same skew risk as using a subset of
-            // partition keys for a join: GroupPartitionsExec will merge partitions that held
-            // distinct keys in the original finer-grained partitioning. Require the same config to
-            // opt in.
-            false
           } else {
             attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
           }
@@ -613,9 +643,12 @@ case class KeyedPartitioning(
       val joinKeyPositions = result.keyPositions.map(_.nonEmpty).zipWithIndex.filter(_._1).map(_._2)
       val projectedExpressions = joinKeyPositions.map(expressions)
       val projectedKeys = projectKeys(joinKeyPositions)._2
-      val distinctProjectedKeys = projectedKeys.distinct
+      // Sort the distinct projected keys the same way `GroupPartitionsExec` does (both sort with
+      // `KeyedPartitioning.groupedKeyRowOrdering`). Otherwise, when only the keyed side is grouped
+      // and the other side is re-shuffled using this spec, the two `KeyedPartitioning`s carry the
+      // same keys in a different order and `PartitioningCollection.fromPartitionings` rejects them.
       val projectedPartitioning =
-        KeyedPartitioning(projectedExpressions, distinctProjectedKeys, isGrouped = true)
+        new KeyedPartitioning(projectedExpressions, projectedKeys, isGrouped = false).toGrouped
       result.copy(partitioning = projectedPartitioning, joinKeyPositions = Some(joinKeyPositions))
     } else {
       result
@@ -657,6 +690,24 @@ object KeyedPartitioning {
       case _ => false
     }
   }
+
+  /**
+   * The ascending ordering in which grouped partition keys are laid out, for keys of the given
+   * data types.
+   *
+   * This is a shared contract, not a convenience: with `allowKeysSubsetOfPartitionKeys`,
+   * `createShuffleSpec` declares the keyed side's projected keys in this order (via `toGrouped`),
+   * and the other side of the join may be shuffled onto exactly those keys, while the
+   * `GroupPartitionsExec` inserted on the keyed side independently re-groups its partitions with
+   * the same key positions and sorts them with this same ordering
+   * (`GroupPartitionsExec.groupAndSortByKeys`). If the two sorts diverged, inner joins would fail
+   * loudly at planning time -- `ShuffledJoin` wraps both sides' partitionings into a
+   * `PartitioningCollection`, whose invariant requires equal partition keys -- but join types that
+   * expose only one side's partitioning (e.g. LEFT OUTER) run nothing that compares the two
+   * orders, and silently return wrong results.
+   */
+  def groupedKeyRowOrdering(dataTypes: Seq[DataType]): BaseOrdering =
+    RowOrdering.createNaturalAscendingOrdering(dataTypes)
 
   /**
    * Projects a sequence of partition keys by selecting only the specified positions.
@@ -1374,6 +1425,13 @@ case class KeyedShuffleSpec(
   override def canCreatePartitioning: Boolean =
     SQLConf.get.v2BucketingShuffleEnabled &&
       !SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
+      // Shuffling another child onto these partition keys assigns each key a single partition, so
+      // an ungrouped partitioning cannot be reproduced: its duplicate keys live in more than one
+      // partition. This is the local gate. Such a spec is not reachable today for a non-local
+      // reason -- `EnsureRequirements` wraps a child whose `KeyedPartitioning` does not satisfy the
+      // distribution in a `GroupPartitionsExec` before it builds any spec -- so do not read this
+      // clause as redundant.
+      partitioning.isGrouped &&
       partitioning.expressions.forall { e =>
         e.isInstanceOf[AttributeReference] || e.isInstanceOf[TransformExpression]
       }

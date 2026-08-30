@@ -939,30 +939,22 @@ class AstBuilder extends DataTypeAstBuilder
       query: LogicalPlan,
       queryAliasCtx: TableAliasContext): LogicalPlan = withOrigin(ctx) {
     ctx match {
-      // For all `InsertIntoStatement`-producing branches, build the `table` slot directly via
-      // `buildWriteTableSlot` so that any `PlanWithUnresolvedIdentifier` lives *inside* the
-      // command's identifier slot. This preserves the `CTEInChildren` shape and lets
-      // `CTESubstitution` place `WithCTE` on the command's children correctly (SPARK-46625).
       case table: InsertIntoTableContext =>
         val insertParams = visitInsertIntoTable(table)
-        val privileges = Set(TableWritePrivilege.INSERT)
-        createInsertIntoStatement(
+        createUnresolvedInsert(
           insertParams = insertParams,
-          tableSlot = buildWriteTableSlot(
-            insertParams.relationCtx, insertParams.options, privileges),
           query = query,
           overwrite = false,
-          withSchemaEvolution = table.EVOLUTION() != null)
+          withSchemaEvolution = table.EVOLUTION() != null,
+          writePrivileges = Set(TableWritePrivilege.INSERT))
       case table: InsertOverwriteTableContext =>
         val insertParams = visitInsertOverwriteTable(table)
-        val privileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
-        createInsertIntoStatement(
+        createUnresolvedInsert(
           insertParams = insertParams,
-          tableSlot = buildWriteTableSlot(
-            insertParams.relationCtx, insertParams.options, privileges),
           query = query,
           overwrite = true,
-          withSchemaEvolution = table.EVOLUTION() != null)
+          withSchemaEvolution = table.EVOLUTION() != null,
+          writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
       case ctx: InsertIntoReplaceBooleanCondContext =>
         // Although REPLACE WHERE and REPLACE ON share a unified grammar rule, they have
         // different SQL semantics:
@@ -973,17 +965,14 @@ class AstBuilder extends DataTypeAstBuilder
         val isInsertReplaceWhere = ctx.WHERE() != null
         if (isInsertReplaceWhere) {
           val insertParams = visitInsertIntoReplaceWhere(ctx)
-          val privileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
-          createInsertIntoStatement(
+          createUnresolvedInsert(
             insertParams = insertParams,
-            tableSlot = buildWriteTableSlot(
-              insertParams.relationCtx, insertParams.options, privileges),
             query = query,
             overwrite = true,
-            withSchemaEvolution = ctx.EVOLUTION() != null)
+            withSchemaEvolution = ctx.EVOLUTION() != null,
+            writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
         } else {
           val insertParams = visitInsertIntoReplaceOn(ctx)
-          val privileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
           val finalQuery = {
             val queryAliasOpt =
               getTableAliasWithoutColumnAlias(queryAliasCtx, "INSERT REPLACE ON")
@@ -993,24 +982,21 @@ class AstBuilder extends DataTypeAstBuilder
               }
             }.getOrElse(query)
           }
-          createInsertIntoStatement(
+          createUnresolvedInsert(
             insertParams = insertParams,
-            tableSlot = buildWriteTableSlot(
-              insertParams.relationCtx, insertParams.options, privileges),
             query = finalQuery,
             overwrite = true,
-            withSchemaEvolution = ctx.EVOLUTION() != null)
+            withSchemaEvolution = ctx.EVOLUTION() != null,
+            writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
         }
       case ctx: InsertIntoReplaceUsingContext =>
         val insertParams = visitInsertIntoReplaceUsing(ctx)
-        val privileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
-        createInsertIntoStatement(
+        createUnresolvedInsert(
           insertParams = insertParams,
-          tableSlot = buildWriteTableSlot(
-            insertParams.relationCtx, insertParams.options, privileges),
           query = query,
           overwrite = true,
-          withSchemaEvolution = ctx.EVOLUTION() != null)
+          withSchemaEvolution = ctx.EVOLUTION() != null,
+          writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
       case dir: InsertOverwriteDirContext =>
         val (isLocal, storage, provider) = visitInsertOverwriteDir(dir)
         InsertIntoDir(isLocal, storage, provider, query, overwrite = true)
@@ -1170,17 +1156,16 @@ class AstBuilder extends DataTypeAstBuilder
       replaceCriteriaOpt = replaceCriteriaOpt)
   }
 
-  /**
-   * Creates an [[InsertIntoStatement]] from [[InsertTableParams]].
-   */
-  private def createInsertIntoStatement(
+  /** Creates an unresolved INSERT plan from [[InsertTableParams]]. */
+  private def createUnresolvedInsert(
       insertParams: InsertTableParams,
-      tableSlot: LogicalPlan,
       query: LogicalPlan,
       overwrite: Boolean,
-      withSchemaEvolution: Boolean): InsertIntoStatement = {
-    InsertIntoStatement(
-      table = tableSlot,
+      withSchemaEvolution: Boolean,
+      writePrivileges: Set[TableWritePrivilege]): UnresolvedInsert = {
+    UnresolvedInsert(
+      table = buildWriteTableSlot(
+        insertParams.relationCtx, insertParams.options, writePrivileges),
       partitionSpec = insertParams.partitionSpec,
       userSpecifiedCols = insertParams.userSpecifiedCols,
       query = query,
@@ -1192,24 +1177,18 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Build the `table` slot of a write command. If the identifier reference is a constant string,
-   * returns an [[UnresolvedRelation]] directly; otherwise returns a
-   * [[PlanWithUnresolvedIdentifier]] that materializes into an [[UnresolvedRelation]] once the
-   * identifier expression is resolved. Both branches produce a [[NamedRelation]], which occupies
-   * the `InsertIntoStatement.table` slot (a general `LogicalPlan` slot, since `NamedRelation`
-   * extends `LogicalPlan`).
-   *
-   * Placing the placeholder in the identifier slot (rather than wrapping the entire write command)
-   * preserves the `CTEInChildren` shape at parse time, so `CTESubstitution` places `WithCTE` on the
-   * command's children correctly. See SPARK-46625.
+   * Build the target of an INSERT. An `IDENTIFIER` expression receives normal analyzer traversal.
+   * A resolved identifier is kept in `UnresolvedInsertTarget` rather than `UnresolvedRelation` so
+   * CTE substitution cannot interpret the target as a source.
    */
   private def buildWriteTableSlot(
       ctx: IdentifierReferenceContext,
       optionsClause: Option[OptionsClauseContext],
-      writePrivileges: Set[TableWritePrivilege]): NamedRelation = {
-    withIdentClause(ctx, parts =>
-      createUnresolvedRelation(ctx, parts, optionsClause, writePrivileges, isStreaming = false))
-      .asInstanceOf[NamedRelation]
+      writePrivileges: Set[TableWritePrivilege]): LogicalPlan = {
+    val options = withOrigin(ctx) { resolveOptions(optionsClause) }
+    withIdentClause(ctx, parts => withOrigin(ctx) {
+      UnresolvedInsertTarget(parts, options, writePrivileges)
+    })
   }
 
   /**
@@ -4198,6 +4177,74 @@ class AstBuilder extends DataTypeAstBuilder
     val (onError, errorDefault) = Option(ctx.errorBehavior)
       .map(buildJsonValueBehavior).getOrElse((JsonValueBehavior.Null, None))
     JsonValue(jsonExpr, path, returning, onEmpty, onError, emptyDefault, errorDefault)
+  }
+
+  /**
+   * Create a [[JsonExists]] expression for the SQL:2016 `JSON_EXISTS` predicate. The `ON ERROR`
+   * clause defaults to `FALSE` when absent, per the standard.
+   */
+  override def visitJsonExists(ctx: JsonExistsContext): Expression = withOrigin(ctx) {
+    val jsonExpr = expression(ctx.jsonExpr)
+    val path = string(visitStringLit(ctx.path))
+    val onError = Option(ctx.errorBehavior).map { b =>
+      if (b.TRUE != null) JsonExistsBehavior.True
+      else if (b.FALSE != null) JsonExistsBehavior.False
+      else if (b.UNKNOWN != null) JsonExistsBehavior.Unknown
+      else JsonExistsBehavior.Error
+    }.getOrElse(JsonExistsBehavior.False)
+    JsonExists(jsonExpr, path, onError)
+  }
+
+  /**
+   * Resolve a `jsonQueryBehavior` clause (`NULL` / `ERROR` / `EMPTY ARRAY` / `EMPTY OBJECT`) into a
+   * [[JsonQueryBehavior]].
+   */
+  private def buildJsonQueryBehavior(ctx: JsonQueryBehaviorContext): JsonQueryBehavior = ctx match {
+    case _: JsonQueryBehaviorNullContext => JsonQueryBehavior.Null
+    case _: JsonQueryBehaviorErrorContext => JsonQueryBehavior.Error
+    case _: JsonQueryBehaviorEmptyArrayContext => JsonQueryBehavior.EmptyArray
+    case _: JsonQueryBehaviorEmptyObjectContext => JsonQueryBehavior.EmptyObject
+  }
+
+  /**
+   * Create a [[JsonQuery]] expression for the SQL:2016 `JSON_QUERY` function. The array wrapper
+   * defaults to `WITHOUT ARRAY WRAPPER`, quotes to `KEEP QUOTES`, and both `ON EMPTY` / `ON ERROR`
+   * to `NULL`, per the standard. `OMIT QUOTES` cannot be combined with an array wrapper.
+   */
+  override def visitJsonQuery(ctx: JsonQueryContext): Expression = withOrigin(ctx) {
+    val jsonExpr = expression(ctx.jsonExpr)
+    val path = string(visitStringLit(ctx.path))
+    // Default RETURNING type is STRING; the result is JSON text. A CHAR/VARCHAR RETURNING is
+    // normalized to STRING truly unconditionally: JSON_QUERY returns the fragment verbatim without
+    // a length-enforcing cast, so the result type must never advertise a CHAR/VARCHAR length it
+    // cannot enforce. The CharVarcharUtils helpers cannot be used here: they honor
+    // spark.sql.preserveCharVarcharTypeInfo and would leave a VARCHAR(n) length in the output type
+    // when that flag is set. A non-string RETURNING is left intact for checkInputDataTypes to fail.
+    val returning = Option(ctx.returning).map(typedVisit[DataType]).map {
+      case c: CharType => c.toStringType
+      case v: VarcharType => v.toStringType
+      case other => other
+    }.getOrElse(StringType)
+    val wrapper = Option(ctx.wrapper).map {
+      case _: JsonQueryWrapperWithoutContext => JsonQueryWrapper.Without
+      case w: JsonQueryWrapperWithContext =>
+        if (w.wrapperType != null && w.wrapperType.getType == SqlBaseParser.CONDITIONAL) {
+          JsonQueryWrapper.Conditional
+        } else {
+          JsonQueryWrapper.Unconditional
+        }
+    }.getOrElse(JsonQueryWrapper.Without)
+    val quotes = Option(ctx.quotes).map {
+      case _: JsonQueryQuotesKeepContext => JsonQueryQuotes.Keep
+      case _: JsonQueryQuotesOmitContext => JsonQueryQuotes.Omit
+    }.getOrElse(JsonQueryQuotes.Keep)
+    // The OMIT QUOTES + array-wrapper invariant is enforced in JsonQuery.checkInputDataTypes so it
+    // holds for directly-constructed expressions too, not only this parser path.
+    val onEmpty =
+      Option(ctx.emptyBehavior).map(buildJsonQueryBehavior).getOrElse(JsonQueryBehavior.Null)
+    val onError =
+      Option(ctx.errorBehavior).map(buildJsonQueryBehavior).getOrElse(JsonQueryBehavior.Null)
+    JsonQuery(jsonExpr, path, returning, wrapper, quotes, onEmpty, onError)
   }
 
   /**

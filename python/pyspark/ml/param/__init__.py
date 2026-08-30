@@ -15,25 +15,25 @@
 # limitations under the License.
 #
 import array
-from abc import ABCMeta
 import copy
+from abc import ABCMeta
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Generic,
     List,
     Optional,
-    overload,
     TypeVar,
     Union,
-    TYPE_CHECKING,
+    overload,
 )
 
 import numpy as np
 
-from pyspark.util import is_remote_only
-from pyspark.ml.linalg import DenseVector, Vector, Matrix
+from pyspark.ml.linalg import DenseVector, Matrix, Vector
 from pyspark.ml.util import Identifiable
+from pyspark.util import is_remote_only
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap

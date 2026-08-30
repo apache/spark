@@ -24,8 +24,8 @@ import unittest
 from pyspark import pipelines as dp
 from pyspark.testing.connectutils import (
     ReusedConnectTestCase,
-    should_test_connect,
     connect_requirement_message,
+    should_test_connect,
 )
 
 if should_test_connect:
@@ -36,8 +36,8 @@ if should_test_connect:
     )
     from pyspark.pipelines.spark_connect_pipeline import (
         create_dataflow_graph,
-        start_run,
         handle_pipeline_events,
+        start_run,
     )
 
 
