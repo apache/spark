@@ -554,10 +554,51 @@ case class KeyedPartitioning(
       newChildren: IndexedSeq[Expression]): KeyedPartitioning =
     copy(expressions = newChildren)
 
+  /** Need not be what the `partitionKeys` rows hold. See `keyDataTypes`. */
   @transient lazy val expressionDataTypes: Seq[DataType] = expressions.map(_.dataType)
 
+  /**
+   * The types the `partitionKeys` rows were built with. Anything reading those rows should take its
+   * types from here. It is a driver-side value, since `partitionKeys` is `@transient`.
+   *
+   * They are the `expressionDataTypes` unless a reducer has rewritten the keys. With
+   * `v2BucketingAllowCompatibleTransforms` a storage-partitioned join reduces one or both sides'
+   * keys onto a common key space, while the partitioning keeps reporting the expressions it was
+   * built from. Joining an `identity(ts)`-partitioned table to a `years(ts)`-partitioned one leaves
+   * `IntegerType` year values under a `TimestampType`-declared expression. With no key at all the
+   * expressions are all there is, and there is no row to read or to place.
+   *
+   * `ShuffleExchangeExec` is the one reader that stays on `expressionDataTypes`. It evaluates the
+   * expressions to place the other child's rows, and it runs on executors, where this value is not
+   * available. `expressionsDescribeKeyShape` is what keeps that site sound.
+   *
+   * Only the first key's types are read, and nothing enforces that the rest match. Reduced keys
+   * also break three readers in ways no choice of types can fix, and SPARK-59121 covers all three:
+   *
+   *  - `EnsureRequirements`' `OrderedDistribution` arm orders these rows by the partition
+   *    attributes.
+   *  - the `UnionExec` key merge concatenates several children's keys.
+   *  - `KeyedShuffleSpec.reducers` binds its reducer to the partition expression, then reads a
+   *    stored key with it.
+   */
+  @transient lazy val keyDataTypes: Seq[DataType] =
+    partitionKeys.headOption.map(_.dataTypes).getOrElse(expressionDataTypes)
+
+  /**
+   * Whether the `partitionKeys` rows still read the same at `expressionDataTypes`, which is what
+   * `ShuffleExchangeExec` declares them at.
+   *
+   * Shapes rather than plain equality, the test `HashJoin` applies to its join key types.
+   * `KeyedShuffleSpec.createPartitioning` puts the other child's expressions over these keys, so a
+   * struct field name can differ here with no reducer involved.
+   */
+  @transient lazy val expressionsDescribeKeyShape: Boolean =
+    keyDataTypes.corresponds(expressionDataTypes)(
+      DataType.equalsStructurally(_, _, ignoreNullability = true))
+
+  /** Driver-side, like the `keyDataTypes` it comes from. */
   @transient lazy val keyRowOrdering =
-    KeyedPartitioning.groupedKeyRowOrdering(expressionDataTypes)
+    KeyedPartitioning.groupedKeyRowOrdering(keyDataTypes)
 
   @transient lazy val keyOrdering = keyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
 
@@ -572,7 +613,7 @@ case class KeyedPartitioning(
    * Returns the projected expressions and their data types together with the projected keys.
    */
   def projectKeys(positions: Seq[Int]): (Seq[DataType], Seq[InternalRowComparableWrapper]) =
-    KeyedPartitioning.projectKeys(partitionKeys, expressionDataTypes, positions)
+    KeyedPartitioning.projectKeys(partitionKeys, keyDataTypes, positions)
 
   /**
    * Reduces this partitioning's partition keys by applying the given reducers.
@@ -580,7 +621,7 @@ case class KeyedPartitioning(
    */
   def reduceKeys(
       reducers: Seq[Option[Reducer[_, _]]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) =
-    KeyedPartitioning.reduceKeys(partitionKeys, expressionDataTypes, reducers)
+    KeyedPartitioning.reduceKeys(partitionKeys, keyDataTypes, reducers)
 
   override def satisfies0(required: Distribution): Boolean = {
     nonGroupedSatisfies(required) || (isGrouped && groupedSatisfies(required))
@@ -1434,7 +1475,13 @@ case class KeyedShuffleSpec(
       partitioning.isGrouped &&
       partitioning.expressions.forall { e =>
         e.isInstanceOf[AttributeReference] || e.isInstanceOf[TransformExpression]
-      }
+      } &&
+      // A reducer leaves keys that the expressions no longer describe, and `ShuffleExchangeExec`
+      // would then compare the two at different types as it builds the shuffle's key map. Matching
+      // shapes are only a proxy for that. `bucket(12)` and `bucket(8)` reducing onto `bucket(4)`
+      // keep the type, pass here, and still misroute rows. SPARK-59045 and SPARK-59121 add the real
+      // test.
+      partitioning.expressionsDescribeKeyShape
 
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
     assert(clustering.size == distribution.clustering.size,

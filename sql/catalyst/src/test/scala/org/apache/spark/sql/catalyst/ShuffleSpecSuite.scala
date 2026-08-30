@@ -19,10 +19,11 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.DirectShufflePartitionID
+import org.apache.spark.sql.catalyst.expressions.{Attribute, DirectShufflePartitionID}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{IntegerType, StructType}
 
 class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
   private val passThrough_a_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"a"), 10)
@@ -441,6 +442,44 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       val ungrouped = keyedSpec(Seq(1, 1, 2))
       assert(!ungrouped.partitioning.isGrouped)
       assert(!ungrouped.canCreatePartitioning)
+    }
+  }
+
+  test("SPARK-59120: canCreatePartitioning: KeyedShuffleSpec requires the declared key shape") {
+    // A partitioning whose keys were built with types the expressions no longer declare, which is
+    // what a reducer leaves behind.
+    def spec(builtWith: Attribute, declared: Attribute, key: InternalRow): KeyedShuffleSpec =
+      KeyedShuffleSpec(
+        KeyedPartitioning(Seq(builtWith), Seq(key)).copy(expressions = Seq(declared)),
+        ClusteredDistribution(Seq(declared)))
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      assert(!spec($"a".int, $"a".timestamp, InternalRow(2020)).canCreatePartitioning,
+        "`IntegerType` keys cannot be looked up by evaluating a `TimestampType` expression")
+
+      // The two sides can name a struct field differently with no reducer involved, see
+      // `expressionsDescribeKeyShape`.
+      def struct(field: String): Attribute = $"a".struct(new StructType().add(field, IntegerType))
+      assert(spec(struct("a"), struct("b"), InternalRow(InternalRow(1))).canCreatePartitioning,
+        "a key row reads the same either way, so the field names must not matter")
+    }
+  }
+
+  test("SPARK-59120: createShuffleSpec sorts the projected keys at their built-with types") {
+    val a = $"a".timestamp
+    val b = $"b".int
+    // A reducer left `(year, bucket)` values, both `IntegerType`, under expressions that still
+    // declare `(TimestampType, IntegerType)`. Projecting to the `a` position sorts them. An
+    // ordering built from the declared types reads the year as a Long and throws.
+    val reduced =
+      KeyedPartitioning(Seq($"a".int, b), Seq(InternalRow(2021, 1), InternalRow(2020, 0)))
+        .copy(expressions = Seq(a, b))
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val spec = reduced.createShuffleSpec(ClusteredDistribution(Seq(a)))
+        .asInstanceOf[KeyedShuffleSpec]
+      assert(spec.joinKeyPositions === Some(Seq(0)))
+      assert(spec.partitioning.partitionKeys.map(_.row.getInt(0)) === Seq(2020, 2021))
     }
   }
 
