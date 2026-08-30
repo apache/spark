@@ -45,6 +45,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone
 import org.apache.spark.sql.execution.{FileSourceScanExec, FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileDataSourceV2, FileTable}
+import org.apache.spark.sql.execution.planmerging.MergeSubplans
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
@@ -3746,16 +3747,22 @@ class AvroV1Suite extends AvroSuite {
         withTempView("t") {
           spark.read.option("positionalFieldMatching", "true").format("avro").load(path)
             .createOrReplaceTempView("t")
-          val df = sql("SELECT (SELECT sum(a) FROM t), (SELECT sum(b) FROM t)")
-          df.collect()
+          val query = "SELECT (SELECT sum(a) FROM t), (SELECT sum(b) FROM t)"
+          // Compared against the same query with merging excluded rather than against a literal
+          // row: positional matching resolves a column against its position in the read schema, so
+          // what `sum(b)` answers depends on its own subquery's projection, and SPARK-59108 changes
+          // it. What merging must not change is either value.
+          val unmerged = withSQLConf(
+              SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> MergeSubplans.ruleName) {
+            sql(query).collect().toSeq
+          }
+          val df = sql(query)
+          checkAnswer(df, unmerged)
           val scanColumns = df.queryExecution.executedPlan
             .collectWithSubqueries { case s: FileSourceScanExec => s }
             .map(_.requiredSchema.fieldNames.sorted.toSeq)
             .sortBy(_.mkString(","))
-          // Positional matching pairs a column with the Avro field at its position in the read
-          // schema, so which field a subquery reads depends on what it projects. One entry per
-          // column means the two subqueries kept their own scans; sharing one would make each
-          // subquery's value depend on what the other projects.
+          // One entry per column means the two subqueries kept their own scans.
           assert(scanColumns === Seq(Seq("a"), Seq("b")))
         }
       }
