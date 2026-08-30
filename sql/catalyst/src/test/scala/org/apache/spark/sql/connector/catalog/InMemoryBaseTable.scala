@@ -714,7 +714,8 @@ abstract class InMemoryBaseTable(
   }
 
   /**
-   * Reference implementation of [[SupportsRuntimeCatalystFiltering.filter]] for the in-memory
+   * Reference implementation of
+   * [[SupportsRuntimeCatalystFiltering.planInputPartitionsWithRuntimeFilters]] for the in-memory
    * fixtures: records what was pushed, and for expressions referencing only partition columns
    * binds them against the partition key and drops partitions that do not match. Binding and
    * interpreting rather than pattern matching a fixed set of operators is what lets the fixture
@@ -730,7 +731,13 @@ abstract class InMemoryBaseTable(
     private val catalystPredicates = ArrayBuffer.empty[CatalystExpression]
     private var filterCalls = 0
 
-    override def filter(expressions: Array[CatalystExpression]): Unit = {
+    override def planInputPartitionsWithRuntimeFilters(
+        expressions: Array[CatalystExpression]): Array[InputPartition] = {
+      filter(expressions)
+      self.planInputPartitions()
+    }
+
+    private def filter(expressions: Array[CatalystExpression]): Unit = {
       catalystPredicates ++= expressions
       filterCalls += 1
       val partAttrs = partitionAttributes

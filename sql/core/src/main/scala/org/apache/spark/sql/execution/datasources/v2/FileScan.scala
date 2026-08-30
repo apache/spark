@@ -29,12 +29,13 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, Expr
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
-import org.apache.spark.sql.internal.connector.SupportsMetadata
+import org.apache.spark.sql.internal.connector.{SupportsMetadata, SupportsRuntimeCatalystFiltering}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -43,6 +44,7 @@ trait FileScan extends Scan
   with Batch
   with SupportsReportStatistics
   with SupportsMetadata
+  with SupportsRuntimeCatalystFiltering
   with SQLConfHelper
   with Logging {
   /**
@@ -141,21 +143,18 @@ trait FileScan extends Scan
   /**
    * Returns the partitions produced from the compile-time `partitionFilters`.
    *
-   * Subclasses that need to customize how `FilePartition`s are produced should override
-   * `partitionsImpl` instead. Overriding only `partitions` is supported for backward
-   * compatibility but will be bypassed on the runtime-filter path
-   * (`planInputPartitionsWithRuntimeFilters`), so the override would not be applied when
-   * DPP or scalar-subquery runtime filters are present.
+   * Subclasses that customize how `FilePartition`s are produced should override `buildPartitions`
+   * instead. Overriding only this method is supported for backward compatibility, but it is
+   * bypassed on the runtime-filter path (`planInputPartitionsWithRuntimeFilters`), so the
+   * customization would not be applied when DPP or scalar-subquery runtime filters are present.
    */
-  protected def partitions: Seq[FilePartition] = partitionsImpl(partitionFilters)
+  protected def partitions: Seq[FilePartition] = buildPartitions(partitionFilters)
 
   /**
-   * Builds `FilePartition`s using all partition filters that must apply (compile-time
-   * `partitionFilters` plus any runtime filters). Subclasses should override this method
-   * so the customization is applied on both the compile-time path (`planInputPartitions`)
-   * and the runtime-filter path (`planInputPartitionsWithRuntimeFilters`).
+   * Builds `FilePartition`s from every partition filter that must apply: the compile-time
+   * `partitionFilters`, plus the runtime filters when Spark derived any.
    */
-  protected def partitionsImpl(allPartitionFilters: Seq[Expression]): Seq[FilePartition] = {
+  protected def buildPartitions(allPartitionFilters: Seq[Expression]): Seq[FilePartition] = {
     val selectedPartitions = fileIndex.listFiles(allPartitionFilters, dataFilters)
     val maxSplitBytes = FilePartition.maxSplitBytes(sparkSession, selectedPartitions)
     val partitionAttributes = toAttributes(fileIndex.partitionSchema)
@@ -204,21 +203,24 @@ trait FileScan extends Scan
   }
 
   /**
-   * SPARK-30628: produce InputPartitions taking additional runtime filters into account.
-   * Called by `BatchScanExec.filteredPartitions` with DPP and scalar-subquery filters that
-   * must apply on top of the scan's compile-time `partitionFilters`. Returns the same
-   * partitions as `planInputPartitions()` when `extraFilters` is empty.
+   * The partition columns Spark can derive a runtime filter on (SPARK-30628).
    *
-   * When `extraFilters` is non-empty, this method routes through `partitionsImpl` directly,
-   * so subclasses that need custom partition planning under runtime filtering must override
-   * `partitionsImpl` (overriding `partitions` is not sufficient on this path).
+   * A filter over them is applied by selecting partition directories in `buildPartitions`, the
+   * same treatment a compile-time `partitionFilters` entry gets, so the scan evaluates it in full
+   * and Spark does not evaluate it again after the scan -- `FileScanBuilder.pushFilters` already
+   * keeps compile-time partition filters out of the post-scan filters for that reason.
    */
-  def planInputPartitionsWithRuntimeFilters(
-      extraFilters: Seq[Expression]): Array[InputPartition] = {
-    if (extraFilters.isEmpty) {
+  override def filterAttributes(): Array[NamedReference] =
+    readPartitionSchema.fieldNames.map(FieldReference.column)
+
+  override def fullyPushedFilterAttributes(): Array[NamedReference] = filterAttributes()
+
+  override def planInputPartitionsWithRuntimeFilters(
+      expressions: Array[Expression]): Array[InputPartition] = {
+    if (expressions.isEmpty) {
       planInputPartitions()
     } else {
-      partitionsImpl(partitionFilters ++ extraFilters).toArray
+      buildPartitions(partitionFilters ++ expressions).toArray
     }
   }
 

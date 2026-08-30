@@ -27,7 +27,7 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -171,30 +171,19 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // Extract scalar subquery filters on runtime-filterable columns for runtime pushdown.
       // These filters stay in postScanFilters for correctness (FilterExec above scan),
       // but are also routed into runtimeFilters so BatchScanExec can use them for
-      // partition pruning via SupportsRuntimeV2Filtering.filter(), or via FileScan's
-      // planInputPartitionsWithRuntimeFilters (SPARK-30628 for V2 file sources). The exceptions
-      // are filters that only reference attributes the scan fully evaluates, which are dropped
-      // from postScanFilters below.
+      // partition pruning via SupportsRuntimeV2Filtering.filter(). The exceptions are filters
+      // that only reference attributes the scan fully evaluates, which are dropped from
+      // postScanFilters below.
       // Non-deterministic filters are not routed: they would be pushed to the source for
       // pruning while the FilterExec above the scan re-evaluates them, so the two evaluations
       // may disagree and rows the source pruned away could not be recovered. This is the
       // runtime counterpart of the pushFilters guard in PushDownUtils (SPARK-58207).
-      val effectiveRuntimeFilterAttrs = relation.scan match {
-        case fs: FileScan =>
-          // SPARK-30628: FileScan implements neither SupportsRuntimeV2Filtering nor
-          // SupportsRuntimeCatalystFiltering, so relation.runtimeFilterAttrs is empty for it.
-          // Recover the eligible attributes from the partition schema -- those are the columns
-          // FileScan can actually filter on at runtime via planInputPartitionsWithRuntimeFilters.
-          val partitionFieldNames = fs.readPartitionSchema.fieldNames.toSet
-          AttributeSet(relation.output.filter(a => partitionFieldNames.contains(a.name)))
-        case _ => relation.runtimeFilterAttrs
-      }
-      val scalarSubqueryFilters = if (effectiveRuntimeFilterAttrs.nonEmpty) {
+      val scalarSubqueryFilters = if (relation.runtimeFilterAttrs.nonEmpty) {
         postScanFilters.filter { f =>
           f.deterministic &&
             f.containsPattern(SCALAR_SUBQUERY) &&
             f.references.nonEmpty &&
-            f.references.subsetOf(effectiveRuntimeFilterAttrs)
+            f.references.subsetOf(relation.runtimeFilterAttrs)
         }
       } else {
         Seq.empty
