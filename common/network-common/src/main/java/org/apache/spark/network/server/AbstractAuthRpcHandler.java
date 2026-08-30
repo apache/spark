@@ -107,6 +107,14 @@ public abstract class AbstractAuthRpcHandler extends RpcHandler {
 
   @Override
   public MergedBlockMetaReqHandler getMergedBlockMetaReqHandler() {
-    return delegate.getMergedBlockMetaReqHandler();
+    return (client, mergedBlockMetaRequest, callback) -> {
+      // Match the pattern in receive
+      if (isAuthenticated) {
+        delegate.getMergedBlockMetaReqHandler()
+          .receiveMergeBlockMetaReq(client, mergedBlockMetaRequest, callback);
+      } else {
+        throw new SecurityException("Unauthenticated call to receiveMergeBlockMetaReq().");
+      }
+    };
   }
 }
