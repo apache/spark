@@ -37,7 +37,7 @@ import org.apache.spark.sql.types.{GeographyType, GeometryType, IntegerType, Nul
 
 class SparkExecuteStatementOperationSuite extends SharedSparkSession {
 
-  test("SPARK-5159 / SPARK-59118 refuse to start when hive.server2.enable.doAs is true but not enforced") {
+  test("SPARK-5159 / SPARK-59118 refuse to start when hive.server2.enable.doAs is set") {
     val hiveConf = new HiveConf()
     hiveConf.setVar(ConfVars.HIVE_SERVER2_AUTHENTICATION, "KERBEROS")
     hiveConf.setBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS, true)
