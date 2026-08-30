@@ -69,7 +69,11 @@ trait FileFormat {
    *
    * TODO: we should just have different traits for the different formats.
    */
-  def supportBatch(sparkSession: SparkSession, dataSchema: StructType): Boolean = {
+  def supportBatch(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      strictlyColumnar: Boolean): Boolean = {
+    assert(!strictlyColumnar)
     false
   }
 
@@ -133,7 +137,9 @@ trait FileFormat {
       requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String],
-      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+      hadoopConf: Configuration,
+      strictlyColumnar: Boolean,
+      ): PartitionedFile => Iterator[InternalRow] = {
     val dataReader = buildReader(
       sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
 

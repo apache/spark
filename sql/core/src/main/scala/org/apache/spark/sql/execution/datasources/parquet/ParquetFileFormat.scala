@@ -97,8 +97,11 @@ class ParquetFileFormat
   /**
    * Returns whether the reader can return the rows as batch or not.
    */
-  override def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
-    ParquetUtils.isBatchReadSupportedForSchema(getSqlConf(sparkSession), schema)
+  override def supportBatch(
+      sparkSession: SparkSession,
+      schema: StructType,
+      strictlyColumnar: Boolean): Boolean = {
+    ParquetUtils.isBatchReadSupportedForSchema(getSqlConf(sparkSession), schema, strictlyColumnar)
   }
 
   override def vectorTypes(
@@ -186,7 +189,8 @@ class ParquetFileFormat
       requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String],
-      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+      hadoopConf: Configuration,
+      strictlyColumnar: Boolean): PartitionedFile => Iterator[InternalRow] = {
     val sqlConf = getSqlConf(sparkSession)
     setupHadoopConf(hadoopConf, sqlConf, requiredSchema)
 
@@ -199,7 +203,7 @@ class ParquetFileFormat
     val resultSchema = StructType(partitionSchema.fields ++ requiredSchema.fields)
     val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
     val enableVectorizedReader: Boolean =
-      ParquetUtils.isBatchReadSupportedForSchema(sqlConf, resultSchema)
+      ParquetUtils.isBatchReadSupportedForSchema(sqlConf, resultSchema, strictlyColumnar)
     val enableRecordFilter: Boolean = sqlConf.parquetRecordFilterEnabled
     val timestampConversion: Boolean = sqlConf.isParquetINT96TimestampConversion
     val capacity = sqlConf.parquetVectorizedReaderBatchSize
@@ -229,7 +233,7 @@ class ParquetFileFormat
 
     // Should always be set by FileSourceScanExec creating this.
     // Check conf before checking option, to allow working around an issue by changing conf.
-    val returningBatch = sqlConf.parquetVectorizedReaderEnabled &&
+    val returningBatch = (sqlConf.parquetVectorizedReaderEnabled || strictlyColumnar) &&
       options.getOrElse(FileFormat.OPTION_RETURNING_BATCH,
         throw new IllegalArgumentException(
           "OPTION_RETURNING_BATCH should always be set for ParquetFileFormat. " +
@@ -238,7 +242,7 @@ class ParquetFileFormat
     if (returningBatch) {
       // If the passed option said that we are to return batches, we need to also be able to
       // do this based on config and resultSchema.
-      assert(supportBatch(sparkSession, resultSchema))
+      assert(supportBatch(sparkSession, resultSchema, strictlyColumnar))
     }
 
     val readSingleFile: PartitionedFile => Iterator[InternalRow] = (file: PartitionedFile) => {
