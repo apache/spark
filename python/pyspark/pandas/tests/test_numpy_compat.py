@@ -354,6 +354,13 @@ class NumPyCompatTestsMixin:
         self.assert_eq(np.signbit(ps_fractional.to_pandas()), np.signbit(pd_fractional))
         self.assert_eq(np.signbit(ps_integral.to_pandas()), np.signbit(pd_integral))
 
+        # A DataFrame with no columns has no per-column result to inspect, so the number of
+        # outputs comes from the ufunc; pandas returns one empty DataFrame per output here too.
+        ps_fractional, ps_integral = np.modf(psdf[[]])
+        pd_fractional, pd_integral = np.modf(pdf[[]])
+        self.assert_eq(ps_fractional, pd_fractional)
+        self.assert_eq(ps_integral, pd_integral)
+
         # Index input: np.modf returns a tuple of Index objects.
         pidx = pd.Index([-3.5, -2.0, -0.5, 0.0, 2.7])
         psidx = ps.from_pandas(pidx)
