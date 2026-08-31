@@ -141,21 +141,6 @@ class QueryExecutionErrorsSuite
     (df1, df2)
   }
 
-  test("SPARK-58945: invalid file extension reports invalidValue") {
-    withTempDir { dir =>
-      val path = new File(dir, "data").getCanonicalPath
-      checkError(
-        exception = intercept[SparkIllegalArgumentException] {
-          spark.range(1).write.option("extension", "12").csv(path)
-        },
-        condition = "INVALID_PARAMETER_VALUE.EXTENSION",
-        parameters = Map(
-          "functionName" -> "`extension`",
-          "parameter" -> "`extension`",
-          "invalidValue" -> "`12`"))
-    }
-  }
-
   test("INVALID_PARAMETER_VALUE.AES_KEY_LENGTH: invalid key lengths in AES functions") {
     val (df1, df2) = getAesInputs()
     def checkInvalidKeyLength(df: => DataFrame, inputBytes: Int): Unit = {
@@ -240,6 +225,23 @@ class QueryExecutionErrorsSuite
       "ECB", "None")
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'CBC', 'NoPadding')"),
       "CBC", "NoPadding")
+  }
+
+  test("SPARK-58945: invalid file extension reports invalidValue") {
+    withTempDir { dir =>
+      val path = new File(dir, "data").getCanonicalPath
+      // Use a value that is unambiguously invalid so this test focuses on the
+      // rendered error message rather than the full extension validation matrix.
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          spark.range(1).write.option("extension", "12").csv(path)
+        },
+        condition = "INVALID_PARAMETER_VALUE.EXTENSION",
+        parameters = Map(
+          "functionName" -> "`csv`",
+          "parameter" -> "`extension`",
+          "invalidValue" -> "`12`"))
+    }
   }
 
   test("UNSUPPORTED_FEATURE: unsupported types (map and struct) in lit()") {
