@@ -1217,7 +1217,9 @@ class LocIndexer(LocIndexerLike):
 
             isin_cond = index_scol.isin([F.lit(r).cast(index_data_type) for r in rows_sel])
 
-            found_keys = {row[0] for row in sdf.filter(isin_cond).select(index_scol).distinct().collect()}
+            found_keys = {
+                row[0] for row in sdf.filter(isin_cond).select(index_scol).distinct().collect()
+            }
 
             missing_keys = [r for r in rows_sel if r not in found_keys]
             if len(missing_keys) > 0:
