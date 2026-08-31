@@ -22,7 +22,7 @@ import java.util.concurrent.{CountDownLatch, Executors, TimeUnit}
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
  * Tests for `UnionExec` whole-stage codegen fusion: plan-shape assertions,
  * correctness, type widening, metrics, and fallbacks.
  */
-class UnionCodegenSuite extends SharedSparkSession {
+class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   // Union codegen fusion is off by default; turn it on for this suite.
   override protected def sparkConf: SparkConf =
@@ -61,30 +61,27 @@ class UnionCodegenSuite extends SharedSparkSession {
     }.nonEmpty
 
   /**
-   * Every node of the final plan, descending through AQE wrappers and query stages.
-   * `SparkPlan.collect` stops at `AdaptiveSparkPlanExec` and `QueryStageExec`, both of which
-   * are `LeafExecNode`s, so it cannot see a union that AQE placed inside a stage.
+   * `AdaptiveSparkPlanHelper.collect` descends through AQE wrappers and query stages, which
+   * `SparkPlan.collect` does not: both are `LeafExecNode`s, so it cannot see a union that AQE
+   * placed inside a stage.
    */
-  private def allNodes(plan: SparkPlan): Seq[SparkPlan] = plan match {
-    case a: AdaptiveSparkPlanExec => plan +: allNodes(a.executedPlan)
-    case q: QueryStageExec => plan +: allNodes(q.plan)
-    case other => other +: other.children.flatMap(allNodes)
-  }
-
   private def fusedUnions(df: DataFrame): Seq[UnionExec] =
-    allNodes(df.queryExecution.executedPlan).collect {
+    collect(df.queryExecution.executedPlan) {
       case w: WholeStageCodegenExec if w.child.isInstanceOf[UnionExec] =>
         w.child.asInstanceOf[UnionExec]
     }
 
   /** A cached aggregate, so the union's children read an `InMemoryTableScanExec`. */
   private def cacheAggregateView(view: String): Unit = {
-    spark.catalog.clearCache()
     spark.range(0, 200, 1, 4)
       .selectExpr("id % 10 AS k", "id AS v")
       .groupBy("k")
       .agg(sum("v").as("s"))
       .createOrReplaceTempView(view)
+    // Both callers need the cache unmaterialized, and `CacheManager` treats caching an
+    // already-cached plan as a no-op, so drop whatever an earlier test left for this plan.
+    // `isCached` matches by plan, so it also catches the same plan cached under another name.
+    if (spark.catalog.isCached(view)) spark.catalog.uncacheTable(view)
     spark.catalog.cacheTable(view)
   }
 
@@ -660,15 +657,15 @@ class UnionCodegenSuite extends SharedSparkSession {
 
   test("SPARK-59122: a fused union keeps numOutputRows when a child's partitioning firms up") {
     // The children's partitioning is not stable while the plan is being prepared:
-    // `InMemoryTableScanExec` reads `cachedPlan.outputPartitioning`, and the inner
-    // `AdaptiveSparkPlanExec` answers `UnknownPartitioning` until its final plan exists. The
-    // asymmetry matters -- an expression on one branch only keeps a `ProjectExec` from being
-    // collapsed away, so `comparePartitioning` rejects the pair, the union looks plain and is
-    // fused. Once the cache stages finalise, both children report the same `HashPartitioning`,
-    // and re-deriving the decision at that point left `metrics` empty while the generated code
-    // still incremented it, so `doProduce` threw
-    // `NoSuchElementException: key not found: numOutputRows`. `SELECT *` or a plain alias is
-    // collapsed away and does not reproduce this.
+    // `InMemoryTableScanExec.cachedPlan` unwraps the inner `AdaptiveSparkPlanExec` only once
+    // `isFinalPlan` is true, and reports `UnknownPartitioning(0)` until then, so the union looks
+    // plain and is fused. The projection is what makes that reachable: `supportsColumnar` is
+    // `children.forall`, so one row-based `ProjectExec` over the columnar scan is enough to make
+    // it false, and without one `supportCodegenFailureReason` reports `columnar` and nothing
+    // fuses. `SELECT *` or a plain alias collapses the projection away and does not reproduce
+    // this. Once the cache stages finalise, both children report the same `HashPartitioning`, and
+    // re-deriving the decision at that point left `metrics` empty while the generated code still
+    // incremented it, so `doProduce` threw `key not found: numOutputRows`.
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       withTempView("v") {
         cacheAggregateView("v")
