@@ -62,9 +62,8 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }.nonEmpty
 
   /**
-   * `AdaptiveSparkPlanHelper.collect` descends through AQE wrappers and query stages, which
-   * `SparkPlan.collect` does not: both are `LeafExecNode`s, so it cannot see a union that AQE
-   * placed inside a stage.
+   * `AdaptiveSparkPlanHelper.collect` descends through AQE wrappers and query stages;
+   * `SparkPlan.collect` stops at them, since both are `LeafExecNode`s.
    */
   private def fusedUnions(df: DataFrame): Seq[UnionExec] =
     collect(df.queryExecution.executedPlan) {
@@ -79,9 +78,8 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       .groupBy("k")
       .agg(sum("v").as("s"))
       .createOrReplaceTempView(view)
-    // Both callers need the cache unmaterialized, and `CacheManager` treats caching an
-    // already-cached plan as a no-op, so drop whatever an earlier test left for this plan.
-    // `isCached` matches by plan, so it also catches the same plan cached under another name.
+    // Both callers need the cache unmaterialized, and `CacheManager` no-ops on an already-cached
+    // plan, so drop whatever an earlier test left for this one. `isCached` matches by plan.
     if (spark.catalog.isCached(view)) spark.catalog.uncacheTable(view)
     spark.catalog.cacheTable(view)
   }
@@ -705,16 +703,12 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
 
   test("SPARK-59122: a partitioning-aware union keeps its layout when the conf changes between " +
     "planning and execution") {
-    // `spark.sql.unionOutputPartitioning` is read when the plain-union decision is latched, not on
-    // every `outputPartitioning` call, so a plan is executed by the partitioning it was planned
-    // against. Reading it per call instead let the parent aggregate lose its exchange during
-    // planning (the union reported a concrete `HashPartitioning`) and then get a plain
-    // concatenation at execution, which puts one group in two partitions and reports it twice.
-    //
-    // The `collect()` below is deliberately outside the `withSQLConf` block that planned the
-    // DataFrame: `executedPlan` is memoized on first read, so this is what running a planned query
-    // under a changed conf looks like. Moving it back inside makes both phases see the same conf
-    // and the test stops exercising anything.
+    // `spark.sql.unionOutputPartitioning` is read where the plain-union decision is latched, not on
+    // every `outputPartitioning` call, so a plan executes by the partitioning it was planned
+    // against. Reading it per call let the parent aggregate lose its exchange at planning and get a
+    // plain concatenation at execution, reporting each group twice. The `collect()` stays outside
+    // the block that planned the DataFrame on purpose: `executedPlan` is memoized on first read,
+    // and moving it back inside makes both phases see the same conf.
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val left = spark.range(0, 20, 1, 2).selectExpr("id % 5 AS k")
       val right = spark.range(20, 40, 1, 2).selectExpr("id % 5 AS k")
