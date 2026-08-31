@@ -449,6 +449,31 @@ class CatalogTestsMixin:
                 spark.catalog.clearCache()
                 assert_cached(False)
 
+    def test_clear_cache_current_session(self):
+        # SPARK-50569: clearCache can preserve data cached by other sessions.
+        spark = self.spark
+        other_session = spark.newSession()
+        first_view = "clear_cache_first_view"
+        second_view = "clear_cache_second_view"
+        try:
+            spark.range(1).createTempView(first_view)
+            other_session.range(1, 2).createTempView(second_view)
+            spark.catalog.cacheTable(first_view)
+            other_session.catalog.cacheTable(second_view)
+
+            spark.catalog.clearCache(allSessions=False)
+
+            self.assertFalse(spark.catalog.isCached(first_view))
+            self.assertTrue(other_session.catalog.isCached(second_view))
+            other_session.catalog.clearCache(allSessions=False)
+            self.assertFalse(other_session.catalog.isCached(second_view))
+        finally:
+            spark.catalog.clearCache()
+            spark.catalog.dropTempView(first_view)
+            other_session.catalog.dropTempView(second_view)
+            if hasattr(other_session, "client"):
+                other_session.client.close()
+
     def test_table_exists(self):
         # SPARK-36176: testing that table_exists returns correct boolean
         spark = self.spark
