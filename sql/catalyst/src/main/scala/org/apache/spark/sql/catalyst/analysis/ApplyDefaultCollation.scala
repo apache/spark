@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateTable, CreateTableAsSelect, CreateTempView, CreateUserDefinedFunction, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, ReplaceTableAsSelect, TableSpec, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -27,6 +28,7 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.{areSameBaseType, isDefaultStringCharOrVarcharType, replaceDefaultStringCharAndVarcharTypes}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StringHelper, StringType}
 
 /**
@@ -36,7 +38,7 @@ import org.apache.spark.sql.types.{DataType, StringHelper, StringType}
  * in other scenarios. For example, when querying a view, its query is re-resolved each time, and
  * that query can take various forms.
  */
-object ApplyDefaultCollation extends Rule[LogicalPlan] {
+object ApplyDefaultCollation extends Rule[LogicalPlan] with SQLConfHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
     val preprocessedPlan = resolveDefaultCollation(pruneRedundantAlterColumnTypes(plan))
 
@@ -380,10 +382,12 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
           dataType = replaceDefaultStringCharAndVarcharTypes(columnDef.dataType, collation),
           generationExpression = newGenExpr)
 
-    case cast: Cast if hasDefaultStringCharOrVarcharType(cast.dataType) &&
-      cast.containsTag(Cast.USER_SPECIFIED_CAST) =>
-      collation => cast.copy(dataType =
-        replaceDefaultStringCharAndVarcharTypes(cast.dataType, collation))
+    case cast: Cast if shouldApplyCollationToCast(cast) =>
+      collation =>
+        val newCast = cast.copy(dataType =
+          replaceDefaultStringCharAndVarcharTypes(cast.dataType, collation))
+        newCast.copyTagsFrom(cast)
+        newCast
 
     case Literal(value, dt) if hasDefaultStringCharOrVarcharType(dt) =>
       collation => Literal(value, replaceDefaultStringCharAndVarcharTypes(dt, collation))
@@ -439,6 +443,12 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
 
   private def hasDefaultStringCharOrVarcharType(dataType: DataType): Boolean =
     dataType.existsRecursively(isDefaultStringCharOrVarcharType)
+
+  private def shouldApplyCollationToCast(cast: Cast): Boolean = {
+    hasDefaultStringCharOrVarcharType(cast.dataType) &&
+      (conf.getConf(SQLConf.APPLY_DEFAULT_COLLATION_TO_IMPLICIT_CASTS) ||
+        cast.containsTag(Cast.USER_SPECIFIED_CAST))
+  }
 
   private def replaceColumnTypes(
       colTypes: Seq[QualifiedColType],

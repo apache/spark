@@ -44,6 +44,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, LateralJoin, LogicalPlan, NamedParametersSupport, OneRowRelation, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
@@ -1235,21 +1236,27 @@ class SessionCatalog(
     if (schemaMode == SchemaEvolution) {
       View(desc = metadata, isTempView = isTempView, child = parsedPlan)
     } else {
+      val schema = metadata.collation.map { _ =>
+        // Preserve the stored view schema: non-collated string fields must stay UTF8_BINARY
+        // instead of inheriting the view's default collation when resolving the view.
+        DataTypeUtils.replaceNonCollatedTypesWithExplicitUTF8Binary(metadata.schema)
+          .asInstanceOf[StructType]
+      }.getOrElse(metadata.schema)
       val projectList = if (!isHiveCreatedView(metadata)) {
         val viewColumnNames = if (metadata.viewQueryColumnNames.isEmpty) {
           // For view created before Spark 2.2.0, the view text is already fully qualified, the plan
           // output is the same with the view output.
-          metadata.schema.fieldNames.toImmutableArraySeq
+          schema.fieldNames.toImmutableArraySeq
         } else {
-          assert(metadata.viewQueryColumnNames.length == metadata.schema.length,
+          assert(metadata.viewQueryColumnNames.length == schema.length,
             "Corrupted view metadata detected for view " +
             metadata.identifier.quotedString + ". " +
             "The number of view query column names " +
             metadata.viewQueryColumnNames.length + " " +
             "does not match the number of columns in the view schema " +
-            metadata.schema.length + ". " +
+            schema.length + ". " +
             "View query column names: [" + metadata.viewQueryColumnNames.mkString(", ") + "], " +
-            "View schema columns: [" + metadata.schema.fieldNames.mkString(", ") + "]. " +
+            "View schema columns: [" + schema.fieldNames.mkString(", ") + "]. " +
             "This indicates corrupted view metadata that needs to be repaired.")
           metadata.viewQueryColumnNames
         }
@@ -1277,7 +1284,7 @@ class SessionCatalog(
         val nameToCurrentOrdinal = scala.collection.mutable.HashMap.empty[String, Int]
         val viewDDL = buildViewDDL(metadata, isTempView)
 
-        viewColumnNames.zip(metadata.schema).map { case (name, field) =>
+        viewColumnNames.zip(schema).map { case (name, field) =>
           val normalizedName = normalizeColName(name)
           val count = nameToCounts(normalizedName)
           val ordinal = nameToCurrentOrdinal.getOrElse(normalizedName, 0)
@@ -1290,7 +1297,7 @@ class SessionCatalog(
         // For view created by hive, the parsed view plan may have different output columns with
         // the schema stored in metadata. For example: `CREATE VIEW v AS SELECT 1 FROM t`
         // the schema in metadata will be `_c0` while the parsed view plan has column named `1`
-        metadata.schema.zipWithIndex.map { case (field, index) =>
+        schema.zipWithIndex.map { case (field, index) =>
           val col = GetColumnByOrdinal(index, field.dataType)
           castColToType(col, field, schemaMode)
         }

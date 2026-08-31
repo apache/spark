@@ -120,8 +120,14 @@ trait CoercesExpressionTypes extends SQLConfHelper with ResolverMetricTracker {
 
     val newChildren = withTypeCoercion.children.map {
       case cast: Cast =>
+        val collatedCast = expressionTreeTraversal.defaultCollation match {
+          case Some(defaultCollation) =>
+            DefaultCollationTypeCoercion(cast, defaultCollation)
+          case None =>
+            cast
+        }
         TimezoneAwareExpressionResolver
-          .resolveTimezone(cast, expressionTreeTraversal.sessionLocalTimeZone)
+          .resolveTimezone(collatedCast, expressionTreeTraversal.sessionLocalTimeZone)
       case other => other
     }
 
