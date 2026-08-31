@@ -157,7 +157,7 @@ object StaticSQLConf {
         "hive.server2.enable.doAs=true and hive.server2.authentication verifies user " +
         "identities (anything other than NONE/NOSASL), unless this option is set to true " +
         "to explicitly acknowledge the limitation.")
-      .version("4.4.0")
+      .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
