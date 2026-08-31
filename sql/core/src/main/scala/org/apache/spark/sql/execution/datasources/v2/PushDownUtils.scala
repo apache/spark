@@ -239,11 +239,16 @@ object PushDownUtils extends Logging {
   /**
    * Screens runtime filters for a [[SupportsRuntimeCatalystFiltering]] scan and unwraps them to
    * the Catalyst predicates the scan should plan with. No translation to connector predicates and
-   * no `filterAttributes` gating happens here.
+   * no `filterAttributes` gating happens here: what a scan can actually apply is the scan's own
+   * business, and `DataSourceV2Strategy` has already restricted a routed filter to the attributes
+   * the scan declared.
    *
-   * A runtime filter is normally evaluated twice: the source prunes with it, and the FilterExec
-   * above the scan applies it again. The two have to agree, so this screen keeps only predicates
-   * the source can be trusted to evaluate in Spark's place.
+   * A runtime filter derived from a scalar subquery is normally evaluated twice: the source prunes
+   * with it, and the FilterExec above the scan applies it again. The two have to agree, so this
+   * screen keeps only predicates the source can be trusted to evaluate in Spark's place. A dynamic
+   * pruning filter never has that second evaluator -- `DataSourceV2Strategy` removes it from the
+   * post-scan filters unconditionally -- but it is implied by the join it came from, so dropping it
+   * costs pruning and not correctness.
    *
    * But pushing a non-deterministic one would let the source prune on its own coin flip and Spark
    * flip again for the rows that survive, so we handle that specially.
@@ -281,8 +286,10 @@ object PushDownUtils extends Logging {
    *    may call this more than once for the same `scan` instance (see [[pushRuntimeFilters]]);
    *    successive calls are additive. A [[SupportsRuntimeCatalystFiltering]] scan instead re-plans
    *    its input partitions from the given expressions, so nothing accumulates on the scan.
-   *  - When `outputPartitioning` is a [[KeyedPartitioning]], every split from
-   *    `planInputPartitions()` used on this path must implement [[HasPartitionKey]].
+   *  - When `outputPartitioning` is a [[KeyedPartitioning]], every split used on this path must
+   *    implement [[HasPartitionKey]]: they come from `planInputPartitions()` on the
+   *    [[SupportsRuntimeV2Filtering]] path, and from `planInputPartitionsWithRuntimeFilters` on
+   *    the Catalyst one.
    *
    * @param scan                the V2 scan to push filters into
    * @param runtimeFilters      runtime filters to translate and push
@@ -291,8 +298,10 @@ object PushDownUtils extends Logging {
    * @param output              scan output attributes
    * @param outputPartitioning  Spark-side output partitioning (used for SPJ validation)
    * @param originalPartitions  unfiltered partitions, consulted only when no runtime filters fire
-   * @return one entry per original input partition: `Some(part)` for surviving partitions and
-   *         `None` for partition keys whose splits were entirely pruned (SPJ alignment)
+   * @return the partitions to read. Under a [[KeyedPartitioning]] there is one entry per original
+   *         input partition: `Some(part)` for a survivor and `None` where a key's splits were
+   *         entirely pruned, which is what preserves SPJ key alignment. Otherwise the entries are
+   *         the partitions the scan re-planned, and their number need not match the original's.
    */
   def replanWithRuntimeFilters(
       scan: Scan,
@@ -305,7 +314,7 @@ object PushDownUtils extends Logging {
       // A scan implementing both runtime-filtering interfaces falls through to pushRuntimeFilters,
       // which rejects it.
       case catalystScan: SupportsRuntimeCatalystFiltering
-          if runtimeFilters.nonEmpty && !scan.isInstanceOf[SupportsRuntimeV2Filtering] =>
+          if runtimeFilters.nonEmpty && !catalystScan.isInstanceOf[SupportsRuntimeV2Filtering] =>
         val catalystFilters = catalystRuntimeFilters(runtimeFilters)
         if (catalystFilters.nonEmpty) {
           (true, catalystScan.planInputPartitionsWithRuntimeFilters(catalystFilters.toArray))

@@ -42,6 +42,12 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * Spark will call [[planInputPartitionsWithRuntimeFilters]] if it can derive a runtime filter
    * for any of these attributes. Each reference must resolve against the scan relation output
    * when Spark builds it. Attributes pruned out of [[Scan.readSchema]] fail to resolve.
+   *
+   * A dynamic partition pruning filter has no post-scan evaluator at all: Spark removes it from
+   * the post-scan filters whether or not the attribute is also in [[fullyPushedFilterAttributes]],
+   * because the join it was derived from already implies it. So an attribute exposed here must be
+   * one this scan can filter on exactly, not approximately. [[fullyPushedFilterAttributes]]
+   * changes what Spark does only for a filter it derived from a scalar subquery.
    */
   def filterAttributes(): Array[NamedReference]
 
@@ -81,8 +87,10 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * them to plan fewer [[InputPartition]]s than [[org.apache.spark.sql.connector.read.Batch]]
    * would without them.
    *
-   * Spark calls this method once per scan node, at execution time, in place of
-   * `Batch.planInputPartitions()`. One scan instance can back several scan nodes (e.g. the two
+   * Spark calls this method at execution time, and only when at least one runtime filter survives
+   * screening; the partitions it returns replace the ones that scan node would otherwise have
+   * read. Spark may also call `Batch.planInputPartitions()` on the same scan, so neither method may
+   * assume it is the only one used. One scan instance can back several scan nodes (e.g. the two
    * branches of a group-based UPDATE), each with its own runtime filters, so an implementation
    * must derive its result from the given expressions alone and must not carry state over from a
    * previous call.

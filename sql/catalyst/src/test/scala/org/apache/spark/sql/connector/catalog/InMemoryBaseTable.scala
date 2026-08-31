@@ -694,6 +694,13 @@ abstract class InMemoryBaseTable(
 
     override def planInputPartitions(): Array[InputPartition] = data.toArray
 
+    /**
+     * The partitions this scan reported to Spark for reading. `data` for a scan that narrows
+     * itself in place when Spark pushes runtime filters, overridden by one that instead plans
+     * fresh partitions per call. `PartitionBasedReplaceData` replaces exactly these.
+     */
+    def readPartitions: Seq[InputPartition] = data
+
     override def createReaderFactory(): PartitionReaderFactory = {
       val metadataColumns = new mutable.ArrayBuffer[String]()
       val nonMetadataColumns = readSchema.filter {
@@ -717,7 +724,7 @@ abstract class InMemoryBaseTable(
    * Reference implementation of
    * [[SupportsRuntimeCatalystFiltering.planInputPartitionsWithRuntimeFilters]] for the in-memory
    * fixtures: records what was pushed, and for expressions referencing only partition columns
-   * binds them against the partition key and drops partitions that do not match. Binding and
+   * binds them against the partition key and returns the partitions that match. Binding and
    * interpreting rather than pattern matching a fixed set of operators is what lets the fixture
    * honor an arbitrary pushed expression, the same way `PartitionPredicateImpl` does. Mixing
    * classes supply their own `filterAttributes()`.
@@ -730,21 +737,30 @@ abstract class InMemoryBaseTable(
 
     private val catalystPredicates = ArrayBuffer.empty[CatalystExpression]
     private var filterCalls = 0
+    private val plannedPartitions = ArrayBuffer.empty[Seq[InputPartition]]
 
     override def planInputPartitionsWithRuntimeFilters(
         expressions: Array[CatalystExpression]): Array[InputPartition] = {
-      filter(expressions)
-      self.planInputPartitions()
-    }
-
-    private def filter(expressions: Array[CatalystExpression]): Unit = {
       catalystPredicates ++= expressions
       filterCalls += 1
+      // The result comes from `expressions` and the unfiltered `data` alone. Spark calls this once
+      // per scan node, and several nodes can share one scan, so carrying one call's pruning into
+      // the next would drop partitions the second node still needs. `catalystPredicates` and
+      // `filterCalls` only record what happened, for test assertions; `plannedPartitions` is read
+      // back through `readPartitions`, which is what the group-based write replaces.
+      val filtered = prunePartitions(self.data, expressions)
+      plannedPartitions += filtered
+      filtered.toArray
+    }
+
+    private def prunePartitions(
+        partitions: Seq[InputPartition],
+        expressions: Array[CatalystExpression]): Seq[InputPartition] = {
       val partAttrs = partitionAttributes
-      if (partAttrs.isEmpty) return
+      if (partAttrs.isEmpty) return partitions
       val partAttrRefs = partAttrs.map(_._2)
 
-      expressions.foreach { expr =>
+      expressions.foldLeft(partitions) { (remaining, expr) =>
         // Top down, so `s.part` is rewritten before its `s` child is considered.
         val remapped = expr.transformDown {
           case e => partitionAttrFor(e, partAttrs).getOrElse(e)
@@ -754,7 +770,7 @@ abstract class InMemoryBaseTable(
         if (remapped.references.forall(r => partAttrRefs.exists(_.exprId == r.exprId))) {
           val bound = BindReferences.bindReference(remapped, partAttrRefs)
           val pred = CatalystPredicate.createInterpreted(bound)
-          self.data = self.data.filter { p =>
+          remaining.filter { p =>
             try {
               pred.eval(p.asInstanceOf[BufferedRows].partitionKey())
             } catch {
@@ -767,14 +783,26 @@ abstract class InMemoryBaseTable(
               case _: Exception => true
             }
           }
+        } else {
+          remaining
         }
       }
     }
 
-    /** Predicates recorded by [[filter]], for test assertions only. */
+    /** Predicates recorded by [[planInputPartitionsWithRuntimeFilters]], for assertions only. */
     def pushedCatalystPredicates: Seq[CatalystExpression] = catalystPredicates.toSeq
 
     def filterCallCount: Int = filterCalls
+
+    /**
+     * Every partition [[planInputPartitionsWithRuntimeFilters]] handed to Spark, unioned over its
+     * calls because two scan nodes can share one scan and the group-based write has to replace
+     * everything they read; `data` when Spark never called it. A node that read through
+     * `planInputPartitions()` without runtime filters is not represented, which holds while every
+     * sharing node gets the same filters -- the only case in this repo.
+     */
+    override def readPartitions: Seq[InputPartition] =
+      if (plannedPartitions.isEmpty) self.data else plannedPartitions.flatten.distinct.toSeq
 
     /**
      * The `AttributeReference`s standing for the partition key InternalRow fields, in its field

@@ -20,6 +20,7 @@ import java.util.{Locale, OptionalLong}
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{PATH, REASON}
 import org.apache.spark.internal.config.IO_WARNING_LARGEFILETHRESHOLD
@@ -144,15 +145,21 @@ trait FileScan extends Scan
    * Returns the partitions produced from the compile-time `partitionFilters`.
    *
    * Subclasses that customize how `FilePartition`s are produced should override `buildPartitions`
-   * instead. Overriding only this method is supported for backward compatibility, but it is
-   * bypassed on the runtime-filter path (`planInputPartitionsWithRuntimeFilters`), so the
-   * customization would not be applied when DPP or scalar-subquery runtime filters are present.
+   * instead. Overriding this method, or `planInputPartitions()`, still compiles, but the
+   * runtime-filter path (`planInputPartitionsWithRuntimeFilters`) goes through `buildPartitions`
+   * directly, so a subclass that narrows the file set in either one gets those files back as soon
+   * as a runtime filter fires.
    */
   protected def partitions: Seq[FilePartition] = buildPartitions(partitionFilters)
 
   /**
    * Builds `FilePartition`s from every partition filter that must apply: the compile-time
    * `partitionFilters`, plus the runtime filters when Spark derived any.
+   *
+   * Spark calls this twice for a scan node that gets runtime filters -- once from `partitions` at
+   * planning time, once from `planInputPartitionsWithRuntimeFilters` at execution time -- so a
+   * `FileIndex` whose `listFiles` is not idempotent would hand the second call a different file
+   * set than the plan was built from.
    */
   protected def buildPartitions(allPartitionFilters: Seq[Expression]): Seq[FilePartition] = {
     val selectedPartitions = fileIndex.listFiles(allPartitionFilters, dataFilters)
@@ -203,25 +210,44 @@ trait FileScan extends Scan
   }
 
   /**
-   * The partition columns Spark can derive a runtime filter on (SPARK-30628).
+   * The partition columns Spark can derive a runtime filter on (SPARK-30628), restricted to the
+   * ones `readSchema()` still exposes: a reference missing from the scan relation output fails to
+   * resolve, and a pushed-down aggregate keeps only the partition columns it groups by.
    *
-   * A filter over them is applied by selecting partition directories in `buildPartitions`, the
-   * same treatment a compile-time `partitionFilters` entry gets, so the scan evaluates it in full
-   * and Spark does not evaluate it again after the scan -- `FileScanBuilder.pushFilters` already
-   * keeps compile-time partition filters out of the post-scan filters for that reason.
+   * A filter over one of them is applied by selecting partition directories in `buildPartitions`,
+   * the same treatment a compile-time `partitionFilters` entry gets, so the scan evaluates it in
+   * full and Spark does not evaluate it again after the scan -- `FileScanBuilder.pushFilters`
+   * already keeps compile-time partition filters out of the post-scan filters for that reason.
+   * Directory selection matches a predicate's references against `fileIndex.partitionSchema` by
+   * name, so the names reported here have to be the ones that schema uses; both sides derive from
+   * it today, and a divergence would silently drop the predicate instead of failing.
    */
-  override def filterAttributes(): Array[NamedReference] =
-    readPartitionSchema.fieldNames.map(FieldReference.column)
+  override def filterAttributes(): Array[NamedReference] = {
+    val readFields = readSchema().fieldNames.map(normalizeName).toSet
+    readPartitionSchema.fieldNames
+      .filter(name => readFields.contains(normalizeName(name)))
+      .map(FieldReference.column)
+  }
 
   override def fullyPushedFilterAttributes(): Array[NamedReference] = filterAttributes()
 
   override def planInputPartitionsWithRuntimeFilters(
       expressions: Array[Expression]): Array[InputPartition] = {
-    if (expressions.isEmpty) {
-      planInputPartitions()
-    } else {
-      buildPartitions(partitionFilters ++ expressions).toArray
+    // Directory selection is the only thing that applies these, and it silently ignores a predicate
+    // whose references are not all partition columns -- which, for attributes declared fully
+    // pushed, would leave the predicate evaluated nowhere. Spark screens for that before it gets
+    // here; fail loudly rather than return wrong rows if that ever stops being true. Compare the
+    // way the file index does, by exact name against its own partition schema, so this guard cannot
+    // pass something the index will then drop.
+    val partitionNames = fileIndex.partitionSchema.fieldNames.toSet
+    val notApplicable = expressions.filterNot(
+      _.references.forall(a => partitionNames.contains(a.name)))
+    if (notApplicable.nonEmpty) {
+      throw SparkException.internalError("A file scan can only apply a runtime filter over its " +
+        s"partition columns ${fileIndex.partitionSchema.fieldNames.mkString("[", ", ", "]")}, " +
+        s"got ${notApplicable.mkString(", ")}")
     }
+    buildPartitions(partitionFilters ++ expressions).toArray
   }
 
   override def estimateStatistics(): Statistics = {
