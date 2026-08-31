@@ -2091,9 +2091,50 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     // 3 running + 0 pending + 1 speculative = 4 tasks -> ceil(4/2) = 2
     post(SparkListenerSpeculativeTaskSubmitted(0, 0))
 
-    // With pendingSpeculative > 0 and maxNeeded == activeExecutors (2),
-    // offset allocates 1 more -> 3
+    // Speculative task submitted; offset allocates 1 more executor -> 3
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 3)
+
+    // Adding 3rd executor keeps maxNeeded at 3
+    post(SparkListenerExecutorAdded(0, "executor-3", new ExecutorInfo("host3", 2, Map.empty)))
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 3)
+
+    // Target remains 3 while speculative task is running
+    val speculativeTaskInfo0 = createTaskInfo(3, 0, "executor-3", speculative = true)
+    post(SparkListenerTaskStart(0, 0, speculativeTaskInfo0))
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 3)
+
+    // Speculative task 0 completes -> maxNeeded returns to 2
+    post(SparkListenerTaskEnd(0, 0, "task", Success, speculativeTaskInfo0, null))
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 2)
+  }
+
+  test("SPARK-49485: target returns to base when speculative task is killed") {
+    val conf = createConf(1, 5, 2).set(config.EXECUTOR_CORES, 2)
+    val manager = createManager(conf)
+
+    post(SparkListenerStageSubmitted(createStageInfo(0, 3)))
+    post(SparkListenerExecutorAdded(0, "executor-1", new ExecutorInfo("host1", 2, Map.empty)))
+    post(SparkListenerExecutorAdded(0, "executor-2", new ExecutorInfo("host2", 2, Map.empty)))
+
+    val taskInfo0 = createTaskInfo(0, 0, "executor-1")
+    val taskInfo1 = createTaskInfo(1, 1, "executor-1")
+    val taskInfo2 = createTaskInfo(2, 2, "executor-2")
+    post(SparkListenerTaskStart(0, 0, taskInfo0))
+    post(SparkListenerTaskStart(0, 0, taskInfo1))
+    post(SparkListenerTaskStart(0, 0, taskInfo2))
+
+    post(SparkListenerSpeculativeTaskSubmitted(0, 0))
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 3)
+
+    post(SparkListenerExecutorAdded(0, "executor-3", new ExecutorInfo("host3", 2, Map.empty)))
+    val speculativeTaskInfo0 = createTaskInfo(3, 0, "executor-3", speculative = true)
+    post(SparkListenerTaskStart(0, 0, speculativeTaskInfo0))
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 3)
+
+    // Primary task 0 completes, causing speculative task 0 to be killed
+    val killReason = TaskKilled("primary task succeeded", Seq.empty, Seq.empty)
+    post(SparkListenerTaskEnd(0, 0, "task", killReason, speculativeTaskInfo0, null))
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 2)
   }
 }
 

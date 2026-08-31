@@ -416,6 +416,8 @@ private[spark] class ExecutorAllocationManager(
   private[spark] def maxNumExecutorsNeededPerResourceProfile(rpId: Int): Int = {
     val pendingTask = listener.pendingTasksPerResourceProfile(rpId)
     val pendingSpeculative = listener.pendingSpeculativeTasksPerResourceProfile(rpId)
+    val runningSpeculative = listener.runningSpeculativeTasksPerResourceProfile(rpId)
+    val speculativeTasks = pendingSpeculative + runningSpeculative
     val unschedulableTaskSets = listener.pendingUnschedulableTaskSetsPerResourceProfile(rpId)
     val running = listener.totalRunningTasksPerResourceProfile(rpId)
     val numRunningOrPendingTasks = pendingTask + pendingSpeculative + running
@@ -426,12 +428,15 @@ private[spark] class ExecutorAllocationManager(
     val maxNeeded = math.ceil(numRunningOrPendingTasks * executorAllocationRatio /
       tasksPerExecutor).toInt
 
+    val regularRunning = math.max(0, running - runningSpeculative)
+    val baseMaxNeededWithoutSpeculation = math.ceil((pendingTask + regularRunning) *
+      executorAllocationRatio / tasksPerExecutor).toInt
+
     val maxNeededWithSpeculationLocalityOffset =
-      if ((tasksPerExecutor > 1 && maxNeeded == 1 && pendingSpeculative > 0) ||
-          (pendingSpeculative > 0 &&
-           maxNeeded == executorMonitor.executorCountWithResourceProfile(rpId))) {
-        // If we have pending speculative tasks and maxNeeded equals the active executor count,
-        // allocate one more to satisfy the locality requirements of speculation.
+      if (tasksPerExecutor > 1 && speculativeTasks > 0 &&
+          maxNeeded == baseMaxNeededWithoutSpeculation) {
+        // Allocate an extra executor for speculative tasks (pending or running) when maxNeeded
+        // equals the base count needed for regular tasks, to satisfy speculation locality.
         maxNeeded + 1
       } else {
         maxNeeded
@@ -1049,6 +1054,11 @@ private[spark] class ExecutorAllocationManager(
       attempts.map(attempt => getPendingSpeculativeTaskSum(attempt)).sum
     }
 
+    def runningSpeculativeTasksPerResourceProfile(rp: Int): Int = {
+      val attempts = resourceProfileIdToStageAttempt.getOrElse(rp, Set.empty).toSeq
+      attempts.map(attempt => getRunningSpeculativeTaskSum(attempt)).sum
+    }
+
     def hasPendingSpeculativeTasks: Boolean = {
       val attemptSets = resourceProfileIdToStageAttempt.values
       attemptSets.exists { attempts =>
@@ -1058,6 +1068,10 @@ private[spark] class ExecutorAllocationManager(
 
     private def getPendingSpeculativeTaskSum(attempt: StageAttempt): Int = {
       stageAttemptToPendingSpeculativeTasks.get(attempt).map(_.size).getOrElse(0)
+    }
+
+    private def getRunningSpeculativeTaskSum(attempt: StageAttempt): Int = {
+      stageAttemptToSpeculativeTaskIndices.get(attempt).map(_.size).getOrElse(0)
     }
 
     /**
