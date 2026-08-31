@@ -100,6 +100,30 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
+  test("transformed partition source cannot be declared fully pushed") {
+    val tbl = s"$catalogName.tbl_transformed_fully_pushed"
+    val dim = s"$catalogName.dim_transformed_fully_pushed"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, part DATE) USING $v2Source " +
+        "PARTITIONED BY (days(part)) " +
+        "TBLPROPERTIES('fully-pushed-filter-attributes' = 'part')")
+      sql(s"INSERT INTO $tbl VALUES " +
+        "(1, DATE '2026-08-01'), (2, DATE '2026-08-02')")
+      sql(s"CREATE TABLE $dim (value DATE) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES (DATE '2026-08-02')")
+
+      val df = sql(s"SELECT * FROM $tbl WHERE part = (SELECT max(value) FROM $dim)")
+      checkAnswer(df, Row(2, java.sql.Date.valueOf("2026-08-02")))
+
+      assertScalarSubqueryRuntimeFilters(df)
+      assertPushedCatalystPredicates(df, expected = 1)
+      assertScalarSubqueryEvaluatedAfterScan(df, expected = true)
+      val scan = collectBatchScan(df)
+      assert(scan.inputPartitions.size === 2)
+      assert(scan.filteredPartitions.flatten.size === 2)
+    }
+  }
+
   test("nested fully pushed filter attribute -> rejected without a runtime filter") {
     val tbl = s"$catalogName.tbl_nested_fully_pushed"
     withTable(tbl) {

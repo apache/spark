@@ -229,6 +229,10 @@ abstract class InMemoryBaseTable(
     }
   }
 
+  protected def identityPartitionReferences: Array[NamedReference] = {
+    partitioning.collect { case IdentityTransform(ref) => ref }
+  }
+
   private val UTC = ZoneId.of("UTC")
   private val EPOCH_LOCAL_DATE = Instant.EPOCH.atZone(UTC).toLocalDate
 
@@ -715,11 +719,10 @@ abstract class InMemoryBaseTable(
 
   /**
    * Reference implementation of [[SupportsRuntimeCatalystFiltering.filter]] for the in-memory
-   * fixtures: records what was pushed, and for expressions referencing only partition columns
-   * binds them against the partition key and drops partitions that do not match. Binding and
-   * interpreting rather than pattern matching a fixed set of operators is what lets the fixture
-   * honor an arbitrary pushed expression, the same way `PartitionPredicateImpl` does. Mixing
-   * classes supply their own `filterAttributes()`.
+   * fixtures: records what was pushed, and binds expressions referencing only identity partition
+   * columns against the partition key to drop partitions that do not match. Interpreting the
+   * bound expression lets the fixture honor arbitrary pushed expressions. Mixing classes supply
+   * their own `filterAttributes()`.
    */
   trait CatalystRuntimeFilteringScan extends SupportsRuntimeCatalystFiltering {
     self: BatchScanBaseClass =>
@@ -829,30 +832,31 @@ abstract class InMemoryBaseTable(
     var pushedFilters: Array[Filter] = Array.empty
 
     override def filterAttributes(): Array[NamedReference] = {
-      partitioning.flatMap(_.references)
+      identityPartitionReferences
         .filter(ref => readSchema.findNestedField(
           ref.fieldNames.toImmutableArraySeq, resolver = SQLConf.get.resolver).isDefined)
     }
 
     override def filter(filters: Array[Filter]): Unit = {
-      if (partitioning.length == 1 && partitioning.head.references().length == 1) {
-        val ref = partitioning.head.references().head
-        filters.foreach {
-          case In(attrName, values) if attrName == ref.toString =>
-            val matchingKeys = values.map { value =>
-              if (value != null) value.toString else null
-            }.toSet
-            this.data = this.data.filter(partition => {
-              val rows = partition.asInstanceOf[BufferedRows]
-              rows.key match {
-                // null partitions are represented as Seq(null)
-                case Seq(null) => matchingKeys.contains(null)
-                case _ => matchingKeys.contains(rows.keyString())
-              }
-            })
+      partitioning match {
+        case Array(IdentityTransform(ref)) =>
+          filters.foreach {
+            case In(attrName, values) if attrName == ref.toString =>
+              val matchingKeys = values.map { value =>
+                if (value != null) value.toString else null
+              }.toSet
+              this.data = this.data.filter(partition => {
+                val rows = partition.asInstanceOf[BufferedRows]
+                rows.key match {
+                  // null partitions are represented as Seq(null)
+                  case Seq(null) => matchingKeys.contains(null)
+                  case _ => matchingKeys.contains(rows.keyString())
+                }
+              })
 
-          case _ => // skip
-        }
+            case _ => // skip
+          }
+        case _ =>
       }
     }
   }
