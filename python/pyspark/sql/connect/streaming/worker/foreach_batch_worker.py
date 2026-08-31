@@ -55,11 +55,14 @@ def main(infile: IO, outfile: IO) -> None:
         if spark is None or spark.session_id != cloned_session_id:
             cloned_url = connect_url + ";session_id=" + cloned_session_id
             spark = SparkSession.builder.remote(cloned_url).create()
-            if spark.session_id != cloned_session_id:
-                raise PySparkAssertionError(
-                    f"Cloned session ID mismatch: expected {cloned_session_id}, "
-                    f"got {spark.session_id}"
-                )
+            # create() fills the default/active slots only when they are empty, and the bootstrap
+            # session below already claimed them. Point them at the cloned session so that
+            # SparkSession.active() and getActiveSession() inside the user function return the
+            # session the batch actually runs on. This has to happen after the user function was
+            # unpickled, which requires the active session to still be the root one.
+            with SparkSession._lock:
+                SparkSession._default_session = spark
+            SparkSession._active_session.session = spark
             print(f"{log_name} Created new session for cloned_session_id {cloned_session_id}")
         print(
             f"{log_name} Started batch {batch_id} with DF id {df_id} "

@@ -61,11 +61,25 @@ object StreamingForeachBatchHelper extends Logging {
   private[connect] class ForeachBatchSessionManager(rootSessionHolder: SessionHolder)
       extends Logging {
     @volatile private var _clonedSessionHolder: SessionHolder = null
+    // Set by close(). Registration must not happen again afterwards: the holder never expires by
+    // inactivity, and the cleaner that would have closed it is already gone from the cache. Read
+    // and written under this instance's lock, so it needs no @volatile.
+    private var closed = false
 
     def getOrCreateClonedSessionHolder(batchDf: DataFrame): SessionHolder = {
-      if (_clonedSessionHolder == null) {
+      val existing = _clonedSessionHolder
+      if (existing != null) {
+        existing
+      } else {
         synchronized {
           if (_clonedSessionHolder == null) {
+            if (closed) {
+              throw IllegalStateErrors.streamLifecycleAlreadyCompleted(
+                "getOrCreateClonedSessionHolder")
+            }
+            if (rootSessionHolder.isClosing) {
+              throw IllegalStateErrors.sessionAlreadyClosed(rootSessionHolder.key.toString)
+            }
             val clonedSession = batchDf.sparkSession
               .asInstanceOf[org.apache.spark.sql.classic.SparkSession]
             val clonedSessionId = UUID.randomUUID().toString
@@ -76,19 +90,26 @@ object StreamingForeachBatchHelper extends Logging {
                 log"Registered cloned SessionHolder " +
                 log"${MDC(STREAM_ID, clonedSessionId)} for foreachBatch.")
           }
+          // Read under the lock so close() cannot null the field out between the registration
+          // above and the return; a null holder would NPE in the caller instead of failing the
+          // batch.
+          _clonedSessionHolder
         }
       }
-      _clonedSessionHolder
     }
 
     def close(): Unit = synchronized {
+      closed = true
       if (_clonedSessionHolder != null) {
         val holder = _clonedSessionHolder
         // Clear the reference before closing so a failure cannot leave a half-closed holder.
         _clonedSessionHolder = null
         try {
+          // allowReconnect = true: no client ever reconnects with this server-generated id, so a
+          // tombstone in closedSessionsCache would only take a slot from a real client session.
           SparkConnectService.sessionManager.closeSession(
-            SessionKey(holder.userId, holder.sessionId))
+            SessionKey(holder.userId, holder.sessionId),
+            allowReconnect = true)
           logInfo(
             log"[rootSession: ${MDC(SESSION_ID, rootSessionHolder.sessionId)}] " +
               log"Closed cloned SessionHolder ${MDC(STREAM_ID, holder.sessionId)}.")

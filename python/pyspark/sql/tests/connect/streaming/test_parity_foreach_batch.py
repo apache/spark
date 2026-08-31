@@ -82,6 +82,14 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
         sentinel_table = f"cloned_session_ran_{suffix}"
 
         def collect_batch(batch_df, _):
+            from pyspark.sql import SparkSession
+
+            # The batch runs on the cloned session, so that is what the standard entry point
+            # must hand back inside the function.
+            assert SparkSession.active() is batch_df.sparkSession, (
+                f"active session {SparkSession.active().session_id} is not the batch session "
+                f"{batch_df.sparkSession.session_id}"
+            )
             batch_df.createOrReplaceTempView(view_name)
             # Read through the cloned session; a resolution failure fails the query.
             batch_df.sparkSession.sql(f"SELECT * FROM {view_name}").collect()
