@@ -21,7 +21,7 @@ import java.util
 
 import org.scalatest.Assertions.assert
 
-import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue, NamedReference, Transform}
+import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, LiteralValue, NamedReference, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{And, Predicate}
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsOverwriteV2, WriteBuilder, WriterCommitMessage}
@@ -67,44 +67,45 @@ class InMemoryTableWithV2Filter(
     extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeV2Filtering {
 
     override def filterAttributes(): Array[NamedReference] = {
-      partitioning.flatMap(_.references)
+      identityPartitionReferences
         .filter(ref => readSchema.findNestedField(
           ref.fieldNames.toImmutableArraySeq, resolver = SQLConf.get.resolver).isDefined)
     }
 
     override def filter(filters: Array[Predicate]): Unit = {
-      if (partitioning.length == 1 && partitioning.head.references().length == 1) {
-        val ref = partitioning.head.references().head
-        filters.foreach {
-          case p : Predicate if p.name().equals("IN") =>
-            if (p.children().length > 1) {
-              val filterRef = p.children()(0).asInstanceOf[FieldReference].references.head
-              if (filterRef.toString.equals(ref.toString)) {
-                val matchingKeys =
-                  p.children().drop(1).map(_.asInstanceOf[LiteralValue[_]].value.toString).toSet
-                data = data.filter(partition => {
-                  val key = partition.asInstanceOf[BufferedRows].keyString()
-                  matchingKeys.contains(key)
-                })
-              }
-            }
-          case p : Predicate if p.name().equals("=") =>
-            if (p.children().length == 2) {
-              val filterRef = p.children()(0).asInstanceOf[FieldReference].references.head
-              if (filterRef.toString.equals(ref.toString)) {
-                val matchingKey = p.children()(1).asInstanceOf[LiteralValue[_]].value
-                if (matchingKey != null) {
+      partitioning match {
+        case Array(IdentityTransform(ref)) =>
+          filters.foreach {
+            case p : Predicate if p.name().equals("IN") =>
+              if (p.children().length > 1) {
+                val filterRef = p.children()(0).asInstanceOf[FieldReference].references.head
+                if (filterRef.toString.equals(ref.toString)) {
+                  val matchingKeys =
+                    p.children().drop(1).map(_.asInstanceOf[LiteralValue[_]].value.toString).toSet
                   data = data.filter(partition => {
                     val key = partition.asInstanceOf[BufferedRows].keyString()
-                    key == matchingKey.toString
+                    matchingKeys.contains(key)
                   })
-                } else {
-                  data = Seq.empty // NULL = anything is always false
                 }
               }
-            }
-          case _ => // Ignore unsupported predicate types
-        }
+            case p : Predicate if p.name().equals("=") =>
+              if (p.children().length == 2) {
+                val filterRef = p.children()(0).asInstanceOf[FieldReference].references.head
+                if (filterRef.toString.equals(ref.toString)) {
+                  val matchingKey = p.children()(1).asInstanceOf[LiteralValue[_]].value
+                  if (matchingKey != null) {
+                    data = data.filter(partition => {
+                      val key = partition.asInstanceOf[BufferedRows].keyString()
+                      key == matchingKey.toString
+                    })
+                  } else {
+                    data = Seq.empty // NULL = anything is always false
+                  }
+                }
+              }
+            case _ => // Ignore unsupported predicate types
+          }
+        case _ =>
       }
     }
   }
