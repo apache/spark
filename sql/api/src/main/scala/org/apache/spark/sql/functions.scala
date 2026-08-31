@@ -1368,6 +1368,10 @@ object functions {
    * @since 1.4.0
    * @return
    *   Returns a column that evaluates to a double.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
    */
   def mean(e: Column): Column = avg(e)
 
@@ -1378,6 +1382,10 @@ object functions {
    * @since 1.4.0
    * @return
    *   Returns a column that evaluates to a double.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
    */
   def mean(columnName: String): Column = avg(columnName)
 
@@ -1750,6 +1758,10 @@ object functions {
    * @since 1.3.0
    * @return
    *   Returns a column that evaluates to a numeric or interval.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
    */
   @deprecated("Use sum_distinct", "3.2.0")
   def sumDistinct(e: Column): Column = sum_distinct(e)
@@ -1761,6 +1773,10 @@ object functions {
    * @since 1.3.0
    * @return
    *   Returns a column that evaluates to a numeric or interval.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
    */
   @deprecated("Use sum_distinct", "3.2.0")
   def sumDistinct(columnName: String): Column = sum_distinct(Column(columnName))
@@ -1774,6 +1790,10 @@ object functions {
    * @since 3.2.0
    * @return
    *   Returns a column that evaluates to a numeric or interval.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
    */
   def sum_distinct(e: Column): Column = Column.fn("sum", isDistinct = true, e)
 
@@ -4558,6 +4578,10 @@ object functions {
    * @since 1.3.0
    * @return
    *   Returns a column of the same type as the input.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
    */
   def negate(e: Column): Column = -e
 
@@ -5916,6 +5940,10 @@ object functions {
    * @since 3.5.0
    * @return
    *   Returns a column of the same type as the input.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
    */
   def negative(e: Column): Column = Column.fn("negative", e)
 
@@ -6080,6 +6108,10 @@ object functions {
    * @since 1.5.0
    * @return
    *   Returns a column of the same type as the input.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
    */
   def pmod(dividend: Column, divisor: Column): Column = Column.fn("pmod", dividend, divisor)
 
@@ -7295,6 +7327,10 @@ object functions {
    * @since 4.0.0
    * @return
    *   Returns a column that evaluates to a string.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.reflect.allowList`
    */
   @scala.annotation.varargs
   def try_reflect(cols: Column*): Column = Column.fn("try_reflect", cols: _*)
@@ -12414,11 +12450,6 @@ object functions {
    * @since 1.5.0
    * @return
    *   Returns a column that evaluates to a long.
-   *
-   * @note
-   *   Affected by these public SQL configurations:
-   *   - `spark.sql.ansi.enabled`
-   *   - `spark.sql.session.timeZone`
    */
   def unix_timestamp(): Column = unix_timestamp(current_timestamp())
 
@@ -13393,7 +13424,8 @@ object functions {
 
   /**
    * Parses the `timestamp` expression with the `format` expression to a timestamp with local time
-   * zone. Returns null with invalid input.
+   * zone. Returns null with invalid input when ANSI mode is disabled, or raises an error
+   * otherwise.
    *
    * @param timestamp
    *   the input column or strings. A column that evaluates to a date, timestamp or string.
@@ -13406,6 +13438,7 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    */
   def to_timestamp_ltz(timestamp: Column, format: Column): Column =
@@ -13414,7 +13447,7 @@ object functions {
   /**
    * Parses the `timestamp` expression with the default format to a timestamp with local time
    * zone. The default format follows casting rules to a timestamp. Returns null with invalid
-   * input.
+   * input when ANSI mode is disabled, or raises an error otherwise.
    *
    * @param timestamp
    *   the input column or strings. A column that evaluates to a date, timestamp or string.
@@ -13425,6 +13458,7 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    */
   def to_timestamp_ltz(timestamp: Column): Column =
@@ -13432,7 +13466,8 @@ object functions {
 
   /**
    * Parses the `timestamp_str` expression with the `format` expression to a timestamp without
-   * time zone. Returns null with invalid input.
+   * time zone. Returns null with invalid input when ANSI mode is disabled, or raises an error
+   * otherwise.
    *
    * @param timestamp
    *   the input column or strings. A column that evaluates to a date, timestamp or string.
@@ -13442,13 +13477,18 @@ object functions {
    * @since 3.5.0
    * @return
    *   Returns a column that evaluates to a timestamp.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
    */
   def to_timestamp_ntz(timestamp: Column, format: Column): Column =
     Column.fn("to_timestamp_ntz", timestamp, format)
 
   /**
    * Parses the `timestamp` expression with the default format to a timestamp without time zone.
-   * The default format follows casting rules to a timestamp. Returns null with invalid input.
+   * The default format follows casting rules to a timestamp. Returns null with invalid input when
+   * ANSI mode is disabled, or raises an error otherwise.
    *
    * @param timestamp
    *   the input column or strings. A column that evaluates to a date, timestamp or string.
@@ -13456,6 +13496,10 @@ object functions {
    * @since 3.5.0
    * @return
    *   Returns a column that evaluates to a timestamp.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
    */
   def to_timestamp_ntz(timestamp: Column): Column =
     Column.fn("to_timestamp_ntz", timestamp)
@@ -17041,7 +17085,6 @@ object functions {
    * @note
    *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
-   *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
   def make_timestamp(
@@ -17106,12 +17149,6 @@ object functions {
    * @since 4.1.0
    * @return
    *   Returns a column that evaluates to a timestamp.
-   *
-   * @note
-   *   Affected by these public SQL configurations:
-   *   - `spark.sql.ansi.enabled`
-   *   - `spark.sql.session.timeZone`
-   *   - `spark.sql.timestampType`
    */
   def make_timestamp(date: Column, time: Column, timezone: Column): Column =
     Column.fn("make_timestamp", date, time, timezone)
@@ -17130,9 +17167,7 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
-   *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
-   *   - `spark.sql.timestampType`
    */
   def make_timestamp(date: Column, time: Column): Column =
     Column.fn("make_timestamp", date, time)
@@ -17164,7 +17199,6 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
-   *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
   def try_make_timestamp(
@@ -17227,11 +17261,6 @@ object functions {
    * @since 4.1.0
    * @return
    *   Returns a column that evaluates to a timestamp.
-   *
-   * @note
-   *   Affected by these public SQL configurations:
-   *   - `spark.sql.session.timeZone`
-   *   - `spark.sql.timestampType`
    */
   def try_make_timestamp(date: Column, time: Column, timezone: Column): Column =
     Column.fn("try_make_timestamp", date, time, timezone)
@@ -17251,7 +17280,6 @@ object functions {
    * @note
    *   Affected by these public SQL configurations:
    *   - `spark.sql.session.timeZone`
-   *   - `spark.sql.timestampType`
    */
   def try_make_timestamp(date: Column, time: Column): Column =
     Column.fn("try_make_timestamp", date, time)
@@ -17284,7 +17312,6 @@ object functions {
    * @note
    *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
-   *   - `spark.sql.session.timeZone`
    */
   def make_timestamp_ltz(
       years: Column,
@@ -17358,10 +17385,6 @@ object functions {
    * @since 4.0.0
    * @return
    *   Returns a column that evaluates to a timestamp.
-   *
-   * @note
-   *   Affected by these public SQL configurations:
-   *   - `spark.sql.session.timeZone`
    */
   def try_make_timestamp_ltz(
       years: Column,
@@ -17457,10 +17480,6 @@ object functions {
    * @since 4.1.0
    * @return
    *   Returns a column that evaluates to a timestamp.
-   *
-   * @note
-   *   Affected by these public SQL configurations:
-   *   - `spark.sql.ansi.enabled`
    */
   def make_timestamp_ntz(date: Column, time: Column): Column =
     Column.fn("make_timestamp_ntz", date, time)

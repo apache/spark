@@ -1825,6 +1825,12 @@ def mean(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         the column for computed results.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     Example 1: Calculating the average age
@@ -1915,6 +1921,12 @@ def sumDistinct(col: "ColumnOrName") -> Column:
 
     .. deprecated:: 3.2.0
         Use :func:`sum_distinct` instead.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
     """
     warnings.warn("Deprecated in 3.2, use sum_distinct instead.", FutureWarning)
     return sum_distinct(col)
@@ -1939,6 +1951,12 @@ def sum_distinct(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the column for computed results.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -3419,6 +3437,12 @@ def negative(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         negative value.
         Returns a column of the same type as the input.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -6652,6 +6676,10 @@ def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", 
     Notes
     -----
     Supports Spark Connect.
+
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -14602,7 +14630,7 @@ def to_timestamp_ltz(
 ) -> Column:
     """
     Parses the `timestamp` with the `format` to a timestamp with time zone.
-    Returns null with invalid input.
+    Returns null with invalid input when ANSI mode is disabled, or raises an error otherwise.
 
     .. versionadded:: 3.5.0
 
@@ -14629,6 +14657,7 @@ def to_timestamp_ltz(
     -----
     Affected by these public SQL configurations:
 
+    * ``spark.sql.ansi.enabled``
     * ``spark.sql.session.timeZone``
 
     Examples
@@ -14681,7 +14710,7 @@ def to_timestamp_ntz(
 ) -> Column:
     """
     Parses the `timestamp` with the `format` to a timestamp without time zone.
-    Returns null with invalid input.
+    Returns null with invalid input when ANSI mode is disabled, or raises an error otherwise.
 
     .. versionadded:: 3.5.0
 
@@ -14703,6 +14732,12 @@ def to_timestamp_ntz(
     :meth:`pyspark.sql.functions.to_unix_timestamp`
     :meth:`pyspark.sql.functions.date_format`
     :meth:`pyspark.sql.functions.try_to_timestamp`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -33308,6 +33343,12 @@ def try_reflect(*cols: "ColumnOrName") -> Column:
     --------
     :meth:`pyspark.sql.functions.reflect`
     :meth:`pyspark.sql.functions.java_method`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.reflect.allowList``
 
     Examples
     --------
