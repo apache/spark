@@ -3921,8 +3921,8 @@ External users can query the static sql config values via `SparkSession.conf` or
   <td><code>spark.graphx.pregel.checkpointInterval</code></td>
   <td>-1</td>
   <td>
-    Checkpoint interval for graph and message in Pregel. It used to avoid stackOverflowError due to long lineage chains
-  after lots of iterations. The checkpoint is disabled by default.
+    Checkpoint interval for the graph in Pregel. Message RDDs are not checkpointed. Graph
+    checkpointing is disabled by default.
   </td>
   <td>2.2.0</td>
 </tr>

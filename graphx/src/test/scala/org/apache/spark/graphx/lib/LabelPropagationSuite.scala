@@ -41,4 +41,16 @@ class LabelPropagationSuite extends SparkFunSuite with LocalSparkContext {
       assert(clique1Labels(0) != clique2Labels(0))
     }
   }
+
+  test("Label Propagation chooses the smallest label when counts are tied") {
+    withSpark { sc =>
+      val graph = Graph.fromEdges(
+        sc.parallelize(Seq(Edge(0L, 16L, 1), Edge(0L, 1L, 1))),
+        defaultValue = 1)
+
+      val labels = LabelPropagation.run(graph, maxSteps = 1).vertices.collect().toMap
+
+      assert(labels(0L) === 1L)
+    }
+  }
 }
