@@ -584,6 +584,8 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.SQLQueryTestSuite",
     "org.apache.spark.sql.hive.client.HadoopVersionInfoSuite",
     "org.apache.spark.sql.hive.thriftserver.SparkExecuteStatementOperationSuite",
+    // Constructs a HiveThriftServer2, which flips HiveConf's static loadHiveServer2Config.
+    "org.apache.spark.sql.hive.thriftserver.HiveThriftServer2DoAsSuite",
     "org.apache.spark.sql.hive.thriftserver.ThriftServerQueryTestSuite",
     "org.apache.spark.sql.hive.thriftserver.SparkSQLEnvSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
