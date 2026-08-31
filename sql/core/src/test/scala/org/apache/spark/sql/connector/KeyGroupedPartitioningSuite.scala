@@ -860,18 +860,51 @@ class KeyGroupedPartitioningSuite
 
   test("SPARK-59045: canonicalization normalizes the reduced expressions") {
     // `KeyReducer` is a plain case class, not an `Expression`, so plan canonicalization does not
-    // normalize the exprIds inside `reducedExpression`. Two structurally identical
-    // `GroupPartitionsExec`s with value-equal reducers must still compare equal after
-    // canonicalization, or exchange/subquery reuse silently stops deduplicating their subtrees.
+    // normalize the exprIds inside it. Two structurally identical `GroupPartitionsExec`s with
+    // value-equal reducers must still compare equal after canonicalization, or exchange/subquery
+    // reuse silently stops deduplicating their subtrees. The reduced expression is the other join
+    // side's transform, so it references an attribute this node's child does not output; the
+    // identity reducer's transform references this side's own key.
     val a1 = AttributeReference("id", LongType, nullable = true)().withExprId(ExprId(1))
     val a2 = AttributeReference("id", LongType, nullable = true)().withExprId(ExprId(2))
-    def groupPartitions(attr: AttributeReference): GroupPartitionsExec = {
+    val o1 = AttributeReference("oid", LongType, nullable = true)().withExprId(ExprId(11))
+    val o2 = AttributeReference("oid", LongType, nullable = true)().withExprId(ExprId(12))
+    def groupPartitions(
+        attr: AttributeReference,
+        otherAttr: AttributeReference,
+        reducer: Reducer[_, _]): GroupPartitionsExec = {
       val child = new LocalTableScanExec(Seq(attr), Nil, None, false)
-      val reduced = TransformExpression(BucketFunction, Seq(attr), Some(2))
+      val reduced = TransformExpression(BucketFunction, Seq(otherAttr), Some(2))
       GroupPartitionsExec(child,
-        reducers = Some(Seq(Some(physical.KeyReducer(BucketReducer(2), reduced)))))
+        reducers = Some(Seq(Some(physical.KeyReducer(reducer, reduced)))))
     }
-    assert(groupPartitions(a1).canonicalized == groupPartitions(a2).canonicalized)
+    // A value-equal reducer, with the reduced expression over the other side's attribute.
+    assert(groupPartitions(a1, o1, BucketReducer(2)).canonicalized ==
+      groupPartitions(a2, o2, BucketReducer(2)).canonicalized)
+    // The identity-derived reducer, whose transform is over this side's own attribute.
+    assert(groupPartitions(a1, o1, physical.IdentityReducer(
+        TransformExpression(BucketFunction, Seq(a1), Some(2)))).canonicalized ==
+      groupPartitions(a2, o2, physical.IdentityReducer(
+        TransformExpression(BucketFunction, Seq(a2), Some(2)))).canonicalized)
+    // Structurally different reducers stay unequal after canonicalization.
+    assert(groupPartitions(a1, o1, BucketReducer(2)).canonicalized !=
+      groupPartitions(a2, o2, BucketReducer(3)).canonicalized)
+
+    // A multi-key partitioning with a mixed reducer sequence (identity keys are not reducible):
+    // the normalization is per position, and the None entries pass through untouched.
+    val dt1 = AttributeReference("dt", StringType, nullable = true)().withExprId(ExprId(21))
+    val dt2 = AttributeReference("dt", StringType, nullable = true)().withExprId(ExprId(22))
+    def mixedKeyGroupPartitions(
+        attr: AttributeReference,
+        dt: AttributeReference,
+        otherAttr: AttributeReference): GroupPartitionsExec = {
+      val child = new LocalTableScanExec(Seq(attr, dt), Nil, None, false)
+      val reduced = TransformExpression(BucketFunction, Seq(otherAttr), Some(2))
+      GroupPartitionsExec(child,
+        reducers = Some(Seq(None, Some(physical.KeyReducer(BucketReducer(2), reduced)))))
+    }
+    assert(mixedKeyGroupPartitions(a1, dt1, o1).canonicalized ==
+      mixedKeyGroupPartitions(a2, dt2, o2).canonicalized)
   }
 
   test("partitioned join: join with two partition keys and matching & sorted partitions") {

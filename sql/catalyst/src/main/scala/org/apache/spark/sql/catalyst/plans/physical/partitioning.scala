@@ -1447,11 +1447,34 @@ case class CoalescedHashShuffleSpec(
  * @param reducer reducer that maps this side's partition key values onto the other side's key space
  * @param reducedExpression expression whose data type matches the reduced keys. Stored as-is from
  *                          the expression pair that produced the reducer; the only structural
- *                          consumer, `GroupPartitionsExec.outputPartitioning`, re-targets it at
- *                          each reported `KeyedPartitioning`'s own key attribute, so the
- *                          attribute it carries here is not load-bearing.
+ *                          consumer, `GroupPartitionsExec`, re-targets it at each reported
+ *                          `KeyedPartitioning`'s own key attribute in `outputPartitioning` and
+ *                          normalizes it positionally in `doCanonicalize`, so the attribute it
+ *                          carries here is not load-bearing.
  */
 case class KeyReducer(reducer: Reducer[_, _], reducedExpression: TransformExpression)
+
+/**
+ * A [[Reducer]] that reduces an identity transform onto a partition transform: it applies the
+ * given partition transform to the raw value of the identity transform's key.
+ *
+ * It is a case class so that structurally identical reducers compare by value, and plans holding
+ * them stay canonicalization-equal.
+ *
+ * @param transform the partition transform, re-targeted at the identity side's key attribute
+ */
+case class IdentityReducer(transform: TransformExpression) extends Reducer[Any, Any] {
+  // `transform` has a single leaf attribute (`KeyedPartitioning.supportsExpressions`), which is
+  // bound to ordinal 0 of the single-value row `reduce` evaluates it against.
+  @transient private lazy val bound: Expression =
+    BindReferences.bindReference(transform, AttributeSeq(transform.references.toSeq))
+
+  override def reduce(v: Any): Any = bound.eval(new GenericInternalRow(Array[Any](v)))
+
+  override def resultType(): DataType = transform.dataType
+
+  override def displayName(): String = transform.toString
+}
 
 /**
  * [[ShuffleSpec]] created by [[KeyedPartitioning]].
@@ -1602,14 +1625,14 @@ case class KeyedShuffleSpec(
 
       // Identity transform on this side, arbitrary transform on the other side: create a reducer
       // that applies the other's transform to the raw identity values. Each partition expression
-      // is guaranteed to have exactly one leaf child (asserted in keyPositions), so `a` lives at
-      // position 0 in the row we construct.
+      // is guaranteed to have exactly one leaf child (asserted in keyPositions), which
+      // `IdentityReducer` binds to ordinal 0.
       case (a: AttributeReference, t: TransformExpression) =>
-        (Some(KeyReducer(identityReducer(t, a), t)), None)
+        (Some(KeyReducer(IdentityReducer(t.withReference(a)), t)), None)
 
       // Symmetric: identity transform on the other side.
       case (t: TransformExpression, a: AttributeReference) =>
-        (None, Some(KeyReducer(identityReducer(t, a), t)))
+        (None, Some(KeyReducer(IdentityReducer(t.withReference(a)), t)))
 
       case (_, _) => (None, None)
     }
@@ -1620,21 +1643,6 @@ case class KeyedShuffleSpec(
     val thisResult = if (thisReducers.forall(_.isEmpty)) None else Some(thisReducers)
     val otherResult = if (otherReducers.forall(_.isEmpty)) None else Some(otherReducers)
     (thisResult, otherResult)
-  }
-
-  /**
-   * Create a reducer that applies the partition transform `t` to the raw values of the identity
-   * transform's attribute `a`, i.e., the reducer that reduces the identity transform onto `t`.
-   */
-  private def identityReducer(
-      t: TransformExpression, a: AttributeReference): Reducer[Any, Any] = {
-    val reducerExpr = t.withReference(a)
-    val boundExpr = BindReferences.bindReference(reducerExpr, AttributeSeq(Seq(a)))
-    new Reducer[Any, Any] {
-      override def reduce(v: Any): Any = boundExpr.eval(new GenericInternalRow(Array[Any](v)))
-      override def resultType(): DataType = reducerExpr.dataType
-      override def displayName(): String = reducerExpr.toString
-    }
   }
 
   override def canCreatePartitioning: Boolean =

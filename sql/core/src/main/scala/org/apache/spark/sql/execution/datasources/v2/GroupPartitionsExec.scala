@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, KeyReducer, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{IdentityReducer, KeyedPartitioning, KeyReducer, Partitioning}
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.execution.{SafeForKWayMerge, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.internal.SQLConf
@@ -102,16 +102,24 @@ case class GroupPartitionsExec(
 
   override def doCanonicalize(): SparkPlan = {
     // `KeyReducer` is a plain case class, not an `Expression`, so plan canonicalization does not
-    // normalize the exprIds inside `reducedExpression`. Do it here, otherwise structurally
-    // identical SPJ subtrees with value-equal reducers stop comparing equal once reducers are
-    // applied, and exchange/subquery reuse silently stops deduplicating them.
+    // normalize the exprIds inside it. Normalize them positionally here: `reducedExpression` may
+    // reference the other join side's key, which this node's child does not output, so both it
+    // and the identity reducer's transform are normalized against their own references. Without
+    // this, structurally identical SPJ subtrees with value-equal reducers stop comparing equal
+    // once reducers are applied, and exchange/subquery reuse silently stops deduplicating them.
     val canonicalized = super.doCanonicalize().asInstanceOf[GroupPartitionsExec]
     canonicalized.copy(reducers = canonicalized.reducers.map { reducerSeqs =>
       reducerSeqs.map { keyReducerOpt =>
         keyReducerOpt.map { keyReducer =>
-          keyReducer.copy(reducedExpression =
-            QueryPlan.normalizeExpressions(keyReducer.reducedExpression, child.output)
-              .asInstanceOf[TransformExpression])
+          val reducer = keyReducer.reducer match {
+            case r: IdentityReducer => r.copy(transform = QueryPlan.normalizeExpressions(
+              r.transform, r.transform.references.toSeq).asInstanceOf[TransformExpression])
+            case other => other
+          }
+          keyReducer.copy(
+            reducer = reducer,
+            reducedExpression = QueryPlan.normalizeExpressions(keyReducer.reducedExpression,
+              keyReducer.reducedExpression.references.toSeq).asInstanceOf[TransformExpression])
         }
       }
     })

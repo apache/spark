@@ -100,8 +100,12 @@ case class TransformExpression(
 
   /**
    * Re-targets this partition transform expression at `attr`. A partition transform expression
-   * has a single leaf attribute (`KeyedPartitioning.supportsExpressions`), so this replaces it
-   * and the result reports the same transform over `attr`.
+   * has a single leaf attribute (`KeyedPartitioning.supportsExpressions`), so this replaces that
+   * attribute and keeps the rest of the expression: any field path above the leaf comes from this
+   * expression, not from the re-targeted key. Re-targeting is therefore only faithful when the
+   * source and the target key expressions have the same path shape (all producers today use bare
+   * attributes; a nested-field partition key does not produce a `KeyedPartitioning`, as
+   * `supportsExpressions` does not unwrap `Alias`).
    */
   def withReference(attr: Attribute): TransformExpression =
     transform { case _: AttributeReference => attr }.asInstanceOf[TransformExpression]
