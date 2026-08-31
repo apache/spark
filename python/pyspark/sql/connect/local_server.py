@@ -117,12 +117,8 @@ def _port_open(host: str, port: int, timeout: float = 0.5) -> bool:
         return False
 
 
-def _is_local_connect_server(pid: int) -> Optional[bool]:
-    """Whether ``pid`` is still the managed Connect server recorded in discovery.
-
-    Returns ``None`` when the process cannot be inspected, so callers do not discard the
-    discovery information needed to retry later.
-    """
+def _process_command(pid: int) -> Optional[str]:
+    """The command of ``pid``, an empty string if it is gone, or ``None`` if inspection fails."""
     try:
         result = subprocess.run(
             ["ps", "-ww", "-p", str(pid), "-o", "command="],
@@ -132,7 +128,17 @@ def _is_local_connect_server(pid: int) -> Optional[bool]:
         )
     except (OSError, subprocess.SubprocessError):
         return None
-    return result.returncode == 0 and _SERVER_CLASS in result.stdout
+    return result.stdout if result.returncode == 0 else ""
+
+
+def _is_local_connect_server(pid: int) -> Optional[bool]:
+    """Whether ``pid`` is still the managed Connect server recorded in discovery.
+
+    Returns ``None`` when the process cannot be inspected, so callers do not discard the
+    discovery information needed to retry later.
+    """
+    command = _process_command(pid)
+    return None if command is None else _SERVER_CLASS in command
 
 
 def runtime_dir() -> str:
