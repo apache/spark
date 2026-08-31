@@ -117,6 +117,15 @@ class SqlScriptingCursorE2eSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58945: OPEN cursor outside script reports cursor name") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("OPEN cur")
+      },
+      condition = "CURSOR_OUTSIDE_SCRIPT",
+      parameters = Map("cursorName" -> "`cur`"))
+  }
+
   test("Test 5: Cursors have a separate namespace from local variables") {
     val result = sql(
       """

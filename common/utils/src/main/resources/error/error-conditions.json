@@ -1826,7 +1826,7 @@
   },
   "CURSOR_OUTSIDE_SCRIPT" : {
     "message" : [
-      "Cursor operations can only be used within SQL scripts."
+      "Cursor <cursorName> can only be used within SQL scripts."
     ],
     "sqlState" : "0A000"
   },
