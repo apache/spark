@@ -340,7 +340,7 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
     }
   }
 
-  // RANGE + spill: after e02bbe4, RANGE is the only frame type that opens a
+  // RANGE + spill: the lower cursor is gated on RANGE, so RANGE alone opens a
   // second SpillableArrayIterator (lowerIterator) concurrently with
   // inputIterator. Both iterators have independent UnsafeRow cursors (each
   // SpillableArrayIterator allocates its own currentRow on construction), so
@@ -358,4 +358,3 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
     }
   }
 }
-
