@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.io.File
+import java.nio.file.Files
+
 import org.apache.spark.SparkException
-import org.apache.spark.util.Utils
 
 /** Test suite for the [[InMemoryCatalog]]. */
 class InMemoryCatalogSuite extends ExternalCatalogSuite {
@@ -31,23 +33,24 @@ class InMemoryCatalogSuite extends ExternalCatalogSuite {
   }
 
   test("createDatabase throws UNABLE_TO_CREATE_DATABASE_DIRECTORY when mkdirs fails") {
-    val parentFile = Utils.createTempDir()
-    // A path nested under an existing regular file: the filesystem cannot create it as a
-    // directory, so `fs.mkdirs` throws an IOException.
-    val blockingFile = new java.io.File(parentFile, "not-a-directory")
-    java.nio.file.Files.createFile(blockingFile.toPath)
-    val dbLocation = new java.io.File(blockingFile, "db_dir").toURI
+    withTempDir { parentFile =>
+      // A path nested under an existing regular file: the filesystem cannot create it as a
+      // directory, so `fs.mkdirs` throws an IOException.
+      val blockingFile = new File(parentFile, "not-a-directory")
+      Files.createFile(blockingFile.toPath)
+      val dbLocation = new File(blockingFile, "db_dir").toURI
 
-    val catalog = new InMemoryCatalog
-    val db = CatalogDatabase("unreachable_db", "db", dbLocation, Map.empty)
-    checkError(
-      exception = intercept[SparkException] {
-        catalog.createDatabase(db, ignoreIfExists = false)
-      },
-      condition = "UNABLE_TO_CREATE_DATABASE_DIRECTORY",
-      parameters = Map(
-        "name" -> "unreachable_db",
-        "locationUri" -> dbLocation.toString))
+      val catalog = new InMemoryCatalog
+      val db = CatalogDatabase("unreachable_db", "db", dbLocation, Map.empty)
+      checkError(
+        exception = intercept[SparkException] {
+          catalog.createDatabase(db, ignoreIfExists = false)
+        },
+        condition = "UNABLE_TO_CREATE_DATABASE_DIRECTORY",
+        parameters = Map(
+          "name" -> "unreachable_db",
+          "locationUri" -> dbLocation.toString))
+    }
   }
 
 }
