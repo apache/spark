@@ -29,6 +29,7 @@ import org.apache.spark.sql.types.ByteType
 
 // Test suite for all the execution errors that requires enable ANSI SQL mode.
 class QueryExecutionAnsiErrorsSuite extends SharedSparkSession {
+
   import testImplicits._
 
   override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "true")
@@ -173,6 +174,38 @@ class QueryExecutionAnsiErrorsSuite extends SharedSparkSession {
       context = ExpectedContext(
         fragment = "cast",
         callSitePattern = getCurrentClassCallSitePattern))
+  }
+
+  test("NUMERIC_VALUE_OUT_OF_RANGE: integer overflow") {
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        sql("select cast(2147483647 as int) + cast(5 as int)").collect()
+      },
+      condition = "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
+      sqlState = "22003",
+      parameters = Map(
+        "alternative" -> "Use 'try_add' to tolerate overflow and return NULL instead.",
+        "config" -> "spark.sql.ansi.enabled",
+        "message" -> "overflow",
+      ),
+      context = ExpectedContext(
+        fragment = "cast(2147483647 as int) + cast(5 as int)",
+        start = 7,
+        stop = 46))
+
+    /* checkError(
+      exception = intercept[SparkArithmeticException] {
+        OneRowRelation().select(lit("66666666666666.666").cast("DECIMAL(8, 1)")).collect()
+      },
+      condition = "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
+      sqlState = "22003",
+      parameters = Map(
+        "value" -> "66666666666666.666",
+        "precision" -> "8",
+        "scale" -> "1"),
+      context = ExpectedContext(
+        fragment = "cast",
+        callSitePattern = getCurrentClassCallSitePattern)) */
   }
 
   test("INVALID_ARRAY_INDEX: get element from array") {
