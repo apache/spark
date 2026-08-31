@@ -2000,7 +2000,7 @@ class SparkConnectClient(object):
                     raise PySparkValueError(
                         errorClass="UNKNOWN_RESPONSE",
                         messageParameters={
-                            "response": response,
+                            "response": str(response),
                         },
                     )
 
