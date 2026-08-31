@@ -4922,4 +4922,99 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       }
     }
   }
+
+  private def createTsTable(name: String, partitions: Array[Transform]): Unit = {
+    createTable(name, columns, partitions)
+    sql(s"INSERT INTO testcat.ns.$name VALUES " +
+      s"(1, 'aa', cast('2020-01-01' as timestamp)), " +
+      s"(2, 'bb', cast('2021-06-01' as timestamp))")
+  }
+
+  test("SPARK-59120: reduced partition keys are read at the types they were built with") {
+    // The join reduces the identity side onto the year key space, so its keys become `IntegerType`
+    // years while the partitioning still reports `identity(ts)`, declaring `TimestampType`. With
+    // the subset opt-in on, AQE re-runs `createShuffleSpec` on the already reduced children through
+    // `ValidateRequirements`, which projects and sorts those keys. The mechanism is in
+    // `ShuffleSpecSuite`'s "createShuffleSpec sorts the projected keys at their built-with types".
+    withTable("t_identity", "t_years") {
+      createTsTable("t_identity", Array(identity("ts")))
+      createTsTable("t_years", Array(years("ts")))
+
+      val query =
+        s"""${selectWithMergeJoinHint("a", "b")} a.id, b.data
+           |FROM testcat.ns.t_identity a JOIN testcat.ns.t_years b ON a.ts = b.ts
+           |""".stripMargin
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+        val df = sql(query)
+        checkAnswer(df, Seq(Row(1, "aa"), Row(2, "bb")))
+        assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+          "the two sides are reduced onto one key space, so they stay co-partitioned")
+      }
+    }
+  }
+
+  test("SPARK-59120: incompatible reduced key types are reported instead of cast") {
+    // The first join reduces the identity side onto the year key space. The third table does not
+    // reduce at all, so the two key spaces genuinely differ, and reading each side's keys at their
+    // own types is what lets `EnsureRequirements` say so. On `master` the merge cast one to the
+    // other and threw `ClassCastException`.
+    withTable("t_identity", "t_years", "t_identity2") {
+      createTsTable("t_identity", Array(identity("ts")))
+      createTsTable("t_years", Array(years("ts")))
+      createTsTable("t_identity2", Array(identity("ts")))
+
+      val query =
+        """SELECT /*+ MERGE(a, b), MERGE(a, c) */ a.id, c.data
+          |FROM testcat.ns.t_identity a JOIN testcat.ns.t_years b ON a.ts = b.ts
+          |JOIN testcat.ns.t_identity2 c ON a.ts = c.ts
+          |""".stripMargin
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        checkError(
+          exception = intercept[SparkException](sql(query).collect()),
+          condition = "STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES",
+          parameters = Map(
+            "leftReducers" -> "[]",
+            "leftReducedDataTypes" -> "[\"INT\"]",
+            "rightReducers" -> "[]",
+            "rightReducedDataTypes" -> "[\"TIMESTAMP\"]"))
+      }
+    }
+  }
+
+  test("SPARK-59120: another child is not shuffled onto reducer-rewritten keys") {
+    // `canCreatePartitioning` refuses the reduced side as a layout for the second join, so both of
+    // that join's sides are shuffled. Without the gate the driver dies while assembling that
+    // shuffle's key map, where the stored keys are re-wrapped at the expressions' types.
+    withTable("t_identity", "t_years", "t_plain") {
+      createTsTable("t_identity", Array(identity("ts")))
+      createTsTable("t_years", Array(years("ts")))
+      createTsTable("t_plain", Array.empty[Transform])
+
+      val query =
+        """SELECT /*+ MERGE(a, b), MERGE(c) */ a.id, c.data
+          |FROM testcat.ns.t_identity a JOIN testcat.ns.t_years b ON a.ts = b.ts
+          |JOIN testcat.ns.t_plain c ON a.ts = c.ts
+          |""".stripMargin
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        val df = sql(query)
+        checkAnswer(df, Seq(Row(1, "aa"), Row(2, "bb")))
+        assert(collectAllShuffles(df.queryExecution.executedPlan).size == 2,
+          "the second join shuffles both of its sides")
+      }
+    }
+  }
 }
