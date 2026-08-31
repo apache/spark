@@ -1186,6 +1186,22 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
             Row("""$['a."b']""", """a."b""", "3"),
             Row("""$[""]""", "", "4")))
 
+        // scalastyle:off nonascii
+        checkAnswer(
+          sql("""
+            |SELECT path, key, to_json(value)
+            |FROM variant_explode(parse_json('{"你好": 5}'), true)
+            |""".stripMargin),
+          Seq(Row("$.你好", "你好", "5")))
+
+        checkAnswer(
+          sql("""
+            |SELECT path, key, to_json(value)
+            |FROM variant_explode(parse_json('{"键.名": 5}'), true)
+            |""".stripMargin),
+          Seq(Row("""$["键.名"]""", "键.名", "5")))
+        // scalastyle:on nonascii
+
         checkAnswer(
           sql("SELECT * FROM variant_explode(parse_json('[]'), true)"),
           Nil)

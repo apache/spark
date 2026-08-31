@@ -181,7 +181,7 @@ abstract class TableValuedFunction {
    * variant values.
    *
    * @group variant_funcs
-   * @since 4.3.0
+   * @since 4.4.0
    */
   def variant_explode(input: Column, recursive: Boolean): Dataset[Row]
 
@@ -210,7 +210,7 @@ abstract class TableValuedFunction {
    * variant null, and any other variant values, then NULL is produced.
    *
    * @group variant_funcs
-   * @since 4.3.0
+   * @since 4.4.0
    */
   def variant_explode_outer(input: Column, recursive: Boolean): Dataset[Row]
 

@@ -44,7 +44,13 @@ object MimaExcludes {
   )
 
   // Exclude rules for 4.4.x from 4.3.0 (add 4.4-specific filters below as needed).
-  lazy val v44excludes: Seq[Problem => Boolean] = v43excludes
+  lazy val v44excludes: Seq[Problem => Boolean] = v43excludes ++ Seq(
+    // [SPARK-58645][SQL] Add recursive mode to variant explode table-valued functions
+    ProblemFilters.exclude[ReversedMissingMethodProblem](
+      "org.apache.spark.sql.TableValuedFunction.variant_explode"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem](
+      "org.apache.spark.sql.TableValuedFunction.variant_explode_outer")
+  )
 
   // Exclude rules for 4.3.x from 4.2.0 (add 4.3-specific filters below as needed).
   lazy val v43excludes: Seq[Problem => Boolean] = v42excludes ++ Seq(
@@ -70,12 +76,7 @@ object MimaExcludes {
     // [SPARK-57987] Add desc field to the SQL REST API Node case class
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.apply"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.copy"),
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.sql.Node$"),
-    // [SPARK-58645][SQL] Add recursive mode to variant explode table-valued functions
-    ProblemFilters.exclude[ReversedMissingMethodProblem](
-      "org.apache.spark.sql.TableValuedFunction.variant_explode"),
-    ProblemFilters.exclude[ReversedMissingMethodProblem](
-      "org.apache.spark.sql.TableValuedFunction.variant_explode_outer")
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.sql.Node$")
   )
 
   // Exclude rules for 4.2.x from 4.1.0

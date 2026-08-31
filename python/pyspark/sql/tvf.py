@@ -568,7 +568,7 @@ class TableValuedFunction:
 
         .. versionadded:: 4.0.0
 
-        .. versionchanged:: 4.3.0
+        .. versionchanged:: 4.4.0
             Added the ``recursive`` parameter.
 
         Parameters
@@ -659,7 +659,7 @@ class TableValuedFunction:
 
         .. versionadded:: 4.0.0
 
-        .. versionchanged:: 4.3.0
+        .. versionchanged:: 4.4.0
             Added the ``recursive`` parameter.
 
         Parameters
