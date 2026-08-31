@@ -20,8 +20,8 @@ package org.apache.spark.sql.errors
 import java.util.IllegalFormatException
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkUnsupportedOperationException}
-import org.apache.spark.sql.catalyst.catalog.InvalidUDFClassException
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.catalog.InvalidUDFClassException
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
