@@ -17,22 +17,32 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{EOFException, InputStream, IOException}
+import java.io.{BufferedReader, EOFException, InputStream, InputStreamReader, IOException}
+import java.nio.charset.{CodingErrorAction, StandardCharsets}
 
-import scala.io.{Codec, Source}
+import scala.annotation.tailrec
 
 import com.fasterxml.jackson.core.JsonParseException
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException
 
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.config.History
 import org.apache.spark.scheduler.ReplayListenerBus._
 import org.apache.spark.util.JsonProtocol
 
 /**
  * A SparkListenerBus that can be used to replay events from serialized event data.
+ *
+ * @param maxLineLength Maximum number of characters of a single event log line that will be
+ *                      materialized during replay. Longer lines are drained, skipped and
+ *                      logged, bounding the memory replay can use when an event log is
+ *                      corrupt or unexpectedly large.
  */
-private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
+private[spark] class ReplayListenerBus(
+    maxLineLength: Int = ReplayListenerBus.DEFAULT_MAX_LINE_LENGTH)
+  extends SparkListenerBus with Logging {
 
   /**
    * Replay each event in the order maintained in the given stream. The stream is expected to
@@ -56,8 +66,77 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
       sourceName: String,
       maybeTruncated: Boolean = false,
       eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Boolean = {
-    val lines = Source.fromInputStream(logData)(Codec.UTF8).getLines()
+    val lines = boundedLines(logData, sourceName)
     replay(lines, sourceName, maybeTruncated, eventsFilter)
+  }
+
+  /**
+   * Reads '\n'-terminated lines like Source.getLines(), but never materializes more than
+   * [[maxLineLength]] characters of a single line. An over-long line is drained and skipped
+   * with a warning instead of being turned into a String.
+   */
+  private def boundedLines(logData: InputStream, sourceName: String): Iterator[String] = {
+    // Fail on malformed input like Source.getLines() does instead of replacing it.
+    val decoder = StandardCharsets.UTF_8.newDecoder()
+      .onMalformedInput(CodingErrorAction.REPORT)
+      .onUnmappableCharacter(CodingErrorAction.REPORT)
+    val reader = new BufferedReader(new InputStreamReader(logData, decoder))
+    new Iterator[String] {
+      private var nextLine: String = _
+      private var lineFetched = false
+      private var warned = false
+
+      override def hasNext: Boolean = {
+        if (!lineFetched) {
+          nextLine = fetchLine()
+          lineFetched = true
+        }
+        nextLine != null
+      }
+
+      override def next(): String = {
+        if (!hasNext) {
+          throw new NoSuchElementException("No more lines")
+        }
+        val line = nextLine
+        nextLine = null
+        lineFetched = false
+        line
+      }
+
+      @tailrec private def fetchLine(): String = {
+        val sb = new java.lang.StringBuilder()
+        var overLong = false
+        var c = reader.read()
+        if (c == -1) {
+          null
+        } else {
+          while (c != -1 && c != '\n') {
+            if (sb.length() < maxLineLength) {
+              sb.append(c.toChar)
+            } else {
+              overLong = true
+            }
+            c = reader.read()
+          }
+          if (overLong) {
+            if (!warned) {
+              logWarning(log"Skipped event log lines longer than " +
+                log"${MDC(MAX_SIZE, maxLineLength)} characters in " +
+                log"${MDC(FILE_NAME, sourceName)}")
+              warned = true
+            }
+            fetchLine()
+          } else {
+            // Handle CRLF line endings like Source.getLines() does.
+            if (sb.length() > 0 && sb.charAt(sb.length() - 1) == '\r') {
+              sb.setLength(sb.length() - 1)
+            }
+            sb.toString
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -145,6 +224,19 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
 private[spark] class HaltReplayException extends RuntimeException
 
 private[spark] object ReplayListenerBus {
+
+  /**
+   * Default per-line cap during replay: far above any legitimate event line, so replay
+   * memory stays bounded even for corrupt logs. Matches the default of
+   * spark.history.fs.eventLog.maxLineLength.
+   */
+  val DEFAULT_MAX_LINE_LENGTH: Int = 512 * 1024 * 1024
+
+  /** Resolves the replay line-length cap from configuration; <= 0 disables the cap. */
+  def maxLineLength(conf: SparkConf): Int = {
+    val configured = conf.get(History.EVENT_LOG_MAX_LINE_LENGTH)
+    if (configured <= 0 || configured > Int.MaxValue) Int.MaxValue else configured.toInt
+  }
 
   type ReplayEventsFilter = (String) => Boolean
 
