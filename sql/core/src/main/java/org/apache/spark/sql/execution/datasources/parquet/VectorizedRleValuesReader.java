@@ -56,6 +56,10 @@ public final class VectorizedRleValuesReader extends ValuesReader
   // Encoded data.
   private ByteBufferInputStream in;
 
+  // Total number of values in the current page, as declared by the page header. Group
+  // counts read from the page body are validated against this bound.
+  private int pageValueCount;
+
   // bit/byte width of decoded data and utility to batch unpack them.
   private int bitWidth;
   private int bytesWidth;
@@ -95,6 +99,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
   @Override
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
     this.in = in;
+    this.pageValueCount = valueCount;
     if (fixedWidth) {
       // Initialize for repetition and definition levels
       if (readLength) {
@@ -860,6 +865,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
     int b;
     do {
       b = in.read();
+      if (b < 0) {
+        // A truncated varint would otherwise spin forever: read() keeps returning -1 at
+        // end of input, whose continuation bit is always set.
+        throw new ParquetDecodingException("Reached end of page while reading a varint header");
+      }
       value |= (b & 0x7F) << shift;
       shift += 7;
     } while ((b & 0x80) != 0);
@@ -919,11 +929,30 @@ public final class VectorizedRleValuesReader extends ValuesReader
       switch (mode) {
         case RLE:
           this.currentCount = header >>> 1;
+          if (this.currentCount > pageValueCount) {
+            throw new ParquetDecodingException("Invalid RLE run of " + this.currentCount +
+              " values in a page declaring " + pageValueCount);
+          }
           this.currentValue = readIntLittleEndianPaddedOnBitWidth();
           break;
         case PACKED:
           int numGroups = header >>> 1;
-          this.currentCount = numGroups * 8;
+          // The group count comes from the page body and may be garbage if the file is
+          // corrupt: `numGroups * 8` can overflow int, and a huge count would size a
+          // multi-GB allocation the page has no bytes for. The last bit-packed group may
+          // be zero-padded to a multiple of 8, so allow count up to pageValueCount + 7.
+          long count = (long) numGroups * 8;
+          long bytesNeeded = (long) numGroups * bitWidth;
+          int bytesAvailable = in.available();
+          // The count check alone still admits count = 2^31 when pageValueCount is within
+          // 7 of Integer.MAX_VALUE, which would overflow the int cast below.
+          if (count > (long) pageValueCount + 7 || count > Integer.MAX_VALUE ||
+              bytesNeeded > bytesAvailable) {
+            throw new ParquetDecodingException("Invalid bit-packed run: " + numGroups +
+              " groups in a page declaring " + pageValueCount + " values with " +
+              bytesAvailable + " bytes remaining");
+          }
+          this.currentCount = (int) count;
 
           if (this.currentBuffer.length < this.currentCount) {
             this.currentBuffer = new int[this.currentCount];
