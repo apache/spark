@@ -17,16 +17,19 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.HashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.analysis.ApplyCharTypePaddingHelper
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * This rule performs string padding for char type.
@@ -51,27 +54,55 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
+    val standardSemantics = conf.charVarcharStandardSemantics
+
     // standardSemantics takes precedence over legacy charVarcharAsString.
-    if (conf.charVarcharAsString && !conf.charVarcharStandardSemantics) {
+    if (conf.charVarcharAsString && !standardSemantics) {
       return plan
     }
 
-    if (conf.charVarcharStandardSemantics && !conf.readSideCharPadding) {
+    if (standardSemantics && !conf.readSideCharPadding) {
       warnReadSidePaddingOverride()
     }
 
-    if (conf.readSideCharPadding || conf.charVarcharStandardSemantics) {
+    if (conf.readSideCharPadding || standardSemantics) {
+      def cleanAttrMetadata(attr: AttributeReference): AttributeReference = {
+        CharVarcharUtils.cleanAttrMetadataForScan(attr, standardSemantics)
+      }
+
       val newPlan = plan.resolveOperatorsUpWithNewOutput {
         case r: LogicalRelation =>
-          ApplyCharTypePaddingHelper.readSidePadding(r, () =>
-            r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata)))
+          ApplyCharTypePaddingHelper.readSidePadding(r, () => {
+            val cleanedRelation = r.relation match {
+              case relation: HadoopFsRelation =>
+                relation.copy(
+                  dataSchema = CharVarcharUtils.markStandardSemanticsForScan(
+                    relation.dataSchema,
+                    standardSemantics),
+                  partitionSchema = CharVarcharUtils.markStandardSemanticsForScan(
+                    relation.partitionSchema,
+                    standardSemantics))(relation.sparkSession)
+              case other => other
+            }
+            r.copy(relation = cleanedRelation, output = r.output.map(cleanAttrMetadata))
+          })
         case r: DataSourceV2Relation =>
-          ApplyCharTypePaddingHelper.readSidePadding(r, () =>
-            r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata)))
+          ApplyCharTypePaddingHelper.readSidePadding(r, () => {
+            val options = if (standardSemantics) {
+              val boundOptions = new HashMap[String, String](r.options.asCaseSensitiveMap)
+              boundOptions.put(
+                CharVarcharUtils.CHAR_VARCHAR_STANDARD_SEMANTICS_SCAN_OPTION,
+                true.toString)
+              new CaseInsensitiveStringMap(boundOptions)
+            } else {
+              r.options
+            }
+            r.copy(output = r.output.map(cleanAttrMetadata), options = options)
+          })
         case r: HiveTableRelation =>
           ApplyCharTypePaddingHelper.readSidePadding(r, () => {
-            val cleanedDataCols = r.dataCols.map(CharVarcharUtils.cleanAttrMetadata)
-            val cleanedPartCols = r.partitionCols.map(CharVarcharUtils.cleanAttrMetadata)
+            val cleanedDataCols = r.dataCols.map(cleanAttrMetadata)
+            val cleanedPartCols = r.partitionCols.map(cleanAttrMetadata)
             r.copy(dataCols = cleanedDataCols, partitionCols = cleanedPartCols)
           })
       }

@@ -1866,6 +1866,34 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
                 checkAnswer(readBack, Row("abcd"))
               }
             }
+
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              Seq("abcdef").toDF("v").write.mode("overwrite").orc(path)
+              val table = "std_orc_view_source"
+              val view = "std_orc_view"
+              withTable(table) {
+                withView(view) {
+                  sql(s"CREATE TABLE $table (v VARCHAR(4)) USING orc LOCATION '$path'")
+                  sql(s"CREATE VIEW $view AS SELECT v FROM $table")
+                  // Keep first-class output enabled in the caller so this isolates whether ORC
+                  // honors the standard semantics captured while resolving the view body.
+                  withSQLConf(
+                      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+                    withClue(
+                        s"ORC view $sourceVersion vectorized=$vectorizedReaderEnabled: ") {
+                      checkError(
+                        exception = intercept[SparkRuntimeException] {
+                          sql(s"SELECT * FROM $view").collect()
+                        },
+                        condition = "EXCEED_LIMIT_LENGTH",
+                        parameters = Map("limit" -> "4"))
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }

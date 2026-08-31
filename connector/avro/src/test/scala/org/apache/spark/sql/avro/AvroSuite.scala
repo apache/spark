@@ -3741,8 +3741,13 @@ abstract class AvroSuite
         val readBack = spark.read.format("avro").load(path)
         assert(DataType.equalsIgnoreNullability(readBack.schema, input.schema))
         checkAnswer(
-          readBack.selectExpr("concat('<', c, '>')", "v", "concat('<', s.c, '>')"),
-          Row("<ab  >", "xy", "<z >"))
+          readBack.selectExpr(
+            "concat('<', c, '>')",
+            "v",
+            "concat('<', s.c, '>')",
+            "a",
+            "m"),
+          Row("<ab  >", "xy", "<z >", Seq("q"), Map("k " -> "v")))
 
         withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
           assert(DataType.equalsIgnoreNullability(
