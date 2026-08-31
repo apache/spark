@@ -2723,7 +2723,6 @@ class CachedTableSuite extends SharedSparkSession
   }
 
   test("SPARK-59114: Class Cast Exception when disabling vectorized read after caching relation") {
-    sql("USE spark_catalog")
     def createCachedTable(
         tablename: String,
         schema: StructType,
@@ -2744,7 +2743,7 @@ class CachedTableSuite extends SharedSparkSession
       )
       spark.catalog.cacheTable(tablename)
     }
-    val t1 = "tbl_59114"
+    val t1 = "spark_catalog.default.tbl"
     val t1_schema = StructType.fromDDL("c1_1 INT, c1_2 INT")
     withTempPath { location =>
       withTable(t1) {
