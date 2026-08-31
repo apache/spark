@@ -8240,7 +8240,7 @@
     ],
     "sqlState" : "42K0G"
   },
-  "UNABLE_TO_CREATE_DATABASE" : {
+  "UNABLE_TO_CREATE_DATABASE_DIRECTORY" : {
     "message" : [
       "Unable to create database <name> as failed to create its directory <locationUri>."
     ],

@@ -30,7 +30,7 @@ class InMemoryCatalogSuite extends ExternalCatalogSuite {
     override def newEmptyCatalog(): ExternalCatalog = new InMemoryCatalog
   }
 
-  test("createDatabase throws UNABLE_TO_CREATE_DATABASE when mkdirs fails") {
+  test("createDatabase throws UNABLE_TO_CREATE_DATABASE_DIRECTORY when mkdirs fails") {
     val parentFile = Utils.createTempDir()
     // A path nested under an existing regular file: the filesystem cannot create it as a
     // directory, so `fs.mkdirs` throws an IOException.
@@ -44,7 +44,7 @@ class InMemoryCatalogSuite extends ExternalCatalogSuite {
       exception = intercept[SparkException] {
         catalog.createDatabase(db, ignoreIfExists = false)
       },
-      condition = "UNABLE_TO_CREATE_DATABASE",
+      condition = "UNABLE_TO_CREATE_DATABASE_DIRECTORY",
       parameters = Map(
         "name" -> "unreachable_db",
         "locationUri" -> dbLocation.toString))
