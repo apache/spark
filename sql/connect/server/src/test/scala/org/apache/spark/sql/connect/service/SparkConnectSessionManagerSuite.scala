@@ -198,9 +198,11 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
           Connect.CONNECT_SESSION_MANAGER_CLEANUP_CACHED_DATA_ENABLED.key ->
             cleanupCachedData.toString) {
           val first = SparkConnectService.sessionManager.getOrCreateIsolatedSession(
-            SessionKey("user", UUID.randomUUID().toString), None)
+            SessionKey("user", UUID.randomUUID().toString),
+            None)
           val second = SparkConnectService.sessionManager.getOrCreateIsolatedSession(
-            SessionKey("user", UUID.randomUUID().toString), None)
+            SessionKey("user", UUID.randomUUID().toString),
+            None)
           val firstDataFrame = first.session.range(1)
           second.session.range(1, 2).createTempView("second_view")
           second.session.catalog.cacheTable("second_view")
@@ -217,7 +219,9 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
 
           SparkConnectService.sessionManager.closeSession(second.key)
           assert(
-            second.session.sharedState.cacheManager.lookupCachedData(secondDataFrame).isDefined ===
+            second.session.sharedState.cacheManager
+              .lookupCachedData(secondDataFrame)
+              .isDefined ===
               !cleanupCachedData)
           spark.catalog.clearCache()
         }
@@ -228,9 +232,11 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
   test("SPARK-50569: cached data cleanup preserves entries persisted by another session") {
     withSparkConf(Connect.CONNECT_SESSION_MANAGER_CLEANUP_CACHED_DATA_ENABLED.key -> "true") {
       val first = SparkConnectService.sessionManager.getOrCreateIsolatedSession(
-        SessionKey("user", UUID.randomUUID().toString), None)
+        SessionKey("user", UUID.randomUUID().toString),
+        None)
       val second = SparkConnectService.sessionManager.getOrCreateIsolatedSession(
-        SessionKey("user", UUID.randomUUID().toString), None)
+        SessionKey("user", UUID.randomUUID().toString),
+        None)
       val firstDataFrame = first.session.range(1)
       val secondDataFrame = second.session.range(1)
 

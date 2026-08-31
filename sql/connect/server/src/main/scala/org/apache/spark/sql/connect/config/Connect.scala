@@ -158,8 +158,9 @@ object Connect {
 
   val CONNECT_SESSION_MANAGER_CLEANUP_CACHED_DATA_ENABLED =
     buildStaticConf("spark.connect.session.manager.cleanupCachedData.enabled")
-      .doc("When true, cached data persisted by an isolated session is removed when the session " +
-        "is closed. Cached data that is also persisted by another session is preserved.")
+      .doc(
+        "When true, cached data persisted by an isolated session is removed when the session " +
+          "is closed. Cached data that is also persisted by another session is preserved.")
       .version("4.4.0")
       .booleanConf
       .createWithDefault(false)
