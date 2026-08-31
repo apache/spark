@@ -63,7 +63,8 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
 private class ShuffleStatus(
     numPartitions: Int,
     numReducers: Int = -1,
-    bufferRacingMigrations: Boolean = false) extends Logging {
+    bufferRacingMigrations: Boolean = false,
+    val isReliablyStored: Boolean = false) extends Logging {
 
   private val (readLock, writeLock) = {
     val lock = new ReentrantReadWriteLock()
@@ -929,23 +930,37 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.valuesIterator.count(_.hasCachedSerializedBroadcast)
   }
 
-  def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int): Unit = {
+  def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int): Unit =
+    registerShuffle(shuffleId, numMaps, numReduces, isReliablyStored = false)
+
+  def registerShuffle(
+      shuffleId: Int,
+      numMaps: Int,
+      numReduces: Int,
+      isReliablyStored: Boolean): Unit = {
     if (pushBasedShuffleEnabled) {
       if (shuffleStatuses.put(shuffleId,
-        new ShuffleStatus(numMaps, numReduces, bufferRacingMigrations)).isDefined) {
+        new ShuffleStatus(numMaps, numReduces, bufferRacingMigrations,
+          isReliablyStored)).isDefined) {
         throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
       }
     } else {
       if (shuffleStatuses.put(shuffleId,
-        new ShuffleStatus(numMaps, bufferRacingMigrations = bufferRacingMigrations)).isDefined) {
+        new ShuffleStatus(numMaps, bufferRacingMigrations = bufferRacingMigrations,
+          isReliablyStored = isReliablyStored)).isDefined) {
         throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
       }
     }
   }
 
   // ShuffleOutputTrackerMaster: a regular shuffle has no per-job registration, so jobId is ignored.
-  override def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int, jobId: Int): Unit =
-    registerShuffle(shuffleId, numMaps, numReduces)
+  override def registerShuffle(
+      shuffleId: Int,
+      numMaps: Int,
+      numReduces: Int,
+      jobId: Int,
+      isReliablyStored: Boolean): Unit =
+    registerShuffle(shuffleId, numMaps, numReduces, isReliablyStored)
 
   def updateMapOutput(shuffleId: Int, mapId: Long, bmAddress: BlockManagerId): Unit = {
     shuffleStatuses.get(shuffleId) match {
@@ -1044,20 +1059,48 @@ private[spark] class MapOutputTrackerMaster(
   /**
    * Removes all shuffle outputs associated with this host. Note that this will also remove
    * outputs which are served by an external shuffle server (if one exists).
+   *
+   * When `skipReliablyStored` is true (executor/worker loss rather than a fetch failure),
+   * shuffles whose output is reliably stored off-executor are left intact, since losing the host
+   * does not lose their output.
    */
-  def removeOutputsOnHost(host: String): Unit = {
-    shuffleStatuses.valuesIterator.foreach { _.removeOutputsOnHost(host) }
-    incrementEpoch()
+  def removeOutputsOnHost(host: String): Unit =
+    removeOutputsOnHost(host, skipReliablyStored = false)
+
+  def removeOutputsOnHost(host: String, skipReliablyStored: Boolean): Unit = {
+    var removedAny = false
+    shuffleStatuses.valuesIterator.foreach { status =>
+      if (!(skipReliablyStored && status.isReliablyStored)) {
+        status.removeOutputsOnHost(host)
+        removedAny = true
+      }
+    }
+    // Skip the epoch bump when nothing was removed (every shuffle was reliably stored): a bump
+    // needlessly invalidates every executor's cached map statuses and forces a re-fetch.
+    if (removedAny) incrementEpoch()
   }
 
   /**
    * Removes all shuffle outputs associated with this executor. Note that this will also remove
    * outputs which are served by an external shuffle server (if one exists), as they are still
    * registered with this execId.
+   *
+   * When `skipReliablyStored` is true (executor loss rather than a fetch failure), shuffles whose
+   * output is reliably stored off-executor are left intact: losing the executor does not lose
+   * their output, so unregistering would force a needless map-stage recompute.
    */
-  def removeOutputsOnExecutor(execId: String): Unit = {
-    shuffleStatuses.valuesIterator.foreach { _.removeOutputsOnExecutor(execId) }
-    incrementEpoch()
+  def removeOutputsOnExecutor(execId: String): Unit =
+    removeOutputsOnExecutor(execId, skipReliablyStored = false)
+
+  def removeOutputsOnExecutor(execId: String, skipReliablyStored: Boolean): Unit = {
+    var removedAny = false
+    shuffleStatuses.valuesIterator.foreach { status =>
+      if (!(skipReliablyStored && status.isReliablyStored)) {
+        status.removeOutputsOnExecutor(execId)
+        removedAny = true
+      }
+    }
+    if (removedAny) incrementEpoch()
   }
 
   /**
@@ -1082,6 +1125,14 @@ private[spark] class MapOutputTrackerMaster(
 
   /** Check if the given shuffle is being tracked */
   override def containsShuffle(shuffleId: Int): Boolean = shuffleStatuses.contains(shuffleId)
+
+  /**
+   * Whether this shuffle's output is reliably stored off-executor, so it is not lost when an
+   * executor or worker holding it is lost. Unknown shuffles default to false.
+   */
+  def isReliablyStored(shuffleId: Int): Boolean = {
+    shuffleStatuses.get(shuffleId).exists(_.isReliablyStored)
+  }
 
   def getNumAvailableOutputs(shuffleId: Int): Int = {
     shuffleStatuses.get(shuffleId).map(_.numAvailableMapOutputs).getOrElse(0)

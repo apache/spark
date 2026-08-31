@@ -136,6 +136,46 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     rpcEnv.shutdown()
   }
 
+  test("SPARK-59138: executor loss skips reliably-stored shuffles but not local-disk ones") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster()
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+
+    val size = MapStatus.compressSize(1000L)
+    // Shuffle 0: local-disk (not reliably stored). Shuffle 1: reliably stored off-executor.
+    tracker.registerShuffle(0, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+    tracker.registerShuffle(1, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES,
+      isReliablyStored = true)
+    tracker.registerMapOutput(0, 0, MapStatus(BlockManagerId("a", "hostA", 1000), Array(size), 5))
+    tracker.registerMapOutput(1, 0, MapStatus(BlockManagerId("a", "hostA", 1000), Array(size), 6))
+
+    assert(tracker.isReliablyStored(0) === false)
+    assert(tracker.isReliablyStored(1) === true)
+
+    // Executor loss: skip reliably-stored shuffles. Shuffle 0 drops, shuffle 1 stays.
+    tracker.removeOutputsOnExecutor("a", skipReliablyStored = true)
+    assert(tracker.getNumAvailableOutputs(0) === 0)
+    assert(tracker.getNumAvailableOutputs(1) === 1)
+
+    // Losing an executor when only reliably-stored shuffles remain removes nothing, so the
+    // epoch must not bump (a bump would needlessly invalidate every executor's cached statuses).
+    tracker.unregisterShuffle(0)
+    val epochBeforeNoOp = tracker.getEpoch
+    tracker.removeOutputsOnExecutor("a", skipReliablyStored = true)
+    assert(tracker.getEpoch === epochBeforeNoOp)
+
+    // Fetch failure (skip = false): even the reliably-stored shuffle's output is removed, and
+    // because something was removed the epoch bumps.
+    val epochBeforeRemoval = tracker.getEpoch
+    tracker.removeOutputsOnExecutor("a", skipReliablyStored = false)
+    assert(tracker.getNumAvailableOutputs(1) === 0)
+    assert(tracker.getEpoch > epochBeforeRemoval)
+
+    tracker.stop()
+    rpcEnv.shutdown()
+  }
+
   test("remote fetch") {
     val hostname = "localhost"
     val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))

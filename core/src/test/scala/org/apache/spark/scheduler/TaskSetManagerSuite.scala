@@ -760,6 +760,37 @@ class TaskSetManagerSuite
     assert(manager.successful(taskIndex))
   }
 
+  test("SPARK-59138: task doesn't rerun on executor lost for a reliably-stored shuffle") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc)
+    val backend = mock(classOf[SchedulerBackend])
+    doNothing().when(backend).reviveOffers()
+    sched.initialize(backend)
+
+    sched.addExecutor("exec0", "host0")
+
+    val mapOutputTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    mapOutputTracker.registerShuffle(0, 2, 0, isReliablyStored = true)
+
+    val taskSet = FakeTask.createShuffleMapTaskSet(2, 0, 0,
+      Seq(TaskLocation("host0", "exec0")), Seq(TaskLocation("host1", "exec1")))
+    sched.submitTasks(taskSet)
+    val manager = sched.taskSetManagerForAttempt(0, 0).get
+
+    val taskDesc = manager.resourceOffer("exec0", "host0", PROCESS_LOCAL)._1
+    assert(taskDesc.isDefined)
+    val taskIndex = taskDesc.get.index
+    val taskId = taskDesc.get.taskId
+    manager.handleSuccessfulTask(taskId, createTaskResult(taskId.toInt))
+    mapOutputTracker.registerMapOutput(0, taskIndex,
+      MapStatus(BlockManagerId("exec0", "host0", 8848), Array(1024), taskId))
+
+    // The shuffle is reliably stored off-executor, so losing exec0 must not rerun the map task,
+    // even without shuffle migration or an external shuffle service.
+    manager.executorLost("exec0", "host0", ExecutorDecommission())
+    assert(manager.successful(taskIndex))
+  }
+
   test("SPARK-32653: Decommissioned host should not be used to calculate locality levels") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc)

@@ -25,4 +25,12 @@ import org.apache.spark.annotation.DeveloperApi
  * @param shuffleId ID of the shuffle
  */
 @DeveloperApi
-abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {}
+abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {
+  /**
+   * Whether this shuffle's output is stored reliably outside the executors that produced it (e.g.
+   * a remote shuffle service). When true, losing an executor does not lose this shuffle's output,
+   * so its map outputs are not unregistered on executor loss. Defaults to false; a ShuffleManager
+   * that routes a shuffle to reliable storage overrides this on the handle it returns.
+   */
+  def isReliablyStored: Boolean = false
+}
