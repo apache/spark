@@ -48,7 +48,7 @@ import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.rpc.RpcTimeoutException
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
-import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
+import org.apache.spark.shuffle.{BaseShuffleHandle, FetchFailedException, MetadataFetchFailedException, ShuffleHandle}
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, Clock, LongAccumulator, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -152,6 +152,17 @@ class MyRDD(
   }
 
   override def toString: String = "DAGSchedulerSuiteRDD " + id
+}
+
+/** A ShuffleDependency whose handle reports its output as reliably stored off-executor. */
+class ReliablyStoredShuffleDependency(
+    rdd: RDD[_ <: Product2[Int, Int]],
+    partitioner: Partitioner)
+  extends ShuffleDependency[Int, Int, Int](rdd, partitioner) {
+  override val shuffleHandle: ShuffleHandle =
+    new BaseShuffleHandle(shuffleId, this) {
+      override def isReliablyStored: Boolean = true
+    }
 }
 
 class DummyScheduledFuture(
@@ -778,7 +789,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     runEvent(ExecutorLost("hostA-exec", ExecutorExited(-100, false, "Container marked as failed")))
     // Executor is removed but shuffle files are not unregistered
     verify(blockManagerMaster, times(1)).removeExecutorAsync("hostA-exec")
-    verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("hostA-exec")
+    verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("hostA-exec", true)
 
     // The MapOutputTracker has all the shuffle files
     val mapStatuses = mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses
@@ -793,7 +804,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // blockManagerMaster.removeExecutorAsync is not called again
     // but shuffle files are unregistered
     verify(blockManagerMaster, times(1)).removeExecutorAsync("hostA-exec")
-    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec")
+    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec", false)
 
     // Shuffle files for hostA-exec should be lost
     assert(mapStatuses.count(_ != null) === 1)
@@ -805,7 +816,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     complete(taskSets(1), Seq(
       (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 1, 0, "ignored"), null)
     ))
-    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec")
+    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec", false)
   }
 
   test("zero split job") {
@@ -1079,15 +1090,15 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       verify(blockManagerMaster, times(1)).removeExecutorAsync("hostA-exec")
       if (expectFileLoss) {
         if (expectHostFileLoss) {
-          verify(mapOutputTracker, times(1)).removeOutputsOnHost("hostA")
+          verify(mapOutputTracker, times(1)).removeOutputsOnHost("hostA", true)
         } else {
-          verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec")
+          verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec", true)
         }
         intercept[MetadataFetchFailedException] {
           mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0)
         }
       } else {
-        verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("hostA-exec")
+        verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("hostA-exec", true)
         assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
           HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
       }
@@ -1112,9 +1123,36 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     completeShuffleMapStageSuccessfully(0, 0, 1)
     runEvent(ExecutorLost("hostA-exec", event))
     verify(blockManagerMaster, times(1)).removeExecutorAsync("hostA-exec")
-    verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("hostA-exec")
+    verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("hostA-exec", true)
     assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
       HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
+  }
+
+  test("SPARK-59138: executor loss keeps a reliably-stored shuffle but drops a local-disk one") {
+    // No external shuffle service, so a plain (local-disk) shuffle's outputs are lost on executor
+    // loss, but a per-shuffle reliably-stored one survives.
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "false")
+
+    val reliableRdd = new MyRDD(sc, 2, Nil)
+    val reliableDep = new ReliablyStoredShuffleDependency(reliableRdd, new HashPartitioner(1))
+    val localRdd = new MyRDD(sc, 2, Nil)
+    val localDep = new ShuffleDependency(localRdd, new HashPartitioner(1))
+    val reduceRdd = new MyRDD(sc, 1, List(reliableDep, localDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0))
+
+    // Two independent map stages, one per shuffle; complete both on hostA / hostB.
+    completeShuffleMapStageSuccessfully(0, 0, 1)
+    completeShuffleMapStageSuccessfully(1, 0, 1)
+
+    runEvent(ExecutorLost("hostA-exec", ExecutorKilled))
+    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec", true)
+
+    // Reliable shuffle keeps hostA's output; local-disk shuffle loses it.
+    assert(mapOutputTracker.getMapSizesByExecutorId(reliableDep.shuffleId, 0).map(_._1).toSet ===
+      HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
+    intercept[MetadataFetchFailedException] {
+      mapOutputTracker.getMapSizesByExecutorId(localDep.shuffleId, 0)
+    }
   }
 
   test("SPARK-28967 properties must be cloned before posting to listener bus for 0 partition") {
@@ -6185,7 +6223,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     verify(blockManagerMaster, times(0))
       .removeExecutorAsync(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
     verify(mapOutputTracker,
-      times(0)).removeOutputsOnExecutor(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
+      times(0)).removeOutputsOnExecutor(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER, true)
 
     // Now a fetch failure from the lost executor occurs
     complete(taskSets(1), Seq(
@@ -6199,7 +6237,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       .removeExecutorAsync(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
     verify(blockManagerMaster, times(1)).removeShufflePushMergerLocation("hostA")
     verify(mapOutputTracker,
-      times(1)).removeOutputsOnHost("hostA")
+      times(1)).removeOutputsOnHost("hostA", false)
 
     // There should be no map statuses or merge statuses on the host
     val shuffleStatuses = mapOutputTracker.shuffleStatuses(shuffleId)

@@ -38,7 +38,12 @@ import org.apache.spark.util.ThreadUtils
  */
 private[spark] trait ShuffleOutputTrackerMaster {
   /** Register a shuffle so its outputs can be tracked. `jobId` is used by the streaming tracker. */
-  def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int, jobId: Int): Unit
+  def registerShuffle(
+      shuffleId: Int,
+      numMaps: Int,
+      numReduces: Int,
+      jobId: Int,
+      isReliablyStored: Boolean = false): Unit
   /** Whether the given shuffle is registered with this tracker. */
   def containsShuffle(shuffleId: Int): Boolean
   /** Unregister a shuffle and release its tracked state. */
@@ -237,7 +242,12 @@ private[spark] class StreamingShuffleOutputTrackerMaster(conf: SparkConf)
     pool
   }
 
-  override def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int, jobId: Int): Unit = {
+  override def registerShuffle(
+      shuffleId: Int,
+      numMaps: Int,
+      numReduces: Int,
+      jobId: Int,
+      isReliablyStored: Boolean): Unit = {
     logInfo(log"Registering shuffleId ${MDC(LogKeys.SHUFFLE_ID, shuffleId)} with ${
       MDC(LogKeys.NUM_MAPPERS, numMaps)} mappers and ${
       MDC(LogKeys.NUM_REDUCERS, numReduces)} reducers")
