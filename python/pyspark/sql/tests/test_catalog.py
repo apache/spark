@@ -18,6 +18,7 @@ import tempfile
 
 from pyspark import StorageLevel
 from pyspark.errors import AnalysisException, PySparkTypeError
+from pyspark.sql import is_remote
 from pyspark.sql.types import IntegerType, StructField, StructType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -471,7 +472,7 @@ class CatalogTestsMixin:
             spark.catalog.clearCache()
             spark.catalog.dropTempView(first_view)
             other_session.catalog.dropTempView(second_view)
-            if hasattr(other_session, "client"):
+            if is_remote():
                 other_session.client.close()
 
     def test_table_exists(self):
