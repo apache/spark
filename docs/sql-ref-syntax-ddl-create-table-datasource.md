@@ -37,7 +37,15 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
     [ LOCATION path ]
     [ COMMENT table_comment ]
     [ TBLPROPERTIES ( key1=val1, key2=val2, ... ) ]
+    [ DISTRIBUTED BY PARTITION ]
+    [ [ LOCALLY ] ORDERED BY ( write_order_field [ , ... ] ) | UNORDERED ]
     [ AS select_statement ]
+```
+
+```sql
+write_order_field
+    { col_name | transform ( { col_name | constant } [ , ... ] ) }
+        [ ASC | DESC ] [ NULLS { FIRST | LAST } ]
 ```
 
 Note that, the clauses between the USING clause and the AS SELECT clause can come in
@@ -97,6 +105,61 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 * **TBLPROPERTIES**
 
     A list of key-value pairs that is used to tag the table definition.
+
+* **DISTRIBUTED BY PARTITION**
+
+    Requests that every write to the table be clustered by the table's partitioning, so each
+    partition is written by a single task rather than by every task that holds rows for it.
+
+    Requires the table to actually be partitioned, with `PARTITIONED BY` or with
+    `CLUSTERED BY ... INTO ... BUCKETS`. Note that `CLUSTER BY` -- a different clause from
+    `CLUSTERED BY ... INTO ... BUCKETS` -- does **not** qualify: it lists clustering columns for the
+    data source to interpret rather than defining a partitioning, and it cannot be combined with
+    `PARTITIONED BY` or `CLUSTERED BY ... INTO ... BUCKETS`, so a table using it has no partitioning
+    to distribute by.
+
+* **ORDERED BY**
+
+    Requests a sort order for every write to the table, recorded on the table so that later writes
+    honor it too. `UNORDERED` asks for no ordering at all, which is different from omitting the
+    clause -- omitting it leaves the choice to the data source. The parentheses are optional:
+    `ORDERED BY (a, b)` and `ORDERED BY a, b` are the same. The sort keys must resolve against the
+    table's columns, so a `CREATE TABLE` with neither a column list nor `AS SELECT` cannot use this
+    clause.
+
+    The distribution decides how far the order reaches, and this clause picks one when
+    `DISTRIBUTED BY PARTITION` is absent: a bare `ORDERED BY` range-partitions each write, so the
+    order holds across the whole table, while `LOCALLY ORDERED BY` asks for it to hold within each
+    write task only, without a shuffle. `UNORDERED` on its own asks for no distribution either.
+
+    When `DISTRIBUTED BY PARTITION` is given it decides the distribution instead, and the order then
+    holds within each write task. `LOCALLY` therefore adds nothing beside it, and `UNORDERED` beside
+    it contributes only "no sort keys":
+
+    ```sql
+    -- range-partition each write by id, so the order holds across the whole table
+    CREATE TABLE t (id INT, c STRING) USING iceberg PARTITIONED BY (c) ORDERED BY (id);
+
+    -- cluster each write by partition instead, and sort by id within each task
+    CREATE TABLE t (id INT, c STRING) USING iceberg PARTITIONED BY (c)
+        DISTRIBUTED BY PARTITION ORDERED BY (id);
+
+    -- cluster each write by partition, with no sort order; UNORDERED here is the same as
+    -- omitting it, since DISTRIBUTED BY PARTITION already fixed the distribution
+    CREATE TABLE t (id INT, c STRING) USING iceberg PARTITIONED BY (c)
+        DISTRIBUTED BY PARTITION UNORDERED;
+    ```
+
+    Both clauses are passed to the catalog, which has to support them: a catalog that does not
+    advertise support for a write distribution and ordering rejects the statement rather than
+    creating a table that silently lacks the requested layout. The built-in catalogs do not
+    support them.
+
+    What the catalog records is a *default* for later writes, not a statement about the data
+    already in the table: an individual write may override it, and rewriting existing data to match
+    a newly requested layout is a separate operation. `SHOW CREATE TABLE` reproduces the clauses
+    when the recorded pair has a clause form, and `DESCRIBE TABLE EXTENDED` reports both values in
+    every case.
 
 * **AS select_statement**
 

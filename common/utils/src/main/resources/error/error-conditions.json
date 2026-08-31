@@ -7196,11 +7196,25 @@
     ],
     "sqlState" : "42908"
   },
+  "SPECIFY_DISTRIBUTED_BY_PARTITION_WITHOUT_PARTITIONING_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot specify DISTRIBUTED BY PARTITION for a table that has no partitioning.",
+      "Please add PARTITIONED BY or CLUSTERED BY ... INTO ... BUCKETS, or drop the clause and use only ORDERED BY."
+    ],
+    "sqlState" : "42908"
+  },
   "SPECIFY_PARTITION_IS_NOT_ALLOWED" : {
     "message" : [
       "A CREATE TABLE without explicit column list cannot specify PARTITIONED BY.",
       "Please use the form with explicit column list and specify PARTITIONED BY.",
       "Alternatively, allow partitioning to be inferred by omitting the PARTITION BY clause."
+    ],
+    "sqlState" : "42601"
+  },
+  "SPECIFY_WRITE_ORDERING_IS_NOT_ALLOWED" : {
+    "message" : [
+      "A CREATE or REPLACE TABLE without an explicit column list cannot specify ORDERED BY, because there is no schema to resolve the ordering against.",
+      "Please use the form with an explicit column list, or the AS SELECT form."
     ],
     "sqlState" : "42601"
   },
@@ -9251,6 +9265,11 @@
       "WRITE_FOR_BINARY_SOURCE" : {
         "message" : [
           "Write for the binary file data source."
+        ]
+      },
+      "WRITE_ORDERING_WITH_UNKNOWN_COLUMN" : {
+        "message" : [
+          "Invalid write ordering: <cols> is not a column of the table."
         ]
       }
     },

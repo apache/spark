@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, SupportsPartitionManagement}
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -922,6 +923,31 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 errorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
                 messageParameters = Map(
                   "cols" -> badReferences.map(r => toSQLId(r)).mkString(", ")))
+            }
+
+            // The same check for the write ordering. It has to live here rather than only in
+            // PreprocessTableCreation, which normalizes references: that rule can only rewrite a
+            // RewritableTransform, so a transform like `truncate(4, col)` would otherwise reach the
+            // connector with a column the table does not have, and it skips the ordering entirely
+            // when the schema is not defined. Like the partitioning check above, this resolves
+            // case-sensitively: normalization has already fixed the case of every reference it
+            // could rewrite, so a reference that still does not match exactly is one that would
+            // reach the connector misspelled.
+            val badOrderingReferences =
+              create.writeOrdering.flatMap(_.expression().references()).toSet
+                .map((ref: NamedReference) => ref.fieldNames)
+                .flatMap { column =>
+                  create.tableSchema.findNestedField(column.toImmutableArraySeq) match {
+                    case Some(_) => None
+                    case _ => Some(column.quoted)
+                  }
+                }.toSeq
+
+            if (badOrderingReferences.nonEmpty) {
+              create.failAnalysis(
+                errorClass = "UNSUPPORTED_FEATURE.WRITE_ORDERING_WITH_UNKNOWN_COLUMN",
+                messageParameters = Map(
+                  "cols" -> badOrderingReferences.map(r => toSQLId(r)).mkString(", ")))
             }
 
             create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))

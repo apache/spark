@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.catalog;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.constraints.Constraint;
+import org.apache.spark.sql.connector.expressions.SortOrder;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.types.StructType;
@@ -104,6 +105,35 @@ public interface Table extends Relation {
    * Returns the constraints for this table.
    */
   default Constraint[] constraints() { return new Constraint[0]; }
+
+  /**
+   * Returns the write distribution this table declares as the default for writes into it, or null
+   * if it declares none.
+   * <p>
+   * A non-null value is one of {@link TableInfo#DISTRIBUTION_MODE_HASH},
+   * {@link TableInfo#DISTRIBUTION_MODE_RANGE} or {@link TableInfo#DISTRIBUTION_MODE_NONE}.
+   * <p>
+   * This is a <em>declared default</em> and nothing more. It says what a write into this table uses
+   * when the write itself does not ask for something else; an individual write may override it, and
+   * a table may narrow it (a hash distribution is meaningless on an unpartitioned table, say). What
+   * a given write actually requires is reported by
+   * {@link org.apache.spark.sql.connector.write.RequiresDistributionAndOrdering} on its
+   * {@code Write}, which stays authoritative. In particular this makes no claim about how the data
+   * already in the table is laid out -- for that, a scan reports its own {@code outputPartitioning}
+   * and {@code outputOrdering}.
+   *
+   * @since 4.4.0
+   */
+  default String writeDistributionMode() { return null; }
+
+  /**
+   * Returns the write ordering this table declares as the default for writes into it, empty if it
+   * declares none. A declared default in exactly the sense described on
+   * {@link #writeDistributionMode()}.
+   *
+   * @since 4.4.0
+   */
+  default SortOrder[] writeOrdering() { return new SortOrder[0]; }
 
   /**
    * Returns the version of this table if versioning is supported, null otherwise.
