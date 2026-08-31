@@ -318,21 +318,20 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
     val sensitiveValue = "sensitive-lambda-value"
     val spec = workerSpec("lambda", Map("UDF_SECRET" -> sensitiveValue))
     val lambdaVariable = NamedLambdaVariable("x", IntegerType, nullable = false)
-    val function = udf("lambda", spec, Seq(lambdaVariable))
     val transform = ArrayTransform(
       CreateArray(Seq(input)),
       LambdaFunction(
-        function,
+        udf("lambda", spec, Seq(lambdaVariable)),
         Seq(lambdaVariable)))
     val plan = Project(Seq(Alias(transform, "result")()), relation)
 
     val exception = intercept[AnalysisException] {
       spark.sessionState.analyzer.executeAndCheck(plan, new QueryPlanningTracker)
     }
-    checkError(
+    checkErrorMatchPVals(
       exception = exception,
       condition = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_EXTERNAL_UDF",
-      parameters = Map("funcName" -> ("\"" + function.sql + "\"")))
+      parameters = Map("funcName" -> "\"lambda\\(lambda x#[0-9]+\\)\""))
     assert(!exception.getMessage.contains(sensitiveValue))
   }
 
@@ -375,17 +374,17 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
     val aggregate = extracted.collectFirst { case node: Aggregate => node }.getOrElse {
       fail(s"Expected an Aggregate node, found:\n$extracted")
     }
-    val projectedGrouping = aggregate.child match {
-      case Project(projectList, evaluation: ExecuteExternalUDF) =>
-        projectList.collectFirst {
-          case alias: Alias if alias.child.semanticEquals(evaluation.resultAttr) =>
-            alias.toAttribute
-        }.getOrElse {
-          fail(s"Expected the grouping UDF result in the Project, found:\n$aggregate")
-        }
-      case other => fail(s"Expected Project and ExecuteExternalUDF below Aggregate, found:\n$other")
+    val groupingProjection = aggregate.child match {
+      case project: Project => project
+      case other => fail(s"Expected a Project below Aggregate, found:\n$other")
     }
-    assert(aggregate.groupingExpressions.exists(_.semanticEquals(projectedGrouping)))
+    val evaluation = singleEvalNode(groupingProjection)
+    assert(groupingProjection.projectList.exists {
+      case alias: Alias =>
+        aggregate.groupingExpressions.exists(_.semanticEquals(alias.toAttribute)) &&
+          alias.child.semanticEquals(evaluation.resultAttr)
+      case _ => false
+    })
     assert(!aggregate.aggregateExpressions.exists(
       _.exists(_.isInstanceOf[ExternalUserDefinedFunction])))
   }
@@ -500,7 +499,7 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
       exception = exception,
       condition = "UNSUPPORTED_FEATURE.EXTERNAL_UDF",
       parameters = Map(
-        "config" -> s"\"${SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key}\""))
+        "config" -> ("\"" + SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key + "\"")))
   }
 
   test("optimizer pushes a local limit through an external UDF node") {
