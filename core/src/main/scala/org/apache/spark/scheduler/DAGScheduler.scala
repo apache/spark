@@ -3338,10 +3338,10 @@ private[spark] class DAGScheduler(
         // finished if the stage is determinate. Here we notify the task scheduler to skip running
         // tasks for the same partition to save resource.
 
-        // Ignore task completion for old attempt of stages with nondeterministic output.
-        // This is tracked via maxAttemptIdToIgnore which is set when a stage is rolled back.
+        // Ignore task completion from attempts invalidated by rollback or barrier stage failure.
         val ignoreOldTaskAttempts =
-          stage.maxAttemptIdToIgnore.exists(_ >= task.stageAttemptId)
+          stage.maxAttemptIdToIgnore.exists(_ >= task.stageAttemptId) ||
+            stage.latestFailedBarrierAttemptId.exists(_ >= task.stageAttemptId)
 
         if (!ignoreOldTaskAttempts && task.stageAttemptId < stage.latestInfo.attemptNumber()) {
           taskScheduler.notifyPartitionCompletion(stageId, task.partitionId)
@@ -3475,7 +3475,8 @@ private[spark] class DAGScheduler(
                 }
               }
             } else {
-              logInfo(log"Ignoring ${MDC(TASK_NAME, smt)} completion from an older attempt of indeterminate stage")
+              logInfo(log"Ignoring ${MDC(TASK_NAME, smt)} completion from " +
+                log"an invalidated stage attempt")
             }
 
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {
@@ -3601,6 +3602,8 @@ private[spark] class DAGScheduler(
             if (failedStage.rdd.isBarrier()) {
               failedStage match {
                 case failedMapStage: ShuffleMapStage =>
+                  // Ignore late completions so the replacement barrier stage reruns every task.
+                  failedMapStage.latestFailedBarrierAttemptId = Some(task.stageAttemptId)
                   // Mark all the map as broken in the map stage, to ensure retry all the tasks on
                   // resubmitted stage attempt.
                   mapOutputTracker.unregisterAllMapAndMergeOutput(
@@ -3709,6 +3712,8 @@ private[spark] class DAGScheduler(
           } else {
             failedStage match {
               case failedMapStage: ShuffleMapStage =>
+                // Ignore late completions so the replacement barrier stage reruns every task.
+                failedMapStage.latestFailedBarrierAttemptId = Some(task.stageAttemptId)
                 // Mark all the map as broken in the map stage, to ensure retry all the tasks on
                 // resubmitted stage attempt.
                 mapOutputTracker.unregisterAllMapAndMergeOutput(failedMapStage.shuffleDep.shuffleId)
