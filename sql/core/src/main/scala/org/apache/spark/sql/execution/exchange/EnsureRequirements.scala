@@ -557,10 +557,10 @@ case class EnsureRequirements(
         val leftReducers = leftSpec.reducers(rightSpec)
         val rightReducers = rightSpec.reducers(leftSpec)
         val (leftReducedDataTypes, leftReducedKeys) = leftReducers.fold(
-          (leftPartitioning.expressionDataTypes, leftPartitioning.partitionKeys)
+          (leftPartitioning.keyDataTypes, leftPartitioning.partitionKeys)
         )(leftPartitioning.reduceKeys)
         val (rightReducedDataTypes, rightReducedKeys) = rightReducers.fold(
-          (rightPartitioning.expressionDataTypes, rightPartitioning.partitionKeys)
+          (rightPartitioning.keyDataTypes, rightPartitioning.partitionKeys)
         )(rightPartitioning.reduceKeys)
         val reducedDataTypes = if (leftReducedDataTypes == rightReducedDataTypes) {
           leftReducedDataTypes
@@ -572,9 +572,8 @@ case class EnsureRequirements(
             rightReducedDataTypes = rightReducedDataTypes)
         }
 
-        val reducedKeyRowOrdering = RowOrdering.createNaturalAscendingOrdering(reducedDataTypes)
-        val reducedKeyOrdering =
-          reducedKeyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
+        val reducedKeyOrdering = KeyedPartitioning.groupedKeyRowOrdering(reducedDataTypes)
+          .on((t: InternalRowComparableWrapper) => t.row)
 
         // merge values on both sides
         var mergedPartitionKeys =
