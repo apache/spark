@@ -525,6 +525,14 @@ class SparkSession(SparkConversionMixin):
                                     messageParameters={},
                                 )
 
+                            pool_cleanup: Optional[Callable[[], None]] = None
+                            pool_local = str(
+                                opts.get(
+                                    "spark.local.connect.pool",
+                                    os.environ.get("SPARK_LOCAL_CONNECT_POOL", ""),
+                                )
+                            ).lower() in ("1", "true")
+
                             reuse_local = str(
                                 opts.get(
                                     "spark.local.connect.reuse",
@@ -532,7 +540,23 @@ class SparkSession(SparkConversionMixin):
                                 )
                             ).lower() in ("1", "true")
 
-                            if url.startswith("local") and reuse_local:
+                            if url.startswith("local") and pool_local:
+                                from pyspark.sql.connect.local_server_pool import (
+                                    acquire_pooled_local_connect_server,
+                                    release_pooled_local_connect_server,
+                                )
+
+                                # Opt-in: claim a server not previously assigned to an
+                                # application run from a pool of booted local Connect servers.
+                                # It is torn down when this run's session stops, so no state
+                                # carries across runs. Takes precedence over reuse. See
+                                # `pyspark.sql.connect.local_server_pool`.
+                                url = acquire_pooled_local_connect_server(url, opts)
+                                pool_cleanup = release_pooled_local_connect_server
+                                for k in list(opts):
+                                    if k.startswith("spark.local.connect."):
+                                        opts.pop(k)
+                            elif url.startswith("local") and reuse_local:
                                 from pyspark.sql.connect.local_server import (
                                     reuse_or_start_local_connect_server,
                                 )
@@ -553,9 +577,27 @@ class SparkSession(SparkConversionMixin):
 
                             os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
                             opts["spark.remote"] = url
+                            try:
+                                remote_session = RemoteSparkSession.builder.config(
+                                    map=opts
+                                ).getOrCreate()
+                            except Exception:
+                                if pool_cleanup is not None:
+                                    try:
+                                        pool_cleanup()
+                                    except Exception as cleanup_error:
+                                        warnings.warn(
+                                            "Failed to clean up a pooled local Connect server "
+                                            f"after session creation failed: {cleanup_error}",
+                                            RuntimeWarning,
+                                            stacklevel=2,
+                                        )
+                                raise
+                            if pool_cleanup is not None:
+                                remote_session._register_on_stop_callback(pool_cleanup)
                             return cast(
                                 SparkSession,
-                                RemoteSparkSession.builder.config(map=opts).getOrCreate(),
+                                remote_session,
                             )
                         elif "SPARK_LOCAL_REMOTE" in os.environ:
                             url = "sc://localhost"
