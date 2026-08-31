@@ -966,16 +966,13 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   }
 
   /**
-   * The SPARK-52921 pass-through partitioning, derived from the children on every call.
-   * `isPlainUnion` latches on whether this comes back `UnknownPartitioning`, and
-   * `outputPartitioning` reports it on the branch where that latch says the union is not a plain
-   * concatenation.
+   * The SPARK-52921 pass-through partitioning, derived from the children. `isPlainUnion` latches
+   * on whether this comes back `UnknownPartitioning`, and `outputPartitioning` reports it on the
+   * branch where that latch says the union is not a plain concatenation. The
+   * `UNION_OUTPUT_PARTITIONING` gate is not checked here but in the latch, so that flipping the
+   * conf after a node has been planned cannot change what it reports or how it executes.
    */
   private def rawPartitioning: Partitioning = {
-    if (!conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING)) {
-      return super.outputPartitioning
-    }
-
     // Children's partitionings with attributes remapped to this union's output attributes.
     val partitionings = prepareOutputPartitioning()
 
@@ -1064,10 +1061,16 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    * the latch is published under `decisionLock` and the first writer wins; the derivation itself
    * runs outside the lock. The lock covers this tag only: `TreeNode`'s tag map is unsynchronized,
    * and `copyTagsFrom` reads it without taking it.
+   *
+   * The `UNION_OUTPUT_PARTITIONING` gate is read here rather than in `rawPartitioning`, so it is
+   * latched with everything else: `conf` is the live session conf, and re-reading it per call let
+   * a node planned with the conf on execute with it off, concatenating after a parent had already
+   * skipped an exchange on the strength of a concrete partitioning.
    */
   private[sql] def isPlainUnion: Boolean = {
     decisionLock.synchronized(getTagValue(UnionExec.PLAIN_UNION_DECISION)).getOrElse {
-      val plain = rawPartitioning.isInstanceOf[UnknownPartitioning]
+      val plain = !conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING) ||
+        rawPartitioning.isInstanceOf[UnknownPartitioning]
       decisionLock.synchronized {
         getTagValue(UnionExec.PLAIN_UNION_DECISION).getOrElse {
           setTagValue(UnionExec.PLAIN_UNION_DECISION, plain)
@@ -1084,10 +1087,13 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    * cost is that SPARK-52921's exchange elimination is lost for a union whose children only agree
    * later, which is the conservative direction.
    *
-   * The other branch is still derived per call, so what this node reports is not stable across
-   * planning and execution: a parent can elide an exchange on a concrete partitioning and
-   * `doExecute` can then derive `UnknownPartitioning` and concatenate. `doExecute` keeps one
-   * answer within itself; the cross-phase gap is not closed here.
+   * The other branch is derived from the children, which can answer differently later: AQE skew
+   * splitting through a union does exactly that, leaving the children's partition counts divergent
+   * and the intersection empty, so the union concatenates at execution after reporting something
+   * concrete at planning. That is only safe because nothing required the reported partitioning in
+   * those plans, and this node cannot tell at execution time whether anything did -- guarding on
+   * the latch alone rejects `UnspecifiedDistribution` parents too, which is why there is no such
+   * guard here.
    */
   override def outputPartitioning: Partitioning =
     if (isPlainUnion) super.outputPartitioning else rawPartitioning
@@ -1297,10 +1303,10 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   override def usedInputs: AttributeSet = AttributeSet.empty
 
   protected override def doExecute(): RDD[InternalRow] = {
-    // One read: the non-plain branch re-derives from the children on every call, so
-    // `numPartitions` has to come from the same answer that picked the branch. Otherwise
-    // `SQLPartitioningAwareUnionRDD` can be handed an `UnknownPartitioning(0)`, which gives it
-    // zero partitions and this union an empty result.
+    // One read: the non-plain branch re-derives from the children, so `numPartitions` has to come
+    // from the same answer that picked the branch. Otherwise `SQLPartitioningAwareUnionRDD` can be
+    // handed an `UnknownPartitioning(0)`, which gives it zero partitions and this union an empty
+    // result.
     val partitioning = outputPartitioning
     partitioning match {
       case _: UnknownPartitioning | _: KeyedPartitioning =>

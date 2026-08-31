@@ -23,6 +23,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -698,6 +699,46 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
           assert(u.outputPartitioning.isInstanceOf[UnknownPartitioning],
             s"a fused union must not claim a concrete partitioning, got ${u.outputPartitioning}")
         }
+      }
+    }
+  }
+
+  test("SPARK-59122: a partitioning-aware union keeps its layout when the conf changes between " +
+    "planning and execution") {
+    // `spark.sql.unionOutputPartitioning` is read when the plain-union decision is latched, not on
+    // every `outputPartitioning` call, so a plan is executed by the partitioning it was planned
+    // against. Reading it per call instead let the parent aggregate lose its exchange during
+    // planning (the union reported a concrete `HashPartitioning`) and then get a plain
+    // concatenation at execution, which puts one group in two partitions and reports it twice.
+    //
+    // The `collect()` below is deliberately outside the `withSQLConf` block that planned the
+    // DataFrame: `executedPlan` is memoized on first read, so this is what running a planned query
+    // under a changed conf looks like. Moving it back inside makes both phases see the same conf
+    // and the test stops exercising anything.
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val left = spark.range(0, 20, 1, 2).selectExpr("id % 5 AS k")
+      val right = spark.range(20, 40, 1, 2).selectExpr("id % 5 AS k")
+      def build(): DataFrame =
+        left.repartition(4, col("k")).union(right.repartition(4, col("k"))).groupBy("k").count()
+
+      val expected = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+        build().collect().toSeq
+      }
+
+      val planned = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+        val df = build()
+        val plan = df.queryExecution.executedPlan
+        val unions = plan.collect { case u: UnionExec => u }
+        assert(unions.size == 1)
+        assert(!unions.head.isPlainUnion,
+          "this shape must report a concrete partitioning, or the test exercises nothing")
+        assert(plan.collect { case s: ShuffleExchangeExec => s }.size == 2,
+          "only the two repartitions may shuffle; the aggregate's exchange must have been elided")
+        df
+      }
+
+      withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+        checkAnswer(planned, expected)
       }
     }
   }
