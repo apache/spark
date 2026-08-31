@@ -810,7 +810,8 @@ class KeyGroupedPartitioningSuite
     // reduced expression is derived from the single spec that `createKeyedShuffleSpec` picks
     // (`collectFirst`). Re-targeting it at each `KeyedPartitioning`'s own key attribute keeps the
     // other sides' partitionings intact - otherwise a GROUP BY on the other side's key no longer
-    // sees a partitioning on it and the query shuffles (0 shuffles on base, 1 after the fix).
+    // sees a partitioning on it and the query shuffles (0 shuffles on base and here, 1 if the
+    // use-site re-targeting is dropped).
     val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
     createTable("b16", cols, Array(bucket(16, "id")))
     createTable("b8", cols, Array(bucket(8, "id")))
@@ -5148,11 +5149,14 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  test("SPARK-59120: incompatible reduced key types are reported instead of cast") {
-    // The first join reduces the identity side onto the year key space. The third table does not
-    // reduce at all, so the two key spaces genuinely differ, and reading each side's keys at their
-    // own types is what lets `EnsureRequirements` say so. On `master` the merge cast one to the
-    // other and threw `ClassCastException`.
+  test("SPARK-59120: a second join with a non-reducing side plans on the reduced keys") {
+    // The first join reduces the identity side onto the year key space. This PR reports the
+    // reduced expression (`years(a.ts)`), so the second join's identity side reduces onto it as
+    // well and the whole query plans without a shuffle. Under `keyDataTypes` alone (#58420) the
+    // reduced keys were read at their own types but still reported under the stale `identity(ts)`
+    // expression, and this query raised STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES; before
+    // #58420 it threw `ClassCastException`. The error path stays covered by
+    // `SPARK-56046: Reducers with different result types`.
     withTable("t_identity", "t_years", "t_identity2") {
       createTsTable("t_identity", Array(identity("ts")))
       createTsTable("t_years", Array(years("ts")))
@@ -5168,22 +5172,21 @@ class KeyGroupedPartitioningSuite
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
           SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
           SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-        checkError(
-          exception = intercept[SparkException](sql(query).collect()),
-          condition = "STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES",
-          parameters = Map(
-            "leftReducers" -> "[]",
-            "leftReducedDataTypes" -> "[\"INT\"]",
-            "rightReducers" -> "[]",
-            "rightReducedDataTypes" -> "[\"TIMESTAMP\"]"))
+        val df = sql(query)
+        checkAnswer(df, Seq(Row(1, "aa"), Row(2, "bb")))
+        assert(collectAllShuffles(df.queryExecution.executedPlan).isEmpty,
+          "the second join reduces onto the type-correct reported expression")
       }
     }
   }
 
-  test("SPARK-59120: another child is not shuffled onto reducer-rewritten keys") {
-    // `canCreatePartitioning` refuses the reduced side as a layout for the second join, so both of
-    // that join's sides are shuffled. Without the gate the driver dies while assembling that
-    // shuffle's key map, where the stored keys are re-wrapped at the expressions' types.
+  test("SPARK-59120: another child is shuffled onto the type-correct reduced keys") {
+    // This PR reports the reduced side's expression as `years(a.ts)`, which describes the reduced
+    // keys, so `canCreatePartitioning`'s shape gate accepts the reduced layout and only the
+    // unpartitioned side is shuffled onto it. Under `keyDataTypes` alone (#58420) the reduced side
+    // still reported `identity(ts)`, the gate refused it and both of the second join's sides were
+    // shuffled; without the gate the driver died while assembling that shuffle's key map, where
+    // the stored keys are re-wrapped at the expressions' types.
     withTable("t_identity", "t_years", "t_plain") {
       createTsTable("t_identity", Array(identity("ts")))
       createTsTable("t_years", Array(years("ts")))
@@ -5202,8 +5205,8 @@ class KeyGroupedPartitioningSuite
           SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
         val df = sql(query)
         checkAnswer(df, Seq(Row(1, "aa"), Row(2, "bb")))
-        assert(collectAllShuffles(df.queryExecution.executedPlan).size == 2,
-          "the second join shuffles both of its sides")
+        assert(collectAllShuffles(df.queryExecution.executedPlan).size == 1,
+          "the second join shuffles only the unpartitioned side, onto the years(ts) layout")
       }
     }
   }

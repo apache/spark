@@ -693,7 +693,6 @@ case class KeyedPartitioning(
    * Returns the reduced keys and their data types.
    */
   def reduceKeys(
-  def reduceKeys(
       reducers: Seq[Option[KeyReducer]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) =
     KeyedPartitioning.reduceKeys(partitionKeys, keyDataTypes, reducers)
 
@@ -1606,7 +1605,7 @@ case class KeyedShuffleSpec(
             // Both sides reduce: the reduced keys are r1(f1(x)) = r2(f2(x)), which no single
             // transform describes. Keep reporting the original expression; its type can differ
             // from the reduced keys, which a downstream shuffle or grouping can then fail on with
-            // a ClassCastException. Known gap, tracked in the follow-up for SPARK-59045.
+            // a ClassCastException. Known gap, tracked in SPARK-59121.
             KeyReducer(reducer, e1)
           }
         }
