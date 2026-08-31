@@ -1341,6 +1341,37 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
+  test("SPARK-36082: left-broadcast NAAJ fallback uses nested-loop join") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
+      withTempView("naajHintedLeft", "naajHintedRight") {
+        Seq[java.lang.Double](-0.0d, 2.0d, null).toDF("key")
+          .createOrReplaceTempView("naajHintedLeft")
+        Seq[java.lang.Double](0.0d, 1.0d).toDF("key")
+          .createOrReplaceTempView("naajHintedRight")
+
+        val result = sql(
+          "select /*+ BROADCAST(naajHintedLeft) */ naajHintedLeft.* " +
+            "from naajHintedLeft left anti join naajHintedRight on " +
+            "naajHintedLeft.key = naajHintedRight.key or " +
+            "isnull(naajHintedLeft.key = naajHintedRight.key)")
+        val plan = result.queryExecution.sparkPlan
+        val nestedLoopJoins = plan.collect {
+          case join: BroadcastNestedLoopJoinExec => join
+        }
+        val nullAwareHashJoins = plan.collect {
+          case join: BroadcastHashJoinExec if join.isNullAwareAntiJoin => join
+        }
+        assert(nestedLoopJoins.size === 1)
+        assert(nestedLoopJoins.head.buildSide === BuildLeft)
+        assert(nullAwareHashJoins.isEmpty)
+        checkAnswer(result, Row(2.0d))
+      }
+    }
+  }
+
   test("SPARK-36082: threshold-disabled NAAJ preserves floating-point equality") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
