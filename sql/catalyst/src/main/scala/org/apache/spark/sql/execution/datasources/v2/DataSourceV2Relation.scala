@@ -204,7 +204,7 @@ case class DataSourceV2ScanRelation(
    */
   lazy val runtimeFilterAttrs: AttributeSet = {
     checkRuntimeFilteringInterfaces()
-    checkFullyPushedFilterAttrs()
+    resolvedFullyPushedRuntimeFilterAttrs
     val filterAttrs = scan match {
       case s: SupportsRuntimeV2Filtering => s.filterAttributes
       case s: SupportsRuntimeCatalystFiltering => s.filterAttributes()
@@ -218,15 +218,19 @@ case class DataSourceV2ScanRelation(
     case _ => Array.empty
   }
 
+  private lazy val resolvedFullyPushedRuntimeFilterAttrs: AttributeSet = {
+    checkFullyPushedFilterAttrs()
+    resolveFilterAttrs(
+      declaredFullyPushedRuntimeFilterAttrs, "fullyPushedFilterAttributes()")
+  }
+
   /**
    * Resolved attributes for which a Catalyst runtime-filtering scan fully evaluates predicates.
    * Empty for a [[SupportsRuntimeV2Filtering]] scan, which keeps its post-scan filters.
    */
   lazy val fullyPushedRuntimeFilterAttrs: AttributeSet = {
     checkRuntimeFilteringInterfaces()
-    checkFullyPushedFilterAttrs()
-    resolveFilterAttrs(
-      declaredFullyPushedRuntimeFilterAttrs, "fullyPushedFilterAttributes()")
+    resolvedFullyPushedRuntimeFilterAttrs
   }
 
   /**
