@@ -370,7 +370,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteNearestByJoin,
       EvalInlineTables,
       ReplaceTranspose,
-      RewriteCollationJoin
+      RewriteCollationJoin,
+      RewriteCollationAggregate
     )
 
     override def apply(plan: LogicalPlan): LogicalPlan = {

@@ -1387,6 +1387,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val COLLATION_HASH_AGGREGATION_ENABLED =
+    buildConf("spark.sql.collation.hashAggregation.enabled")
+      .doc("When true, allows hash-based aggregation for non-binary collated strings by " +
+        "rewriting grouping keys to collation keys.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val OBJECT_LEVEL_COLLATIONS_ENABLED =
     buildConf("spark.sql.collation.objectLevel.enabled")
       .internal()
@@ -8908,6 +8916,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(SHUFFLE_CHECKSUM_MISMATCH_QUERY_LEVEL_ROLLBACK_ENABLED)
 
   def allowCollationsInMapKeys: Boolean = getConf(ALLOW_COLLATIONS_IN_MAP_KEYS)
+
+  def collationHashAggregationEnabled: Boolean = getConf(COLLATION_HASH_AGGREGATION_ENABLED)
 
   def objectLevelCollationsEnabled: Boolean = getConf(OBJECT_LEVEL_COLLATIONS_ENABLED)
 
