@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Ascending, Attribute, AttributeReference, CreateNamedStruct, Expression, ExprId, GetStructField, GreaterThan, If, LessThan, Literal, Or, ScalarSubquery, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Ascending, Attribute, AttributeReference, CreateNamedStruct, Expression, ExpressionSet, ExprId, GetStructField, GreaterThan, If, LessThan, Literal, Or, ScalarSubquery, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -2111,6 +2111,73 @@ class MergeSubplansSuite extends PlanTest {
       s"equal advisory filters should remain ordinary identical Filters:\n$optimized")
   }
 
+  test("SPARK-58892: compare and deduplicate advisory filters as semantic sets") {
+    val table = new AdvisoryTestV2Table(AdvisoryFullyPushed)
+    val greaterThanTen = (a: Attribute) => GreaterThan(a, Literal(10))
+    val duplicateGreaterThanTen = (a: Attribute) => GreaterThan(a, Literal(10))
+    val lessThanOneHundred = (a: Attribute) => LessThan(a, Literal(100))
+    val left = advisoryScanReading(
+      table, Seq("a", "b"), Seq(greaterThanTen, lessThanOneHundred))
+    val right = advisoryScanReading(
+      table,
+      Seq("a", "c"),
+      Seq(lessThanOneHundred, greaterThanTen, duplicateGreaterThanTen))
+
+    val optimized = Optimize.execute(advisoryMergeQuery(left, right).analyze)
+    val scans = v2Scans(optimized)
+    assert(scans.length == 1, s"semantically equal advisory sets should merge:\n$optimized")
+    val advisoryFilters = scans.head.advisoryFilters
+    assert(advisoryFilters.size == 2)
+    val relationAttr = scans.head.relation.output.head
+    Seq(greaterThanTen(relationAttr), lessThanOneHundred(relationAttr)).foreach { expected =>
+      assert(advisoryFilters.count(_.semanticEquals(expected)) == 1,
+        s"expected one representative for $expected, got: $advisoryFilters")
+    }
+  }
+
+  test("SPARK-58892: keep advisories out of symmetric filter propagation aliases") {
+    Seq((true, false), (false, true)).foreach {
+      case (symmetricEnabled, dsv2SymmetricEnabled) =>
+        val table = new AdvisoryTestV2Table(AdvisoryFullyPushed)
+        val advisory = (a: Attribute) => GreaterThan(a, Literal(10))
+        val left = advisoryScanReading(table, Seq("a", "b"), Some(advisory))
+        val right = advisoryScanReading(table, Seq("a", "c"), Some(advisory))
+        val leftCondition =
+          And(left.advisoryFilters.head, GreaterThan(left.output.last, Literal(2)))
+        val rightCondition =
+          And(right.advisoryFilters.head, LessThan(right.output.last, Literal(100)))
+        val query = testRelation.select(
+          ScalarSubquery(Filter(leftCondition, left).groupBy()(sum(left.output.last).as("left"))),
+          ScalarSubquery(
+            Filter(rightCondition, right).groupBy()(sum(right.output.last).as("right"))))
+
+        withSQLConf(
+            SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
+            SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key ->
+              symmetricEnabled.toString,
+            SQLConf.MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key ->
+              dsv2SymmetricEnabled.toString) {
+          val optimized = Optimize.execute(query.analyze)
+          val scans = v2Scans(optimized)
+          assert(scans.length == 1, s"expected one merged scan:\n$optimized")
+          val mergedAdvisory = scans.head.advisoryFilters.head
+          val propagatedAliases = optimized.collect { case project: Project =>
+            project.projectList.collect {
+              case alias: Alias if alias.name.startsWith("propagatedFilter_") => alias
+            }
+          }.flatten
+          assert(propagatedAliases.size == 2, s"expected two residual aliases:\n$optimized")
+          assert(!propagatedAliases.exists(_.child.exists(_.semanticEquals(mergedAdvisory))),
+            s"advisory predicates must not be evaluated in propagated aliases:\n$optimized")
+          assert(optimized.exists {
+            case Filter(condition, _: DataSourceV2ScanRelation) =>
+              condition.exists(_.semanticEquals(mergedAdvisory))
+            case _ => false
+          }, s"the advisory must remain in a scan-adjacent removable Filter:\n$optimized")
+        }
+    }
+  }
+
   test("SPARK-58892: decline incompatible advisory filters") {
     val advisory = (a: Attribute) => GreaterThan(a, Literal(10))
     val differentAdvisory = (a: Attribute) => LessThan(a, Literal(100))
@@ -3112,7 +3179,13 @@ class MergeSubplansSuite extends PlanTest {
   private def advisoryScanReading(
       table: AdvisoryTestV2Table,
       cols: Seq[String],
-      advisory: Option[Attribute => Expression]): DataSourceV2ScanRelation = {
+      advisory: Option[Attribute => Expression]): DataSourceV2ScanRelation =
+    advisoryScanReading(table, cols, advisory.toSeq)
+
+  private def advisoryScanReading(
+      table: AdvisoryTestV2Table,
+      cols: Seq[String],
+      advisories: Seq[Attribute => Expression]): DataSourceV2ScanRelation = {
     val fullOutput = toAttributes(table.schema())
     val relation =
       DataSourceV2Relation(table, fullOutput, None, None, CaseInsensitiveStringMap.empty())
@@ -3121,12 +3194,12 @@ class MergeSubplansSuite extends PlanTest {
       relation,
       TestV2Scan(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable)))),
       output,
-      advisoryFilters = advisory.toSeq.map(_(fullOutput.head)),
+      advisoryFilters = advisories.map(_(fullOutput.head)),
       mergeableScan = true)
   }
 
   private def withAdvisoryFilter(scan: DataSourceV2ScanRelation): LogicalPlan =
-    scan.advisoryFilters.headOption.map(Filter(_, scan)).getOrElse(scan)
+    ExpressionSet(scan.advisoryFilters).toSeq.reduceOption(And).map(Filter(_, scan)).getOrElse(scan)
 
   private def advisoryMergeQuery(
       left: DataSourceV2ScanRelation,

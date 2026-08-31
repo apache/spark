@@ -1211,11 +1211,26 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     val (table, relation) = newPushdownRelation()
     val id = relation.output.find(_.name == "id").get
     val filtered = Filter(EqualTo(id, Literal(1L)), relation)
+    val advisoryFilter = GreaterThanOrEqual(id, Literal(0L))
     val count = Alias(Count(id).toAggregateExpression(), "count")()
     val plan = Aggregate(Nil, Seq(count), filtered)
 
-    V2ScanRelationPushDown(plan)
+    val pushedPlan = V2ScanRelationPushDown(plan)
     assert(table.builder.pushedAggregation.nonEmpty)
+    val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+    assert(scan.advisoryFilters.isEmpty,
+      s"aggregate output replacement must discard advisory metadata:\n$pushedPlan")
+    assert(!pushedPlan.exists {
+      case filter: Filter => filter.condition.exists(_.semanticEquals(advisoryFilter))
+      case _ => false
+    }, s"the original advisory filter must not survive aggregate pushdown:\n$pushedPlan")
+    val physicalPlans = new DataSourceV2Strategy(spark).apply(pushedPlan)
+    assert(physicalPlans.nonEmpty, s"expected DataSourceV2Strategy to plan:\n$pushedPlan")
+    assert(!physicalPlans.exists(_.exists {
+      case filter: org.apache.spark.sql.execution.FilterExec =>
+        filter.condition.exists(_.semanticEquals(advisoryFilter))
+      case _ => false
+    }), s"the original advisory filter must not reach FilterExec:\n${physicalPlans.mkString("\n")}")
   }
 
   test("advisory filters do not block join pushdown") {

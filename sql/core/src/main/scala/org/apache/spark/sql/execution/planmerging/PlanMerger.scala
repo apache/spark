@@ -509,9 +509,18 @@ class PlanMerger(
                   // Note: the new Project always uses mergedChild as its child (rather than
                   // flattening into an existing Project below) because mergedChild.output may
                   // contain previously-propagated filter attributes that cp.condition references.
+                  val advisoryFilters = deferred.toSeq.flatMap(_.advisoryFilters)
+                  val residualNPCondition =
+                    removeAdvisoryConjuncts(mappedNPCondition, advisoryFilters)
+                  val residualCPCondition =
+                    removeAdvisoryConjuncts(cp.condition, advisoryFilters)
                   val newNPCondition =
-                    npFilter.fold(mappedNPCondition) { case (f, _) => And(f, mappedNPCondition) }
-                  val newCPCondition = cpFilter.fold(cp.condition)(And(_, cp.condition))
+                    npFilter.fold(residualNPCondition) {
+                      case (f, _) => And(f, residualNPCondition)
+                    }
+                  val newCPCondition = cpFilter.fold(residualCPCondition) {
+                    And(_, residualCPCondition)
+                  }
                   // The OR-widen moves both conditions into a boolean Project above the merged
                   // scan, so the scan itself would read the full table. Build the deferred scan
                   // here with OR(np condition, cp condition) as the best-effort filter (the Filter
@@ -519,21 +528,24 @@ class PlanMerger(
                   // scan-level conditions, not the propagated filter attributes in newNP/newCP.
                   tryBuildFilterDSv2ScanChild(
                     mergedChild, deferred, Some(Or(mappedNPCondition, cp.condition)))
-                    .map { prunedChild =>
-                      val newNPFilterAlias =
-                        Alias(newNPCondition, s"propagatedFilter_${PlanMerger.newId}")()
-                      val newCPFilterAlias =
-                        Alias(newCPCondition, s"propagatedFilter_${PlanMerger.newId}")()
-                      val newNPFilter = newNPFilterAlias.toAttribute
-                      val newCPFilter = newCPFilterAlias.toAttribute
-                      val project = Project(
-                        prunedChild.output.toList ++ Seq(newNPFilterAlias, newCPFilterAlias),
-                        prunedChild)
-                      val newFilter = Filter(Or(newNPFilter, newCPFilter), project)
-                      newFilter.copyTagsFrom(cp)
-                      newFilter.setTagValue(PlanMerger.MERGED_FILTER_TAG, ())
-                      TryMergeResult(newFilter, npMapping, Some((newNPFilter, true)),
-                        Some(newCPFilter), dsv2Merged = dsv2Merged)
+                    .flatMap { prunedChild =>
+                      addAdvisoryFilter(prunedChild, advisoryFilters).map { filteredChild =>
+                        val newNPFilterAlias =
+                          Alias(newNPCondition, s"propagatedFilter_${PlanMerger.newId}")()
+                        val newCPFilterAlias =
+                          Alias(newCPCondition, s"propagatedFilter_${PlanMerger.newId}")()
+                        val newNPFilter = newNPFilterAlias.toAttribute
+                        val newCPFilter = newCPFilterAlias.toAttribute
+                        val project = Project(
+                          prunedChild.output.toList ++
+                            Seq(newNPFilterAlias, newCPFilterAlias),
+                          filteredChild)
+                        val newFilter = Filter(Or(newNPFilter, newCPFilter), project)
+                        newFilter.copyTagsFrom(cp)
+                        newFilter.setTagValue(PlanMerger.MERGED_FILTER_TAG, ())
+                        TryMergeResult(newFilter, npMapping, Some((newNPFilter, true)),
+                          Some(newCPFilter), dsv2Merged = dsv2Merged)
+                      }
                     }
                 }
               } else {
@@ -753,10 +765,7 @@ class PlanMerger(
     // accepts the degradation). Otherwise the single report the merged scan must reproduce/satisfy.
     val expectedKeyGroupedPartitioning = combinedKeyGroupedPartitioning.getOrElse(Nil)
     val expectedOrdering = combinedOrdering.getOrElse(Nil)
-    val expectedAdvisoryFilters = cp.advisoryFilters.foldLeft(Seq.empty[Expression]) {
-      case (distinct, filter) if distinct.exists(_.semanticEquals(filter)) => distinct
-      case (distinct, filter) => distinct :+ filter
-    }
+    val expectedAdvisoryFilters = ExpressionSet(cp.advisoryFilters).toSeq
 
     if (context.filterAboveScan) {
       // Defer the build to the enclosing Filter so the scan is built once with strict +
@@ -778,6 +787,42 @@ class PlanMerger(
         bestEffortFilter = None)
         .filterNot(mergeDegradesReporting(_, expectedKeyGroupedPartitioning, expectedOrdering))
         .map(TryMergeResult(_, npMapping, dsv2Merged = true))
+    }
+  }
+
+  /** Removes scan advisory predicates from a condition before it becomes executable projection. */
+  private def removeAdvisoryConjuncts(
+      condition: Expression,
+      advisoryFilters: Seq[Expression]): Expression = {
+    val advisorySet = ExpressionSet(advisoryFilters)
+
+    def splitConjuncts(expression: Expression): Seq[Expression] = expression match {
+      case And(left, right) => splitConjuncts(left) ++ splitConjuncts(right)
+      case other => other :: Nil
+    }
+
+    splitConjuncts(condition)
+      .filterNot(advisorySet.contains)
+      .reduceOption(And)
+      .getOrElse(Literal.TrueLiteral)
+  }
+
+  /** Keeps advisory predicates in the scan-adjacent Filter removed by physical planning. */
+  private def addAdvisoryFilter(
+      plan: LogicalPlan,
+      advisoryFilters: Seq[Expression]): Option[LogicalPlan] = {
+    advisoryFilters.reduceOption(And) match {
+      case None => Some(plan)
+      case Some(condition) =>
+        plan.collectFirst {
+          case scan: DataSourceV2ScanRelation
+              if condition.references.subsetOf(scan.outputSet) &&
+                ExpressionSet(scan.advisoryFilters) == ExpressionSet(advisoryFilters) => scan
+        }.map { targetScan =>
+          plan.transformUp {
+            case scan: DataSourceV2ScanRelation if scan eq targetScan => Filter(condition, scan)
+          }
+        }
     }
   }
 
