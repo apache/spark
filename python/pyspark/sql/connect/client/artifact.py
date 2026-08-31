@@ -33,7 +33,9 @@ import grpc
 import pyspark.sql.connect.proto as proto
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
-from pyspark.sql.connect.logging import logger
+from pyspark.sql.connect.logging import getLogger
+
+logger = getLogger(__name__)
 
 JAR_PREFIX: str = "jars"
 PYFILE_PREFIX: str = "pyfiles"
