@@ -88,7 +88,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
   /**
    * Creates independent key operations for a single {@link Location}, allowing each instance to
    * reuse mutable state. All instances must implement the same key semantics. Maps configured
-   * with this factory must use the key-operations lookup methods exclusively.
+   * with this factory must use the key-operations lookup methods exclusively. Callers may invoke
+   * {@link #create()} concurrently, so factory implementations must be thread-safe.
    */
   @FunctionalInterface
   public interface KeyOperationsFactory {

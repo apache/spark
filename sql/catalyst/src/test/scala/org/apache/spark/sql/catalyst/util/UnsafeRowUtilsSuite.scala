@@ -237,6 +237,18 @@ class UnsafeRowUtilsSuite extends SparkFunSuite with SQLConfHelper {
         InternalRow(array(array(utf8("hello")), array(utf8("world")))),
         InternalRow(array(array(utf8("hello")), array(utf8("other"))))),
       KeyContractCase(
+        "nested array with unequal lengths",
+        StructType(StructField("a", ArrayType(ArrayType(unicodeCI))) :: Nil),
+        InternalRow(array(array(utf8("HELLO")))),
+        InternalRow(array(array(utf8("hello")))),
+        InternalRow(array(array(utf8("hello"), utf8("world"))))),
+      KeyContractCase(
+        "nested empty and non-empty arrays",
+        StructType(StructField("a", ArrayType(ArrayType(unicodeCI))) :: Nil),
+        InternalRow(array(array())),
+        InternalRow(array(array())),
+        InternalRow(array(array(utf8("value"))))),
+      KeyContractCase(
         "nested struct with LCASE RTRIM collation",
         StructType(StructField("nested", nestedType) :: Nil),
         InternalRow(InternalRow(7, utf8("VALUE"))),

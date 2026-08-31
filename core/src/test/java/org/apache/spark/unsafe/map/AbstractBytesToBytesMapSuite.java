@@ -138,7 +138,7 @@ public abstract class AbstractBytesToBytesMapSuite {
   @Test
   public void supportsSemanticKeyOperations() throws Exception {
     AtomicInteger operationsCreated = new AtomicInteger();
-    BytesToBytesMap.KeyOperationsFactory firstByteCaseInsensitive = () -> {
+    BytesToBytesMap.KeyOperationsFactory caseInsensitiveWithConstantHash = () -> {
       operationsCreated.incrementAndGet();
       return new BytesToBytesMap.KeyOperations() {
         private final AtomicReference<Thread> owner = new AtomicReference<>();
@@ -152,7 +152,7 @@ public abstract class AbstractBytesToBytesMapSuite {
         @Override
         public int hash(Object base, long offset, int length) {
           assertThreadOwnership();
-          return Character.toLowerCase(Platform.getByte(base, offset));
+          return 0;
         }
 
         @Override
@@ -170,39 +170,64 @@ public abstract class AbstractBytesToBytesMapSuite {
       };
     };
     BytesToBytesMap map = new BytesToBytesMap(
-      taskMemoryManager, 64, PAGE_SIZE_BYTES, firstByteCaseInsensitive);
+      taskMemoryManager, 64, PAGE_SIZE_BYTES, caseInsensitiveWithConstantHash);
     ExecutorService executor = Executors.newFixedThreadPool(2);
 
-    byte[] storedKey = new byte[8];
-    storedKey[0] = 'A';
-    byte[] equivalentKey = new byte[16];
-    equivalentKey[0] = 'a';
-    byte[] value = new byte[8];
+    byte[] firstStoredKey = new byte[8];
+    firstStoredKey[0] = 'A';
+    byte[] firstEquivalentKey = new byte[16];
+    firstEquivalentKey[0] = 'a';
+    byte[] firstValue = new byte[8];
+    Platform.putLong(firstValue, Platform.BYTE_ARRAY_OFFSET, 1L);
+    byte[] secondStoredKey = new byte[8];
+    secondStoredKey[0] = 'B';
+    byte[] secondEquivalentKey = new byte[16];
+    secondEquivalentKey[0] = 'b';
+    byte[] secondValue = new byte[8];
+    Platform.putLong(secondValue, Platform.BYTE_ARRAY_OFFSET, 2L);
 
     try {
       BytesToBytesMap.Location location = map.lookup(
-        storedKey, Platform.BYTE_ARRAY_OFFSET, storedKey.length);
+        firstStoredKey, Platform.BYTE_ARRAY_OFFSET, firstStoredKey.length);
       assertFalse(location.isDefined());
       assertTrue(location.append(
-        storedKey,
+        firstStoredKey,
         Platform.BYTE_ARRAY_OFFSET,
-        storedKey.length,
-        value,
+        firstStoredKey.length,
+        firstValue,
         Platform.BYTE_ARRAY_OFFSET,
-        value.length));
+        firstValue.length));
 
       location = map.lookup(
-        equivalentKey, Platform.BYTE_ARRAY_OFFSET, equivalentKey.length);
+        secondStoredKey, Platform.BYTE_ARRAY_OFFSET, secondStoredKey.length);
+      assertFalse(location.isDefined());
+      assertTrue(location.append(
+        secondStoredKey,
+        Platform.BYTE_ARRAY_OFFSET,
+        secondStoredKey.length,
+        secondValue,
+        Platform.BYTE_ARRAY_OFFSET,
+        secondValue.length));
+
+      location = map.lookup(
+        firstEquivalentKey, Platform.BYTE_ARRAY_OFFSET, firstEquivalentKey.length);
       assertTrue(location.isDefined());
-      assertEquals(storedKey.length, location.getKeyLength());
+      assertEquals(firstStoredKey.length, location.getKeyLength());
+      assertEquals(1L, Platform.getLong(location.getValueBase(), location.getValueOffset()));
 
       location = map.lookup(
-        equivalentKey,
+        secondEquivalentKey, Platform.BYTE_ARRAY_OFFSET, secondEquivalentKey.length);
+      assertTrue(location.isDefined());
+      assertEquals(secondStoredKey.length, location.getKeyLength());
+      assertEquals(2L, Platform.getLong(location.getValueBase(), location.getValueOffset()));
+
+      location = map.lookup(
+        firstEquivalentKey,
         Platform.BYTE_ARRAY_OFFSET,
-        equivalentKey.length,
+        firstEquivalentKey.length,
         Integer.MAX_VALUE);
       assertTrue(location.isDefined());
-      assertEquals(1, map.numKeys());
+      assertEquals(2, map.numKeys());
 
       CountDownLatch ready = new CountDownLatch(2);
       CountDownLatch start = new CountDownLatch(1);
@@ -212,9 +237,9 @@ public abstract class AbstractBytesToBytesMapSuite {
         start.await();
         for (int i = 0; i < 100; i++) {
           map.safeLookup(
-            equivalentKey,
+            firstEquivalentKey,
             Platform.BYTE_ARRAY_OFFSET,
-            equivalentKey.length,
+            firstEquivalentKey.length,
             threadLocation);
           assertTrue(threadLocation.isDefined());
         }
