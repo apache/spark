@@ -2089,7 +2089,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     // Task 0 is submitted as speculatable
     // 3 running + 0 pending + 1 speculative = 4 tasks -> ceil(4/2) = 2
-    post(SparkListenerSpeculativeTaskSubmitted(0, 0))
+    post(new SparkListenerSpeculativeTaskSubmitted(0, 0, 0, 0))
 
     // Speculative task submitted; offset allocates 1 more executor -> 3
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 3)
@@ -2104,7 +2104,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 3)
 
     // Speculative task 0 completes -> maxNeeded returns to 2
-    post(SparkListenerTaskEnd(0, 0, "task", Success, speculativeTaskInfo0, null))
+    post(SparkListenerTaskEnd(0, 0, "task", Success, speculativeTaskInfo0, null, null))
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 2)
   }
 
@@ -2123,7 +2123,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerTaskStart(0, 0, taskInfo1))
     post(SparkListenerTaskStart(0, 0, taskInfo2))
 
-    post(SparkListenerSpeculativeTaskSubmitted(0, 0))
+    post(new SparkListenerSpeculativeTaskSubmitted(0, 0, 0, 0))
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 3)
 
     post(SparkListenerExecutorAdded(0, "executor-3", new ExecutorInfo("host3", 2, Map.empty)))
@@ -2133,7 +2133,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     // Primary task 0 completes, causing speculative task 0 to be killed
     val killReason = TaskKilled("primary task succeeded", Seq.empty, Seq.empty)
-    post(SparkListenerTaskEnd(0, 0, "task", killReason, speculativeTaskInfo0, null))
+    post(SparkListenerTaskEnd(0, 0, "task", killReason, speculativeTaskInfo0, null, null))
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 2)
   }
 }
