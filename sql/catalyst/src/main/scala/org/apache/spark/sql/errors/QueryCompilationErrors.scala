@@ -2229,6 +2229,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def bucketingColumnCannotBePartOfPartitionColumnsError(
       bucketCol: String, normalizedPartCols: Seq[String]): Throwable = {
+    // These names are already resolved against the table schema, so each is quoted as a single
+    // part. The `String` overload of `toSQLId` would parse them instead.
     new AnalysisException(
       errorClass = "BUCKET_COLUMN_IN_PARTITION_COLUMNS",
       messageParameters = Map(
@@ -2237,7 +2239,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def bucketSortingColumnCannotBePartOfPartitionColumnsError(
-    sortCol: String, normalizedPartCols: Seq[String]): Throwable = {
+      sortCol: String, normalizedPartCols: Seq[String]): Throwable = {
+    // Quoted as single parts, as in bucketingColumnCannotBePartOfPartitionColumnsError above.
     new AnalysisException(
       errorClass = "BUCKET_SORT_COLUMN_IN_PARTITION_COLUMNS",
       messageParameters = Map(
