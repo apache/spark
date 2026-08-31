@@ -290,6 +290,20 @@ class RewriteWithExpressionSuite extends PlanTest {
     assert(finishAnalysisAndInline(expr, Instant.now()) == EqualTo(expected, expected))
   }
 
+  test("applyForExpression inlines a TIME -> TIMESTAMP cast stabilized by ComputeCurrentTime") {
+    // ComputeCurrentTime rewrites the cast to a pure makeTimestamp* builder StaticInvoke anchored
+    // on a query-stable current-date literal. Even though ConstantFolding (not part of this
+    // pipeline) has not folded it to a single literal, inlining it at both references is safe.
+    val expr = With(Cast(Literal(0L, TimeType(6)), TimestampNTZType, Some("UTC"))) {
+      case Seq(ref) => EqualTo(ref, ref)
+    }
+    val rewritten = finishAnalysisAndInline(expr, Instant.now())
+    assert(!rewritten.exists(_.isInstanceOf[With]))
+    val EqualTo(left, right) = rewritten: @unchecked
+    assert(ComputeCurrentTime.isStabilizedTimeToTimestamp(left))
+    assert(left == right)
+  }
+
   test("non-cheap common expression") {
     val a = testRelation.output.head
     val expr = With(a + a) { case Seq(ref) =>

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.{CurrentUserContext, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{CastSupport, ResolvedInlineTable}
 import org.apache.spark.sql.catalyst.analysis.ResolveInlineTables.prepareForEval
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -237,6 +238,13 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
           localDateTimeToTimestampNanos(asDateTime, lt.precision),
           TimestampNTZNanosType(lt.precision))
       })
+  }
+
+  /** Whether `e` is a `DateTimeUtils.makeTimestamp*` builder that `expressionTransform` emits. */
+  private[optimizer] def isStabilizedTimeToTimestamp(e: Expression): Boolean = e match {
+    case si: StaticInvoke if si.staticObject == classOf[DateTimeUtils.type] =>
+      si.functionName.startsWith("makeTimestamp")
+    case _ => false
   }
 }
 
