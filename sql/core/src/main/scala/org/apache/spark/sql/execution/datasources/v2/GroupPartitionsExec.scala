@@ -144,7 +144,7 @@ case class GroupPartitionsExec(
     // Project partition keys if join key positions are specified
     val (projectedDataTypes, projectedKeys) =
       joinKeyPositions.fold(
-        (keyedPartitioning.expressionDataTypes, keyedPartitioning.partitionKeys)
+        (keyedPartitioning.keyDataTypes, keyedPartitioning.partitionKeys)
       )(keyedPartitioning.projectKeys)
 
     // Reduce keys if reducers are specified
