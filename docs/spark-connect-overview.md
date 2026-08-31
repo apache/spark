@@ -345,6 +345,37 @@ backed by the shared `SparkContext` (the persistent catalog/warehouse, global te
 cached datasets) *is* shared across runs, so namespace per-run databases or clear that state
 yourself if your runs must be fully isolated.
 
+### Fully isolated runs with a pool of single-use servers
+
+If your runs must be fully isolated from each other but you still want to skip the per-run
+startup cost, a second experimental opt-in keeps a small pool of booted servers that have
+never been assigned to an application run instead of one shared one. With
+`SPARK_LOCAL_CONNECT_POOL=1` set (or
+`spark.local.connect.pool=true` on the builder), each run *claims* a fresh server from the pool,
+a replacement is booted in the background, and the claimed server is torn down when the run's
+session stops -- no server ever serves two runs, so runs are as isolated as with the default
+in-process server:
+
+```bash
+export SPARK_LOCAL_CONNECT_POOL=1
+
+# Each run claims a pre-booted server not previously assigned to another run.
+python -c 'from pyspark.sql import SparkSession; SparkSession.builder.remote("local[*]").getOrCreate()'
+
+# Force-stop all pool servers and start over from a clean slate.
+python -m pyspark.sql.connect.local_server_pool --purge
+```
+
+The trade-off relative to the reuse mode above is memory: `spark.local.connect.pool.size`
+(default 2) idle servers stay resident while you iterate, several hundred MB each. Idle pool
+servers warm themselves up with a fixed set of synthetic queries (disable with
+`SPARK_LOCAL_CONNECT_POOL_WARMUP=0`), so the first real query of a run is fast too, and they
+shut down on their own after sitting unclaimed for `SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT`
+seconds (default 1800), so an idle machine drains back to zero servers. Pool servers are only
+handed to runs whose master, startup configurations, working directory, and Python environment
+match the ones they were booted with; runs that differ in any of these boot their own pool
+members. If both this and `spark.local.connect.reuse` are set, the pool takes precedence.
+
 ## Use Spark Connect in standalone applications
 
 <div class="codetabs">
