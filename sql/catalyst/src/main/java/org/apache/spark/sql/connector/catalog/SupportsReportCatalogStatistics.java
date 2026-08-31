@@ -40,7 +40,7 @@ import org.apache.spark.sql.connector.read.Statistics;
  * @since 5.0.0
  */
 @Evolving
-public interface SupportsReportCatalogStatistics {
+public interface SupportsReportCatalogStatistics extends Table {
 
   /**
    * Returns estimated statistics for this table based on catalog metadata.
