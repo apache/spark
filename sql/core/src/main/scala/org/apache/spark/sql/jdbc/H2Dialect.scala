@@ -26,7 +26,13 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
-import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{
+  IndexAlreadyExistsException,
+  NoSuchIndexException,
+  NoSuchItemExceptionHelper,
+  NoSuchNamespaceException,
+  NoSuchTableException,
+  TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
@@ -230,10 +236,8 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
               errorClass = "TABLE_OR_VIEW_NOT_FOUND",
               messageParameters = Map(
                 "relationName" -> relationName,
-                // classifyException receives only pre-rendered strings, so no Spark-side
-                // search path exists here; "not available" matches the rendering used for
-                // an empty search path.
-                "searchPath" -> "not available"),
+                // Use the shared empty-search-path rendering for this dialect-classification path.
+                "searchPath" -> NoSuchItemExceptionHelper.formatSearchPath(Seq.empty)),
               cause = Some(e))
           // SCHEMA_NOT_FOUND_1
           case 90079 =>
