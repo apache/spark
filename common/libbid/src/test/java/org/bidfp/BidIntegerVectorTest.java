@@ -53,7 +53,7 @@ public final class BidIntegerVectorTest {
             long actual = BidConvert.toInt64(
                 input, mode, flags, signed, width, suffix.startsWith("x"));
             if (!sameBits(actual, expected, width) || flags.bits() != expectedFlags) {
-              throw new AssertionError(String.format(
+              throw new IllegalStateException(String.format(
                   "%s actual [0x%016x] %02x", line, actual, flags.bits()));
             }
             tested++;
@@ -80,7 +80,7 @@ public final class BidIntegerVectorTest {
             long actual = BidConvert.toInt64From128(
                 input[0], input[1], mode, flags, signed, width, suffix.startsWith("x"));
             if (!sameBits(actual, expected, width) || flags.bits() != expectedFlags) {
-              throw new AssertionError(String.format(
+              throw new IllegalStateException(String.format(
                   "%s actual [0x%016x] %02x", line, actual, flags.bits()));
             }
             tested++;
@@ -106,7 +106,7 @@ public final class BidIntegerVectorTest {
         StatusFlags flags = new StatusFlags();
         long actual = BidConvert.toInt64(input, mode, flags, true, width, exact);
         if (!sameBits(actual, expected, width) || flags.bits() != expectedFlags) {
-          throw new AssertionError(String.format(
+          throw new IllegalStateException(String.format(
               "%s actual [0x%016x] %02x", line, actual, flags.bits()));
         }
         tested++;
@@ -131,7 +131,7 @@ public final class BidIntegerVectorTest {
         long actual = BidConvert.toInt64From128(
             input[0], input[1], mode, flags, true, width, exact);
         if (!sameBits(actual, expected, width) || flags.bits() != expectedFlags) {
-          throw new AssertionError(String.format(
+          throw new IllegalStateException(String.format(
               "%s actual [0x%016x] %02x", line, actual, flags.bits()));
         }
         tested++;
@@ -186,7 +186,7 @@ public final class BidIntegerVectorTest {
           long[] expected = IntelVectors.hex128(tokens[3]);
           if (actual[0] != expected[0] || actual[1] != expected[1]
               || flags.bits() != IntelVectors.flags(tokens[4])) {
-            throw new AssertionError(String.format(
+            throw new IllegalStateException(String.format(
                 "%s actual [0x%016x%016x] %02x",
                 line, actual[0], actual[1], flags.bits()));
           }
@@ -274,7 +274,7 @@ public final class BidIntegerVectorTest {
   private static void assertFrom64(
       String line, long actual, long expected, int actualFlags, String expectedFlags) {
     if (actual != expected || actualFlags != IntelVectors.flags(expectedFlags)) {
-      throw new AssertionError(String.format(
+      throw new IllegalStateException(String.format(
           "%s actual [0x%016x] %02x", line, actual, actualFlags));
     }
   }

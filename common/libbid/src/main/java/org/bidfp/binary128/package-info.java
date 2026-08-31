@@ -1,16 +1,27 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 /**
- * IEEE 754 binary128 representation and the Intel DPML float128 kernels used
- * by this project's BID64/BID128 transcendental functions.
+ * IEEE 754 binary128 representation and Intel DPML float128 kernels used by
+ * the BID64 and BID128 transcendental functions in this module.
  *
- * <p>This artifact has no dependency on BID. Decimal wrappers that convert
- * BID64/BID128 through this type live in {@code org.bidfp} ({@code libbid-java}).
- *
- * <p>This package is the bounded Java port of libbid's emulated
- * {@code bid_f128_*} engine. It is not a complete general-purpose binary128
- * language binding: only the representation, arithmetic, and kernel families
- * required by this libbid port are supported. It does not provide decimal
- * parsing or formatting, a C ABI, binary80, or the full IEEE utility surface.
- * Java users seeking the libbid API should use {@code org.bidfp.Bid64} and
+ * <p>This is a bounded execution engine rather than a general-purpose
+ * binary128 language binding. It provides the representation, arithmetic,
+ * and kernel families needed by {@code org.bidfp.Bid64} and
  * {@code org.bidfp.Bid128}.
  */
 package org.bidfp.binary128;

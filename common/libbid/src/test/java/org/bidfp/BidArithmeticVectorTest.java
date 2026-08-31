@@ -40,7 +40,7 @@ public final class BidArithmeticVectorTest {
     tested += test128("mul");
     tested += test128("div");
     if (tested != EXPECTED_VECTORS) {
-      throw new AssertionError("unexpected arithmetic vector count: " + tested);
+      throw new IllegalStateException("unexpected arithmetic vector count: " + tested);
     }
     System.out.println(
         "BidArithmeticVectorTest: all tests passed (" + tested + " vectors)");
@@ -51,7 +51,7 @@ public final class BidArithmeticVectorTest {
     for (String line : IntelVectors.lines("bid64_" + operation)) {
       String[] tokens = IntelVectors.tokens(line);
       if (tokens.length < 6) {
-        throw new AssertionError("short vector: " + line);
+        throw new IllegalStateException("short vector: " + line);
       }
       RoundingMode mode = IntelVectors.mode(tokens[1]);
       long x = IntelVectors.operand64(tokens[2]);
@@ -61,13 +61,13 @@ public final class BidArithmeticVectorTest {
       StatusFlags flags = new StatusFlags();
       long actual = apply64(operation, x, y, mode, flags);
       if (actual != expected || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "%s actual [0x%016x] %02x", line, actual, flags.bits()));
       }
       StatusFlags objectFlags = new StatusFlags();
       long objectBits = applyObject64(operation, x, y, mode, objectFlags);
       if (objectBits != actual || objectFlags.bits() != flags.bits()) {
-        throw new AssertionError("object!=raw " + line);
+        throw new IllegalStateException("object!=raw " + line);
       }
       tested++;
     }
@@ -79,7 +79,7 @@ public final class BidArithmeticVectorTest {
     for (String line : IntelVectors.lines("bid128_" + operation)) {
       String[] tokens = IntelVectors.tokens(line);
       if (tokens.length < 6) {
-        throw new AssertionError("short vector: " + line);
+        throw new IllegalStateException("short vector: " + line);
       }
       RoundingMode mode = IntelVectors.mode(tokens[1]);
       long[] x = IntelVectors.operand128(tokens[2]);
@@ -91,7 +91,7 @@ public final class BidArithmeticVectorTest {
       apply128(operation, x, y, mode, flags, actual);
       if (actual[0] != expected[0] || actual[1] != expected[1]
           || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "%s actual [0x%016x%016x] %02x",
             line, actual[0], actual[1], flags.bits()));
       }
@@ -99,7 +99,7 @@ public final class BidArithmeticVectorTest {
       long[] objectBits = applyObject128(operation, x, y, mode, objectFlags);
       if (objectBits[0] != actual[0] || objectBits[1] != actual[1]
           || objectFlags.bits() != flags.bits()) {
-        throw new AssertionError("object!=raw " + line);
+        throw new IllegalStateException("object!=raw " + line);
       }
       tested++;
     }
@@ -113,7 +113,7 @@ public final class BidArithmeticVectorTest {
       case "sub" -> Bid64Raw.sub(x, y, mode, flags);
       case "mul" -> Bid64Raw.mul(x, y, mode, flags);
       case "div" -> Bid64Raw.div(x, y, mode, flags);
-      default -> throw new AssertionError(operation);
+      default -> throw new IllegalStateException(operation);
     };
   }
 
@@ -126,7 +126,7 @@ public final class BidArithmeticVectorTest {
       case "sub" -> left.subtract(right, mode, flags);
       case "mul" -> left.multiply(right, mode, flags);
       case "div" -> left.divide(right, mode, flags);
-      default -> throw new AssertionError(operation);
+      default -> throw new IllegalStateException(operation);
     };
     return result.toRawBits();
   }
@@ -143,7 +143,7 @@ public final class BidArithmeticVectorTest {
       case "sub" -> Bid128Raw.sub(x[0], x[1], y[0], y[1], mode, flags, out);
       case "mul" -> Bid128Raw.mul(x[0], x[1], y[0], y[1], mode, flags, out);
       case "div" -> Bid128Raw.div(x[0], x[1], y[0], y[1], mode, flags, out);
-      default -> throw new AssertionError(operation);
+      default -> throw new IllegalStateException(operation);
     }
   }
 
@@ -156,7 +156,7 @@ public final class BidArithmeticVectorTest {
       case "sub" -> left.subtract(right, mode, flags);
       case "mul" -> left.multiply(right, mode, flags);
       case "div" -> left.divide(right, mode, flags);
-      default -> throw new AssertionError(operation);
+      default -> throw new IllegalStateException(operation);
     };
     return new long[] {result.highBits(), result.lowBits()};
   }

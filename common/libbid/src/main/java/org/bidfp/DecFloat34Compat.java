@@ -17,10 +17,10 @@
 package org.bidfp;
 
 /**
- * Signature-compatible replacements for {@code DecFloat34} JNI natives.
+ * Spark-facing decimal128 adapters over the LibBID raw API.
  *
- * <p>The original JNI signatures retain their flag-discarding behavior. Overloads with
- * {@code statusOut} expose IEEE status flags to Java callers.
+ * <p>Operations that can raise IEEE status require a {@code statusOut}
+ * argument.
  */
 public final class DecFloat34Compat {
   private DecFloat34Compat() {
@@ -37,12 +37,14 @@ public final class DecFloat34Compat {
     return Bid128Raw.toString(hi, lo);
   }
 
+  /** Spark SQL ordering: signed zeros equal and all NaNs equal and greatest. */
   public static int bid128Compare(long aHi, long aLo, long bHi, long bLo) {
-    return DecFloatAdapters.compare128(aHi, aLo, bHi, bLo);
+    return DecFloatAdapters.sqlCompare128(aHi, aLo, bHi, bLo);
   }
 
+  /** Spark SQL equality, which differs from IEEE encoding equality. */
   public static boolean bid128Equals(long aHi, long aLo, long bHi, long bLo) {
-    return DecFloatAdapters.equals128(aHi, aLo, bHi, bLo);
+    return DecFloatAdapters.sqlEquals128(aHi, aLo, bHi, bLo);
   }
 
   public static boolean bid128IsNaN(long hi, long lo) {
@@ -54,19 +56,9 @@ public final class DecFloat34Compat {
   }
 
   public static void bid128Add(
-      long aHi, long aLo, long bHi, long bLo, int rounding, long[] payloadOut) {
-    bid128Add(aHi, aLo, bHi, bLo, rounding, payloadOut, null);
-  }
-
-  public static void bid128Add(
       long aHi, long aLo, long bHi, long bLo, int rounding, long[] payloadOut,
       int[] statusOut) {
     Bid128Raw.add(aHi, aLo, bHi, bLo, rounding, payloadOut, statusOut);
-  }
-
-  public static void bid128Sub(
-      long aHi, long aLo, long bHi, long bLo, int rounding, long[] payloadOut) {
-    bid128Sub(aHi, aLo, bHi, bLo, rounding, payloadOut, null);
   }
 
   public static void bid128Sub(
@@ -76,19 +68,9 @@ public final class DecFloat34Compat {
   }
 
   public static void bid128Mul(
-      long aHi, long aLo, long bHi, long bLo, int rounding, long[] payloadOut) {
-    bid128Mul(aHi, aLo, bHi, bLo, rounding, payloadOut, null);
-  }
-
-  public static void bid128Mul(
       long aHi, long aLo, long bHi, long bLo, int rounding, long[] payloadOut,
       int[] statusOut) {
     Bid128Raw.mul(aHi, aLo, bHi, bLo, rounding, payloadOut, statusOut);
-  }
-
-  public static void bid128Div(
-      long aHi, long aLo, long bHi, long bLo, int rounding, long[] payloadOut) {
-    bid128Div(aHi, aLo, bHi, bLo, rounding, payloadOut, null);
   }
 
   public static void bid128Div(
@@ -99,10 +81,6 @@ public final class DecFloat34Compat {
 
   public static void bid128Negate(long hi, long lo, long[] payloadOut) {
     Bid128Raw.negate(hi, lo, payloadOut);
-  }
-
-  public static void bid128RoundIntegralZero(long hi, long lo, long[] payloadOut) {
-    bid128RoundIntegralZero(hi, lo, payloadOut, null);
   }
 
   public static void bid128RoundIntegralZero(
@@ -120,19 +98,11 @@ public final class DecFloat34Compat {
     DecFloatAdapters.sign128(hi, lo, payloadOut);
   }
 
-  public static void bid128Floor(long hi, long lo, long[] payloadOut) {
-    bid128Floor(hi, lo, payloadOut, null);
-  }
-
   public static void bid128Floor(
       long hi, long lo, long[] payloadOut, int[] statusOut) {
     StatusFlags flags = new StatusFlags();
     Bid128Raw.floor(hi, lo, flags, payloadOut);
     flags.copyTo(statusOut);
-  }
-
-  public static void bid128Ceil(long hi, long lo, long[] payloadOut) {
-    bid128Ceil(hi, lo, payloadOut, null);
   }
 
   public static void bid128Ceil(
@@ -143,12 +113,14 @@ public final class DecFloat34Compat {
   }
 
   public static void bid128RoundToScale(
-      long hi, long lo, long targetExponent, int rounding, long[] payloadOut) {
-    DecFloatAdapters.roundToScale128(hi, lo, targetExponent, rounding, payloadOut);
-  }
-
-  public static void bid128Sqrt(long hi, long lo, int rounding, long[] payloadOut) {
-    bid128Sqrt(hi, lo, rounding, payloadOut, null);
+      long hi,
+      long lo,
+      long targetExponent,
+      int rounding,
+      long[] payloadOut,
+      int[] statusOut) {
+    DecFloatAdapters.roundToScale128(
+        hi, lo, targetExponent, rounding, payloadOut, statusOut);
   }
 
   public static void bid128Sqrt(
@@ -211,8 +183,22 @@ public final class DecFloat34Compat {
         unscaledHi, unscaledLo, scale, rounding, payloadOut, statusOut);
   }
 
-  public static int bid128ToDecimal(long hi, long lo, long[] unscaledOut, int[] statusOut) {
-    return DecFloatAdapters.toDecimal128(hi, lo, unscaledOut, statusOut);
+  public static int bid128ToDecimal(
+      long hi,
+      long lo,
+      int targetPrecision,
+      int targetScale,
+      int rounding,
+      long[] unscaledOut,
+      int[] statusOut) {
+    return DecFloatAdapters.toDecimal128(
+        hi,
+        lo,
+        targetPrecision,
+        targetScale,
+        rounding,
+        unscaledOut,
+        statusOut);
   }
 
   public static void bid128Canonicalize(long hi, long lo, long[] payloadOut) {

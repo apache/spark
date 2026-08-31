@@ -3,11 +3,31 @@
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the conditions in
- * LICENSE-INTEL are met.
+ * modification, are permitted provided that the following conditions are met:
  *
- * Generated from Intel RDFP float128 UX table headers. Do not edit by
- * hand; regenerate from the Intel RDFP table sources.
+ *   * Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *   * Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *   * Neither the name of Intel Corporation nor the names of its contributors
+ *     may be used to endorse or promote products derived from this software
+ *     without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Generated from Intel RDFP 2.0 Update 4 float128 UX table sources.
+ * Do not edit by hand; regenerate with common/libbid/tools/gen_dpml_tables.py.
  */
 package org.bidfp.binary128.tables;
 
@@ -36,7 +56,7 @@ public final class PowX {
   public static final int POW_LOG2_COEF_ARRAY_DEGREE = 17;
 
   /** Little-endian table words (two u32s per long). */
-  public static final long[] TABLE = {
+  public static final TableData TABLE = new TableData(new long[] {
       0x1000000000000000L, 0x000000BA98765432L,
       0xA4D3208208208208L, 0x94D3410410410410L,
       0x84D3494494494449L, 0x74D34BD03D4BD449L,
@@ -103,5 +123,5 @@ public final class PowX {
       0xE4F1D9CC01F97B59L, 0x58B90BFBE8E7BCD5L,
       0x0000000000000000L, 0x8000000000000000L,
       0x0000000000000001L
-  };
+  });
 }

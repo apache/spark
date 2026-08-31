@@ -168,20 +168,20 @@ public final class Bid64Test {
 
   private static void check(boolean condition, String message) {
     if (!condition) {
-      throw new AssertionError(message);
+      throw new IllegalStateException(message);
     }
   }
 
   private static void equal(Object expected, Object actual, String message) {
     if (!expected.equals(actual)) {
-      throw new AssertionError(
+      throw new IllegalStateException(
           message + ": expected " + expected + ", actual " + actual);
     }
   }
 
   private static void equal(long expected, long actual, String message) {
     if (expected != actual) {
-      throw new AssertionError(
+      throw new IllegalStateException(
           message + ": expected " + expected + ", actual " + actual);
     }
   }

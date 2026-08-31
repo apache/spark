@@ -43,6 +43,11 @@ class LibraryTests {
   }
 
   @Test
+  void bidParserAdapters() {
+    BidParserAdapterTest.main(new String[0]);
+  }
+
+  @Test
   void bid64Add() throws IOException {
     Bid64AddTest.main(new String[0]);
   }

@@ -56,7 +56,7 @@ public final class Bid64RawKernelTest {
         flags);
     checkFiniteResult("maximum add", sum, false, 401, 2_000_000_000_000_000L);
     if (flags.bits() != StatusFlags.INEXACT) {
-      throw new AssertionError("maximum add must be inexact");
+      throw new IllegalStateException("maximum add must be inexact");
     }
 
     flags.clear();
@@ -67,7 +67,7 @@ public final class Bid64RawKernelTest {
         flags);
     checkFiniteResult("maximum exact multiply", product, true, 398, maximum);
     if (flags.bits() != 0) {
-      throw new AssertionError("maximum exact multiply raised flags");
+      throw new IllegalStateException("maximum exact multiply raised flags");
     }
 
     long quotient = Bid64Divide.divideRawBits(
@@ -77,7 +77,7 @@ public final class Bid64RawKernelTest {
         flags);
     checkFiniteResult("maximum exact divide", quotient, false, 767, 1L);
     if (flags.bits() != 0) {
-      throw new AssertionError("maximum exact divide raised flags");
+      throw new IllegalStateException("maximum exact divide raised flags");
     }
   }
 
@@ -104,7 +104,7 @@ public final class Bid64RawKernelTest {
           mode,
           flags);
       if (flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "same-quantum add flags: expected %02x, actual %02x",
             expectedFlags,
             flags.bits()));
@@ -132,7 +132,7 @@ public final class Bid64RawKernelTest {
           RoundingMode.TIES_TO_EVEN,
           flags);
       if (flags.bits() != 0) {
-        throw new AssertionError("exact multiply raised flags");
+        throw new IllegalStateException("exact multiply raised flags");
       }
       checkFiniteResult(
           "exact multiply",
@@ -161,7 +161,7 @@ public final class Bid64RawKernelTest {
           RoundingMode.TIES_TO_EVEN,
           flags);
       if (flags.bits() != 0) {
-        throw new AssertionError("exact divide raised flags");
+        throw new IllegalStateException("exact divide raised flags");
       }
       checkFiniteResult(
           "exact divide",
@@ -191,7 +191,7 @@ public final class Bid64RawKernelTest {
       case TOWARD_ZERO:
         return false;
       default:
-        throw new AssertionError(mode);
+        throw new IllegalStateException(String.valueOf(mode));
     }
   }
 
@@ -199,7 +199,7 @@ public final class Bid64RawKernelTest {
       String operation, long actual, boolean negative, int exponent, long coefficient) {
     long expected = Bid64.finite(negative, exponent, coefficient).toRawBits();
     if (actual != expected) {
-      throw new AssertionError(String.format(
+      throw new IllegalStateException(String.format(
           "%s: expected 0x%016x, actual 0x%016x", operation, expected, actual));
     }
   }
@@ -216,7 +216,7 @@ public final class Bid64RawKernelTest {
       long expected = numerator.divide(BigInteger.valueOf(divisor)).longValue();
       long actual = Bid64Divide.divide128By64(high, low, divisor);
       if (actual != expected) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "divide128By64(0x%016x%016x, %d): expected 0x%016x, actual 0x%016x",
             high,
             low,
@@ -284,7 +284,7 @@ public final class Bid64RawKernelTest {
       StatusFlags rawFlags,
       StatusFlags objectFlags) {
     if (raw != object || rawFlags.bits() != objectFlags.bits()) {
-      throw new AssertionError(String.format(
+      throw new IllegalStateException(String.format(
           "%s(0x%016x, 0x%016x): raw [0x%016x] %02x, object [0x%016x] %02x",
           operation,
           xBits,

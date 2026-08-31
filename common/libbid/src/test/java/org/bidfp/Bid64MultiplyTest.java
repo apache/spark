@@ -114,7 +114,7 @@ public final class Bid64MultiplyTest {
         flags);
     int expected = StatusFlags.DIVIDE_BY_ZERO | StatusFlags.INVALID;
     if (flags.bits() != expected) {
-      throw new AssertionError(
+      throw new IllegalStateException(
           String.format("accumulated flags: expected %02x, actual %02x", expected, flags.bits()));
     }
   }
@@ -128,7 +128,7 @@ public final class Bid64MultiplyTest {
     StatusFlags flags = new StatusFlags();
     long actual = Bid64Multiply.multiply(x, y, mode, flags).toRawBits();
     if (actual != expected || flags.bits() != expectedFlags) {
-      throw new AssertionError(String.format(
+      throw new IllegalStateException(String.format(
           "multiply(%s, %s, %s): expected [0x%016x] %02x, actual [0x%016x] %02x",
           x, y, mode, expected, expectedFlags, actual, flags.bits()));
     }

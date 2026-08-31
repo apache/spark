@@ -341,7 +341,7 @@ public final class BidObjectApiTest {
           "arith64Bits:" + objectName);
       check(objectFlags.bits() == rawFlags.bits(), "arith64Flags:" + objectName);
     } catch (ReflectiveOperationException e) {
-      throw new AssertionError("arith64:" + objectName, e);
+      throw new IllegalStateException("arith64:" + objectName, e);
     }
   }
 
@@ -380,7 +380,7 @@ public final class BidObjectApiTest {
       check(
           objectFlags.bits() == rawFlags.bits(), "arith128Flags:" + objectName);
     } catch (ReflectiveOperationException e) {
-      throw new AssertionError("arith128:" + objectName, e);
+      throw new IllegalStateException("arith128:" + objectName, e);
     }
   }
 
@@ -401,7 +401,7 @@ public final class BidObjectApiTest {
           "flags64Bits:" + objectName);
       check(objectFlags.bits() == rawFlags.bits(), "flags64Flags:" + objectName);
     } catch (ReflectiveOperationException e) {
-      throw new AssertionError("flags64:" + objectName, e);
+      throw new IllegalStateException("flags64:" + objectName, e);
     }
   }
 
@@ -437,7 +437,7 @@ public final class BidObjectApiTest {
       check(
           objectFlags.bits() == rawFlags.bits(), "flags128Flags:" + objectName);
     } catch (ReflectiveOperationException e) {
-      throw new AssertionError("flags128:" + objectName, e);
+      throw new IllegalStateException("flags128:" + objectName, e);
     }
   }
 
@@ -598,7 +598,7 @@ public final class BidObjectApiTest {
           objectFlags.bits() == rawFlags.bits(),
           "unary64Flags:" + name + ":" + x);
     } catch (ReflectiveOperationException e) {
-      throw new AssertionError("unary64:" + name, e);
+      throw new IllegalStateException("unary64:" + name, e);
     }
   }
 
@@ -626,7 +626,7 @@ public final class BidObjectApiTest {
           objectFlags.bits() == rawFlags.bits(),
           "unary128Flags:" + name + ":" + x);
     } catch (ReflectiveOperationException e) {
-      throw new AssertionError("unary128:" + name, e);
+      throw new IllegalStateException("unary128:" + name, e);
     }
   }
 
@@ -653,7 +653,7 @@ public final class BidObjectApiTest {
           objectFlags.bits() == rawFlags.bits(),
           "binary64Flags:" + name + ":" + left + "," + right);
     } catch (ReflectiveOperationException e) {
-      throw new AssertionError("binary64:" + name, e);
+      throw new IllegalStateException("binary64:" + name, e);
     }
   }
 
@@ -693,7 +693,7 @@ public final class BidObjectApiTest {
           objectFlags.bits() == rawFlags.bits(),
           "binary128Flags:" + name + ":" + left + "," + right);
     } catch (ReflectiveOperationException e) {
-      throw new AssertionError("binary128:" + name, e);
+      throw new IllegalStateException("binary128:" + name, e);
     }
   }
 
@@ -743,7 +743,7 @@ public final class BidObjectApiTest {
 
   private static void check(boolean condition, String name) {
     if (!condition) {
-      throw new AssertionError(name);
+      throw new IllegalStateException(name);
     }
   }
 }

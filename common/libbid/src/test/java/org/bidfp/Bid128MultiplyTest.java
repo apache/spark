@@ -182,7 +182,7 @@ public final class Bid128MultiplyTest {
     StatusFlags flags = new StatusFlags();
     Bid128 actual = Bid128Multiply.multiply(x, y, mode, flags);
     if (!actual.equals(expected) || flags.bits() != expectedFlags) {
-      throw new AssertionError(String.format(
+      throw new IllegalStateException(String.format(
           "multiply(%s, %s, %s): expected %s %02x, actual %s %02x",
           x, y, mode, expected, expectedFlags, actual, flags.bits()));
     }
@@ -190,7 +190,7 @@ public final class Bid128MultiplyTest {
 
   private static void check(boolean condition, String message) {
     if (!condition) {
-      throw new AssertionError(message);
+      throw new IllegalStateException(message);
     }
   }
 }

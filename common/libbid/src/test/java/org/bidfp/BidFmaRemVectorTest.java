@@ -54,7 +54,7 @@ public final class BidFmaRemVectorTest {
           actual = Bid64Raw.fmod(x, y, flags);
         }
         if (actual != expected || flags.bits() != expectedFlags) {
-          throw new AssertionError(String.format(
+          throw new IllegalStateException(String.format(
               "%s actual [0x%016x] %02x", line, actual, flags.bits()));
         }
         tested++;
@@ -91,7 +91,7 @@ public final class BidFmaRemVectorTest {
         }
         if (actual[0] != expected[0] || actual[1] != expected[1]
             || flags.bits() != expectedFlags) {
-          throw new AssertionError(String.format(
+          throw new IllegalStateException(String.format(
               "%s actual [0x%016x%016x] %02x",
               line, actual[0], actual[1], flags.bits()));
         }

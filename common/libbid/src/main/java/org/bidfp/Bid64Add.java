@@ -377,7 +377,7 @@ public final class Bid64Add {
         }
         break;
       default:
-        throw new AssertionError(roundingMode);
+        throw new IllegalStateException(String.valueOf(roundingMode));
     }
 
     if (direction == 0) {
@@ -442,7 +442,7 @@ public final class Bid64Add {
         increment = false;
         break;
       default:
-        throw new AssertionError(roundingMode);
+        throw new IllegalStateException(String.valueOf(roundingMode));
       }
     }
     if (increment) {
@@ -511,7 +511,7 @@ public final class Bid64Add {
       case TOWARD_ZERO:
         return false;
       default:
-        throw new AssertionError(roundingMode);
+        throw new IllegalStateException(String.valueOf(roundingMode));
     }
   }
 
@@ -546,7 +546,7 @@ public final class Bid64Add {
         infinity = false;
         break;
       default:
-        throw new AssertionError(roundingMode);
+        throw new IllegalStateException(String.valueOf(roundingMode));
     }
     if (infinity) {
       return (negative ? Bid64.MASK_SIGN : 0L) | Bid64.MASK_INFINITY;

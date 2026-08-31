@@ -106,7 +106,7 @@ public final class Bid64IntelVectorTest {
       int expected = (int) vector[1];
       int actual = value.classify().ordinal();
       if (expected != actual) {
-        throw new AssertionError(
+        throw new IllegalStateException(
             String.format(
                 "class(0x%016x): expected %d, actual %d (%s)",
                 vector[0], expected, actual, value.classify()));
@@ -124,7 +124,7 @@ public final class Bid64IntelVectorTest {
       boolean expected = vector[1] != 0;
       boolean actual = Bid64.fromRawBits(vector[0]).isCanonical();
       if (expected != actual) {
-        throw new AssertionError(
+        throw new IllegalStateException(
             String.format(
                 "isCanonical(0x%016x): expected %s, actual %s",
                 vector[0], expected, actual));
@@ -152,7 +152,7 @@ public final class Bid64IntelVectorTest {
       boolean actual =
           Bid64.fromRawBits(vector[0]).sameQuantum(Bid64.fromRawBits(vector[1]));
       if (expected != actual) {
-        throw new AssertionError(
+        throw new IllegalStateException(
             String.format(
                 "sameQuantum(0x%016x, 0x%016x): expected %s, actual %s",
                 vector[0], vector[1], expected, actual));
@@ -254,7 +254,7 @@ public final class Bid64IntelVectorTest {
       boolean actual =
           Bid64.fromRawBits(vector[0]).totalOrder(Bid64.fromRawBits(vector[1]));
       if (expected != actual) {
-        throw new AssertionError(
+        throw new IllegalStateException(
             String.format(
                 "totalOrder(0x%016x, 0x%016x): expected %s, actual %s",
                 vector[0], vector[1], expected, actual));
@@ -265,7 +265,7 @@ public final class Bid64IntelVectorTest {
       boolean actual =
           Bid64.fromRawBits(vector[0]).totalOrderMag(Bid64.fromRawBits(vector[1]));
       if (expected != actual) {
-        throw new AssertionError(
+        throw new IllegalStateException(
             String.format(
                 "totalOrderMag(0x%016x, 0x%016x): expected %s, actual %s",
                 vector[0], vector[1], expected, actual));
@@ -275,13 +275,13 @@ public final class Bid64IntelVectorTest {
 
   private static void check(boolean condition, String message) {
     if (!condition) {
-      throw new AssertionError(message);
+      throw new IllegalStateException(message);
     }
   }
 
   private static void equal(int expected, int actual, String message) {
     if (expected != actual) {
-      throw new AssertionError(
+      throw new IllegalStateException(
           message + ": expected " + expected + ", actual " + actual);
     }
   }

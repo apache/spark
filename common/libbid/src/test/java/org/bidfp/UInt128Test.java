@@ -101,7 +101,7 @@ public final class UInt128Test {
     int expectedComparison = Integer.signum(leftBig.compareTo(rightBig));
     int actualComparison = Integer.signum(left.compareTo(right));
     if (expectedComparison != actualComparison) {
-      throw new AssertionError(
+      throw new IllegalStateException(
           "compare: expected " + expectedComparison + ", actual " + actualComparison);
     }
 
@@ -124,10 +124,10 @@ public final class UInt128Test {
     UInt128.Division actual = value.divide(divisor);
     equal(expected[0], actual.quotient(), "divide quotient");
     if (expected[1].longValueExact() != actual.remainder()) {
-      throw new AssertionError("divide remainder");
+      throw new IllegalStateException("divide remainder");
     }
     if (!source.toString().equals(value.toDecimalString())) {
-      throw new AssertionError("decimal string");
+      throw new IllegalStateException("decimal string");
     }
   }
 
@@ -143,7 +143,7 @@ public final class UInt128Test {
     BigInteger wrapped = expected.and(MASK);
     BigInteger actualBig = toBigInteger(actual);
     if (!wrapped.equals(actualBig)) {
-      throw new AssertionError(
+      throw new IllegalStateException(
           operation + ": expected 0x" + wrapped.toString(16) + ", actual " + actual);
     }
   }

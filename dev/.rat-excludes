@@ -133,8 +133,10 @@ SqlBaseLexer.tokens
 LimitedInputStream.java
 TimSort.java
 mllib-local/src/main/scala/scala/collection/compat/package.scala
-# Intel RDFP-derived sources retain their BSD 3-Clause license headers.
-libbid
+# Intel RDFP data resources cannot carry source-file license headers.
+bid128_sin_moduli.bin
+intel-f128-oracle.txt
+readtest.in
 xml-resources/*
 loose_version.py
 people.xml

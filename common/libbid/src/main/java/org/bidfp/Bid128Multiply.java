@@ -182,7 +182,7 @@ public final class Bid128Multiply {
         toInfinity = false;
         break;
       default:
-        throw new AssertionError(mode);
+        throw new IllegalStateException(String.valueOf(mode));
     }
     return toInfinity
         ? infinity(negative)
@@ -315,7 +315,7 @@ public final class Bid128Multiply {
           increment = false;
           break;
         default:
-          throw new AssertionError(mode);
+          throw new IllegalStateException(String.valueOf(mode));
       }
       if (increment) {
         l0++;
@@ -358,7 +358,7 @@ public final class Bid128Multiply {
         case 9:
           return divideByBillion();
         default:
-          throw new AssertionError(digits);
+          throw new IllegalStateException(String.valueOf(digits));
       }
     }
 

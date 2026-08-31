@@ -337,7 +337,7 @@ public final class Bid128Add {
         }
         break;
       default:
-        throw new AssertionError(roundingMode);
+        throw new IllegalStateException(String.valueOf(roundingMode));
     }
     if (direction == 0) {
       return pack(aNegative, aExponent, aHigh, aLow, roundingMode, flags);
@@ -401,7 +401,7 @@ public final class Bid128Add {
         increment = false;
         break;
       default:
-        throw new AssertionError(roundingMode);
+        throw new IllegalStateException(String.valueOf(roundingMode));
     }
     if (increment) {
       quotientLow++;
@@ -453,7 +453,7 @@ public final class Bid128Add {
         infinity = false;
         break;
       default:
-        throw new AssertionError(roundingMode);
+        throw new IllegalStateException(String.valueOf(roundingMode));
     }
     if (infinity) {
       return negative ? Bid128.NEGATIVE_INFINITY : Bid128.POSITIVE_INFINITY;
@@ -548,7 +548,7 @@ public final class Bid128Add {
         increment = false;
         break;
       default:
-        throw new AssertionError(roundingMode);
+        throw new IllegalStateException(String.valueOf(roundingMode));
     }
     if (increment) {
       magnitude.increment();

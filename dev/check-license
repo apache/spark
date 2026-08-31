@@ -69,7 +69,10 @@ mkdir -p "$FWDIR"/lib
 }
 
 mkdir -p target
-$java_cmd -jar "$rat_jar" -E "$FWDIR"/dev/.rat-excludes -d "$FWDIR" > target/rat-results.txt
+$java_cmd -jar "$rat_jar" \
+  --licenses "$FWDIR"/dev/rat-licenses.xml \
+  -E "$FWDIR"/dev/.rat-excludes \
+  -d "$FWDIR" > target/rat-results.txt
 
 if [ $? -ne 0 ]; then
    echo "RAT exited abnormally"

@@ -296,7 +296,7 @@ public final class Bid128Divide {
       case TOWARD_ZERO:
         return false;
       default:
-        throw new AssertionError(mode);
+        throw new IllegalStateException(String.valueOf(mode));
     }
   }
 
@@ -320,7 +320,7 @@ public final class Bid128Divide {
       case TOWARD_ZERO:
         return false;
       default:
-        throw new AssertionError(mode);
+        throw new IllegalStateException(String.valueOf(mode));
     }
   }
 
@@ -381,7 +381,7 @@ public final class Bid128Divide {
         infinity = false;
         break;
       default:
-        throw new AssertionError(mode);
+        throw new IllegalStateException(String.valueOf(mode));
     }
     if (infinity) {
       infinity(negative, out);
@@ -747,7 +747,7 @@ public final class Bid128Divide {
           limb4 = value;
           break;
         default:
-          throw new AssertionError(index);
+          throw new IllegalStateException(String.valueOf(index));
       }
     }
 

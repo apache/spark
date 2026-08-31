@@ -17,9 +17,10 @@
 package org.bidfp;
 
 /**
- * Signature-compatible replacements for {@code DecFloat16} JNI natives.
- * The original JNI signatures retain their flag-discarding behavior. Overloads with
- * {@code statusOut} expose IEEE status flags to Java callers.
+ * Spark-facing decimal64 adapters over the LibBID raw API.
+ *
+ * <p>Operations that can raise IEEE status require a {@code statusOut}
+ * argument.
  */
 public final class DecFloat16Compat {
   private DecFloat16Compat() {
@@ -36,12 +37,14 @@ public final class DecFloat16Compat {
     return Bid64Raw.toString(payload);
   }
 
+  /** Spark SQL ordering: signed zeros equal and all NaNs equal and greatest. */
   public static int bid64Compare(long a, long b) {
-    return DecFloatAdapters.compare64(a, b);
+    return DecFloatAdapters.sqlCompare64(a, b);
   }
 
+  /** Spark SQL equality, which differs from IEEE encoding equality. */
   public static boolean bid64Equals(long a, long b) {
-    return DecFloatAdapters.equals64(a, b);
+    return DecFloatAdapters.sqlEquals64(a, b);
   }
 
   public static boolean bid64IsNaN(long payload) {
@@ -52,32 +55,16 @@ public final class DecFloat16Compat {
     return Bid64Raw.isZero(payload);
   }
 
-  public static long bid64Add(long a, long b, int rounding) {
-    return bid64Add(a, b, rounding, null);
-  }
-
   public static long bid64Add(long a, long b, int rounding, int[] statusOut) {
     return Bid64Raw.add(a, b, rounding, statusOut);
-  }
-
-  public static long bid64Sub(long a, long b, int rounding) {
-    return bid64Sub(a, b, rounding, null);
   }
 
   public static long bid64Sub(long a, long b, int rounding, int[] statusOut) {
     return Bid64Raw.sub(a, b, rounding, statusOut);
   }
 
-  public static long bid64Mul(long a, long b, int rounding) {
-    return bid64Mul(a, b, rounding, null);
-  }
-
   public static long bid64Mul(long a, long b, int rounding, int[] statusOut) {
     return Bid64Raw.mul(a, b, rounding, statusOut);
-  }
-
-  public static long bid64Div(long a, long b, int rounding) {
-    return bid64Div(a, b, rounding, null);
   }
 
   public static long bid64Div(long a, long b, int rounding, int[] statusOut) {
@@ -86,10 +73,6 @@ public final class DecFloat16Compat {
 
   public static long bid64Negate(long payload) {
     return Bid64Raw.negate(payload);
-  }
-
-  public static long bid64RoundIntegralZero(long payload) {
-    return bid64RoundIntegralZero(payload, null);
   }
 
   public static long bid64RoundIntegralZero(long payload, int[] statusOut) {
@@ -107,19 +90,11 @@ public final class DecFloat16Compat {
     return DecFloatAdapters.sign64(payload);
   }
 
-  public static long bid64Floor(long payload) {
-    return bid64Floor(payload, null);
-  }
-
   public static long bid64Floor(long payload, int[] statusOut) {
     StatusFlags flags = new StatusFlags();
     long result = Bid64Raw.floor(payload, flags);
     flags.copyTo(statusOut);
     return result;
-  }
-
-  public static long bid64Ceil(long payload) {
-    return bid64Ceil(payload, null);
   }
 
   public static long bid64Ceil(long payload, int[] statusOut) {
@@ -129,12 +104,10 @@ public final class DecFloat16Compat {
     return result;
   }
 
-  public static long bid64RoundToScale(long payload, long targetExponent, int rounding) {
-    return DecFloatAdapters.roundToScale64(payload, targetExponent, rounding);
-  }
-
-  public static long bid64Sqrt(long payload, int rounding) {
-    return bid64Sqrt(payload, rounding, null);
+  public static long bid64RoundToScale(
+      long payload, long targetExponent, int rounding, int[] statusOut) {
+    return DecFloatAdapters.roundToScale64(
+        payload, targetExponent, rounding, statusOut);
   }
 
   public static long bid64Sqrt(long payload, int rounding, int[] statusOut) {
@@ -194,8 +167,20 @@ public final class DecFloat16Compat {
     return DecFloatAdapters.fromDecimal64(unscaledHi, unscaledLo, scale, rounding, statusOut);
   }
 
-  public static int bid64ToDecimal(long payload, long[] unscaledOut, int[] statusOut) {
-    return DecFloatAdapters.toDecimal64(payload, unscaledOut, statusOut);
+  public static int bid64ToDecimal(
+      long payload,
+      int targetPrecision,
+      int targetScale,
+      int rounding,
+      long[] unscaledOut,
+      int[] statusOut) {
+    return DecFloatAdapters.toDecimal64(
+        payload,
+        targetPrecision,
+        targetScale,
+        rounding,
+        unscaledOut,
+        statusOut);
   }
 
   public static long bid64Canonicalize(long payload) {

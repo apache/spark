@@ -76,7 +76,7 @@ public final class BidUtilityVectorTest {
       String[] tokens = IntelVectors.tokens(line);
       int actual = Bid64Raw.classify(operand64(tokens[2])).ordinal();
       if (actual != Integer.parseInt(tokens[3]) || IntelVectors.flags(tokens[4]) != 0) {
-        throw new AssertionError(line + " actual " + actual);
+        throw new IllegalStateException(line + " actual " + actual);
       }
       tested++;
     }
@@ -164,7 +164,7 @@ public final class BidUtilityVectorTest {
       long[] input = operand128(tokens[2]);
       int actual = Bid128Raw.classify(input[0], input[1]).ordinal();
       if (actual != Integer.parseInt(tokens[3]) || IntelVectors.flags(tokens[4]) != 0) {
-        throw new AssertionError(line + " actual " + actual);
+        throw new IllegalStateException(line + " actual " + actual);
       }
       tested++;
     }
@@ -216,7 +216,7 @@ public final class BidUtilityVectorTest {
 
   private static void assert64(String line, long actual, long expected, String flags) {
     if (actual != expected || IntelVectors.flags(flags) != 0) {
-      throw new AssertionError(String.format("%s actual [0x%016x]", line, actual));
+      throw new IllegalStateException(String.format("%s actual [0x%016x]", line, actual));
     }
   }
 
@@ -224,7 +224,7 @@ public final class BidUtilityVectorTest {
       String line, long[] actual, long[] expected, String flags) {
     if (actual[0] != expected[0] || actual[1] != expected[1]
         || IntelVectors.flags(flags) != 0) {
-      throw new AssertionError(String.format(
+      throw new IllegalStateException(String.format(
           "%s actual [0x%016x%016x]", line, actual[0], actual[1]));
     }
   }
@@ -232,7 +232,7 @@ public final class BidUtilityVectorTest {
   private static void assertBoolean(
       String line, boolean actual, String expected, String flags) {
     if (actual != !expected.equals("0") || IntelVectors.flags(flags) != 0) {
-      throw new AssertionError(line + " actual " + actual);
+      throw new IllegalStateException(line + " actual " + actual);
     }
   }
 

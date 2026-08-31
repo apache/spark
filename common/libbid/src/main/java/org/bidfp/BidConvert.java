@@ -2,8 +2,29 @@
  * Copyright (c) 2007-2025, Intel Corp.
  * All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the conditions in LICENSE-INTEL are met.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *   * Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *   * Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *   * Neither the name of Intel Corporation nor the names of its contributors
+ *     may be used to endorse or promote products derived from this software
+ *     without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 package org.bidfp;
 
@@ -15,6 +36,9 @@ final class BidConvert {
   static long fromString64(String text, RoundingMode mode, StatusFlags flags) {
     ParsedDecimal parsed = parse(text, false);
     if (parsed.special != 0L) {
+      if (parsed.invalid) {
+        flags.raise(StatusFlags.INVALID);
+      }
       return parsed.special;
     }
     DecNum number = parsed.number;
@@ -25,6 +49,9 @@ final class BidConvert {
       String text, RoundingMode mode, StatusFlags flags, long[] payloadOut) {
     ParsedDecimal parsed = parse(text, true);
     if (parsed.special != 0L) {
+      if (parsed.invalid) {
+        flags.raise(StatusFlags.INVALID);
+      }
       payloadOut[0] = parsed.special;
       payloadOut[1] = 0L;
       return;
@@ -530,7 +557,7 @@ final class BidConvert {
     int comparison = binary.compareAbsolute(number);
     if (comparison != 0) {
       flags.raise(StatusFlags.INEXACT);
-      nearest = directedDouble(nearest, comparison, negative, mode);
+      nearest = directedDouble(nearest, comparison, negative, mode, number);
       if (Double.isInfinite(nearest)) {
         flags.raise(StatusFlags.OVERFLOW);
       }
@@ -574,7 +601,16 @@ final class BidConvert {
   }
 
   private static double directedDouble(
-      double nearest, int comparison, boolean negative, RoundingMode mode) {
+      double nearest,
+      int comparison,
+      boolean negative,
+      RoundingMode mode,
+      DecNum number) {
+    if (mode == RoundingMode.TIES_AWAY
+        && comparison < 0
+        && isDoubleMidpoint(nearest, number)) {
+      return Math.nextUp(nearest);
+    }
     boolean towardSmallerMagnitude = mode == RoundingMode.TOWARD_ZERO
         || mode == RoundingMode.TOWARD_NEGATIVE && !negative
         || mode == RoundingMode.TOWARD_POSITIVE && negative;
@@ -612,7 +648,7 @@ final class BidConvert {
     int comparison = binary.compareAbsolute(number);
     if (comparison != 0) {
       flags.raise(StatusFlags.INEXACT);
-      nearest = directedFloat(nearest, comparison, negative, mode);
+      nearest = directedFloat(nearest, comparison, negative, mode, number);
       if (Float.isInfinite(nearest)) {
         flags.raise(StatusFlags.OVERFLOW);
       }
@@ -624,7 +660,16 @@ final class BidConvert {
   }
 
   private static float directedFloat(
-      float nearest, int comparison, boolean negative, RoundingMode mode) {
+      float nearest,
+      int comparison,
+      boolean negative,
+      RoundingMode mode,
+      DecNum number) {
+    if (mode == RoundingMode.TIES_AWAY
+        && comparison < 0
+        && isFloatMidpoint(nearest, number)) {
+      return Math.nextUp(nearest);
+    }
     boolean towardSmallerMagnitude = mode == RoundingMode.TOWARD_ZERO
         || mode == RoundingMode.TOWARD_NEGATIVE && !negative
         || mode == RoundingMode.TOWARD_POSITIVE && negative;
@@ -637,6 +682,42 @@ final class BidConvert {
       return Math.nextUp(nearest);
     }
     return nearest;
+  }
+
+  private static boolean isDoubleMidpoint(double lower, DecNum number) {
+    double upper = Math.nextUp(lower);
+    if (Double.isInfinite(upper)) {
+      return isOverflowMidpoint(
+          fromBinary(lower), fromBinary(Math.ulp(lower)), number);
+    }
+    return isMidpoint(fromBinary(lower), fromBinary(upper), number);
+  }
+
+  private static boolean isFloatMidpoint(float lower, DecNum number) {
+    float upper = Math.nextUp(lower);
+    if (Float.isInfinite(upper)) {
+      return isOverflowMidpoint(
+          fromBinary((double) lower), fromBinary((double) Math.ulp(lower)), number);
+    }
+    return isMidpoint(fromBinary(lower), fromBinary(upper), number);
+  }
+
+  private static boolean isOverflowMidpoint(
+      DecNum maximumFinite, DecNum ulp, DecNum number) {
+    maximumFinite.multiplySmall(2);
+    maximumFinite.addAbsolute(ulp);
+    DecNum doubled = new DecNum();
+    doubled.copyFrom(number);
+    doubled.multiplySmall(2);
+    return maximumFinite.compareAbsolute(doubled) == 0;
+  }
+
+  private static boolean isMidpoint(DecNum lower, DecNum upper, DecNum number) {
+    lower.addAbsolute(upper);
+    DecNum doubled = new DecNum();
+    doubled.copyFrom(number);
+    doubled.multiplySmall(2);
+    return lower.compareAbsolute(doubled) == 0;
   }
 
   private static boolean isTinyBinary32(
@@ -734,70 +815,174 @@ final class BidConvert {
   }
 
   private static ParsedDecimal parse(String text, boolean bid128) {
-    String value = text.trim();
-    boolean negative = value.startsWith("-");
-    if (negative || value.startsWith("+")) {
-      value = value.substring(1);
-    }
     ParsedDecimal parsed = new ParsedDecimal();
-    if (value.equalsIgnoreCase("Infinity") || value.equalsIgnoreCase("Inf")) {
+    if (text == null) {
+      return invalid(parsed);
+    }
+    String value = text.trim();
+    if (value.isEmpty()) {
+      return invalid(parsed);
+    }
+    int position = 0;
+    boolean negative = value.charAt(position) == '-';
+    if (negative || value.charAt(position) == '+') {
+      position++;
+      if (position == value.length()) {
+        return invalid(parsed);
+      }
+    }
+    if (equalsIgnoreCase(value, position, "Infinity")
+        || equalsIgnoreCase(value, position, "Inf")) {
       parsed.special = (negative ? Bid64.MASK_SIGN : 0L) | Bid64.MASK_INFINITY;
       return parsed;
     }
-    if (value.regionMatches(true, 0, "SNaN", 0, 4)) {
+    if (equalsIgnoreCase(value, position, "SNaN")
+        || equalsIgnoreCase(value, position, "SNaNi")) {
       parsed.special = (negative ? Bid64.MASK_SIGN : 0L) | Bid64.MASK_SIGNALING_NAN;
-      parsed.signaling = true;
       return parsed;
     }
-    if (value.regionMatches(true, 0, "NaN", 0, 3)
-        || value.regionMatches(true, 0, "QNaN", 0, 4)) {
+    if (equalsIgnoreCase(value, position, "NaN")
+        || equalsIgnoreCase(value, position, "QNaN")) {
       parsed.special = (negative ? Bid64.MASK_SIGN : 0L) | Bid64.MASK_NAN;
       return parsed;
     }
-    int ePosition = Math.max(value.indexOf('E'), value.indexOf('e'));
-    int explicit = 0;
-    if (ePosition >= 0) {
-      String exponent = value.substring(ePosition + 1);
-      if (bid128 && exponent.endsWith("E")) {
-        exponent = exponent.substring(0, exponent.length() - 1);
+
+    int precision = bid128 ? 34 : 16;
+    int retainedLimit = precision + 1;
+    StringBuilder digits = new StringBuilder(precision + 2);
+    boolean point = false;
+    boolean sawDigit = false;
+    boolean significant = false;
+    boolean sticky = false;
+    long fraction = 0;
+    long significantDigits = 0;
+    while (position < value.length()) {
+      char c = value.charAt(position);
+      if (c == 'e' || c == 'E') {
+        break;
       }
-      try {
-        explicit = Integer.parseInt(exponent);
-      } catch (NumberFormatException exception) {
-        parsed.special = Bid64.MASK_NAN;
-        return parsed;
+      if (c == '.') {
+        if (point) {
+          return invalid(parsed);
+        }
+        point = true;
+      } else if (c >= '0' && c <= '9') {
+        sawDigit = true;
+        if (point) {
+          fraction = saturatedIncrement(fraction);
+        }
+        if (significant || c != '0') {
+          significant = true;
+          significantDigits = saturatedIncrement(significantDigits);
+          if (digits.length() < retainedLimit) {
+            digits.append(c);
+          } else if (c != '0') {
+            sticky = true;
+          }
+        }
+      } else {
+        return invalid(parsed);
       }
-      value = value.substring(0, ePosition);
+      position++;
     }
-    int point = value.indexOf('.');
-    int fraction = point < 0 ? 0 : value.length() - point - 1;
-    String digits = point < 0 ? value : value.substring(0, point) + value.substring(point + 1);
-    if (digits.isEmpty()) {
-      digits = "0";
+    if (!sawDigit) {
+      return invalid(parsed);
     }
+
+    long explicit = 0;
+    if (position < value.length()) {
+      position++;
+      boolean exponentNegative = false;
+      if (position < value.length()
+          && (value.charAt(position) == '+' || value.charAt(position) == '-')) {
+        exponentNegative = value.charAt(position) == '-';
+        position++;
+      }
+      int exponentStart = position;
+      while (position < value.length()
+          && value.charAt(position) >= '0'
+          && value.charAt(position) <= '9') {
+        explicit = saturatedDecimalAppend(explicit, value.charAt(position) - '0');
+        position++;
+      }
+      if (position == exponentStart) {
+        return invalid(parsed);
+      }
+      if (bid128 && position + 1 == value.length() && value.charAt(position) == 'E') {
+        position++;
+      }
+      if (position != value.length()) {
+        return invalid(parsed);
+      }
+      if (exponentNegative) {
+        explicit = -explicit;
+      }
+    }
+
+    if (!significant) {
+      digits.append('0');
+      significantDigits = 1;
+    }
+    long discarded = significantDigits - Math.min(significantDigits, retainedLimit);
+    long exponent = saturatedAdd(saturatedAdd(explicit, -fraction), discarded);
+    if (sticky) {
+      digits.append('1');
+      exponent = saturatedAdd(exponent, -1);
+    }
+    int minimumExponent = bid128 ? -6213 : -417;
+    int maximumExponent = bid128 ? 6146 : 386;
+    int boundedExponent = (int) Math.max(
+        minimumExponent, Math.min(maximumExponent, exponent));
     DecNum number = new DecNum();
     number.clear();
     for (int i = 0; i < digits.length(); i++) {
       char c = digits.charAt(i);
-      if (c < '0' || c > '9') {
-        parsed.special = Bid64.MASK_NAN;
-        parsed.signaling = true;
-        return parsed;
-      }
       number.multiplyBy10();
       number.addDigit(c - '0');
     }
     if (negative) {
       number.setNegative();
     }
-    number.shiftExp(explicit - fraction);
+    number.shiftExp(boundedExponent);
     parsed.number = number;
     return parsed;
+  }
+
+  private static ParsedDecimal invalid(ParsedDecimal parsed) {
+    parsed.special = Bid64.MASK_NAN;
+    parsed.invalid = true;
+    return parsed;
+  }
+
+  private static boolean equalsIgnoreCase(String value, int start, String expected) {
+    return value.length() - start == expected.length()
+        && value.regionMatches(true, start, expected, 0, expected.length());
+  }
+
+  private static long saturatedIncrement(long value) {
+    return value == Long.MAX_VALUE ? value : value + 1;
+  }
+
+  private static long saturatedDecimalAppend(long value, int digit) {
+    if (value > (Long.MAX_VALUE - digit) / 10) {
+      return Long.MAX_VALUE;
+    }
+    return value * 10 + digit;
+  }
+
+  private static long saturatedAdd(long left, long right) {
+    if (right > 0 && left > Long.MAX_VALUE - right) {
+      return Long.MAX_VALUE;
+    }
+    if (right < 0 && left < Long.MIN_VALUE - right) {
+      return Long.MIN_VALUE;
+    }
+    return left + right;
   }
 
   private static final class ParsedDecimal {
     DecNum number;
     long special;
-    boolean signaling;
+    boolean invalid;
   }
 }

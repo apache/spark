@@ -208,7 +208,7 @@ public final class Bid64Divide {
       case TOWARD_ZERO:
         return false;
       default:
-        throw new AssertionError(mode);
+        throw new IllegalStateException(String.valueOf(mode));
     }
   }
 
@@ -233,7 +233,7 @@ public final class Bid64Divide {
       case TOWARD_ZERO:
         return false;
       default:
-        throw new AssertionError(mode);
+        throw new IllegalStateException(String.valueOf(mode));
     }
   }
 
@@ -318,7 +318,7 @@ public final class Bid64Divide {
         infinity = false;
         break;
       default:
-        throw new AssertionError(mode);
+        throw new IllegalStateException(String.valueOf(mode));
     }
     return infinity
         ? infinity(negative)

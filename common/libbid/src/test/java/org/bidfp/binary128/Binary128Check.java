@@ -153,7 +153,7 @@ public final class Binary128Check {
   private static void checkEquals(
       Binary128 expected, Binary128 actual, String label) {
     if (!expected.equals(actual)) {
-      throw new AssertionError(
+      throw new IllegalStateException(
           label + ": expected " + expected + ", got " + actual);
     }
   }
@@ -161,7 +161,7 @@ public final class Binary128Check {
   private static void checkDouble(long expectedBits, double actual, String label) {
     long actualBits = Double.doubleToRawLongBits(actual);
     if (expectedBits != actualBits) {
-      throw new AssertionError(String.format(
+      throw new IllegalStateException(String.format(
           "%s: expected %016x, got %016x", label, expectedBits, actualBits));
     }
   }
@@ -169,7 +169,7 @@ public final class Binary128Check {
   private static void checkFlags(
       int expected, StatusFlags actual, String label) {
     if (actual.bits() != expected) {
-      throw new AssertionError(
+      throw new IllegalStateException(
           label + ": expected flags " + expected + ", got " + actual.bits());
     }
   }

@@ -2,8 +2,29 @@
  * Copyright (c) 2007-2025, Intel Corp.
  * All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the conditions in LICENSE-INTEL are met.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *   * Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *   * Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *   * Neither the name of Intel Corporation nor the names of its contributors
+ *     may be used to endorse or promote products derived from this software
+ *     without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 package org.bidfp;
 
@@ -109,9 +130,9 @@ public final class Bid64 implements Comparable<Bid64> {
     }
 
     int ePosition = Math.max(value.indexOf('E'), value.indexOf('e'));
-    int explicitExponent = ePosition < 0
+    long explicitExponent = ePosition < 0
         ? 0
-        : Integer.parseInt(value.substring(ePosition + 1));
+        : Long.parseLong(value.substring(ePosition + 1));
     String mantissa = ePosition < 0 ? value : value.substring(0, ePosition);
     int point = mantissa.indexOf('.');
     if (point != mantissa.lastIndexOf('.')) {
@@ -129,7 +150,7 @@ public final class Bid64 implements Comparable<Bid64> {
       firstNonZero++;
     }
     digits = firstNonZero == digits.length() ? "0" : digits.substring(firstNonZero);
-    int exponent = Math.subtractExact(explicitExponent, fractionalDigits);
+    long exponent = Math.subtractExact(explicitExponent, fractionalDigits);
     while (digits.length() > 16 && digits.endsWith("0")) {
       digits = digits.substring(0, digits.length() - 1);
       exponent = Math.incrementExact(exponent);
@@ -137,8 +158,20 @@ public final class Bid64 implements Comparable<Bid64> {
     if (digits.length() > 16) {
       throw new ArithmeticException("value is not exactly representable as BID64");
     }
-    int biasedExponent = Math.addExact(exponent, 398);
-    if (biasedExponent < 0 || biasedExponent > 767) {
+    if (digits.equals("0")) {
+      exponent = Math.max(-398, Math.min(369, exponent));
+    }
+    while (exponent > 369 && digits.length() < 16) {
+      digits += "0";
+      exponent--;
+    }
+    while (exponent < -398 && digits.length() > 1 && digits.endsWith("0")) {
+      digits = digits.substring(0, digits.length() - 1);
+      exponent++;
+    }
+    long biasedLong = Math.addExact(exponent, 398);
+    int biasedExponent = (int) biasedLong;
+    if (biasedLong < 0 || biasedLong > 767) {
       throw new ArithmeticException("value is outside the BID64 exponent range");
     }
     return finite(negative, biasedExponent, Long.parseLong(digits));
@@ -956,7 +989,8 @@ public final class Bid64 implements Comparable<Bid64> {
    *
    * <p>Unlike the quiet comparison methods, this ordering includes NaNs,
    * signed zeros, and distinct cohorts and is consistent with bitwise
-   * {@link #equals(Object)}.
+   * {@link #equals(Object)}. It is not Spark SQL ordering; SQL callers must
+   * use {@link DecFloatAdapters#sqlCompare64(long, long)}.
    */
   @Override
   public int compareTo(Bid64 other) {

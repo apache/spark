@@ -40,7 +40,7 @@ public final class BidDpdVectorTest {
       int expectedFlags = IntelVectors.flags(tokens[4]);
       long actual = toDpd ? Bid64Raw.toDpd(input) : Bid64Raw.fromDpd(input);
       if (actual != expected || expectedFlags != 0) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "%s actual [0x%016x] 00", line, actual));
       }
       tested++;
@@ -62,7 +62,7 @@ public final class BidDpdVectorTest {
         Bid128Raw.fromDpd(input[0], input[1], actual);
       }
       if (actual[0] != expected[0] || actual[1] != expected[1] || expectedFlags != 0) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "%s actual [0x%016x%016x] 00", line, actual[0], actual[1]));
       }
       tested++;

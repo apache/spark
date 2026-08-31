@@ -17,8 +17,11 @@
 package org.bidfp;
 
 /**
- * DBR SQL adapters that are not Intel RDFP operations. Marked so this library
- * is not mistaken for a 1:1 Intel dump.
+ * Spark SQL adapters for BID values.
+ *
+ * <p>These methods implement SQL equality and ordering, not IEEE
+ * {@code totalOrder}. Signed zeros compare equal, all NaNs compare equal, and
+ * NaN sorts after finite values.
  */
 public final class DecFloatAdapters {
   private static final int BID64_MAX_QUANTUM = 369;
@@ -27,8 +30,8 @@ public final class DecFloatAdapters {
   private DecFloatAdapters() {
   }
 
-  /** DBR total order: NaN greatest, all NaNs equal, signed zeros equal. */
-  public static int compare64(long a, long b) {
+  /** Returns the Spark SQL ordering of two decimal64 payloads. */
+  public static int sqlCompare64(long a, long b) {
     if (Bid64Raw.isNaN(a)) {
       return Bid64Raw.isNaN(b) ? 0 : 1;
     }
@@ -45,11 +48,13 @@ public final class DecFloatAdapters {
     return 0;
   }
 
-  public static boolean equals64(long a, long b) {
-    return compare64(a, b) == 0;
+  /** Returns whether two decimal64 payloads are equal under Spark SQL semantics. */
+  public static boolean sqlEquals64(long a, long b) {
+    return sqlCompare64(a, b) == 0;
   }
 
-  public static int compare128(long aHi, long aLo, long bHi, long bLo) {
+  /** Returns the Spark SQL ordering of two decimal128 payloads. */
+  public static int sqlCompare128(long aHi, long aLo, long bHi, long bLo) {
     if (Bid128Raw.isNaN(aHi, aLo)) {
       return Bid128Raw.isNaN(bHi, bLo) ? 0 : 1;
     }
@@ -66,8 +71,22 @@ public final class DecFloatAdapters {
     return 0;
   }
 
-  public static boolean equals128(long aHi, long aLo, long bHi, long bLo) {
-    return compare128(aHi, aLo, bHi, bLo) == 0;
+  /** Returns whether two decimal128 payloads are equal under Spark SQL semantics. */
+  public static boolean sqlEquals128(long aHi, long aLo, long bHi, long bLo) {
+    return sqlCompare128(aHi, aLo, bHi, bLo) == 0;
+  }
+
+  /** Returns a hash consistent with {@link #sqlEquals64(long, long)}. */
+  public static int sqlHash64(long payload) {
+    return Long.hashCode(canonicalize64(payload));
+  }
+
+  /** Returns a hash consistent with SQL decimal128 equality. */
+  public static int sqlHash128(long hi, long lo) {
+    long[] canonical = new long[2];
+    canonicalize128(hi, lo, canonical);
+    int result = Long.hashCode(canonical[0]);
+    return 31 * result + Long.hashCode(canonical[1]);
   }
 
   public static long sign64(long payload) {
@@ -138,47 +157,65 @@ public final class DecFloatAdapters {
         out);
   }
 
-  public static long roundToScale64(long payload, long targetExponent, int rounding) {
+  public static long roundToScale64(
+      long payload, long targetExponent, int rounding, int[] statusOut) {
     StatusFlags flags = new StatusFlags();
     RoundingMode mode = RoundingMode.fromIntel(rounding);
-    if (Bid64Raw.isInf(payload)) {
+    if (Bid64Raw.isNaN(payload) || Bid64Raw.isInf(payload) || Bid64Raw.isZero(payload)) {
+      flags.copyTo(statusOut);
       return payload;
     }
     if (Bid64Raw.isFinite(payload) && !Bid64Raw.isNaN(payload)) {
       int quantum = BidScale.quantexp64(payload);
       if (targetExponent <= quantum) {
+        flags.copyTo(statusOut);
         return payload;
       }
     }
     if (targetExponent > BID64_MAX_QUANTUM) {
-      return roundCoarse64(payload, targetExponent, mode, flags);
+      long result = roundCoarse64(payload, targetExponent, mode, flags);
+      flags.copyTo(statusOut);
+      return result;
     }
     long exemplar = Bid64.finiteRawBits(false, (int) targetExponent + 398, 1L);
-    return Bid64Raw.quantize(payload, exemplar, mode, flags);
+    long result = Bid64Raw.quantize(payload, exemplar, mode, flags);
+    flags.copyTo(statusOut);
+    return result;
   }
 
   public static void roundToScale128(
-      long hi, long lo, long targetExponent, int rounding, long[] out) {
+      long hi,
+      long lo,
+      long targetExponent,
+      int rounding,
+      long[] out,
+      int[] statusOut) {
     RoundingMode mode = RoundingMode.fromIntel(rounding);
     StatusFlags flags = new StatusFlags();
-    if (Bid128Raw.isInf(hi, lo)) {
+    if (Bid128Raw.isNaN(hi, lo)
+        || Bid128Raw.isInf(hi, lo)
+        || Bid128Raw.isZero(hi, lo)) {
       out[0] = hi;
       out[1] = lo;
+      flags.copyTo(statusOut);
       return;
     }
     if (Bid128Raw.isFinite(hi, lo) && !Bid128Raw.isNaN(hi, lo)
         && targetExponent <= BidScale.quantexp128(hi, lo)) {
       out[0] = hi;
       out[1] = lo;
+      flags.copyTo(statusOut);
       return;
     }
     if (targetExponent > BID128_MAX_QUANTUM) {
       roundCoarse128(hi, lo, targetExponent, mode, flags, out);
+      flags.copyTo(statusOut);
       return;
     }
     Bid128 exemplar = Bid128.finite(false, (int) targetExponent + 6176, 0L, 1L);
     Bid128Raw.quantize(
         hi, lo, exemplar.highBits(), exemplar.lowBits(), mode, flags, out);
+    flags.copyTo(statusOut);
   }
 
   public static long fromDecimal64(
@@ -199,27 +236,46 @@ public final class DecFloatAdapters {
     return result;
   }
 
-  public static int toDecimal64(long payload, long[] unscaledOut, int[] statusOut) {
+  public static int toDecimal64(
+      long payload,
+      int targetPrecision,
+      int targetScale,
+      int rounding,
+      long[] unscaledOut,
+      int[] statusOut) {
     StatusFlags flags = new StatusFlags();
-    if (!Bid64Raw.isFinite(payload) || Bid64Raw.isNaN(payload)) {
-      flags.raise(StatusFlags.INVALID);
-      flags.copyTo(statusOut);
-      unscaledOut[0] = 0L;
-      unscaledOut[1] = 0L;
-      return 0;
+    if (!validDecimalType(targetPrecision, targetScale)
+        || !Bid64Raw.isFinite(payload)
+        || Bid64Raw.isNaN(payload)) {
+      return invalidDecimal(unscaledOut, statusOut, flags);
     }
-    long coeff = Bid64.significandBits(payload);
-    int exp = Bid64.biasedExponentBits(payload) - 398;
-    int scale = -exp;
-    if (Bid64Raw.isSigned(payload) && coeff != 0L) {
-      unscaledOut[0] = -1L;
-      unscaledOut[1] = -coeff;
+    int[] roundingStatus = {0};
+    long rounded = roundToScale64(payload, -(long) targetScale, rounding, roundingStatus);
+    flags.raise(roundingStatus[0]);
+    if (!Bid64Raw.isFinite(rounded) || Bid64Raw.isNaN(rounded)) {
+      return invalidDecimal(unscaledOut, statusOut, flags);
+    }
+    DecNum decimal = DecNum.ofUnsigned(0L, Bid64.significandBits(rounded));
+    int exponent = Bid64.biasedExponentBits(rounded) - 398;
+    if (!decimal.isZero()) {
+      int scaleDelta = exponent + targetScale;
+      if (scaleDelta < 0 || decimal.digitCount() + scaleDelta > targetPrecision) {
+        return invalidDecimal(unscaledOut, statusOut, flags);
+      }
+      decimal.multiplyPow10(scaleDelta);
+    }
+    if (decimal.digitCount() > targetPrecision) {
+      return invalidDecimal(unscaledOut, statusOut, flags);
+    }
+    UInt128 coeff = decimal.toUInt128();
+    if (Bid64Raw.isSigned(rounded) && !coeff.isZero()) {
+      storeNegative(coeff, unscaledOut);
     } else {
-      unscaledOut[0] = 0L;
-      unscaledOut[1] = coeff;
+      unscaledOut[0] = coeff.high();
+      unscaledOut[1] = coeff.low();
     }
     flags.copyTo(statusOut);
-    return scale;
+    return targetScale;
   }
 
   public static void fromDecimal128(
@@ -238,40 +294,85 @@ public final class DecFloatAdapters {
     flags.copyTo(statusOut);
   }
 
-  public static int toDecimal128(long hi, long lo, long[] unscaledOut, int[] statusOut) {
+  public static int toDecimal128(
+      long hi,
+      long lo,
+      int targetPrecision,
+      int targetScale,
+      int rounding,
+      long[] unscaledOut,
+      int[] statusOut) {
     StatusFlags flags = new StatusFlags();
     Bid128 value = Bid128.fromRawBits(hi, lo);
-    if (!value.isFinite() || value.isNaN()) {
-      flags.raise(StatusFlags.INVALID);
-      flags.copyTo(statusOut);
-      unscaledOut[0] = 0L;
-      unscaledOut[1] = 0L;
-      return 0;
+    if (!validDecimalType(targetPrecision, targetScale)
+        || !value.isFinite()
+        || value.isNaN()) {
+      return invalidDecimal(unscaledOut, statusOut, flags);
     }
-    UInt128 coeff = value.coefficient();
-    if (value.isSigned()) {
-      long signedLow = -coeff.low();
-      unscaledOut[0] = ~coeff.high() + (signedLow == 0L ? 1L : 0L);
-      unscaledOut[1] = signedLow;
+    long[] rounded = new long[2];
+    int[] roundingStatus = {0};
+    roundToScale128(
+        hi, lo, -(long) targetScale, rounding, rounded, roundingStatus);
+    flags.raise(roundingStatus[0]);
+    value = Bid128.fromRawBits(rounded[0], rounded[1]);
+    if (!value.isFinite() || value.isNaN()) {
+      return invalidDecimal(unscaledOut, statusOut, flags);
+    }
+    DecNum decimal = DecNum.ofUnsigned(
+        value.coefficient().high(), value.coefficient().low());
+    int exponent = value.biasedExponent() - 6176;
+    if (!decimal.isZero()) {
+      int scaleDelta = exponent + targetScale;
+      if (scaleDelta < 0 || decimal.digitCount() + scaleDelta > targetPrecision) {
+        return invalidDecimal(unscaledOut, statusOut, flags);
+      }
+      decimal.multiplyPow10(scaleDelta);
+    }
+    if (decimal.digitCount() > targetPrecision) {
+      return invalidDecimal(unscaledOut, statusOut, flags);
+    }
+    UInt128 coeff = decimal.toUInt128();
+    if (value.isSigned() && !coeff.isZero()) {
+      storeNegative(coeff, unscaledOut);
     } else {
       unscaledOut[0] = coeff.high();
       unscaledOut[1] = coeff.low();
     }
-    if (value.isSigned() && coeff.low() == 0L) {
-      unscaledOut[0] = -coeff.high();
-      unscaledOut[1] = 0L;
-    }
     flags.copyTo(statusOut);
-    return -(value.biasedExponent() - 6176);
+    return targetScale;
+  }
+
+  private static boolean validDecimalType(int precision, int scale) {
+    return precision >= 1 && precision <= 38 && scale <= 38 && scale <= precision;
+  }
+
+  private static int invalidDecimal(
+      long[] unscaledOut, int[] statusOut, StatusFlags flags) {
+    flags.raise(StatusFlags.INVALID);
+    unscaledOut[0] = 0L;
+    unscaledOut[1] = 0L;
+    flags.copyTo(statusOut);
+    return 0;
+  }
+
+  private static void storeNegative(UInt128 magnitude, long[] unscaledOut) {
+    long signedLow = -magnitude.low();
+    unscaledOut[0] = ~magnitude.high() + (signedLow == 0L ? 1L : 0L);
+    unscaledOut[1] = signedLow;
   }
 
   private static long roundCoarse64(
       long payload, long targetExponent, RoundingMode mode, StatusFlags flags) {
     long coeff = Bid64.significandBits(payload);
     int exp = Bid64.biasedExponentBits(payload) - 398;
-    DecNum number = DecNum.ofCoefficient(Bid64Raw.isSigned(payload), coeff, exp);
-    number.shiftExp(-(int) Math.min(targetExponent, Integer.MAX_VALUE));
-    number.roundToDigits(1, mode, flags);
+    DecNum number = roundAtExponent(
+        Bid64Raw.isSigned(payload),
+        Long.toUnsignedString(coeff),
+        exp,
+        targetExponent,
+        mode,
+        flags,
+        386);
     return number.packBid64(mode, flags);
   }
 
@@ -279,13 +380,63 @@ public final class DecFloatAdapters {
       long hi, long lo, long targetExponent, RoundingMode mode, StatusFlags flags, long[] out) {
     Bid128 value = Bid128.fromRawBits(hi, lo);
     UInt128 coeff = value.coefficient();
-    DecNum number = DecNum.ofUnsigned(coeff.high(), coeff.low());
-    if (value.isSigned()) {
-      number.setNegative();
-    }
-    number.shiftExp(value.biasedExponent() - 6176);
-    number.shiftExp(-(int) Math.min(targetExponent, Integer.MAX_VALUE));
-    number.roundToDigits(1, mode, flags);
+    DecNum number = roundAtExponent(
+        value.isSigned(),
+        coeff.toDecimalString(),
+        value.biasedExponent() - 6176,
+        targetExponent,
+        mode,
+        flags,
+        6146);
     number.packBid128(mode, flags, out);
+  }
+
+  private static DecNum roundAtExponent(
+      boolean negative,
+      String digits,
+      int exponent,
+      long targetExponent,
+      RoundingMode mode,
+      StatusFlags flags,
+      int maximumBoundedExponent) {
+    long discarded = exponent < 0 && targetExponent > Long.MAX_VALUE + exponent
+        ? Long.MAX_VALUE
+        : targetExponent - exponent;
+    int kept = discarded >= digits.length() ? 0 : digits.length() - (int) discarded;
+    int first = 0;
+    boolean sticky = false;
+    if (discarded == digits.length()) {
+      first = digits.charAt(0) - '0';
+      sticky = hasNonZero(digits, 1);
+    } else if (discarded > digits.length()) {
+      sticky = hasNonZero(digits, 0);
+    } else {
+      first = digits.charAt(kept) - '0';
+      sticky = hasNonZero(digits, kept + 1);
+    }
+    DecNum rounded = new DecNum();
+    rounded.clear();
+    for (int i = 0; i < kept; i++) {
+      rounded.multiplyBy10();
+      rounded.addDigit(digits.charAt(i) - '0');
+    }
+    rounded.setNegative(negative);
+    if (first != 0 || sticky) {
+      flags.raise(StatusFlags.INEXACT);
+    }
+    if (BidRound.shouldIncrement(negative, rounded.low64(), first, sticky, mode)) {
+      rounded.addOne();
+    }
+    rounded.shiftExp((int) Math.min(targetExponent, maximumBoundedExponent));
+    return rounded;
+  }
+
+  private static boolean hasNonZero(String digits, int start) {
+    for (int i = start; i < digits.length(); i++) {
+      if (digits.charAt(i) != '0') {
+        return true;
+      }
+    }
+    return false;
   }
 }

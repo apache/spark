@@ -30,7 +30,7 @@ public final class BidBinary128VectorTest {
     int binaryTo128 = checkBinary128ToBid128();
     if (bid64To != 1516 || binaryTo64 != 1819 || bid128To != 1767
         || binaryTo128 != 1562) {
-      throw new AssertionError(String.format(
+      throw new IllegalStateException(String.format(
           "unexpected convert counts: %d %d %d %d",
           bid64To, binaryTo64, bid128To, binaryTo128));
     }
@@ -54,7 +54,7 @@ public final class BidBinary128VectorTest {
       Bid64Raw.toBinary128(input, mode, flags, actual);
       if (actual[0] != expected[0] || actual[1] != expected[1]
           || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "bid64_to_binary128 %s actual [0x%016x%016x] %02x",
             line, actual[0], actual[1], flags.bits()));
       }
@@ -80,7 +80,7 @@ public final class BidBinary128VectorTest {
       StatusFlags flags = new StatusFlags();
       long actual = Bid64Raw.fromBinary128(input[0], input[1], mode, flags);
       if (actual != expected || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "binary128_to_bid64 %s actual [0x%016x] %02x",
             line, actual, flags.bits()));
       }
@@ -105,7 +105,7 @@ public final class BidBinary128VectorTest {
       Bid128Raw.toBinary128(input[0], input[1], mode, flags, actual);
       if (actual[0] != expected[0] || actual[1] != expected[1]
           || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "bid128_to_binary128 %s actual [0x%016x%016x] %02x",
             line, actual[0], actual[1], flags.bits()));
       }
@@ -130,7 +130,7 @@ public final class BidBinary128VectorTest {
       Bid128Raw.fromBinary128(input[0], input[1], mode, flags, actual);
       if (actual[0] != expected[0] || actual[1] != expected[1]
           || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "binary128_to_bid128 %s actual [0x%016x%016x] %02x",
             line, actual[0], actual[1], flags.bits()));
       }

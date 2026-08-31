@@ -430,6 +430,8 @@ object SparkBuild extends PomBuild {
   /* Generate and pick the spark build info from extra-resources */
   enable(CommonUtils.settings)(commonUtils)
 
+  enable(LibBID.settings)(libbid)
+
   enable(Core.settings)(core)
 
   /* Unsafe settings */
@@ -655,6 +657,12 @@ object CommonUtils {
       val propsFile = baseDirectory.value / "target" / "extra-resources" / "spark-version-info.properties"
       Seq(propsFile)
     }.taskValue
+  )
+}
+
+object LibBID {
+  lazy val settings = Seq(
+    publish / skip := true
   )
 }
 

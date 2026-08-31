@@ -119,7 +119,7 @@ public final class Bid128AddTest {
       StatusFlags flags = new StatusFlags();
       Bid128 actual = Bid128Add.add(x, y, RoundingMode.TIES_TO_EVEN, flags);
       if (!actual.equals(expectedBid) || flags.bits() != 0) {
-        throw new AssertionError(
+        throw new IllegalStateException(
             "exact oracle: expected " + expectedBid + ", actual " + actual);
       }
     }
@@ -135,7 +135,7 @@ public final class Bid128AddTest {
         flags);
     int expected = StatusFlags.DIVIDE_BY_ZERO | StatusFlags.INVALID;
     if (flags.bits() != expected) {
-      throw new AssertionError(
+      throw new IllegalStateException(
           String.format("accumulated flags: expected %02x, actual %02x", expected, flags.bits()));
     }
   }
@@ -163,13 +163,13 @@ public final class Bid128AddTest {
         StatusFlags flags = new StatusFlags();
         Bid128 actual = Bid128Add.add(x, y, mode, flags);
         if (!actual.equals(encode(rounded))) {
-          throw new AssertionError(
+          throw new IllegalStateException(
               "differential add: expected " + rounded + ", actual "
                   + actual.toCanonicalString());
         }
         int expectedFlags = exact.compareTo(rounded) == 0 ? 0 : StatusFlags.INEXACT;
         if (flags.bits() != expectedFlags) {
-          throw new AssertionError("differential add flags");
+          throw new IllegalStateException("differential add flags");
         }
       }
     }
@@ -226,7 +226,7 @@ public final class Bid128AddTest {
         ? Bid128Add.subtract(x, y, mode, flags)
         : Bid128Add.add(x, y, mode, flags);
     if (!result.equals(expected) || flags.bits() != expectedFlags) {
-      throw new AssertionError(String.format(
+      throw new IllegalStateException(String.format(
           "%s(%s, %s, %s): expected %s %02x, actual %s %02x",
           subtract ? "subtract" : "add",
           x,

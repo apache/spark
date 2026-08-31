@@ -53,7 +53,7 @@ public final class BidMiscVectorTest {
       StatusFlags flags = new StatusFlags();
       long actual = Bid64Raw.frexp(operand64(tokens[2], mode), exponent, flags);
       if (exponent[0] != Integer.parseInt(tokens[3])) {
-        throw new AssertionError(line + " exponent " + exponent[0]);
+        throw new IllegalStateException(line + " exponent " + exponent[0]);
       }
       assert64(line, actual, operand64(tokens[4], mode), flags.bits(), tokens[5]);
       tested++;
@@ -72,7 +72,7 @@ public final class BidMiscVectorTest {
       if (integral[0] != operand64(tokens[3], mode)
           || fractional != operand64(tokens[4], mode)
           || flags.bits() != IntelVectors.flags(tokens[5])) {
-        throw new AssertionError(line);
+        throw new IllegalStateException(line);
       }
       tested++;
     }
@@ -107,7 +107,7 @@ public final class BidMiscVectorTest {
       StatusFlags flags = new StatusFlags();
       Bid128Raw.frexp(input[0], input[1], exponent, flags, actual);
       if (exponent[0] != Integer.parseInt(tokens[3])) {
-        throw new AssertionError(line + " exponent " + exponent[0]);
+        throw new IllegalStateException(line + " exponent " + exponent[0]);
       }
       assert128(line, actual, expected, flags.bits(), tokens[5]);
       tested++;
@@ -131,7 +131,7 @@ public final class BidMiscVectorTest {
           || fractional[0] != expectedFractional[0]
           || fractional[1] != expectedFractional[1]
           || flags.bits() != IntelVectors.flags(tokens[5])) {
-        throw new AssertionError(line);
+        throw new IllegalStateException(line);
       }
       tested++;
     }
@@ -174,7 +174,7 @@ public final class BidMiscVectorTest {
   private static void assert64(
       String line, long actual, long expected, int actualFlags, String expectedFlags) {
     if (actual != expected || actualFlags != IntelVectors.flags(expectedFlags)) {
-      throw new AssertionError(String.format(
+      throw new IllegalStateException(String.format(
           "%s actual [0x%016x] %02x", line, actual, actualFlags));
     }
   }
@@ -183,7 +183,7 @@ public final class BidMiscVectorTest {
       String line, long[] actual, long[] expected, int actualFlags, String expectedFlags) {
     if (actual[0] != expected[0] || actual[1] != expected[1]
         || actualFlags != IntelVectors.flags(expectedFlags)) {
-      throw new AssertionError(String.format(
+      throw new IllegalStateException(String.format(
           "%s actual [0x%016x%016x] %02x",
           line, actual[0], actual[1], actualFlags));
     }

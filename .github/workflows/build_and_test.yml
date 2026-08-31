@@ -164,12 +164,22 @@ jobs:
             docs=false
             java25=false
           fi
-          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,credential-aws,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
+          build_modules="core,unsafe,kvstore,libbid,avro,utils,utils-java,network-common"
+          build_modules="$build_modules,network-shuffle,repl,launcher,examples,sketch,variant,api"
+          build_modules="$build_modules,catalyst,hive-thriftserver,mllib-local,mllib,graphx"
+          build_modules="$build_modules,streaming,sql-kafka-0-10,streaming-kafka-0-10"
+          build_modules="$build_modules,streaming-kinesis-asl,credential-aws,kubernetes"
+          build_modules="$build_modules,hadoop-cloud"
+          build_modules="$build_modules,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive"
+          build_modules="$build_modules,pipelines"
+          build=`./dev/is-changed.py -m "$build_modules"`
           build_core_utils=`./dev/is-changed.py -m "core,unsafe,kvstore,utils,utils-java,network-common,network-shuffle,sketch,variant,launcher"`
+          build_libbid=`./dev/is-changed.py -m libbid`
           precondition="
             {
               \"build\": \"$build\",
               \"build-core-utils\": \"$build_core_utils\",
+              \"build-libbid\": \"$build_libbid\",
               \"pyspark\": \"$pyspark\",
               \"pyspark-pandas\": \"$pandas\",
               \"pyspark-install\": \"$pyspark_install\",
@@ -285,6 +295,7 @@ jobs:
           - >-
             core, unsafe, kvstore, utils, utils-java,
             network-common, network-shuffle, sketch, variant, launcher
+          - libbid
           - >-
             api, catalyst, hive-thriftserver
           - >-
@@ -336,6 +347,9 @@ jobs:
           # PySpark-only changes). The precondition is opt-out: omitted means run (so periodic
           # full-build workflows that set only "build": "true" keep running this entry).
           - modules: ${{ fromJson(needs.precondition.outputs.required).build-core-utils == 'false' && 'core, unsafe, kvstore, utils, utils-java, network-common, network-shuffle, sketch, variant, launcher' }}
+          - modules: >-
+              ${{ fromJSON(needs.precondition.outputs.required).build-libbid == 'false'
+              && 'libbid' }}
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       EXCLUDED_TAGS: ${{ matrix.excluded-tags }}

@@ -203,7 +203,7 @@ public final class BidScaleVectorTest {
   private static void check64(
       String line, long expected, int expectedFlags, long actual, int actualFlags) {
     if (actual != expected || actualFlags != expectedFlags) {
-      throw new AssertionError(String.format(
+      throw new IllegalStateException(String.format(
           "%s actual [0x%016x] %02x", line, actual, actualFlags));
     }
   }
@@ -212,7 +212,7 @@ public final class BidScaleVectorTest {
       String line, long[] expected, int expectedFlags, long[] actual, int actualFlags) {
     if (actual[0] != expected[0] || actual[1] != expected[1]
         || actualFlags != expectedFlags) {
-      throw new AssertionError(String.format(
+      throw new IllegalStateException(String.format(
           "%s actual [0x%016x%016x] %02x",
           line, actual[0], actual[1], actualFlags));
     }
@@ -221,7 +221,7 @@ public final class BidScaleVectorTest {
   private static void checkInteger(
       String line, long expected, int expectedFlags, long actual, int actualFlags) {
     if (actual != expected || actualFlags != expectedFlags) {
-      throw new AssertionError(
+      throw new IllegalStateException(
           line + ": actual " + actual + "/" + actualFlags);
     }
   }

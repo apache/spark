@@ -72,7 +72,7 @@ public final class Bid128Test {
       int actual = value.classify().ordinal();
       int expected = (int) vector[2];
       if (actual != expected) {
-        throw new AssertionError(
+        throw new IllegalStateException(
             String.format(
                 "class(0x%016x%016x): expected %d, actual %d",
                 vector[0], vector[1], expected, actual));
@@ -274,7 +274,7 @@ public final class Bid128Test {
 
   private static void check(boolean condition, String message) {
     if (!condition) {
-      throw new AssertionError(message);
+      throw new IllegalStateException(message);
     }
   }
 }

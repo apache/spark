@@ -67,11 +67,11 @@ public final class BidRawApiTest {
   private static void testCompatAdd() {
     long x = Bid64.parseExact("10").toRawBits();
     long y = Bid64.parseExact("3").toRawBits();
-    long sum = DecFloat16Compat.bid64Add(x, y, 0);
+    long sum = DecFloat16Compat.bid64Add(x, y, 0, new int[1]);
     check(Bid64Raw.quietEqual(sum, Bid64.parseExact("13").toRawBits(), new StatusFlags()),
         "compat add");
     check(DecFloat16Compat.bid64Compare(x, y) > 0, "dbr compare");
-    check(DecFloatAdapters.equals64(
+    check(DecFloatAdapters.sqlEquals64(
         Bid64.parseExact("-0").toRawBits(),
         Bid64.parseExact("0").toRawBits()), "signed zeros equal");
   }
@@ -91,14 +91,14 @@ public final class BidRawApiTest {
       StatusFlags flags = new StatusFlags();
       long actual = Bid64Raw.fromInt64(input, mode, flags);
       if (actual != expected || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "from_int64 %s: expected [0x%016x] %02x, actual [0x%016x] %02x",
             line, expected, expectedFlags, actual, flags.bits()));
       }
       tested++;
     }
     if (tested < 20) {
-      throw new AssertionError("too few from_int64 hex vectors: " + tested);
+      throw new IllegalStateException("too few from_int64 hex vectors: " + tested);
     }
   }
 
@@ -124,12 +124,12 @@ public final class BidRawApiTest {
       Bid64Raw.toBid128(input, actual, flags);
       if (actual[0] != expected[0] || actual[1] != expected[1]
           || flags.bits() != expectedFlags) {
-        throw new AssertionError("bid64_to_bid128 " + line);
+        throw new IllegalStateException("bid64_to_bid128 " + line);
       }
       tested++;
     }
     if (tested < 50) {
-      throw new AssertionError("too few bid64_to_bid128 vectors: " + tested);
+      throw new IllegalStateException("too few bid64_to_bid128 vectors: " + tested);
     }
   }
 
@@ -145,7 +145,7 @@ public final class BidRawApiTest {
       Bid128Raw.fromInt64(input, IntelVectors.mode(tokens[1]), flags, actual);
       if (actual[0] != expected[0] || actual[1] != expected[1]
           || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "bid128_from_int64 %s actual [0x%016x%016x] %02x",
             line, actual[0], actual[1], flags.bits()));
       }
@@ -167,7 +167,7 @@ public final class BidRawApiTest {
             ? Bid64Raw.toInt64Int(input, flags)
             : Bid64Raw.toInt64Xint(input, flags);
         if (actual != expected || flags.bits() != expectedFlags) {
-          throw new AssertionError(
+          throw new IllegalStateException(
               line + ": actual " + actual + "/" + flags.bits());
         }
         tested++;
@@ -193,7 +193,7 @@ public final class BidRawApiTest {
             ? Bid128Raw.toInt64Int(input[0], input[1], flags)
             : Bid128Raw.toInt64Xint(input[0], input[1], flags);
         if (actual != expected || flags.bits() != expectedFlags) {
-          throw new AssertionError(
+          throw new IllegalStateException(
               line + ": actual " + actual + "/" + flags.bits());
         }
         tested++;
@@ -209,10 +209,13 @@ public final class BidRawApiTest {
       RoundingMode mode = IntelVectors.mode(tokens[1]);
       long expected = parse64Operand(tokens[3]);
       int expectedFlags = IntelVectors.flags(tokens[4]);
+      if (Bid64Raw.isNaN(expected) && !isNanText(tokens[2])) {
+        expectedFlags |= StatusFlags.INVALID;
+      }
       StatusFlags flags = new StatusFlags();
       long actual = Bid64Raw.fromString(tokens[2], mode, flags);
       if (actual != expected || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "bid64_from_string %s actual [0x%016x] %02x",
             line, actual, flags.bits()));
       }
@@ -230,12 +233,15 @@ public final class BidRawApiTest {
         expected = new long[] {value.highBits(), value.lowBits()};
       }
       int expectedFlags = IntelVectors.flags(tokens[4]);
+      if (Bid128Raw.isNaN(expected[0], expected[1]) && !isNanText(tokens[2])) {
+        expectedFlags |= StatusFlags.INVALID;
+      }
       long[] actual = new long[2];
       StatusFlags flags = new StatusFlags();
       Bid128Raw.fromString(tokens[2], mode, flags, actual);
       if (actual[0] != expected[0] || actual[1] != expected[1]
           || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "bid128_from_string %s actual [0x%016x%016x] %02x",
             line, actual[0], actual[1], flags.bits()));
       }
@@ -250,7 +256,7 @@ public final class BidRawApiTest {
       String[] tokens = IntelVectors.tokens(line);
       String actual = Bid64Raw.toString(IntelVectors.hex64(tokens[2]));
       if (!actual.equals(tokens[3])) {
-        throw new AssertionError(line + ": actual " + actual);
+        throw new IllegalStateException(line + ": actual " + actual);
       }
       bid64++;
     }
@@ -260,23 +266,41 @@ public final class BidRawApiTest {
       long[] input = IntelVectors.hex128(tokens[2]);
       String actual = Bid128Raw.toString(input[0], input[1]);
       if (!actual.equals(tokens[3])) {
-        throw new AssertionError(line + ": actual " + actual);
+        throw new IllegalStateException(line + ": actual " + actual);
       }
       bid128++;
     }
     check(bid64 == 12 && bid128 == 31, "unexpected to_string vector counts");
   }
 
+  private static boolean isNanText(String text) {
+    String value = text.startsWith("+") || text.startsWith("-") ? text.substring(1) : text;
+    return value.equalsIgnoreCase("NaN")
+        || value.equalsIgnoreCase("QNaN")
+        || value.equalsIgnoreCase("SNaN")
+        || value.equalsIgnoreCase("SNaNi");
+  }
+
   private static void testAdapters() {
     long nan = Bid64.QUIET_NAN.toRawBits();
-    check(DecFloatAdapters.compare64(nan, Bid64.parseExact("1").toRawBits()) > 0,
+    check(DecFloatAdapters.sqlCompare64(nan, Bid64.parseExact("1").toRawBits()) > 0,
         "nan greatest");
     check(DecFloatAdapters.canonicalize64(Bid64.parseExact("150").toRawBits())
-            == Bid64.parseExact("15E1").toRawBits()
-            || DecFloatAdapters.equals64(
-                DecFloatAdapters.canonicalize64(Bid64.parseExact("150").toRawBits()),
-                Bid64.parseExact("15E1").toRawBits()),
+            == Bid64.parseExact("15E1").toRawBits(),
         "canonicalize cohort");
+    long negativeZero64 = Bid64.parseExact("-0").toRawBits();
+    long positiveZero64 = Bid64.parseExact("0").toRawBits();
+    check(DecFloatAdapters.sqlCompare64(negativeZero64, positiveZero64) == 0,
+        "sql decimal64 signed-zero order");
+    check(DecFloatAdapters.sqlHash64(negativeZero64)
+            == DecFloatAdapters.sqlHash64(positiveZero64),
+        "sql decimal64 signed-zero hash");
+    check(DecFloatAdapters.sqlEquals64(
+        Bid64.parseExact("150").toRawBits(), Bid64.parseExact("15E1").toRawBits()),
+        "sql decimal64 cohort equality");
+    check(DecFloatAdapters.sqlHash64(Bid64.parseExact("150").toRawBits())
+            == DecFloatAdapters.sqlHash64(Bid64.parseExact("15E1").toRawBits()),
+        "sql decimal64 cohort hash");
     check(DecFloatAdapters.sign64(Bid64.parseExact("-4").toRawBits())
             == Bid64.parseExact("-1").toRawBits(),
         "sign");
@@ -288,9 +312,28 @@ public final class BidRawApiTest {
         .quietEqual(Bid128.parseExact("-5"), new StatusFlags()), "negative decimal128 input");
     long[] unscaled = new long[2];
     int scale = DecFloatAdapters.toDecimal128(
-        decimal128[0], decimal128[1], unscaled, status);
+        decimal128[0], decimal128[1], 38, 0, 0, unscaled, status);
     check(scale == 0 && unscaled[0] == -1L && unscaled[1] == -5L,
         "negative decimal128 round trip");
+    Bid128 negativeZero128 = Bid128.parseExact("-0");
+    Bid128 positiveZero128 = Bid128.parseExact("0");
+    check(DecFloatAdapters.sqlCompare128(
+        negativeZero128.highBits(), negativeZero128.lowBits(),
+        positiveZero128.highBits(), positiveZero128.lowBits()) == 0,
+        "sql decimal128 signed-zero order");
+    check(DecFloatAdapters.sqlHash128(
+        negativeZero128.highBits(), negativeZero128.lowBits())
+            == DecFloatAdapters.sqlHash128(
+                positiveZero128.highBits(), positiveZero128.lowBits()),
+        "sql decimal128 signed-zero hash");
+    Bid128 cohort128a = Bid128.parseExact("150");
+    Bid128 cohort128b = Bid128.parseExact("15E1");
+    check(DecFloatAdapters.sqlEquals128(
+        cohort128a.highBits(), cohort128a.lowBits(),
+        cohort128b.highBits(), cohort128b.lowBits()), "sql decimal128 cohort equality");
+    check(DecFloatAdapters.sqlHash128(cohort128a.highBits(), cohort128a.lowBits())
+            == DecFloatAdapters.sqlHash128(cohort128b.highBits(), cohort128b.lowBits()),
+        "sql decimal128 cohort hash");
     StatusFlags flags = new StatusFlags();
     check(Bid64.parseExact("5").remainder(Bid64.parseExact("2"), flags)
             .quietEqual(Bid64.parseExact("1"), new StatusFlags()),
@@ -317,7 +360,7 @@ public final class BidRawApiTest {
       StatusFlags flags = new StatusFlags();
       long actual = Bid128Raw.toBid64(input[0], input[1], mode, flags);
       if (actual != expected || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "bid128_to_bid64 %s actual [0x%016x] %02x",
             line, actual, flags.bits()));
       }
@@ -381,13 +424,13 @@ public final class BidRawApiTest {
       StatusFlags flags = new StatusFlags();
       long actual = Bid64Raw.roundIntegralZero(input, flags);
       if (actual != expected) {
-        throw new AssertionError("round_integral_zero " + line
+        throw new IllegalStateException("round_integral_zero " + line
             + " actual " + Long.toHexString(actual));
       }
       tested++;
     }
     if (tested < 10) {
-      throw new AssertionError("too few round_integral_zero vectors: " + tested);
+      throw new IllegalStateException("too few round_integral_zero vectors: " + tested);
     }
   }
 
@@ -402,12 +445,12 @@ public final class BidRawApiTest {
       long expected = IntelVectors.hex64(tokens[3]);
       long actual = Bid64Raw.nextUp(input, new StatusFlags());
       if (actual != expected) {
-        throw new AssertionError("nextup " + line + " actual " + Long.toHexString(actual));
+        throw new IllegalStateException("nextup " + line + " actual " + Long.toHexString(actual));
       }
       tested++;
     }
     if (tested < 10) {
-      throw new AssertionError("too few nextup vectors: " + tested);
+      throw new IllegalStateException("too few nextup vectors: " + tested);
     }
   }
 
@@ -427,13 +470,13 @@ public final class BidRawApiTest {
       StatusFlags flags = new StatusFlags();
       long actual = Bid64Raw.quantize(x, y, mode, flags);
       if (actual != expected || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "quantize %s actual [0x%016x] %02x", line, actual, flags.bits()));
       }
       tested++;
     }
     if (tested < 5) {
-      throw new AssertionError("too few quantize hex vectors: " + tested);
+      throw new IllegalStateException("too few quantize hex vectors: " + tested);
     }
   }
 
@@ -453,13 +496,13 @@ public final class BidRawApiTest {
       StatusFlags flags = new StatusFlags();
       long actual = Bid64Raw.fromBinary64(input, mode, flags);
       if (actual != expected || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "binary64_to_bid64 %s actual [0x%016x] %02x", line, actual, flags.bits()));
       }
       tested++;
     }
     if (tested != 1529) {
-      throw new AssertionError("unexpected binary64_to_bid64 vector count: " + tested);
+      throw new IllegalStateException("unexpected binary64_to_bid64 vector count: " + tested);
     }
   }
 
@@ -477,12 +520,12 @@ public final class BidRawApiTest {
       long expected = IntelVectors.hex64(tokens[3]);
       long actual = Bid64Raw.fromDpd(input);
       if (actual != expected) {
-        throw new AssertionError("dpd " + line + " actual " + Long.toHexString(actual));
+        throw new IllegalStateException("dpd " + line + " actual " + Long.toHexString(actual));
       }
       tested++;
     }
     if (tested < 10) {
-      throw new AssertionError("too few dpd vectors: " + tested);
+      throw new IllegalStateException("too few dpd vectors: " + tested);
     }
   }
 
@@ -497,7 +540,7 @@ public final class BidRawApiTest {
       StatusFlags flags = new StatusFlags();
       int actual = Float.floatToRawIntBits(Bid64Raw.toBinary32(input, mode, flags));
       if (actual != expected || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "bid64_to_binary32 %s actual [0x%08x] %02x",
             line, actual, flags.bits()));
       }
@@ -520,7 +563,7 @@ public final class BidRawApiTest {
       int actual = Float.floatToRawIntBits(
           Bid128Raw.toBinary32(input[0], input[1], mode, flags));
       if (actual != expected || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "bid128_to_binary32 %s actual [0x%08x] %02x",
             line, actual, flags.bits()));
       }
@@ -553,14 +596,14 @@ public final class BidRawApiTest {
       Bid128Raw.fromBinary64(input, mode, flags, actual);
       if (actual[0] != expected[0] || actual[1] != expected[1]
           || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "binary64_to_bid128 %s actual [0x%016x%016x] %02x",
             line, actual[0], actual[1], flags.bits()));
       }
       tested++;
     }
     if (tested != 1550) {
-      throw new AssertionError("unexpected binary64_to_bid128 vector count: " + tested);
+      throw new IllegalStateException("unexpected binary64_to_bid128 vector count: " + tested);
     }
   }
 
@@ -578,14 +621,14 @@ public final class BidRawApiTest {
       StatusFlags flags = new StatusFlags();
       long actual = Double.doubleToRawLongBits(Bid64Raw.toBinary64(input, mode, flags));
       if (actual != expected || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "bid64_to_binary64 %s actual [0x%016x] %02x",
             line, actual, flags.bits()));
       }
       tested++;
     }
     if (tested != 1756) {
-      throw new AssertionError("unexpected bid64_to_binary64 vector count: " + tested);
+      throw new IllegalStateException("unexpected bid64_to_binary64 vector count: " + tested);
     }
   }
 
@@ -602,7 +645,7 @@ public final class BidRawApiTest {
       StatusFlags flags = new StatusFlags();
       long actual = Bid64Raw.fromBinary32(input, mode, flags);
       if (actual != expected || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "binary32_to_bid64 %s actual [0x%016x] %02x",
             line, actual, flags.bits()));
       }
@@ -628,7 +671,7 @@ public final class BidRawApiTest {
       Bid128Raw.fromBinary32(input, mode, flags, actual);
       if (actual[0] != expected[0] || actual[1] != expected[1]
           || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "binary32_to_bid128 %s actual [0x%016x%016x] %02x",
             line, actual[0], actual[1], flags.bits()));
       }
@@ -658,14 +701,14 @@ public final class BidRawApiTest {
       long actual = Double.doubleToRawLongBits(
           Bid128Raw.toBinary64(input[0], input[1], mode, flags));
       if (actual != expected || flags.bits() != expectedFlags) {
-        throw new AssertionError(String.format(
+        throw new IllegalStateException(String.format(
             "bid128_to_binary64 %s actual [0x%016x] %02x",
             line, actual, flags.bits()));
       }
       tested++;
     }
     if (tested != 1816) {
-      throw new AssertionError("unexpected bid128_to_binary64 vector count: " + tested);
+      throw new IllegalStateException("unexpected bid128_to_binary64 vector count: " + tested);
     }
   }
 
@@ -679,7 +722,7 @@ public final class BidRawApiTest {
 
   private static void check(boolean condition, String message) {
     if (!condition) {
-      throw new AssertionError(message);
+      throw new IllegalStateException(message);
     }
   }
 }

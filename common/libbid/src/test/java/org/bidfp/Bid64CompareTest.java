@@ -102,7 +102,7 @@ public final class Bid64CompareTest {
 
   private static void check(boolean condition, String message) {
     if (!condition) {
-      throw new AssertionError(message);
+      throw new IllegalStateException(message);
     }
   }
 }

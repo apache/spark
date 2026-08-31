@@ -3,10 +3,32 @@
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the conditions in LICENSE-INTEL
- * are met.
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *   * Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *   * Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *   * Neither the name of Intel Corporation nor the names of its contributors
+ *     may be used to endorse or promote products derived from this software
+ *     without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 package org.bidfp.binary128;
+
+import org.bidfp.binary128.tables.TableData;
 
 /**
  * Intel {@code EVALUATE_RATIONAL} / {@code EVALUATE_PACKED_POLY} for UX
@@ -74,7 +96,7 @@ final class UxEval {
    */
   static void evaluateRational(
       Unpacked argument,
-      long[] table,
+      TableData table,
       int coefsOffset,
       int degree,
       long flags,
@@ -99,7 +121,7 @@ final class UxEval {
 
   private static void evaluateRationalCore(
       Unpacked argument,
-      long[] table,
+      TableData table,
       int coefsOffset,
       int degree,
       long flags,
@@ -183,7 +205,7 @@ final class UxEval {
   /** Single-result overload (numerator-only / in-place rational). */
   static void evaluateRational(
       Unpacked argument,
-      long[] table,
+      TableData table,
       int coefsOffset,
       int degree,
       long flags,
@@ -205,7 +227,7 @@ final class UxEval {
    */
   static void evaluatePackedPoly(
       Unpacked argument,
-      long[] table,
+      TableData table,
       int coefsOffset,
       int degree,
       long mask,
@@ -251,14 +273,14 @@ final class UxEval {
    * {@code scaleOut} is {@code ((lsd >> 1) & mask) - bias}.
    */
   private static int unpackCoefToUx(
-      long[] table,
+      TableData table,
       int byteOffset,
       long mask,
       int bias,
       Unpacked dest) {
     int i = byteOffset >>> 3;
-    long lsd = table[i];
-    long msd = table[i + 1];
+    long lsd = table.get(i);
+    long msd = table.get(i + 1);
     int operation = (int) (lsd & 1L);
     int scale = (int) (((lsd >>> 1) & mask) - (long) bias);
     long fracLo = lsd & ~mask;
@@ -277,7 +299,7 @@ final class UxEval {
    */
   private static void evalPoly(
       Unpacked polyArg,
-      long[] table,
+      TableData table,
       int coefsOffset,
       int degree,
       boolean alternateSign,

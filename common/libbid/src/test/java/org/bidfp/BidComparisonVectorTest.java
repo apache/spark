@@ -139,7 +139,7 @@ public final class BidComparisonVectorTest {
       case "signaling_not_less":
         return Bid64Raw.signalingNotLess(x, y, flags);
       default:
-        throw new AssertionError(predicate);
+        throw new IllegalStateException(predicate);
     }
   }
 
@@ -187,7 +187,7 @@ public final class BidComparisonVectorTest {
       case "signaling_not_less":
         return Bid128Raw.signalingNotLess(x[0], x[1], y[0], y[1], flags);
       default:
-        throw new AssertionError(predicate);
+        throw new IllegalStateException(predicate);
     }
   }
 
@@ -225,7 +225,7 @@ public final class BidComparisonVectorTest {
   private static void check(
       String line, boolean expected, int expectedFlags, boolean actual, int actualFlags) {
     if (actual != expected || actualFlags != expectedFlags) {
-      throw new AssertionError(
+      throw new IllegalStateException(
           line + ": expected " + expected + "/" + expectedFlags
               + ", actual " + actual + "/" + actualFlags);
     }

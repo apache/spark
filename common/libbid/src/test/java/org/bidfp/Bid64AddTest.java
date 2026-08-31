@@ -131,7 +131,7 @@ public final class Bid64AddTest {
           flags);
       Bid64 expectedBid = Bid64.finite(expectedNegative, exponent, expectedCoefficient);
       if (!actual.equals(expectedBid) || flags.bits() != 0) {
-        throw new AssertionError(
+        throw new IllegalStateException(
             "exact oracle: expected " + expectedBid + ", actual " + actual);
       }
     }
@@ -147,7 +147,7 @@ public final class Bid64AddTest {
         flags);
     int expected = StatusFlags.DIVIDE_BY_ZERO | StatusFlags.INVALID;
     if (flags.bits() != expected) {
-      throw new AssertionError(
+      throw new IllegalStateException(
           String.format("accumulated flags: expected %02x, actual %02x", expected, flags.bits()));
     }
   }
@@ -164,7 +164,7 @@ public final class Bid64AddTest {
         ? Bid64Add.subtract(x, y, mode, flags)
         : Bid64Add.add(x, y, mode, flags);
     if (result.toRawBits() != expected || flags.bits() != expectedFlags) {
-      throw new AssertionError(String.format(
+      throw new IllegalStateException(String.format(
           "%s(%s, %s, %s): expected [0x%016x] %02x, actual [0x%016x] %02x",
           subtract ? "subtract" : "add",
           x,

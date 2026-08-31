@@ -83,7 +83,7 @@ public final class Bid64ConversionTest {
       Bid64 actual = Bid64.fromLong(value, RoundingMode.TIES_TO_EVEN, flags);
       BigDecimal expected = BigDecimal.valueOf(value).round(MathContext.DECIMAL64);
       if (toBigDecimal(actual).compareTo(expected) != 0) {
-        throw new AssertionError(
+        throw new IllegalStateException(
             "fromLong(" + value + "): expected " + expected + ", actual " + actual);
       }
     }
@@ -97,7 +97,7 @@ public final class Bid64ConversionTest {
 
   private static void check(boolean condition, String message) {
     if (!condition) {
-      throw new AssertionError(message);
+      throw new IllegalStateException(message);
     }
   }
 }

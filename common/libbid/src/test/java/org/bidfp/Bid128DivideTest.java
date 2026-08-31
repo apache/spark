@@ -109,7 +109,7 @@ public final class Bid128DivideTest {
         flags);
     int expected = StatusFlags.DENORMAL | StatusFlags.INVALID;
     if (flags.bits() != expected) {
-      throw new AssertionError(String.format(
+      throw new IllegalStateException(String.format(
           "accumulated flags: expected %02x, actual %02x", expected, flags.bits()));
     }
   }
@@ -157,13 +157,13 @@ public final class Bid128DivideTest {
     StatusFlags flags = new StatusFlags();
     Bid128 actual = Bid128Divide.divide(x, y, mode, flags);
     if (!actual.equals(encode(expected))) {
-      throw new AssertionError(
+      throw new IllegalStateException(
           "differential divide: expected " + expected + ", actual "
               + actual.toCanonicalString());
     }
     int expectedFlags = isExact(xd, yd, expected) ? 0 : StatusFlags.INEXACT;
     if (flags.bits() != expectedFlags) {
-      throw new AssertionError(
+      throw new IllegalStateException(
           "differential flags: expected " + expectedFlags + ", actual " + flags.bits());
     }
   }
@@ -235,7 +235,7 @@ public final class Bid128DivideTest {
     StatusFlags flags = new StatusFlags();
     Bid128 actual = Bid128Divide.divide(x, y, mode, flags);
     if (!actual.equals(expected) || flags.bits() != expectedFlags) {
-      throw new AssertionError(String.format(
+      throw new IllegalStateException(String.format(
           "divide(%s, %s, %s): expected %s %02x, actual %s %02x",
           x, y, mode, expected, expectedFlags, actual, flags.bits()));
     }

@@ -30,7 +30,7 @@ public final class BidNextMinMaxVectorTest {
     skippedMalformedVectors = 0;
     int tested = test64() + test128();
     if (skippedMalformedVectors != EXPECTED_MALFORMED_VECTORS) {
-      throw new AssertionError(
+      throw new IllegalStateException(
           "unexpected malformed vector count: " + skippedMalformedVectors);
     }
     System.out.println(
@@ -58,7 +58,7 @@ public final class BidNextMinMaxVectorTest {
         StatusFlags flags = new StatusFlags();
         long actual = apply64(operation, x, y, IntelVectors.mode(tokens[1]), flags);
         if (actual != expected || flags.bits() != expectedFlags) {
-          throw new AssertionError(String.format(
+          throw new IllegalStateException(String.format(
               "%s actual [0x%016x] %02x", line, actual, flags.bits()));
         }
         tested++;
@@ -94,7 +94,7 @@ public final class BidNextMinMaxVectorTest {
         apply128(operation, x, y, IntelVectors.mode(tokens[1]), flags, actual);
         if (actual[0] != expected[0] || actual[1] != expected[1]
             || flags.bits() != expectedFlags) {
-          throw new AssertionError(String.format(
+          throw new IllegalStateException(String.format(
               "%s actual [0x%016x%016x] %02x",
               line, actual[0], actual[1], flags.bits()));
         }
@@ -124,7 +124,7 @@ public final class BidNextMinMaxVectorTest {
       case "fdim":
         return Bid64Raw.fdim(x, y, mode, flags);
       default:
-        throw new AssertionError(operation);
+        throw new IllegalStateException(operation);
     }
   }
 
@@ -167,7 +167,7 @@ public final class BidNextMinMaxVectorTest {
         Bid128Raw.fdim(x[0], x[1], y[0], y[1], mode, flags, result);
         break;
       default:
-        throw new AssertionError(operation);
+        throw new IllegalStateException(operation);
     }
   }
 

@@ -20,12 +20,14 @@ import java.lang.reflect.Method;
 
 /**
  * Intel {@code readtest.in} transcendental families. Values use Intel relative
- * ULP limits; NaN/Inf require exact bits. Flags check INVALID and DIVBYZERO
- * only ({@code trans_flags_mask = 0x05} in {@code readtest.c}).
+ * ULP limits: decimal64 uses 0.55 ULP for nearest rounding and 1.05 ULP for
+ * directed rounding; decimal128 uses 2 ULP and 5 ULP, respectively. NaN and
+ * infinity require exact bits. Flags check INVALID and DIVBYZERO only
+ * ({@code trans_flags_mask = 0x05} in {@code readtest.c}).
  */
 public final class BidTranscendentalVectorTest {
   private static final int TRANS_FLAGS = StatusFlags.INVALID | StatusFlags.DIVIDE_BY_ZERO;
-  private static final boolean REPORT_ALL = Boolean.getBoolean("bid.trans.reportAll");
+  private static final int MAX_REPORTED_FAILURES = 100;
   private static final String[] UNARY64 = {
       "exp", "expm1", "exp2", "exp10", "log", "log10", "log2", "log1p",
       "sin", "cos", "tan", "asin", "acos", "atan",
@@ -37,7 +39,7 @@ public final class BidTranscendentalVectorTest {
   }
 
   public static void main(String[] args) throws Exception {
-    StringBuilder failures = new StringBuilder();
+    FailureCollector failures = new FailureCollector();
     int total = 0;
     for (String op : UNARY64) {
       total += checkUnary64("bid64_" + op, failures);
@@ -49,22 +51,21 @@ public final class BidTranscendentalVectorTest {
     total += checkBinary128("bid128_pow", "pow", failures);
     total += checkBinary128("bid128_hypot", "hypot", failures);
     total += checkBinary128("bid128_atan2", "atan2", failures);
-    if (failures.length() > 0) {
-      throw new AssertionError(failures.toString());
+    if (failures.count > 0) {
+      throw new IllegalStateException(failures.message());
     }
     if (total != 5448) {
-      throw new AssertionError("unexpected transcendental vector count: " + total);
+      throw new IllegalStateException("unexpected transcendental vector count: " + total);
     }
     System.out.println("BidTranscendentalVectorTest: all tests passed (" + total
         + " vectors)");
   }
 
-  private static int checkUnary64(String operation, StringBuilder failures)
+  private static int checkUnary64(String operation, FailureCollector failures)
       throws Exception {
     Method method = Bid64Raw.class.getMethod(
         operation.substring(6), long.class, RoundingMode.class, StatusFlags.class);
     int tested = 0;
-    boolean reported = false;
     for (String line : IntelVectors.lines(operation)) {
       String[] tokens = IntelVectors.tokens(line);
       if (tokens.length < 5) {
@@ -76,25 +77,22 @@ public final class BidTranscendentalVectorTest {
       int expectedFlags = IntelVectors.flags(tokens[4]) & TRANS_FLAGS;
       StatusFlags flags = new StatusFlags();
       long actual = (Long) method.invoke(null, input, mode, flags);
-      if ((!reported || REPORT_ALL) && (!accept64(
-          actual, expected, mode, IntelVectors.ulp(line))
-          || (flags.bits() & TRANS_FLAGS) != expectedFlags)) {
-        failures.append(String.format(
+      if (!accept64(actual, expected, mode, IntelVectors.ulp(line))
+          || (flags.bits() & TRANS_FLAGS) != expectedFlags) {
+        failures.add(String.format(
             "%s actual [0x%016x] %02x%n", line, actual, flags.bits()));
-        reported = true;
       }
       tested++;
     }
     return tested;
   }
 
-  private static int checkUnary128(String operation, StringBuilder failures)
+  private static int checkUnary128(String operation, FailureCollector failures)
       throws Exception {
     Method method = Bid128Raw.class.getMethod(
         operation.substring(7),
         long.class, long.class, RoundingMode.class, StatusFlags.class, long[].class);
     int tested = 0;
-    boolean reported = false;
     for (String line : IntelVectors.lines(operation)) {
       String[] tokens = IntelVectors.tokens(line);
       if (tokens.length < 5) {
@@ -107,13 +105,11 @@ public final class BidTranscendentalVectorTest {
       long[] actual = new long[2];
       StatusFlags flags = new StatusFlags();
       method.invoke(null, input[0], input[1], mode, flags, actual);
-      if ((!reported || REPORT_ALL) && (!accept128(
-          actual, expected, mode, IntelVectors.ulp(line))
-          || (flags.bits() & TRANS_FLAGS) != expectedFlags)) {
-        failures.append(String.format(
+      if (!accept128(actual, expected, mode, IntelVectors.ulp(line))
+          || (flags.bits() & TRANS_FLAGS) != expectedFlags) {
+        failures.add(String.format(
             "%s actual [0x%016x%016x] %02x%n",
             line, actual[0], actual[1], flags.bits()));
-        reported = true;
       }
       tested++;
     }
@@ -121,12 +117,11 @@ public final class BidTranscendentalVectorTest {
   }
 
   private static int checkBinary64(
-      String operation, String methodName, StringBuilder failures)
+      String operation, String methodName, FailureCollector failures)
       throws Exception {
     Method method = Bid64Raw.class.getMethod(
         methodName, long.class, long.class, RoundingMode.class, StatusFlags.class);
     int tested = 0;
-    boolean reported = false;
     for (String line : IntelVectors.lines(operation)) {
       String[] tokens = IntelVectors.tokens(line);
       if (tokens.length < 6) {
@@ -139,12 +134,10 @@ public final class BidTranscendentalVectorTest {
       int expectedFlags = IntelVectors.flags(tokens[5]) & TRANS_FLAGS;
       StatusFlags flags = new StatusFlags();
       long actual = (Long) method.invoke(null, x, y, mode, flags);
-      if ((!reported || REPORT_ALL) && (!accept64(
-          actual, expected, mode, IntelVectors.ulp(line))
-          || (flags.bits() & TRANS_FLAGS) != expectedFlags)) {
-        failures.append(String.format(
+      if (!accept64(actual, expected, mode, IntelVectors.ulp(line))
+          || (flags.bits() & TRANS_FLAGS) != expectedFlags) {
+        failures.add(String.format(
             "%s actual [0x%016x] %02x%n", line, actual, flags.bits()));
-        reported = true;
       }
       tested++;
     }
@@ -152,14 +145,13 @@ public final class BidTranscendentalVectorTest {
   }
 
   private static int checkBinary128(
-      String operation, String methodName, StringBuilder failures)
+      String operation, String methodName, FailureCollector failures)
       throws Exception {
     Method method = Bid128Raw.class.getMethod(
         methodName,
         long.class, long.class, long.class, long.class,
         RoundingMode.class, StatusFlags.class, long[].class);
     int tested = 0;
-    boolean reported = false;
     for (String line : IntelVectors.lines(operation)) {
       String[] tokens = IntelVectors.tokens(line);
       if (tokens.length < 6) {
@@ -174,13 +166,11 @@ public final class BidTranscendentalVectorTest {
       long[] actual = new long[2];
       StatusFlags flags = new StatusFlags();
       method.invoke(null, x[0], x[1], y[0], y[1], mode, flags, actual);
-      if ((!reported || REPORT_ALL) && (!accept128(
-          actual, expected, mode, IntelVectors.ulp(line))
-          || (flags.bits() & TRANS_FLAGS) != expectedFlags)) {
-        failures.append(String.format(
+      if (!accept128(actual, expected, mode, IntelVectors.ulp(line))
+          || (flags.bits() & TRANS_FLAGS) != expectedFlags) {
+        failures.add(String.format(
             "%s actual [0x%016x%016x] %02x%n",
             line, actual[0], actual[1], flags.bits()));
-        reported = true;
       }
       tested++;
     }
@@ -229,20 +219,7 @@ public final class BidTranscendentalVectorTest {
       return actual[0] == expected[0] && actual[1] == expected[1];
     }
     if (e.isInfinite() || a.isInfinite()) {
-      if (actual[0] == expected[0] && actual[1] == expected[1]) {
-        return true;
-      }
-      if (a.isInfinite() && !e.isInfinite()) {
-        a = Bid128.fromRawBits(
-            (actual[0] & Bid128.MASK_SIGN) | 0x5fff_ed09_bead_87c0L,
-            0x378d_8e63_ffff_ffffL);
-      } else if (e.isInfinite() && !a.isInfinite()) {
-        e = Bid128.fromRawBits(
-            (expected[0] & Bid128.MASK_SIGN) | 0x5fff_ed09_bead_87c0L,
-            0x378d_8e63_ffff_ffffL);
-      } else {
-        return false;
-      }
+      return actual[0] == expected[0] && actual[1] == expected[1];
     }
     if (a.isSigned() != e.isSigned()) {
       return a.isZero() && e.isZero();
@@ -316,5 +293,27 @@ public final class BidTranscendentalVectorTest {
     long[] value = new long[2];
     Bid128Raw.fromString(token, mode, new StatusFlags(), value);
     return value;
+  }
+
+  private static final class FailureCollector {
+    private final StringBuilder details = new StringBuilder();
+    private int count;
+
+    void add(String failure) {
+      count++;
+      if (count <= MAX_REPORTED_FAILURES) {
+        details.append(failure);
+      }
+    }
+
+    String message() {
+      if (count > MAX_REPORTED_FAILURES) {
+        details.append("... ")
+            .append(count - MAX_REPORTED_FAILURES)
+            .append(" additional failures omitted")
+            .append(System.lineSeparator());
+      }
+      return count + " transcendental vector failures" + System.lineSeparator() + details;
+    }
   }
 }
