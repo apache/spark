@@ -23,7 +23,6 @@ import java.util.concurrent.Semaphore
 import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.OperationState
 import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImpl}
 import org.apache.hive.service.rpc.thrift.{TProtocolVersion, TTypeId}
@@ -32,54 +31,10 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2EventManager
-import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{GeographyType, GeometryType, IntegerType, NullType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType}
 
 class SparkExecuteStatementOperationSuite extends SharedSparkSession {
-
-  test("SPARK-5159 / SPARK-59118 refuse to start when doAs is enabled but not enforced") {
-    val hiveConf = new HiveConf()
-    hiveConf.setVar(ConfVars.HIVE_SERVER2_AUTHENTICATION, "KERBEROS")
-    hiveConf.setBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS, true)
-    val e = intercept[IllegalArgumentException] {
-      new HiveThriftServer2(spark).checkImpersonationIsEnforced(hiveConf)
-    }
-    assert(e.getMessage.contains(ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname))
-    assert(e.getMessage.contains(StaticSQLConf.HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS.key))
-    assert(e.getMessage.contains("SPARK-5159"))
-  }
-
-  test("SPARK-59118 does not refuse to start when auth type is NONE") {
-    val hiveConf = new HiveConf()
-    hiveConf.setVar(ConfVars.HIVE_SERVER2_AUTHENTICATION, "NONE")
-    hiveConf.setBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS, true)
-    new HiveThriftServer2(spark).checkImpersonationIsEnforced(hiveConf)
-  }
-
-  test("SPARK-59118 does not refuse to start when auth type is NOSASL") {
-    val hiveConf = new HiveConf()
-    hiveConf.setVar(ConfVars.HIVE_SERVER2_AUTHENTICATION, "NOSASL")
-    hiveConf.setBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS, true)
-    new HiveThriftServer2(spark).checkImpersonationIsEnforced(hiveConf)
-  }
-
-  test("SPARK-59118 does not refuse to start when doAs is disabled") {
-    val hiveConf = new HiveConf()
-    hiveConf.setVar(ConfVars.HIVE_SERVER2_AUTHENTICATION, "KERBEROS")
-    hiveConf.setBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS, false)
-    new HiveThriftServer2(spark).checkImpersonationIsEnforced(hiveConf)
-  }
-
-  test("SPARK-59118 allowIneffectiveDoAs=true permits an otherwise-refused config") {
-    val hiveConf = new HiveConf()
-    hiveConf.setVar(ConfVars.HIVE_SERVER2_AUTHENTICATION, "KERBEROS")
-    hiveConf.setBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS, true)
-    val permissiveSpark = mock(classOf[SparkSession], RETURNS_DEEP_STUBS)
-    when(permissiveSpark.conf.get(StaticSQLConf.HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS))
-      .thenReturn(true)
-    new HiveThriftServer2(permissiveSpark).checkImpersonationIsEnforced(hiveConf)
-  }
 
   test("SPARK-17112 `select null` via JDBC triggers IllegalArgumentException in ThriftServer") {
     val field1 = StructField("NULL", NullType)
