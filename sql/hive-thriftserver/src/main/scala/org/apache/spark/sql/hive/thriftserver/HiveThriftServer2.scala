@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.hadoop.hive.common.ServerUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hive.service.auth.HiveAuthFactory.AuthTypes
 import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
 import org.apache.hive.service.server.HiveServer2
 
@@ -153,18 +154,12 @@ private[hive] class HiveThriftServer2(sparkSession: SparkSession)
   // started, and then once only.
   private val started = new AtomicBoolean(false)
 
-  override def init(hiveConf: HiveConf): Unit = {
-    // The Spark Thrift Server accepts and authorizes doAs (proxy-user) sessions at the Hive
-    // session layer, but every query still executes -- and is authorized by the storage
-    // layer -- as the server's own service identity (SPARK-5159). An accepted-but-unenforced
-    // impersonation control is worse than none: an authenticated user can read data that
-    // HDFS/object-store ACLs deny to her own identity but allow to the privileged service
-    // principal. Refuse to start rather than silently accept it.
-    // Only refuse when the server actually verifies user identities (NONE/NOSASL sessions
-    // carry unverified usernames, so impersonation is not a meaningful control there and the
-    // Hive default of hive.server2.enable.doAs=true must keep working out of the box).
-    val authTypeStr = hiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION)
-    val authVerifiesUser = !Seq("NONE", "NOSASL").exists(_.equalsIgnoreCase(authTypeStr))
+  // Refuse to start if doAs is accepted but not enforced (SPARK-5159): queries always run as
+  // the service identity, so storage ACLs end up checking the wrong principal.
+  private[thriftserver] def checkImpersonationIsEnforced(hiveConf: HiveConf): Unit = {
+    val authType = hiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION)
+    val unverifiedAuthTypes = Seq(AuthTypes.NONE, AuthTypes.NOSASL).map(_.getAuthName)
+    val authVerifiesUser = !unverifiedAuthTypes.exists(_.equalsIgnoreCase(authType))
     if (authVerifiesUser && hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS) &&
         !sparkSession.conf.get(StaticSQLConf.HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS)) {
       throw new IllegalArgumentException(
@@ -172,10 +167,16 @@ private[hive] class HiveThriftServer2(sparkSession: SparkSession)
         "Server does not enforce impersonation: queries run as the server's own service " +
         "identity and storage permissions are checked against the service principal instead " +
         "of the connecting user (SPARK-5159), which can expose data the connecting user is " +
-        s"not authorized to read. Either unset ${ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname}, " +
-        s"or set ${StaticSQLConf.HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS.key}=true to " +
-        "explicitly acknowledge this limitation and start anyway.")
+        s"not authorized to read. Explicitly set ${ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname} " +
+        "to false (unsetting it does not help -- Hive's own default is true), or set " +
+        s"${StaticSQLConf.HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS.key}=true via --conf or " +
+        "spark-defaults.conf, not --hiveconf, to explicitly acknowledge this limitation and " +
+        "start anyway.")
     }
+  }
+
+  override def init(hiveConf: HiveConf): Unit = {
+    checkImpersonationIsEnforced(hiveConf)
     val sparkSqlCliService = new SparkSQLCLIService(this, sparkSession)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)
