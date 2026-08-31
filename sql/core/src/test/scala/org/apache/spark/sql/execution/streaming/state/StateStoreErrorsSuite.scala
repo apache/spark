@@ -15,33 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.errors
+package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.catalog.InvalidUDFClassException
-import org.apache.spark.sql.execution.streaming.state.StateStoreColumnFamilyMismatch
+import org.apache.spark.SparkFunSuite
 
-class ErrorMessageParametersSuite extends SparkFunSuite {
-
-  test("SPARK-58945: invalid writer commit message reports detail") {
-    checkError(
-      exception = QueryExecutionErrors.invalidWriterCommitMessageError("zero")
-        .asInstanceOf[SparkRuntimeException],
-      condition = "INVALID_WRITER_COMMIT_MESSAGE",
-      parameters = Map("detail" -> "zero"))
-  }
-
-  test("SPARK-58945: invalid UDF class error reports clazz") {
-    checkError(
-      exception = QueryCompilationErrors.invalidUDFClassError("example.InvalidFunction")
-        .asInstanceOf[InvalidUDFClassException],
-      condition = "_LEGACY_ERROR_TEMP_2450",
-      parameters = Map("clazz" -> "example.InvalidFunction"))
-  }
+class StateStoreErrorsSuite extends SparkFunSuite {
 
   test("SPARK-58945: state store mismatch reports schema details") {
     checkError(
-      exception = new StateStoreColumnFamilyMismatch(
+      exception = StateStoreErrors.stateStoreColumnFamilyMismatch(
         "state", "old_schema", "new_schema"),
       condition = "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE",
       parameters = Map(

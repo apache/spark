@@ -244,6 +244,14 @@ class QueryExecutionErrorsSuite
     }
   }
 
+  test("SPARK-58945: invalid writer commit message reports detail") {
+    checkError(
+      exception = QueryExecutionErrors.invalidWriterCommitMessageError("zero")
+        .asInstanceOf[SparkRuntimeException],
+      condition = "INVALID_WRITER_COMMIT_MESSAGE",
+      parameters = Map("detail" -> "zero"))
+  }
+
   test("UNSUPPORTED_FEATURE: unsupported types (map and struct) in lit()") {
     def checkUnsupportedTypeInLiteral(v: Any, literal: String, dataType: String): Unit = {
       checkError(

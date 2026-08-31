@@ -20,6 +20,7 @@ package org.apache.spark.sql.errors
 import java.util.IllegalFormatException
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkUnsupportedOperationException}
+import org.apache.spark.sql.catalyst.catalog.InvalidUDFClassException
 import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -281,6 +282,14 @@ class QueryCompilationErrorsSuite
       condition = "UNSUPPORTED_FEATURE.TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS",
       parameters = Map("num" -> "24"),
       sqlState = "0A000")
+  }
+
+  test("SPARK-58945: invalid UDF class error reports clazz") {
+    checkError(
+      exception = QueryCompilationErrors.invalidUDFClassError("example.InvalidFunction")
+        .asInstanceOf[InvalidUDFClassException],
+      condition = "_LEGACY_ERROR_TEMP_2450",
+      parameters = Map("clazz" -> "example.InvalidFunction"))
   }
 
   test("GROUPING_COLUMN_MISMATCH: not found the grouping column") {
