@@ -154,8 +154,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     // A guarded nested field can set a null bit, so the mask is not static for such rows.
     val hasGuardedNestedField =
       inputs.zip(schemas).exists { case (input, Schema(dataType, nullable)) =>
-        (!nullable || input.isNull == FalseLiteral) &&
-          isNestedRowType(UserDefinedType.sqlType(dataType))
+        (!nullable || input.isNull == FalseLiteral) && isNestedRowType(dataType)
       }
 
     val resetWriter = if (isTopLevel) {
