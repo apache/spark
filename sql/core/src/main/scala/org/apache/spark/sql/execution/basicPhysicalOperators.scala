@@ -971,13 +971,10 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       // The `KeyedPartitioning`s must agree on the partition expressions to merge.
       val compatible = kps.forall(comparePartitioning(_, headKp))
       if (compatible) {
-        val mergedKeys = kps.flatMap(_.partitionKeys)
-        val mergedExpressions = headKp.expressions.map(_.transform {
-          case a: Attribute if attributeMap.contains(a) => attributeMap(a)
-        })
-        val isGrouped = mergedKeys.distinct.size == mergedKeys.size
-        val isNarrowed = kps.exists(_.isNarrowed)
-        return KeyedPartitioning(mergedExpressions, mergedKeys, isGrouped, isNarrowed)
+        // `concat` returns the merged partitioning in the first child's attribute space, which is
+        // what `prepareOutputPartitioning` normalizes to on this branch, so lift it to this
+        // union's output the same way the pass-through case below does.
+        return toUnionOutput(KeyedPartitioning.concat(kps))
       } else {
         return super.outputPartitioning
       }

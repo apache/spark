@@ -73,20 +73,20 @@ case class EnsureRequirements(
           child
         } else {
           // Check KeyedPartitioning satisfaction conditions
-          val groupedSatisfies = grouped.find(_.satisfies(distribution))
+          val satisfyingGrouped = grouped.find(_.satisfies(distribution))
           val nonGroupedSatisfiesAsIs = nonGrouped.exists(_.nonGroupedSatisfies(distribution))
-          val nonGroupedSatisfiesWhenGrouped = nonGrouped.find(_.groupedSatisfies(distribution))
+          val groupableNonGrouped = nonGrouped.find(_.mayGroupToSatisfy(distribution))
 
           // Check if any KeyedPartitioning satisfies the distribution
-          if (groupedSatisfies.isDefined || nonGroupedSatisfiesAsIs
-              || nonGroupedSatisfiesWhenGrouped.isDefined) {
+          if (satisfyingGrouped.isDefined || nonGroupedSatisfiesAsIs
+              || groupableNonGrouped.isDefined) {
             distribution match {
               case o: OrderedDistribution =>
                 // OrderedDistribution requires grouped KeyedPartitioning with sorted keys
                 // according to the distribution's ordering.
-                // Find any KeyedPartitioning that satisfies via groupedSatisfies.
+                // Find any KeyedPartitioning that satisfies, grouped or groupable.
                 val satisfyingKeyedPartitioning =
-                  groupedSatisfies.orElse(nonGroupedSatisfiesWhenGrouped).get
+                  satisfyingGrouped.orElse(groupableNonGrouped).get
                 // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees
                 // one attribute per partition expression.
                 val attrs = satisfyingKeyedPartitioning.expressions.flatMap(_.references)
@@ -107,7 +107,7 @@ case class EnsureRequirements(
                   )
                 }
 
-              case _ if groupedSatisfies.isDefined =>
+              case _ if satisfyingGrouped.isDefined =>
                 // Grouped KeyedPartitioning already satisfies
                 child
 
