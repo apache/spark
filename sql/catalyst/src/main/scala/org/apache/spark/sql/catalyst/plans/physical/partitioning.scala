@@ -380,15 +380,17 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
  *   unique partition keys, or (2) `GroupPartitionsExec` coalesces partitions with duplicate keys.
  *
  * == Distribution Satisfaction and Grouping ==
- * Besides the default `satisfies()`, `KeyedPartitioning` exposes two additional methods used by
- * `EnsureRequirements` to handle grouped and non-grouped KPs separately:
+ * Besides the default `satisfies()`, `KeyedPartitioning` answers two more questions. They differ in
+ * what they let happen to the data before the distribution counts as met.
  *
- * - `nonGroupedSatisfies()`: called on non-grouped KPs to check as-is satisfaction (without
- *   inserting `GroupPartitionsExec`).
- * - `groupedSatisfies()`: called on non-grouped KPs to check whether inserting
- *   `GroupPartitionsExec` would satisfy the distribution. When it returns true, the distribution
- *   is NOT yet satisfied -- `EnsureRequirements` will insert `GroupPartitionsExec` to coalesce
- *   duplicate partition keys.
+ * - `nonGroupedSatisfies()`: is the distribution met by the partitioning as it stands, with no node
+ *   inserted? It is the default `Partitioning` implementation, so for a `ClusteredDistribution` it
+ *   is always false.
+ * - `groupedSatisfies()`: do the partition keys match what the distribution asks for? Duplicate
+ *   keys are ignored, so this asks about the key expressions alone. `satisfies()` is this plus
+ *   `isGrouped`, and nothing more. `EnsureRequirements` asks it directly, of grouped and
+ *   non-grouped partitionings alike, because a `GroupPartitionsExec` may be needed either way: to
+ *   coalesce duplicate partition keys, or to project them down to the operation keys.
  *
  * For `OrderedDistribution`, `GroupPartitionsExec` must also sort the partition keys to meet the
  * ordering requirement.
@@ -499,6 +501,26 @@ case class KeyedPartitioning(
     KeyedPartitioning.projectKeys(partitionKeys, keyDataTypes, positions)
 
   /**
+   * The number of partitions a `GroupPartitionsExec` projecting these keys to `positions` would
+   * leave, which is the number of distinct projected keys. `positions` must be distinct and in
+   * range, as it must be for `projectKeys`.
+   *
+   * A projection that keeps every position is the identity on the key values, so it needs no
+   * projected rows at all. The rest allocate a row per partition and hash it with an uncached
+   * `hashCode`, which makes this the expensive question to ask of a partitioning. A caller asking
+   * it for several position sets should memoize on the set.
+   */
+  def numPartitionsProjectedOn(positions: Seq[Int]): Int = {
+    if (positions.length < expressions.length) {
+      projectKeys(positions)._2.distinct.size
+    } else if (isGrouped) {
+      numPartitions
+    } else {
+      partitionKeys.distinct.size
+    }
+  }
+
+  /**
    * Reduces this partitioning's partition keys by applying the given reducers.
    * Returns the reduced keys and their data types.
    */
@@ -510,8 +532,10 @@ case class KeyedPartitioning(
     nonGroupedSatisfies(required) || (isGrouped && groupedSatisfies(required))
   }
 
-  def nonGroupedSatisfies(required: Distribution): Boolean = super.satisfies0(required)
+  /** The first of the two questions the class doc lists. */
+  private def nonGroupedSatisfies(required: Distribution): Boolean = super.satisfies0(required)
 
+  /** The second of the two questions the class doc lists. */
   def groupedSatisfies(required: Distribution): Boolean = {
     required match {
       case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
