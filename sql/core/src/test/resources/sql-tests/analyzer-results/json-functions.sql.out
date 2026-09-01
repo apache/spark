@@ -1725,3 +1725,116 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "json_query('{\"name\":\"Ada\"}', '$.name' WITH ARRAY WRAPPER OMIT QUOTES)"
   } ]
 }
+
+
+-- !query
+select json_array(1, 'x', true)
+-- !query analysis
+Project [json_array(1, x, true, false, false, false, false, false, false, Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY(1, x, true)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array(1, NULL, 3)
+-- !query analysis
+Project [json_array(1, null, 3, false, false, false, false, false, false, Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY(1, NULL, 3)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array(1, NULL, 3 NULL ON NULL)
+-- !query analysis
+Project [json_array(1, null, 3, false, false, false, false, false, false, Null, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY(1, NULL, 3 NULL ON NULL)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array()
+-- !query analysis
+Project [json_array(Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY()#x]
++- OneRowRelation
+
+
+-- !query
+select json_array(CAST(1.50 AS DECIMAL(5,2)), DATE'2020-01-02')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select json_array(json_array(1, 2), 3)
+-- !query analysis
+Project [json_array(json_array(1, 2, false, false, false, false, Absent, StringType, Some(America/Los_Angeles)), 3, true, false, false, false, Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY(JSON_ARRAY(1, 2), 3)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array('[1,2]')
+-- !query analysis
+Project [json_array([1,2], false, false, Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY([1,2])#x]
++- OneRowRelation
+
+
+-- !query
+select json_array('[1,2]' FORMAT JSON)
+-- !query analysis
+Project [json_array([1,2], true, true, Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY([1,2] FORMAT JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array('{"a":1}' FORMAT JSON, 'x')
+-- !query analysis
+Project [json_array({"a":1}, x, true, false, true, false, Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY({"a":1} FORMAT JSON, x)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array(123 FORMAT JSON)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_FORMAT_JSON_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_array`",
+    "inputType" : "\"INT\"",
+    "position" : "1",
+    "sqlExpr" : "\"JSON_ARRAY(123 FORMAT JSON)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "json_array(123 FORMAT JSON)"
+  } ]
+}
+
+
+-- !query
+select json_array('1,2' FORMAT JSON)
+-- !query analysis
+Project [json_array(1,2, true, true, Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY(1,2 FORMAT JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array(NULL FORMAT JSON)
+-- !query analysis
+Project [json_array(null, true, true, Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY(NULL FORMAT JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array(NULL FORMAT JSON NULL ON NULL)
+-- !query analysis
+Project [json_array(null, true, true, Null, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY(NULL FORMAT JSON NULL ON NULL)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array(1 IS NULL, 2 > 1)
+-- !query analysis
+Project [json_array(isnull(1), (2 > 1), false, false, false, false, Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY((1 IS NULL), (2 > 1))#x]
++- OneRowRelation
