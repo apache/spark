@@ -417,14 +417,14 @@ case class EnsureRequirements(
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, rightExpressions, rightKeys)
           .orElse(reorderJoinKeysRecursively(
             leftKeys, rightKeys, leftPartitioning, None))
-      case (Some(KeyedPartitioning(clustering, _, _, _)), _) =>
+      case (Some(KeyedPartitioning(clustering, _, _, _, _)), _) =>
         // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
         // attribute per partition expression.
         val leafExprs = clustering.flatMap(_.references)
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, leftKeys)
             .orElse(reorderJoinKeysRecursively(
               leftKeys, rightKeys, None, rightPartitioning))
-      case (_, Some(KeyedPartitioning(clustering, _, _, _))) =>
+      case (_, Some(KeyedPartitioning(clustering, _, _, _, _))) =>
         // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
         // attribute per partition expression.
         val leafExprs = clustering.flatMap(_.references)

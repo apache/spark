@@ -223,6 +223,35 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(gpe.outputOrdering === Nil)
   }
 
+  test("SPARK-59050: unknown-keyed child with reducers gives up the keyed claim at the real " +
+    "count") {
+    // No planner path reaches the give-up branch with the built-in transforms --
+    // `createShuffleSpec` refuses a narrowing projection of an unknown-keyed partitioning one
+    // hop earlier, and `areKeysCompatible` pairs it only with same-function partners that have
+    // no reducer (see `GroupPartitionsExec.outputPartitioning`) -- so pin the contract
+    // directly: the node must report `UnknownPartitioning` with its physical grouped count.
+    // Reporting zero partitions is what threw once a parent join built a
+    // `PartitioningCollection` over both sides.
+    val partitionKeys = Seq(row(1), row(2), row(1))
+    val child = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), partitionKeys)
+        .copy(mayContainUnknownPartitionKeys = true))
+    val gpe = GroupPartitionsExec(child, reducers = Some(Seq(None)))
+
+    assert(gpe.groupedPartitions.size === 2, "expected coalescing into 2 groups")
+    gpe.outputPartitioning match {
+      case u: UnknownPartitioning =>
+        assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
+      case other =>
+        fail(s"expected the unknown-keyed claim to be dropped on reduction, got $other")
+    }
+    // A parent join merges the two sides' partitionings into a collection: a count of 0 fails
+    // the uniform-numPartitions requirement, the round-2 planning throw reproduced -- this call
+    // throwing fails the test.
+    val partner = KeyedPartitioning(Seq(exprB), Seq(row(1), row(2)))
+    PartitioningCollection.fromPartitionings(Seq(gpe.outputPartitioning, partner))
+  }
+
   test("SPARK-55715: sorted merge config enabled but child not SafeForKWayMerge falls back " +
       "to key-expression ordering") {
     // DummySparkPlan does not extend SafeForKWayMerge, so childIsSafeForKWayMerge = false and
