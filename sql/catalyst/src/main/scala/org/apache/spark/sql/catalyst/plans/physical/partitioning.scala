@@ -500,8 +500,8 @@ case class CoalescedNullAwareHashPartitioning(
  *
  * - '''Grouping without a collapse''' merges only partitions that already shared a key. A source
  *   reporting several splits per key produces those, and so does a union of children whose keys
- *   overlap. Every partitioning that never went through a projection is in this case, so no opt-in
- *   is needed.
+ *   overlap. A partitioning that went through neither a projection nor a reduction is always in
+ *   this case, so no opt-in is needed.
  * - '''Grouping after a collapse''' merges partitions that the finer-grained partitioning held
  *   apart. The two `1` partitions above came from the different keys `(1, 'a')` and `(1, 'b')`, so
  *   the merged partition holds more data than any partition the source declared. This is what the
