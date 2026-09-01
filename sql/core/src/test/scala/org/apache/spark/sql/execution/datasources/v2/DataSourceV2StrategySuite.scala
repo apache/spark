@@ -1068,15 +1068,15 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
-  test("advisory filters use dotted names for nested columns") {
+  test("inferred filters use dotted names for nested columns") {
     val tableSchema = StructType(Seq(
       StructField("id", LongType, nullable = false),
       StructField("s", StructType(Seq(
         StructField("tz", StringType, nullable = true))), nullable = true)))
-    val advisoryFilter =
+    val inferredFilter =
       EqualTo(AttributeReference("s.tz", StringType)(), Literal("UTC"))
     val relation = DataSourceV2Relation.create(
-      new InMemoryCatalystFilterTable(tableSchema, advisoryFilter),
+      new InMemoryCatalystFilterTable(tableSchema, inferredFilter),
       None,
       None,
       CaseInsensitiveStringMap.empty)
@@ -1088,18 +1088,18 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     assert(pushedPlan.exists {
       case Filter(condition, _) => condition.exists(_.semanticEquals(expected))
       case _ => false
-    }, s"expected rebound nested advisory filter in:\n$pushedPlan")
+    }, s"expected rebound nested inferred filter in:\n$pushedPlan")
   }
 
-  test("advisory filters support quoted dotted name parts") {
+  test("inferred filters support quoted dotted name parts") {
     val tableSchema = StructType(Seq(
       StructField("id", LongType, nullable = false),
       StructField("a.b", StructType(Seq(
         StructField("c.d", StringType, nullable = true))), nullable = true)))
-    val advisoryFilter =
+    val inferredFilter =
       EqualTo(AttributeReference("`a.b`.`c.d`", StringType)(), Literal("PST"))
     val relation = DataSourceV2Relation.create(
-      new InMemoryCatalystFilterTable(tableSchema, advisoryFilter),
+      new InMemoryCatalystFilterTable(tableSchema, inferredFilter),
       None,
       None,
       CaseInsensitiveStringMap.empty)
@@ -1111,25 +1111,25 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     assert(pushedPlan.exists {
       case Filter(condition, _) => condition.exists(_.semanticEquals(expected))
       case _ => false
-    }, s"expected rebound quoted advisory filter in:\n$pushedPlan")
+    }, s"expected rebound quoted inferred filter in:\n$pushedPlan")
   }
 
-  test("advisory filters exclude user-defined expressions") {
+  test("inferred filters exclude user-defined expressions") {
     val schema = StructType(Seq(StructField("id", LongType, nullable = false)))
-    val advisoryUDF = ScalaUDF(
+    val inferredUDF = ScalaUDF(
       function = (() => true),
       dataType = BooleanType,
       children = Nil,
-      udfName = Some("advisory_udf"))
-    val externalAdvisoryUDF = ExternalUserDefinedFunction(
-      name = Some("external_advisory_udf"),
+      udfName = Some("inferred_udf"))
+    val externalInferredUDF = ExternalUserDefinedFunction(
+      name = Some("external_inferred_udf"),
       payload = Array.emptyByteArray,
       dataType = BooleanType,
       children = Nil,
       udfDeterministic = true,
       udfNullable = false)
 
-    Seq(advisoryUDF, externalAdvisoryUDF).foreach { udf =>
+    Seq(inferredUDF, externalInferredUDF).foreach { udf =>
       val relation = DataSourceV2Relation.create(
         new InMemoryCatalystFilterTable(schema, udf),
         None,
@@ -1139,25 +1139,25 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
       val pushedPlan = V2ScanRelationPushDown(Filter(EqualTo(id, Literal(1L)), relation))
       val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
-      assert(scan.advisoryFilters.isEmpty)
+      assert(scan.inferredFilters.isEmpty)
       assert(!pushedPlan.exists {
         case Filter(condition, _) => condition.exists(_ eq udf)
         case _ => false
-      }, s"user-defined advisory filter $udf must be discarded:\n$pushedPlan")
+      }, s"user-defined inferred filter $udf must be discarded:\n$pushedPlan")
     }
   }
 
-  test("advisory filters exclude non-deterministic and subquery expressions") {
+  test("inferred filters exclude non-deterministic and subquery expressions") {
     val scalarSubquery = ScalarSubquery(
       Project(Seq(Alias(Literal(1L), "value")()), OneRowRelation()))
-    val invalidAdvisories = Seq(
+    val invalidInferredFilters = Seq(
       GreaterThan(Rand(0), Literal(0.5)),
       GreaterThan(scalarSubquery, Literal(0L)))
 
-    invalidAdvisories.foreach { advisory =>
+    invalidInferredFilters.foreach { inferred =>
       val schema = StructType(Seq(StructField("id", LongType, nullable = false)))
       val relation = DataSourceV2Relation.create(
-        new InMemoryCatalystFilterTable(schema, advisory),
+        new InMemoryCatalystFilterTable(schema, inferred),
         None,
         None,
         CaseInsensitiveStringMap.empty)
@@ -1165,41 +1165,41 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
         Filter(EqualTo(relation.output.head, Literal(1L)), relation))
       val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
 
-      assert(scan.advisoryFilters.isEmpty)
+      assert(scan.inferredFilters.isEmpty)
       assert(!pushedPlan.exists {
-        case Filter(condition, _) => condition.exists(_.semanticEquals(advisory))
+        case Filter(condition, _) => condition.exists(_.semanticEquals(inferred))
         case _ => false
-      }, s"invalid advisory filter $advisory must be discarded:\n$pushedPlan")
+      }, s"invalid inferred filter $inferred must be discarded:\n$pushedPlan")
     }
   }
 
-  test("advisory filters ignore unresolvable and ill-typed expressions") {
+  test("inferred filters ignore unresolvable and ill-typed expressions") {
     val schema = StructType(Seq(StructField("id", LongType, nullable = false)))
-    val invalidAdvisories = Seq(
+    val invalidInferredFilters = Seq(
       GreaterThan(AttributeReference("missing", LongType)(), Literal(0L)),
       GreaterThan(AttributeReference("id", StringType)(), Literal("zero")),
       AttributeReference("id", LongType)())
 
-    invalidAdvisories.foreach { advisory =>
+    invalidInferredFilters.foreach { inferred =>
       val relation = DataSourceV2Relation.create(
-        new InMemoryCatalystFilterTable(schema, advisory),
+        new InMemoryCatalystFilterTable(schema, inferred),
         None,
         None,
         CaseInsensitiveStringMap.empty)
       val pushedPlan = V2ScanRelationPushDown(
         Filter(EqualTo(relation.output.head, Literal(1L)), relation))
       val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
-      assert(scan.advisoryFilters.isEmpty,
-        s"invalid advisory filter $advisory must be ignored:\n$pushedPlan")
+      assert(scan.inferredFilters.isEmpty,
+        s"invalid inferred filter $inferred must be ignored:\n$pushedPlan")
     }
 
     val ambiguousSchema = StructType(Seq(
       StructField("id", LongType, nullable = false),
       StructField("ID", LongType, nullable = false)))
-    val ambiguousAdvisory =
+    val ambiguousInferred =
       GreaterThan(AttributeReference("Id", LongType)(), Literal(0L))
     val ambiguousRelation = DataSourceV2Relation.create(
-      new InMemoryCatalystFilterTable(ambiguousSchema, ambiguousAdvisory),
+      new InMemoryCatalystFilterTable(ambiguousSchema, ambiguousInferred),
       None,
       None,
       CaseInsensitiveStringMap.empty)
@@ -1207,18 +1207,18 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       Filter(EqualTo(ambiguousRelation.output.head, Literal(1L)), ambiguousRelation))
     val ambiguousScan =
       ambiguousPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
-    assert(ambiguousScan.advisoryFilters.isEmpty,
-      s"ambiguous advisory filter must be ignored:\n$ambiguousPlan")
+    assert(ambiguousScan.inferredFilters.isEmpty,
+      s"ambiguous inferred filter must be ignored:\n$ambiguousPlan")
   }
 
-  test("advisory filters retain referenced columns in the pruned scan schema") {
+  test("inferred filters retain referenced columns in the pruned scan schema") {
     val schema = StructType(Seq(
       StructField("id", LongType, nullable = false),
       StructField("part", LongType, nullable = false),
       StructField("value", LongType, nullable = false)))
-    val advisory =
+    val inferred =
       GreaterThanOrEqual(AttributeReference("part", LongType)(), Literal(0L))
-    val table = new PruningCatalystFilterTable(schema, advisory)
+    val table = new PruningCatalystFilterTable(schema, inferred)
     val relation = DataSourceV2Relation.create(
       table,
       None,
@@ -1232,23 +1232,23 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
     assert(table.builder.requiredSchema.fieldNames.contains("part"))
     assert(scan.output.exists(_.name == "part"))
-    assert(scan.advisoryFilters.exists(_.references.exists(_.name == "part")))
+    assert(scan.inferredFilters.exists(_.references.exists(_.name == "part")))
     assert(pushedPlan.exists {
-      case Filter(condition, _) => condition.exists(_.semanticEquals(scan.advisoryFilters.head))
+      case Filter(condition, _) => condition.exists(_.semanticEquals(scan.inferredFilters.head))
       case _ => false
-    }, s"the advisory must remain an executable filter:\n$pushedPlan")
+    }, s"the inferred filter must remain executable:\n$pushedPlan")
   }
 
-  test("Boolean simplification preserves executable advisory filters") {
+  test("Boolean simplification preserves executable inferred filters") {
     val schema = StructType(Seq(
       StructField("a", BooleanType, nullable = false),
       StructField("b", BooleanType, nullable = false),
       StructField("c", BooleanType, nullable = false)))
-    val advisory = Or(
+    val inferred = Or(
       EqualTo(AttributeReference("a", BooleanType)(), Literal(true)),
       EqualTo(AttributeReference("b", BooleanType)(), Literal(true)))
     val relation = DataSourceV2Relation.create(
-      new InMemoryCatalystFilterTable(schema, advisory),
+      new InMemoryCatalystFilterTable(schema, inferred),
       None,
       None,
       CaseInsensitiveStringMap.empty)
@@ -1260,19 +1260,20 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       V2ScanRelationPushDown(Filter(residual, relation))))
     val logicalFilters = optimized.collect { case filter: Filter => filter.condition }
     assert(logicalFilters.exists(_.references.exists(_.name == "b")),
-      s"the advisory must remain executable after Boolean simplification:\n$optimized")
+      s"the inferred filter must remain executable after Boolean simplification:\n$optimized")
     val scan = optimized.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
-    assert(scan.advisoryFilters.exists(_.references.exists(_.name == "b")))
+    assert(scan.inferredFilters.exists(_.references.exists(_.name == "b")))
     val physicalPlans = new DataSourceV2Strategy(spark).apply(optimized)
     assert(physicalPlans.exists(_.exists {
       case filter: org.apache.spark.sql.execution.FilterExec =>
         filter.condition.references.exists(_.name == "b")
       case _ => false
-    }), s"the simplified advisory must remain in FilterExec:\n${physicalPlans.mkString("\n")}")
+    }), s"the simplified inferred filter must remain in FilterExec:\n" +
+      physicalPlans.mkString("\n"))
   }
 
-  test("advisory filters are evaluated for V1 scans") {
-    checkAdvisoryEvaluatedForScan { tableSchema =>
+  test("inferred filters are evaluated for V1 scans") {
+    checkInferredEvaluatedForScan { tableSchema =>
       new V1Scan {
         override def readSchema(): StructType = tableSchema
 
@@ -1290,8 +1291,8 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
-  test("advisory filters are evaluated for local scans") {
-    checkAdvisoryEvaluatedForScan { tableSchema =>
+  test("inferred filters are evaluated for local scans") {
+    checkInferredEvaluatedForScan { tableSchema =>
       new LocalScan {
         override def readSchema(): StructType = tableSchema
 
@@ -1300,27 +1301,27 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
-  test("advisory filters do not block limit pushdown") {
+  test("inferred filters do not block limit pushdown") {
     val (table, relation) = newPushdownRelation()
     val id = relation.output.find(_.name == "id").get
     val plan = Limit(Literal(5), Filter(EqualTo(id, Literal(1L)), relation))
 
     val pushedPlan = V2ScanRelationPushDown(plan)
     assert(table.builder.pushedLimit.contains(5))
-    assertAdvisoryFilter(pushedPlan)
+    assertInferredFilter(pushedPlan)
   }
 
-  test("advisory filters do not block offset pushdown") {
+  test("inferred filters do not block offset pushdown") {
     val (table, relation) = newPushdownRelation()
     val id = relation.output.find(_.name == "id").get
     val plan = Offset(Literal(3), Filter(EqualTo(id, Literal(1L)), relation))
 
     val pushedPlan = V2ScanRelationPushDown(plan)
     assert(table.builder.pushedOffset.contains(3))
-    assertAdvisoryFilter(pushedPlan)
+    assertInferredFilter(pushedPlan)
   }
 
-  test("advisory filters do not block top-N pushdown") {
+  test("inferred filters do not block top-N pushdown") {
     val (table, relation) = newPushdownRelation()
     val id = relation.output.find(_.name == "id").get
     val filtered = Filter(EqualTo(id, Literal(1L)), relation)
@@ -1328,36 +1329,36 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
     val pushedPlan = V2ScanRelationPushDown(plan)
     assert(table.builder.pushedTopN.exists(_._2 == 5))
-    assertAdvisoryFilter(pushedPlan)
+    assertInferredFilter(pushedPlan)
   }
 
-  test("advisory filters do not block aggregate pushdown") {
+  test("inferred filters do not block aggregate pushdown") {
     val (table, relation) = newPushdownRelation()
     val id = relation.output.find(_.name == "id").get
     val filtered = Filter(EqualTo(id, Literal(1L)), relation)
-    val advisoryFilter = GreaterThanOrEqual(id, Literal(0L))
+    val inferredFilter = GreaterThanOrEqual(id, Literal(0L))
     val count = Alias(Count(id).toAggregateExpression(), "count")()
     val plan = Aggregate(Nil, Seq(count), filtered)
 
     val pushedPlan = V2ScanRelationPushDown(plan)
     assert(table.builder.pushedAggregation.nonEmpty)
     val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
-    assert(scan.advisoryFilters.isEmpty,
-      s"aggregate output replacement must discard advisory metadata:\n$pushedPlan")
+    assert(scan.inferredFilters.isEmpty,
+      s"aggregate output replacement must discard inferred metadata:\n$pushedPlan")
     assert(!pushedPlan.exists {
-      case filter: Filter => filter.condition.exists(_.semanticEquals(advisoryFilter))
+      case filter: Filter => filter.condition.exists(_.semanticEquals(inferredFilter))
       case _ => false
-    }, s"the original advisory filter must not survive aggregate pushdown:\n$pushedPlan")
+    }, s"the original inferred filter must not survive aggregate pushdown:\n$pushedPlan")
     val physicalPlans = new DataSourceV2Strategy(spark).apply(pushedPlan)
     assert(physicalPlans.nonEmpty, s"expected DataSourceV2Strategy to plan:\n$pushedPlan")
     assert(!physicalPlans.exists(_.exists {
       case filter: org.apache.spark.sql.execution.FilterExec =>
-        filter.condition.exists(_.semanticEquals(advisoryFilter))
+        filter.condition.exists(_.semanticEquals(inferredFilter))
       case _ => false
-    }), s"the original advisory filter must not reach FilterExec:\n${physicalPlans.mkString("\n")}")
+    }), s"the original inferred filter must not reach FilterExec:\n${physicalPlans.mkString("\n")}")
   }
 
-  test("advisory filters do not block join pushdown") {
+  test("inferred filters do not block join pushdown") {
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val (leftTable, left) = newPushdownRelation()
       val (rightTable, right) = newPushdownRelation()
@@ -1376,19 +1377,19 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       assert(leftTable.builder.joinPushed)
       assert(!rightTable.builder.joinPushed)
       val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
-      assert(scan.advisoryFilters.isEmpty)
+      assert(scan.inferredFilters.isEmpty)
       assert(!pushedPlan.exists {
         case filter: Filter => filter.condition.exists(_.isInstanceOf[GreaterThanOrEqual])
         case _ => false
-      }, s"advisory filters must not survive join pushdown:\n$pushedPlan")
+      }, s"inferred filters must not survive join pushdown:\n$pushedPlan")
     }
   }
 
-  test("advisory filters do not block variant pushdown") {
+  test("inferred filters do not block variant pushdown") {
     val schema = StructType(Seq(
       StructField("id", LongType, nullable = false),
       StructField("v", VariantType, nullable = true)))
-    val advisoryFilter = GreaterThan(
+    val inferredFilter = GreaterThan(
       VariantGet(
         AttributeReference("v", VariantType)(),
         Literal("$.b"),
@@ -1396,7 +1397,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
         failOnError = true,
         timeZoneId = Some("UTC")),
       Literal(0))
-    val table = new VariantPushdownTable(schema, advisoryFilter)
+    val table = new VariantPushdownTable(schema, inferredFilter)
     val relation = DataSourceV2Relation.create(
       table,
       None,
@@ -1417,21 +1418,21 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     val pushedPlan = V2ScanRelationPushDown(plan)
     assert(table.builder.variantPushed)
     val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
-    assert(scan.advisoryFilters.isEmpty)
+    assert(scan.inferredFilters.isEmpty)
     assert(!pushedPlan.exists {
-      case filter: Filter => filter.condition.exists(_.semanticEquals(advisoryFilter))
+      case filter: Filter => filter.condition.exists(_.semanticEquals(inferredFilter))
       case _ => false
-    }, s"advisory filters must not survive variant pushdown:\n$pushedPlan")
+    }, s"inferred filters must not survive variant pushdown:\n$pushedPlan")
   }
 
   private def newPushdownRelation(
-      advisoryColumn: String = "id"): (PushdownTable, DataSourceV2Relation) = {
+      inferredColumn: String = "id"): (PushdownTable, DataSourceV2Relation) = {
     val schema = StructType(Seq(
       StructField("id", LongType, nullable = false),
       StructField("value", LongType, nullable = false)))
-    val advisoryFilter =
-      GreaterThanOrEqual(AttributeReference(advisoryColumn, LongType)(), Literal(0L))
-    val table = new PushdownTable(schema, advisoryFilter)
+    val inferredFilter =
+      GreaterThanOrEqual(AttributeReference(inferredColumn, LongType)(), Literal(0L))
+    val table = new PushdownTable(schema, inferredFilter)
     val relation = DataSourceV2Relation.create(
       table,
       None,
@@ -1440,44 +1441,44 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     (table, relation)
   }
 
-  private def assertAdvisoryFilter(plan: LogicalPlan): Unit = {
+  private def assertInferredFilter(plan: LogicalPlan): Unit = {
     val scan = plan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
-    assert(scan.advisoryFilters.nonEmpty)
+    assert(scan.inferredFilters.nonEmpty)
     assert(plan.exists {
       case filter: Filter =>
-        scan.advisoryFilters.forall(advisory => filter.condition.exists(_.semanticEquals(advisory)))
+        scan.inferredFilters.forall(inferred => filter.condition.exists(_.semanticEquals(inferred)))
       case _ => false
-    }, s"expected advisory filter above the scan:\n$plan")
-    assertAdvisoryEvaluated(plan)
+    }, s"expected inferred filter above the scan:\n$plan")
+    assertInferredEvaluated(plan)
   }
 
-  private def assertAdvisoryEvaluated(plan: LogicalPlan): Unit = {
+  private def assertInferredEvaluated(plan: LogicalPlan): Unit = {
     val scan = plan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
     val physicalPlans = new DataSourceV2Strategy(spark).apply(plan)
     assert(physicalPlans.nonEmpty, s"expected DataSourceV2Strategy to plan:\n$plan")
     val physicalFilters = physicalPlans.flatMap(_.collect {
       case filter: org.apache.spark.sql.execution.FilterExec => filter.condition
     })
-    assert(scan.advisoryFilters.forall { advisory =>
-      physicalFilters.exists(_.exists(_.semanticEquals(advisory)))
-    }, s"advisory filters must remain in FilterExec:\n${physicalPlans.mkString("\n")}")
+    assert(scan.inferredFilters.forall { inferred =>
+      physicalFilters.exists(_.exists(_.semanticEquals(inferred)))
+    }, s"inferred filters must remain in FilterExec:\n${physicalPlans.mkString("\n")}")
   }
 
-  private def checkAdvisoryEvaluatedForScan(scanFactory: StructType => Scan): Unit = {
+  private def checkInferredEvaluatedForScan(scanFactory: StructType => Scan): Unit = {
     val schema = StructType(Seq(
       StructField("id", LongType, nullable = false),
       StructField("value", LongType, nullable = false)))
-    val advisoryFilter =
+    val inferredFilter =
       GreaterThanOrEqual(AttributeReference("value", LongType)(), Literal(0L))
     val relation = DataSourceV2Relation.create(
-      new InMemoryCatalystFilterTable(schema, advisoryFilter, Some(scanFactory)),
+      new InMemoryCatalystFilterTable(schema, inferredFilter, Some(scanFactory)),
       None,
       None,
       CaseInsensitiveStringMap.empty)
     val id = relation.output.find(_.name == "id").get
     val pushedPlan = V2ScanRelationPushDown(Filter(EqualTo(id, Literal(1L)), relation))
 
-    assertAdvisoryFilter(pushedPlan)
+    assertInferredFilter(pushedPlan)
   }
 
   private def emptyBatch: Batch = new Batch {
@@ -1491,7 +1492,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
   private class InMemoryCatalystFilterTable(
       tableSchema: StructType,
-      advisoryFilter: Expression,
+      inferredFilter: Expression,
       scanFactory: Option[StructType => Scan] = None) extends Table with SupportsRead {
 
     override def name(): String = "in-memory-catalyst-filter-table"
@@ -1502,12 +1503,12 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       EnumSet.of(TableCapability.BATCH_READ)
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
-      new InMemoryCatalystFilterScanBuilder(tableSchema, advisoryFilter, scanFactory)
+      new InMemoryCatalystFilterScanBuilder(tableSchema, inferredFilter, scanFactory)
   }
 
   private class InMemoryCatalystFilterScanBuilder(
       tableSchema: StructType,
-      advisoryFilter: Expression,
+      inferredFilter: Expression,
       scanFactory: Option[StructType => Scan])
     extends ScanBuilder with SupportsPushDownCatalystFilters {
 
@@ -1523,12 +1524,12 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
     override def pushedFilters: Array[Predicate] = Array.empty
 
-    override def advisoryFilters: Seq[Expression] = Seq(advisoryFilter)
+    override def inferredFilters: Seq[Expression] = Seq(inferredFilter)
   }
 
   private class PruningCatalystFilterTable(
       tableSchema: StructType,
-      advisoryFilter: Expression) extends Table with SupportsRead {
+      inferredFilter: Expression) extends Table with SupportsRead {
 
     var builder: PruningCatalystFilterScanBuilder = _
 
@@ -1540,14 +1541,14 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       EnumSet.of(TableCapability.BATCH_READ)
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      builder = new PruningCatalystFilterScanBuilder(tableSchema, advisoryFilter)
+      builder = new PruningCatalystFilterScanBuilder(tableSchema, inferredFilter)
       builder
     }
   }
 
   private class PruningCatalystFilterScanBuilder(
       tableSchema: StructType,
-      advisoryFilter: Expression)
+      inferredFilter: Expression)
     extends ScanBuilder
     with SupportsPushDownCatalystFilters
     with SupportsPushDownRequiredColumns {
@@ -1562,7 +1563,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
     override def pushedFilters: Array[Predicate] = Array.empty
 
-    override def advisoryFilters: Seq[Expression] = Seq(advisoryFilter)
+    override def inferredFilters: Seq[Expression] = Seq(inferredFilter)
 
     override def pruneColumns(schema: StructType): Unit = {
       requiredSchema = schema
@@ -1571,7 +1572,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
   private class PushdownTable(
       tableSchema: StructType,
-      advisoryFilter: Expression) extends Table with SupportsRead {
+      inferredFilter: Expression) extends Table with SupportsRead {
 
     var builder: PushdownScanBuilder = _
 
@@ -1583,14 +1584,14 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       EnumSet.of(TableCapability.BATCH_READ)
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      builder = new PushdownScanBuilder(tableSchema, advisoryFilter)
+      builder = new PushdownScanBuilder(tableSchema, inferredFilter)
       builder
     }
   }
 
   private class PushdownScanBuilder(
       tableSchema: StructType,
-      advisoryFilter: Expression)
+      inferredFilter: Expression)
     extends ScanBuilder
     with SupportsPushDownCatalystFilters
     with SupportsPushDownAggregates
@@ -1616,7 +1617,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
     override def pushedFilters: Array[Predicate] = Array.empty
 
-    override def advisoryFilters: Seq[Expression] = Seq(advisoryFilter)
+    override def inferredFilters: Seq[Expression] = Seq(inferredFilter)
 
     override def supportCompletePushDown(aggregation: Aggregation): Boolean = true
 
@@ -1665,7 +1666,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
   private class VariantPushdownTable(
       tableSchema: StructType,
-      advisoryFilter: Expression) extends Table with SupportsRead {
+      inferredFilter: Expression) extends Table with SupportsRead {
 
     var builder: VariantPushdownScanBuilder = _
 
@@ -1677,14 +1678,14 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       EnumSet.of(TableCapability.BATCH_READ)
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      builder = new VariantPushdownScanBuilder(tableSchema, advisoryFilter)
+      builder = new VariantPushdownScanBuilder(tableSchema, inferredFilter)
       builder
     }
   }
 
   private class VariantPushdownScanBuilder(
       tableSchema: StructType,
-      advisoryFilter: Expression)
+      inferredFilter: Expression)
     extends ScanBuilder
     with SupportsPushDownCatalystFilters
     with SupportsPushDownVariantExtractions {
@@ -1702,7 +1703,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
     override def pushedFilters: Array[Predicate] = Array.empty
 
-    override def advisoryFilters: Seq[Expression] = Seq(advisoryFilter)
+    override def inferredFilters: Seq[Expression] = Seq(inferredFilter)
 
     override def pushVariantExtractions(extractions: Array[VariantExtraction]): Array[Boolean] = {
       variantPushed = true

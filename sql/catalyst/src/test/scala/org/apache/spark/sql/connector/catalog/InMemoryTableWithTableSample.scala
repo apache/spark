@@ -373,12 +373,12 @@ class InMemoryTableWithLegacyTableSample(
 }
 
 /**
- * Sample table plus Catalyst advisory filters. V1 `SupportsPushDownFilters` cannot
+ * Sample table plus inferred Catalyst filters. V1 `SupportsPushDownFilters` cannot
  * mix with `SupportsPushDownCatalystFilters` (`pushedFilters` return types clash),
- * so this wraps the sample builder. The advisory SQL is specified by the `advisory-filter`
- * property.
+ * so this wraps the sample builder. The inferred filter SQL is specified by the
+ * `inferred-filter` property.
  */
-class InMemoryTableWithTableSampleAndAdvisoryFilters(
+class InMemoryTableWithTableSampleAndInferredFilters(
     name: String,
     columns: Array[Column],
     partitioning: Array[Transform],
@@ -386,10 +386,10 @@ class InMemoryTableWithTableSampleAndAdvisoryFilters(
   extends InMemoryTableWithTableSample(name, columns, partitioning, properties) {
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    new SampleAndAdvisoryScanBuilder(new InMemoryTableSampleScanBuilder(schema, options), schema)
+    new SampleAndInferredScanBuilder(new InMemoryTableSampleScanBuilder(schema, options), schema)
   }
 
-  private class SampleAndAdvisoryScanBuilder(
+  private class SampleAndInferredScanBuilder(
       inner: InMemoryTableSampleScanBuilder,
       tableSchema: StructType)
     extends ScanBuilder
@@ -415,20 +415,20 @@ class InMemoryTableWithTableSampleAndAdvisoryFilters(
 
     override def pushedFilters: Array[Predicate] = Array.empty
 
-    override def advisoryFilters: Seq[Expression] =
-      InMemoryTableWithTableSampleAndAdvisoryFilters.parseAdvisory(properties, tableSchema)
+    override def inferredFilters: Seq[Expression] =
+      InMemoryTableWithTableSampleAndInferredFilters.parseInferred(properties, tableSchema)
 
     override def build(): Scan = inner.build
   }
 }
 
-object InMemoryTableWithTableSampleAndAdvisoryFilters {
-  val ADVISORY_FILTER_PROP: String = "advisory-filter"
+object InMemoryTableWithTableSampleAndInferredFilters {
+  val INFERRED_FILTER_PROP: String = "inferred-filter"
 
-  def parseAdvisory(
+  def parseInferred(
       properties: util.Map[String, String],
       tableSchema: StructType): Seq[Expression] = {
-    Option(properties.get(ADVISORY_FILTER_PROP)).filter(_.nonEmpty).map { sql =>
+    Option(properties.get(INFERRED_FILTER_PROP)).filter(_.nonEmpty).map { sql =>
       CatalystSqlParser.parseExpression(sql).transformUp {
         case u: UnresolvedAttribute =>
           val field = tableSchema(u.name)

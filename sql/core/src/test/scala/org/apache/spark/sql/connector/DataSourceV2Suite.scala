@@ -1669,73 +1669,73 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       "non-deterministic filter should be retained as a post-scan Filter")
   }
 
-  test("advisory filters remain in logical Filter and FilterExec") {
-    // Rows satisfy j = -i, so i > 2 implies the advisory predicate j < -2.
+  test("inferred filters remain in logical Filter and FilterExec") {
+    // Rows satisfy j = -i, so i > 2 implies the inferred predicate j < -2.
     val query = spark.read
       .format(classOf[CatalystFilterDataSourceV2].getName)
-      .option(CatalystFilterScanBuilder.ADVISORY_DERIVATION,
+      .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
         CatalystFilterScanBuilder.NEGATE_I_TO_J)
       .load()
       .filter($"i" > 2)
 
     checkAnswer(query, (3 until 10).map(i => Row(i, -i)))
-    val advisoryFilter = "j < -2"
+    val inferredFilter = "j < -2"
     val filters = query.queryExecution.optimizedPlan.collect {
       case filter: LogicalFilter => filter.condition
     }
-    assert(filters.exists(containsFilter(_, advisoryFilter)),
-      s"advisory filter $advisoryFilter should remain in the logical Filter:\n" +
+    assert(filters.exists(containsFilter(_, inferredFilter)),
+      s"inferred filter $inferredFilter should remain in the logical Filter:\n" +
         query.queryExecution.optimizedPlan)
-    assert(getScanRelation(query).advisoryFilters.exists(containsFilter(_, advisoryFilter)),
-      "advisory filter should be recorded on the scan relation")
+    assert(getScanRelation(query).inferredFilters.exists(containsFilter(_, inferredFilter)),
+      "inferred filter should be recorded on the scan relation")
     val execFilters = query.queryExecution.executedPlan.collect {
       case filter: FilterExec => filter.condition
     }
-    assert(execFilters.exists(containsFilter(_, advisoryFilter)),
-      s"advisory filter $advisoryFilter should remain in FilterExec:\n" +
+    assert(execFilters.exists(containsFilter(_, inferredFilter)),
+      s"inferred filter $inferredFilter should remain in FilterExec:\n" +
         query.queryExecution.executedPlan)
   }
 
-  test("advisory filters remain below a non-deterministic residual") {
+  test("inferred filters remain below a non-deterministic residual") {
     val query = spark.read
       .format(classOf[CatalystFilterDataSourceV2].getName)
-      .option(CatalystFilterScanBuilder.ADVISORY_DERIVATION,
+      .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
         CatalystFilterScanBuilder.NEGATE_I_TO_J)
       .load()
       .filter($"i" > 2 && rand(0) > 0.5)
 
-    val advisoryFilter = "j < -2"
-    assert(getScanRelation(query).advisoryFilters.exists(containsFilter(_, advisoryFilter)),
-      "advisory filter should be recorded on the scan relation")
+    val inferredFilter = "j < -2"
+    assert(getScanRelation(query).inferredFilters.exists(containsFilter(_, inferredFilter)),
+      "inferred filter should be recorded on the scan relation")
     val execFilters = query.queryExecution.executedPlan.collect {
       case filter: FilterExec => filter.condition
     }
     assert(execFilters.exists(_.exists(!_.deterministic)),
       s"expected a non-deterministic residual FilterExec:\n${query.queryExecution.executedPlan}")
-    assert(execFilters.exists(containsFilter(_, advisoryFilter)),
-      s"advisory filter $advisoryFilter should remain in FilterExec:\n" +
+    assert(execFilters.exists(containsFilter(_, inferredFilter)),
+      s"inferred filter $inferredFilter should remain in FilterExec:\n" +
         query.queryExecution.executedPlan)
     val logicalFilters = query.queryExecution.optimizedPlan.collect {
       case filter: LogicalFilter => filter.condition
     }
-    assert(logicalFilters.exists(containsFilter(_, advisoryFilter)),
-      s"advisory filter $advisoryFilter should remain in the logical Filter:\n" +
+    assert(logicalFilters.exists(containsFilter(_, inferredFilter)),
+      s"inferred filter $inferredFilter should remain in the logical Filter:\n" +
         query.queryExecution.optimizedPlan)
   }
 
-  test("compound advisory filters remain in logical Filter and FilterExec") {
+  test("compound inferred filters remain in logical Filter and FilterExec") {
     // i > 2 AND i < 8 implies j < -2 AND j > -8.
     val query = spark.read
       .format(classOf[CatalystFilterDataSourceV2].getName)
-      .option(CatalystFilterScanBuilder.ADVISORY_DERIVATION,
+      .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
         CatalystFilterScanBuilder.NEGATE_I_TO_J)
       .load()
       .filter($"i" > 2 && $"i" < 8)
 
     checkAnswer(query, (3 until 8).map(i => Row(i, -i)))
-    val advisoryFilters = getScanRelation(query).advisoryFilters
-    assert(advisoryFilters.length == 2,
-      s"compound advisory filter should be stored as conjuncts: $advisoryFilters")
+    val inferredFilters = getScanRelation(query).inferredFilters
+    assert(inferredFilters.length == 2,
+      s"compound inferred filter should be stored as conjuncts: $inferredFilters")
     val execFilters = query.queryExecution.executedPlan.collect {
       case filter: FilterExec => filter.condition
     }
@@ -1748,11 +1748,11 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     assert(logicalFilters.exists(containsFilter(_, "j > -8")))
   }
 
-  test("advisory filters do not block join pushdown") {
+  test("inferred filters do not block join pushdown") {
     val format = classOf[CatalystFilterJoinDataSourceV2].getName
     def load(): DataFrame =
       spark.read.format(format)
-        .option(CatalystFilterScanBuilder.ADVISORY_DERIVATION,
+        .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
           CatalystFilterScanBuilder.NEGATE_I_TO_J)
         .load()
         .filter($"i" >= 0)
@@ -1761,22 +1761,22 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       val joins = df.queryExecution.optimizedPlan.collect { case j: Join => j }
       assert(joins.isEmpty,
         s"join should be pushed:\n${df.queryExecution.optimizedPlan}")
-      assert(getScanRelation(df).advisoryFilters.isEmpty,
-        s"advisory filters must not survive join pushdown:\n" +
+      assert(getScanRelation(df).inferredFilters.isEmpty,
+        s"inferred filters must not survive join pushdown:\n" +
           df.queryExecution.optimizedPlan)
       val filters = df.queryExecution.optimizedPlan.collect {
         case filter: LogicalFilter => filter.condition
       }
       assert(!filters.exists(containsFilter(_, "j <= 0")),
-        s"advisory filter j <= 0 should not remain after join pushdown:\n" +
+        s"inferred filter j <= 0 should not remain after join pushdown:\n" +
           df.queryExecution.optimizedPlan)
     }
   }
 
-  test("advisory filters do not block limit pushdown") {
+  test("inferred filters do not block limit pushdown") {
     val df = spark.read
       .format(classOf[CatalystFilterLimitDataSourceV2].getName)
-      .option(CatalystFilterScanBuilder.ADVISORY_DERIVATION,
+      .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
         CatalystFilterScanBuilder.NEGATE_I_TO_J)
       .load()
       .filter($"i" > 2)
@@ -1787,70 +1787,70 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
     assert(limits.isEmpty, s"limit should be pushed:\n${df.queryExecution.optimizedPlan}")
     checkAnswer(df, (3 until 8).map(i => Row(i, -i)))
-    val advisoryFilter = "j < -2"
+    val inferredFilter = "j < -2"
     val filters = df.queryExecution.optimizedPlan.collect {
       case filter: LogicalFilter => filter.condition
     }
-    assert(filters.exists(containsFilter(_, advisoryFilter)),
-      s"advisory filter $advisoryFilter should remain in the logical Filter:\n" +
+    assert(filters.exists(containsFilter(_, inferredFilter)),
+      s"inferred filter $inferredFilter should remain in the logical Filter:\n" +
         df.queryExecution.optimizedPlan)
-    assert(getScanRelation(df).advisoryFilters.exists(containsFilter(_, advisoryFilter)),
-      "advisory filter should be recorded on the scan relation")
+    assert(getScanRelation(df).inferredFilters.exists(containsFilter(_, inferredFilter)),
+      "inferred filter should be recorded on the scan relation")
     val execFilters = df.queryExecution.executedPlan.collect {
       case filter: FilterExec => filter.condition
     }
-    assert(execFilters.exists(containsFilter(_, advisoryFilter)),
-      s"advisory filter $advisoryFilter should remain in FilterExec:\n" +
+    assert(execFilters.exists(containsFilter(_, inferredFilter)),
+      s"inferred filter $inferredFilter should remain in FilterExec:\n" +
         df.queryExecution.executedPlan)
   }
 
-  test("advisory filters are ignored when the Catalyst pushFilters callback did not run") {
+  test("inferred filters are ignored when the Catalyst pushFilters callback did not run") {
     // The builder mixes SupportsPushDownV2Filters and SupportsPushDownCatalystFilters.
     // PushDownUtils prefers the V2 path, so the Catalyst pushFilters callback never runs and its
-    // advisory filters must not be collected, even though the source reports a non-empty advisory.
+    // Inferred filters must not be collected, even though the source reports a non-empty one.
     val df = spark.read
       .format(classOf[CatalystAndV2FilterDataSourceV2].getName)
-      .option(CatalystFilterScanBuilder.ADVISORY_DERIVATION,
+      .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
         CatalystFilterScanBuilder.CONSTANT_J_LT_100)
       .load()
       .filter($"i" > 2)
-    assert(getScanRelation(df).advisoryFilters.isEmpty,
-      s"advisory filters must be ignored when the Catalyst callback did not run:\n" +
+    assert(getScanRelation(df).inferredFilters.isEmpty,
+      s"inferred filters must be ignored when the Catalyst callback did not run:\n" +
         df.queryExecution.optimizedPlan)
   }
 
-  test("advisory filters are ignored when there is no eligible Catalyst filter") {
+  test("inferred filters are ignored when there is no eligible Catalyst filter") {
     // A subquery-only filter leaves no eligible (non-subquery) Catalyst filter to push, so even a
-    // pure Catalyst source's advisory filters (j < 100) must not be collected. The subquery reads
+    // pure Catalyst source's inferred filters (j < 100) must not be collected. The subquery reads
     // the same source so it is not constant-folded away before pushdown, and constraint propagation
     // is disabled so no isnotnull predicate is inferred alongside the subquery.
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
-      withTempView("catalyst_advisory_src") {
+      withTempView("catalyst_inferred_src") {
         val df = spark.read
           .format(classOf[CatalystFilterDataSourceV2].getName)
-          .option(CatalystFilterScanBuilder.ADVISORY_DERIVATION,
+          .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
             CatalystFilterScanBuilder.CONSTANT_J_LT_100)
           .load()
-        df.createOrReplaceTempView("catalyst_advisory_src")
+        df.createOrReplaceTempView("catalyst_inferred_src")
         val query = sql(
-          "SELECT * FROM catalyst_advisory_src " +
-            "WHERE i > (SELECT max(i) FROM catalyst_advisory_src)")
-        assert(getScanRelation(query).advisoryFilters.isEmpty,
-          s"advisory filters must be ignored for a subquery-only filter:\n" +
+          "SELECT * FROM catalyst_inferred_src " +
+            "WHERE i > (SELECT max(i) FROM catalyst_inferred_src)")
+        assert(getScanRelation(query).inferredFilters.isEmpty,
+          s"inferred filters must be ignored for a subquery-only filter:\n" +
             query.queryExecution.optimizedPlan)
       }
     }
   }
 
-  test("advisory filters are ignored for a non-deterministic-only Catalyst filter") {
+  test("inferred filters are ignored for a non-deterministic-only Catalyst filter") {
     val query = spark.read
       .format(classOf[CatalystFilterDataSourceV2].getName)
-      .option(CatalystFilterScanBuilder.ADVISORY_DERIVATION,
+      .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
         CatalystFilterScanBuilder.CONSTANT_J_LT_100)
       .load()
       .filter(rand(0) > 0.5)
-    assert(getScanRelation(query).advisoryFilters.isEmpty,
-      s"advisory filters must be ignored for a non-deterministic-only filter:\n" +
+    assert(getScanRelation(query).inferredFilters.isEmpty,
+      s"inferred filters must be ignored for a non-deterministic-only filter:\n" +
         query.queryExecution.optimizedPlan)
   }
 
@@ -2122,7 +2122,7 @@ class CatalystAndV2FilterDataSourceV2 extends TestingV2Source {
 }
 
 // Implements both the Catalyst and V2 filter traits. `PushDownUtils.pushFilters` prefers the V2
-// path, so the Catalyst `pushFilters` callback never runs and the advisory filters it would report
+// path, so the Catalyst `pushFilters` callback never runs and the inferred filters it would report
 // must be ignored.
 class CatalystAndV2FilterScanBuilder(options: CaseInsensitiveStringMap)
   extends CatalystFilterScanBuilder(options) with SupportsPushDownV2Filters {
@@ -2209,7 +2209,7 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
   with SupportsPushDownCatalystFilters {
 
   private var pushedCatalystFilters = Seq.empty[CatalystExpression]
-  private val deriveAdvisory = CatalystFilterScanBuilder.derivation(options)
+  private val deriveInferred = CatalystFilterScanBuilder.derivation(options)
 
   override def pushFilters(filters: Seq[CatalystExpression]): Seq[CatalystExpression] = {
     if (filters.exists(!_.deterministic)) {
@@ -2220,13 +2220,14 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
     Nil
   }
 
-  override def advisoryFilters: Seq[CatalystExpression] = deriveAdvisory(pushedCatalystFilters)
+  override def inferredFilters: Seq[CatalystExpression] = deriveInferred(pushedCatalystFilters)
 
   override def pushedFilters: Array[Predicate] = Array.empty
 
   override def planInputPartitions(): Array[InputPartition] = {
-    // This test source uses advisories for pruning; Spark still evaluates them after the scan.
-    val enforcedFilters = pushedCatalystFilters ++ advisoryFilters
+    // This test source enforces inferred filters while pruning; Spark currently also evaluates
+    // them after the scan.
+    val enforcedFilters = pushedCatalystFilters ++ inferredFilters
     enforcedFilters.reduceLeftOption(CatalystAnd) match {
       case Some(filter) =>
         val attrs = DataTypeUtils.toAttributes(readSchema())
@@ -2251,18 +2252,19 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
 }
 
 object CatalystFilterScanBuilder {
-  val ADVISORY_DERIVATION: String = "advisoryDerivation"
+  val INFERRED_DERIVATION: String = "inferredDerivation"
   val NEGATE_I_TO_J: String = "negate-i-to-j"
   val CONSTANT_J_LT_100: String = "constant-j-lt-100"
 
-  // Always reports the same advisory (j < 100), regardless of the pushed filters. Rows are
-  // (i, j) with j = -i in [0, 9], so it drops nothing. Used to prove that advisory collection is
-  // gated on the Catalyst pushFilters dispatch and eligibility, not on the reported advisory.
+  // Always reports the same inferred filter (j < 100), regardless of the pushed filters. Rows are
+  // (i, j) with j = -i in [0, 9], so it drops nothing. Used to prove that inferred-filter
+  // collection is gated on the Catalyst pushFilters dispatch and eligibility, not on the
+  // reported inferred filter.
   val constantJLt100: Seq[CatalystExpression] => Seq[CatalystExpression] = { _ =>
     Seq(CatalystLessThan(AttributeReference("j", IntegerType)(), CatalystLiteral(100)))
   }
 
-  // Common derivation used by advisory-filter tests. Rows are (i, j) with j = -i, so a
+  // Common derivation used by inferred-filter tests. Rows are (i, j) with j = -i, so a
   // pushed predicate on i implies the corresponding predicate on j after negating both sides.
   val negateIToJ: Seq[CatalystExpression] => Seq[CatalystExpression] = { filters =>
     val jAttr = AttributeReference("j", IntegerType)()
@@ -2293,7 +2295,7 @@ object CatalystFilterScanBuilder {
 
   private[connector] def derivation(
       options: CaseInsensitiveStringMap): Seq[CatalystExpression] => Seq[CatalystExpression] = {
-    Option(options.get(ADVISORY_DERIVATION)).flatMap(derivations.get).getOrElse(_ => Nil)
+    Option(options.get(INFERRED_DERIVATION)).flatMap(derivations.get).getOrElse(_ => Nil)
   }
 }
 

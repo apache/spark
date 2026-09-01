@@ -170,10 +170,10 @@ case class DataSourceV2Relation(
  *                      complete set is what lets `PlanMerger` soundly compare and re-enforce a
  *                      scan's filters when fusing two scans via a Spark-side scan merge
  *                      (`TableCapability.SCAN_MERGING`).
- * @param advisoryFilters Catalyst expressions the data source inferred from pushed query filters.
- *                        Spark adds matching logical Filters for optimizer use. They are not kept
- *                        when a join, aggregate, or variant extraction is pushed, and do not
- *                        duplicate `pushedFilters`.
+ * @param inferredFilters Source-guaranteed Catalyst expressions inferred from pushed query
+ *                        filters. Spark adds matching logical Filters for optimizer statistics.
+ *                        They are not kept when a join, aggregate, or variant extraction is
+ *                        pushed, and do not duplicate `pushedFilters`.
  * @param mergeableScan whether this scan may be fused with an equivalent scan by a Spark-side scan
  *                      merge (see `TableCapability.SCAN_MERGING`).
  *                      Default false (not mergeable): only the plain column-pruning + filter
@@ -191,7 +191,7 @@ case class DataSourceV2ScanRelation(
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     ordering: Option[Seq[SortOrder]] = None,
     pushedFilters: Seq[Expression] = Seq.empty,
-    advisoryFilters: Seq[Expression] = Seq.empty,
+    inferredFilters: Seq[Expression] = Seq.empty,
     mergeableScan: Boolean = false) extends LeafNode with NamedRelation {
 
   // TODO: Override validConstraints to return ExpressionSet(pushedFilters) so that pushed
@@ -303,9 +303,9 @@ case class DataSourceV2ScanRelation(
       ),
       // pushedFilters may reference columns pruned out of `output` (see the field doc), so they are
       // normalized against the relation's full output rather than `output`. The same holds for
-      // advisoryFilters.
+      // inferredFilters.
       pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, relation.output)),
-      advisoryFilters = advisoryFilters.map(QueryPlan.normalizeExpressions(_, relation.output))
+      inferredFilters = inferredFilters.map(QueryPlan.normalizeExpressions(_, relation.output))
     )
   }
 }
