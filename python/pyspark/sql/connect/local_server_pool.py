@@ -38,6 +38,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from pyspark.errors import PySparkValueError
 from pyspark.sql.connect.local_server import (
     Discovery,
+    ServerLauncher,
     _is_local_connect_server,
     _pid_alive,
     _port_open,
@@ -547,9 +548,10 @@ class PoolDirectory:
 class ServerPool:
     """Claims, reaps, and retires members of one pool directory."""
 
-    # A pending marker older than this belongs to a launch that hung. Keep this above the local
-    # server startup timeout so a slow but healthy launch is never stopped by the janitor.
-    _LAUNCH_TIMEOUT_SECONDS = 180
+    # A pending marker older than this belongs to a launch that hung. A launch can spend the
+    # maximum in both the script and readiness phases; leave another minute for setup and
+    # scheduling so a slow but healthy launch is never stopped by the janitor.
+    _LAUNCH_TIMEOUT_SECONDS = ServerLauncher._MAX_STARTUP_SECONDS + 60
     # A retired server still alive after the grace period is hard-killed. With a process handle,
     # tracking is removed only once it is gone, replaced, or successfully signalled. PID-less
     # malformed state uses the give-up age as its bounded recovery window.
@@ -684,13 +686,40 @@ class ServerPool:
         )
 
     @staticmethod
-    def _signal_attendant_group(pid: int, sig: int) -> bool:
-        """Signal a detached attendant and the launch subprocesses in its process group."""
+    def _attendant_group_alive(pgid: int) -> bool:
+        """Whether a recorded attendant process group still has any members."""
+        if pgid <= 0 or pgid == os.getpgrp():
+            return False
+        try:
+            os.killpg(pgid, 0)
+            return True
+        except (ProcessLookupError, OverflowError):
+            return False
+        except OSError:
+            # As with _pid_alive, an existing group we cannot signal still counts as alive.
+            return True
+
+    @staticmethod
+    def _signal_attendant_group(pid: int, sig: int, *, leader_may_be_dead: bool = False) -> bool:
+        """Signal a detached attendant and the launch subprocesses in its process group.
+
+        A process group survives its leader while any child remains, and its id cannot be
+        recycled during that time. When the recorded leader is already gone, signal the still
+        owned group id directly; ``killpg`` then fails harmlessly if the group is empty.
+        """
         if pid <= 0 or pid == os.getpgrp():
             return False
         try:
-            if os.getpgid(pid) != pid:
-                return False
+            try:
+                if os.getpgid(pid) != pid:
+                    return False
+                if leader_may_be_dead and _pid_alive(pid):
+                    # The caller observed a dead leader, but this pid now belongs to a live
+                    # process. It was reused between checks, so do not signal its group.
+                    return False
+            except ProcessLookupError:
+                if not leader_may_be_dead:
+                    return False
             os.killpg(pid, sig)
             return True
         except (OSError, OverflowError):
@@ -806,6 +835,14 @@ class ServerPool:
         attendant_pid = parsed_pid if parsed_pid is not None else -1
         attendant_alive = _pid_alive(attendant_pid)
         if not attendant_alive:
+            if pending is not None and not self._signal_attendant_group(
+                attendant_pid, signal.SIGKILL, leader_may_be_dead=True
+            ):
+                # Keep the only launch-group handle when signalling failed but descendants
+                # remain. If the pid was reused by a live process, withdraw the stale record
+                # without signalling it.
+                if not _pid_alive(attendant_pid) and self._attendant_group_alive(attendant_pid):
+                    return
             self.abort_launch(uid)
         elif age > self._LAUNCH_TIMEOUT_SECONDS:
             is_attendant = self._is_pool_attendant(attendant_pid, uid)
@@ -813,8 +850,8 @@ class ServerPool:
                 return
             if is_attendant and not self._signal_attendant_group(attendant_pid, signal.SIGKILL):
                 # Keep the record when an attendant that still appears live could not be
-                # stopped; a later pass can retry without losing its only process handle.
-                if _pid_alive(attendant_pid):
+                # stopped, or when its leader exited during the attempt but children remain.
+                if _pid_alive(attendant_pid) or self._attendant_group_alive(attendant_pid):
                     return
             self.abort_launch(uid)
 
@@ -823,6 +860,14 @@ class ServerPool:
         states = self._directory.states(uid)
         pending_path = states.get("pending")
         server_path = states.get("server")
+        if "retired" in states:
+            # A previous abort can die after retiring the server but before removing the pending
+            # marker. The retired record owns the server's process-generation identity; never
+            # replace it with the weaker attendant record on the recovery pass.
+            if pending_path is not None:
+                self._directory.remove(pending_path)
+            self._directory.remove(self._directory.conf_path(uid))
+            return
         if server_path is not None:
             data = self._directory.read_json(server_path)
             server_pid, process_start_id = self._recover_server_handle(uid, data)

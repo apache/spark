@@ -365,7 +365,10 @@ class ServerLauncher:
     launch path without duplicating its process and readiness handling.
     """
 
+    _SCRIPT_TIMEOUT = 120
     _READY_TIMEOUT = 120
+    # The two phases have independent deadlines and run sequentially.
+    _MAX_STARTUP_SECONDS = _SCRIPT_TIMEOUT + _READY_TIMEOUT
 
     def __init__(
         self,
@@ -501,7 +504,7 @@ class ServerLauncher:
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=self._SCRIPT_TIMEOUT,
         )
         if result.returncode != 0:
             stale_pid = self._discovery.daemon_pid()

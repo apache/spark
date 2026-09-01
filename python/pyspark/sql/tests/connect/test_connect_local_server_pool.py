@@ -18,6 +18,7 @@
 import contextlib
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -30,7 +31,7 @@ from pyspark.testing.connectutils import connect_requirement_message, should_tes
 
 if should_test_connect:
     from pyspark.sql.connect import local_server_pool
-    from pyspark.sql.connect.local_server import _SERVER_CLASS, _pid_alive
+    from pyspark.sql.connect.local_server import _SERVER_CLASS, ServerLauncher, _pid_alive
     from pyspark.sql.connect.local_server_pool import (
         _JVM_ENV_VARS,
         PendingState,
@@ -144,10 +145,14 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self._directory = PoolDirectory()
         self._pool = ServerPool(self._directory)
         self._procs = []
+        self._launch_groups = []
         local_server_pool._claimed_member = None
 
     def tearDown(self) -> None:
         local_server_pool._claimed_member = None
+        for pgid in self._launch_groups:
+            with contextlib.suppress(OSError):
+                os.killpg(pgid, signal.SIGKILL)
         for proc in self._procs:
             try:
                 proc.kill()
@@ -218,6 +223,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             start_new_session=True,
         )
         self._procs.append(proc)
+        self._launch_groups.append(proc.pid)
         assert proc.stdout is not None
         return proc, int(proc.stdout.readline())
 
@@ -949,6 +955,12 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         os.environ["SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT"] = "not-an-integer"
         self.assertEqual(self._pool._idle_timeout(), ServerPool._DEFAULT_IDLE_TIMEOUT_SECONDS)
 
+    def test_launch_timeout_outlasts_valid_server_startup(self) -> None:
+        self.assertGreater(
+            ServerPool._LAUNCH_TIMEOUT_SECONDS,
+            ServerLauncher._MAX_STARTUP_SECONDS,
+        )
+
     def test_reap_pending_of_dead_attendant(self) -> None:
         # The attendant died mid-boot: its pending marker and conf seed are withdrawn, and
         # the half-started server whose pid spark-daemon.sh recorded remains tracked. A daemon
@@ -980,6 +992,22 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         with self._directory:
             self.assertTrue(self._pool.reap("b007"))
 
+    def test_reap_dead_attendant_kills_its_surviving_launch_group(self) -> None:
+        attendant, launch_child_pid = self._attendant_with_launch_child("fade")
+        self._write_state(
+            self._directory.pending_path("fade"),
+            {"attendant_pid": attendant.pid, "created": time.time(), "fingerprint": "fp"},
+        )
+        self._write_state(self._directory.conf_path("fade"), {"spark.foo": "bar"})
+        attendant.kill()
+        self.assertTrue(_wait_proc_dead(attendant))
+        self.assertTrue(_pid_alive(launch_child_pid))
+
+        with self._directory:
+            self.assertTrue(self._pool.reap("fade"))
+
+        self.assertTrue(_wait_pid_dead(launch_child_pid))
+
     def test_reap_malformed_pending(self) -> None:
         attendant = self._attendant("bad3")
         self._write_state(
@@ -999,7 +1027,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             self._directory.pending_path("bad8"),
             {
                 "attendant_pid": unrelated.pid,
-                "created": time.time() - 181,
+                "created": time.time() - ServerPool._LAUNCH_TIMEOUT_SECONDS - 1,
                 "fingerprint": "fp",
             },
         )
@@ -1021,7 +1049,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             self._directory.pending_path("bad0"),
             {
                 "attendant_pid": attendant.pid,
-                "created": time.time() - 181,
+                "created": time.time() - ServerPool._LAUNCH_TIMEOUT_SECONDS - 1,
                 "fingerprint": "fp",
             },
         )
@@ -1054,6 +1082,32 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertEqual(set(self._states("bad7")), {"member", "retired"})
         self.assertIsNone(server.poll())
 
+    def test_reap_preserves_retirement_after_interrupted_pending_cleanup(self) -> None:
+        server = self._stubborn_process()
+        uid = "cafe"
+        server_data = self._server_data(12345, server.pid)
+        server_path = self._write_state(self._directory.server_path(uid), server_data)
+        self._write_state(
+            self._directory.pending_path(uid),
+            {"attendant_pid": 2**31 - 1, "created": time.time(), "fingerprint": "fp"},
+        )
+        self._write_state(self._directory.conf_path(uid), {"spark.foo": "bar"})
+
+        with self._directory as directory:
+            # Model a reaper dying after _retire commits but before abort_launch removes pending.
+            self._pool._retire(server_path, server.pid, server_data["process_start_id"])
+            retired_path = self._directory.retired_path(uid)
+            original = directory.read_json(retired_path)
+        assert original is not None
+
+        with self._directory as directory:
+            self.assertFalse(self._pool.reap(uid))
+            retained = directory.read_json(retired_path)
+
+        self.assertEqual(retained, original)
+        self.assertEqual(set(self._states(uid)), {"retired"})
+        self.assertIsNone(server.poll())
+
     def test_reap_removes_conf_left_after_publication(self) -> None:
         server = self._live_process()
         with _listening_socket() as port:
@@ -1070,7 +1124,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
 
     def test_reap_removes_stale_conf_without_an_attendant(self) -> None:
         conf_path = self._write_state(self._directory.conf_path("c0f2"), {"spark.foo": "bar"})
-        old = time.time() - 181
+        old = time.time() - ServerPool._LAUNCH_TIMEOUT_SECONDS - 1
         os.utime(conf_path, (old, old))
 
         with self._directory:
