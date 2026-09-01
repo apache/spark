@@ -1696,6 +1696,35 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         query.queryExecution.executedPlan)
   }
 
+  test("inferred filters do not retain pruned columns during execution") {
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      val query = spark.read
+        .format(classOf[CatalystFilterDataSourceV2].getName)
+        .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
+          CatalystFilterScanBuilder.NEGATE_I_TO_J)
+        .load()
+        .filter($"i" > 2)
+        .select($"i")
+
+      checkAnswer(query, (3 until 10).map(Row(_)))
+      val scan = getScanRelation(query)
+      assert(scan.output.map(_.name) == Seq("i"),
+        s"the inferred-filter column j should be pruned:\n${query.queryExecution.optimizedPlan}")
+      assert(scan.inferredFilters.isEmpty,
+        s"the inferred filter on j should be dropped:\n${query.queryExecution.optimizedPlan}")
+      assert(!query.queryExecution.optimizedPlan.exists {
+        case filter: LogicalFilter => filter.condition.references.exists(_.name == "j")
+        case _ => false
+      }, s"the logical plan should not filter on pruned column j:\n" +
+        query.queryExecution.optimizedPlan)
+      assert(!query.queryExecution.executedPlan.exists {
+        case filter: FilterExec => filter.condition.references.exists(_.name == "j")
+        case _ => false
+      }, s"the physical plan should not filter on pruned column j:\n" +
+        query.queryExecution.executedPlan)
+    }
+  }
+
   test("inferred filters remain below a non-deterministic residual") {
     val query = spark.read
       .format(classOf[CatalystFilterDataSourceV2].getName)
@@ -1945,7 +1974,7 @@ case class RangeInputPartition(start: Int, end: Int) extends InputPartition
 
 case class ValuesInputPartition(values: Seq[Int]) extends InputPartition
 
-object ValuesReaderFactory extends PartitionReaderFactory {
+class ValuesReaderFactory(requiredSchema: StructType) extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val ValuesInputPartition(values) = partition
     new PartitionReader[InternalRow] {
@@ -1956,14 +1985,22 @@ object ValuesReaderFactory extends PartitionReaderFactory {
         index < values.length
       }
 
-      override def get(): InternalRow = InternalRow(values(index), -values(index))
+      override def get(): InternalRow = {
+        val i = values(index)
+        InternalRow.fromSeq(requiredSchema.map(_.name).map {
+          case "i" => i
+          case "j" => -i
+        })
+      }
 
       override def close(): Unit = {}
     }
   }
 }
 
-object SimpleReaderFactory extends PartitionReaderFactory {
+object ValuesReaderFactory extends ValuesReaderFactory(TestingV2Source.schema)
+
+class SimpleReaderFactory(requiredSchema: StructType) extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val RangeInputPartition(start, end) = partition
     new PartitionReader[InternalRow] {
@@ -1974,12 +2011,17 @@ object SimpleReaderFactory extends PartitionReaderFactory {
         current < end
       }
 
-      override def get(): InternalRow = InternalRow(current, -current)
+      override def get(): InternalRow = InternalRow.fromSeq(requiredSchema.map(_.name).map {
+        case "i" => current
+        case "j" => -current
+      })
 
       override def close(): Unit = {}
     }
   }
 }
+
+object SimpleReaderFactory extends SimpleReaderFactory(TestingV2Source.schema)
 
 abstract class SimpleBatchTable extends Table with SupportsRead  {
 
@@ -2201,15 +2243,26 @@ class CatalystFilterLimitScanBuilder(options: CaseInsensitiveStringMap)
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    if (pushedLimit.isDefined) ValuesReaderFactory else super.createReaderFactory()
+    if (pushedLimit.isDefined) {
+      new ValuesReaderFactory(readSchema())
+    } else {
+      super.createReaderFactory()
+    }
   }
 }
 
 class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends SimpleScanBuilder
-  with SupportsPushDownCatalystFilters {
+  with SupportsPushDownCatalystFilters with SupportsPushDownRequiredColumns {
 
   private var pushedCatalystFilters = Seq.empty[CatalystExpression]
   private val deriveInferred = CatalystFilterScanBuilder.derivation(options)
+  private var requiredSchema = TestingV2Source.schema
+
+  override def readSchema(): StructType = requiredSchema
+
+  override def pruneColumns(schema: StructType): Unit = {
+    requiredSchema = schema
+  }
 
   override def pushFilters(filters: Seq[CatalystExpression]): Seq[CatalystExpression] = {
     if (filters.exists(!_.deterministic)) {
@@ -2230,7 +2283,7 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
     val enforcedFilters = pushedCatalystFilters ++ inferredFilters
     enforcedFilters.reduceLeftOption(CatalystAnd) match {
       case Some(filter) =>
-        val attrs = DataTypeUtils.toAttributes(readSchema())
+        val attrs = DataTypeUtils.toAttributes(TestingV2Source.schema)
         val bound = filter.transformUp {
           case attr: AttributeReference =>
             attrs.find(_.name == attr.name).getOrElse(
@@ -2247,7 +2300,11 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    if (pushedCatalystFilters.nonEmpty) ValuesReaderFactory else SimpleReaderFactory
+    if (pushedCatalystFilters.nonEmpty) {
+      new ValuesReaderFactory(readSchema())
+    } else {
+      new SimpleReaderFactory(readSchema())
+    }
   }
 }
 
