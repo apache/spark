@@ -594,7 +594,7 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     val partitioning = KeyedPartitioning(
       Seq(partAttr),
       Seq(InternalRowComparableWrapper(InternalRow(1), Seq(partAttr))),
-      isGrouped = false)
+      isGrouped = false, isCollapsed = false)
 
     def replanAfterFiltering(afterFilter: Seq[InputPartition]): Unit = {
       val scan = new PartitioningBreakingScan(Seq(KeyedInputPartition(1)), afterFilter)
