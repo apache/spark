@@ -88,15 +88,12 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
     operation.getPairsList.asScala.iterator.foreach { pair =>
       val (key, value) = SparkConnectConfigHandler.toKeyValue(pair)
       try {
-        // Reject a write that would leave the session's Python worker environment invalid, before
-        // it is stored. Inside the try so that a `silent` request reports it as a warning, the way
-        // it reports any other rejected write.
-        //
-        // Check and write under the monitor that guards the session configurations, so that a
-        // concurrent write cannot land in between and leave the environment in a state neither
-        // writer validated. Both sides of the check take it: `getAllConfs` reads under it, and the
-        // writes go through `setConfString`, with `setConf(props)` holding it across a compound
-        // write.
+        // Refuse a write that would leave the session's Python worker environment invalid, before
+        // it is stored. Inside the try so a `silent` request reports it as a warning, like any
+        // other rejected write. Check and write under the monitor that guards the session
+        // configurations, so a concurrent write cannot land in between and leave an environment
+        // neither writer validated: `getAllConfs` reads under it and `setConfString` writes under
+        // it.
         sqlConf.settings.synchronized {
           PythonWorkerEnvironment.validateConfigChange(conf, key, value)
           conf.set(key, value.orNull)
@@ -105,11 +102,9 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
       } catch {
         case e: Throwable =>
           if (silent) {
-            // Report the condition, not the message. A configuration value can be a secret, and
-            // this warning outlives the response: the Scala client logs it and the Python client
-            // raises it. `INVALID_CONF_VALUE` renders as "The value '<confValue>' in the config
-            // ... is invalid", so passing the message through would disclose a rejected value that
-            // is otherwise redacted on every read through this handler.
+            // The condition, not the message: `INVALID_CONF_VALUE` quotes the rejected value,
+            // and this warning outlives the response -- the Scala client logs it and the Python
+            // client raises it -- while every read through this handler is redacted.
             val condition = e match {
               case t: SparkThrowable if t.getCondition != null => t.getCondition
               case _ => e.getClass.getName

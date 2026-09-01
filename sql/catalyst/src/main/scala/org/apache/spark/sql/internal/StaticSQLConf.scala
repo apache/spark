@@ -366,14 +366,12 @@ object StaticSQLConf {
       "Every entry must be a valid regular expression.")
     .createWithDefault(Nil)
 
-  // Bounds on the environment a session may install in the Python workers that run its Python
-  // functions, which it sets through configurations under the reserved `spark.pythonWorkerEnv.`
-  // prefix. These are static so that a session cannot raise its own limits. Their keys are
-  // deliberately not under that prefix: every SparkConf entry is copied into a new session's
-  // SQLConf, so a limit named under the prefix would be read back as an environment variable.
-  // Their binding policy is NOT_APPLICABLE: a static limit cannot differ between the session
-  // that created a view or a UDF and one that calls it, and it never changes what a body
-  // resolves to, only whether a write to the environment is accepted.
+  // Bounds on the environment a session may install in its Python workers through the reserved
+  // `spark.pythonWorkerEnv.` prefix. Static, so a session cannot raise its own limits. Their keys
+  // are deliberately not under that prefix: every SparkConf entry is copied into a new session's
+  // SQLConf, so a limit named under it would be read back as an environment variable. The binding
+  // policy is NOT_APPLICABLE because a static limit cannot differ between the session that created
+  // a view and one that calls it.
   val PYTHON_WORKER_ENV_MAX_VARIABLES =
     buildStaticConf("spark.sql.pythonWorkerEnv.maxVariables")
       .doc(

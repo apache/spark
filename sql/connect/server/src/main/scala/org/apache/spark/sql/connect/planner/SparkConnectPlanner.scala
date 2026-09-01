@@ -87,9 +87,6 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
-/**
- * Translates a Spark Connect request into Catalyst.
- */
 class SparkConnectPlanner(
     val sessionHolder: SessionHolder,
     val executeHolderOpt: Option[ExecuteHolder] = None)
@@ -2234,7 +2231,7 @@ class SparkConnectPlanner(
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
     SimplePythonFunction(
       command = fun.getCommand.toByteArray.toImmutableArraySeq,
-      // The session's Python worker environment is installed when a worker is launched, not here.
+      // Empty environment variables
       envVars = new HashMap[String, String](),
       pythonExec = pythonExec,
       // Merge the user specified includes with the includes managed by the artifact manager.
