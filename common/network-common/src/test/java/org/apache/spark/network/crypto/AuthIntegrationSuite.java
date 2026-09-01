@@ -176,6 +176,19 @@ public class AuthIntegrationSuite {
     assertNotNull(ctx.authRpcHandler.getMergedBlockMetaReqHandler());
   }
 
+  @Test
+  public void validateBlockMetaReqHandlerMatchesReceive() throws Exception {
+    RpcHandler delegate = mock(RpcHandler.class);
+    AuthRpcHandler handler = new AuthRpcHandler(
+      new TransportConf("rpc", MapConfigProvider.EMPTY), mock(Channel.class), delegate,
+      mock(SecretKeyHolder.class));
+    assertFalse(handler.isAuthenticated());
+    assertThrows(SecurityException.class,
+      () -> handler.getMergedBlockMetaReqHandler().receiveMergeBlockMetaReq(
+        mock(TransportClient.class), null, null));
+    verify(delegate, never()).getMergedBlockMetaReqHandler();
+  }
+
   private static class DummyRpcHandler extends RpcHandler {
     @Override
     public void receive(

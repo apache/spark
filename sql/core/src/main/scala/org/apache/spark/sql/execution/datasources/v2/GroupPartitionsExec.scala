@@ -68,21 +68,20 @@ case class GroupPartitionsExec(
     child.outputPartitioning match {
       case p: Partitioning with Expression =>
         // There can be multiple `KeyedPartitioning`s in an output partitioning of a join, but they
-        // can only differ in `expressions`; their `partitionKeys` reference is shared (enforced by
-        // `PartitioningCollection`), so `groupedPartitions` is computed only once.
-        val partitionKeys = groupedPartitions.map(_._1)
+        // can only differ in `expressions`. Their `partitionKeys` reference and `isCollapsed` flag
+        // are shared (enforced by `PartitioningCollection`), so the grouping is computed once.
+        val partitionKeys = grouping.partitions.map(_._1)
         p.transform {
           case k: KeyedPartitioning =>
             val projectedExpressions = joinKeyPositions.fold(k.expressions)(_.map(k.expressions))
-            KeyedPartitioning(projectedExpressions, partitionKeys, isGrouped = isGrouped)
+            KeyedPartitioning(
+              projectedExpressions, partitionKeys, grouping.isGrouped, grouping.isCollapsed)
         }.asInstanceOf[Partitioning]
       case o => o
     }
   }
 
-  /**
-   * Aligns partitions based on `expectedPartitionKeys` and clustering mode.
-   */
+  /** Aligns partitions based on `expectedPartitionKeys` and clustering mode. */
   private def alignToExpectedKeys(keyMap: Map[InternalRowComparableWrapper, Seq[Int]]) = {
     var isGrouped = true
     val alignedPartitions = expectedPartitionKeys.get.flatMap { case (key, numSplits) =>
@@ -119,15 +118,14 @@ case class GroupPartitionsExec(
    * 3. Grouping input partition indices by their (possibly projected/reduced) keys
    * 4. Sorting or distributing based on whether partial clustering is enabled
    *
-   * Returns a tuple of (partitions, isGrouped) where:
-   * - partitions: sequence of (partitionKey, inputPartitionIndices) pairs representing
-   *   how input partitions should be grouped together
-   * - isGrouped: whether the output partitioning is grouped (no duplicates in partition keys)
+   * `isCollapsed` says whether the output stands for more than one of the child's partition keys.
+   * Two things set it: the child's own flag, and a merge this node performs.
    */
-  @transient private lazy val groupedPartitionsTuple = {
-    // There must be a `KeyedPartitioning` in child's output partitioning as a
-    // `GroupPartitionsExec` node is added to a plan only in that case.
-    val keyedPartitioning = child.outputPartitioning
+  @transient private lazy val grouping: PartitionGrouping = {
+    // There must be a `KeyedPartitioning` in the child's output partitioning, as a
+    // `GroupPartitionsExec` node is added to a plan only in that case. Any member will do, see
+    // `outputPartitioning` above.
+    val childKp = child.outputPartitioning
       .asInstanceOf[Partitioning with Expression]
       .collectFirst { case k: KeyedPartitioning => k }
       .getOrElse(
@@ -136,8 +134,8 @@ case class GroupPartitionsExec(
     // Project partition keys if join key positions are specified
     val (projectedDataTypes, projectedKeys) =
       joinKeyPositions.fold(
-        (keyedPartitioning.expressionDataTypes, keyedPartitioning.partitionKeys)
-      )(keyedPartitioning.projectKeys)
+        (childKp.keyDataTypes, childKp.partitionKeys)
+      )(childKp.projectKeys)
 
     // Reduce keys if reducers are specified
     val (reducedDataTypes, reducedKeys) = reducers.fold((projectedDataTypes, projectedKeys))(
@@ -145,17 +143,38 @@ case class GroupPartitionsExec(
 
     val keyToPartitionIndices = reducedKeys.zipWithIndex.groupMap(_._1)(_._2)
 
-    if (expectedPartitionKeys.isDefined) {
+    val (partitions, isGrouped) = if (expectedPartitionKeys.isDefined) {
       alignToExpectedKeys(keyToPartitionIndices)
     } else {
       (groupAndSortByKeys(keyToPartitionIndices, reducedDataTypes), true)
     }
+
+    // Both cheap terms come first, so the scan below runs only where a merge is possible. A
+    // grouping that left the keys as they are groups the child's own key values, and one of those
+    // groups can only ever cover the one key it was built from.
+    val keysChanged =
+      joinKeyPositions.exists(_.length < childKp.expressions.length) || reducers.isDefined
+    val isCollapsed = childKp.isCollapsed || keysChanged && {
+      // The groups this node keeps are the ones that can merge keys of the child, and asking the
+      // child's keys rather than its partitions is what tells such a merge from a source that
+      // reports several splits per key.
+      val keptGroups = expectedPartitionKeys match {
+        case Some(expected) => expected.view.flatMap { case (key, _) =>
+          keyToPartitionIndices.get(key)
+        }
+        case None => keyToPartitionIndices.values.view
+      }
+      val childKeys = childKp.partitionKeys.toArray
+      keptGroups.exists { group =>
+        val first = childKeys(group.head)
+        group.tail.exists(childKeys(_) != first)
+      }
+    }
+    PartitionGrouping(partitions, isGrouped, isCollapsed)
   }
 
   @transient lazy val groupedPartitions: Seq[(InternalRowComparableWrapper, Seq[Int])] =
-    groupedPartitionsTuple._1
-
-  @transient lazy val isGrouped: Boolean = groupedPartitionsTuple._2
+    grouping.partitions
 
   @transient private lazy val hasCoalescing: Boolean = groupedPartitions.exists(_._2.size > 1)
 
@@ -334,6 +353,12 @@ case class GroupPartitionsExec(
 
   }
 }
+
+/** What a [[GroupPartitionsExec]] computes once and reports from several members. */
+private case class PartitionGrouping(
+    partitions: Seq[(InternalRowComparableWrapper, Seq[Int])],
+    isGrouped: Boolean,
+    isCollapsed: Boolean)
 
 /**
  * A PartitionCoalescer that groups partitions according to a pre-computed grouping plan.
