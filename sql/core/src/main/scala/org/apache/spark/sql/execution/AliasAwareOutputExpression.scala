@@ -131,18 +131,10 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
 
     if (projectablePositions.isEmpty) return LazyList.empty
 
-    // All input KPs share the same partitionKeys by invariant; use the first as the key source.
-    val keySource = kps.head
-    val sharedKeys =
-      if (projectablePositions.length == numPositions) keySource.partitionKeys
-      else keySource.projectKeys(projectablePositions)._2
-
-    val isGrouped = sharedKeys.distinct.size == sharedKeys.size
-    // A KP is narrowed if this node drops positions, or if the input KPs were already narrowed
-    // (i.e. came from a finer-grained partitioning). The flag must be sticky: a subsequent
-    // PartitioningPreservingUnaryExecNode that passes all positions through would otherwise
-    // recompute isNarrowed=false, silently dropping the protection.
-    val isNarrowed = projectablePositions.length < numPositions || keySource.isNarrowed
+    // All input KPs share the same partitionKeys and isCollapsed flag by invariant, so the first
+    // one projects the keys and both flags for every combination below. Only the expressions
+    // differ.
+    val projected = kps.head.project(projectablePositions)
 
     // Cross-product the per-position alternatives to produce all concrete KPs.
     // Note: generateCartesianProduct expects thunks () => Seq[T], but wrapping LazyLists in thunks
@@ -151,8 +143,7 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
     // so all cross-product combinations are distinct by construction.
     MultiTransform.generateCartesianProduct(
       projectablePositions.map(i => () => alternativesPerPosition(i)))
-      .map(projectedExprs =>
-        new KeyedPartitioning(projectedExprs, sharedKeys, isGrouped, isNarrowed))
+      .map(projectedExprs => projected.copy(expressions = projectedExprs))
   }
 }
 
