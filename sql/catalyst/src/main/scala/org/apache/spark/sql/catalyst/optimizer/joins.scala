@@ -498,11 +498,13 @@ trait JoinSelectionHelper extends Logging {
       getBroadcastBuildSide(join, hintOnly = true, conf).orElse {
         if (noShufflePlannedBefore) getBroadcastBuildSide(join, hintOnly = false, conf) else None
       }
-    // The null-aware hash join only supports BuildRight. Preserve a generic BuildLeft fallback.
-    case j @ ExtractSingleColumnNullAwareAntiJoin(_, _)
-        if canBroadcastBySize(j.right, conf) &&
-          getBroadcastNestedLoopJoinBuildSide(j, conf) == BuildRight =>
-      Some(BuildRight)
+    case j if ExtractSingleColumnNullAwareAntiJoin.extract(j).isDefined =>
+      if (NullAwareAntiJoinPlanning.decide(j, conf) ==
+          NullAwareAntiJoinPlanning.BroadcastHash) {
+        Some(BuildRight)
+      } else {
+        None
+      }
     case _ => None
   }
 
@@ -624,5 +626,21 @@ trait JoinSelectionHelper extends Logging {
   private def forceApplyShuffledHashJoin(conf: SQLConf): Boolean = {
     Utils.isTesting &&
       conf.getConfString("spark.sql.join.forceApplyShuffledHashJoin", "false") == "true"
+  }
+}
+
+private[sql] object NullAwareAntiJoinPlanning extends JoinSelectionHelper {
+  sealed trait Decision
+  case object BroadcastHash extends Decision
+  case object BroadcastNestedLoop extends Decision
+
+  def decide(join: Join, conf: SQLConf): Decision = {
+    if (conf.optimizeNullAwareAntiJoin &&
+        canBroadcastBySize(join.right, conf) &&
+        getBroadcastNestedLoopJoinBuildSide(join, conf) == BuildRight) {
+      BroadcastHash
+    } else {
+      BroadcastNestedLoop
+    }
   }
 }

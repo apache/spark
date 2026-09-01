@@ -130,6 +130,23 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     }
   }
 
+  test("Aggregate: ordinary semi and anti pushdown does not require broadcast eligibility") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      Seq(LeftSemi, LeftAnti).foreach { joinType =>
+        val originalQuery = testRelation
+          .groupBy($"b")($"b", sum($"c"))
+          .join(testRelation1, joinType = joinType, condition = Some($"b" === $"d"))
+        val optimized = Optimize.execute(originalQuery.analyze)
+        val correctAnswer = testRelation
+          .join(testRelation1, joinType = joinType, condition = Some($"b" === $"d"))
+          .groupBy($"b")($"b", sum($"c"))
+          .analyze
+
+        comparePlans(optimized, correctAnswer)
+      }
+    }
+  }
+
   test("Aggregate: NAAJ no pushdown when the original join would build left") {
     val leftKey = $"leftKey".int
     val leftKeyStats = ColumnStat(
@@ -161,12 +178,16 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     }
   }
 
-  test("Aggregate: LeftSemi join no pushdown - empty join condition") {
+  test("Aggregate: ordinary LeftSemi join pushdown - empty join condition") {
     val originalQuery = testRelation
       .groupBy($"b")($"b", sum($"c"))
       .join(testRelation1, joinType = LeftSemi, condition = None)
+    val correctAnswer = testRelation
+      .join(testRelation1, joinType = LeftSemi, condition = None)
+      .groupBy($"b")($"b", sum($"c"))
+      .analyze
 
-    comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
   }
 
   test("Aggregate: LeftSemi join no pushdown - non-deterministic aggr expressions") {

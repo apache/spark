@@ -197,6 +197,12 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       assert(!canPlanAsBroadcastHashJoin(
         nullAwareAntiJoin.copy(hint = JoinHint(hintBroadcast, None)), SQLConf.get))
     }
+
+    withSQLConf(
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+      assert(!canPlanAsBroadcastHashJoin(nullAwareAntiJoin, SQLConf.get))
+    }
   }
 
   test("canPlanAsBroadcastHashJoin checks the NAAJ right-size short circuit") {

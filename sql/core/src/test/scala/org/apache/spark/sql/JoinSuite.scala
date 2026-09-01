@@ -1309,6 +1309,17 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
+  test("SPARK-36082: disabled NAAJ hash optimization uses nested-loop fallback") {
+    withSQLConf(
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
+      val joinExec = assertJoin((
+        "select * from testData where key not in (select b from testData3)",
+        classOf[BroadcastNestedLoopJoinExec]))
+      assert(joinExec.asInstanceOf[BroadcastNestedLoopJoinExec].buildSide === BuildRight)
+    }
+  }
+
   test("SPARK-36082: keep over-threshold NAAJ nested-loop join when fallback builds right") {
     withSQLConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {

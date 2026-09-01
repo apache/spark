@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJoin
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -60,12 +61,11 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
         }
       }
 
-    // LeftSemi/LeftAnti over Aggregate, only push down if join can be planned as broadcast join.
+    // LeftSemi/LeftAnti over Aggregate
     case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), joinCond, _)
         if agg.aggregateExpressions.forall(_.deterministic) && agg.groupingExpressions.nonEmpty &&
           !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
-          canPushThroughCondition(agg.children, joinCond, rightOp) &&
-          canPlanAsBroadcastHashJoin(join, conf) =>
+          canPushThroughCondition(agg.children, joinCond, rightOp) =>
       val aliasMap = getAliasMap(agg)
       val canPushDownPredicate = (predicate: Expression) => {
         val replaced = replaceAlias(predicate, aliasMap)
@@ -75,11 +75,20 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
       val makeJoinCondition = (predicates: Seq[Expression]) => {
         replaceAlias(predicates.reduce(And), aliasMap)
       }
+      val canPushDownJoin = if (ExtractSingleColumnNullAwareAntiJoin.extract(join).isDefined) {
+        val originalIsBroadcastHash =
+          NullAwareAntiJoinPlanning.decide(join, conf) == NullAwareAntiJoinPlanning.BroadcastHash
+        (pushedJoin: Join) => originalIsBroadcastHash &&
+          NullAwareAntiJoinPlanning.decide(pushedJoin, conf) ==
+            NullAwareAntiJoinPlanning.BroadcastHash
+      } else {
+        (_: Join) => true
+      }
       pushDownJoin(
         join,
         canPushDownPredicate,
         makeJoinCondition,
-        canPlanAsBroadcastHashJoin(_, conf))
+        canPushDownJoin)
 
     // LeftSemi/LeftAnti over Window
     case join @ Join(w: Window, rightOp, LeftSemiOrAnti(_), _, _)
@@ -167,13 +176,13 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
           join
         } else {
           val newPlan = join.left.withNewChildren(Seq(pushedJoin))
-          // If there is no more filter to stay up, return the new plan that has join pushed down.
+          // If no predicates remain above the join, return the plan with the join pushed down.
           if (stayUp.isEmpty) {
             newPlan
           } else {
             join.joinType match {
-              // In case of Left semi join, the part of the join condition which does not refer to
-              // to attributes of the grandchild are kept as a Filter above.
+              // For a left semi join, the non-pushable part of the condition is kept as a Filter
+              // above the join.
               case LeftSemi => Filter(stayUp.reduce(And), newPlan)
               // In case of left-anti join, the join is pushed down only when the entire join
               // condition is eligible to be pushed down to preserve the semantics of left-anti

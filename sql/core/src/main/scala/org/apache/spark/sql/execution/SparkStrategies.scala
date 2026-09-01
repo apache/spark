@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NamedRelation}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.{BuildRight, BuildSide, JoinSelectionHelper, NormalizeFloatingNumbers}
+import org.apache.spark.sql.catalyst.optimizer.{BuildRight, BuildSide, JoinSelectionHelper, NormalizeFloatingNumbers, NullAwareAntiJoinPlanning}
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -340,10 +340,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             .getOrElse(createJoinWithoutHint())
         }
 
-      case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
-          if canPlanAsBroadcastHashJoin(j, conf) =>
-        Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
-          None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
+      case j: logical.Join if ExtractSingleColumnNullAwareAntiJoin.extract(j).isDefined =>
+        val (leftKeys, rightKeys) = ExtractSingleColumnNullAwareAntiJoin.extract(j).get
+        NullAwareAntiJoinPlanning.decide(j, conf) match {
+          case NullAwareAntiJoinPlanning.BroadcastHash =>
+            Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
+              None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
+          case NullAwareAntiJoinPlanning.BroadcastNestedLoop =>
+            checkHintNonEquiJoin(j.hint)
+            val buildSide = getBroadcastNestedLoopJoinBuildSide(j, conf)
+            Seq(joins.BroadcastNestedLoopJoinExec(
+              planLater(j.left), planLater(j.right), buildSide, LeftAnti, j.condition))
+        }
 
       // If it is not an equi-join, we first look at the join hints w.r.t. the following order:
       //   1. broadcast hint: pick broadcast nested loop join. If both sides have the broadcast
