@@ -127,7 +127,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         sHolder.pushedPredicates.mkString(", ")
       }
 
-      // Keep advisory filters off the plan until the other source pushdowns have run. Their
+      // Keep inferred filters off the plan until the other source pushdowns have run. Their
       // interactions with Spark-side filters vary, but they must not block an otherwise
       // independent pushdown.
       val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
@@ -141,14 +141,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         .filterNot(postScanFilterSet.contains)
         .filter(_.deterministic)
       val fullyPushedFilterSet = ExpressionSet(sHolder.pushedFilterExpressions)
-      // Collect advisories only after an eligible Catalyst callback; V1/V2 interfaces take
+      // Collect inferred filters only after an eligible Catalyst callback; V1/V2 interfaces take
       // precedence when a builder implements multiple filter APIs.
       val catalystFiltersPushed = normalizedFiltersWithoutSubquery.exists(_.deterministic) &&
         pushedFilters.isRight &&
         sHolder.builder.isInstanceOf[SupportsPushDownCatalystFilters] &&
         !sHolder.builder.isInstanceOf[SupportsPushDownV2Filters]
-      sHolder.advisoryFilterExpressions = if (catalystFiltersPushed) {
-        getAdvisoryFilters(sHolder).filterNot(fullyPushedFilterSet.contains)
+      sHolder.inferredFilterExpressions = if (catalystFiltersPushed) {
+        getInferredFilters(sHolder).filterNot(fullyPushedFilterSet.contains)
       } else {
         Nil
       }
@@ -995,11 +995,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val normalizedProjects = DataSourceStrategy
         .normalizeExprs(project, sHolder.output)
         .asInstanceOf[Seq[NamedExpression]]
-      // Keep advisories below non-deterministic residual filters and include them in column
+      // Keep inferred filters below non-deterministic residual filters and include them in column
       // pruning. This mirrors fully pushed filters when
       // SupportsReportStatistics.reflectsFullyPushedDownFilters returns false: filter estimation
       // and execution retain every referenced column.
-      val allFilters = sHolder.advisoryFilterExpressions ++
+      val allFilters = sHolder.inferredFilterExpressions ++
         filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
       val normalizedFilters = DataSourceStrategy.normalizeExprs(allFilters, sHolder.output)
       val (scan, output) = PushDownUtils.pruneColumns(
@@ -1031,9 +1031,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         }
       }.filter(_.references.subsetOf(AttributeSet(output)))
 
-      // Remap advisory filters to the pruned output. They were included in normalizedFilters, so
+      // Remap inferred filters to the pruned output. They were included in normalizedFilters, so
       // pruning retained their fields and FIELD_NOT_FOUND cannot occur here.
-      val remappedAdvisoryFilters = sHolder.advisoryFilterExpressions.map(projectionFunc)
+      val remappedInferredFilters = sHolder.inferredFilterExpressions.map(projectionFunc)
 
       // Record the fully-pushed filter expressions on the scan relation, keeping their references
       // to the relation's (pre-pruning) output. These include filters on columns that were pruned
@@ -1044,7 +1044,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // merge unsound. See DataSourceV2ScanRelation.pushedFilters.
       val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output,
         pushedFilters = sHolder.pushedFilterExpressions,
-        advisoryFilters = remappedAdvisoryFilters,
+        inferredFilters = remappedInferredFilters,
         // The one site that grants mergeability: a plain scan carrying only reproducible pushdowns
         // (column pruning + deterministic filters) may be fused. See hasBlockingPushdown.
         mergeableScan = !hasBlockingPushdown(sHolder))
@@ -1287,20 +1287,20 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  private def getAdvisoryFilters(sHolder: ScanBuilderHolder): Seq[Expression] = {
+  private def getInferredFilters(sHolder: ScanBuilderHolder): Seq[Expression] = {
     sHolder.builder match {
       case r: SupportsPushDownCatalystFilters =>
-        val advisoryFilters = r.advisoryFilters.filter { filter =>
+        val inferredFilters = r.inferredFilters.filter { filter =>
           filter.deterministic &&
             !SubqueryExpression.hasSubquery(filter) &&
             !filter.containsPattern(EXTERNAL_UDF) &&
             !filter.exists(_.isInstanceOf[UserDefinedExpression])
         }
-        val validFilters = rebindFilters(advisoryFilters, sHolder.output).filter { filter =>
+        val validFilters = rebindFilters(inferredFilters, sHolder.output).filter { filter =>
           val valid = filter.resolved && filter.dataType == BooleanType &&
             filter.checkInputDataTypes().isSuccess
           if (!valid) {
-            logWarning(s"Ignoring invalid advisory filter reported by the data source: $filter")
+            logWarning(s"Ignoring invalid inferred filter reported by the data source: $filter")
           }
           valid
         }.flatMap(splitConjunctivePredicates)
@@ -1330,13 +1330,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         unresolvedAttribute match {
           case Some(name) =>
             logWarning(
-              s"Ignoring advisory filter with an unknown data source column '$name': $filter")
+              s"Ignoring inferred filter with an unknown data source column '$name': $filter")
             None
           case None => Some(rebound)
         }
       } catch {
         case e: AnalysisException =>
-          logWarning(s"Ignoring advisory filter that cannot be resolved: $filter", e)
+          logWarning(s"Ignoring inferred filter that cannot be resolved: $filter", e)
           None
       }
     }
@@ -1374,7 +1374,7 @@ case class ScanBuilderHolder(
 
   var pushedFilterExpressions: Seq[Expression] = Seq.empty
 
-  var advisoryFilterExpressions: Seq[Expression] = Seq.empty
+  var inferredFilterExpressions: Seq[Expression] = Seq.empty
 }
 
 // A wrapper for v1 scan to carry the translated filters and the handled ones, along with

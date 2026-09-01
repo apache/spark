@@ -128,7 +128,7 @@ class InMemoryTableWithLegacyTableSampleCatalog extends InMemoryTableCatalog {
   }
 }
 
-class InMemoryTableWithTableSampleAndAdvisoryCatalog extends InMemoryTableCatalog {
+class InMemoryTableWithTableSampleAndInferredCatalog extends InMemoryTableCatalog {
   import CatalogV2Implicits._
 
   override def createTable(
@@ -143,7 +143,7 @@ class InMemoryTableWithTableSampleAndAdvisoryCatalog extends InMemoryTableCatalo
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
     val tableName = s"$name.${ident.quoted}"
-    val table = new InMemoryTableWithTableSampleAndAdvisoryFilters(
+    val table = new InMemoryTableWithTableSampleAndInferredFilters(
       tableName, columns, partitions, properties)
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
