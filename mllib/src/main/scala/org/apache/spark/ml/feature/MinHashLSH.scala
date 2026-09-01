@@ -235,7 +235,6 @@ object MinHashLSHModel extends MLReadable[MinHashLSHModel] {
     }
   }
 
-
   private[ml] case class Data(randCoefficients: Array[Int])
 
   private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
