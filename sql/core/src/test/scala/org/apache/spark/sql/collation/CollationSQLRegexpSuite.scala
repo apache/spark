@@ -20,6 +20,7 @@ package org.apache.spark.sql.collation
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, StringType}
 
@@ -320,6 +321,32 @@ class CollationSQLRegexpSuite
           stop = 63)
       )
     })
+  }
+
+  test("SPARK-59112: quantified LIKE preserves pattern-side collation") {
+    Seq("LIKE", "ILIKE").foreach { operator =>
+      Seq("ANY", "SOME", "ALL").foreach { quantifier =>
+        val pattern = "'foo%' COLLATE UTF8_LCASE"
+        val predicate =
+          s"'FOO' $operator $quantifier ($pattern)"
+        val expected = sql(s"SELECT 'FOO' $operator ($pattern)").head().getBoolean(0)
+        checkAnswer(sql(s"SELECT $predicate"), Row(expected))
+        checkAnswer(sql(s"SELECT NOT ($predicate)"), Row(!expected))
+
+        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+          Seq("CHAR(4)", "VARCHAR(4)").foreach { dataType =>
+            val charVarcharPattern =
+              s"CAST('foo%' AS $dataType COLLATE UTF8_LCASE)"
+            val charVarcharPredicate =
+              s"'FOO' $operator $quantifier " +
+                s"($charVarcharPattern)"
+            val charVarcharExpected =
+              sql(s"SELECT 'FOO' $operator ($charVarcharPattern)").head().getBoolean(0)
+            checkAnswer(sql(s"SELECT $charVarcharPredicate"), Row(charVarcharExpected))
+          }
+        }
+      }
+    }
   }
 
   test("Support RLike string expression with collation") {

@@ -22,7 +22,9 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ProtobufDescriptorFileReader}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{BinaryType, MapType, NullType, StringType, StructType}
+import org.apache.spark.sql.types.{
+  BinaryType, CharType, MapType, NullType, StringType, StructType, VarcharType
+}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -83,8 +85,14 @@ case class FromProtobuf(
     this(
       data,
       messageName,
-      descFilePathOrOptions.dataType match {
-        case _: StringType | BinaryType =>
+      descFilePathOrOptions match {
+        case lit: Literal
+            if lit.dataType == StringType || lit.dataType == BinaryType ||
+              lit.dataType.isInstanceOf[CharType] || lit.dataType.isInstanceOf[VarcharType] =>
+          descFilePathOrOptions
+        case expression if expression.foldable &&
+            (expression.dataType.isInstanceOf[CharType] ||
+              expression.dataType.isInstanceOf[VarcharType]) =>
           descFilePathOrOptions
         case _ => Literal(null)
       },
@@ -232,8 +240,14 @@ case class ToProtobuf(
     this(
       data,
       messageName,
-      descFilePathOrOptions.dataType match {
-        case _: StringType | BinaryType =>
+      descFilePathOrOptions match {
+        case lit: Literal
+            if lit.dataType == StringType || lit.dataType == BinaryType ||
+              lit.dataType.isInstanceOf[CharType] || lit.dataType.isInstanceOf[VarcharType] =>
+          descFilePathOrOptions
+        case expression if expression.foldable &&
+            (expression.dataType.isInstanceOf[CharType] ||
+              expression.dataType.isInstanceOf[VarcharType]) =>
           descFilePathOrOptions
         case _ => Literal(null)
       },
