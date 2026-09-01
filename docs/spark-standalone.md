@@ -502,6 +502,23 @@ SPARK_WORKER_OPTS supports the following system properties:
   <td>3.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.service.requireAppScopedLocalDirs</code></td>
+  <td>false</td>
+  <td>
+    When true, the external shuffle service only accepts executor registrations whose local
+    directories lie inside the registering application's own per-application directory (the
+    application id must appear as a path segment under one of the service's configured local
+    directory roots). This keeps each application's shuffle and RDD blocks within its own
+    directory scope at registration and cleanup time. Workers on this version always create
+    executor local directories as <code>&lt;root&gt;/&lt;appId&gt;/executor-*</code>, which satisfies the
+    check; that layout is additive and harmless while the check is disabled. For a rolling
+    upgrade, first upgrade every Worker, then set this to true on the shuffle service: enabling
+    it while executors launched by older Workers are still registering rejects their
+    registrations. This only affects standalone mode.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
   <td><code>spark.storage.cleanupFilesAfterExecutorExit</code></td>
   <td>true</td>
   <td>
