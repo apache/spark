@@ -315,15 +315,22 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     if (entry.getLeft().equals(responseStreamId)) {
       return;
     }
+    // Log at the detection site, in the structured MDC form used throughout this file, so this
+    // otherwise-silent guard is directly greppable ("desynced") for incidence analysis, independent
+    // of the generic connection-exception log the thrown IllegalStateException produces downstream.
+    logger.error("Stream callback queue desynced: received streamId {} does not match the head of "
+        + "the callback queue from {}. This is unreachable under correct operation and may "
+        + "indicate memory or hardware corruption; failing the connection to avoid delivering the "
+        + "wrong block.",
+      MDC.of(LogKeys.STREAM_ID, responseStreamId),
+      MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
+    // Full detail (both streamIds) goes on the exception that fails the callback and tears down the
+    // connection.
     String msg = String.format(
       "Stream callback queue desynced: %s streamId %s does not match the head of the callback "
         + "queue (streamId %s) from %s. This is unreachable under correct operation and may "
         + "indicate memory or hardware corruption; failing the connection to avoid delivering the "
         + "wrong block.", kind, responseStreamId, entry.getLeft(), getRemoteAddress(channel));
-    // Log at the detection site so this otherwise-silent guard is directly greppable ("desynced"),
-    // independent of the generic connection-exception log the thrown IllegalStateException produces
-    // downstream.
-    logger.error(msg);
     try {
       entry.getRight().onFailure(entry.getLeft(), new IOException(msg));
     } catch (IOException ioe) {
