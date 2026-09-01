@@ -199,6 +199,24 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     }
   }
 
+  test("canPlanAsBroadcastHashJoin checks the NAAJ right-size short circuit") {
+    val leftStatsAccessed = new AtomicBoolean(false)
+    val uncachedLeft = TrackingStatsTestPlan(Seq($"uncachedLeft".int), leftStatsAccessed)
+    val largeRight = right.copy(rowCount = 20000000, size = Some(20000000))
+    val leftKey = uncachedLeft.output.head
+    val rightKey = largeRight.output.head
+    val condition = Or(EqualTo(leftKey, rightKey), IsNull(EqualTo(leftKey, rightKey)))
+    val nullAwareAntiJoin = Join(
+      uncachedLeft, largeRight, LeftAnti, Some(condition), JoinHint.NONE)
+
+    withSQLConf(
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+      assert(!canPlanAsBroadcastHashJoin(nullAwareAntiJoin, SQLConf.get))
+      assert(!leftStatsAccessed.get())
+    }
+  }
+
   test("getBroadcastHashJoinBuildSide returns the hinted side") {
     val equiJoin = join.copy(condition = Some(EqualTo(left.output.head, right.output.head)))
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
