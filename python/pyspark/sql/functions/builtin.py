@@ -14738,6 +14738,7 @@ def to_timestamp_ntz(
     Affected by these public SQL configurations:
 
     * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -23021,6 +23022,7 @@ def from_json(
 
     * ``spark.sql.columnNameOfCorruptRecord``
     * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
 
     Examples
     --------
@@ -23872,6 +23874,12 @@ def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) ->
         a column of `targetType` representing the extracted result
         Returns a column of the type given by `targetType`.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.timestampType``
+
     Examples
     --------
     >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }''', 'path': '$.a'} ])
@@ -23922,6 +23930,12 @@ def try_variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str
     :class:`~pyspark.sql.Column`
         a column of `targetType` representing the extracted result
         Returns a column of the type given by `targetType`.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.timestampType``
 
     Examples
     --------
@@ -24172,7 +24186,6 @@ def schema_of_json(json: Union[Column, str], options: Optional[Mapping[str, str]
     -----
     Affected by these public SQL configurations:
 
-    * ``spark.sql.session.timeZone``
     * ``spark.sql.timestampType``
 
     Examples
@@ -24341,6 +24354,7 @@ def from_xml(
 
     * ``spark.sql.columnNameOfCorruptRecord``
     * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
     * ``spark.sql.xml.variant.respectInferSchema``
 
     Examples
@@ -24455,7 +24469,7 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Mapping[str, str]] 
     -----
     Affected by these public SQL configurations:
 
-    * ``spark.sql.session.timeZone``
+    * ``spark.sql.columnNameOfCorruptRecord``
     * ``spark.sql.timestampType``
 
     Examples
@@ -24623,7 +24637,6 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Mapping[str, str]] 
     -----
     Affected by these public SQL configurations:
 
-    * ``spark.sql.session.timeZone``
     * ``spark.sql.timestampType``
 
     Examples
@@ -26273,6 +26286,7 @@ def from_csv(
 
     * ``spark.sql.columnNameOfCorruptRecord``
     * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
 
     Examples
     --------

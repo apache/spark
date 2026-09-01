@@ -13481,6 +13481,7 @@ object functions {
    * @note
    *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
+   *   - `spark.sql.session.timeZone`
    */
   def to_timestamp_ntz(timestamp: Column, format: Column): Column =
     Column.fn("to_timestamp_ntz", timestamp, format)
@@ -13500,6 +13501,7 @@ object functions {
    * @note
    *   Affected by these public SQL configurations:
    *   - `spark.sql.ansi.enabled`
+   *   - `spark.sql.session.timeZone`
    */
   def to_timestamp_ntz(timestamp: Column): Column =
     Column.fn("to_timestamp_ntz", timestamp)
@@ -14642,6 +14644,7 @@ object functions {
    *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
+   *   - `spark.sql.timestampType`
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
@@ -14673,6 +14676,7 @@ object functions {
    *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
+   *   - `spark.sql.timestampType`
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: String, options: Map[String, String]): Column = {
@@ -14698,6 +14702,7 @@ object functions {
    *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
+   *   - `spark.sql.timestampType`
    */
   def from_json(e: Column, schema: Column): Column = {
     from_json(e, schema, Map.empty[String, String].asJava)
@@ -14728,6 +14733,7 @@ object functions {
    *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
+   *   - `spark.sql.timestampType`
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: Column, options: java.util.Map[String, String]): Column = {
@@ -15257,6 +15263,10 @@ object functions {
    * @since 4.0.0
    * @return
    *   Returns a column of the type specified by the `targetType` argument.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.timestampType`
    */
   def variant_get(v: Column, path: String, targetType: String): Column =
     Column.fn("variant_get", v, lit(path), lit(targetType))
@@ -15277,6 +15287,10 @@ object functions {
    * @since 4.0.0
    * @return
    *   Returns a column of the type specified by the `targetType` argument.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.timestampType`
    */
   def variant_get(v: Column, path: Column, targetType: String): Column =
     Column.fn("variant_get", v, path, lit(targetType))
@@ -15296,6 +15310,10 @@ object functions {
    * @since 4.0.0
    * @return
    *   Returns a column of the type specified by the `targetType` argument.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.timestampType`
    */
   def try_variant_get(v: Column, path: String, targetType: String): Column =
     Column.fn("try_variant_get", v, lit(path), lit(targetType))
@@ -15316,6 +15334,10 @@ object functions {
    * @since 4.0.0
    * @return
    *   Returns a column of the type specified by the `targetType` argument.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.timestampType`
    */
   def try_variant_get(v: Column, path: Column, targetType: String): Column =
     Column.fn("try_variant_get", v, lit(path), lit(targetType))
@@ -15357,7 +15379,6 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
-   *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
   def schema_of_json(json: String): Column = schema_of_json(lit(json))
@@ -15375,7 +15396,6 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
-   *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
   def schema_of_json(json: Column): Column = Column.fn("schema_of_json", json)
@@ -15400,7 +15420,6 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
-   *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
   // scalastyle:on line.size.limit
@@ -16041,6 +16060,7 @@ object functions {
    *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
+   *   - `spark.sql.timestampType`
    */
   // scalastyle:on line.size.limit
   def from_csv(e: Column, schema: Column, options: java.util.Map[String, String]): Column =
@@ -16062,7 +16082,6 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
-   *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
   def schema_of_csv(csv: String): Column = schema_of_csv(lit(csv))
@@ -16080,7 +16099,6 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
-   *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
   def schema_of_csv(csv: Column): Column = schema_of_csv(csv, Collections.emptyMap())
@@ -16104,7 +16122,6 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
-   *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
   // scalastyle:on line.size.limit
@@ -16208,6 +16225,7 @@ object functions {
    *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
+   *   - `spark.sql.timestampType`
    *   - `spark.sql.xml.variant.respectInferSchema`
    */
   // scalastyle:on line.size.limit
@@ -16233,6 +16251,7 @@ object functions {
    *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
+   *   - `spark.sql.timestampType`
    *   - `spark.sql.xml.variant.respectInferSchema`
    */
   // scalastyle:on line.size.limit
@@ -16263,6 +16282,7 @@ object functions {
    *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
+   *   - `spark.sql.timestampType`
    *   - `spark.sql.xml.variant.respectInferSchema`
    */
   // scalastyle:on line.size.limit
@@ -16309,7 +16329,7 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
-   *   - `spark.sql.session.timeZone`
+   *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.timestampType`
    */
   def schema_of_xml(xml: String): Column = schema_of_xml(lit(xml))
@@ -16326,7 +16346,7 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
-   *   - `spark.sql.session.timeZone`
+   *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.timestampType`
    */
   def schema_of_xml(xml: Column): Column = Column.fn("schema_of_xml", xml)
@@ -16351,7 +16371,7 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
-   *   - `spark.sql.session.timeZone`
+   *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.timestampType`
    */
   // scalastyle:on line.size.limit
@@ -16598,10 +16618,6 @@ object functions {
    * @since 3.5.0
    * @return
    *   Returns a column that evaluates to a timestamp.
-   *
-   * @note
-   *   Affected by these public SQL configurations:
-   *   - `spark.sql.session.timeZone`
    */
   def convert_timezone(sourceTz: Column, targetTz: Column, sourceTs: Column): Column =
     Column.fn("convert_timezone", sourceTz, targetTz, sourceTs)
