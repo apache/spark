@@ -152,7 +152,7 @@ class RunnerConf(Conf):
         return (
             self.get(
                 "spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled",
-                "false",
+                "true",
             )
             == "true"
         )
