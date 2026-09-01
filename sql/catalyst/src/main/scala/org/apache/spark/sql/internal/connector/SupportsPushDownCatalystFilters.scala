@@ -35,18 +35,18 @@ trait SupportsPushDownCatalystFilters extends ScanBuilder {
   def pushFilters(filters: Seq[Expression]): Seq[Expression]
 
   /**
-   * Returns additional filters guaranteed for every row returned by the scan built from this
-   * builder. Spark adds them to the logical Filter node only so later optimizer rules can use them,
-   * for example to improve partition statistics for cost-based optimization. The data source must
-   * guarantee these filters so Spark does not have to evaluate them; Spark therefore drops them
-   * from FilterExec in the final physical plan. They are discarded if a join, aggregate, or variant
-   * extraction is pushed because those operators replace the scan output.
+   * Returns additional filters implied by the query filters passed to [[pushFilters]]. Spark adds
+   * them to the logical Filter for optimizer statistics and post-scan evaluation. The data source
+   * may also use them for pruning without fully enforcing them. This matches post-scan predicates
+   * in `SupportsPushDownV2Filters.pushedPredicates` and the statistics adjustment enabled when
+   * `SupportsReportStatistics.reflectsFullyPushedDownFilters` returns `false`.
    *
-   * Spark asks for these after [[pushFilters]], so a source can infer them from the user filters,
-   * if necessary. For now this is only supported when there are filters being pushed down.
+   * Spark requests advisory filters after [[pushFilters]] and only when filters are pushed. It
+   * discards them if a join, aggregate, or variant extraction replaces the scan output.
    *
    * Advisory filters must be deterministic, must not contain subqueries or user-defined
-   * expressions, and must not duplicate filters fully pushed by [[pushFilters]].
+   * expressions, must resolve to well-typed Boolean expressions, and must not duplicate filters
+   * fully pushed by [[pushFilters]]. Spark ignores invalid advisory filters.
    *
    * Column references must be represented by `AttributeReference`. A nested column is represented
    * by a dotted name, with path parts containing dots quoted using Spark SQL identifier syntax.
