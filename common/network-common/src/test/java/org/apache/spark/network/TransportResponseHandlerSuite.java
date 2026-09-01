@@ -27,6 +27,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.buffer.NioManagedBuffer;
@@ -193,6 +195,113 @@ public class TransportResponseHandlerSuite {
 
     verify(cb, times(1)).onFailure(eq("stream"), isA(NullPointerException.class));
     verify(c, times(1)).close();
+    assertEquals(0, handler.numOutstandingRequests());
+  }
+
+  @Test
+  public void streamResponseWithMismatchedStreamIdThrows() throws Exception {
+    // The FIFO streamCallbacks queue matches responses to callbacks by poll() order, which assumes
+    // the server answers StreamRequests in the order the client sent them. If a StreamResponse's
+    // streamId does not match the head-of-queue callback's registered streamId, that assumption has
+    // been violated and the queue is desynced -- delivering this response would feed the wrong
+    // block's bytes to the callback. The handler must throw instead (SPARK-59142); throwing
+    // propagates to Netty's exceptionCaught -> the connection is torn down and its outstanding
+    // requests re-fetched in order on a fresh channel.
+    Channel c = new LocalChannel();
+    c.pipeline().addLast(TransportFrameDecoder.HANDLER_NAME, new TransportFrameDecoder());
+    TransportResponseHandler handler = new TransportResponseHandler(c);
+
+    StreamCallback cb = mock(StreamCallback.class);
+    handler.addStreamCallback("stream-A", cb);
+
+    // A response for a different streamId arrives at the head of the FIFO queue.
+    StreamResponse mismatched = new StreamResponse("stream-B", 1234L, null);
+    IllegalStateException e = assertThrows(IllegalStateException.class,
+      () -> handler.handle(mismatched));
+    assertTrue(e.getMessage().contains("desynced"),
+      "expected a desync error, got: " + e.getMessage());
+    // The mismatched response must NOT have been delivered to the wrong callback as success...
+    verify(cb, never()).onComplete(any());
+    // ...and the polled callback is failed (with its OWN streamId) so its caller does not hang.
+    verify(cb, times(1)).onFailure(eq("stream-A"), isA(IOException.class));
+  }
+
+  @Test
+  public void streamFailureWithMismatchedStreamIdThrows() throws Exception {
+    Channel c = new LocalChannel();
+    c.pipeline().addLast(TransportFrameDecoder.HANDLER_NAME, new TransportFrameDecoder());
+    TransportResponseHandler handler = new TransportResponseHandler(c);
+
+    StreamCallback cb = mock(StreamCallback.class);
+    handler.addStreamCallback("stream-A", cb);
+
+    StreamFailure mismatched = new StreamFailure("stream-B", "uh-oh");
+    IllegalStateException e = assertThrows(IllegalStateException.class,
+      () -> handler.handle(mismatched));
+    assertTrue(e.getMessage().contains("desynced"),
+      "expected a desync error, got: " + e.getMessage());
+    // The failure must NOT be routed under the wrong (response) streamId; the polled callback is
+    // failed under its OWN streamId instead, so its caller does not hang.
+    verify(cb, never()).onFailure(eq("stream-B"), any());
+    verify(cb, times(1)).onFailure(eq("stream-A"), isA(IOException.class));
+  }
+
+  @Test
+  public void desyncTearsDownConnectionAndFailsAllOutstandingRequestsRetriably() throws Exception {
+    // Upstream impact of the streamId assert. In production, throwing from handle() propagates to
+    // TransportChannelHandler.exceptionCaught, which calls responseHandler.exceptionCaught (failing
+    // EVERY outstanding request on the channel) and then ctx.close(). This test simulates that
+    // sequence and shows the meaning for callers: when a stream-callback desync is detected, the
+    // whole (poisoned) connection is torn down and ALL its in-flight requests -- the mismatched
+    // stream AND any innocent concurrent chunk-fetch sharing the channel -- fail with a retriable
+    // error. None receive data. Upstream, each onFailure becomes a FetchFailedException -> stage
+    // retry on a fresh, in-order connection. The cost of a detected desync is a retry, never
+    // corrupt bytes.
+    Channel c = new LocalChannel();
+    c.pipeline().addLast(TransportFrameDecoder.HANDLER_NAME, new TransportFrameDecoder());
+    TransportResponseHandler handler = new TransportResponseHandler(c);
+
+    // An innocent chunk fetch is in flight on the same connection.
+    StreamChunkId chunkId = new StreamChunkId(1, 0);
+    ChunkReceivedCallback chunkCb = mock(ChunkReceivedCallback.class);
+    handler.addFetchRequest(chunkId, chunkCb);
+    // ...and a stream fetch for "stream-A".
+    StreamCallback streamCb = mock(StreamCallback.class);
+    handler.addStreamCallback("stream-A", streamCb);
+    assertEquals(2, handler.numOutstandingRequests());
+
+    // A StreamResponse for the wrong streamId arrives -> handle() throws (desync detected).
+    // The desynced (polled) stream callback is failed inline so its caller does not hang.
+    IllegalStateException thrown = assertThrows(IllegalStateException.class,
+      () -> handler.handle(new StreamResponse("stream-B", 1234L, null)));
+    assertTrue(thrown.getMessage().contains("desynced"));
+    verify(streamCb, times(1)).onFailure(eq("stream-A"), any());
+    verify(streamCb, never()).onComplete(any());
+
+    // Netty then invokes exceptionCaught with the thrown cause; this is the teardown path that
+    // fails the connection's REMAINING outstanding requests (the innocent concurrent chunk fetch).
+    handler.exceptionCaught(thrown);
+    verify(chunkCb, times(1)).onFailure(eq(0), any());
+
+    // Net result: no request on the poisoned connection received data; all failed retriably.
+    assertEquals(0, handler.numOutstandingRequests());
+  }
+
+  @Test
+  public void streamResponseWithMatchingStreamIdIsDelivered() throws Exception {
+    // Regression guard: the streamId check must not disturb the normal in-order case. A response
+    // whose streamId matches the head-of-queue callback is handled exactly as before.
+    Channel c = new LocalChannel();
+    c.pipeline().addLast(TransportFrameDecoder.HANDLER_NAME, new TransportFrameDecoder());
+    TransportResponseHandler handler = new TransportResponseHandler(c);
+
+    StreamCallback cb = mock(StreamCallback.class);
+    handler.addStreamCallback("stream", cb);
+    assertEquals(1, handler.numOutstandingRequests());
+
+    // byteCount == 0 -> the handler calls onComplete inline (no interceptor install needed).
+    handler.handle(new StreamResponse("stream", 0L, null));
+    verify(cb, times(1)).onComplete(eq("stream"));
     assertEquals(0, handler.numOutstandingRequests());
   }
 

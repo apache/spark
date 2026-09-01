@@ -236,6 +236,33 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       Pair<String, StreamCallback> entry = streamCallbacks.poll();
       if (entry != null) {
         StreamCallback callback = entry.getRight();
+        // Stream responses are matched to callbacks by FIFO poll() order, which assumes the server
+        // answers StreamRequests in the same order the client sent them (see SPARK-11265). If the
+        // streamId of the polled callback does not match the response's streamId, that assumption
+        // has been violated and the callback queue is desynced: this response, and every subsequent
+        // poll() on this channel, would be bound to the wrong callback -- silently delivering the
+        // wrong block's bytes to a reader. Fail the polled callback (so its caller does not hang
+        // waiting for a response it will never correctly receive) and throw to tear down the
+        // connection, so its remaining outstanding requests are re-fetched in order on a fresh
+        // channel rather than corrupting data. This comparison cannot false-fire: the client
+        // registers the callback under the exact streamId it requested, so a mismatch is always a
+        // real desync.
+        if (!entry.getLeft().equals(resp.streamId)) {
+          String msg = String.format(
+            "Stream callback queue desynced: response streamId %s does not match the head of the "
+              + "callback queue (streamId %s) from %s. Failing the connection to avoid delivering "
+              + "the wrong block.", resp.streamId, entry.getLeft(), getRemoteAddress(channel));
+          // Log at the detection site so this rare, previously-silent corruption guard is directly
+          // greppable ("desynced") for fleet-wide incidence analysis, independent of the generic
+          // connection-exception log the thrown IllegalStateException produces downstream.
+          logger.error(msg);
+          try {
+            callback.onFailure(entry.getLeft(), new IOException(msg));
+          } catch (IOException ioe) {
+            logger.warn("Error in stream failure handler.", ioe);
+          }
+          throw new IllegalStateException(msg);
+        }
         if (resp.byteCount > 0) {
           StreamInterceptor<ResponseMessage> interceptor = new StreamInterceptor<>(
             this, resp.streamId, resp.byteCount, callback);
@@ -270,6 +297,24 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       Pair<String, StreamCallback> entry = streamCallbacks.poll();
       if (entry != null) {
         StreamCallback callback = entry.getRight();
+        // Same FIFO-ordering invariant as StreamResponse above: a streamId mismatch means the
+        // callback queue is desynced, so we must not route this failure to the wrong callback.
+        // Fail the polled callback (so it doesn't hang) and throw to tear down the connection.
+        if (!entry.getLeft().equals(resp.streamId)) {
+          String msg = String.format(
+            "Stream callback queue desynced: failure streamId %s does not match the head of the "
+              + "callback queue (streamId %s) from %s.",
+            resp.streamId, entry.getLeft(), getRemoteAddress(channel));
+          // Log at the detection site (see the StreamResponse twin above) so the desync is directly
+          // greppable for production impact analysis rather than only via the downstream exception.
+          logger.error(msg);
+          try {
+            callback.onFailure(entry.getLeft(), new IOException(msg));
+          } catch (IOException ioe) {
+            logger.warn("Error in stream failure handler.", ioe);
+          }
+          throw new IllegalStateException(msg);
+        }
         try {
           callback.onFailure(resp.streamId, new RuntimeException(resp.error));
         } catch (IOException ioe) {
