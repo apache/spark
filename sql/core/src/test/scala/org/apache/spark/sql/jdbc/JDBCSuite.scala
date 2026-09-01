@@ -891,6 +891,54 @@ class JDBCSuite extends SharedSparkSession {
     }
   }
 
+  test("rename table query quotes the new table name by jdbc dialect") {
+    // The base JdbcDialect.renameTable quotes both sides; the Postgres and Derby overrides left
+    // the new name unquoted, so a name needing quotes could not be renamed to.
+    val ident = (ns: String, name: String) => Identifier.of(Array(ns), name)
+    assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+      .renameTable(ident("s", "t1"), ident("s", "new tbl")) ===
+      "ALTER TABLE \"s\".\"t1\" RENAME TO \"new tbl\"")
+    assert(JdbcDialects.get("jdbc:derby:memory:db")
+      .renameTable(ident("s", "t1"), ident("s", "new tbl")) ===
+      "RENAME TABLE \"s\".\"t1\" TO \"new tbl\"")
+  }
+
+  test("MySQLDialect quotes the table name in dropIndex and listIndexes") {
+    // createIndex and indexExists put the table name at identifier position via quoteIdentifier;
+    // dropIndex and listIndexes build the same position and now match them.
+    val dialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val ident = Identifier.of(Array.empty[String], "ta ble")
+
+    assert(dialect.dropIndex("i 1", ident) === "DROP INDEX `i 1` ON `ta ble`")
+
+    val conn = mock(classOf[Connection])
+    val stmt = mock(classOf[Statement])
+    val rs = mock(classOf[ResultSet])
+    when(conn.createStatement()).thenReturn(stmt)
+    when(stmt.executeQuery(anyString())).thenReturn(rs)
+
+    val options =
+      new JDBCOptions("jdbc:mysql://127.0.0.1/db", "ta ble", Map.empty[String, String])
+    dialect.listIndexes(conn, ident, options)
+
+    val sqlCaptor = ArgumentCaptor.forClass(classOf[String])
+    verify(stmt).executeQuery(sqlCaptor.capture())
+    assert(sqlCaptor.getValue.contains("SHOW INDEXES FROM `ta ble`"),
+      s"Unexpected listIndexes SQL: ${sqlCaptor.getValue}")
+  }
+
+  test("MsSqlServerDialect escapes a single quote in the renamed column name") {
+    // getRenameColumnQuery passes the qualified "table.column" name to sp_rename as a SQL string
+    // literal, so a single quote in the column name must be escaped to keep the literal
+    // well-formed. The table name arrives already quoted from JDBCTableCatalog.
+    val dialect = JdbcDialects.get("jdbc:sqlserver://127.0.0.1;databaseName=db")
+    assert(dialect.getRenameColumnQuery("\"tbl\"", "it's", "fine", 0) ===
+      "EXEC sp_rename '\"tbl\".\"it''s\"', \"fine\", 'COLUMN'")
+    // A name without a single quote produces the same statement as before.
+    assert(dialect.getRenameColumnQuery("\"db\".\"tbl\"", "ID", "RENAMED", 0) ===
+      "EXEC sp_rename '\"db\".\"tbl\".\"ID\"', \"RENAMED\", 'COLUMN'")
+  }
+
   test("quote column names by jdbc dialect") {
     val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     val postgresDialect = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
