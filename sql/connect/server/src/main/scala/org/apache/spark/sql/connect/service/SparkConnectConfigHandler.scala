@@ -92,8 +92,10 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
         // it is stored. Inside the try so a `silent` request reports it as a warning, like any
         // other rejected write. Check and write under the monitor that guards the session
         // configurations, so a concurrent write cannot land in between and leave an environment
-        // neither writer validated: `getAllConfs` reads under it and `setConfString` writes under
-        // it.
+        // neither writer validated. That monitor is `settings` itself, a
+        // `Collections.synchronizedMap` whose every `put` locks the wrapper, so holding it here
+        // excludes the read in `getAllConfs` and the writes in `setConfString` and
+        // `setConf(props)` alike.
         sqlConf.settings.synchronized {
           PythonWorkerEnvironment.validateConfigChange(conf, key, value)
           conf.set(key, value.orNull)
