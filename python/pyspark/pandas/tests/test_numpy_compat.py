@@ -391,7 +391,7 @@ class NumPyCompatTestsMixin:
         self.assert_eq(ps_integral, pd_integral, almost=True)
 
     def test_floor_divide_func(self):
-        from pyspark.pandas.numpy_compat import _floor_divide_func
+        from pyspark.pandas.utils import _floor_divide_func
 
         def floor_divided(pdf):
             psdf = ps.from_pandas(pdf)
