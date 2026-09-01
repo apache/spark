@@ -753,7 +753,9 @@ class KeyGroupedPartitioningSuite
     // `identity(id)` reports a Long partition key while `bucket(4, id)` reports an Integer one.
     // The identity->bucket reducer maps the Long keys to Integer; the GroupPartitionsExec output
     // partitioning must report the reduced (Integer) expression, not the original Long identity,
-    // or the key ordering derived from the expressions fails with a ClassCastException.
+    // so downstream consumers see the keys' real type: another join can reduce onto the reported
+    // transform, and a reduced layout can serve as another child's shuffle target only when the
+    // expressions describe the keys.
     val cols = Array(
       Column.create("id", LongType),
       Column.create("data", StringType))
@@ -3872,18 +3874,29 @@ class KeyGroupedPartitioningSuite
       s"(5, 44.0, cast('2020-01-15' as timestamp)), " +
       s"(7, 46.5, cast('2021-02-08' as timestamp))")
 
+    // A third table partitioned by `identity(time)` joins on the same timestamps: its side
+    // reduces onto the first join's reported `years(arrive_time)`, so the chain plans without a
+    // shuffle only while the reduced keys are reported under the type-correct target transform.
+    val shipments = "shipments"
+    createTable(shipments, purchasesColumns, Array(identity("time")))
+    sql(s"INSERT INTO testcat.ns.$shipments VALUES " +
+      s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      s"(9, 46.5, cast('2021-02-08' as timestamp))")
+
     withSQLConf(
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
         Seq(
-          s"testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.time = i.arrive_time",
-          s"testcat.ns.$purchases p JOIN testcat.ns.$items i ON i.arrive_time = p.time"
+          s"testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.time = i.arrive_time " +
+            s"JOIN testcat.ns.$shipments s ON i.arrive_time = s.time",
+          s"testcat.ns.$purchases p JOIN testcat.ns.$items i ON i.arrive_time = p.time " +
+            s"JOIN testcat.ns.$shipments s ON i.arrive_time = s.time"
         ).foreach { joinString =>
           val df = sql(
             s"""
-               |${selectWithMergeJoinHint("i", "p")} id, item_id
+               |${selectWithMergeJoinHint("i", "p")} i.id, p.item_id
                |FROM $joinString
-               |ORDER BY id, item_id
+               |ORDER BY i.id, p.item_id
                |""".stripMargin)
 
           val shuffles = collectShuffles(df.queryExecution.executedPlan)
@@ -5150,10 +5163,10 @@ class KeyGroupedPartitioningSuite
   }
 
   test("SPARK-59120: a second join with a non-reducing side plans on the reduced keys") {
-    // The first join reduces the identity side onto the year key space. This PR reports the
-    // reduced expression (`years(a.ts)`), so the second join's identity side reduces onto it as
-    // well and the whole query plans without a shuffle. Under `keyDataTypes` alone (#58420) the
-    // reduced keys were read at their own types but still reported under the stale `identity(ts)`
+    // The first join reduces the identity side onto the year key space and reports the reduced
+    // expression `years(a.ts)`, so the second join's identity side reduces onto it as well and
+    // the whole query plans without a shuffle. Under `keyDataTypes` alone (#58420) the reduced
+    // keys were read at their own types but still reported under the stale `identity(ts)`
     // expression, and this query raised STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES; before
     // #58420 it threw `ClassCastException`. The error path stays covered by
     // `SPARK-56046: Reducers with different result types`.
@@ -5181,7 +5194,7 @@ class KeyGroupedPartitioningSuite
   }
 
   test("SPARK-59120: another child is shuffled onto the type-correct reduced keys") {
-    // This PR reports the reduced side's expression as `years(a.ts)`, which describes the reduced
+    // The reduced side's expression is reported as `years(a.ts)`, which describes the reduced
     // keys, so `canCreatePartitioning`'s shape gate accepts the reduced layout and only the
     // unpartitioned side is shuffled onto it. Under `keyDataTypes` alone (#58420) the reduced side
     // still reported `identity(ts)`, the gate refused it and both of the second join's sides were

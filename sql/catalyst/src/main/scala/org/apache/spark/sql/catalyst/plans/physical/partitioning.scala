@@ -1455,7 +1455,9 @@ case class KeyReducer(reducer: Reducer[_, _], reducedExpression: TransformExpres
 
 /**
  * A [[Reducer]] that reduces an identity transform onto a partition transform: it applies the
- * given partition transform to the raw value of the identity transform's key.
+ * given partition transform to the raw value of the identity transform's key. For instance, an
+ * `identity(id)` side joined to a `bucket(4, id)` side reduces with
+ * `IdentityReducer(bucket(4, id))`, which maps each raw id value to its `bucket(4, id)` value.
  *
  * It is a case class so that structurally identical reducers compare by value, and plans holding
  * them stay canonicalization-equal.
