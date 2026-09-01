@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -91,10 +93,31 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
    * error would become a StackOverflowError. A nested `With` is not affected either way: `children`
    * is `child +: defs`, so this scan already descends into an inner `With`'s own definitions.
    */
-  @transient private lazy val refsToBind: Seq[(CommonExpressionRef, CommonExpressionDef)] = {
+  @transient private lazy val refsToBind: IndexedSeq[(CommonExpressionRef, CommonExpressionDef)] = {
     val idToDef = defs.map(d => d.id -> d).toMap
-    child.collect { case r: CommonExpressionRef if idToDef.contains(r.id) => (r, idToDef(r.id)) }
+    val found = mutable.ArrayBuffer.empty[(CommonExpressionRef, CommonExpressionDef)]
+    child.foreach {
+      // One entry per reference *object*: `BETWEEN` reads one object twice, and two entries for it
+      // would have the second save the binding the first just installed, so the restore below could
+      // not put back what was there before. Equality would not do here, since two distinct objects
+      // of the same id compare equal while needing separate saves.
+      case r: CommonExpressionRef if idToDef.contains(r.id) && !found.exists(_._1 eq r) =>
+        found += ((r, idToDef(r.id)))
+      case _ =>
+    }
+    found.toIndexedSeq
   }
+
+  /**
+   * Where each reference pointed before this `With` bound it, restored when the child's evaluation
+   * returns. A reference can be shared with another `With` -- see the binding note on [[eval]] --
+   * and a shared one can be read again after a nested `With` has returned, so leaving the nested
+   * binding in place would let the inner definition answer for the outer scope. The arrays are
+   * instance state rather than allocated per row; the same `With` object cannot be entered while
+   * one of its own entries is in progress, since that would need the tree to contain itself.
+   */
+  @transient private lazy val savedDefinitions = new Array[Expression](refsToBind.length)
+  @transient private lazy val savedCells = new Array[CommonExpressionCell](refsToBind.length)
 
   /**
    * Binds this `With`'s references to its own cells, clears them, and evaluates the child. A
@@ -107,12 +130,30 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
    * rebuilt reference compares equal to the one it replaces, since the binding it carries is not
    * part of its equality, so `transform` keeps the original. Binding once would then leave the
    * `With` that bound last deciding what both of them read. Rebinding costs one pass over the
-   * references, two for a `BETWEEN`, and makes the `With` currently evaluating always the owner.
+   * distinct reference objects on entry and one to restore them on exit, and makes the `With`
+   * currently evaluating the owner -- restoring what was there before makes it the owner only until
+   * its child is done, which is what a lexical scope means. Without the restore, an outer reference
+   * read after a nested `With` returned would still point at the inner definition.
    */
   override def eval(input: InternalRow): Any = {
-    refsToBind.foreach { case (ref, exprDef) => ref.bindTo(exprDef) }
+    var i = 0
+    while (i < refsToBind.length) {
+      val (ref, exprDef) = refsToBind(i)
+      savedDefinitions(i) = ref.boundDefinition
+      savedCells(i) = ref.boundCell
+      ref.bindTo(exprDef)
+      i += 1
+    }
     defs.foreach(_.cell.clear())
-    child.eval(input)
+    try {
+      child.eval(input)
+    } finally {
+      var j = 0
+      while (j < refsToBind.length) {
+        refsToBind(j)._1.bindTo(savedDefinitions(j), savedCells(j))
+        j += 1
+      }
+    }
   }
 
   // The cells are cleared on entry, so this holds state for the duration of one evaluation.
@@ -165,6 +206,16 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
    * path because `CollapseCodegenStages.supportCodegen` turns whole-stage codegen off for a plan
    * whose expressions hold the offending `CodegenFallback` -- it is visible there, since a `With`
    * in a conditional branch reaches execution inside `plan.expressions` like any other expression.
+   *
+   * One object is registered however many times this is generated, so two generated occurrences of
+   * one `With` call `eval` on the same instance. `GenerateOrdering` does generate a key twice, once
+   * per side of the comparison, which makes a stateful definition advance across the two sides.
+   * That predates this expression and is not specific to it: a stateful `CodegenFallback` used as a
+   * sort key behaves the same way with no `With` in the tree, and `InterpretedOrdering` escapes it
+   * only where `freshCopyIfContainsStatefulExpression` on its right side reaches the state. That
+   * copy does rebuild a stateful non-leaf, and a leaf that overrides `withNewChildrenInternal` as
+   * `MonotonicallyIncreasingID` does, but a leaf that leaves `LeafLike`'s default in place is
+   * handed to the copy as it is and keeps advancing. Nothing tracks that today.
    */
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (refUnderCodegenFallback) {
@@ -337,6 +388,16 @@ case class CommonExpressionRef(id: CommonExpressionId, dataType: DataType, nulla
   private[expressions] def bindTo(exprDef: CommonExpressionDef): Unit = {
     definition = exprDef.child
     cell = exprDef.cell
+  }
+
+  private[expressions] def boundDefinition: Expression = definition
+  private[expressions] def boundCell: CommonExpressionCell = cell
+
+  private[expressions] def bindTo(
+      newDefinition: Expression,
+      newCell: CommonExpressionCell): Unit = {
+    definition = newDefinition
+    cell = newCell
   }
 
   override val nodePatterns: Seq[TreePattern] = Seq(COMMON_EXPR_REF)

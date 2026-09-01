@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TempResolvedColumn
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -262,6 +263,39 @@ class RewriteWithExpressionSuite extends PlanTest {
     val kept = With(a + b) { case Seq(ref) => ref * ref }
     val keptPlan = testRelation.select(Coalesce(Seq(b, kept)).as("col"))
     comparePlans(Optimizer.execute(keptPlan), keptPlan)
+  }
+
+  test("SPARK-58902: a branch-local With keeps only the definitions worth memoizing") {
+    val Seq(a, b) = testRelation.output
+    // Two definitions in one `With`, one of each kind, so the rule has to rebuild the `With` around
+    // what is left rather than inline all of them or keep all of them. The other branch-local tests
+    // each use a single definition, which only exercises those two ends.
+    val expr = With(a, a + b) { case Seq(cheap, expensive) =>
+      Add(cheap * cheap, expensive * expensive)
+    }
+    val plan = testRelation.select(Coalesce(Seq(b, expr)).as("col"))
+    val rewritten = Optimizer.execute(plan)
+
+    val withs = rewritten.expressions.flatMap(_.collect { case w: With => w })
+    assert(withs.length == 1, s"expected one surviving With:\n$rewritten")
+    val kept = withs.head
+    assert(kept.defs.map(_.child) == Seq(a + b), s"the wrong definition was kept:\n$rewritten")
+    // The inlined definition's id is gone from the tree, not left as a reference nobody binds.
+    val keptIds = kept.defs.map(_.id).toSet
+    val refIds = rewritten.expressions.flatMap(_.collect { case r: CommonExpressionRef => r.id })
+    assert(refIds.nonEmpty && refIds.forall(keptIds.contains),
+      s"a reference to an inlined definition survived:\n$rewritten")
+    // The cheap definition was substituted at both of its references, not just the first.
+    assert(kept.child.collectFirst { case Add(l, _, _) => l }.contains(a * a),
+      s"the cheap definition was not inlined at every reference:\n$rewritten")
+    // The rebuilt `With` binds the references it carried over from the one it replaced, which is
+    // what the value proves: a = 2 inlined twice, a + b = 5 memoized and squared.
+    val bound = BindReferences.bindReference(
+      rewritten.expressions.head.children.head.asInstanceOf[Coalesce].children.last,
+      testRelation.output)
+    assert(bound.eval(InternalRow(2, 3)) == 2 * 2 + 5 * 5)
+    // Running the batch again changes nothing: the rebuilt `With` is a fixed point.
+    comparePlans(Optimizer.execute(rewritten), rewritten)
   }
 
   test("SPARK-58902: a cheap definition is only inlined if it is also deterministic") {

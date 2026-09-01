@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode, GenerateMutableProjection}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -208,6 +208,54 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
       val proj = GenerateMutableProjection.generate(Seq(nested(4)))
       assert(proj(InternalRow(1)).getInt(0) == (1 + marker) * 16)
     }
+  }
+
+  test("SPARK-58902: a nested With sharing a reference object restores the outer binding") {
+    // Two `With`s over one reference object, the inner one nested in the outer one's child and
+    // redefining the id the outer one defines. Only a caller building the case class directly
+    // produces this -- `withNewChildrenInternal` shares references between a `With` and its
+    // replacement, which are siblings, and no rule nests a redefinition of a live id -- so this is
+    // hardening rather than a reachable wrong answer. Binding on entry alone is not enough: the
+    // inner `With` rebinds the shared reference to its own definition, so a read after the inner
+    // one returned would answer with the inner definition unless the outer binding is put back.
+    val id = new CommonExpressionId()
+    val outerDef = CommonExpressionDef(counter(), id)
+    val innerDef = CommonExpressionDef(Literal(10), id)
+    val ref = new CommonExpressionRef(outerDef)
+    val inner = With(Add(ref, ref), Seq(innerDef))
+    val outer = With(Add(Add(ref, inner), ref), Seq(outerDef))
+    // The outer definition counts, the inner one does not, so row n is n + (10 + 10) + n. A counter
+    // is what makes the repetition worth something: leaving the inner binding in place gives
+    // n + 20 + 10, and losing memoization of the outer definition gives n + 20 + (n + 1).
+    assert((1 to 3).map(_ => outer.eval(InternalRow.empty)) == Seq(22, 24, 26))
+
+    // The generated path never has to answer this: one id in two nested scopes is refused while
+    // generating, so it cannot quietly disagree with the values above.
+    val literalOuter = CommonExpressionDef(Literal(1), new CommonExpressionId())
+    val literalRef = new CommonExpressionRef(literalOuter)
+    val nested = With(
+      Add(literalRef, With(Add(literalRef, literalRef),
+        Seq(CommonExpressionDef(Literal(10), literalOuter.id)))),
+      Seq(literalOuter))
+    val generated = intercept[SparkException](GenerateMutableProjection.generate(Seq(nested)))
+    assert(generated.getMessage.contains("is already being generated"))
+  }
+
+  test("SPARK-58902: a definition that references its own id fails without recursing") {
+    // Only a caller building the case class directly can produce this, and it is caught rather than
+    // left to recurse: generating the definition re-enters the same slot, and evaluating it reaches
+    // a reference `refsToBind` never bound, since that scan only covers `child`.
+    val id = new CommonExpressionId()
+    val proto = CommonExpressionDef(Literal(1), id)
+    val selfDef = CommonExpressionDef(Add(new CommonExpressionRef(proto), Literal(1)), id)
+    val w = With(new CommonExpressionRef(proto), Seq(selfDef))
+
+    val generated = intercept[SparkException] {
+      GenerateMutableProjection.generate(Seq(w))
+    }
+    assert(generated.getMessage.contains("references it"))
+    val interpreted = intercept[SparkException](w.eval(InternalRow.empty))
+    assert(interpreted.getMessage.contains("outside its With"))
   }
 
   test("SPARK-58902: a reference under a CodegenFallback still memoizes") {

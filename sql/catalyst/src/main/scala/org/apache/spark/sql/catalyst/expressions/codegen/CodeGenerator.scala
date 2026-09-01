@@ -214,13 +214,23 @@ class CodegenContext extends Logging {
   case class CommonExprSlots(
       value: ExprCode,
       computed: String,
-      definition: Expression,
-      private var fillCode: Option[Block] = None) {
+      definition: Expression) {
+
+    // Not constructor parameters: every one of those takes part in a case class's `equals`,
+    // `hashCode`, `copy` and `toString`, so a mutable one would make a slot's hash change as it is
+    // filled, and would hand a `copy` the code generated for another scope.
+    private var fillCode: Option[Block] = None
+    private var filling: Boolean = false
 
     /**
      * The code that computes the definition into the slots and sets `computed`, which a reference
      * emits behind that flag. Generated once and cached, so that every reference shares whatever
      * mutable state the definition allocated, such as an RNG, rather than getting its own.
+     *
+     * A definition that references its own id would re-enter this while the first call is still
+     * generating it, since `fillCode` is set only after `definition.genCode` returns. `filling`
+     * turns that into the error `With.refsToBind` documents for the interpreted path, rather than a
+     * StackOverflowError from generating the same definition inside itself forever.
      *
      * The body goes into a method where it can and is worth it -- a definition that is or holds
      * another `With`, or a body past the split threshold -- leaving a reference's own code a single
@@ -235,50 +245,64 @@ class CodegenContext extends Logging {
      */
     def fill: Block = {
       if (fillCode.isEmpty) {
-        val defGen = definition.genCode(CodegenContext.this)
-        // Whether the isNull slot exists is decided by the definition, so it is read off the slot
-        // rather than off a reference's own `nullable`: taking it from both would let the two
-        // disagree, and either emit `false = <isNull>;`, which does not compile, or leave the slot
-        // holding the previous row's nullness.
-        val assignIsNull = if (value.isNull == FalseLiteral) {
-          ""
-        } else {
-          s"${value.isNull} = ${defGen.isNull};"
+        if (filling) {
+          throw SparkException.internalError(
+            "Cannot generate a common expression whose definition references it: " +
+              definition.toString)
         }
-        val body = code"""
-           |${defGen.code}
-           |$assignIsNull
-           |${value.value} = ${defGen.value};
-           |$computed = true;
-         """.stripMargin
-        val canPutInMethod = INPUT_ROW != null && currentVars == null
-        // A definition that is or holds another `With` is the shape whose code doubles per level,
-        // and what this is aimed at. It is not the only one -- a definition referencing a sibling
-        // definition of the same `With` doubles the same way, and codegen accepts that, since the
-        // sibling's slots are in scope while this definition is generated (`With.refsToBind` says
-        // why nothing builds that tree, and that evaluating one raises). What bounds those is not
-        // the length arm below: `body` is assembled after `definition.genCode` already ran
-        // `reduceCodeSize`, so the arm fires only in the band just under the threshold. It is
-        // `reduceCodeSize` itself, which hoists whichever node's code first passes the threshold as
-        // generation walks up, capping what one level contributes, so the code stays linear in the
-        // depth either way. The length arm just keeps the same body from being split once per
-        // reference, which leaves the methods small and the code as large.
-        val worthAMethod = definition.exists(_.isInstanceOf[With]) ||
-          body.length > SQLConf.get.methodSplitThreshold
-        fillCode = Some(if (canPutInMethod && worthAMethod) {
-          val funcName = freshName("computeCommonExpr")
-          val funcFullName = addNewFunction(funcName,
-            s"""
-               |private void $funcName(InternalRow $INPUT_ROW) {
-               |  $body
-               |}
-             """.stripMargin)
-          code"$funcFullName($INPUT_ROW);"
-        } else {
-          body
-        })
+        filling = true
+        try {
+          fillCode = Some(build)
+        } finally {
+          filling = false
+        }
       }
       fillCode.get
+    }
+
+    private def build: Block = {
+      val defGen = definition.genCode(CodegenContext.this)
+      // Whether the isNull slot exists is decided by the definition, so it is read off the slot
+      // rather than off a reference's own `nullable`: taking it from both would let the two
+      // disagree, and either emit `false = <isNull>;`, which does not compile, or leave the slot
+      // holding the previous row's nullness.
+      val assignIsNull = if (value.isNull == FalseLiteral) {
+        ""
+      } else {
+        s"${value.isNull} = ${defGen.isNull};"
+      }
+      val body = code"""
+         |${defGen.code}
+         |$assignIsNull
+         |${value.value} = ${defGen.value};
+         |$computed = true;
+       """.stripMargin
+      val canPutInMethod = INPUT_ROW != null && currentVars == null
+      // A definition that is or holds another `With` is the shape whose code doubles per level,
+      // and what this is aimed at. It is not the only one -- a definition referencing a sibling
+      // definition of the same `With` doubles the same way, and codegen accepts that, since the
+      // sibling's slots are in scope while this definition is generated (`With.refsToBind` says
+      // why nothing builds that tree, and that evaluating one raises). What bounds those is not
+      // the length arm below: `body` is assembled after `definition.genCode` already ran
+      // `reduceCodeSize`, so the arm fires only in the band just under the threshold. It is
+      // `reduceCodeSize` itself, which hoists whichever node's code first passes the threshold as
+      // generation walks up, capping what one level contributes, so the code stays linear in the
+      // depth either way. The length arm just keeps the same body from being split once per
+      // reference, which leaves the methods small and the code as large.
+      val worthAMethod = definition.exists(_.isInstanceOf[With]) ||
+        body.length > SQLConf.get.methodSplitThreshold
+      if (canPutInMethod && worthAMethod) {
+        val funcName = freshName("computeCommonExpr")
+        val funcFullName = addNewFunction(funcName,
+          s"""
+             |private void $funcName(InternalRow $INPUT_ROW) {
+             |  $body
+             |}
+           """.stripMargin)
+        code"$funcFullName($INPUT_ROW);"
+      } else {
+        body
+      }
     }
   }
 
