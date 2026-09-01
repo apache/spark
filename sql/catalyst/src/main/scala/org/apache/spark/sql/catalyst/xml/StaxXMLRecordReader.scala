@@ -40,10 +40,9 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
   private lazy val in1 = inputStream()
   private lazy val primaryEventReader = StaxXmlParserUtils.filteredReader(in1, options)
 
-  private val xsdSchemaValidator = Option(options.rowValidationXSDPath)
-    .map(path => ValidatorUtil.getSchema(path).newValidator())
+  private val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
   // Reader for the XSD validation, if an XSD schema is provided.
-  private lazy val in2 = xsdSchemaValidator.map(_ => inputStream())
+  private lazy val in2 = xsdSchema.map(_ => inputStream())
   // An XMLStreamReader used by StAXSource for XSD validation.
   private lazy val xsdValidationStreamReader =
     in2.map(in => StaxXmlParserUtils.filteredStreamReader(in, options))
@@ -103,8 +102,9 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
     while (!rowTagStarted && streamReader.hasNext) {
       streamReader.next()
     }
-    xsdSchemaValidator.get.reset()
-    xsdSchemaValidator.get.validate(new StAXSource(streamReader))
+    // Create a fresh Validator per record: Validator.reset() does not retain the
+    // configuration that ValidatorUtil.newValidator applies.
+    ValidatorUtil.newValidator(xsdSchema.get).validate(new StAXSource(streamReader))
   }
 
   override def close(): Unit = {

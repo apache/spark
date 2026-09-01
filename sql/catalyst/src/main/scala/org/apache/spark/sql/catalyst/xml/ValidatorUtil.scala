@@ -19,10 +19,11 @@ package org.apache.spark.sql.catalyst.xml
 import java.io.{File, FileInputStream, InputStream}
 import javax.xml.XMLConstants
 import javax.xml.transform.stream.StreamSource
-import javax.xml.validation.{Schema, SchemaFactory}
+import javax.xml.validation.{Schema, SchemaFactory, Validator}
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.apache.hadoop.fs.Path
+import org.xml.sax.{SAXNotRecognizedException, SAXNotSupportedException}
 
 import org.apache.spark.SparkFiles
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -75,4 +76,26 @@ object ValidatorUtil extends Logging {
    * @return Schema for the file at that path
    */
   def getSchema(path: String): Schema = cache.get(path)
+
+  /**
+   * Creates a [[Validator]] for the given schema that does not resolve external DTDs,
+   * entities, or schema references found in the document being validated. The record
+   * parser does not process DTDs, so validation applies the same restrictions to keep
+   * the two consistent. All validation of record data must go through this method.
+   */
+  def newValidator(schema: Schema): Validator = {
+    val validator = schema.newValidator()
+    try {
+      validator.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "")
+      validator.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
+      validator.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
+    } catch {
+      case e @ (_: SAXNotRecognizedException | _: SAXNotSupportedException) =>
+        // Throw rather than validate with a Validator that cannot disable external access.
+        throw new UnsupportedOperationException(
+          "The JAXP Validator implementation in use does not support disabling external " +
+            "DTD/schema access; refusing to validate with it.", e)
+    }
+    validator
+  }
 }
