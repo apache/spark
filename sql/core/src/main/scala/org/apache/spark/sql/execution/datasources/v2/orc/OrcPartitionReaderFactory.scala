@@ -49,6 +49,7 @@ import org.apache.spark.util.ArrayImplicits._
  * @param readDataSchema Required data schema in the batch scan.
  * @param partitionSchema Schema of partitions.
  * @param options Options for parsing ORC files.
+ * @param charVarcharStandardSemantics CHAR/VARCHAR semantics bound during analysis.
  */
 case class OrcPartitionReaderFactory(
     sqlConf: SQLConf,
@@ -59,7 +60,8 @@ case class OrcPartitionReaderFactory(
     filters: Array[Filter],
     aggregation: Option[Aggregation],
     options: OrcOptions,
-    memoryMode: MemoryMode) extends FilePartitionReaderFactory {
+    memoryMode: MemoryMode,
+    charVarcharStandardSemantics: Boolean = false) extends FilePartitionReaderFactory {
   private val resultSchema = StructType(readDataSchema.fields ++ partitionSchema.fields)
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val capacity = sqlConf.orcVectorizedReaderBatchSize
@@ -97,7 +99,13 @@ case class OrcPartitionReaderFactory(
       new EmptyPartitionReader[InternalRow]
     } else {
       val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
-      OrcUtils.orcResultSchemaString(canPruneCols, dataSchema, resultSchema, partitionSchema, conf)
+      OrcUtils.orcResultSchemaString(
+        canPruneCols,
+        dataSchema,
+        resultSchema,
+        partitionSchema,
+        conf,
+        charVarcharStandardSemantics)
       assert(requestedColIds.length == readDataSchema.length,
         "[BUG] requested column IDs do not match required schema")
 
@@ -138,7 +146,7 @@ case class OrcPartitionReaderFactory(
     } else {
       val (requestedDataColIds, canPruneCols) = resultedColPruneInfo.get
       val resultSchemaString = OrcUtils.orcResultSchemaString(canPruneCols,
-        dataSchema, resultSchema, partitionSchema, conf)
+        dataSchema, resultSchema, partitionSchema, conf, charVarcharStandardSemantics)
       val requestedColIds = requestedDataColIds ++ Array.fill(partitionSchema.length)(-1)
       assert(requestedColIds.length == resultSchema.length,
         "[BUG] requested column IDs do not match required schema")
