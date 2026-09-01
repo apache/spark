@@ -130,23 +130,6 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     }
   }
 
-  test("Aggregate: ordinary semi and anti pushdown does not require broadcast eligibility") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      Seq(LeftSemi, LeftAnti).foreach { joinType =>
-        val originalQuery = testRelation
-          .groupBy($"b")($"b", sum($"c"))
-          .join(testRelation1, joinType = joinType, condition = Some($"b" === $"d"))
-        val optimized = Optimize.execute(originalQuery.analyze)
-        val correctAnswer = testRelation
-          .join(testRelation1, joinType = joinType, condition = Some($"b" === $"d"))
-          .groupBy($"b")($"b", sum($"c"))
-          .analyze
-
-        comparePlans(optimized, correctAnswer)
-      }
-    }
-  }
-
   test("Aggregate: NAAJ no pushdown when the original join would build left") {
     val leftKey = $"leftKey".int
     val leftKeyStats = ColumnStat(
@@ -541,7 +524,7 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
   }
 
   Seq(LeftSemi, LeftAnti).foreach { jt =>
-    test(s"SPARK-34081: $jt only push down if join can be planned as broadcast join") {
+    test(s"SPARK-34081: ordinary $jt pushdown does not require broadcast eligibility") {
       Seq(-1, 100000).foreach { threshold =>
         withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
           val originalQuery = testRelation
@@ -549,14 +532,10 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
             .join(testRelation1, joinType = jt, condition = Some($"b" <=> $"d"))
 
           val optimized = Optimize.execute(originalQuery.analyze)
-          val correctAnswer = if (threshold > 0) {
-            testRelation
-              .join(testRelation1, joinType = jt, condition = Some($"b" <=> $"d"))
-              .groupBy($"b")($"b")
-              .analyze
-          } else {
-            originalQuery.analyze
-          }
+          val correctAnswer = testRelation
+            .join(testRelation1, joinType = jt, condition = Some($"b" <=> $"d"))
+            .groupBy($"b")($"b")
+            .analyze
 
           comparePlans(optimized, correctAnswer)
         }
