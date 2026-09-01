@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.master
 
+import java.io.ObjectInputFilter
 import java.nio.ByteBuffer
 
 import scala.jdk.CollectionConverters._
@@ -29,7 +30,8 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkCuratorUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Deploy._
-import org.apache.spark.serializer.Serializer
+import org.apache.spark.serializer.{JavaDeserializationStream, JavaSerializer, Serializer}
+import org.apache.spark.util.{ByteBufferInputStream, Utils}
 
 
 private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer: Serializer)
@@ -38,6 +40,12 @@ private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer
 
   private val workingDir = conf.get(ZOOKEEPER_DIRECTORY).getOrElse("/spark") + "/master_status"
   private val zk: CuratorFramework = SparkCuratorUtil.newClient(conf)
+
+  // Only instantiate well-known classes while reading persisted state back, so corrupted
+  // or unexpected znode contents are dropped instead of being instantiated in the newly
+  // elected master.
+  private val serializationFilter: ObjectInputFilter =
+    ObjectInputFilter.Config.createFilter(conf.get(RECOVERY_SERIALIZATION_FILTER))
 
   SparkCuratorUtil.mkdir(zk, workingDir)
 
@@ -69,7 +77,21 @@ private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer
   private def deserializeFromFile[T](filename: String)(implicit m: ClassTag[T]): Option[T] = {
     val fileData = zk.getData().forPath(workingDir + "/" + filename)
     try {
-      Some(serializer.newInstance().deserialize[T](ByteBuffer.wrap(fileData)))
+      val inputStream = new ByteBufferInputStream(ByteBuffer.wrap(fileData))
+      val in = serializer match {
+        case _: JavaSerializer =>
+          // A class rejected by the filter surfaces as InvalidClassException, which lands
+          // in the catch below: the znode is deleted and recovery continues.
+          new JavaDeserializationStream(
+            inputStream, Utils.getContextOrSparkClassLoader, Some(serializationFilter))
+        case _ =>
+          serializer.newInstance().deserializeStream(inputStream)
+      }
+      try {
+        Some(in.readObject[T]())
+      } finally {
+        in.close()
+      }
     } catch {
       case e: Exception =>
         logWarning("Exception while reading persisted file, deleting", e)
