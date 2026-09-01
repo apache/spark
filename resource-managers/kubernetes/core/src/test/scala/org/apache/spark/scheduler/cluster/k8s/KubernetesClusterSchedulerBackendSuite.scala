@@ -16,6 +16,8 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import java.io.File
+import java.nio.file.Files
 import java.util.Arrays
 import java.util.concurrent.TimeUnit
 
@@ -43,6 +45,7 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{Decommis
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils.TEST_SPARK_APP_ID
 import org.apache.spark.storage.{BlockManager, BlockManagerMaster}
+import org.apache.spark.util.Utils
 
 class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -509,5 +512,56 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       }
     }
     assert(schedulerBackendUnderTest.supportsExecutorHold)
+  }
+
+  test("SPARK-50758: setUpExecutorKrb5ConfigMap publishes or creates the krb5 ConfigMap") {
+    // 1. No krb5 config at all: no-op.
+    schedulerBackendUnderTest.setUpExecutorKrb5ConfigMap(None)
+    assert(sparkConf.getOption(KRB_CONFIG_MAP_NAME).isEmpty)
+    verify(configMapsWithNamespace, never()).resource(any[ConfigMap]())
+
+    // 2. Cluster mode: the driver step already set KRB_CONFIG_MAP_NAME.
+    sparkConf.set(KRB_CONFIG_MAP_NAME, "alreadySetByDriverStep")
+    sparkConf.set(KUBERNETES_KERBEROS_KRB5_FILE, "/does/not/matter")
+    try {
+      schedulerBackendUnderTest.setUpExecutorKrb5ConfigMap(None)
+      assert(sparkConf.get(KRB_CONFIG_MAP_NAME) === "alreadySetByDriverStep")
+      verify(configMapsWithNamespace, never()).resource(any[ConfigMap]())
+    } finally {
+      sparkConf.remove(KRB_CONFIG_MAP_NAME)
+      sparkConf.remove(KUBERNETES_KERBEROS_KRB5_FILE.key)
+    }
+
+    // 3. User-provided ConfigMap name is just published, nothing is created.
+    sparkConf.set(KUBERNETES_KERBEROS_KRB5_CONFIG_MAP, "userKrbCM")
+    try {
+      schedulerBackendUnderTest.setUpExecutorKrb5ConfigMap(None)
+      assert(sparkConf.get(KRB_CONFIG_MAP_NAME) === "userKrbCM")
+      verify(configMapsWithNamespace, never()).resource(any[ConfigMap]())
+    } finally {
+      sparkConf.remove(KUBERNETES_KERBEROS_KRB5_CONFIG_MAP.key)
+      sparkConf.remove(KRB_CONFIG_MAP_NAME)
+    }
+
+    // 4. Client mode: a local krb5.conf file triggers ConfigMap creation.
+    val tmpDir = Utils.createTempDir()
+    val krb5 = File.createTempFile("krb5", ".conf", tmpDir)
+    Files.writeString(krb5.toPath, "some krb5 data")
+    sparkConf.set(KUBERNETES_KERBEROS_KRB5_FILE, krb5.getAbsolutePath)
+    try {
+      schedulerBackendUnderTest.setUpExecutorKrb5ConfigMap(None)
+      val captor = ArgumentCaptor.forClass(classOf[ConfigMap])
+      verify(configMapsWithNamespace).resource(captor.capture())
+      verify(configMapResource).create()
+      val created = captor.getValue
+      val labels = created.getMetadata.getLabels.asScala
+      assert(labels(SPARK_APP_ID_LABEL) === TEST_SPARK_APP_ID)
+      assert(labels(SPARK_ROLE_LABEL) === SPARK_POD_EXECUTOR_ROLE)
+      assert(created.getData.keySet().asScala === Set(krb5.getName))
+      assert(sparkConf.get(KRB_CONFIG_MAP_NAME) === created.getMetadata.getName)
+    } finally {
+      sparkConf.remove(KUBERNETES_KERBEROS_KRB5_FILE.key)
+      sparkConf.remove(KRB_CONFIG_MAP_NAME)
+    }
   }
 }
