@@ -22,7 +22,6 @@ import java.util.{HashMap => JHashMap}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
 import org.apache.spark.ml.linalg.{SQLDataTypes, Vectors}
@@ -297,22 +296,16 @@ class CountVectorizerModel(
   @Since("2.0.0")
   def setBinary(value: Boolean): this.type = set(binary, value)
 
-  /** Dictionary created from [[vocabulary]] and its indices, broadcast once for [[transform()]] */
-  private var broadcastDict: Option[Broadcast[JHashMap[String, Integer]]] = None
-
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
-    if (broadcastDict.isEmpty) {
-      val dict = new JHashMap[String, Integer](math.ceil(vocabulary.length / 0.75).toInt)
-      var index = 0
-      while (index < vocabulary.length) {
-        dict.put(vocabulary(index), index)
-        index += 1
-      }
-      broadcastDict = Some(dataset.sparkSession.sparkContext.broadcast(dict))
+    val dict = new JHashMap[String, Integer](math.ceil(vocabulary.length / 0.75).toInt)
+    var index = 0
+    while (index < vocabulary.length) {
+      dict.put(vocabulary(index), index)
+      index += 1
     }
-    val dictBr = broadcastDict.get
+    val dictBr = dataset.sparkSession.sparkContext.broadcast(dict)
     val localMinTF = $(minTF)
     val localBinary = $(binary)
     val vectorizer = udf { document: Seq[String] =>
