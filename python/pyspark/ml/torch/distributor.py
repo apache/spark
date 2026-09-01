@@ -431,12 +431,20 @@ class TorchDistributor(Distributor):
         else:
             processes_per_node = 1
         node_rank = os.environ["RANK"]
+        # Set by set_torch_config; no constant fallback, since concurrent runs sharing a
+        # rendezvous endpoint would collide on a fixed id.
+        rdzv_id = os.environ.get("PYSPARK_TORCH_DISTRIBUTOR_RDZV_ID")
+        if not rdzv_id:
+            raise RuntimeError(
+                "Missing PYSPARK_TORCH_DISTRIBUTOR_RDZV_ID environment variable: a unique "
+                "per-run rendezvous id is required for distributed training."
+            )
 
         torchrun_args = [
             f"--nnodes={num_processes // processes_per_node}",
             f"--node_rank={node_rank}",
             f"--rdzv_endpoint={master_addr}:{master_port}",
-            "--rdzv_id=0",  # TODO: setup random ID that is gleaned from env variables
+            f"--rdzv_id={rdzv_id}",
         ]
         return torchrun_args, processes_per_node
 
@@ -660,6 +668,7 @@ class TorchDistributor(Distributor):
         # Spark task program
         def wrapped_train_fn(iterator):  # type: ignore[no-untyped-def]
             import os
+            import secrets
             import pandas as pd
             import pyarrow
             from pyspark import BarrierTaskContext
@@ -687,6 +696,15 @@ class TorchDistributor(Distributor):
 
                 os.environ["MASTER_ADDR"] = str(addrs[0])
                 os.environ["MASTER_PORT"] = str(get_free_port(addrs[0], context))
+                # Unique per run so that concurrent runs sharing a rendezvous endpoint
+                # do not collide.
+                rdzv_id = secrets.token_hex(16) if context.partitionId() == 0 else ""
+                rdzv_id = context.allGather(str(rdzv_id))[0]
+                if not rdzv_id:
+                    raise RuntimeError(
+                        "Failed to generate a shared rendezvous id for distributed training."
+                    )
+                os.environ["PYSPARK_TORCH_DISTRIBUTOR_RDZV_ID"] = rdzv_id
                 os.environ["WORLD_SIZE"] = str(num_processes)
                 os.environ["NODE_RANK"] = str(context.partitionId())
                 os.environ["RANK"] = str(context.partitionId())
