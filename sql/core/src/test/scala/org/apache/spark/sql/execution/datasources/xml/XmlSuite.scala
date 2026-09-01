@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
-import java.io.{EOFException, File, StringWriter}
+import java.io.{EOFException, File, StringReader, StringWriter}
 import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
@@ -24,6 +24,7 @@ import java.time.{Instant, LocalDateTime}
 import java.util.TimeZone
 import java.util.concurrent.ConcurrentHashMap
 import javax.xml.stream.{XMLOutputFactory, XMLStreamException}
+import javax.xml.transform.stream.StreamSource
 
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
@@ -35,12 +36,13 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FSDataInputStream
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
+import org.xml.sax.SAXException
 
 import org.apache.spark.{DebugFilesystem, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
-import org.apache.spark.sql.catalyst.xml.{IndentingXMLStreamWriter, XmlOptions}
+import org.apache.spark.sql.catalyst.xml.{IndentingXMLStreamWriter, ValidatorUtil, XmlOptions}
 import org.apache.spark.sql.catalyst.xml.XmlOptions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
@@ -1233,6 +1235,25 @@ class XmlSuite
         .xml(getTestResourcePath(resDir + "basket.xml"))
       // Mostly checking it doesn't fail
       assert(basketDF.selectExpr("entry[0].key").head().getLong(0) === 9027)
+    }
+  }
+
+  test("XSD validation does not resolve external references in records") {
+    val schema = ValidatorUtil.getSchema(
+      getTestResourcePath(resDir + "basket.xsd").replace("file:/", "/"))
+
+    withTempDir { dir =>
+      val dataFile = new File(dir, "data.txt")
+      Files.write(dataFile.toPath, "9027".getBytes(StandardCharsets.UTF_8))
+      // The validator sees the raw record before the record parser does, so it must
+      // reject DOCTYPE references the same way the parser does.
+      val record =
+        s"""<?xml version="1.0"?>
+           |<!DOCTYPE basket [<!ENTITY ext SYSTEM "${dataFile.toURI}">]>
+           |<basket><entry><key>&ext;</key><value>1</value></entry></basket>""".stripMargin
+      intercept[SAXException] {
+        ValidatorUtil.newValidator(schema).validate(new StreamSource(new StringReader(record)))
+      }
     }
   }
 
