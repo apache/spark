@@ -305,11 +305,11 @@ class CountVectorizerModel(
       dict.put(vocabulary(index), index)
       index += 1
     }
-    val dictBr = dataset.sparkSession.sparkContext.broadcast(dict)
+    val bcDict = dataset.sparkSession.sparkContext.broadcast(dict)
     val localMinTF = $(minTF)
     val localBinary = $(binary)
     val vectorizer = udf { document: Seq[String] =>
-      val dict = dictBr.value
+      val dict = bcDict.value
       val dictSize = dict.size()
       val termCounts = new OpenHashMap[Int, Int]
       var tokenCount = 0L
