@@ -243,8 +243,6 @@ case class AdaptiveSparkPlanExec(
 
   @volatile private var _isFinalPlan = false
 
-  private var currentStageId = 0
-
   /**
    * Return type for `createQueryStages`
    * @param newPlan the new plan with created query stages.
@@ -790,11 +788,12 @@ case class AdaptiveSparkPlanExec(
       case resultStage @ ResultQueryStageExec(_, optimizedPlan, _) =>
         assertStageNotFailed(resultStage)
         if (firstRun) {
-          // There is already an existing ResultQueryStage created in previous `withFinalPlanUpdate`
+          // There is already an existing ResultQueryStage created in previous `withFinalPlanUpdate
           // e.g, when we do `df.collect` multiple times. Here we create a new result stage to
           // execute it again, as the handler function can be different.
-          val newResultStage = ResultQueryStageExec(currentStageId, optimizedPlan, resultHandler)
-          currentStageId += 1
+          val newResultStage = ResultQueryStageExec(context.currentStageId, optimizedPlan,
+            resultHandler)
+          context.incrementStageId
           setLogicalLinkForNewQueryStage(newResultStage, optimizedPlan)
           CreateStageResult(newPlan = newResultStage,
             allChildStagesMaterialized = false,
@@ -942,8 +941,8 @@ case class AdaptiveSparkPlanExec(
       optimizeQueryStage(plan, isFinalStage = true),
       postStageCreationRules(supportsColumnar),
       "AQE Post Stage Creation")
-    val resultStage = ResultQueryStageExec(currentStageId, optimizedRootPlan, resultHandler)
-    currentStageId += 1
+    val resultStage = ResultQueryStageExec(context.currentStageId, optimizedRootPlan, resultHandler)
+    context.incrementStageId
     setLogicalLinkForNewQueryStage(resultStage, plan)
     resultStage
   }
@@ -961,14 +960,14 @@ case class AdaptiveSparkPlanExec(
             throw SparkException.internalError(
               "Custom columnar rules cannot transform shuffle node to something else.")
           }
-          ShuffleQueryStageExec(currentStageId, newPlan, e.canonicalized)
+          ShuffleQueryStageExec(context.currentStageId, newPlan, e.canonicalized)
         } else {
           assert(e.isInstanceOf[BroadcastExchangeLike])
           if (!newPlan.isInstanceOf[BroadcastExchangeLike]) {
             throw SparkException.internalError(
               "Custom columnar rules cannot transform broadcast node to something else.")
           }
-          BroadcastQueryStageExec(currentStageId, newPlan, e.canonicalized)
+          BroadcastQueryStageExec(context.currentStageId, newPlan, e.canonicalized)
         }
       case i: InMemoryTableScanLike =>
         // Apply `queryStageOptimizerRules` so that we can reuse subquery.
@@ -979,9 +978,9 @@ case class AdaptiveSparkPlanExec(
           throw SparkException.internalError(
             "Custom AQE rules cannot transform table scan node to something else.")
         }
-        TableCacheQueryStageExec(currentStageId, newPlan)
+        TableCacheQueryStageExec(context.currentStageId, newPlan)
     }
-    currentStageId += 1
+    context.incrementStageId
     setLogicalLinkForNewQueryStage(queryStage, plan)
     queryStage
   }
@@ -990,8 +989,8 @@ case class AdaptiveSparkPlanExec(
       existing: ExchangeQueryStageExec,
       exchange: Exchange): ExchangeQueryStageExec = {
     context.markSharedStageResult(existing.resultOption, this)
-    val queryStage = existing.newReuseInstance(currentStageId, exchange.output)
-    currentStageId += 1
+    val queryStage = existing.newReuseInstance(context.currentStageId, exchange.output)
+    context.incrementStageId
     setLogicalLinkForNewQueryStage(queryStage, exchange)
     recordStageId(queryStage)
     queryStage
@@ -1319,6 +1318,13 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
   }
 
   val shuffleIds: ConcurrentHashMap[Int, Boolean] = new ConcurrentHashMap[Int, Boolean]()
+
+  private var _currentStageId = 0
+  private[adaptive] def currentStageId: Int = this._currentStageId
+  private[adaptive] def incrementStageId: Unit = {
+    this._currentStageId += 1
+  }
+
 }
 
 /**
