@@ -200,13 +200,14 @@ public class TransportResponseHandlerSuite {
 
   @Test
   public void streamResponseWithMismatchedStreamIdThrows() throws Exception {
-    // The FIFO streamCallbacks queue matches responses to callbacks by poll() order, which assumes
-    // the server answers StreamRequests in the order the client sent them. If a StreamResponse's
-    // streamId does not match the head-of-queue callback's registered streamId, that assumption has
-    // been violated and the queue is desynced -- delivering this response would feed the wrong
-    // block's bytes to the callback. The handler must throw instead (SPARK-59142); throwing
-    // propagates to Netty's exceptionCaught -> the connection is torn down and its outstanding
-    // requests re-fetched in order on a fresh channel.
+    // The FIFO streamCallbacks queue matches responses to callbacks by poll() order. A response
+    // whose streamId does not match the head-of-queue callback's registered streamId is unreachable
+    // under correct operation (responses arrive in order on one connection and each callback is
+    // registered under its own streamId) -- it would only arise from memory/hardware corruption,
+    // and delivering the response would feed the wrong block's bytes to the callback. The defensive
+    // guard must throw instead (SPARK-59142); throwing propagates to Netty's exceptionCaught -> the
+    // connection is torn down and its outstanding requests re-fetched in order on a fresh channel.
+    // A mismatch is simulated by registering "stream-A" and handling a response for "stream-B".
     Channel c = new LocalChannel();
     c.pipeline().addLast(TransportFrameDecoder.HANDLER_NAME, new TransportFrameDecoder());
     TransportResponseHandler handler = new TransportResponseHandler(c);
