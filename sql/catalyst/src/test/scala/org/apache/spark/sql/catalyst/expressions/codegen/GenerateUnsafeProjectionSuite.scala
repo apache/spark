@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{ArrayTransform, BoundReference, InterpretedUnsafeProjection, LambdaFunction, NamedLambdaVariable}
+import org.apache.spark.sql.catalyst.expressions.{ArrayExists, ArrayForAll, ArrayTransform, BoundReference, InterpretedUnsafeProjection, LambdaFunction, Literal, NamedLambdaVariable}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
@@ -133,12 +133,34 @@ class GenerateUnsafeProjectionSuite extends SparkFunSuite {
   }
 
   test("a higher-order function over a declared-non-null null argument yields null") {
-    // The argument is declared non-nullable but is null at runtime.
-    val lv = NamedLambdaVariable("x", StringType, nullable = true)
-    val child = BoundReference(0, ArrayType(StringType, containsNull = true), nullable = false)
-    val expr = ArrayTransform(child, LambdaFunction(lv, Seq(lv)))
-    val result = GenerateUnsafeProjection.generate(expr :: Nil).apply(InternalRow(null))
-    assert(result.isNullAt(0))
+    // The argument is declared non-nullable but is null at runtime. `exists` and `forall` return a
+    // primitive, so a result that is not reported as null would be a wrong answer rather than a
+    // dereference of null.
+    val nullArgument = BoundReference(
+      0, ArrayType(StringType, containsNull = true), nullable = false)
+    def lambdaVar(): NamedLambdaVariable = NamedLambdaVariable("x", StringType, nullable = true)
+
+    val identity = lambdaVar()
+    val exprs = Seq(
+      "transform" -> ArrayTransform(nullArgument, LambdaFunction(identity, Seq(identity))),
+      "exists" -> ArrayExists(
+        nullArgument, LambdaFunction(Literal(true), Seq(lambdaVar())),
+        followThreeValuedLogic = true),
+      "exists (legacy)" -> ArrayExists(
+        nullArgument, LambdaFunction(Literal(true), Seq(lambdaVar())),
+        followThreeValuedLogic = false),
+      "forall" -> ArrayForAll(nullArgument, LambdaFunction(Literal(true), Seq(lambdaVar()))))
+
+    exprs.foreach { case (name, expr) =>
+      withClue(s"$name: ") {
+        // `eval` returns null for a null argument whatever the declaration says, so the expression
+        // has to report itself nullable for the projection to keep the null.
+        assert(expr.nullable)
+        assert(expr.eval(InternalRow(null)) == null)
+        val result = GenerateUnsafeProjection.generate(expr :: Nil).apply(InternalRow(null))
+        assert(result.isNullAt(0))
+      }
+    }
   }
 }
 

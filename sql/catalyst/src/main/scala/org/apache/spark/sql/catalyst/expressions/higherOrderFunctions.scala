@@ -359,6 +359,11 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction with BinaryLike[Expr
     throw QueryExecutionErrors.notOverrideExpectedMethodsError(this.getClass.getName,
       "eval", "nullSafeEval")
 
+  // The argument is an array or map, whose declared non-nullability is not enforced against the
+  // data, so `eval` below returns null for a null argument no matter what the declaration says.
+  // The result is therefore nullable regardless of the argument's own flag.
+  override def nullable: Boolean = true
+
   override def eval(inputRow: InternalRow): Any = {
     val value = argument.eval(inputRow)
     if (value == null) {
@@ -375,25 +380,15 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction with BinaryLike[Expr
     val argumentGen = argument.genCode(ctx)
     val resultCode = f(argumentGen.value)
 
-    if (nullable) {
-      val nullSafeEval = ctx.nullSafeExec(argument.nullable, argumentGen.isNull)(resultCode)
-      ev.copy(code = code"""
-        |${argumentGen.code}
-        |boolean ${ev.isNull} = ${argumentGen.isNull};
-        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        |$nullSafeEval
-      """)
-    } else {
-      // A declared non-null argument can still be null at runtime, so null-check the reference
-      // here too, matching `eval` above.
-      ev.copy(code = code"""
-        |${argumentGen.code}
-        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        |if (${argumentGen.value} != null) {
-        |  $resultCode
-        |}
-      """, isNull = FalseLiteral)
-    }
+    // Test the reference rather than the declared nullability, matching `eval` above.
+    ev.copy(code = code"""
+      |${argumentGen.code}
+      |boolean ${ev.isNull} = ${argumentGen.isNull} || ${argumentGen.value} == null;
+      |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+      |if (!${ev.isNull}) {
+      |  $resultCode
+      |}
+    """)
   }
 }
 
