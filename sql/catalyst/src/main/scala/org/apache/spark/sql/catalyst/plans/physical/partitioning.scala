@@ -467,8 +467,9 @@ case class CoalescedNullAwareHashPartitioning(
  *   or a `GroupPartitionsExec` can coalesce the partitions that share a key.
  *
  * == Distribution Satisfaction and Grouping ==
- * Besides the default `satisfies()`, `KeyedPartitioning` answers three questions. They differ in
- * what they let happen to the data before the distribution counts as met.
+ * Besides the default `satisfies()`, `KeyedPartitioning` answers four questions. They differ in
+ * what they let happen to the data before the distribution counts as met. Only `keysMaySatisfy()`
+ * is asked from outside the class. The other three build it and `satisfies()` up.
  *
  * - `nonGroupedSatisfies()`: is the distribution met by the partitioning as it stands, with no node
  *   inserted? It is the default `Partitioning` implementation, so for a `ClusteredDistribution` it
@@ -480,6 +481,10 @@ case class CoalescedNullAwareHashPartitioning(
  *   distribution? It is asked of non-grouped partitionings only, where such a node coalesces the
  *   duplicate keys. So the answer is `keysSatisfy()`, plus whether that coalescing is allowed.
  *   "Key Collapse" below says when it is not.
+ * - `keysMaySatisfy()`: the same question for a partitioning that may already be grouped, which is
+ *   what `EnsureRequirements` asks. It is `mayGroupToSatisfy()` for a non-grouped one, and
+ *   `keysSatisfy()` for a grouped one, which has no duplicate keys left for the node to coalesce,
+ *   and so nothing for the permission to govern.
  *
  * For `OrderedDistribution`, `GroupPartitionsExec` must also sort the partition keys to meet the
  * ordering requirement.
@@ -689,6 +694,26 @@ case class KeyedPartitioning(
     KeyedPartitioning.projectKeys(partitionKeys, keyDataTypes, positions)
 
   /**
+   * The number of partitions a `GroupPartitionsExec` projecting these keys to `positions` would
+   * leave, which is the number of distinct projected keys. `positions` must be distinct and in
+   * range, as it must be for `project` and `projectKeys`.
+   *
+   * A projection that keeps every position is the identity on the key values, so it needs no
+   * projected rows at all. The rest allocate a row per partition and hash it with an uncached
+   * `hashCode`, which makes this the expensive question to ask of a partitioning. A caller asking
+   * it for several position sets should memoize on the set.
+   */
+  def numPartitionsProjectedOn(positions: Seq[Int]): Int = {
+    if (positions.length < expressions.length) {
+      projectKeys(positions)._2.distinct.size
+    } else if (isGrouped) {
+      numPartitions
+    } else {
+      partitionKeys.distinct.size
+    }
+  }
+
+  /**
    * Reduces this partitioning's partition keys by applying the given reducers.
    * Returns the reduced keys and their data types.
    */
@@ -700,9 +725,10 @@ case class KeyedPartitioning(
     nonGroupedSatisfies(required) || (isGrouped && keysSatisfy(required))
   }
 
-  def nonGroupedSatisfies(required: Distribution): Boolean = super.satisfies0(required)
+  /** The first of the four questions the class doc lists. */
+  private def nonGroupedSatisfies(required: Distribution): Boolean = super.satisfies0(required)
 
-  /** The first of the three questions the class doc lists. */
+  /** The second of the four questions the class doc lists. */
   private def keysSatisfy(required: Distribution): Boolean = {
     required match {
       case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
@@ -738,10 +764,10 @@ case class KeyedPartitioning(
   }
 
   /**
-   * The third of the three questions the class doc lists. Ask it only of a partitioning that is not
-   * grouped, since a grouped one has nothing to coalesce and `satisfies` is the question for it.
+   * The third of the four questions the class doc lists. Ask it only of a partitioning that is not
+   * grouped, since a grouped one has nothing to coalesce and `keysMaySatisfy` covers both.
    */
-  def mayGroupToSatisfy(required: Distribution): Boolean = {
+  private[sql] def mayGroupToSatisfy(required: Distribution): Boolean = {
     val mayCoalesce = required match {
       case _: ClusteredDistribution =>
         !isCollapsed || SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys
@@ -749,6 +775,11 @@ case class KeyedPartitioning(
     }
     // The permission is the cheap half, so it is asked first.
     mayCoalesce && keysSatisfy(required)
+  }
+
+  /** The fourth of the four questions the class doc lists. */
+  private[sql] def keysMaySatisfy(required: Distribution): Boolean = {
+    if (isGrouped) keysSatisfy(required) else mayGroupToSatisfy(required)
   }
 
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec = {
