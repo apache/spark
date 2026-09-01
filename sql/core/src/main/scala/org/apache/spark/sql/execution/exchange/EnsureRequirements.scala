@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.exchange
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -26,7 +27,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
-import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.v2.GroupPartitionsExec
@@ -72,20 +72,20 @@ case class EnsureRequirements(
           child
         } else {
           // Check KeyedPartitioning satisfaction conditions
-          val groupedSatisfies = grouped.find(_.satisfies(distribution))
+          val satisfyingGrouped = grouped.find(_.satisfies(distribution))
           val nonGroupedSatisfiesAsIs = nonGrouped.exists(_.nonGroupedSatisfies(distribution))
-          val nonGroupedSatisfiesWhenGrouped = nonGrouped.find(_.groupedSatisfies(distribution))
+          val groupableNonGrouped = nonGrouped.find(_.mayGroupToSatisfy(distribution))
 
           // Check if any KeyedPartitioning satisfies the distribution
-          if (groupedSatisfies.isDefined || nonGroupedSatisfiesAsIs
-              || nonGroupedSatisfiesWhenGrouped.isDefined) {
+          if (satisfyingGrouped.isDefined || nonGroupedSatisfiesAsIs
+              || groupableNonGrouped.isDefined) {
             distribution match {
               case o: OrderedDistribution =>
                 // OrderedDistribution requires grouped KeyedPartitioning with sorted keys
                 // according to the distribution's ordering.
-                // Find any KeyedPartitioning that satisfies via groupedSatisfies.
+                // Find any KeyedPartitioning that satisfies, grouped or groupable.
                 val satisfyingKeyedPartitioning =
-                  groupedSatisfies.orElse(nonGroupedSatisfiesWhenGrouped).get
+                  satisfyingGrouped.orElse(groupableNonGrouped).get
                 // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees
                 // one attribute per partition expression.
                 val attrs = satisfyingKeyedPartitioning.expressions.flatMap(_.references)
@@ -106,7 +106,7 @@ case class EnsureRequirements(
                   )
                 }
 
-              case _ if groupedSatisfies.isDefined =>
+              case _ if satisfyingGrouped.isDefined =>
                 // Grouped KeyedPartitioning already satisfies
                 child
 
@@ -248,13 +248,16 @@ case class EnsureRequirements(
           child
         case ((child, dist), idx) =>
           if (bestSpecOpt.isDefined && bestSpecOpt.get.isCompatibleWith(specs(idx))) {
-            bestSpecOpt match {
+            // If the child's partitioning is a `PartitioningCollection`, its spec is a
+            // `ShuffleSpecCollection` whose `createPartitioning` delegates to the head spec,
+            // so unwrap to the head spec to stay aligned with the re-shuffled side below.
+            unwrapSpecCollection(bestSpecOpt.get) match {
               // If `areChildrenCompatible` is false, we can still perform SPJ
               // by shuffling the other side based on join keys (see the else case below).
               // Hence we need to ensure that after this call, the outputPartitioning of the
               // partitioned side's BatchScanExec is grouped by join keys to match,
               // and we do that by pushing down the join keys
-              case Some(KeyedShuffleSpec(_, _, Some(joinKeyPositions))) =>
+              case KeyedShuffleSpec(_, _, Some(joinKeyPositions)) =>
                 withJoinKeyPositions(child, joinKeyPositions)
               case _ => child
             }
@@ -550,13 +553,12 @@ case class EnsureRequirements(
 
         // in case of compatible but not identical partition expressions, we apply 'reduce'
         // transforms to group one side's partitions as well as the common partition values
-        val leftReducers = leftSpec.reducers(rightSpec)
-        val rightReducers = rightSpec.reducers(leftSpec)
+        val (leftReducers, rightReducers) = leftSpec.reducersBothWays(rightSpec)
         val (leftReducedDataTypes, leftReducedKeys) = leftReducers.fold(
-          (leftPartitioning.expressionDataTypes, leftPartitioning.partitionKeys)
+          (leftPartitioning.keyDataTypes, leftPartitioning.partitionKeys)
         )(leftPartitioning.reduceKeys)
         val (rightReducedDataTypes, rightReducedKeys) = rightReducers.fold(
-          (rightPartitioning.expressionDataTypes, rightPartitioning.partitionKeys)
+          (rightPartitioning.keyDataTypes, rightPartitioning.partitionKeys)
         )(rightPartitioning.reduceKeys)
         val reducedDataTypes = if (leftReducedDataTypes == rightReducedDataTypes) {
           leftReducedDataTypes
@@ -568,9 +570,8 @@ case class EnsureRequirements(
             rightReducedDataTypes = rightReducedDataTypes)
         }
 
-        val reducedKeyRowOrdering = RowOrdering.createNaturalAscendingOrdering(reducedDataTypes)
-        val reducedKeyOrdering =
-          reducedKeyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
+        val reducedKeyOrdering = KeyedPartitioning.groupedKeyRowOrdering(reducedDataTypes)
+          .on((t: InternalRowComparableWrapper) => t.row)
 
         // merge values on both sides
         var mergedPartitionKeys =
@@ -743,7 +744,7 @@ case class EnsureRequirements(
       plan: SparkPlan,
       joinKeyPositions: Option[Seq[Int]],
       mergedPartitionKeys: Seq[(InternalRowComparableWrapper, Int)],
-      reducers: Option[Seq[Option[Reducer[_, _]]]],
+      reducers: Option[Seq[Option[KeyReducer]]],
       distributePartitions: Boolean): SparkPlan = {
     plan match {
       case g: GroupPartitionsExec =>
@@ -758,6 +759,14 @@ case class EnsureRequirements(
         GroupPartitionsExec(plan, joinKeyPositions, Some(mergedPartitionKeys), reducers,
           distributePartitions)
     }
+  }
+
+  // Unwraps a `ShuffleSpecCollection` (possibly nested) to the spec that its
+  // `createPartitioning` delegates to, i.e. the head spec.
+  @tailrec
+  private def unwrapSpecCollection(spec: ShuffleSpec): ShuffleSpec = spec match {
+    case ShuffleSpecCollection(specs) => unwrapSpecCollection(specs.head)
+    case other => other
   }
 
   /**

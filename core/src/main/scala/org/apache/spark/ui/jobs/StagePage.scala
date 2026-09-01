@@ -20,9 +20,10 @@ package org.apache.spark.ui.jobs
 import java.util.Date
 
 import scala.collection.mutable.HashSet
-import scala.xml.{Node, Unparsed}
+import scala.xml.{Node, Unparsed, Utility}
 
 import jakarta.servlet.http.HttpServletRequest
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.scheduler.TaskLocality
@@ -247,7 +248,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
 
   }
 
-  private def makeTimeline(
+  private[jobs] def makeTimeline(
       tasksFunc: () => Seq[TaskData],
       currentTime: Long,
       page: Int,
@@ -267,8 +268,16 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
 
     val executorsArrayStr =
       tasks.sortBy(-_.launchTime.getTime()).take(MAX_TIMELINE_TASKS).map { taskInfo =>
-        val executorId = taskInfo.executorId
-        val host = taskInfo.host
+        // Executor ids and hosts can carry quotes or markup (e.g. custom executor names),
+        // which would break the task timeline's JavaScript string literals and tooltip
+        // HTML. Escape them as AllJobsPage.makeJobEvent does, and the status along with
+        // them; the status lands in the tooltip's data-bs-title, which the tooltip
+        // re-parses as HTML, so it gets a second HTML-escape layer, as in
+        // AllJobsPage.makeExecutorEvent.
+        val executorId = StringEscapeUtils.escapeEcmaScript(Utility.escape(taskInfo.executorId))
+        val host = StringEscapeUtils.escapeEcmaScript(Utility.escape(taskInfo.host))
+        val status = StringEscapeUtils.escapeEcmaScript(
+          Utility.escape(Utility.escape(taskInfo.status)))
         executorsSet += ((executorId, host))
 
         val launchTime = taskInfo.launchTime.getTime()
@@ -364,7 +373,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
                  |data-bs-toggle="tooltip"
                  |data-bs-html="true" data-bs-container="body"
                  |data-bs-title="${"Task " + index + " (attempt " + attempt + ")"}<br>
-                 |Status: ${taskInfo.status}<br>
+                 |Status: $status<br>
                  |Launch Time: ${UIUtils.formatDate(new Date(launchTime))}
                  |${
                      if (taskInfo.duration.isEmpty) {
