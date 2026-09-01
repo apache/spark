@@ -14846,9 +14846,9 @@ object functions {
   /**
    * Keeps only the fields or array elements of a variant at the given JSONPath locations,
    * preserving their enclosing structure; kept array elements are compacted into a new array in
-   * their original order. Returns NULL if `v` is NULL; NULL paths are skipped. If no path
-   * matches, an object or array input yields an empty object or array, while a scalar or
-   * variant-null input is unchanged.
+   * their original order. If no path matches, an object or array input yields an empty object or
+   * array, while a scalar or variant-null input is unchanged. Returns NULL if `v` is NULL; NULL
+   * paths are skipped.
    *
    * @param v
    *   a variant column.
@@ -14859,7 +14859,9 @@ object functions {
    * @param paths
    *   additional JSONPath arguments.
    * @group variant_funcs
-   * @since 5.0.0
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a variant.
    */
   @scala.annotation.varargs
   def variant_pick(v: Column, path: Column, paths: Column*): Column =
@@ -14868,19 +14870,21 @@ object functions {
   /**
    * Keeps only the fields or array elements of a variant at the given JSONPath locations,
    * preserving their enclosing structure; kept array elements are compacted into a new array in
-   * their original order. Returns NULL if `v` is NULL; NULL paths are skipped. If no path
-   * matches, an object or array input yields an empty object or array, while a scalar or
-   * variant-null input is unchanged.
+   * their original order. If no path matches, an object or array input yields an empty object or
+   * array, while a scalar or variant-null input is unchanged. Returns NULL if `v` is NULL; NULL
+   * paths are skipped.
    *
    * @param v
    *   a variant column.
    * @param path
-   *   the first JSONPath identifying a substructure to keep. A valid path should start with `$` and
-   *   is followed by zero or more segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+   *   the first JSONPath identifying a substructure to keep. A valid path should start with `$`
+   *   and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or `["name"]`.
    * @param paths
    *   additional JSONPath strings.
    * @group variant_funcs
-   * @since 5.0.0
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a variant.
    */
   @scala.annotation.varargs
   def variant_pick(v: Column, path: String, paths: String*): Column =

@@ -276,16 +276,8 @@ object VariantExpressionEvalUtils {
     new VariantVal(out.getValue, out.getMetadata)
   }
 
-  /**
-   * Throws `INVALID_VARIANT_PATH` on a malformed path. Unlike the other variant manipulation
-   * functions, the empty (root `$`) path is allowed: for `variant_pick` it selects the whole
-   * variant.
-   */
-  def parseVariantPickPath(pathValue: String): Array[VariantPathSegment] =
-    parseVariantPath(pathValue, "variant_pick", allowRoot = true)
-
   def parsePickPath(path: UTF8String): Array[VariantBuilder.PathSegment] =
-    toJavaSegments(parseVariantPickPath(path.toString))
+    toJavaSegments(parseVariantPath(path.toString, "variant_pick", allowRoot = true))
 
   def pickAtPaths(
       input: VariantVal,

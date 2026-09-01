@@ -23549,11 +23549,11 @@ def variant_pick(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
     """
     Keeps only the fields or array elements of a variant at the given JSONPath locations, preserving
     their enclosing structure; kept array elements are compacted into a new array in their
-    original order. Returns NULL if `v` is NULL; NULL paths are skipped. If no path matches, an
-    object or array input yields an empty object or array, while a scalar or variant-null input is
-    unchanged.
+    original order. If no path matches, an object or array input yields an empty object or array,
+    while a scalar or variant-null input is unchanged. Returns NULL if `v` is NULL; NULL paths are
+    skipped.
 
-    .. versionadded:: 5.0.0
+    .. versionadded:: 4.4.0
 
     Parameters
     ----------
@@ -23580,7 +23580,7 @@ def variant_pick(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
     >>> v = parse_json(df.json)
     >>> df.select(to_json(variant_pick(v, "$.a.b")).alias("r")).collect()
     [Row(r='{"a":{"b":1}}')]
-    >>> df.select(to_json(variant_pick(v, "$.a.c", "$.items[0]")).alias("r")).collect()
+    >>> df.select(to_json(variant_pick(v, lit(None), "$.a.c", "$.items[0]")).alias("r")).collect()
     [Row(r='{"a":{"c":2},"items":[10]}')]
     >>> df.select(to_json(variant_pick(v, "$.items[0]", "$.items[2]")).alias("r")).collect()
     [Row(r='{"items":[10,30]}')]

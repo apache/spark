@@ -1004,9 +1004,9 @@ object VariantDelete {
 @ExpressionDescription(
   usage = "_FUNC_(v, path1[, path2, ...]) - Keeps only the fields or array elements of a variant " +
     "at the given JSONPath locations, preserving their enclosing structure; kept array elements " +
-    "are compacted into a new array in their original order. Returns NULL if `v` is NULL; NULL " +
-    "paths are skipped. If no path matches, an object or array input yields an empty object or " +
-    "array, while a scalar or variant-null input is unchanged.",
+    "are compacted into a new array in their original order. If no path matches, an object or " +
+    "array input yields an empty object or array, while a scalar or variant-null input is " +
+    "unchanged. Returns NULL if `v` is NULL; NULL paths are skipped.",
   arguments = """
     Arguments:
       * v - A variant value to project.
@@ -1031,7 +1031,7 @@ object VariantDelete {
       > SELECT _FUNC_(NULL, '$.a');
        NULL
   """,
-  since = "5.0.0",
+  since = "4.4.0",
   group = "variant_funcs"
 )
 // scalastyle:on line.size.limit
@@ -1051,7 +1051,6 @@ case class VariantPick(children: Seq[Expression])
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length < 2) {
-      // `wrongNumArgsError` already quotes the function name via `toSQLId`, so pass the raw name.
       throw QueryCompilationErrors.wrongNumArgsError(
         prettyName, Seq("> 1"), children.length)
     }
@@ -1079,8 +1078,7 @@ case class VariantPick(children: Seq[Expression])
     }
   }
 
-  // Collect the java path segments of all non-NULL paths. Unlike `variant_delete`, the paths are a
-  // set applied in a single pass, so they must be gathered before projecting.
+  // Collect the java path segments of all non-NULL paths.
   private def collectPaths(
       input: InternalRow): java.util.List[Array[VariantBuilder.PathSegment]] = {
     val paths = new java.util.ArrayList[Array[VariantBuilder.PathSegment]](pathArgs.length)
@@ -1179,8 +1177,8 @@ object VariantPick {
       if (v == null) {
         None
       } else {
-        Some(ParsedPickPath(
-          VariantExpressionEvalUtils.parseVariantPickPath(v.asInstanceOf[UTF8String].toString)))
+        Some(ParsedPickPath(VariantExpressionEvalUtils.parseVariantPath(
+          v.asInstanceOf[UTF8String].toString, "variant_pick", allowRoot = true)))
       }
     } else {
       Some(DynamicPickPath(child))

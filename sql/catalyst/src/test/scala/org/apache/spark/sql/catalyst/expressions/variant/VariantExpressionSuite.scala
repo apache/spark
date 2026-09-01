@@ -2145,11 +2145,17 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // A broader path subsumes a narrower one.
     checkPick("""{"a": {"b": 1, "c": 2}}""", Seq("$.a", "$.a.b"), """{"a":{"b":1,"c":2}}""")
+    checkPick("""{"a": {"b": 1, "c": 2}}""", Seq("$.a.b", "$.a"), """{"a":{"b":1,"c":2}}""")
 
     // Arrays are compacted in original order; out-of-range indices are skipped.
     checkPick("[10, 20, 30, 40]", Seq("$[2]", "$[0]"), "[10,30]")
     checkPick("[10, 20, 30]", Seq("$[5]"), "[]")
     checkPick("""{"a": [10, 20, 30]}""", Seq("$.a[1]"), """{"a":[20]}""")
+
+    // Array elements that are containers recurse and compact; an element that picks nothing drops.
+    checkPick("""[{"x": 1, "y": 2}, {"z": 3}]""", Seq("$[0].x"), """[{"x":1}]""")
+    checkPick("""[{"x": 1}]""", Seq("$[0].y"), "[]")
+    checkPick("[[10, 20, 30]]", Seq("$[0][1]"), "[[20]]")
 
     // Missing keys are skipped; a parent whose picks all miss is dropped.
     checkPick("""{"a": 1, "b": 2}""", Seq("$.a", "$.missing"), """{"a":1}""")
@@ -2166,11 +2172,25 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Type mismatch matches nothing, but the top-level shape is preserved (object -> {}, array
     // -> []); descending into a scalar drops the parent.
     checkPick("[1, 2, 3]", Seq("$.a"), "[]")
+    checkPick("""{"a": 1}""", Seq("$[0]"), "{}")
     checkPick("""{"a": 1}""", Seq("$.a.b"), "{}")
+
+    // Paths disagreeing on the container type build a node holding both maps; only the one matching
+    // the actual value is used (object value -> object key, array value -> index).
+    checkPick("""{"a": 1, "b": 2}""", Seq("$.a", "$[0]"), """{"a":1}""")
+    checkPick("[10, 20, 30]", Seq("$.a", "$[0]"), "[10]")
 
     // Duplicate paths are deduplicated, and bracket notation resolves like dot notation.
     checkPick("""{"a": 1, "b": 2}""", Seq("$.a", "$.a"), """{"a":1}""")
     checkPick("""{"a": 1, "b": 2}""", Seq("$['a']"), """{"a":1}""")
+
+    // Non-ASCII field names are matched and preserved, in both dot and bracket notation.
+    // scalastyle:off nonascii
+    checkPick("""{"café": 1, "naïve": 2}""", Seq("$.café"), """{"café":1}""")
+    checkPick(
+      """{"日本語": {"x": 1, "y": 2}}""", Seq("$['日本語'].x"), """{"日本語":{"x":1}}""")
+    checkPick("""{"ключ": [10, 20, 30]}""", Seq("$.ключ[1]"), """{"ключ":[20]}""")
+    // scalastyle:on nonascii
 
     // A NULL path is skipped; the remaining paths still apply.
     checkPick("""{"a": 1, "b": 2}""", Seq(null, "$.a"), """{"a":1}""")
@@ -2184,6 +2204,13 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       ResolveTimeZone.resolveTimeZones(Cast(mixedLitDyn, StringType)),
       """{"a":1,"c":3}""",
       InternalRow(UTF8String.fromString("$.c")))
+
+    // A dynamic path that evaluates to NULL is skipped at runtime (unlike a constant NULL, which is
+    // dropped when the tree is built); the remaining literal path still applies.
+    checkEvaluation(
+      ResolveTimeZone.resolveTimeZones(Cast(mixedLitDyn, StringType)),
+      """{"a":1}""",
+      InternalRow(null))
 
     // NULL variant input yields NULL.
     checkEvaluation(
@@ -2201,6 +2228,15 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkErrorInExpression[SparkRuntimeException](
       VariantPick(Seq(BoundReference(0, VariantType, nullable = true), Literal("garbage"))),
       InternalRow(null),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "garbage", "functionName" -> "`variant_pick`"))
+
+    // A malformed dynamic path is rejected at runtime (via `parsePickPath`), in both modes.
+    checkErrorInExpression[SparkRuntimeException](
+      VariantPick(Seq(
+        Literal(parseJson("""{"a": 1}""")),
+        BoundReference(0, StringType, nullable = true))),
+      InternalRow(UTF8String.fromString("garbage")),
       "INVALID_VARIANT_PATH",
       Map("path" -> "garbage", "functionName" -> "`variant_pick`"))
 

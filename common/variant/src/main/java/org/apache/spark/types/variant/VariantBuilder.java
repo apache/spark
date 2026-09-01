@@ -1000,6 +1000,9 @@ public class VariantBuilder {
       }
       if (depth == path.length) {
         keepAll = true;
+        // Drop children from narrower paths added earlier; keepAll subsumes them.
+        objectChildren = null;
+        arrayChildren = null;
         return;
       }
       PathSegment seg = path[depth];
@@ -1047,8 +1050,7 @@ public class VariantBuilder {
           value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
         ArrayList<FieldEntry> fields = new ArrayList<>();
         int start = writePos;
-        // Only object-key paths can match object fields; skip the scan (and its per-field key
-        // lookups) entirely when this node holds none (e.g. an object reached by array indexes).
+        // No object-key children here: skip the whole scan and its per-field key lookups.
         if (node.objectChildren != null) {
           for (int i = 0; i < size; ++i) {
             int id = readUnsigned(value, idStart + idSize * i, idSize);
@@ -1073,16 +1075,19 @@ public class VariantBuilder {
       return handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) -> {
         ArrayList<Integer> offsets = new ArrayList<>();
         int start = writePos;
-        for (int i = 0; i < size; ++i) {
-          PickNode child = node.arrayChildren == null ? null : node.arrayChildren.get(i);
-          if (child != null) {
-            int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
-            int elementStart = writePos;
-            int elementOffset = writePos - start;
-            if (pickImpl(value, metadata, dataStart + offset, child)) {
-              offsets.add(elementOffset);
-            } else {
-              writePos = elementStart;
+        // No array-index children here: skip the whole element scan.
+        if (node.arrayChildren != null) {
+          for (int i = 0; i < size; ++i) {
+            PickNode child = node.arrayChildren.get(i);
+            if (child != null) {
+              int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+              int elementStart = writePos;
+              int elementOffset = writePos - start;
+              if (pickImpl(value, metadata, dataStart + offset, child)) {
+                offsets.add(elementOffset);
+              } else {
+                writePos = elementStart;
+              }
             }
           }
         }
