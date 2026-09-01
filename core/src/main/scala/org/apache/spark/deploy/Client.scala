@@ -31,6 +31,7 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.master.DriverState.DriverState
+import org.apache.spark.deploy.rest.RestSubmissionClient
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.Network.RPC_ASK_TIMEOUT
@@ -101,9 +102,12 @@ private class ClientEndpoint(
 
         val sparkJavaOpts = Utils.sparkJavaOpts(conf)
         val javaOpts = sparkJavaOpts ++ extraJavaOpts
+        // Forward only Spark-relevant environment variables, matching the REST submission
+        // client, instead of the submitter's full environment.
+        val filteredEnv = RestSubmissionClient.filterSystemEnvironment(sys.env)
         val command = new Command(mainClass,
           Seq("{{WORKER_URL}}", "{{USER_JAR}}", driverArgs.mainClass) ++ driverArgs.driverOptions,
-          sys.env, classPathEntries, libraryPathEntries, javaOpts)
+          filteredEnv, classPathEntries, libraryPathEntries, javaOpts)
         val driverResourceReqs = ResourceUtils.parseResourceRequirements(conf,
           config.SPARK_DRIVER_PREFIX)
         val driverDescription = new DriverDescription(
