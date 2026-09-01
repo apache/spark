@@ -35,6 +35,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Nested column pruning", FixedPoint(100),
+      RewriteSizeOfArrayStruct,
       ColumnPruning,
       CollapseProject,
       RemoveNoopOperators) :: Nil
@@ -236,6 +237,46 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .select(field1, field2)
       .limit(5)
       .analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("SPARK-58735: size(array<struct>) prunes to a single element field") {
+    def collectArrayStructFields(plan: LogicalPlan): Seq[GetArrayStructFields] =
+      plan.flatMap(_.expressions.flatMap(_.collect { case g: GetArrayStructFields => g })).distinct
+
+    // `size(friends)` should be rewritten to read only one field of the element struct,
+    // so nested column pruning reads a single column instead of the whole `friends` struct.
+    val query = contact.select(Size($"friends", legacySizeOfNull = false)).analyze
+    val optimized = Optimize.execute(query)
+
+    // The rewrite preserves the user-visible output name (`size(friends)`); only the read
+    // schema changes.
+    val expected = contact
+      .select(Size(
+        GetArrayStructFields($"friends",
+          field = StructField("first", StringType),
+          ordinal = 0,
+          numFields = 3,
+          containsNull = true),
+        legacySizeOfNull = false).as("size(friends)"))
+      .analyze
+    comparePlans(optimized, expected)
+
+    // Only the single (first, atomic) field is extracted.
+    val extracted = collectArrayStructFields(optimized)
+    assert(extracted.map(_.field.name) == Seq("first"),
+      s"expected only `first` to be read, but got:\n$optimized")
+  }
+
+  test("SPARK-58735: size over array<primitive> / already-extracted field is not rewritten") {
+    // `friends.first` is already a single-field extraction (array<string>). The rule must not
+    // wrap it again (idempotence) and must not add any further extraction.
+    val alreadyExtracted = GetArrayStructFields($"friends",
+      field = StructField("first", StringType), ordinal = 0, numFields = 3, containsNull = true)
+    val query = contact.select(Size(alreadyExtracted, legacySizeOfNull = false)).analyze
+    val optimized = Optimize.execute(query)
+
+    val expected = contact.select(Size(alreadyExtracted, legacySizeOfNull = false)).analyze
     comparePlans(optimized, expected)
   }
 

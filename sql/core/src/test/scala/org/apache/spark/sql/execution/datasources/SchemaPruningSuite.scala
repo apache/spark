@@ -177,6 +177,12 @@ abstract class SchemaPruningSuite
       Nil)
   }
 
+  testSchemaPruning("SPARK-58735: size of an array of structs reads a single nested field") {
+    val query = sql("select id, size(friends) from contacts where p=1")
+    checkScan(query, "struct<id:int,friends:array<struct<first:string>>>")
+    checkAnswer(query.orderBy("id"), Row(0, 1) :: Row(1, 0) :: Nil)
+  }
+
   testSchemaPruning("select a single complex field from a map entry and its parent map entry") {
     val query =
       sql("select relatives[\"brother\"].middle, relatives[\"brother\"] from contacts where p=1")
