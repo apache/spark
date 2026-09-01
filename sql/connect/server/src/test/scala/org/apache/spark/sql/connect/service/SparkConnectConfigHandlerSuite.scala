@@ -213,7 +213,7 @@ class SparkConnectConfigHandlerSuite extends SharedSparkSession {
     withEnvKeys(key) {
       val ex = intercept[SparkException](sendSet(sessionHolder, key, "x"))
       assert(ex.getCondition === "INVALID_SPARK_CONFIG.INVALID_PYTHON_WORKER_ENV_VAR_NAME")
-      // The point of checking here rather than only when a Python function is built: the write is
+      // The point of checking here rather than only when a worker is launched: the write is
       // refused, so the session is not left carrying an environment none of its queries can use.
       assert(spark.conf.getOption(key).isEmpty)
     }
@@ -288,6 +288,21 @@ class SparkConnectConfigHandlerSuite extends SharedSparkSession {
       assert(!warning.contains(nul.toString))
       assert(spark.conf.getOption(key).isEmpty)
     }
+  }
+
+  test("SPARK-58752: a silent rejection of any config does not carry the rejected value") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    // Not an environment variable: any typed config whose conversion fails produces an
+    // INVALID_CONF_VALUE error, and that message quotes the offending value. The warning must
+    // report the condition instead, since a value rejected for the wrong type can still be a
+    // secret that a caller pasted into the wrong key.
+    val sentinel = "not-a-number-hunter2"
+    val response = sendSet(sessionHolder, SQLConf.SHUFFLE_PARTITIONS.key, sentinel, silent = true)
+    assert(response.getWarningsCount === 1)
+    val warning = response.getWarnings(0)
+    assert(warning.contains(SQLConf.SHUFFLE_PARTITIONS.key))
+    assert(!warning.contains(sentinel))
+    assert(warning.contains("INVALID_CONF_VALUE"))
   }
 
   test("SPARK-58752: concurrent writes cannot jointly exceed a limit") {

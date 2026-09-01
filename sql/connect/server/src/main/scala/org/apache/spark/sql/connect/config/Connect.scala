@@ -484,9 +484,6 @@ object Connect {
       .intConf
       .createWithDefault(10 * 1024 * 1024) // 10 MB
 
-  // The limits below bound the environment a session can install in its Python workers. They are
-  // cluster-level rather than session-level so that a client cannot raise the bound on the server
-  // memory its own session holds.
   val CONNECT_PLAN_COMPRESSION_DEFAULT_ALGORITHM =
     buildConf("spark.connect.session.planCompression.defaultAlgorithm")
       .doc("The default algorithm of proto plan compression.")

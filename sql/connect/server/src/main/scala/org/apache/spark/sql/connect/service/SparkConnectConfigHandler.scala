@@ -22,6 +22,7 @@ import scala.util.matching.Regex
 
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SECRET_REDACTION_PATTERN
@@ -93,8 +94,9 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
         //
         // Check and write under the monitor that guards the session configurations, so that a
         // concurrent write cannot land in between and leave the environment in a state neither
-        // writer validated. Every writer takes this monitor -- `setConfString` and `getAllConfs`
-        // both do -- and `SQLConf` itself holds it across the compound write in `setConf(props)`.
+        // writer validated. Both sides of the check take it: `getAllConfs` reads under it, and the
+        // writes go through `setConfString`, with `setConf(props)` holding it across a compound
+        // write.
         sqlConf.settings.synchronized {
           PythonWorkerEnvironment.validateConfigChange(conf, key, value)
           conf.set(key, value.orNull)
@@ -103,11 +105,16 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
       } catch {
         case e: Throwable =>
           if (silent) {
-            // The rejected value is deliberately left out. A configuration value can be a secret,
-            // and this warning outlives the response: the Scala client logs it and the Python
-            // client raises it as a warning. Reads through this handler are redacted for the same
-            // reason, and the environment validation keeps values out of its messages.
-            builder.addWarnings(s"Failed to set $key due to ${e.getMessage}")
+            // Report the condition, not the message. A configuration value can be a secret, and
+            // this warning outlives the response: the Scala client logs it and the Python client
+            // raises it. `INVALID_CONF_VALUE` renders as "The value '<confValue>' in the config
+            // ... is invalid", so passing the message through would disclose a rejected value that
+            // is otherwise redacted on every read through this handler.
+            val condition = e match {
+              case t: SparkThrowable if t.getCondition != null => t.getCondition
+              case _ => e.getClass.getName
+            }
+            builder.addWarnings(s"Failed to set $key ($condition)")
           } else {
             throw e
           }
