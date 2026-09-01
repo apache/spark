@@ -152,18 +152,28 @@ def _copysign_func(c1: Column, c2: Column) -> Column:
 def _fmod_func(c1: Column, c2: Column) -> Column:
     c1_double = c1.cast("double")
     c2_double = c2.cast("double")
+    integral_types = ["tinyint", "smallint", "int", "bigint"]
 
-    return F.when(
-        F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
+    return (
+        # A null or a nan propagates for every operand type.
         F.when(c1.isNull() | F.isnan(c1), c1_double)
         .when(c2.isNull() | F.isnan(c2), c2_double)
-        .when(c2_double == 0, F.lit(float("nan")))
-        .otherwise(F.try_mod(c1_double, c2_double)),
-    ).otherwise(
-        F.when(c1.isNull() | F.isnan(c1), c1_double)
-        .when(c2.isNull() | F.isnan(c2), c2_double)
-        .when(c2_double == 0, F.lit(0.0))
-        .otherwise(F.try_mod(c1_double, c2_double))
+        # Integral operands take the remainder as longs: a double cannot hold 9007199254740993.
+        .when(
+            F.typeof(c1).isin(integral_types) & F.typeof(c2).isin(integral_types),
+            F.when(c2_double == 0, F.lit(0.0)).otherwise(
+                F.try_mod(c1.cast("long"), c2.cast("long")).cast("double")
+            ),
+        )
+        # Floating operands, where a zero divisor is nan rather than the 0 above.
+        .when(
+            F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
+            F.when(c2_double == 0, F.lit(float("nan"))).otherwise(F.try_mod(c1_double, c2_double)),
+        )
+        # A decimal falls through here, since typeof carries its precision, as in decimal(10,2).
+        # np.fmod raises on Decimal objects, so there is no NumPy behavior to match: a zero
+        # divisor returns 0 and any other divisor takes the remainder in double.
+        .otherwise(F.when(c2_double == 0, F.lit(0.0)).otherwise(F.try_mod(c1_double, c2_double)))
     )
 
 
