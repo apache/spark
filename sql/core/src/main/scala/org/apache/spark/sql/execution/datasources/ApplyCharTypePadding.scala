@@ -57,9 +57,26 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val standardSemantics = conf.charVarcharStandardSemantics
 
+    def bindStandardSemantics[T <: LogicalPlan](relation: T): T = {
+      if (relation.getTagValue(standardSemanticsTag).isEmpty) {
+        relation.setTagValue(standardSemanticsTag, standardSemantics)
+      }
+      relation
+    }
+
+    val boundPlan = if (conf.charVarcharFirstClassTypes) {
+      plan.resolveOperatorsUp {
+        case relation: LogicalRelation => bindStandardSemantics(relation)
+        case relation: DataSourceV2Relation => bindStandardSemantics(relation)
+        case relation: HiveTableRelation => bindStandardSemantics(relation)
+      }
+    } else {
+      plan
+    }
+
     // standardSemantics takes precedence over legacy charVarcharAsString.
     if (conf.charVarcharAsString && !standardSemantics) {
-      return plan
+      return boundPlan
     }
 
     if (standardSemantics && !conf.readSideCharPadding) {
@@ -67,14 +84,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
     }
 
     if (conf.readSideCharPadding || standardSemantics) {
-      def bindStandardSemantics[T <: LogicalPlan](relation: T): T = {
-        if (relation.getTagValue(standardSemanticsTag).isEmpty) {
-          relation.setTagValue(standardSemanticsTag, standardSemantics)
-        }
-        relation
-      }
-
-      val newPlan = plan.resolveOperatorsUpWithNewOutput {
+      val newPlan = boundPlan.resolveOperatorsUpWithNewOutput {
         case r: LogicalRelation =>
           bindStandardSemantics(r)
           ApplyCharTypePaddingHelper.readSidePadding(r, () =>
@@ -97,7 +107,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
       ApplyCharTypePaddingHelper.paddingForStringComparison(newPlan, padCharCol = false)
     } else {
       ApplyCharTypePaddingHelper.paddingForStringComparison(
-        plan, padCharCol = !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_PREDICATE))
+        boundPlan, padCharCol = !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_PREDICATE))
     }
   }
 }
