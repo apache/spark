@@ -812,6 +812,39 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.9.0</td>
 </tr>
 <tr>
+  <td><code>spark.pythonWorkerEnv.[EnvironmentVariableName]</code></td>
+  <td>(none)</td>
+  <td>
+    Add the environment variable specified by <code>EnvironmentVariableName</code> to the Python
+    worker processes that run the session's Python UDFs, making it visible to
+    <code>os.environ</code> inside a UDF. Multiple of these may be set to add several environment
+    variables. Supported on both classic Spark and Spark Connect.
+    <br /><br />
+    Unlike <code>spark.executorEnv.[EnvironmentVariableName]</code>, which is scoped to the whole
+    application and fixed before it starts, this is a session configuration: each session carries
+    its own environment, may change it while running, and a change takes effect on the next action.
+    Where both set the same variable, this one wins. An environment variable that Spark sets for a
+    Python worker itself takes precedence over both.
+    <br /><br />
+    Currently applied to the regular scalar Python UDF, in both its Arrow-optimized and non-Arrow
+    forms. Other Python function families -- pandas UDFs, Python UDTFs, and the streaming and
+    listener paths -- do not receive it yet.
+    <br /><br />
+    A variable name must match <code>[A-Za-z_][A-Za-z0-9_]*</code>, and a value must not contain a
+    NUL character, which a process environment cannot carry. The number of variables and the total
+    size of the environment are also bounded. A Spark Connect client setting one through the
+    configuration API, which is what <code>spark.conf.set</code> uses there, fails immediately if
+    the result would be invalid and stores nothing. Setting one any other way -- SQL
+    <code>SET</code>, or <code>spark.conf.set</code> on a classic session -- does not pass through
+    that check, so the value is stored and instead fails the queries that would install it in a
+    worker.
+    <br /><br />
+    Values are not redacted from the worker environment, so a session that puts a secret here is
+    responsible for keeping the Python code it runs from disclosing it.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
   <td><code>spark.redaction.regex</code></td>
   <td>(?i)secret|password|token|access[.]?key</td>
   <td>
@@ -3697,45 +3730,6 @@ Command types in proto.</td>
   </td>
   <td>The interval at which the progress of a query is reported to the client. If the value is set to a negative value the progress reports will be disabled.</td>
   <td>4.0.0</td>
-</tr>
-</table>
-
-#### Session Configuration
-
-Session configurations are set by a Spark Connect client for its own session, for example with
-`spark.conf.set` or SQL `SET`. They apply only to that session, and a client may change them at any
-point while the session is alive.
-
-<table class="spark-config">
-<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
-<tr>
-  <td><code>spark.pythonWorkerEnv.[EnvironmentVariableName]</code></td>
-  <td>
-    (none)
-  </td>
-  <td>
-    Add the environment variable specified by <code>EnvironmentVariableName</code> to the Python
-    worker processes that run the session's Python functions, making it visible to
-    <code>os.environ</code> inside a Python UDF. A client may specify several of these to set
-    several environment variables.
-    <br /><br />
-    This differs from <code>spark.executorEnv.[EnvironmentVariableName]</code>, which is scoped to
-    the whole application and fixed before it starts: these are session configurations, so each
-    session carries its own environment and can change it while running.
-    <br /><br />
-    A variable name must match <code>[A-Za-z_][A-Za-z0-9_]*</code>, and a value must not contain a
-    NUL character, which a process environment cannot carry. The number of variables and the total
-    size of the environment are also bounded. Setting a configuration through the Spark Connect
-    configuration API, which is what <code>spark.conf.set</code> uses, fails immediately if the
-    result would be invalid and stores nothing. Setting one through SQL <code>SET</code> does not
-    go through that API, so it is stored and instead fails the queries that would install it in a
-    worker.
-    <br /><br />
-    An environment variable that Spark sets for a Python worker itself takes precedence over one
-    set here. Values are not redacted from the worker environment, so a session that puts a secret
-    here is responsible for keeping the Python code it runs from disclosing it.
-  </td>
-  <td>4.4.0</td>
 </tr>
 </table>
 

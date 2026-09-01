@@ -61,7 +61,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // Analyzing a large plan may be expensive, and it is not uncommon to build the plan step-by-step
   // with several analysis during the process. This cache aids the recursive analysis process by
   // memorizing `LogicalPlan`s which may be a sub-tree in a subsequent plan.
-  private lazy val planCache: Option[Cache[PlanCacheKey, LogicalPlan]] = {
+  private lazy val planCache: Option[Cache[proto.Relation, LogicalPlan]] = {
     if (SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE) <= 0) {
       logWarning(
         log"Session plan cache is disabled due to non-positive cache size." +
@@ -75,7 +75,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
         CacheBuilder
           .newBuilder()
           .maximumSize(SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE))
-          .build[PlanCacheKey, LogicalPlan]())
+          .build[proto.Relation, LogicalPlan]())
     }
   }
 
@@ -608,10 +608,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * @return
    *   The logical plan.
    */
-  private[connect] def usePlanCache(
-      rel: proto.Relation,
-      cachePlan: Boolean,
-      pythonWorkerEnv: Map[String, String])(
+  private[connect] def usePlanCache(rel: proto.Relation, cachePlan: Boolean)(
       transform: proto.Relation => LogicalPlan): LogicalPlan = {
     val planCacheEnabled = Option(session)
       .forall(_.sessionState.conf.getConf(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED, true))
@@ -623,18 +620,10 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
       .forall(_.conf.get(Connect.CONNECT_ALWAYS_CACHE_DATA_SOURCE_READS_ENABLED, true))
     lazy val isDataSourceRead = rel.hasRead && rel.getRead.hasDataSource
 
-    // A cached plan holds the Python worker environment of the request that built it, baked into
-    // every Python function it contains, so an entry may only be reused by a request whose
-    // environment matches. The caller passes the one snapshot it is planning with;
-    // re-reading the configurations here would let a plan built with one environment be stored
-    // under the key of another that a concurrent request installed meanwhile.
-    def cacheKey(rel: proto.Relation): PlanCacheKey =
-      PlanCacheKey(rel, pythonWorkerEnv)
-
     def getPlanCache(rel: proto.Relation): Option[LogicalPlan] =
       planCache match {
         case Some(cache) if planCacheEnabled && hasPlanId =>
-          Option(cache.getIfPresent(cacheKey(rel))) match {
+          Option(cache.getIfPresent(rel)) match {
             case Some(plan) =>
               logDebug(s"Using cached plan for relation '$rel': $plan")
               Some(plan)
@@ -645,7 +634,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     def putPlanCache(rel: proto.Relation, plan: LogicalPlan): Unit =
       planCache match {
         case Some(cache) if planCacheEnabled && hasPlanId =>
-          cache.put(cacheKey(rel), plan)
+          cache.put(rel, plan)
         case _ =>
       }
 
@@ -660,23 +649,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   // For testing. Expose the plan cache for testing purposes.
-  private[service] def getPlanCache: Option[Cache[PlanCacheKey, LogicalPlan]] = planCache
+  private[service] def getPlanCache: Option[Cache[proto.Relation, LogicalPlan]] = planCache
 }
-
-/**
- * Key of an entry in a session's plan cache.
- *
- * @param relation
- *   the relation the cached plan was built from.
- * @param pythonWorkerEnv
- *   the Python worker environment the plan was built with, as the request that built it observed
- *   it. It is part of the key because the environment is baked into every Python function the
- *   plan contains, so a plan built with one environment must not be reused by a request carrying
- *   another.
- */
-private[service] case class PlanCacheKey(
-    relation: proto.Relation,
-    pythonWorkerEnv: Map[String, String])
 
 object SessionHolder {
 

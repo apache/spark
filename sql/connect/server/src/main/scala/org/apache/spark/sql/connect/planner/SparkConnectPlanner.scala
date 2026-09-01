@@ -73,7 +73,7 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExternalCommandExecutor}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
-import org.apache.spark.sql.execution.python.{PythonWorkerEnvironment, UserDefinedPythonFunction, UserDefinedPythonTableFunction}
+import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.execution.python.streaming.PythonForeachWriter
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl.groupStateTimeoutFromString
@@ -89,12 +89,6 @@ import org.apache.spark.util.Utils
 
 /**
  * Translates a Spark Connect request into Catalyst.
- *
- * An instance is request-scoped: construct one per request and discard it. Some state is derived
- * once and reused for the whole request -- notably the Python worker environment, which must be a
- * single snapshot so that a plan cannot be built with one environment and cached under another.
- * Reusing an instance across requests would pin that state to whatever the first request
- * observed.
  */
 class SparkConnectPlanner(
     val sessionHolder: SessionHolder,
@@ -152,7 +146,7 @@ class SparkConnectPlanner(
    */
   @DeveloperApi
   def transformRelation(rel: proto.Relation, cachePlan: Boolean): LogicalPlan = {
-    val plan = sessionHolder.usePlanCache(rel, cachePlan, pythonWorkerEnvSnapshot) { rel =>
+    val plan = sessionHolder.usePlanCache(rel, cachePlan) { rel =>
       val plan = rel.getRelTypeCase match {
         // DataFrame API
         case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
@@ -2237,32 +2231,11 @@ class SparkConnectPlanner(
       bufferType = if (udf.hasBufferType) transformDataType(udf.getBufferType) else null)
   }
 
-  // The environment to install in the Python workers that run this session's Python functions.
-  //
-  // Read once and reused for everything this request does, so that it cannot drift mid-request if a
-  // concurrent request rewrites the configurations, which would otherwise let a plan built with one
-  // environment be cached under the identifier of another. This relies on the request-scoped
-  // lifetime stated in the class documentation.
-  private lazy val pythonWorkerEnvSnapshot: Map[String, String] =
-    Option(session)
-      .map(s => PythonWorkerEnvironment.read(s.sessionState.conf))
-      .getOrElse(Map.empty)
-
-  // The snapshot, validated. Validation is deferred to here so that a malformed environment fails
-  // only the queries that would install it in a worker, not every query that consults the cache.
-  private lazy val pythonWorkerEnv: Map[String, String] = {
-    PythonWorkerEnvironment.validate(pythonWorkerEnvSnapshot)
-    pythonWorkerEnvSnapshot
-  }
-
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
     SimplePythonFunction(
       command = fun.getCommand.toByteArray.toImmutableArraySeq,
-      // The proto carries no environment of its own, so this is the session's environment in a
-      // fresh mutable map. Going through the shared merge keeps the precedence rule in one place
-      // for the day a front end does supply one.
-      envVars = PythonWorkerEnvironment
-        .mergeToJavaMap(java.util.Collections.emptyMap[String, String](), pythonWorkerEnv),
+      // The session's Python worker environment is installed when a worker is launched, not here.
+      envVars = new HashMap[String, String](),
       pythonExec = pythonExec,
       // Merge the user specified includes with the includes managed by the artifact manager.
       pythonIncludes = (fun.getAdditionalIncludesList.asScala.toSeq ++

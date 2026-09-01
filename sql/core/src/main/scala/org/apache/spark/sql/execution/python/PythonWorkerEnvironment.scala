@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.python
 import java.nio.charset.StandardCharsets
 
 import org.apache.spark.{SparkEnv, SparkException}
-import org.apache.spark.api.python.{PythonFunction, SimplePythonFunction}
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
@@ -35,9 +35,14 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
  * wherever ordinary session configurations follow it, including into a session created by
  * `cloneSession`.
  *
- * This is shared by every front end that builds Python functions, so that the prefix, the
- * accepted names, the limits and the merge precedence are defined in exactly one place rather
- * than once per front end.
+ * The environment is installed when a Python worker is launched, not when a Python function is
+ * built, so a function carries no environment of its own and the values a worker receives are
+ * the session's values as of the query that launched it. A plan may therefore be cached and
+ * reused across changes to the environment.
+ *
+ * This object holds the whole policy -- the prefix, the accepted names, the limits, the merge
+ * precedence and the evaluation types in scope -- in one place, so that each execution path adds
+ * only a call rather than a copy of the rules.
  *
  * Names are preserved case-sensitively by Spark. On a case-sensitive operating system `FOO` and
  * `foo` are therefore distinct variables; Windows process environments are case-insensitive, so
@@ -93,12 +98,13 @@ private[sql] object PythonWorkerEnvironment {
   /**
    * Rejects a malformed or oversized environment.
    *
-   * This runs when a Python function is built, which is the one point that every way of writing a
-   * configuration reaches: a front end's own configuration API, SQL `SET`, and the
-   * application-level configurations merged into a new session all arrive here.
+   * This runs when a worker is launched for an evaluation type in [[appliesTo]], which is the one
+   * point every way of writing a configuration reaches: a front end's own configuration API, SQL
+   * `SET`, and the application-level configurations merged into a new session all arrive here.
    * [[validateConfigChange]] rejects a write earlier and more helpfully where a front end can
    * intercept one, but it cannot see the other paths, so this is the check that makes an invalid
-   * environment unable to reach a worker at all.
+   * environment unable to reach a worker at all. Because it runs at launch, a rejection surfaces
+   * as a task failure on the paths that have no write-time check.
    *
    * A message may name a variable but never carries its value, so a rejection cannot copy a value
    * into a log or a stack trace. Note that the name is chosen by the user, so a name is only as
@@ -194,21 +200,34 @@ private[sql] object PythonWorkerEnvironment {
   }
 
   /**
-   * `original` with the session's environment installed in it.
+   * Whether a Python function with this evaluation type receives the session's environment.
    *
-   * @throws SparkException
-   *   if `original` is not an implementation this can rewrite.
+   * Scoped to the regular scalar Python UDF, in both the Arrow-optimized and the non-Arrow form,
+   * because those are the two execution paths this change wires up and tests. Both forms are the
+   * same thing to a user -- `spark.sql.execution.pythonUDF.arrow.enabled` decides which one runs
+   * a given UDF, and it is enabled by default -- so covering only one of them would leave the
+   * feature inert for the ordinary case.
+   *
+   * The other families deliberately do not receive it yet. Each has its own runner, and a family
+   * is only in scope once that path has a test proving a worker receives the environment;
+   * widening this predicate without one would extend the feature silently.
    */
-  def merge(original: PythonFunction, sessionEnv: Map[String, String]): PythonFunction = {
-    original match {
-      case function: SimplePythonFunction =>
-        function.copy(envVars = mergeToJavaMap(function.envVars, sessionEnv))
-      case other =>
-        // Returning `other` unchanged would drop the environment silently, which is the failure
-        // mode this feature has to avoid: a UDF would run without a variable it was told to have.
-        throw SparkException.internalError(
-          s"Cannot install a Python worker environment in a ${other.getClass.getName}.")
-    }
+  def appliesTo(evalType: Int): Boolean = {
+    evalType == PythonEvalType.SQL_BATCHED_UDF || evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF
+  }
+
+  /**
+   * `originalEnv` with the session's validated environment applied over it, in a fresh mutable
+   * map, ready to hand to a Python worker.
+   *
+   * This is what an execution path calls: it reads the environment from the session
+   * configurations, rejects it if it is malformed or oversized, and merges it with the
+   * precedence [[mergeToJavaMap]] documents.
+   */
+  def mergeValidated(
+      originalEnv: java.util.Map[String, String],
+      conf: SQLConf): java.util.HashMap[String, String] = {
+    mergeToJavaMap(originalEnv, readValidated(conf))
   }
 
   /**
