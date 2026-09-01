@@ -137,15 +137,12 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val executorPodsAllocator = makeExecutorPodsAllocator(
       sc, kubernetesClient, snapshotsStore, Some(executorPodsLifecycleManager))
 
-    val podsWatchEventSource = new ExecutorPodsWatchSnapshotSource(
-      snapshotsStore,
-      kubernetesClient,
-      sc.conf)
-
-    val eventsPollingExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
-      "kubernetes-executor-pod-polling-sync")
-    val podsPollingEventSource = new ExecutorPodsPollingSnapshotSource(
-      sc.conf, kubernetesClient, snapshotsStore, eventsPollingExecutor)
+    val snapshotSources = {
+      val sources = makeSnapshotSources(sc.conf, kubernetesClient, snapshotsStore)
+      logInfo(s"Executor pods snapshot sources: " +
+        sources.map(_.getClass.getSimpleName).mkString(", "))
+      sources
+    }
 
     new KubernetesClusterSchedulerBackend(
       scheduler.asInstanceOf[TaskSchedulerImpl],
@@ -155,8 +152,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       snapshotsStore,
       executorPodsAllocator,
       executorPodsLifecycleManager,
-      podsWatchEventSource,
-      podsPollingEventSource)
+      snapshotSources)
   }
 
   private[k8s] def makeExecutorPodsAllocator(
@@ -202,6 +198,28 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     }
 
     allocatorInstance
+  }
+
+  private def makeSnapshotSources(
+      conf: SparkConf,
+      kubernetesClient: KubernetesClient,
+      snapshotsStore: ExecutorPodsSnapshotsStore): Seq[ExecutorPodsSnapshotSource] = {
+    if (conf.get(KUBERNETES_EXECUTOR_ENABLE_INFORMER)) {
+      val informerManager = new InformerManager(kubernetesClient, conf)
+      val listerExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+        "kubernetes-executor-pod-lister-sync")
+      Seq(
+        new ExecutorPodsInformerSnapshotSource(snapshotsStore, informerManager),
+        new ExecutorPodsListerSnapshotSource(
+          conf, kubernetesClient, snapshotsStore, informerManager, listerExecutor))
+    } else {
+      val eventsPollingExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+        "kubernetes-executor-pod-polling-sync")
+      Seq(
+        new ExecutorPodsWatchSnapshotSource(snapshotsStore, kubernetesClient, conf),
+        new ExecutorPodsPollingSnapshotSource(
+          conf, kubernetesClient, snapshotsStore, eventsPollingExecutor))
+    }
   }
 
   override def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {

@@ -576,6 +576,19 @@ private[spark] object Config extends Logging {
       .intConf
       .createOptional
 
+  val KUBERNETES_EXECUTOR_ENABLE_INFORMER =
+    ConfigBuilder("spark.kubernetes.executor.enableInformer")
+      .doc("If true, use a shared Kubernetes informer (list + watch) to track executor pod " +
+        "state, driven by ExecutorPodsInformerSnapshotSource (event-driven) and " +
+        "ExecutorPodsListerSnapshotSource (periodic refresh of the informer cache). If " +
+        "false (default), use the legacy path backed by ExecutorPodsWatchSnapshotSource and " +
+        "ExecutorPodsPollingSnapshotSource. The two modes are mutually exclusive; " +
+        "`spark.kubernetes.executor.enableApiWatcher` and " +
+        "`spark.kubernetes.executor.enableApiPolling` only apply when this is false.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
       .doc("Number of pods to launch at once in each round of executor allocation.")
@@ -668,6 +681,24 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(true)
 
+  val KUBERNETES_EXECUTOR_LISTER_POLLING_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.listerPollingInterval")
+      .doc("Interval between polls against the Kubernetes informer cache to inspect the " +
+        "state of executors.")
+      .version("4.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(interval => interval > 0,
+        "Informer lister polling interval must be a positive time value.")
+      .createWithDefaultString("30s")
+
+  val KUBERNETES_EXECUTOR_INFORMER_RESYNC_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.informerResyncInterval")
+      .doc("Interval between informer cache resync.")
+      .version("4.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(interval => interval >= 0,
+        "Informer resync interval must not be a negative time value.")
+      .createWithDefaultString("0s")
 
   val KUBERNETES_EXECUTOR_API_POLLING_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.apiPollingInterval")
