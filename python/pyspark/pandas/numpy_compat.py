@@ -51,8 +51,6 @@ unary_np_spark_mappings = {
     "expm1": F.expm1,
     "fabs": lambda c: F.abs(c.cast("double")),
     "floor": F.floor,
-    "frexp": lambda _: NotImplemented,  # 'frexp' output lengths become different
-    # and it cannot be supported via pandas UDF.
     "invert": F.bitwise_not,
     "isfinite": lambda c: F.coalesce(
         ~(F.isnan(c) | (c == float("inf")) | (c == float("-inf"))), F.lit(False)
@@ -291,10 +289,70 @@ def _modf_fractional_func(c: Column) -> Column:
     )
 
 
+def _frexp_scale(c_double: Column, exponent: Column) -> Column:
+    # x * 2**-exponent, in two halves because a single 2**exponent is not finite across
+    # frexp's range (-1073 for the smallest subnormal, 1024 for the largest double).
+    half = F.floor(exponent / F.lit(2.0))
+    return c_double / F.pow(F.lit(2.0), half) / F.pow(F.lit(2.0), exponent - half)
+
+
+def _frexp_finite_exponent(c_double: Column) -> Column:
+    # floor(log2|x|) + 1, which the logarithm can put on the wrong side of an integer next
+    # to a power of two, but never by more than one: check the scaled magnitude against
+    # frexp's [0.5, 1) range and step the estimate where it falls outside.
+    estimate = F.floor(F.log2(F.abs(c_double))) + F.lit(1)
+    magnitude = F.abs(_frexp_scale(c_double, estimate))
+    return (
+        F.when(magnitude >= F.lit(1.0), estimate + F.lit(1))
+        .when(magnitude < F.lit(0.5), estimate - F.lit(1))
+        .otherwise(estimate)
+    )
+
+
+def _frexp_is_special_value(c: Column) -> Column:
+    # frexp returns 0, +-inf and nan unchanged as the mantissa, keeping the sign of a zero,
+    # and pairs them with a zero exponent. from_pandas delivers a NaN as a null; the sign of a
+    # NaN never survives to here, so numpy's -nan mantissa reads +nan.
+    c_double = c.cast("double")
+    return (
+        c.isNull()
+        | F.isnan(c_double)
+        | (c_double == 0)
+        | c_double.isin(float("-inf"), float("inf"))
+    )
+
+
+def _frexp_mantissa_func(c: Column) -> Column:
+    c_double = c.cast("double")
+    return F.when(_frexp_is_special_value(c), c_double).otherwise(
+        _frexp_scale(c_double, _frexp_finite_exponent(c_double))
+    )
+
+
+def _frexp_exponent_func(c: Column) -> Column:
+    return (
+        F.when(
+            # A genuine <NA> from a nullable dtype (e.g. Int64) arrives as a non-floating null
+            # and must propagate; a NaN arrives as a floating null and takes the zero branch
+            # below. A nullable float dtype's <NA> (Float32 or Float64) is a floating null too,
+            # indistinguishable from a NaN after from_pandas, so it reads 0 instead.
+            c.isNull() & ~F.typeof(c).isin("float", "double"),
+            F.lit(None),
+        )
+        .when(_frexp_is_special_value(c), F.lit(0))
+        .otherwise(_frexp_finite_exponent(c.cast("double")))
+        # numpy returns the exponent as an int32.
+        .cast("int")
+    )
+
+
 # Every multi-output ufunc numpy ships (modf, frexp) has exactly two outputs, so each entry
 # maps to a pair of Column->Column functions applied independently and returned as a 2-tuple
 # that numpy's __array_ufunc__ unpacks (for example `fractional, integral = np.modf(series)`).
 multi_output_np_spark_mappings = {
+    # np.frexp(x) -> (mantissa, exponent) with x == mantissa * 2**exponent, the mantissa
+    # keeping x's sign at a magnitude in [0.5, 1).
+    "frexp": (_frexp_mantissa_func, _frexp_exponent_func),
     # np.modf(x) -> (fractional part, integral part); the integral part is exactly trunc.
     "modf": (_modf_fractional_func, unary_np_spark_mappings["trunc"]),
 }
