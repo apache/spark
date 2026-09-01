@@ -338,6 +338,18 @@ object StaticSQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL =
+    buildStaticConf("spark.sql.artifact.copyFromLocalToFs.allowDestLocal")
+      .internal()
+      .doc("Allow the `copyFromLocalToFs` destination to be a local file system path on the " +
+        "driver node. This lets the caller overwrite arbitrary files on the driver node, so it " +
+        "should only be enabled for testing purposes. This is a static conf: it can only be set " +
+        "when starting the driver, and not from a session.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val REFLECT_ALLOW_LIST = buildStaticConf("spark.sql.reflect.allowList")
     .doc("A comma-separated allow list of regular expressions matched against the canonical " +
       "static method name (in the form `class.method`, e.g. `java.util.UUID.randomUUID`) " +

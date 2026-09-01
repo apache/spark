@@ -20,18 +20,17 @@ import shutil
 import string
 import sys
 import tempfile
-
 import unittest
 from decimal import Decimal
 
-from pyspark.sql.streaming.state import GroupStateTimeout, GroupState
+from pyspark.sql.streaming.state import GroupState, GroupStateTimeout
 from pyspark.sql.types import (
-    LongType,
-    StringType,
-    StructType,
-    StructField,
-    Row,
     DecimalType,
+    LongType,
+    Row,
+    StringType,
+    StructField,
+    StructType,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (

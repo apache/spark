@@ -248,6 +248,30 @@ Data source options of XML can be set via:
     <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shortened names (none, bzip2, gzip, lz4, snappy and deflate). XML built-in functions ignore this option.</td>
     <td>write</td>
   </tr>
+  <tr>
+    <td><code>indent</code></td>
+    <td>four spaces</td>
+    <td>String used to indent each nested level of the generated XML. Setting it to an empty string disables indentation, writing each row on a new line.</td>
+    <td>write</td>
+  </tr>
+  <tr>
+    <td><code>multiLine</code></td>
+    <td><code>true</code></td>
+    <td>Whether to parse one record, which may span multiple lines, per file.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>prefersDecimal</code></td>
+    <td><code>false</code></td>
+    <td>During schema inference, infers floating-point values as <code>DecimalType</code> rather than <code>DoubleType</code> when they fit.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>preferDate</code></td>
+    <td><code>true</code></td>
+    <td>During schema inference, tries to infer string columns that contain dates as <code>DateType</code>. Disabled when <code>spark.sql.legacy.timeParserPolicy</code> is set to <code>LEGACY</code>.</td>
+    <td>read</td>
+  </tr>
 
   <tr>
       <td><code>validateName</code></td>

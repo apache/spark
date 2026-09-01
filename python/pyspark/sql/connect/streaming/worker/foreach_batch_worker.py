@@ -21,19 +21,18 @@ Usually this is ran on the driver side of the Spark Connect Server.
 """
 
 import os
+from typing import IO
 
-from pyspark.worker_util import get_sock_file_to_executor
-from pyspark.serializers import (
-    write_int,
-    read_long,
-    UTF8Deserializer,
-    CPickleSerializer,
-)
 from pyspark import worker
+from pyspark.serializers import (
+    CPickleSerializer,
+    UTF8Deserializer,
+    read_long,
+    write_int,
+)
 from pyspark.sql.connect.session import SparkSession
 from pyspark.util import handle_worker_exception
-from typing import IO
-from pyspark.worker_util import check_python_version
+from pyspark.worker_util import check_python_version, get_sock_file_to_executor
 
 pickle_ser = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()

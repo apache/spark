@@ -271,6 +271,15 @@ abstract class PercentileBase
       positive integral
 
       """,
+  arguments = """
+    Arguments:
+      * col - The column to compute the percentile of.
+          An expression that evaluates to a numeric, ANSI interval, or time.
+      * percentage - The percentile(s) to compute, each between 0.0 and 1.0. Either a
+          single numeric value or an array of numeric values. Must be foldable.
+      * frequency - Optional. The number of times each value should be counted.
+          An expression that evaluates to a positive integral value. Defaults to 1.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col, 0.3) FROM VALUES (0), (10) AS tab(col);
@@ -493,6 +502,12 @@ case class PercentileDisc(
   usage = "_FUNC_(percentage) WITHIN GROUP (ORDER BY col) - Return a percentile value based on " +
     "a continuous distribution of numeric, ANSI interval or TIME column `col` at the given " +
     "`percentage` (specified in ORDER BY clause).",
+  arguments = """
+    Arguments:
+      * percentage - The percentile to compute, between 0.0 and 1.0. Must be foldable.
+      * col - The column to compute the percentile of, specified in the ORDER BY clause.
+          An expression that evaluates to a numeric, ANSI interval, or time.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0.25) WITHIN GROUP (ORDER BY col) FROM VALUES (0), (10) AS tab(col);
@@ -519,6 +534,12 @@ object PercentileContBuilder extends ExpressionBuilder {
   usage = "_FUNC_(percentage) WITHIN GROUP (ORDER BY col) - Return a percentile value based on " +
     "a discrete distribution of numeric, ANSI interval or TIME column `col` at the given " +
     "`percentage` (specified in ORDER BY clause).",
+  arguments = """
+    Arguments:
+      * percentage - The percentile to compute, between 0.0 and 1.0. Must be foldable.
+      * col - The column to compute the percentile of, specified in the ORDER BY clause.
+          An expression that evaluates to a numeric, ANSI interval, or time.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0.25) WITHIN GROUP (ORDER BY col) FROM VALUES (0), (10) AS tab(col);

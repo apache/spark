@@ -137,14 +137,16 @@ class PythonPipelineSuite
     TableIdentifier(catalog = Option("spark_catalog"), database = Option("default"), table = name)
   }
 
+  private def sessionCaseSensitive: Boolean = spark.sessionState.conf.caseSensitiveAnalysis
+
   test("basic") {
     val graph = buildGraph("""
         |@dp.table
         |def table1():
         |    return spark.readStream.format("rate").load()
         |""".stripMargin)
-      .resolve()
-      .validate()
+      .resolve(sessionCaseSensitive)
+      .validate(sessionCaseSensitive)
     assert(graph.flows.size == 1)
     assert(graph.tables.size == 1)
   }
@@ -302,7 +304,7 @@ class PythonPipelineSuite
         |def a():
         |  return spark.range(5)
         |""".stripMargin)
-    val resolvedGraph = graph.resolve().validate()
+    val resolvedGraph = graph.resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
     assert(resolvedGraph.tables.size == 4)
     assert(resolvedGraph.resolvedFlows.size == 4)
   }
@@ -316,7 +318,7 @@ class PythonPipelineSuite
       |@dp.append_flow(target = "a")
       |def supplement():
       |  return spark.readStream.format("rate").load()
-      |""".stripMargin).resolve().validate()
+      |""".stripMargin).resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
 
     assert(graph.tables.map(_.identifier.table).toSet == Set("a"))
     assert(graph.resolvedFlows.size == 2)
@@ -377,7 +379,7 @@ class PythonPipelineSuite
       |@dp.table
       |def d():
       |  return spark.sql("SELECT * FROM STREAM src")
-      |""".stripMargin).resolve().validate()
+      |""".stripMargin).resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
 
     assert(
       graph.table.keySet == Set(
@@ -424,7 +426,7 @@ class PythonPipelineSuite
         |@dp.table
         |def e():
         |  return spark.sql("SELECT * FROM STREAM spark_catalog.default.src")
-        |""".stripMargin).resolve().validate()
+        |""".stripMargin).resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
 
     assert(
       graph.tables.map(_.identifier).toSet == Set(
@@ -466,7 +468,7 @@ class PythonPipelineSuite
         |@dp.table
         |def e():
         |  return spark.sql("SELECT * FROM STREAM src")
-        |""".stripMargin).resolve()
+        |""".stripMargin).resolve(sessionCaseSensitive)
 
     assert(graph.resolutionFailedFlows.size == 5)
     graph.resolutionFailedFlows.foreach { flow =>
@@ -496,7 +498,7 @@ class PythonPipelineSuite
         |@dp.table
         |def e():
         |  return spark.sql("SELECT * FROM STREAM spark_catalog.default.src")
-        |""".stripMargin).resolve()
+        |""".stripMargin).resolve(sessionCaseSensitive)
     assert(graph.resolutionFailedFlows.size == 5)
     graph.resolutionFailedFlows.foreach { flow =>
       assert(flow.failure.head.getMessage.contains("[TABLE_OR_VIEW_NOT_FOUND]"))
@@ -517,7 +519,7 @@ class PythonPipelineSuite
         |@dp.materialized_view
         |def mv_from_read_table_df():
         |  return read_table_df
-        |""".stripMargin).resolve().validate()
+        |""".stripMargin).resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
 
     assert(
       graph.resolvedFlows.map(_.identifier).toSet == Set(
@@ -541,7 +543,7 @@ class PythonPipelineSuite
         |def mv_from_read_table_df():
         |  return read_table_df
         |
-        |""".stripMargin).resolve().validate()
+        |""".stripMargin).resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
     assert(
       graph.resolvedFlows.map(_.identifier).toSet == Set(
         graphIdentifier("mv_from_read_table_df"),
@@ -608,7 +610,7 @@ class PythonPipelineSuite
          |@dp.table(name = "schema_b.st_2")
          |def irrelevant_3():
          |  return spark.readStream.format("rate").load()
-         |""".stripMargin).resolve()
+         |""".stripMargin).resolve(sessionCaseSensitive)
 
     // validate these dataset are properly fully qualified
     assert(
@@ -659,7 +661,7 @@ class PythonPipelineSuite
            |@dp.table(name = "some_catalog.some_schema.st")
            |def irrelevant_2():
            |  return spark.readStream.format("rate").load()
-           |""".stripMargin).resolve()
+           |""".stripMargin).resolve(sessionCaseSensitive)
     }
     assert(graphTry.isSuccess)
     assert(
@@ -689,7 +691,7 @@ class PythonPipelineSuite
          |@dp.temporary_view(name= "view_3")
          |def irrelevant_2():
          |  return spark.read.table("view_1")
-         |""".stripMargin).resolve()
+         |""".stripMargin).resolve(sessionCaseSensitive)
     // views are temporary views, so they're not fully qualified.
     assert(
       Set("view_1", "view_2", "view_3").subsetOf(
@@ -725,7 +727,7 @@ class PythonPipelineSuite
            |@dp.append_flow(target = "default.a")
            |def supplement():
            |  return spark.readStream.format("rate").load()
-           |""".stripMargin).resolve().validate()
+           |""".stripMargin).resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
 
     assert(graph.tables.map(_.identifier) == Seq(graphIdentifier("a")))
     assert(
@@ -894,8 +896,8 @@ class PythonPipelineSuite
         |def table_with_string_schema():
         |    return spark.range(5).withColumn("name", lit("test"))
         |""".stripMargin)
-      .resolve()
-      .validate()
+      .resolve(sessionCaseSensitive)
+      .validate(sessionCaseSensitive)
 
     assert(graph.flows.size == 1)
     assert(graph.tables.size == 1)
@@ -917,8 +919,8 @@ class PythonPipelineSuite
         |def table_with_struct_schema():
         |    return spark.range(5).withColumn("name", lit("test"))
         |""".stripMargin)
-      .resolve()
-      .validate()
+      .resolve(sessionCaseSensitive)
+      .validate(sessionCaseSensitive)
 
     assert(graph.flows.size == 1)
     assert(graph.tables.size == 1)
@@ -936,9 +938,9 @@ class PythonPipelineSuite
         |def table_with_wrong_schema():
         |    return spark.range(5).withColumn("wrong_column", lit("test"))
         |""".stripMargin)
-      .resolve()
+      .resolve(sessionCaseSensitive)
 
-    val ex = intercept[AnalysisException] { graph.validate() }
+    val ex = intercept[AnalysisException] { graph.validate(sessionCaseSensitive) }
     assert(ex.getMessage.contains("has a user-specified schema that is incompatible"))
     assert(ex.getMessage.contains("table_with_wrong_schema"))
   }
@@ -955,9 +957,9 @@ class PythonPipelineSuite
         |def table_with_wrong_struct_schema():
         |    return spark.range(5).withColumn("different_column", lit("test"))
         |""".stripMargin)
-      .resolve()
+      .resolve(sessionCaseSensitive)
 
-    val ex = intercept[AnalysisException] { graph.validate() }
+    val ex = intercept[AnalysisException] { graph.validate(sessionCaseSensitive) }
     assert(ex.getMessage.contains("has a user-specified schema that is incompatible"))
     assert(ex.getMessage.contains("table_with_wrong_struct_schema"))
   }
@@ -1103,6 +1105,26 @@ class PythonPipelineSuite
     assert(flow.destinationIdentifier == graphIdentifier("target"))
   }
 
+  test("AutoCDC API: spark_conf is forwarded to the flow's sqlConf") {
+    val flow = buildAutoCdcFlow("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    spark_conf = {"spark.sql.shuffle.partitions": "8"},
+        |)
+        |""".stripMargin)
+
+    assert(flow.sqlConf == Map("spark.sql.shuffle.partitions" -> "8"))
+  }
+
   test("AutoCDC API: multi-part `keys` column is rejected at flow registration") {
     val ex = intercept[RuntimeException] {
       buildAutoCdcFlow("""
@@ -1185,7 +1207,7 @@ class PythonPipelineSuite
         |    keys = ["value"],
         |    sequence_by = "timestamp",
         |)
-        |""".stripMargin).resolve()
+        |""".stripMargin).resolve(sessionCaseSensitive)
 
     val resolvedFlow = graph.resolvedFlow(graphIdentifier("target"))
     assert(resolvedFlow.inputs == Set(graphIdentifier("src")))
@@ -1214,7 +1236,8 @@ class PythonPipelineSuite
         |""".stripMargin,
       defaultCatalog = Some("my_catalog"),
       defaultDatabase = Some("my_db"),
-      setupSql = Some("CREATE NAMESPACE IF NOT EXISTS my_catalog.my_db")).resolve()
+      setupSql = Some("CREATE NAMESPACE IF NOT EXISTS my_catalog.my_db"))
+      .resolve(sessionCaseSensitive)
 
     val resolvedFlow =
       graph.resolvedFlow(TableIdentifier("target", Some("my_db"), Some("my_catalog")))
@@ -1237,7 +1260,7 @@ class PythonPipelineSuite
         |    keys = ["value"],
         |    sequence_by = "timestamp",
         |)
-        |""".stripMargin).resolve()
+        |""".stripMargin).resolve(sessionCaseSensitive)
 
     val targetIdent = TableIdentifier("target", Some("some_schema"), Some("some_catalog"))
     val srcIdent = TableIdentifier("src", Some("some_schema"), Some("some_catalog"))
@@ -1309,7 +1332,7 @@ class PythonPipelineSuite
         |    apply_as_deletes = "value % 2 = 0",
         |    column_list = ["value", "timestamp"],
         |)
-        |""".stripMargin).resolve().validate()
+        |""".stripMargin).resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
 
     val resolvedFlow = graph.resolvedFlow(graphIdentifier("target"))
     assert(resolvedFlow.isInstanceOf[AutoCdcMergeFlow])

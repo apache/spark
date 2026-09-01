@@ -79,6 +79,24 @@ private class TestFailingProvider extends HadoopDelegationTokenProvider {
   }
 }
 
+private class TestRequirementFailingProvider extends HadoopDelegationTokenProvider {
+  override def serviceName: String = "test-requirement-failing"
+
+  override def delegationTokensRequired(
+      sparkConf: SparkConf, hadoopConf: Configuration): Boolean = {
+    if (sparkConf.getBoolean(
+        "spark.test.requirement-failing.throw", false)) {
+      throw new RuntimeException("Simulated provider requirement failure")
+    }
+    false
+  }
+
+  override def obtainDelegationTokens(
+      hadoopConf: Configuration,
+      sparkConf: SparkConf,
+      creds: Credentials): Option[Long] = None
+}
+
 // Adds a credential but reports no expiry (returns None), mimicking providers such as
 // HBaseDelegationTokenProvider. This exercises the nextRenewal == Long.MaxValue case where
 // credentials were nevertheless obtained.
@@ -147,6 +165,32 @@ class NonKerberosCredentialsSuite extends SparkFunSuite {
 
     assert(creds.getSecretKey(new Text("test.direct.credential")) != null)
     assert(new String(creds.getSecretKey(new Text("test.direct.credential"))) === "test-token")
+  }
+
+  test("provider requirement failure does not prevent other providers from running") {
+    val sparkConf = baseConf
+      .set("spark.security.credentials.test-requirement-failing.enabled", "true")
+      .set("spark.test.requirement-failing.throw", "true")
+    val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
+
+    assert(manager.renewalEnabled)
+
+    val creds = new Credentials()
+    manager.obtainDelegationTokens(creds)
+
+    assert(creds.getSecretKey(new Text("test.direct.credential")) != null)
+  }
+
+  test("provider requirement failure does not abort renewalEnabled") {
+    val sparkConf = baseConf
+      .set("spark.security.credentials.test-direct.enabled", "false")
+      .set("spark.security.credentials.test-failing.enabled", "false")
+      .set("spark.security.credentials.test-noexpiry.enabled", "false")
+      .set("spark.security.credentials.test-requirement-failing.enabled", "true")
+      .set("spark.test.requirement-failing.throw", "true")
+    val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
+
+    assert(!manager.renewalEnabled)
   }
 
   test("individual provider can be disabled via per-service config") {

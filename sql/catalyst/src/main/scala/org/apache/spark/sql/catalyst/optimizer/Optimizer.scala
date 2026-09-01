@@ -125,6 +125,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeRepartition,
         EliminateWindowPartitions,
         TransposeWindow,
+        PullUpProjectAliasThroughWindow,
         NullPropagation,
         // NullPropagation may introduce Exists subqueries, so RewriteNonCorrelatedExists must run
         // after.
@@ -174,6 +175,13 @@ abstract class Optimizer(catalogManager: CatalogManager)
         PushDownPredicates))
 
     val batches: Seq[Batch] = flattenBatches(Seq(
+    // UDF substitution rules should be executed before any other optimization rules
+    // so that the substituted Catalyst alternatives go through the same finalization
+    // (FinishAnalysis, RewriteWithExpression, etc.) and downstream optimization as
+    // any other expression. Anything ConvertToCatalyst leaves behind -- including
+    // RuntimeReplaceable nodes inside transpiled options -- is still rewritten by
+    // the FinishAnalysis batch that runs immediately after.
+    Batch("Convert python UDFs to Catalyst", Once, ConvertToCatalyst),
     Batch("Finish Analysis", FixedPoint(1), FinishAnalysis),
     // We must run this batch after `ReplaceExpressions`, as `RuntimeReplaceable` expression
     // may produce `With` expressions that need to be rewritten.
@@ -255,6 +263,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("Eliminate Sorts", Once,
       EliminateSorts,
       RemoveRedundantSorts),
+    // Run after operator optimization normally folds accuracy expressions and before
+    // RewriteDistinctAggregates so fused distinct percentiles are rewritten correctly.
+    Batch("Combine Approximate Percentiles", Once,
+      CombineApproximatePercentiles),
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates),
     // This batch must run after "Decimal Optimizations", as that one may change the
@@ -304,7 +316,14 @@ abstract class Optimizer(catalogManager: CatalogManager)
    */
   def nonExcludableRules: Seq[String] =
     Seq(
+      // ConvertToCatalyst is the only rule that strips the Unevaluable
+      // TranspiledPythonUDF node; excluding it would leak that node into
+      // execution, so it must never be excludable.
+      ConvertToCatalyst.ruleName,
       FinishAnalysis.ruleName,
+      // ReplaceExpressions (in FinishAnalysis) turns Between/NullIf into the Unevaluable
+      // With expression; excluding this rule leaks it into codegen and fails with INTERNAL_ERROR.
+      RewriteWithExpression.ruleName,
       RewriteDistinctAggregates.ruleName,
       ReplaceDeduplicateWithAggregate.ruleName,
       ReplaceIntersectWithSemiJoin.ruleName,
@@ -339,10 +358,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
       NormalizeFloatingNumbers,
       RewriteNonCorrelatedExists,
       PullOutGroupingExpressions,
-      // Put `InsertMapSortInGroupingExpressions` after `PullOutGroupingExpressions`,
-      // so the grouping keys can only be attribute and literal which makes
-      // `InsertMapSortInGroupingExpressions` easy to insert `MapSort`.
-      InsertMapSortInGroupingExpressions,
+      // Put `InsertMapSortInAggregate` after `PullOutGroupingExpressions`,
+      // so grouping keys are attributes or literals. The rule also projects complex distinct
+      // aggregate arguments before inserting `MapSort`.
+      InsertMapSortInAggregate,
       InsertMapSortInRepartitionExpressions,
       ComputeCurrentTime,
       ReplaceCurrentLike(catalogManager),
@@ -1007,6 +1026,80 @@ object LimitPushDown extends Rule[LogicalPlan] {
 }
 
 /**
+ * Attempt to convert UDFS to Catalyst expressions.
+ */
+object ConvertToCatalyst extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    // Short circuit if there are no Transpiled Python UDFs in the plan.
+    if (!plan.containsPattern(TRANSPILED_PYTHON_UDF)) {
+      return plan
+    }
+    // Traverse subquery plans too: this batch runs Once, and later rules (e.g.
+    // PullupCorrelatedPredicates) can move expressions from a subquery into the
+    // outer plan, so an Unevaluable TranspiledPythonUDF left inside a subquery
+    // here could otherwise escape and reach execution un-stripped.
+    plan.transformDownWithSubqueriesAndPruning(
+      _.containsPattern(TRANSPILED_PYTHON_UDF), ruleId) {
+      case p => p.transformExpressionsWithPruning(_.containsPattern(TRANSPILED_PYTHON_UDF)) {
+        case s: TranspiledPythonUDF => applyExpr(s, parentIsUdf = false)
+      }
+    }
+  }
+
+  def applyExpr(expression: Expression, parentIsUdf: Boolean = false): Expression = {
+    expression match {
+      case s: TranspiledPythonUDF =>
+        // We _shouldn't_ have these nodes if ANSI is not enabled or transpilation is disabled
+        // but if someone changed it while running we'll want to strip the nodes out.
+        if (!conf.getConf(SQLConf.ANSI_ENABLED)) {
+          logWarning(log"Skipping Python UDF transpilation: " +
+            log"${MDC(LogKeys.CONFIG, SQLConf.ANSI_ENABLED.key)} is disabled. The transpiler " +
+            log"targets ANSI semantics and refuses to rewrite plans under non-ANSI mode. " +
+            log"Enable ANSI or disable transpilation to silence this warning.")
+          s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
+        } else if (!conf.getConf(SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS)) {
+          logWarning(log"Skipping Python UDF transpilation: " +
+            log"${MDC(LogKeys.CONFIG, SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key)} " +
+            log"is disabled but we still got TranspiledPythonUDFs in our plan.")
+          s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
+        } else if (!parentIsUdf || !s.hasOnlyPythonUDFInputs) {
+          // Walk the full list of transpiled options and pick the first one,
+          // falling back to the original Python UDF if none are available.
+          // Options whose declared input-type categories don't match the bound
+          // column types are already pruned during analysis by
+          // ResolveTranspiledPythonUDFOptions, so any option that reaches here is
+          // safe to use. If you're plugging in your own transpilation, please add
+          // a separate ConvertToX so you can choose your desired transpiled nodes.
+          // NOTE: the substituted option is used as-is, with no cast back to the
+          // UDF's declared return type. The built-in transpiler guarantees each
+          // option's dataType already matches; a custom transpiler MUST do the
+          // same (or insert its own Cast), or it will silently change the output
+          // schema.
+          val firstEvaluable = s.transpiledOptions.headOption
+          firstEvaluable match {
+            case None =>
+              s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
+            case Some(catalystExpr) =>
+              // Recursively apply to the children first because we may use them as inputs in parent
+              catalystExpr.mapChildren(applyExpr(_, parentIsUdf = false))
+          }
+        } else {
+          // We should avoid converting a UDF node where that could break pipelining.
+          // For example: (UDF -> UDF -> UDF) is often cheaper than UDF -> Catalyst -> UDF.
+          s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
+        }
+      case _ =>
+        // Not a TranspiledPythonUDF: recurse down, telling the children whether
+        // this node is itself a scalar Python UDF so a transpiled child can
+        // preserve the UDF batch pipeline (e.g. an outer UDF that could not be
+        // transpiled wrapping one that could).
+        expression.mapChildren(
+          applyExpr(_, parentIsUdf = isScalarPythonUDF(expression)))
+    }
+  }
+}
+
+/**
  * Pushes Project operator to both sides of a Union operator.
  * Operations that are safe to pushdown are listed as follows.
  * Union:
@@ -1664,6 +1757,10 @@ object OptimizeWindowFunctions extends Rule[LogicalPlan] {
  * Collapse Adjacent Window Expression.
  * - If the partition specs and order specs are the same and the window expression are
  *   independent and are of the same window function type, collapse into the parent.
+ * - If the partition specs are the same and one of the order specs is empty, collapse into the
+ *   parent when the window expressions of the empty-order window can be evaluated under any row
+ *   order. The merged window keeps the non-empty order spec. Merging an empty-order child is
+ *   gated by `spark.sql.optimizer.collapseWindowWithEmptyOrderSpecInChild`.
  */
 object CollapseWindow extends Rule[LogicalPlan] {
   private def specCompatible(s1: Seq[Expression], s2: Seq[Expression]): Boolean = {
@@ -1671,9 +1768,46 @@ object CollapseWindow extends Rule[LogicalPlan] {
       s1.zip(s2).forall(e => e._1.semanticEquals(e._2))
   }
 
+  /**
+   * Returns true if the given window expression can still be evaluated correctly when the rows
+   * of the partition are reordered, so that it can be merged into another window with a different
+   * (non-empty) order spec.
+   *
+   * The frame determines whether reordering is safe. When the frame is the whole partition
+   * (`UNBOUNDED PRECEDING` to `UNBOUNDED FOLLOWING`), it always covers all the rows of the
+   * partition regardless of the ordering, so reordering changes only the order in which the rows
+   * are seen, never which rows are in the frame. Since the order spec of the window is empty,
+   * the query does not fix the row order, so evaluating its expressions under any ordering
+   * yields a valid result, even though the value may differ for order-dependent expressions
+   * such as `first`, `collect_list`, or floating-point `sum`/`avg`. On the other hand, a bounded
+   * frame (e.g. `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`) is order-sensitive: which
+   * rows are in the frame depends on the ordering, so even `count` or `sum` would change value,
+   * and such a window must not be merged.
+   */
+  private def canEvaluateUnderAnyOrder(windowExpression: NamedExpression): Boolean =
+    windowExpression match {
+      case Alias(WindowExpression(_, WindowSpecDefinition(_, _,
+          SpecifiedWindowFrame(_, UnboundedPreceding, UnboundedFollowing))), _) => true
+      case _ => false
+    }
+
   private def windowsCompatible(w1: Window, w2: Window): Boolean = {
     specCompatible(w1.partitionSpec, w2.partitionSpec) &&
-      specCompatible(w1.orderSpec, w2.orderSpec) &&
+      // The order specs can differ when one of them is empty, as long as the window expressions
+      // of the window with the empty order spec are safe to evaluate under any row order. In that
+      // case, they can be evaluated under the non-empty order spec of the other window. The
+      // operator then keeps the non-empty order spec while the merged-in expressions keep their
+      // own empty order spec; this divergence is safe because after analysis only
+      // OptimizeWindowFunctions reads an expression's own order spec, and it is a no-op without
+      // one. Merging an empty-order child into an ordered parent can disable
+      // InferWindowGroupLimit and LimitPushDownThroughWindow, so that direction is gated by
+      // conf.collapseWindowWithEmptyOrderSpecInChild.
+      (specCompatible(w1.orderSpec, w2.orderSpec) ||
+        (w1.orderSpec.isEmpty && w2.orderSpec.nonEmpty &&
+          w1.windowExpressions.forall(canEvaluateUnderAnyOrder)) ||
+        (conf.collapseWindowWithEmptyOrderSpecInChild && w2.orderSpec.isEmpty &&
+          w1.orderSpec.nonEmpty &&
+          w2.windowExpressions.forall(canEvaluateUnderAnyOrder))) &&
       w1.references.intersect(w2.windowOutputSet).isEmpty &&
       w1.windowExpressions.nonEmpty && w2.windowExpressions.nonEmpty &&
       // This assumes Window contains the same type of window expressions. This is ensured
@@ -1686,13 +1820,19 @@ object CollapseWindow extends Rule[LogicalPlan] {
     _.containsPattern(WINDOW), ruleId) {
     case w1 @ Window(we1, _, _, w2 @ Window(we2, _, _, grandChild, _), _)
         if windowsCompatible(w1, w2) =>
-      w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
+      w1.copy(
+        orderSpec = if (w1.orderSpec.nonEmpty) w1.orderSpec else w2.orderSpec,
+        windowExpressions = we2 ++ we1,
+        child = grandChild)
 
     case w1 @ Window(we1, _, _, Project(pl, w2 @ Window(we2, _, _, grandChild, _)), _)
         if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
       Project(
         pl ++ w1.windowOutputSet,
-        w1.copy(windowExpressions = we2 ++ we1, child = grandChild))
+        w1.copy(
+          orderSpec = if (w1.orderSpec.nonEmpty) w1.orderSpec else w2.orderSpec,
+          windowExpressions = we2 ++ we1,
+          child = grandChild))
   }
 }
 
@@ -2104,6 +2244,10 @@ object PushDownPredicates extends Rule[LogicalPlan] {
  * 2) the predicate is deterministic and the operator will not change any of rows.
  * 3) We don't add double evaluation OR double evaluation would be cheap OR we're configured to.
  *
+ * Note: if a new push-through case is added here, or the translation applied to pushed
+ * conditions changes (e.g. how aliases are substituted), also update
+ * `removePushedDownFilter` in [[PushdownPredicatesAndPruneColumnsForCTEDef]], which mirrors
+ * this rule's cases to locate and remove filters previously pushed into CTE definitions.
  */
 object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
@@ -2695,9 +2839,11 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
     _.containsPattern(LOCAL_RELATION), ruleId) {
     case Project(projectList, LocalRelation(output, data, isStreaming, stream))
         if !projectList.exists(hasUnevaluableExpr) =>
-      val projection = new InterpretedMutableProjection(projectList, output)
+      val freshProjectList = projectList.map(
+        _.freshCopyIfContainsStatefulExpression().asInstanceOf[NamedExpression])
+      val projection = new InterpretedMutableProjection(freshProjectList, output)
       projection.initialize(0)
-      LocalRelation(projectList.map(_.toAttribute), data.map(projection(_).copy()),
+      LocalRelation(freshProjectList.map(_.toAttribute), data.map(projection(_).copy()),
         isStreaming, stream)
 
     case Limit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming, stream)) =>
@@ -2708,7 +2854,8 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
 
     case Filter(condition, LocalRelation(output, data, isStreaming, stream))
         if !hasUnevaluableExpr(condition) =>
-      val predicate = Predicate.create(condition, output)
+      val freshCondition = condition.freshCopyIfContainsStatefulExpression()
+      val predicate = Predicate.create(freshCondition, output)
       predicate.initialize(0)
       LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming, stream)
   }
@@ -2738,7 +2885,7 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
     case d @ Deduplicate(keys, child, _) if !child.isStreaming =>
       val keyExprIds = keys.map(_.exprId)
-      val generatedAliasesMap = new mutable.HashMap[Attribute, Alias]();
+      val generatedAliasesMap = new mutable.HashMap[Attribute, Alias]()
       val aggCols = child.output.map { attr =>
         if (keyExprIds.contains(attr.exprId)) {
           attr

@@ -604,6 +604,41 @@ Project [cast(1960-01-01 19:04:05.123456789 + INTERVAL '0 00:00:00.000001' DAY T
 
 
 -- !query
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + INTERVAL '1' YEAR
+-- !query analysis
+Project [2020-01-01 19:04:05.123456789 + INTERVAL '1' YEAR AS TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' + INTERVAL '1' YEAR#x]
++- OneRowRelation
+
+
+-- !query
+SELECT INTERVAL '1' YEAR + TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC'
+-- !query analysis
+Project [2020-01-01 19:04:05.123456789 + INTERVAL '1' YEAR AS TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' + INTERVAL '1' YEAR#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + INTERVAL '1' MONTH
+-- !query analysis
+Project [2020-01-01 19:04:05.123456789 + INTERVAL '1' MONTH AS TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' + INTERVAL '1' MONTH#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - INTERVAL '1-2' YEAR TO MONTH
+-- !query analysis
+Project [2020-01-01 19:04:05.123456789 - INTERVAL '1-2' YEAR TO MONTH AS TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' - INTERVAL '1-2' YEAR TO MONTH#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '1960-01-31 03:04:05.123456789 UTC' + INTERVAL '1' MONTH
+-- !query analysis
+Project [1960-01-30 19:04:05.123456789 + INTERVAL '1' MONTH AS TIMESTAMP_LTZ '1960-01-30 19:04:05.123456789' + INTERVAL '1' MONTH#x]
++- OneRowRelation
+
+
+-- !query
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + make_interval(0, 1, 0, 2, 0, 0, 0)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -628,23 +663,80 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + INTERVAL '1' MONTH
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - TIMESTAMP_LTZ '2020-01-01 03:04:05.000000111 UTC'
+-- !query analysis
+Project [(2020-01-01 19:04:05.123456789 - 2019-12-31 19:04:05.000000111) AS (TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' - TIMESTAMP_LTZ '2019-12-31 19:04:05.000000111')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - TIMESTAMP_LTZ '2020-01-02 03:04:05.123456001 UTC'
+-- !query analysis
+Project [(2020-01-01 19:04:05.123456789 - 2020-01-01 19:04:05.123456001) AS (TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' - TIMESTAMP_LTZ '2020-01-01 19:04:05.123456001')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-01 03:04:05.000000111 UTC' - TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC'
+-- !query analysis
+Project [(2019-12-31 19:04:05.000000111 - 2020-01-01 19:04:05.123456789) AS (TIMESTAMP_LTZ '2019-12-31 19:04:05.000000111' - TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT ('2020-01-02 03:04:05.1234567 UTC' :: timestamp_ltz(7)) - ('2020-01-01 03:04:05.000000009 UTC' :: timestamp_ltz(9))
+-- !query analysis
+Project [(cast(cast(2020-01-02 03:04:05.1234567 UTC as timestamp_ltz(7)) as timestamp_ltz(9)) - cast(2020-01-01 03:04:05.000000009 UTC as timestamp_ltz(9))) AS (CAST(2020-01-02 03:04:05.1234567 UTC AS TIMESTAMP_LTZ(7)) - CAST(2020-01-01 03:04:05.000000009 UTC AS TIMESTAMP_LTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - TIMESTAMP_LTZ '2020-01-02 03:04:05 UTC'
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-02 00:00:00.000000789' - DATE '2020-01-01'
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' - TIMESTAMP_LTZ '1960-01-01 00:00:00.000000999 UTC'
+-- !query analysis
+Project [(2019-12-31 16:00:00.123456789 - 1959-12-31 16:00:00.000000999) AS (TIMESTAMP_LTZ '2019-12-31 16:00:00.123456789' - TIMESTAMP_LTZ '1959-12-31 16:00:00.000000999')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - CAST(NULL AS timestamp_ltz(9))
+-- !query analysis
+Project [(2020-01-01 19:04:05.123456789 - cast(null as timestamp_ltz(9))) AS (TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' - CAST(NULL AS TIMESTAMP_LTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT convert_timezone('Europe/Brussels', 'Europe/Moscow',
+    '2022-03-27 03:00:00.123456789 UTC' :: timestamp_ltz(9))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"TIMESTAMP_LTZ(9)\"",
-    "right" : "\"INTERVAL MONTH\"",
-    "sqlExpr" : "\"(TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' + INTERVAL '1' MONTH)\""
+    "inputSql" : "\"CAST(2022-03-27 03:00:00.123456789 UTC AS TIMESTAMP_LTZ(9))\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "third",
+    "requiredType" : "\"(TIMESTAMP_NTZ OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\"",
+    "sqlExpr" : "\"convert_timezone(Europe/Brussels, Europe/Moscow, CAST(2022-03-27 03:00:00.123456789 UTC AS TIMESTAMP_LTZ(9)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 77,
-    "fragment" : "TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + INTERVAL '1' MONTH"
+    "stopIndex" : 120,
+    "fragment" : "convert_timezone('Europe/Brussels', 'Europe/Moscow',\n    '2022-03-27 03:00:00.123456789 UTC' :: timestamp_ltz(9))"
   } ]
 }
 
@@ -671,6 +763,55 @@ Sort [c#x ASC NULLS FIRST], true
 +- Aggregate [c#x], [c#x, count(1) AS count(1)#xL]
    +- SubqueryAlias t
       +- LocalRelation [c#x]
+
+
+-- !query
+SELECT k, count(*), sum(v) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 1),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 2),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 3),
+  (CAST(NULL AS timestamp_ltz(9)), 4),
+  (CAST(NULL AS timestamp_ltz(9)), 5) AS t(k, v)
+  GROUP BY k ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Aggregate [k#x], [k#x, count(1) AS count(1)#xL, sum(v#x) AS sum(v)#xL]
+   +- SubqueryAlias t
+      +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT mode(c) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC') AS t(c)
+-- !query analysis
+Aggregate [mode(c#x, 0, 0, None) AS mode(c)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SELECT sort_array(collect_set(c)) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC') AS t(c)
+-- !query analysis
+Aggregate [sort_array(collect_set(c#x, 0, 0, true), true) AS sort_array(collect_set(c), true)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SELECT sort_array(collect_list(c)) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (CAST(NULL AS timestamp_ltz(9))) AS t(c)
+-- !query analysis
+Aggregate [sort_array(collect_list(c#x, 0, 0, true), true) AS sort_array(collect_list(c), true)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
 
 
 -- !query
@@ -732,6 +873,21 @@ SELECT max_by(v, k), min_by(v, k) FROM VALUES
 Aggregate [max_by(v#x, k#x) AS max_by(v, k)#x, min_by(v#x, k#x) AS min_by(v, k)#x]
 +- SubqueryAlias t
    +- LocalRelation [v#x, k#x]
+
+
+-- !query
+SELECT DISTINCT c FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (CAST(NULL AS timestamp_ltz(9))) AS t(c)
+  ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Distinct
+   +- Project [c#x]
+      +- SubqueryAlias t
+         +- LocalRelation [c#x]
 
 
 -- !query
@@ -1037,6 +1193,63 @@ Sort [v#x ASC NULLS FIRST], true
 
 
 -- !query
+SELECT c = '2020-01-02 03:04:05.123456789',
+       c = '2020-01-02 03:04:05.123456788',
+       c < '2020-01-02 03:04:05.123456790'
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789') AS t(c)
+-- !query analysis
+Project [(c#x = cast(2020-01-02 03:04:05.123456789 as timestamp_ltz(9))) AS (c = 2020-01-02 03:04:05.123456789)#x, (c#x = cast(2020-01-02 03:04:05.123456788 as timestamp_ltz(9))) AS (c = 2020-01-02 03:04:05.123456788)#x, (c#x < cast(2020-01-02 03:04:05.123456790 as timestamp_ltz(9))) AS (c < 2020-01-02 03:04:05.123456790)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SELECT c FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-02 03:04:05.000000001'),
+  (TIMESTAMP_LTZ '2020-01-02 03:04:05.000000009') AS t(c)
+  WHERE c BETWEEN '2020-01-02 03:04:05.000000001' AND '2020-01-02 03:04:05.000000005'
+-- !query analysis
+Project [c#x]
++- Filter between(c#x, 2020-01-02 03:04:05.000000001, 2020-01-02 03:04:05.000000005)
+   +- SubqueryAlias t
+      +- LocalRelation [c#x]
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(false))
+
+
+-- !query
+SET spark.sql.legacy.typeCoercion.datetimeToString.enabled=true
+-- !query analysis
+SetCommand (spark.sql.legacy.typeCoercion.datetimeToString.enabled,Some(true))
+
+
+-- !query
+SELECT c = '2020-01-02 03:04:05.123456789',
+       c < '2020-01-02 03:04:05.123456790'
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789') AS t(c)
+-- !query analysis
+Project [(c#x = cast(2020-01-02 03:04:05.123456789 as timestamp_ltz(9))) AS (c = 2020-01-02 03:04:05.123456789)#x, (cast(c#x as string) < 2020-01-02 03:04:05.123456790) AS (c < 2020-01-02 03:04:05.123456790)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SET spark.sql.legacy.typeCoercion.datetimeToString.enabled=false
+-- !query analysis
+SetCommand (spark.sql.legacy.typeCoercion.datetimeToString.enabled,Some(false))
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(true))
+
+
+-- !query
 SELECT unix_seconds(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC')
 -- !query analysis
 Project [unix_seconds(2020-01-01 05:24:35.123456789) AS unix_seconds(TIMESTAMP_LTZ '2020-01-01 05:24:35.123456789')#xL]
@@ -1173,4 +1386,238 @@ Project [date_trunc(DAY, cast(2020-01-01 04:00:00.000000123 UTC as timestamp_ltz
 SELECT date_trunc('NANOSECOND', TIMESTAMP_LTZ '2020-01-01 12:34:56.123456789 UTC')
 -- !query analysis
 Project [date_trunc(NANOSECOND, 2020-01-01 04:34:56.123456789, Some(America/Los_Angeles)) AS date_trunc(NANOSECOND, TIMESTAMP_LTZ '2020-01-01 04:34:56.123456789')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(current_timestamp(9)), typeof(current_timestamp(8)), typeof(current_timestamp(7))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT typeof(now(9)), typeof(now(6))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT typeof(current_timestamp()), typeof(current_timestamp(6))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT typeof(current_timestamp(7 + 2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT current_timestamp(9) = current_timestamp(9), now(9) = current_timestamp(9)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT current_timestamp(3)
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "3",
+    "type" : "TIMESTAMP_LTZ"
+  }
+}
+
+
+-- !query
+SELECT current_timestamp(10)
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "10",
+    "type" : "TIMESTAMP_LTZ"
+  }
+}
+
+
+-- !query
+SELECT c FROM (SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC' AS c
+    UNION ALL SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC')
+  INTERSECT SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC' ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Intersect false
+   :- Project [c#x]
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- Union false, false
+   :        :- Project [2019-12-31 16:00:00.000000001 AS c#x]
+   :        :  +- OneRowRelation
+   :        +- Project [2019-12-31 16:00:00.000000999 AS TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999'#x]
+   :           +- OneRowRelation
+   +- Project [2019-12-31 16:00:00.000000001 AS TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001'#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT c FROM (SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC' AS c
+    UNION ALL SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC')
+  EXCEPT SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC' ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Except false
+   :- Project [c#x]
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- Union false, false
+   :        :- Project [2019-12-31 16:00:00.000000001 AS c#x]
+   :        :  +- OneRowRelation
+   :        +- Project [2019-12-31 16:00:00.000000999 AS TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999'#x]
+   :           +- OneRowRelation
+   +- Project [2019-12-31 16:00:00.000000001 AS TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001'#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT typeof(c), c FROM (
+    (SELECT '2020-01-01 00:00:00.0000009 UTC' :: timestamp_ltz(7) AS c)
+     INTERSECT (SELECT '2020-01-01 00:00:00.000000900 UTC' :: timestamp_ltz(9))) ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Project [typeof(c#x) AS typeof(c)#x, c#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Intersect false
+         :- Project [cast(c#x as timestamp_ltz(9)) AS c#x]
+         :  +- Project [cast(2020-01-01 00:00:00.0000009 UTC as timestamp_ltz(7)) AS c#x]
+         :     +- OneRowRelation
+         +- Project [cast(2020-01-01 00:00:00.000000900 UTC as timestamp_ltz(9)) AS CAST(2020-01-01 00:00:00.000000900 UTC AS TIMESTAMP_LTZ(9))#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500 UTC'
+    BETWEEN TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'
+        AND TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'
+-- !query analysis
+Project [between(2019-12-31 16:00:00.0000005, 2019-12-31 16:00:00.000000001, 2019-12-31 16:00:00.000000999) AS between(TIMESTAMP_LTZ '2019-12-31 16:00:00.000000500', TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000001000 UTC'
+    BETWEEN TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'
+        AND TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'
+-- !query analysis
+Project [between(2019-12-31 16:00:00.000001, 2019-12-31 16:00:00.000000001, 2019-12-31 16:00:00.000000999) AS between(TIMESTAMP_LTZ '2019-12-31 16:00:00.000001000', TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT '2020-01-01 00:00:00.000000500 UTC' :: timestamp_ltz(9)
+    BETWEEN '2020-01-01 00:00:00.0000001 UTC' :: timestamp_ltz(7)
+        AND TIMESTAMP_LTZ '2020-01-01 00:00:00.000001 UTC'
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT if(true,
+    '2020-01-01 00:00:00.0000001 UTC' :: timestamp_ltz(7),
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC') AS v)
+-- !query analysis
+Project [typeof(v#x) AS typeof(v)#x, v#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [if (true) cast(cast(2020-01-01 00:00:00.0000001 UTC as timestamp_ltz(7)) as timestamp_ltz(9)) else 2019-12-31 16:00:00.123456789 AS v#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT nvl(
+    CAST(NULL AS timestamp_ltz(9)),
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC') AS v)
+-- !query analysis
+Project [typeof(v#x) AS typeof(v)#x, v#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [nvl(cast(null as timestamp_ltz(9)), 2019-12-31 16:00:00.000000999) AS v#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT ifnull(TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', CAST(NULL AS timestamp_ltz(9)))
+-- !query analysis
+Project [ifnull(2019-12-31 16:00:00.000000001, cast(null as timestamp_ltz(9))) AS ifnull(TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', CAST(NULL AS TIMESTAMP_LTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT k FROM VALUES
+    (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+    (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC') AS t(k)
+  WHERE k IN (SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC') ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x]
+   +- Filter k#x IN (list#x [])
+      :  +- Project [2019-12-31 16:00:00.000000999 AS TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999'#x]
+      :     +- OneRowRelation
+      +- SubqueryAlias t
+         +- LocalRelation [k#x]
+
+
+-- !query
+SELECT typeof(col), col FROM (SELECT explode(array(
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC',
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'))) ORDER BY col
+-- !query analysis
+Sort [col#x ASC NULLS FIRST], true
++- Project [typeof(col#x) AS typeof(col)#x, col#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Project [col#x]
+         +- Generate explode(array(2019-12-31 16:00:00.000000001, 2019-12-31 16:00:00.000000999)), false, [col#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT element_at(array(
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC',
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'), 2)
+-- !query analysis
+Project [element_at(array(2019-12-31 16:00:00.000000001, 2019-12-31 16:00:00.000000999), 2, None, true) AS element_at(array(TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999'), 2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT (named_struct('f', TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC')).f
+-- !query analysis
+Project [named_struct(f, 2019-12-31 16:00:00.123456789).f AS named_struct(f, TIMESTAMP_LTZ '2019-12-31 16:00:00.123456789').f#x]
++- OneRowRelation
+
+
+-- !query
+SELECT map('k', TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC')['k']
+-- !query analysis
+Project [map(k, 2019-12-31 16:00:00.123456789)[k] AS map(k, TIMESTAMP_LTZ '2019-12-31 16:00:00.123456789')[k]#x]
++- OneRowRelation
+
+
+-- !query
+SELECT map(TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 'a',
+           TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 'b')[
+       TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC']
+-- !query analysis
+Project [map(2019-12-31 16:00:00.000000001, a, 2019-12-31 16:00:00.000000999, b)[2019-12-31 16:00:00.000000999] AS map(TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', a, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999', b)[TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999']#x]
++- OneRowRelation
+
+
+-- !query
+SELECT element_at(map(TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 'a',
+           TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 'b'),
+       TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC')
+-- !query analysis
+Project [element_at(map(2019-12-31 16:00:00.000000001, a, 2019-12-31 16:00:00.000000999, b), 2019-12-31 16:00:00.000000001, None, true) AS element_at(map(TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', a, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999', b), TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001')#x]
 +- OneRowRelation

@@ -288,7 +288,7 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
   }
 
   /**
-   * Helper for lock acquisistion.
+   * Helper for lock acquisition.
    */
   private def acquireLock(
       blockId: BlockId,

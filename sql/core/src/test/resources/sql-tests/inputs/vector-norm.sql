@@ -153,3 +153,36 @@ SELECT vector_norm(
     array(1.0F, 2.0F, 3.0F, 4.0F, 5.0F, CAST(NULL AS FLOAT), 7.0F, 8.0F, 9.0F, 10.0F, 11.0F, 12.0F, 13.0F, 14.0F, 15.0F, 16.0F),
     2.0F
 );
+
+-- SPARK-58544: large magnitudes, the intermediate sum of squares must not overflow the float range
+
+-- vector_norm: sqrt((3e19)^2 + (4e19)^2) = 5e19
+SELECT vector_norm(array(3.0e19F, 4.0e19F), 2.0F);
+
+-- vector_normalize: [3e19, 4e19] normalizes to [0.6, 0.8]
+SELECT vector_normalize(array(3.0e19F, 4.0e19F), 2.0F);
+
+-- vector_norm: the L1 norm itself is not representable as a float, so it stays infinite
+SELECT vector_norm(array(3.0e38F, 3.0e38F), 1.0F);
+
+-- vector_normalize: normalization still succeeds when the norm exceeds the float range
+SELECT vector_normalize(array(3.0e38F, 3.0e38F), 1.0F);
+
+-- SPARK-58544: small magnitudes, the intermediate sum of squares must not underflow to zero
+
+-- vector_norm: the L2 norm of a tiny vector is not zero
+SELECT vector_norm(array(1.0e-23F, 0.0F), 2.0F);
+
+-- vector_normalize: normalization is scale invariant, so the result is a unit vector, not NULL
+SELECT vector_normalize(array(1.0e-23F, 0.0F), 2.0F);
+
+SELECT vector_normalize(array(1.0e-23F, 1.0e-23F), 2.0F);
+
+-- SPARK-58544: elements that are already infinite still produce an infinite norm; the wider
+-- accumulators do not change that
+
+-- vector_norm: an infinite element makes the L2 norm infinite
+SELECT vector_norm(array(float('inf'), 1.0F), 2.0F);
+
+-- vector_normalize: dividing by an infinite norm yields NaN for the infinite element
+SELECT vector_normalize(array(float('inf'), 1.0F), 2.0F);

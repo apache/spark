@@ -51,6 +51,15 @@ private[spark] object PythonEvalType {
 
   val SQL_BATCHED_UDF = 100
   val SQL_ARROW_BATCHED_UDF = 101
+  // A scalar Python UDF applied element-wise over the elements of an array column, used to
+  // support Python UDFs inside higher-order function lambdas. See ExtractPythonUDFFromLambda.
+  // 102 lifts a row-at-a-time UDF (SQL_BATCHED_UDF / SQL_ARROW_BATCHED_UDF); 103-106 lift the
+  // vectorized scalar UDFs, preserving pandas- vs. Arrow-shaped batches and the iterator contract.
+  val SQL_ARROW_ELEMENTWISE_UDF = 102
+  val SQL_SCALAR_PANDAS_ELEMENTWISE_UDF = 103
+  val SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF = 104
+  val SQL_SCALAR_ARROW_ELEMENTWISE_UDF = 105
+  val SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF = 106
 
   val SQL_SCALAR_PANDAS_UDF = 200
   val SQL_GROUPED_MAP_PANDAS_UDF = 201
@@ -78,6 +87,19 @@ private[spark] object PythonEvalType {
   val SQL_WINDOW_AGG_ARROW_UDF = 253
   val SQL_GROUPED_AGG_ARROW_ITER_UDF = 254
 
+  // Incremental (partial + final) Arrow aggregator. Unlike the whole-group grouped-agg UDFs
+  // above, these support true partial aggregation: the PARTIAL eval type folds input rows into a
+  // per-group buffer (via the aggregator's `reduce`) on the map side, and the FINAL eval type
+  // merges partial buffers across the shuffle (via `merge`) and produces the output (via `finish`).
+  // See PythonIncrementalAggregateExec and the Python `Aggregator` API.
+  val SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF = 255
+  val SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF = 256
+
+  // Window aggregation with an incremental Arrow aggregator. A window has no shuffle, so it needs
+  // neither the PARTIAL nor the FINAL eval type above: the operator sends each frame's rows to the
+  // worker, which folds them with `reduce` (from `zero`) and produces the value with `finish`.
+  val SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF = 257
+
   val SQL_TABLE_UDF = 300
   val SQL_ARROW_TABLE_UDF = 301
   val SQL_ARROW_UDTF = 302
@@ -86,6 +108,11 @@ private[spark] object PythonEvalType {
     case NON_UDF => "NON_UDF"
     case SQL_BATCHED_UDF => "SQL_BATCHED_UDF"
     case SQL_ARROW_BATCHED_UDF => "SQL_ARROW_BATCHED_UDF"
+    case SQL_ARROW_ELEMENTWISE_UDF => "SQL_ARROW_ELEMENTWISE_UDF"
+    case SQL_SCALAR_PANDAS_ELEMENTWISE_UDF => "SQL_SCALAR_PANDAS_ELEMENTWISE_UDF"
+    case SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF => "SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF"
+    case SQL_SCALAR_ARROW_ELEMENTWISE_UDF => "SQL_SCALAR_ARROW_ELEMENTWISE_UDF"
+    case SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF => "SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF"
     case SQL_SCALAR_PANDAS_UDF => "SQL_SCALAR_PANDAS_UDF"
     case SQL_GROUPED_MAP_PANDAS_UDF => "SQL_GROUPED_MAP_PANDAS_UDF"
     case SQL_GROUPED_AGG_PANDAS_UDF => "SQL_GROUPED_AGG_PANDAS_UDF"
@@ -116,6 +143,23 @@ private[spark] object PythonEvalType {
     case SQL_GROUPED_AGG_ARROW_UDF => "SQL_GROUPED_AGG_ARROW_UDF"
     case SQL_WINDOW_AGG_ARROW_UDF => "SQL_WINDOW_AGG_ARROW_UDF"
     case SQL_GROUPED_AGG_ARROW_ITER_UDF => "SQL_GROUPED_AGG_ARROW_ITER_UDF"
+    case SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF =>
+      "SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF"
+    case SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF =>
+      "SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF"
+    case SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF => "SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF"
+  }
+
+  // The eval types produced by ExtractPythonUDFFromLambda: a scalar UDF lifted out of a
+  // higher-order function's lambda, which receives each argument as an `array<T>` column and is
+  // applied element-wise inside the Python worker. See ExtractPythonUDFFromLambda.
+  def isElementwiseUDF(evalType: Int): Boolean = evalType match {
+    case SQL_ARROW_ELEMENTWISE_UDF |
+         SQL_SCALAR_PANDAS_ELEMENTWISE_UDF |
+         SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF |
+         SQL_SCALAR_ARROW_ELEMENTWISE_UDF |
+         SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF => true
+    case _ => false
   }
 }
 

@@ -55,6 +55,11 @@ trait NoThrow
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, ...) - Returns an array with the given elements.",
+  arguments = """
+    Arguments:
+      * expr - An expression of any type to include as an array element. Zero or more
+          expressions can be given, and they must share a common type.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1, 2, 3);
@@ -179,6 +184,14 @@ private [sql] object GenArrayData {
  */
 @ExpressionDescription(
   usage = "_FUNC_(key0, value0, key1, value1, ...) - Creates a map with the given key/value pairs.",
+  arguments = """
+    Arguments:
+      * keyN - An expression for the N-th map key. Keys must not be NULL and all keys must
+          share a common type.
+      * valueN - An expression for the value paired with keyN. All values must share a common
+          type. Keys and values are supplied as alternating arguments, so the total number of
+          arguments must be even.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1.0, '2', 3.0, '4');
@@ -423,7 +436,12 @@ object CreateStruct {
       null,
       "struct",
       "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.",
-      "",
+      """
+        |    Arguments:
+        |      * colN - The field values of the struct. There can be zero or more of them,
+        |          each an expression of any type. Field names are assigned as `colN` by
+        |          default unless the value is a named expression.
+        |  """.stripMargin,
       """
         |    Examples:
         |      > SELECT _FUNC_(1, 2, 3);
@@ -446,6 +464,13 @@ object CreateStruct {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.",
+  arguments = """
+    Arguments:
+      * nameN - A STRING literal giving the name of the N-th struct field. It must not be NULL.
+      * valN - An expression of any type providing the value for the field named nameN. Names
+          and values are supplied as alternating arguments, so the total number of arguments
+          must be even.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
@@ -615,9 +640,14 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation, StringTypeNonCSAICollation)
 
-  override def dataType: DataType = MapType(first.dataType, first.dataType)
+  // The entries are split out of the input, so they do not carry its CHAR(n)/VARCHAR(n) length
+  // constraint. ImplicitTypeCasts promotes CHAR/VARCHAR to STRING at this ExpectsInputTypes site.
+  private lazy val entryType: DataType =
+    first.dataType
 
-  private lazy val mapBuilder = new ArrayBasedMapBuilder(first.dataType, first.dataType)
+  override def dataType: DataType = MapType(entryType, entryType)
+
+  private lazy val mapBuilder = new ArrayBasedMapBuilder(entryType, entryType)
 
   private final lazy val collationId: Int = text.dataType.asInstanceOf[StringType].collationId
 

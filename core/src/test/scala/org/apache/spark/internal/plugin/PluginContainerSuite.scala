@@ -290,6 +290,7 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
           case _: TestSparkPluginEvent =>
             // Count down upon receiving the event sent from the plugin during shutdown.
             countDownLatch.countDown()
+          case _ =>
         }
       }
     })

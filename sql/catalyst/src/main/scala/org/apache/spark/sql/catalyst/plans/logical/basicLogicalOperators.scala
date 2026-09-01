@@ -184,10 +184,41 @@ object Project {
         if (other == target) {
           col
         } else if (Cast.canANSIStoreAssign(other, target)) {
-          Cast(col, target, Option(conf.sessionLocalTimeZone), ansiEnabled = true)
+          storeAssignCast(col, other, target, conf)
         } else {
           throw QueryCompilationErrors.invalidColumnOrFieldDataTypeError(columnPath, other, target)
         }
+    }
+  }
+
+  /**
+   * Cast `col` for ANSI store assignment without using character-to-character CAST
+   * truncation (ISO 6.13).
+   *
+   * For CHAR/VARCHAR targets the plan is Cast to unconstrained STRING, then
+   * `stringLengthCheck` (write-side overflow). Avoid replaceCharVarcharWithString
+   * so first-class types stay CHAR/VARCHAR.
+   */
+  private def storeAssignCast(
+      col: Expression,
+      other: DataType,
+      target: DataType,
+      conf: SQLConf): Expression = {
+    val (castTarget, lengthCheckType) = target match {
+      case c: CharType => (c.toStringType, Some(c: DataType))
+      case v: VarcharType => (v.toStringType, Some(v: DataType))
+      case otherType => (otherType, None)
+    }
+    val casted = if (other == castTarget) {
+      col
+    } else {
+      Cast(col, castTarget, Option(conf.sessionLocalTimeZone), ansiEnabled = true)
+    }
+    lengthCheckType match {
+      case Some(dt) if CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf) =>
+        CharVarcharUtils.stringLengthCheck(casted, dt)
+      case _ =>
+        casted
     }
   }
 
@@ -2070,6 +2101,18 @@ object SampleMethod {
 
 object Sample {
   /**
+   * Resolves the seed of a sample, generating a random one when the user did not specify one.
+   *
+   * Generated seeds are non-negative. A pushed-down sample renders its seed into SQL as
+   * `REPEATABLE (<seed>)`, and the seed in that grammar does not accept a sign. A
+   * user-specified seed is returned unchanged, negative values included.
+   */
+  def resolveSeed(seed: Option[Long]): Long = {
+    // `Utils` in this file is o.a.s.util.collection.Utils, so qualify the one we want here.
+    seed.getOrElse(org.apache.spark.util.Utils.random.nextLong() & Long.MaxValue)
+  }
+
+  /**
    * Convenience constructor that wraps a concrete seed in [[Some]].
    * Use the case-class constructor directly with [[None]] when no seed
    * was specified and a random seed should be generated at execution time.
@@ -2546,14 +2589,8 @@ case class AsOfJoin(
 
   override protected def stringArgs: Iterator[Any] = super.stringArgs.take(5)
 
-  override def output: Seq[Attribute] = {
-    joinType match {
-      case LeftOuter =>
-        left.output ++ right.output.map(_.withNullability(true))
-      case _ =>
-        left.output ++ right.output
-    }
-  }
+  override def output: Seq[Attribute] =
+    AsOfJoin.computeOutput(joinType, left.output, right.output)
 
   def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
@@ -2581,6 +2618,19 @@ case class AsOfJoin(
 }
 
 object AsOfJoin {
+
+  /**
+   * Computes the output attributes of an [[AsOfJoin]] given its join type and child outputs.
+   */
+  def computeOutput(
+      joinType: JoinType,
+      leftOutput: Seq[Attribute],
+      rightOutput: Seq[Attribute]): Seq[Attribute] = joinType match {
+    case LeftOuter =>
+      leftOutput ++ rightOutput.map(_.withNullability(true))
+    case _ =>
+      leftOutput ++ rightOutput
+  }
 
   def apply(
       left: LogicalPlan,
@@ -2750,13 +2800,11 @@ object AsOfJoin {
     operand.isInstanceOf[CreateNamedStruct]
 
   private[catalyst] def normalizeMatchOperands(
-      left: LogicalPlan,
-      right: LogicalPlan,
+      leftSet: AttributeSet,
+      rightSet: AttributeSet,
       expr1: Expression,
       operator: MatchComparisonOperator,
       expr2: Expression): (Expression, Expression, MatchComparisonOperator) = {
-    val leftSet = left.outputSet
-    val rightSet = right.outputSet
     val expr1Side = operandJoinSide(expr1, leftSet, rightSet, syntacticIsLeft = true)
     val expr2Side = operandJoinSide(expr2, leftSet, rightSet, syntacticIsLeft = false)
     (expr1Side, expr2Side) match {

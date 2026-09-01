@@ -18,18 +18,22 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.{DataInputStream, DataOutputStream}
+import java.util.{List => JList}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.{Column, TableArg}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF, UnresolvedTableArgPlanId}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonAggregate, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, TranspiledPythonUDF, UnresolvedPolymorphicPythonUDTF, UnresolvedTableArgPlanId}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.classic.ColumnConversions
 import org.apache.spark.sql.classic.ExpressionUtils.expression
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{SQLConf, TableValuedFunctionArgument}
@@ -43,7 +47,20 @@ case class UserDefinedPythonFunction(
     func: PythonFunction,
     dataType: DataType,
     pythonEvalType: Int,
-    udfDeterministic: Boolean) {
+    udfDeterministic: Boolean,
+    // TODO: Add support for transpilation with Spark Connect and remove the default value.
+    transpiled: JList[Column] = Nil.asJava,
+    // Per-option input-type categories ("numeric"/"string" per public param),
+    // parallel to `transpiled` (same length). The analyzer rule
+    // ResolveTranspiledPythonUDFOptions later keeps only the options whose
+    // categories match the bound argument types; when none match, the call
+    // falls back to the plain Python UDF. `builder` requires the two lists to
+    // be parallel and skips transpilation otherwise.
+    transpiledInputTypes: JList[JList[String]] = Nil.asJava,
+    // Schema of the intermediate aggregation buffer, set only for the incremental Python
+    // aggregator eval types (see [[PythonAggregate]]); `null` otherwise. Nullable rather than
+    // `Option` so it can be passed positionally from Python over Py4J.
+    bufferType: DataType = null) {
 
   def builder(e: Seq[Expression]): Expression = {
     if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
@@ -53,7 +70,8 @@ case class UserDefinedPythonFunction(
         || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
         || pythonEvalType == PythonEvalType.SQL_SCALAR_ARROW_UDF
         || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
-        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF) {
+        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF
+        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF) {
       /*
        * Check if the named arguments:
        * - don't have duplicated names
@@ -63,14 +81,99 @@ case class UserDefinedPythonFunction(
     } else if (e.exists(_.isInstanceOf[NamedArgumentExpression])) {
       throw QueryCompilationErrors.namedArgumentsNotSupported(name)
     }
+    val transpiledExprs: List[Expression] = transpiled.asScala.map(
+      column => ColumnConversions.expression(column)).toList
+    val optionInputTypes: List[List[String]] =
+      transpiledInputTypes.asScala.map(_.asScala.toList).toList
 
-    if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+
+    val udfExpr = if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF) {
       PythonUDAF(name, func, dataType, e, udfDeterministic, pythonEvalType)
+    } else if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF) {
+      // The incremental Python aggregator. `bufferType` (the intermediate buffer schema) must have
+      // been supplied as a struct when the UDF was created. The single expression carries the
+      // aggregator for both the PARTIAL and FINAL stages; the physical operator picks the per-stage
+      // eval type. `udaf()` enforces this up front, but a malformed Connect proto (eval type set,
+      // `buffer_type` missing or non-struct) or a direct `UserDefinedFunction(f, evalType=...)` can
+      // reach here without it, so return a classed error rather than a bare require /
+      // ClassCastException.
+      val bufferStruct = bufferType match {
+        case s: StructType => s
+        case _ =>
+          throw QueryCompilationErrors.invalidIncrementalPythonAggregatorBufferError(
+            name, bufferType)
+      }
+      PythonAggregate(name, func, dataType, e, udfDeterministic, bufferStruct)
     } else {
       PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic)
+    }
+    // The ``_udf_param_N`` substitution below is positional, so a UDF
+    // call site that supplied named arguments (e.g. SQL ``name => val``
+    // or pyspark ``udf(b=col)``) would splice ``NamedArgumentExpression``
+    // wrappers into the rewritten Catalyst tree and confuse downstream
+    // function resolution (``isnotnull`` etc. reject named parameters).
+    // The Python ``__call__`` shim resolves kwargs to positional before
+    // they reach this builder; SQL named arguments don't go through that
+    // shim, so we conservatively skip transpilation here when any child
+    // is a ``NamedArgumentExpression`` and let the regular Python UDF
+    // path execute.
+    val transpiledExprsForUse =
+      if (e.exists(_.isInstanceOf[NamedArgumentExpression])) Nil else transpiledExprs
+    val optionInputTypesForUse =
+      if (e.exists(_.isInstanceOf[NamedArgumentExpression])) Nil else optionInputTypes
+    // If we have possible transpiled expressions insert the node carrying every
+    // option plus its declared input-type categories. We can't pick here: this
+    // builder runs at call-construction time, before the argument columns are
+    // bound, so their types aren't known yet. ResolveTranspiledPythonUDFOptions
+    // prunes the options to those matching the resolved input types (once known,
+    // and before CheckAnalysis), and ConvertToCatalyst picks the survivor.
+    // Only build the node when every option carries its parallel input-type
+    // categories. ResolveTranspiledPythonUDFOptions prunes type-incompatible
+    // options using those categories, but only when they are present (its guard
+    // is `optionInputCategories.nonEmpty`); an empty or mismatched categories
+    // list would leave a type-invalid option to fail CheckAnalysis instead of
+    // falling back. If the two lists don't line up, skip transpilation.
+    // A call-site arity mismatch (user passed more or fewer args than the UDF's
+    // parameters) must fall back to the plain Python UDF so the standard runtime
+    // TypeError surfaces. Each option's category list has exactly one entry per
+    // public parameter, so a length mismatch against the bound children detects
+    // both directions: too few args would otherwise trip the placeholder bounds
+    // check below as a misleading "internal error", and too many args on a
+    // zero/fewer-param UDF would otherwise silently succeed where Python raises.
+    if (transpiledExprsForUse.nonEmpty &&
+        optionInputTypesForUse.length == transpiledExprsForUse.length &&
+        optionInputTypesForUse.forall(_.length == e.length)) {
+      val udfChildren = udfExpr.children.toArray
+      // Resolve the `_udf_param_N` placeholders the transpiler emits into the bound
+      // UDF arguments. Apply this ONLY to the transpiled options -- never to
+      // `udfExpr` itself, whose children are the user's argument expressions. A user
+      // column literally named `_udf_param_N` passed as an argument must not be
+      // rewritten, so we leave `udfExpr` untouched.
+      def resolveUDFParams(expression: Expression, children: Array[Expression]): Expression = {
+        expression match {
+          case UnresolvedAttribute(nameParts)
+              if nameParts.length == 1 && nameParts.head.startsWith("_udf_param_") =>
+            val suffix = nameParts.head.stripPrefix("_udf_param_")
+            val index = suffix.toIntOption.getOrElse {
+              throw QueryCompilationErrors.invalidUDFParameterPlaceholder(nameParts.head)
+            }
+            if (index >= 0 && index < children.length) {
+              children(index)
+            } else {
+              throw QueryCompilationErrors.invalidUDFParameterPlaceholderIndex(
+                index, children.length)
+            }
+          case _ =>
+            expression.mapChildren(resolveUDFParams(_, children))
+        }
+      }
+      val resolvedOptions = transpiledExprsForUse.map(resolveUDFParams(_, udfChildren))
+      TranspiledPythonUDF(name, udfExpr, resolvedOptions, optionInputTypesForUse)
+    } else {
+      udfExpr
     }
   }
 
@@ -86,7 +189,10 @@ case class UserDefinedPythonFunction(
    */
   def fromUDFExpr(expr: Expression): Column = {
     Column(expr match {
+      case TranspiledPythonUDF(name, udaf: PythonUDAF, transpiled, inputCategories) =>
+        TranspiledPythonUDF(name, udaf.toAggregateExpression(), transpiled, inputCategories)
       case udaf: PythonUDAF => udaf.toAggregateExpression()
+      case agg: PythonAggregate => agg.toAggregateExpression()
       case _ => expr
     })
   }

@@ -121,7 +121,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
         case (_, lit: Literal[_]) if lit.dataType == BinaryType =>
           compareBlob(le, name, lit)
         case _ =>
-          super.visitBinaryComparison(name, le, re);
+          super.visitBinaryComparison(name, le, re)
       }
     }
 

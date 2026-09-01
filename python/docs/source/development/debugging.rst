@@ -575,7 +575,7 @@ Solution:
     1    6
     dtype: int64
 
-**RuntimeError: Result vector from pandas_udf was not the required length**
+**PySparkRuntimeError: [RESULT_ROWS_MISMATCH] The number of output rows must match the number of input rows**
 
 Exception:
 
@@ -588,7 +588,7 @@ Exception:
     22/04/12 13:46:39 ERROR Executor: Exception in task 2.0 in stage 16.0 (TID 88)
     org.apache.spark.api.python.PythonException: Traceback (most recent call last):
     ...
-    RuntimeError: Result vector from pandas_udf was not the required length: expected 1, got 0
+    pyspark.errors.exceptions.base.PySparkRuntimeError: [RESULT_ROWS_MISMATCH] The number of output rows (0) must match the number of input rows (1).
 
 Solution:
 

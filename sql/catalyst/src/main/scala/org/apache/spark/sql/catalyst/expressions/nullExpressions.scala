@@ -41,6 +41,11 @@ import org.apache.spark.sql.types._
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, ...) - Returns the first non-null argument if exists. Otherwise, null.",
+  arguments = """
+    Arguments:
+      * exprN - An expression of any type. All arguments must share a common type.
+          Arguments are evaluated in order and the first non-null value is returned.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(NULL, 1, NULL);
@@ -252,6 +257,10 @@ case class NullIfZero(input: Expression, replacement: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns zero if `expr` is equal to null, or `expr` otherwise.",
+  arguments = """
+    Arguments:
+      * expr - An expression. Zero is returned when it is null, otherwise `expr` is returned.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(NULL);
@@ -273,6 +282,11 @@ case class ZeroIfNull(input: Expression, replacement: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns `expr2` if `expr1` is null, or `expr1` otherwise.",
+  arguments = """
+    Arguments:
+      * expr1 - An expression. Returned when it is not null.
+      * expr2 - The value returned when `expr1` is null.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(NULL, array('2'));
@@ -297,6 +311,12 @@ case class Nvl(left: Expression, right: Expression, replacement: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, expr3) - Returns `expr2` if `expr1` is not null, or `expr3` otherwise.",
+  arguments = """
+    Arguments:
+      * expr1 - An expression tested for nullability.
+      * expr2 - The value returned when `expr1` is not null.
+      * expr3 - The value returned when `expr1` is null.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(NULL, 2, 1);
@@ -464,6 +484,10 @@ case class NaNvl(left: Expression, right: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns true if `expr` is null, or false otherwise.",
+  arguments = """
+    Arguments:
+      * expr - An expression of any type to test for nullability.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);
@@ -498,6 +522,10 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns true if `expr` is not null, or false otherwise.",
+  arguments = """
+    Arguments:
+      * expr - An expression of any type to test for nullability.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);

@@ -77,6 +77,7 @@ COMPENSATION	false
 COMPUTE	false
 CONCATENATE	false
 CONDITION	false
+CONDITIONAL	false
 CONSTRAINT	false
 CONTAINS	false
 CONTINUE	false
@@ -130,8 +131,10 @@ DOUBLE	false
 DROP	false
 ELSE	false
 ELSEIF	false
+EMPTY	false
 END	false
 ENFORCED	false
+ERROR	false
 ESCAPE	false
 ESCAPED	false
 EVOLUTION	false
@@ -210,6 +213,11 @@ ITEMS	false
 ITERATE	false
 JOIN	false
 JSON	false
+JSON_EXISTS	false
+JSON_QUERY	false
+JSON_TABLE	false
+JSON_VALUE	false
+KEEP	false
 KEY	false
 KEYS	false
 LANGUAGE	false
@@ -268,8 +276,10 @@ NOT	false
 NULL	false
 NULLS	false
 NUMERIC	false
+OBJECT	false
 OF	false
 OFFSET	false
+OMIT	false
 ON	false
 ONLY	false
 OPEN	false
@@ -277,6 +287,7 @@ OPTION	false
 OPTIONS	false
 OR	false
 ORDER	false
+ORDINALITY	false
 OUT	false
 OUTER	false
 OUTPUTFORMAT	false
@@ -302,6 +313,7 @@ PURGE	false
 QUALIFY	false
 QUARTER	false
 QUERY	false
+QUOTES	false
 RANGE	false
 READ	false
 READS	false
@@ -324,6 +336,7 @@ RESET	false
 RESPECT	false
 RESTRICT	false
 RETURN	false
+RETURNING	false
 RETURNS	false
 REVOKE	false
 RIGHT	false
@@ -407,11 +420,13 @@ TYPE	false
 UNARCHIVE	false
 UNBOUNDED	false
 UNCACHE	false
+UNCONDITIONAL	false
 UNIFORM	false
 UNION	false
 UNIQUE	false
 UNKNOWN	false
 UNLOCK	false
+UNNEST	false
 UNPIVOT	false
 UNSET	false
 UNTIL	false
@@ -440,6 +455,7 @@ WINDOW	false
 WITH	false
 WITHIN	false
 WITHOUT	false
+WRAPPER	false
 X	false
 YEAR	false
 YEARS	false

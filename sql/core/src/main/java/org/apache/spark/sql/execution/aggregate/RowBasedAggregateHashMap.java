@@ -110,6 +110,14 @@ public abstract class RowBasedAggregateHashMap implements AutoCloseable {
     return batch.rowIterator();
   }
 
+  /**
+   * Returns the number of distinct keys currently held by this map. Used by adaptive partial
+   * aggregation to measure the reduction ratio across both aggregation maps.
+   */
+  public final int getNumKeys() {
+    return numRows;
+  }
+
   @Override
   public final void close() {
     batch.close();

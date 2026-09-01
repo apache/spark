@@ -54,17 +54,21 @@ class SparkConnectResultSet(
   override def next(): Boolean = {
     checkOpen()
 
-    val hasNext = iterator.hasNext
-    if (hasNext) {
-      currentRow = iterator.next()
-      cursor += 1
-    } else {
-      currentRow = null
-      if (cursor > 0 && cursor == sparkResult.length) {
+    // rows are fetched lazily, so an error raised while the query is still
+    // streaming results surfaces here rather than in execute()
+    JdbcErrorUtils.mapToSQLException {
+      val hasNext = iterator.hasNext
+      if (hasNext) {
+        currentRow = iterator.next()
         cursor += 1
+      } else {
+        currentRow = null
+        if (cursor > 0 && cursor == sparkResult.length) {
+          cursor += 1
+        }
       }
+      hasNext
     }
-    hasNext
   }
 
   @volatile private var closed: Boolean = false

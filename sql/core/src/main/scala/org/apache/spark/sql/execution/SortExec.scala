@@ -146,7 +146,7 @@ case class SortExec(
       v => s"$v = $thisPlan.createSorter();", forceInline = true)
     val metrics = ctx.addMutableState(classOf[TaskMetrics].getName, "metrics",
       v => s"$v = org.apache.spark.TaskContext.get().taskMetrics();", forceInline = true)
-    val sortedIterator = ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", "sortedIter",
+    val sortedIterator = ctx.addMutableState("scala.collection.Iterator<InternalRow>", "sortedIter",
       forceInline = true)
 
     val addToSorter = ctx.freshName("addToSorter")

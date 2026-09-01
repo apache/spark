@@ -459,6 +459,14 @@ Security options for the Spark History Server are covered more detail in the
     <td>4.1.0</td>
   </tr>
   <tr>
+    <td>spark.history.fs.eventLog.onDemandLoadEnabled</td>
+    <td>true</td>
+    <td>
+      Whether to look up single event log locations on demand manner before listing files.
+    </td>
+    <td>4.3.0</td>
+  </tr>
+  <tr>
     <td>spark.history.store.hybridStore.enabled</td>
     <td>false</td>
     <td>
@@ -647,6 +655,17 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   <tr>
     <td><code>/applications/[app-id]/allexecutors</code></td>
     <td>A list of all(active and dead) executors for the given application.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/holdstatus</code></td>
+    <td>
+      Whether the given application is held, as <code>supported</code> (whether the deployment
+      allows holding), <code>held</code>, and <code>draining</code> (the number of executors
+      that have not exited yet). An application is held and resumed through the
+      <code>/jobs/hold/</code> and <code>/jobs/resume/</code> POST endpoints of its web UI,
+      which require modify permissions, while reading this status only requires view
+      permissions. Not available via the history server.
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/storage/rdd</code></td>
@@ -1328,6 +1347,11 @@ This is the component with the largest amount of instrumented metrics
   - queue.eventLog.numDroppedEvents.count
   - queue.eventLog.size
   - queue.executorManagement.listenerProcessingTime (timer)
+  - queue.executorManagement.numDroppedEvents.count
+  - queue.executorManagement.size
+  - queue.shared.listenerProcessingTime (timer)
+  - queue.shared.numDroppedEvents.count
+  - queue.shared.size
 
 - namespace=appStatus (all metrics of type=counter)
   - **note:** Introduced in Spark 3.0. Conditional to a configuration parameter:

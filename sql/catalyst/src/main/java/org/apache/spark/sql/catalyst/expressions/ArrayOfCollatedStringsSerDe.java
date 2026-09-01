@@ -45,8 +45,8 @@ public class ArrayOfCollatedStringsSerDe extends ArrayOfItemsSerDe<CollatedStrin
     }
 
     private CollatedString wrap(String original) {
-        String key = CollationFactory.getCollationKey(
-            UTF8String.fromString(original), collationId).toString();
+        byte[] key = CollationFactory.getCollationKeyBytes(
+            UTF8String.fromString(original), collationId);
         return new CollatedString(key, original);
     }
 

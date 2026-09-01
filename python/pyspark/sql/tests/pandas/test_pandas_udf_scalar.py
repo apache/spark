@@ -14,53 +14,52 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import logging
 import os
 import random
 import shutil
 import tempfile
 import time
 import unittest
-import logging
 from datetime import date, datetime
 from decimal import Decimal
 
 from pyspark import TaskContext
-from pyspark.util import PythonEvalType, is_remote_only
+from pyspark.errors import AnalysisException, PythonException
 from pyspark.sql import Column, Row
 from pyspark.sql.functions import (
+    PandasUDFType,
     array,
     col,
     expr,
     lit,
-    sum,
-    struct,
-    udf,
     pandas_udf,
+    struct,
+    sum,
     to_json,
-    PandasUDFType,
+    udf,
 )
 from pyspark.sql.types import (
-    IntegerType,
-    ByteType,
-    StructType,
-    ShortType,
-    BooleanType,
-    LongType,
-    FloatType,
-    DoubleType,
-    DecimalType,
-    StringType,
     ArrayType,
-    StructField,
-    TimestampType,
-    MapType,
-    DateType,
     BinaryType,
-    YearMonthIntervalType,
+    BooleanType,
+    ByteType,
+    DateType,
+    DecimalType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
+    MapType,
+    ShortType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
     VariantType,
     VariantVal,
+    YearMonthIntervalType,
 )
-from pyspark.errors import AnalysisException, PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     test_compiled,
@@ -73,6 +72,7 @@ from pyspark.testing.utils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
+from pyspark.util import PythonEvalType, is_remote_only
 
 if have_pandas:
     import pandas as pd
@@ -678,7 +678,7 @@ class ScalarPandasUDFTestsMixin:
         df = self.spark.range(10)
         raise_exception = pandas_udf(lambda _: pd.Series(1), LongType())
         with self.assertRaisesRegex(
-            Exception, "Result vector from pandas_udf was not the required length"
+            Exception, "The number of output rows.*must match the number of input rows"
         ):
             df.select(raise_exception(col("id"))).collect()
 
@@ -703,6 +703,18 @@ class ScalarPandasUDFTestsMixin:
             df1 = self.spark.range(10).repartition(1)
             with self.assertRaisesRegex(Exception, "The input iterator must be fully consumed"):
                 df1.select(iter_udf_not_reading_all_input(col("id"))).collect()
+
+        @pandas_udf(LongType(), PandasUDFType.SCALAR_ITER)
+        def iter_udf_too_many_output_rows(it):
+            for batch in it:
+                yield pd.Series([1] * (len(batch) + 1))
+
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 3}):
+            df1 = self.spark.range(10).repartition(1)
+            with self.assertRaisesRegex(
+                Exception, "The number of output rows must not exceed the number of input rows"
+            ):
+                df1.select(iter_udf_too_many_output_rows(col("id"))).collect()
 
     def test_vectorized_udf_chained(self):
         df = self.spark.range(10)

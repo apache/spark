@@ -264,6 +264,102 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     assert(projected.queryExecution.executedPlan.toString.contains("InMemoryTableScan"))
   }
 
+  test("column projection prunes columns on load for every projection shape") {
+    // The read path reads only the selected columns' buffers out of the cached bytes. Exercise a
+    // spread of projection shapes -- reordering, single column at each position, complex columns
+    // mixed with primitives, and duplicate selection -- under both the row and vectorized read
+    // paths, so the buffer-span arithmetic (which must skip the exact node/buffer runs of
+    // unselected columns, including the child buffers of complex columns) is covered end to end.
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        val df = (1 to 50).map { i =>
+          (i, s"str$i", Seq(i, i + 1), (i.toLong, s"n$i"))
+        }.toDF("a", "b", "arr", "st")
+        df.cache()
+        try {
+          def expected(cols: Seq[String]): Seq[Row] = (1 to 50).map { i =>
+            Row.fromSeq(cols.map {
+              case "a" => i
+              case "b" => s"str$i"
+              case "arr" => Seq(i, i + 1)
+              case "st" => Row(i.toLong, s"n$i")
+            })
+          }
+          // Selecting a complex column after skipping a var-width one exercises skipping the
+          // multi-buffer runs (offset + data) of the unselected string.
+          checkAnswer(df.select("arr"), expected(Seq("arr")))
+          checkAnswer(df.select("st"), expected(Seq("st")))
+          checkAnswer(df.select("b"), expected(Seq("b")))
+          // Reordered projection: the loaded root must be in output (columnIndices) order.
+          checkAnswer(df.select("st", "a"), expected(Seq("st", "a")))
+          checkAnswer(df.select("arr", "b", "a"), expected(Seq("arr", "b", "a")))
+          // Duplicate selection maps two output columns to one cached column.
+          checkAnswer(df.select("a", "a"), (1 to 50).map(i => Row(i, i)))
+          // Full projection (no pruning) still round-trips.
+          checkAnswer(df.select("a", "b", "arr", "st"), expected(Seq("a", "b", "arr", "st")))
+        } finally {
+          df.unpersist()
+        }
+      }
+    }
+  }
+
+  test("column projection prunes deeply nested columns on load") {
+    // The buffer-span arithmetic must skip (and, when selected, copy) a column's ENTIRE buffer
+    // subtree, at arbitrary nesting depth. Exercise array<struct>, struct<struct<struct>>, and
+    // map<int, array<int>>, each selected while pruning neighbours whose own subtrees have varying
+    // buffer counts, under both read paths, so an off-by-one in the recursive span would surface
+    // as wrong values in a following column.
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        val schema = new StructType()
+          .add("id", IntegerType)
+          .add("arrOfStruct", ArrayType(new StructType().add("x", LongType).add("y", StringType)))
+          .add("s", StringType)
+          .add("deepStruct", new StructType()
+            .add("l1", new StructType()
+              .add("l2", new StructType().add("v", LongType).add("t", StringType))))
+          .add("mapOfArray", MapType(IntegerType, ArrayType(IntegerType)))
+        val rows = (1 to 30).map { i =>
+          Row(i, Seq(Row(i.toLong, s"a$i"), Row((i + 1).toLong, s"b$i")), s"s$i",
+            Row(Row(Row(i.toLong * 10, s"deep$i"))), Map(i -> Seq(i, i + 1, i + 2)))
+        }
+        val df = spark.createDataFrame(
+          spark.sparkContext.parallelize(rows, 1), schema).cache()
+        try {
+          def expected(cols: Seq[String]): Seq[Row] = (1 to 30).map { i =>
+            Row.fromSeq(cols.map {
+              case "id" => i
+              case "arrOfStruct" => Seq(Row(i.toLong, s"a$i"), Row((i + 1).toLong, s"b$i"))
+              case "s" => s"s$i"
+              case "deepStruct" => Row(Row(Row(i.toLong * 10, s"deep$i")))
+              case "mapOfArray" => Map(i -> Seq(i, i + 1, i + 2))
+            })
+          }
+          // Each nested column selected alone: its whole subtree must be copied, nothing else.
+          checkAnswer(df.select("arrOfStruct"), expected(Seq("arrOfStruct")))
+          checkAnswer(df.select("deepStruct"), expected(Seq("deepStruct")))
+          checkAnswer(df.select("mapOfArray"), expected(Seq("mapOfArray")))
+          // A primitive after a pruned deep column: the skip must span the whole deep subtree.
+          checkAnswer(df.select("id", "s"), expected(Seq("id", "s")))
+          // Reordered mix of nested and primitive columns, pruning others in between.
+          checkAnswer(
+            df.select("mapOfArray", "id", "deepStruct"),
+            expected(Seq("mapOfArray", "id", "deepStruct")))
+          checkAnswer(
+            df.select("deepStruct", "arrOfStruct"),
+            expected(Seq("deepStruct", "arrOfStruct")))
+          // Full projection round-trips.
+          checkAnswer(
+            df.select("id", "arrOfStruct", "s", "deepStruct", "mapOfArray"),
+            expected(Seq("id", "arrOfStruct", "s", "deepStruct", "mapOfArray")))
+        } finally {
+          df.unpersist()
+        }
+      }
+    }
+  }
+
   test("caching with multiple batches") {
     withSQLConf(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "10") {
       val df = (1 to 50).map(i => (i, s"str$i")).toDF("a", "b")

@@ -34,7 +34,9 @@ import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DecimalType.{ByteDecimal, IntDecimal, LongDecimal, ShortDecimal}
+import org.apache.spark.tags.ExtendedSQLTest
 
+@ExtendedSQLTest
 class ParquetTypeWideningSuite
     extends ParquetTest
     with SharedSparkSession

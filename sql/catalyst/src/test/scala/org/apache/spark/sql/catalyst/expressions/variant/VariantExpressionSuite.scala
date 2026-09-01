@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.types.variant.VariantBuilder
+import org.apache.spark.types.variant.{Variant, VariantBuilder}
 import org.apache.spark.types.variant.VariantUtil._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.collection.Utils.createArray
@@ -548,6 +548,57 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     testVariantGet(json, "$." + numKeys, IntegerType, null)
   }
 
+  test("SPARK-58949: object keys use unsigned UTF-8 order") {
+    val bmpKey = new String(Character.toChars(65535))
+    val supplementaryKey = new String(Character.toChars(0x10000))
+    val quote = 34.toChar.toString
+    val asciiFields = (0 until 32).map(i => quote + i + quote + ":" + i)
+    val objectJson = (asciiFields ++ Seq(
+      quote + supplementaryKey + quote + ":99",
+      quote + bmpKey + quote + ":98")).mkString("{", ",", "}")
+
+    val variant = VariantBuilder.parseJson(objectJson, false)
+    assert(variant.getFieldAtIndex(32).key === bmpKey)
+    assert(variant.getFieldAtIndex(33).key === supplementaryKey)
+    assert(variant.getFieldByKey(bmpKey).getLong === 98L)
+    assert(variant.getFieldByKey(supplementaryKey).getLong === 99L)
+    assert(variant.getFieldByKey("missing") === null)
+
+    val nestedJson = "{" + quote + "nested" + quote + ":" + objectJson + "}"
+    val nested = VariantBuilder.parseJson(nestedJson, false)
+      .getFieldByKey("nested")
+    assert(nested.getFieldAtIndex(32).key === bmpKey)
+    assert(nested.getFieldByKey(supplementaryKey).getLong === 99L)
+
+    // Reorder the last two field entries to reproduce the UTF-16 order written by older Spark.
+    val legacyValue = variant.getValue.clone()
+    handleObject[Unit](legacyValue, 0,
+      (size, idSize, offsetSize, idStart, offsetStart, _dataStart) => {
+        def swap(start: Int, width: Int): Unit = {
+          val left = start + (size - 2) * width
+          val right = left + width
+          val leftValue = readUnsigned(legacyValue, left, width)
+          val rightValue = readUnsigned(legacyValue, right, width)
+          writeLong(legacyValue, left, rightValue, width)
+          writeLong(legacyValue, right, leftValue, width)
+        }
+        swap(idStart, idSize)
+        swap(offsetStart, offsetSize)
+      })
+    val legacy = new Variant(legacyValue, variant.getMetadata)
+    assert(legacy.getFieldAtIndex(32).key === supplementaryKey)
+    assert(legacy.getFieldByKey("31").getLong === 31L)
+    assert(legacy.getFieldByKey(bmpKey).getLong === 98L)
+    assert(legacy.getFieldByKey("missing") === null)
+
+    val expectedSchemaNames = ((0 until 32).map(_.toString).sorted ++
+      Seq(supplementaryKey, bmpKey)).toArray
+    Seq(variant, legacy).foreach { v =>
+      val schema = SchemaOfVariant.schemaOf(v).asInstanceOf[StructType]
+      assert(schema.fieldNames === expectedSchemaNames)
+    }
+  }
+
   test("variant_get timestamp") {
     DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {
@@ -686,6 +737,16 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on nonascii
     testVariantGet("[1, 2, 3]", "$[2147483647]", IntegerType, null)
 
+    Seq("variant_get" -> true, "try_variant_get" -> false).foreach {
+      case (name, failOnError) =>
+        checkErrorInExpression[SparkRuntimeException](
+          VariantGet(BoundReference(0, VariantType, nullable = true), Literal(".a"),
+            IntegerType, failOnError),
+          InternalRow(null),
+          "INVALID_VARIANT_GET_PATH",
+          Map("path" -> ".a", "functionName" -> s"`$name`"))
+    }
+
     checkInvalidPath("")
     checkInvalidPath(".a")
     checkInvalidPath("$1")
@@ -696,6 +757,31 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkInvalidPath("$[\"\"\"]")
     checkInvalidPath("$[\"\\\"\"]")
+  }
+
+  test("SPARK-58672: validate char/varchar target types in variant_get") {
+    def check(dataType: DataType, expected: Boolean): Unit = {
+      assert(
+        variantGet("""{"a": 1}""", "$", dataType)
+          .checkInputDataTypes().isSuccess == expected)
+    }
+
+    def targetTypes(stringType: StringType): Seq[DataType] = Seq(
+      stringType,
+      ArrayType(stringType),
+      MapType(stringType, IntegerType),
+      MapType(StringType, stringType),
+      StructType(Seq(StructField("v", stringType))))
+
+    targetTypes(StringType).foreach { dataType =>
+      check(dataType, expected = true)
+    }
+
+    Seq(CharType(10), VarcharType(10)).foreach { stringType =>
+      targetTypes(stringType).foreach { dataType =>
+        check(dataType, expected = false)
+      }
+    }
   }
 
   test("cast from variant") {
@@ -974,6 +1060,94 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkFailure(true, toVariantObject = true)
     checkFailure(Literal.create(Literal.create(Period.ofMonths(0))), toVariantObject = true)
     checkFailure(Map(1 -> 1), toVariantObject = true)
+  }
+
+  test("SPARK-58672: validate char/varchar input types in to_variant_object") {
+    def check(dataType: DataType, expected: Boolean): Unit = {
+      assert(
+        ToVariantObject(Literal.create(null, dataType))
+          .checkInputDataTypes().isSuccess == expected)
+    }
+
+    def nestedTypes(stringType: StringType): Seq[DataType] = Seq(
+      ArrayType(stringType),
+      MapType(stringType, IntegerType),
+      MapType(StringType, stringType),
+      StructType(Seq(StructField("v", stringType))))
+
+    nestedTypes(StringType).foreach { dataType =>
+      check(dataType, expected = true)
+    }
+
+    Seq(CharType(10), VarcharType(10)).foreach { stringType =>
+      nestedTypes(stringType).foreach { dataType =>
+        check(dataType, expected = false)
+      }
+    }
+  }
+
+  test("variant_from_arrays and variant_from_entries") {
+    def keysValues(keys: Any, values: Any, valueType: DataType): VariantFromArrays =
+      VariantFromArrays(
+        Literal.create(keys, ArrayType(StringType)),
+        Literal.create(values, ArrayType(valueType)))
+
+    def entriesOf(entries: Any, valueType: DataType,
+        containsNull: Boolean = false): VariantFromEntries =
+      VariantFromEntries(Literal.create(entries, ArrayType(
+        StructType(Seq(StructField("k", StringType), StructField("v", valueType))), containsNull)))
+
+    // Basic object construction; keys are sorted in the resulting variant object.
+    checkEvaluation(StructsToJson(Map.empty,
+      keysValues(Array("z", "a"), Array(1, 2), IntegerType)), """{"a":2,"z":1}""")
+    checkEvaluation(StructsToJson(Map.empty,
+      entriesOf(Array(Row("a", 1), Row("b", 2)), IntegerType)), """{"a":1,"b":2}""")
+
+    // Empty input produces an empty object.
+    checkEvaluation(StructsToJson(Map.empty,
+      keysValues(Array.empty[String], Array.empty[Int], IntegerType)), "{}")
+
+    // Null values are kept as variant null; nested values are converted recursively.
+    checkEvaluation(StructsToJson(Map.empty,
+      entriesOf(Array(Row("a", 1), Row("b", null)), IntegerType)), """{"a":1,"b":null}""")
+    checkEvaluation(StructsToJson(Map.empty,
+      keysValues(Array("a"), Array(Array(1, 2, 3)), ArrayType(IntegerType))), """{"a":[1,2,3]}""")
+    checkEvaluation(StructsToJson(Map.empty, keysValues(Array("a"), Array(Row(1)),
+      StructType(Seq(StructField("i", IntegerType))))), """{"a":{"i":1}}""")
+
+    // A null entry makes the whole result null.
+    checkEvaluation(StructsToJson(Map.empty,
+      entriesOf(Array(Row("a", 1), null), IntegerType, containsNull = true)), null)
+
+    // A null entry dominates a value-conversion failure in an earlier entry (matches
+    // map_from_entries: the null check runs for every entry before any value is converted).
+    checkEvaluation(StructsToJson(Map.empty,
+      entriesOf(Array(Row("a", Row(1, 2)), null),
+        StructType(Seq(StructField("x", IntegerType), StructField("x", IntegerType))),
+        containsNull = true)), null)
+
+    // A null array input produces null.
+    checkEvaluation(StructsToJson(Map.empty, VariantFromArrays(
+      Literal.create(null, ArrayType(StringType)),
+      Literal.create(Array(1), ArrayType(IntegerType)))), null)
+
+    // A null key is rejected.
+    checkErrorInExpression[SparkRuntimeException](
+      keysValues(Array("a", null), Array(1, 2), IntegerType),
+      "NULL_MAP_KEY", Map.empty[String, String])
+
+    // Duplicate keys are rejected for both forms.
+    checkErrorInExpression[SparkRuntimeException](
+      keysValues(Array("a", "a"), Array(1, 2), IntegerType),
+      "VARIANT_DUPLICATE_KEY", Map("key" -> "a"))
+    checkErrorInExpression[SparkRuntimeException](
+      entriesOf(Array(Row("a", 1), Row("a", 2)), IntegerType),
+      "VARIANT_DUPLICATE_KEY", Map("key" -> "a"))
+
+    // Mismatched array lengths are rejected.
+    checkErrorInExpression[SparkRuntimeException](
+      keysValues(Array("a", "b"), Array(1), IntegerType),
+      "_LEGACY_ERROR_TEMP_2128", Map.empty[String, String])
   }
 
   test("schema_of_variant - unknown type") {
@@ -1487,6 +1661,16 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "INVALID_VARIANT_PATH",
       name => Map("path" -> "abc", "functionName" -> s"`$name`"))
 
+    Seq("variant_insert" -> true, "try_variant_insert" -> false).foreach {
+      case (name, failOnError) =>
+        checkErrorInExpression[SparkRuntimeException](
+          VariantInsert(BoundReference(0, VariantType, nullable = true),
+            Literal.create("abc", StringType), Literal(1), failOnError),
+          InternalRow(null),
+          "INVALID_VARIANT_PATH",
+          Map("path" -> "abc", "functionName" -> s"`$name`"))
+    }
+
     val tooBig = "x".repeat(16 * 1024 * 1024)
     checkInsertUnrecoverableError("{}", "$.a[2000000000]", Literal(1),
       "VARIANT_SIZE_LIMIT",
@@ -1617,20 +1801,34 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkSet("""{"a": 1}""", "$.a", Literal.create(null, NullType), null)
 
     Seq(true, false).foreach { failOnError =>
-      val dynamic = VariantSet(
+      val dynamicCreate = VariantSet(
         Literal(parseJson("""{"a": 1}""")),
         BoundReference(0, StringType, nullable = true),
         Literal(2),
-        BoundReference(1, BooleanType, nullable = true),
+        Literal(true),
         failOnError)
       checkEvaluation(
-        ResolveTimeZone.resolveTimeZones(Cast(dynamic, StringType)),
+        ResolveTimeZone.resolveTimeZones(Cast(dynamicCreate, StringType)),
         """{"a":1,"b":2}""",
-        InternalRow(UTF8String.fromString("$.b"), true))
+        InternalRow(UTF8String.fromString("$.b")))
+      val dynamicNoCreate = VariantSet(
+        Literal(parseJson("""{"a": 1}""")),
+        BoundReference(0, StringType, nullable = true),
+        Literal(2),
+        Literal(false),
+        failOnError)
       checkEvaluation(
-        ResolveTimeZone.resolveTimeZones(Cast(dynamic, StringType)),
+        ResolveTimeZone.resolveTimeZones(Cast(dynamicNoCreate, StringType)),
         """{"a":1}""",
-        InternalRow(UTF8String.fromString("$.b"), false))
+        InternalRow(UTF8String.fromString("$.b")))
+    }
+
+    // create_if_missing must be a constant, for both variant_set and try_variant_set.
+    Seq(true, false).foreach { failOnError =>
+      assert(VariantSet(
+        Literal(parseJson("""{"a": 1}""")), Literal("$.a"), Literal(2),
+        BoundReference(0, BooleanType, nullable = true), failOnError)
+        .checkInputDataTypes().isFailure)
     }
 
     // Recoverable errors: `variant_set` throws; `try_variant_set` returns NULL. Every shape of
@@ -1840,6 +2038,16 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkAppendUnrecoverableError("[]", "abc", Literal(1),
       "INVALID_VARIANT_PATH",
       name => Map("path" -> "abc", "functionName" -> s"`$name`"))
+
+    Seq("variant_array_append" -> true, "try_variant_array_append" -> false).foreach {
+      case (name, failOnError) =>
+        checkErrorInExpression[SparkRuntimeException](
+          VariantArrayAppend(BoundReference(0, VariantType, nullable = true),
+            Literal.create("abc", StringType), Literal(1), failOnError),
+          InternalRow(null),
+          "INVALID_VARIANT_PATH",
+          Map("path" -> "abc", "functionName" -> s"`$name`"))
+    }
     checkErrorInExpression[SparkRuntimeException](
       VariantArrayAppend(Literal(parseJson("[]")), Literal(""), Literal(1)),
       "INVALID_VARIANT_PATH",
@@ -1848,5 +2056,75 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkAppendUnrecoverableError("[]", "$", Literal(tooBig),
       "VARIANT_SIZE_LIMIT",
       name => Map("sizeLimit" -> "16.0 MiB", "functionName" -> s"`$name`"))
+  }
+
+  test("variant_strip_nulls") {
+    // Strip `input`, render the result back to JSON, and compare. `includeArrays` defaults to true.
+    def check(input: String, expected: String, includeArrays: Boolean = true): Unit = {
+      val expr = VariantStripNulls(Literal(parseJson(input)), Literal(includeArrays))
+      val result = replace(expr).eval().asInstanceOf[VariantVal]
+      val json = if (result == null) null
+        else new Variant(result.getValue, result.getMetadata).toJson(ZoneOffset.UTC)
+      assert(json == expected)
+    }
+
+    // The optional `include_arrays` argument defaults to true in the function signature.
+    assert(VariantStripNullsExpressionBuilder.functionSignature.get.parameters.last.default
+      .contains(Literal.create(true, BooleanType)))
+
+    // include_arrays must be a constant; a non-foldable expression is rejected.
+    assert(VariantStripNulls(
+      Literal(parseJson("[1, null]")), BoundReference(0, BooleanType, nullable = true))
+      .checkInputDataTypes().isFailure)
+
+    check("""{"a": 1, "b": null, "c": 3}""", """{"a":1,"c":3}""")
+    check("[1, null, 3]", "[1,3]")
+    check("""{"user": {"name": "Alice", "age": null}}""", """{"user":{"name":"Alice"}}""")
+    check("""{"a": [1, null, {"b": null, "c": 2}]}""", """{"a":[1,{"c":2}]}""")
+    check("[[1, null], [null]]", "[[1],[]]")
+
+    // Empty containers are preserved; the parent is never collapsed.
+    check("""{"a": null}""", "{}")
+    check("[null]", "[]")
+    check("""{"a": {"b": null}}""", """{"a":{}}""")
+    check("""{"a": [null]}""", """{"a":[]}""")
+    check("{}", "{}")
+    check("[]", "[]")
+
+    // Top-level variant null and scalars are returned unchanged.
+    check("null", "null")
+    check("42", "42")
+    check("\"hi\"", "\"hi\"")
+
+    check("""{"a": {"b": {"c": null, "d": 4}}}""", """{"a":{"b":{"d":4}}}""")
+
+    check("""{"a": 300, "b": null, "c": 100000, "d": 10000000000}""",
+      """{"a":300,"c":100000,"d":10000000000}""")
+    check("""[1000000, null, "hello world", null, 10000000000]""",
+      """[1000000,"hello world",10000000000]""")
+    val bigStr = "x".repeat(300)
+    check(s"""{"k": "$bigStr", "n": null, "m": 3}""", s"""{"k":"$bigStr","m":3}""")
+    check(s"""[null, "$bigStr", null, 100000]""", s"""["$bigStr",100000]""")
+
+    // `includeArrays = false`.
+    check("""{"a": [1, null, 3], "b": null}""", """{"a":[1,null,3]}""", includeArrays = false)
+    check(
+      """[{"a": 1, "b": null}, null, {"c": null, "d": 4}]""",
+      """[{"a":1},null,{"d":4}]""",
+      includeArrays = false)
+    // `includeArrays = true` (explicit) strips array nulls.
+    check("""{"a": [1, null, 3]}""", """{"a":[1,3]}""", includeArrays = true)
+
+    // SQL NULL variant input yields SQL NULL.
+    checkEvaluation(
+      Cast(VariantStripNulls(Literal.create(null, VariantType), Literal(true)), StringType),
+      null)
+    // NULL `includeArrays` yields SQL NULL (the expression is null intolerant).
+    checkEvaluation(
+      Cast(
+        VariantStripNulls(
+          Literal(parseJson("""{"a": null}""")), Literal.create(null, BooleanType)),
+        StringType),
+      null)
   }
 }

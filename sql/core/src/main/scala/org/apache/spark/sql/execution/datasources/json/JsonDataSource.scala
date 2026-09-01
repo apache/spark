@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.{ByteArrayInputStream, FileNotFoundException, InputStream, IOException}
+import java.io.{ByteArrayInputStream, Closeable, FileNotFoundException, InputStream, IOException}
 
-import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, GlobPattern, Path}
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
@@ -36,7 +35,7 @@ import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JsonInferSchema, JSONOptions}
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
@@ -85,13 +84,16 @@ abstract class JsonDataSource extends Serializable with Logging with SupportsArc
    * and is intentionally left untouched.
    *
    * @param parser builds a fresh JSON parser for each entry.
+   * @param archivePathFilter optional glob matched against the entry's full path
    */
   def readArchive(
       conf: Configuration,
       file: PartitionedFile,
       parser: () => JacksonParser,
-      schema: StructType): Iterator[InternalRow] =
-    SupportsArchiveFormat.readArchiveEntries(file.toPath, conf) { (_, in) =>
+      schema: StructType,
+      archivePathFilter: Option[GlobPattern]): Iterator[InternalRow] =
+    SupportsArchiveFormat.readArchiveEntries(
+        file.toPath, conf, archivePathFilter = archivePathFilter) { (_, in) =>
       readStream(in, parser(), schema)
     }
 
@@ -105,15 +107,9 @@ abstract class JsonDataSource extends Serializable with Logging with SupportsArc
       case None =>
         val hasArchive = parsedOptions.archiveFormatEnabled &&
           inputPaths.exists(f => SupportsArchiveFormat.isArchivePath(f.getPath))
-        if (hasArchive && supportsArchiveScan) {
-          // Archives (and any loose files alongside them) are inferred in a single JsonInferSchema
-          // pass over all inputs -- archive entries are streamed, never unpacked -- so the result
-          // matches what the scan returns for the same files.
-          Some(inferWithArchives(sparkSession, inputPaths, parsedOptions))
-        } else if (hasArchive) {
-          // The caller's scan path cannot read archives (e.g. the DSv2 reader), so refuse to infer
-          // a schema when any input is an archive: returning None raises UNABLE_TO_INFER_SCHEMA,
-          // which fails loudly instead of letting the scan parse raw archive bytes as JSON.
+        if (hasArchive && !supportsArchiveScan) {
+          // The caller's scan cannot read archives (e.g. DSv2), so refuse rather than let it
+          // mis-read raw archive bytes as JSON.
           None
         } else if (inputPaths.nonEmpty) {
           Some(infer(sparkSession, inputPaths, parsedOptions))
@@ -127,92 +123,6 @@ abstract class JsonDataSource extends Serializable with Logging with SupportsArc
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): StructType
-
-  /**
-   * Infers a JSON schema when at least one input is a tar archive. Every archive entry (streamed
-   * via `SupportsArchiveFormat`, never unpacked to disk) and every loose file is read as JSON
-   * records -- each line is a record, or the whole input is one document in multi-line mode -- and
-   * all of them feed a single [[JsonInferSchema]] pass, exactly as a directory of the same files
-   * would infer.
-   * Because [[JsonInferSchema]] already merges every record's type by field name across all inputs,
-   * one pass is itself the union: a field empty in one input but typed in another widens to the
-   * real type, and a `NullType` field survives to the single final canonicalization rather than
-   * being collapsed per-input. A corrupt/missing input is skipped as a unit (a whole archive or a
-   * whole file) when `ignoreCorruptFiles`/`ignoreMissingFiles` are set.
-   */
-  private def inferWithArchives(
-      sparkSession: SparkSession,
-      inputPaths: Seq[FileStatus],
-      parsedOptions: JSONOptions): StructType = {
-    val baseRdd = JsonDataSource.createBaseRdd(sparkSession, inputPaths, parsedOptions)
-    val multiLine = parsedOptions.multiLine
-    val lineSeparator = parsedOptions.lineSeparatorInRead
-    val encoding = parsedOptions.encoding
-    val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
-    val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
-
-    // Applies `perEntry` to each input -- once per archive entry, once for a loose file -- skipping
-    // a whole input when it is corrupt/missing and the ignore flags are set. The entry/file stream
-    // is consumed lazily by `perEntry`, never buffered whole; mirrors CSV's `inferWithArchives`.
-    //
-    // An archive entry's stream is a `CloseShieldInputStream` view over the one shared
-    // `TarArchiveInputStream` cursor, valid only until `readEntries` advances to the next entry
-    // (`getNextEntry` skips the prior entry's unread bytes). A consumer that emits the raw stream
-    // (the multiLine path below) must therefore fully consume each element before the iterator
-    // advances; `JsonInferSchema.infer` does, parsing each record before pulling the next.
-    // Buffering, look-ahead, or parallelizing the per-partition consumption would read from an
-    // advanced cursor and infer a wrong schema. The line-delimited path sidesteps this by
-    // materializing each record (`copyBytes()`).
-    def perInput[T: ClassTag](perEntry: InputStream => Iterator[T]): RDD[T] = baseRdd.flatMap {
-      stream =>
-        val path = new Path(stream.getPath())
-        try {
-          if (SupportsArchiveFormat.isArchivePath(path)) {
-            SupportsArchiveFormat.readArchiveEntries(path, stream.getConfiguration) { (_, in) =>
-              perEntry(in)
-            }
-          } else {
-            perEntry(
-              CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path))
-          }
-        } catch {
-          case e: FileNotFoundException if ignoreMissingFiles =>
-            logWarning(log"Skipped missing input: ${MDC(PATH, stream.getPath())}", e)
-            Iterator.empty
-          case e: FileNotFoundException => throw e
-          case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
-            logWarning(log"Skipped the corrupted input: ${MDC(PATH, stream.getPath())}", e)
-            Iterator.empty
-          case NonFatal(e) =>
-            throw QueryExecutionErrors.cannotReadFilesError(
-              e, SparkPath.fromPathString(stream.getPath()).urlEncoded)
-        }
-    }
-
-    SQLExecution.withSQLConfPropagated(sparkSession) {
-      val inferSchema = new JsonInferSchema(parsedOptions)
-      if (multiLine) {
-        // Each input/entry is one JSON document: hand its stream straight to the parser
-        // (`CreateJacksonParser.inputStream`, matching MultiLineJsonDataSource and its charset
-        // auto-detect) so the document is parsed incrementally rather than buffered.
-        val docs = perInput(in => Iterator.single(in))
-        val docParser: (JsonFactory, InputStream) => JsonParser = encoding
-          .map(enc => CreateJacksonParser.inputStream(enc, _: JsonFactory, _: InputStream))
-          .getOrElse(CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream))
-        inferSchema.infer[InputStream](
-          JsonUtils.sample(docs, parsedOptions), docParser, isReadFile = true)
-      } else {
-        // Line-delimited: each line is a record, copied off the reused line buffer and parsed from
-        // its bytes (`CreateJacksonParser.bytes`, matching TextInputJsonDataSource).
-        val lines = perInput(in => lineIterator(in, lineSeparator).map(_.copyBytes()))
-        val lineParser: (JsonFactory, Array[Byte]) => JsonParser = encoding
-          .map(enc => CreateJacksonParser.bytes(enc, _: JsonFactory, _: Array[Byte]))
-          .getOrElse(CreateJacksonParser.bytes(_: JsonFactory, _: Array[Byte]))
-        inferSchema.infer[Array[Byte]](
-          JsonUtils.sample(lines, parsedOptions), lineParser, isReadFile = false)
-      }
-    }
-  }
 }
 
 object JsonDataSource {
@@ -344,6 +254,12 @@ object MultiLineJsonDataSource extends JsonDataSource {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): StructType = {
+    val hasArchive = parsedOptions.archiveFormatEnabled &&
+      inputPaths.exists(f => SupportsArchiveFormat.isArchivePath(f.getPath))
+    if (hasArchive) {
+      return inferWithArchives(sparkSession, inputPaths, parsedOptions)
+    }
+
     val json: RDD[PortableDataStream] =
       JsonDataSource.createBaseRdd(sparkSession, inputPaths, parsedOptions)
     val sampled: RDD[PortableDataStream] = JsonUtils.sample(json, parsedOptions)
@@ -354,6 +270,109 @@ object MultiLineJsonDataSource extends JsonDataSource {
     SQLExecution.withSQLConfPropagated(sparkSession) {
       new JsonInferSchema(parsedOptions)
         .infer[PortableDataStream](sampled, parser, isReadFile = true)
+    }
+  }
+
+  /**
+   * Infers a multi-line JSON schema when at least one input is an archive. Each archive entry
+   * (streamed via `SupportsArchiveFormat`, never unpacked to disk) and each loose file is one whole
+   * JSON document, and all feed a single [[JsonInferSchema]] pass -- exactly as a directory of the
+   * same files would infer. Single-line archive inference does not come here: the Text data source
+   * reads archives directly, so it flows through [[TextInputJsonDataSource.infer]] like any
+   * directory read. Corrupt/missing inputs are skipped when the ignore flags are set (see
+   * [[skipInputOnError]]).
+   */
+  private def inferWithArchives(
+      sparkSession: SparkSession,
+      inputPaths: Seq[FileStatus],
+      parsedOptions: JSONOptions): StructType = {
+    val baseRdd = JsonDataSource.createBaseRdd(sparkSession, inputPaths, parsedOptions)
+    // Inference must see the same entries the scan reads, so it honors archivePathFilter too.
+    // Capture the glob string: the compiled GlobPattern is not serializable, so each task
+    // compiles it once when the archive branch is taken.
+    val archivePathFilterGlob = parsedOptions.archivePathFilter
+    val encoding = parsedOptions.encoding
+    val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
+    val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
+
+    // An archive entry's stream is only valid until the shared cursor advances, so each document
+    // must be consumed before the next is pulled; `JsonInferSchema.infer` does.
+    val docs: RDD[InputStream] = baseRdd.mapPartitions { streams =>
+      // Compile at most once per partition: lazy so a partition of only loose files never
+      // compiles, while a partition with archives reuses one matcher across all of them.
+      lazy val archivePathFilter =
+        archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)
+      streams.flatMap { stream =>
+        val path = new Path(stream.getPath())
+        skipInputOnError(stream.getPath(), ignoreMissingFiles, ignoreCorruptFiles) {
+          if (SupportsArchiveFormat.isArchivePath(path)) {
+            SupportsArchiveFormat.readArchiveEntries(
+              path, stream.getConfiguration, archivePathFilter = archivePathFilter) {
+              (_, in) =>
+              Iterator.single(in)
+            }
+          } else {
+            Iterator.single(
+              CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path))
+          }
+        }
+      }
+    }
+
+    SQLExecution.withSQLConfPropagated(sparkSession) {
+      val docParser: (JsonFactory, InputStream) => JsonParser = encoding
+        .map(enc => CreateJacksonParser.inputStream(enc, _: JsonFactory, _: InputStream))
+        .getOrElse(CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream))
+      new JsonInferSchema(parsedOptions).infer[InputStream](
+        JsonUtils.sample(docs, parsedOptions), docParser, isReadFile = true)
+    }
+  }
+
+  /**
+   * Builds one input's document iterator, catching a missing/corrupt error when the ignore flags
+   * are set. `readArchiveEntries` advances to later entries lazily, so a corrupt later entry throws
+   * on `hasNext`, not at construction; the returned iterator catches both. A construction failure
+   * skips the whole input; a mid-advance failure keeps the entries already yielded and skips only
+   * the remainder of the archive.
+   */
+  private def skipInputOnError(
+      inputPath: String,
+      ignoreMissingFiles: Boolean,
+      ignoreCorruptFiles: Boolean)(
+      build: => Iterator[InputStream]): Iterator[InputStream] = {
+    def handle(e: Throwable): Iterator[InputStream] = e match {
+      case e: FileNotFoundException if ignoreMissingFiles =>
+        logWarning(log"Skipped missing input: ${MDC(PATH, inputPath)}", e)
+        Iterator.empty
+      case e: FileNotFoundException => throw e
+      case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+        logWarning(log"Skipped the corrupted input: ${MDC(PATH, inputPath)}", e)
+        Iterator.empty
+      case NonFatal(e) =>
+        throw QueryExecutionErrors.cannotReadFilesError(
+          e, SparkPath.fromPathString(inputPath).urlEncoded)
+    }
+
+    val underlying =
+      try build
+      catch { case NonFatal(e) => return handle(e) }
+
+    new Iterator[InputStream] {
+      private var delegate = underlying
+      override def hasNext: Boolean =
+        try delegate.hasNext
+        catch {
+          case NonFatal(e) =>
+            // A mid-advance throw reaches neither exhaustion nor close, so close the failed
+            // iterator here to release its archive stream promptly rather than at task completion.
+            delegate match {
+              case c: Closeable => try c.close() catch { case NonFatal(_) => }
+              case _ =>
+            }
+            delegate = handle(e)
+            delegate.hasNext
+        }
+      override def next(): InputStream = delegate.next()
     }
   }
 

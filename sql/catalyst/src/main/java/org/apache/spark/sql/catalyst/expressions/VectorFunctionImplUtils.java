@@ -31,6 +31,9 @@ public class VectorFunctionImplUtils {
    * Returns NULL if either vector contains NULL elements, has zero magnitude, or is empty.
    * Throws an exception if vectors have different dimensions.
    * Uses manual loop unrolling (8 elements at a time) for speculative SIMD optimization.
+   * The dot product and the squared norms are accumulated in double precision: their magnitudes
+   * are quadratic in the input values, so single precision would overflow to infinity (or
+   * underflow to zero) for vectors whose cosine similarity is perfectly representable as a float.
    */
   public static Float vectorCosineSimilarity(ArrayData left, ArrayData right, UTF8String funcName) {
     int leftLen = left.numElements();
@@ -45,9 +48,9 @@ public class VectorFunctionImplUtils {
       return null;
     }
 
-    float dotProduct = 0.0f;
-    float norm1Sq = 0.0f;
-    float norm2Sq = 0.0f;
+    double dotProduct = 0.0d;
+    double norm1Sq = 0.0d;
+    double norm2Sq = 0.0d;
 
     int i = 0;
     int simdLimit = (leftLen / 8) * 8;
@@ -66,15 +69,15 @@ public class VectorFunctionImplUtils {
         return null;
       }
 
-      float a0 = left.getFloat(i), a1 = left.getFloat(i + 1);
-      float a2 = left.getFloat(i + 2), a3 = left.getFloat(i + 3);
-      float a4 = left.getFloat(i + 4), a5 = left.getFloat(i + 5);
-      float a6 = left.getFloat(i + 6), a7 = left.getFloat(i + 7);
+      double a0 = left.getFloat(i), a1 = left.getFloat(i + 1);
+      double a2 = left.getFloat(i + 2), a3 = left.getFloat(i + 3);
+      double a4 = left.getFloat(i + 4), a5 = left.getFloat(i + 5);
+      double a6 = left.getFloat(i + 6), a7 = left.getFloat(i + 7);
 
-      float b0 = right.getFloat(i), b1 = right.getFloat(i + 1);
-      float b2 = right.getFloat(i + 2), b3 = right.getFloat(i + 3);
-      float b4 = right.getFloat(i + 4), b5 = right.getFloat(i + 5);
-      float b6 = right.getFloat(i + 6), b7 = right.getFloat(i + 7);
+      double b0 = right.getFloat(i), b1 = right.getFloat(i + 1);
+      double b2 = right.getFloat(i + 2), b3 = right.getFloat(i + 3);
+      double b4 = right.getFloat(i + 4), b5 = right.getFloat(i + 5);
+      double b6 = right.getFloat(i + 6), b7 = right.getFloat(i + 7);
 
       dotProduct += a0 * b0 + a1 * b1 + a2 * b2 + a3 * b3 +
                     a4 * b4 + a5 * b5 + a6 * b6 + a7 * b7;
@@ -90,19 +93,23 @@ public class VectorFunctionImplUtils {
       if (left.isNullAt(i) || right.isNullAt(i)) {
         return null;
       }
-      float a = left.getFloat(i);
-      float b = right.getFloat(i);
+      double a = left.getFloat(i);
+      double b = right.getFloat(i);
       dotProduct += a * b;
       norm1Sq += a * a;
       norm2Sq += b * b;
       i++;
     }
 
-    float normProduct = (float) Math.sqrt(norm1Sq * norm2Sq);
-    if (normProduct < Float.MIN_NORMAL) {
+    // For vectors of finite elements, `norm1Sq * norm2Sq` cannot overflow in double precision:
+    // both factors are bounded by MAX_ROUNDED_ARRAY_LENGTH * Float.MAX_VALUE^2, so their product
+    // stays well below Double.MAX_VALUE. An element that is already infinite makes the product
+    // infinite and the result NaN, exactly as it did before the accumulators were widened.
+    double normProduct = Math.sqrt(norm1Sq * norm2Sq);
+    if (normProduct == 0.0d) {
       return null;
     }
-    return dotProduct / normProduct;
+    return (float) (dotProduct / normProduct);
   }
 
   /**
@@ -111,6 +118,8 @@ public class VectorFunctionImplUtils {
    * Returns 0.0 for empty vectors.
    * Throws an exception if vectors have different dimensions.
    * Uses manual loop unrolling (8 elements at a time) for speculative SIMD optimization.
+   * The dot product is accumulated in double precision so that intermediate terms do not
+   * overflow to infinity when the final result is representable as a float.
    */
   public static Float vectorInnerProduct(ArrayData left, ArrayData right, UTF8String funcName) {
     int leftLen = left.numElements();
@@ -125,7 +134,7 @@ public class VectorFunctionImplUtils {
       return 0.0f;
     }
 
-    float dotProduct = 0.0f;
+    double dotProduct = 0.0d;
 
     int i = 0;
     int simdLimit = (leftLen / 8) * 8;
@@ -144,15 +153,15 @@ public class VectorFunctionImplUtils {
         return null;
       }
 
-      float a0 = left.getFloat(i), a1 = left.getFloat(i + 1);
-      float a2 = left.getFloat(i + 2), a3 = left.getFloat(i + 3);
-      float a4 = left.getFloat(i + 4), a5 = left.getFloat(i + 5);
-      float a6 = left.getFloat(i + 6), a7 = left.getFloat(i + 7);
+      double a0 = left.getFloat(i), a1 = left.getFloat(i + 1);
+      double a2 = left.getFloat(i + 2), a3 = left.getFloat(i + 3);
+      double a4 = left.getFloat(i + 4), a5 = left.getFloat(i + 5);
+      double a6 = left.getFloat(i + 6), a7 = left.getFloat(i + 7);
 
-      float b0 = right.getFloat(i), b1 = right.getFloat(i + 1);
-      float b2 = right.getFloat(i + 2), b3 = right.getFloat(i + 3);
-      float b4 = right.getFloat(i + 4), b5 = right.getFloat(i + 5);
-      float b6 = right.getFloat(i + 6), b7 = right.getFloat(i + 7);
+      double b0 = right.getFloat(i), b1 = right.getFloat(i + 1);
+      double b2 = right.getFloat(i + 2), b3 = right.getFloat(i + 3);
+      double b4 = right.getFloat(i + 4), b5 = right.getFloat(i + 5);
+      double b6 = right.getFloat(i + 6), b7 = right.getFloat(i + 7);
 
       dotProduct += a0 * b0 + a1 * b1 + a2 * b2 + a3 * b3 +
                     a4 * b4 + a5 * b5 + a6 * b6 + a7 * b7;
@@ -164,13 +173,13 @@ public class VectorFunctionImplUtils {
       if (left.isNullAt(i) || right.isNullAt(i)) {
         return null;
       }
-      float a = left.getFloat(i);
-      float b = right.getFloat(i);
+      double a = left.getFloat(i);
+      double b = right.getFloat(i);
       dotProduct += a * b;
       i++;
     }
 
-    return dotProduct;
+    return (float) dotProduct;
   }
 
   /**
@@ -179,6 +188,8 @@ public class VectorFunctionImplUtils {
    * Returns 0.0 for empty vectors.
    * Throws an exception if vectors have different dimensions.
    * Uses manual loop unrolling (8 elements at a time) for speculative SIMD optimization.
+   * The sum of squares is accumulated in double precision: it is quadratic in the input values,
+   * so single precision would overflow to infinity for distances representable as a float.
    */
   public static Float vectorL2Distance(ArrayData left, ArrayData right, UTF8String funcName) {
     int leftLen = left.numElements();
@@ -193,7 +204,7 @@ public class VectorFunctionImplUtils {
       return 0.0f;
     }
 
-    float sumSq = 0.0f;
+    double sumSq = 0.0d;
 
     int i = 0;
     int simdLimit = (leftLen / 8) * 8;
@@ -212,18 +223,18 @@ public class VectorFunctionImplUtils {
         return null;
       }
 
-      float a0 = left.getFloat(i), a1 = left.getFloat(i + 1);
-      float a2 = left.getFloat(i + 2), a3 = left.getFloat(i + 3);
-      float a4 = left.getFloat(i + 4), a5 = left.getFloat(i + 5);
-      float a6 = left.getFloat(i + 6), a7 = left.getFloat(i + 7);
+      double a0 = left.getFloat(i), a1 = left.getFloat(i + 1);
+      double a2 = left.getFloat(i + 2), a3 = left.getFloat(i + 3);
+      double a4 = left.getFloat(i + 4), a5 = left.getFloat(i + 5);
+      double a6 = left.getFloat(i + 6), a7 = left.getFloat(i + 7);
 
-      float b0 = right.getFloat(i), b1 = right.getFloat(i + 1);
-      float b2 = right.getFloat(i + 2), b3 = right.getFloat(i + 3);
-      float b4 = right.getFloat(i + 4), b5 = right.getFloat(i + 5);
-      float b6 = right.getFloat(i + 6), b7 = right.getFloat(i + 7);
+      double b0 = right.getFloat(i), b1 = right.getFloat(i + 1);
+      double b2 = right.getFloat(i + 2), b3 = right.getFloat(i + 3);
+      double b4 = right.getFloat(i + 4), b5 = right.getFloat(i + 5);
+      double b6 = right.getFloat(i + 6), b7 = right.getFloat(i + 7);
 
-      float d0 = a0 - b0, d1 = a1 - b1, d2 = a2 - b2, d3 = a3 - b3;
-      float d4 = a4 - b4, d5 = a5 - b5, d6 = a6 - b6, d7 = a7 - b7;
+      double d0 = a0 - b0, d1 = a1 - b1, d2 = a2 - b2, d3 = a3 - b3;
+      double d4 = a4 - b4, d5 = a5 - b5, d6 = a6 - b6, d7 = a7 - b7;
 
       sumSq += d0 * d0 + d1 * d1 + d2 * d2 + d3 * d3 +
                d4 * d4 + d5 * d5 + d6 * d6 + d7 * d7;
@@ -235,9 +246,9 @@ public class VectorFunctionImplUtils {
       if (left.isNullAt(i) || right.isNullAt(i)) {
         return null;
       }
-      float a = left.getFloat(i);
-      float b = right.getFloat(i);
-      float diff = a - b;
+      double a = left.getFloat(i);
+      double b = right.getFloat(i);
+      double diff = a - b;
       sumSq += diff * diff;
       i++;
     }
@@ -246,19 +257,19 @@ public class VectorFunctionImplUtils {
   }
 
   /**
-   * Computes the L1 norm (Manhattan norm) of a float vector.
+   * Computes the L1 norm (Manhattan norm) of a float vector, in double precision.
    * Returns NULL if the vector contains NULL elements.
    * Returns 0.0 for empty vectors.
    * Uses manual loop unrolling (8 elements at a time) for speculative SIMD optimization.
    */
-  public static Float vectorL1Norm(ArrayData vec) {
+  public static Double vectorL1Norm(ArrayData vec) {
     int len = vec.numElements();
 
     if (len == 0) {
-      return 0.0f;
+      return 0.0d;
     }
 
-    float sum = 0.0f;
+    double sum = 0.0d;
 
     int i = 0;
     int simdLimit = (len / 8) * 8;
@@ -273,10 +284,10 @@ public class VectorFunctionImplUtils {
         return null;
       }
 
-      float a0 = vec.getFloat(i), a1 = vec.getFloat(i + 1);
-      float a2 = vec.getFloat(i + 2), a3 = vec.getFloat(i + 3);
-      float a4 = vec.getFloat(i + 4), a5 = vec.getFloat(i + 5);
-      float a6 = vec.getFloat(i + 6), a7 = vec.getFloat(i + 7);
+      double a0 = vec.getFloat(i), a1 = vec.getFloat(i + 1);
+      double a2 = vec.getFloat(i + 2), a3 = vec.getFloat(i + 3);
+      double a4 = vec.getFloat(i + 4), a5 = vec.getFloat(i + 5);
+      double a6 = vec.getFloat(i + 6), a7 = vec.getFloat(i + 7);
 
       sum += Math.abs(a0) + Math.abs(a1) + Math.abs(a2) + Math.abs(a3) +
              Math.abs(a4) + Math.abs(a5) + Math.abs(a6) + Math.abs(a7);
@@ -288,7 +299,7 @@ public class VectorFunctionImplUtils {
       if (vec.isNullAt(i)) {
         return null;
       }
-      float a = vec.getFloat(i);
+      double a = vec.getFloat(i);
       sum += Math.abs(a);
       i++;
     }
@@ -297,19 +308,19 @@ public class VectorFunctionImplUtils {
   }
 
   /**
-   * Computes the L2 norm (Euclidean norm) of a float vector.
+   * Computes the L2 norm (Euclidean norm) of a float vector, in double precision.
    * Returns NULL if the vector contains NULL elements.
    * Returns 0.0 for empty vectors.
    * Uses manual loop unrolling (8 elements at a time) for speculative SIMD optimization.
    */
-  public static Float vectorL2Norm(ArrayData vec) {
+  public static Double vectorL2Norm(ArrayData vec) {
     int len = vec.numElements();
 
     if (len == 0) {
-      return 0.0f;
+      return 0.0d;
     }
 
-    float sumSq = 0.0f;
+    double sumSq = 0.0d;
 
     int i = 0;
     int simdLimit = (len / 8) * 8;
@@ -324,10 +335,10 @@ public class VectorFunctionImplUtils {
         return null;
       }
 
-      float a0 = vec.getFloat(i), a1 = vec.getFloat(i + 1);
-      float a2 = vec.getFloat(i + 2), a3 = vec.getFloat(i + 3);
-      float a4 = vec.getFloat(i + 4), a5 = vec.getFloat(i + 5);
-      float a6 = vec.getFloat(i + 6), a7 = vec.getFloat(i + 7);
+      double a0 = vec.getFloat(i), a1 = vec.getFloat(i + 1);
+      double a2 = vec.getFloat(i + 2), a3 = vec.getFloat(i + 3);
+      double a4 = vec.getFloat(i + 4), a5 = vec.getFloat(i + 5);
+      double a6 = vec.getFloat(i + 6), a7 = vec.getFloat(i + 7);
 
       sumSq += a0 * a0 + a1 * a1 + a2 * a2 + a3 * a3 +
                a4 * a4 + a5 * a5 + a6 * a6 + a7 * a7;
@@ -339,24 +350,24 @@ public class VectorFunctionImplUtils {
       if (vec.isNullAt(i)) {
         return null;
       }
-      float a = vec.getFloat(i);
+      double a = vec.getFloat(i);
       sumSq += a * a;
       i++;
     }
 
-    return (float) Math.sqrt(sumSq);
+    return Math.sqrt(sumSq);
   }
 
   /**
-   * Computes the infinity norm (maximum absolute value) of a float vector.
+   * Computes the infinity norm (maximum absolute value) of a float vector, in double precision.
    * Returns NULL if the vector contains NULL elements.
    * Returns 0.0 for empty vectors.
    */
-  public static Float vectorInfNorm(ArrayData vec) {
+  public static Double vectorInfNorm(ArrayData vec) {
     int len = vec.numElements();
 
     if (len == 0) {
-      return 0.0f;
+      return 0.0d;
     }
 
     float maxAbs = 0.0f;
@@ -370,7 +381,7 @@ public class VectorFunctionImplUtils {
       }
     }
 
-    return maxAbs;
+    return (double) maxAbs;
   }
 
   /**
@@ -378,15 +389,17 @@ public class VectorFunctionImplUtils {
    * Returns NULL if the vector contains NULL elements or if the norm is zero.
    * Returns an empty array for empty vectors.
    * Uses manual loop unrolling (8 elements at a time) for speculative SIMD optimization.
+   * The norm is taken in double precision so that vectors whose norm is not representable as a
+   * float (or is only representable as a subnormal float) are still normalized correctly.
    */
-  public static ArrayData vectorNormalizeWithNorm(ArrayData vec, float norm) {
+  public static ArrayData vectorNormalizeWithNorm(ArrayData vec, double norm) {
     int len = vec.numElements();
 
     if (len == 0) {
       return vec;
     }
 
-    if (norm < Float.MIN_NORMAL) {
+    if (norm == 0.0d) {
       return null;
     }
 
@@ -405,14 +418,14 @@ public class VectorFunctionImplUtils {
         return null;
       }
 
-      result[i] = vec.getFloat(i) / norm;
-      result[i + 1] = vec.getFloat(i + 1) / norm;
-      result[i + 2] = vec.getFloat(i + 2) / norm;
-      result[i + 3] = vec.getFloat(i + 3) / norm;
-      result[i + 4] = vec.getFloat(i + 4) / norm;
-      result[i + 5] = vec.getFloat(i + 5) / norm;
-      result[i + 6] = vec.getFloat(i + 6) / norm;
-      result[i + 7] = vec.getFloat(i + 7) / norm;
+      result[i] = (float) (vec.getFloat(i) / norm);
+      result[i + 1] = (float) (vec.getFloat(i + 1) / norm);
+      result[i + 2] = (float) (vec.getFloat(i + 2) / norm);
+      result[i + 3] = (float) (vec.getFloat(i + 3) / norm);
+      result[i + 4] = (float) (vec.getFloat(i + 4) / norm);
+      result[i + 5] = (float) (vec.getFloat(i + 5) / norm);
+      result[i + 6] = (float) (vec.getFloat(i + 6) / norm);
+      result[i + 7] = (float) (vec.getFloat(i + 7) / norm);
       i += 8;
     }
 
@@ -421,7 +434,7 @@ public class VectorFunctionImplUtils {
       if (vec.isNullAt(i)) {
         return null;
       }
-      result[i] = vec.getFloat(i) / norm;
+      result[i] = (float) (vec.getFloat(i) / norm);
       i++;
     }
 
@@ -429,13 +442,13 @@ public class VectorFunctionImplUtils {
   }
 
   /**
-   * Computes the Lp norm of a float vector using the specified degree.
-   * Supported degrees: 1.0 (L1), 2.0 (L2), Float.POSITIVE_INFINITY (L∞).
+   * Computes the Lp norm of a float vector using the specified degree, in double precision.
+   * Supported degrees: 1.0 (L1), 2.0 (L2), Float.POSITIVE_INFINITY (infinity norm).
    * Returns NULL if the vector contains NULL elements.
    * Returns 0.0 for empty vectors.
    * Throws INVALID_VECTOR_NORM_DEGREE if degree is not supported.
    */
-  public static Float vectorNorm(ArrayData vec, float degree, UTF8String funcName) {
+  private static Double vectorNormAsDouble(ArrayData vec, float degree, UTF8String funcName) {
     // exact floating point comparison for degree since this is direct user input
     if (degree == 1.0f) {
       return vectorL1Norm(vec);
@@ -449,14 +462,32 @@ public class VectorFunctionImplUtils {
   }
 
   /**
+   * Computes the Lp norm of a float vector using the specified degree.
+   * Supported degrees: 1.0 (L1), 2.0 (L2), Float.POSITIVE_INFINITY (infinity norm).
+   * Returns NULL if the vector contains NULL elements.
+   * Returns 0.0 for empty vectors.
+   * Throws INVALID_VECTOR_NORM_DEGREE if degree is not supported.
+   */
+  public static Float vectorNorm(ArrayData vec, float degree, UTF8String funcName) {
+    Double norm = vectorNormAsDouble(vec, degree, funcName);
+    if (norm == null) {
+      return null;
+    }
+    return (float) norm.doubleValue();
+  }
+
+  /**
    * Normalizes a float vector to unit length using the specified norm degree.
-   * Supported degrees: 1.0 (L1), 2.0 (L2), Float.POSITIVE_INFINITY (L∞).
+   * Supported degrees: 1.0 (L1), 2.0 (L2), Float.POSITIVE_INFINITY (infinity norm).
    * Returns NULL if the vector contains NULL elements or has zero norm.
    * Returns an empty array for empty vectors.
    * Throws INVALID_VECTOR_NORM_DEGREE if degree is not supported.
    */
   public static ArrayData vectorNormalize(ArrayData vec, float degree, UTF8String funcName) {
-    Float norm = vectorNorm(vec, degree, funcName);
+    // The norm is kept in double precision here: rounding it to a float first would turn a norm
+    // that overflows (or underflows) the float range into infinity (or zero) and produce an
+    // all-zero (or NULL) result for a vector that is perfectly normalizable.
+    Double norm = vectorNormAsDouble(vec, degree, funcName);
     if (norm == null) {
       return null;
     }

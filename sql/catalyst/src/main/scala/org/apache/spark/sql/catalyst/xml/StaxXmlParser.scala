@@ -560,7 +560,7 @@ class StaxXmlParser(
       } else {
         newRow(i) = row(i)
       }
-      i += 1;
+      i += 1
     }
 
     if (badRecordException.isEmpty) {

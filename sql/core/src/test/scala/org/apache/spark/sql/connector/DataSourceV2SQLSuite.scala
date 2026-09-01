@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, QualifiedTableName, TableIden
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, GetStructField}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
@@ -45,7 +46,7 @@ import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelationWithTable}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
@@ -136,6 +137,44 @@ abstract class DataSourceV2SQLSuite
       val tableWithTsPattern = raw"$t\s+TIMESTAMP\s+AS\s+OF\s+$ts"
       val relationPattern = raw".*RelationV2\[[^]]*]\s$tableWithTsPattern$$".r
       checkExplain(s"SELECT * FROM $t TIMESTAMP AS OF '2019-01-29 00:37:58'", relationPattern)
+    }
+  }
+
+  test("nested partition source column receives a DPP runtime filter") {
+    val fact = s"${catalogAndNamespace}fact_nested_runtime_filter"
+    val dim = s"${catalogAndNamespace}dim_nested_runtime_filter"
+    withTable(fact, dim) {
+      sql(s"CREATE TABLE $fact " +
+        "(id INT, derives STRUCT<toStr: STRING, other: STRING>) USING " +
+        s"$v2Format PARTITIONED BY (derives.toStr)")
+      sql(s"INSERT INTO $fact VALUES " +
+        "(1, named_struct('toStr', 'AA', 'other', 'a')), " +
+        "(2, named_struct('toStr', 'BB', 'other', 'b')), " +
+        "(3, named_struct('toStr', 'CC', 'other', 'c'))")
+      sql(s"CREATE TABLE $dim (value STRING, selected INT) USING $v2Format")
+      sql(s"INSERT INTO $dim VALUES ('AA', 0), ('BB', 1)")
+
+      withSQLConf(
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
+        val df = sql(
+          s"""SELECT f.id FROM $fact f JOIN $dim d
+             |ON f.derives.toStr = d.value WHERE d.selected = 1""".stripMargin)
+        checkAnswer(df, Row(2))
+
+        val batchScans = collect(df.queryExecution.executedPlan) {
+          case b: BatchScanExec if b.runtimeFilters.nonEmpty => b
+        }
+        assert(batchScans.nonEmpty,
+          s"expected a scan with runtime filters, got ${df.queryExecution}")
+        val batchScan = batchScans.head
+        assert(batchScan.runtimeFilters.exists(_.exists(_.isInstanceOf[GetStructField])),
+          s"expected a runtime filter on derives.toStr, got ${batchScan.runtimeFilters}")
+        assert(batchScan.partitions.size === 3)
+        assert(batchScan.filteredPartitions.flatten.size === 1,
+          s"expected 1 partition after pruning, got ${batchScan.filteredPartitions.flatten.size}")
+      }
     }
   }
 
@@ -5440,9 +5479,6 @@ class DataSourceV2SQLSuiteV1Filter
 }
 
 class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
-  import org.apache.spark.sql.catalyst.expressions.DynamicPruning
-  import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
-
   override protected val catalogAndNamespace = "testv2filter.ns1.ns2."
 
   test("SPARK-56467: scalar subquery filters on partition columns are pushed into runtimeFilters") {
@@ -5476,6 +5512,47 @@ class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
       val numPartitions = batchScan.filteredPartitions.count(_.isDefined)
       assert(numPartitions == 1,
         s"Expected 1 partition after scalar subquery pruning, got $numPartitions")
+    }
+  }
+
+  test("SPARK-58207: non-deterministic scalar subquery filters are not pushed into " +
+    "runtimeFilters") {
+    val tbl = s"${catalogAndNamespace}tbl"
+    val dim = s"${catalogAndNamespace}dim"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Format PARTITIONED BY (part)")
+      for (i <- 0 until 10) {
+        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
+      }
+
+      sql(s"CREATE TABLE $dim (val INT) USING $v2Format")
+      sql(s"INSERT INTO $dim VALUES (3)")
+
+      // `part = (subquery) OR rand() < 0.5` references only the partition column and holds a
+      // scalar subquery, so it is a candidate for runtime pushdown, but it is non-deterministic.
+      // Routing it would push it to the source for pruning while the FilterExec above the scan
+      // re-evaluates it, and a partition the source dropped on its own evaluation could not be
+      // recovered.
+      val df = sql(
+        s"SELECT * FROM $tbl WHERE part = (SELECT max(val) FROM $dim) OR rand() < 0.5")
+      df.collect()
+
+      val batchScan = collect(df.queryExecution.executedPlan) {
+        case b: BatchScanExec => b
+      }.head
+      assert(batchScan.runtimeFilters.isEmpty,
+        s"Expected no runtime filters for a non-deterministic filter, " +
+          s"got ${batchScan.runtimeFilters}")
+
+      // No pruning at the source, and the filter is still evaluated by Spark after the scan.
+      val numPartitions = batchScan.filteredPartitions.count(_.isDefined)
+      assert(numPartitions == 10,
+        s"Expected all 10 partitions to be retained, got $numPartitions")
+      val postScanConditions = collect(df.queryExecution.executedPlan) {
+        case f: FilterExec => f.condition
+      }
+      assert(postScanConditions.exists(!_.deterministic),
+        s"Expected the non-deterministic filter above the scan, got $postScanConditions")
     }
   }
 }

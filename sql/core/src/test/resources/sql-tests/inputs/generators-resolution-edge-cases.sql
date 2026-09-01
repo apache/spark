@@ -215,3 +215,29 @@ SELECT posexplode(array('x', 'y')) as (pos, val), pos, val FROM (VALUES (42)) AS
 
 -- generator's multi-alias does not shadow table column with aggregate
 SELECT posexplode(array('x', 'y')) as (pos, val), pos, val, count(*) FROM (VALUES (42)) AS t(pos) GROUP BY pos;
+
+-- HAVING on a grouping key should be evaluated before a window function with a generator
+SELECT explode(array(a)) AS col, count(*) OVER () AS cnt, a
+FROM VALUES (1), (2), (3), (NULL) AS t(a)
+GROUP BY a
+HAVING a IS NOT NULL;
+
+-- HAVING on an aggregate should be evaluated before a window function with a generator
+SELECT explode(array(a)) AS col,
+       count(*) OVER () AS group_count,
+       count(*) AS row_count
+FROM VALUES (1), (1), (2), (3), (3) AS t(a)
+GROUP BY a
+HAVING row_count > 1;
+
+-- HAVING should be evaluated before multiple window functions with a generator
+SELECT explode(array(a)) AS col,
+       count(*) OVER () AS cnt,
+       count(*) OVER (
+         ORDER BY a
+         ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+       ) AS ordered_cnt,
+       a
+FROM VALUES (1), (2), (3), (NULL) AS t(a)
+GROUP BY a
+HAVING a IS NOT NULL;

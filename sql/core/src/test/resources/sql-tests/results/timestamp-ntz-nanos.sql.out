@@ -597,6 +597,46 @@ struct<TIMESTAMP_NTZ '1960-01-02 03:04:05.123456789' + INTERVAL '0 00:00:00.0000
 
 
 -- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' YEAR
+-- !query schema
+struct<TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' YEAR:timestamp_ntz(9)>
+-- !query output
+2021-01-02 03:04:05.123456789
+
+
+-- !query
+SELECT INTERVAL '1' YEAR + TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789'
+-- !query schema
+struct<TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' YEAR:timestamp_ntz(9)>
+-- !query output
+2021-01-02 03:04:05.123456789
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH
+-- !query schema
+struct<TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH:timestamp_ntz(9)>
+-- !query output
+2020-02-02 03:04:05.123456789
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - INTERVAL '1-2' YEAR TO MONTH
+-- !query schema
+struct<TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - INTERVAL '1-2' YEAR TO MONTH:timestamp_ntz(9)>
+-- !query output
+2018-11-02 03:04:05.123456789
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '1960-01-31 03:04:05.123456789' + INTERVAL '1' MONTH
+-- !query schema
+struct<TIMESTAMP_NTZ '1960-01-31 03:04:05.123456789' + INTERVAL '1' MONTH:timestamp_ntz(9)>
+-- !query output
+1960-02-29 03:04:05.123456789
+
+
+-- !query
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + make_interval(0, 1, 0, 2, 0, 0, 0)
 -- !query schema
 struct<>
@@ -623,27 +663,93 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111'
 -- !query schema
-struct<>
+struct<(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111'):interval day to second>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "left" : "\"TIMESTAMP_NTZ(9)\"",
-    "right" : "\"INTERVAL MONTH\"",
-    "sqlExpr" : "\"(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 73,
-    "fragment" : "TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH"
-  } ]
-}
+1 00:00:00.123456000
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456001'
+-- !query schema
+struct<(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456001'):interval day to second>
+-- !query output
+0 00:00:00.000000000
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789'
+-- !query schema
+struct<(TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789'):interval day to second>
+-- !query output
+-1 00:00:00.123456000
+
+
+-- !query
+SELECT ('2020-01-02 03:04:05.1234567' :: timestamp_ntz(7)) - ('2020-01-01 03:04:05.000000009' :: timestamp_ntz(9))
+-- !query schema
+struct<(CAST(2020-01-02 03:04:05.1234567 AS TIMESTAMP_NTZ(7)) - CAST(2020-01-01 03:04:05.000000009 AS TIMESTAMP_NTZ(9))):interval day to second>
+-- !query output
+1 00:00:00.123456000
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05'
+-- !query schema
+struct<(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05'):interval day to second>
+-- !query output
+0 00:00:00.123456000
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 00:00:00.000000789' - DATE '2020-01-01'
+-- !query schema
+struct<(TIMESTAMP_NTZ '2020-01-02 00:00:00.000000789' - DATE '2020-01-01'):interval day to second>
+-- !query output
+1 00:00:00.000000000
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' - TIMESTAMP_NTZ '1960-01-01 00:00:00.000000999'
+-- !query schema
+struct<(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' - TIMESTAMP_NTZ '1960-01-01 00:00:00.000000999'):interval day to second>
+-- !query output
+21915 00:00:00.123456000
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - CAST(NULL AS timestamp_ntz(9))
+-- !query schema
+struct<(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - CAST(NULL AS TIMESTAMP_NTZ(9))):interval day to second>
+-- !query output
+NULL
+
+
+-- !query
+SELECT convert_timezone('Europe/Brussels', 'Europe/Moscow',
+    TIMESTAMP_NTZ '2022-03-27 03:00:00.123456789')
+-- !query schema
+struct<convert_timezone(Europe/Brussels, Europe/Moscow, TIMESTAMP_NTZ '2022-03-27 03:00:00.123456789'):timestamp_ntz(9)>
+-- !query output
+2022-03-27 04:00:00.123456789
+
+
+-- !query
+SELECT typeof(convert_timezone('Europe/Brussels', 'Europe/Moscow',
+    '2022-03-27 03:00:00.1234567' :: timestamp_ntz(7)))
+-- !query schema
+struct<typeof(convert_timezone(Europe/Brussels, Europe/Moscow, CAST(2022-03-27 03:00:00.1234567 AS TIMESTAMP_NTZ(7)))):string>
+-- !query output
+timestamp_ntz(7)
+
+
+-- !query
+SELECT convert_timezone('America/Los_Angeles', 'UTC', CAST(NULL AS timestamp_ntz(9)))
+-- !query schema
+struct<convert_timezone(America/Los_Angeles, UTC, CAST(NULL AS TIMESTAMP_NTZ(9))):timestamp_ntz(9)>
+-- !query output
+NULL
 
 
 -- !query
@@ -668,6 +774,56 @@ struct<c:timestamp_ntz(9),count(1):bigint>
 -- !query output
 2020-01-01 00:00:00.000000001	2
 2020-01-01 00:00:00.000000999	1
+
+
+-- !query
+SELECT k, count(*), sum(v) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 1),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 2),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 3),
+  (CAST(NULL AS timestamp_ntz(9)), 4),
+  (CAST(NULL AS timestamp_ntz(9)), 5) AS t(k, v)
+  GROUP BY k ORDER BY k
+-- !query schema
+struct<k:timestamp_ntz(9),count(1):bigint,sum(v):bigint>
+-- !query output
+NULL	2	9
+2020-01-01 00:00:00.000000001	2	3
+2020-01-01 00:00:00.000000999	1	3
+
+
+-- !query
+SELECT mode(c) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c)
+-- !query schema
+struct<mode(c):timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.000000001
+
+
+-- !query
+SELECT sort_array(collect_set(c)) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c)
+-- !query schema
+struct<sort_array(collect_set(c), true):array<timestamp_ntz(9)>>
+-- !query output
+[2020-01-01 00:00:00.000000001,2020-01-01 00:00:00.000000999]
+
+
+-- !query
+SELECT sort_array(collect_list(c)) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (CAST(NULL AS timestamp_ntz(9))) AS t(c)
+-- !query schema
+struct<sort_array(collect_list(c), true):array<timestamp_ntz(9)>>
+-- !query output
+[2020-01-01 00:00:00.000000001,2020-01-01 00:00:00.000000001,2020-01-01 00:00:00.000000999]
 
 
 -- !query
@@ -728,6 +884,21 @@ SELECT max_by(v, k), min_by(v, k) FROM VALUES
 struct<max_by(v, k):timestamp_ntz(9),min_by(v, k):timestamp_ntz(9)>
 -- !query output
 2020-01-01 00:00:00.000000999	2020-01-01 00:00:00.000000001
+
+
+-- !query
+SELECT DISTINCT c FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (CAST(NULL AS timestamp_ntz(9))) AS t(c)
+  ORDER BY c
+-- !query schema
+struct<c:timestamp_ntz(9)>
+-- !query output
+NULL
+2020-01-01 00:00:00.000000001
+2020-01-01 00:00:00.000000999
 
 
 -- !query
@@ -925,6 +1096,70 @@ struct<v:timestamp_ntz(9),next_v:timestamp_ntz(9)>
 
 
 -- !query
+SELECT c = '2020-01-02 03:04:05.123456789',
+       c = '2020-01-02 03:04:05.123456788',
+       c < '2020-01-02 03:04:05.123456790'
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789') AS t(c)
+-- !query schema
+struct<(c = 2020-01-02 03:04:05.123456789):boolean,(c = 2020-01-02 03:04:05.123456788):boolean,(c < 2020-01-02 03:04:05.123456790):boolean>
+-- !query output
+true	false	true
+
+
+-- !query
+SELECT c FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-02 03:04:05.000000001'),
+  (TIMESTAMP_NTZ '2020-01-02 03:04:05.000000009') AS t(c)
+  WHERE c BETWEEN '2020-01-02 03:04:05.000000001' AND '2020-01-02 03:04:05.000000005'
+-- !query schema
+struct<c:timestamp_ntz(9)>
+-- !query output
+2020-01-02 03:04:05.000000001
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	false
+
+
+-- !query
+SET spark.sql.legacy.typeCoercion.datetimeToString.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.typeCoercion.datetimeToString.enabled	true
+
+
+-- !query
+SELECT c = '2020-01-02 03:04:05.123456789',
+       c < '2020-01-02 03:04:05.123456790'
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789') AS t(c)
+-- !query schema
+struct<(c = 2020-01-02 03:04:05.123456789):boolean,(c < 2020-01-02 03:04:05.123456790):boolean>
+-- !query output
+true	true
+
+
+-- !query
+SET spark.sql.legacy.typeCoercion.datetimeToString.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.typeCoercion.datetimeToString.enabled	false
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	true
+
+
+-- !query
 SELECT unix_seconds(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
 struct<unix_seconds(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'):bigint>
@@ -1074,3 +1309,317 @@ SELECT date_trunc('NANOSECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789')
 struct<date_trunc(NANOSECOND, TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789'):timestamp_ntz(9)>
 -- !query output
 NULL
+
+
+-- !query
+SELECT typeof(localtimestamp(9)), typeof(localtimestamp(8)), typeof(localtimestamp(7))
+-- !query schema
+struct<typeof(localtimestamp()):string,typeof(localtimestamp()):string,typeof(localtimestamp()):string>
+-- !query output
+timestamp_ntz(9)	timestamp_ntz(8)	timestamp_ntz(7)
+
+
+-- !query
+SELECT typeof(localtimestamp()), typeof(localtimestamp(6))
+-- !query schema
+struct<typeof(localtimestamp()):string,typeof(localtimestamp()):string>
+-- !query output
+timestamp_ntz	timestamp_ntz
+
+
+-- !query
+SELECT typeof(localtimestamp(8 + 1))
+-- !query schema
+struct<typeof(localtimestamp()):string>
+-- !query output
+timestamp_ntz(9)
+
+
+-- !query
+SELECT localtimestamp(9) = localtimestamp(9)
+-- !query schema
+struct<(localtimestamp() = localtimestamp()):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT localtimestamp(3)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "3",
+    "type" : "TIMESTAMP_NTZ"
+  }
+}
+
+
+-- !query
+SELECT localtimestamp(10)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "10",
+    "type" : "TIMESTAMP_NTZ"
+  }
+}
+
+
+-- !query
+SELECT c FROM (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001' AS c
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999')
+  INTERSECT SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001' ORDER BY c
+-- !query schema
+struct<c:timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.000000001
+
+
+-- !query
+SELECT c FROM (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001' AS c
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999')
+  EXCEPT SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001' ORDER BY c
+-- !query schema
+struct<c:timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.000000999
+
+
+-- !query
+SELECT typeof(c), c FROM (
+    (SELECT '2020-01-01 00:00:00.0000009' :: timestamp_ntz(7) AS c)
+     INTERSECT (SELECT '2020-01-01 00:00:00.000000900' :: timestamp_ntz(9))) ORDER BY c
+-- !query schema
+struct<typeof(c):string,c:timestamp_ntz(9)>
+-- !query output
+timestamp_ntz(9)	2020-01-01 00:00:00.0000009
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500'
+    BETWEEN TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'
+        AND TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'
+-- !query schema
+struct<between(TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500', TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000001000'
+    BETWEEN TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'
+        AND TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'
+-- !query schema
+struct<between(TIMESTAMP_NTZ '2020-01-01 00:00:00.000001000', TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'):boolean>
+-- !query output
+false
+
+
+-- !query
+SELECT '2020-01-01 00:00:00.000000500' :: timestamp_ntz(9)
+    BETWEEN '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7)
+        AND TIMESTAMP_NTZ '2020-01-01 00:00:00.000001'
+-- !query schema
+struct<between(CAST(2020-01-01 00:00:00.000000500 AS TIMESTAMP_NTZ(9)), CAST(2020-01-01 00:00:00.0000001 AS TIMESTAMP_NTZ(7)), TIMESTAMP_NTZ '2020-01-01 00:00:00.000001'):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT if(true,
+    '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7),
+    TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789') AS v)
+-- !query schema
+struct<typeof(v):string,v:timestamp_ntz(9)>
+-- !query output
+timestamp_ntz(9)	2020-01-01 00:00:00.0000001
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT nvl(
+    CAST(NULL AS timestamp_ntz(9)),
+    TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS v)
+-- !query schema
+struct<typeof(v):string,v:timestamp_ntz(9)>
+-- !query output
+timestamp_ntz(9)	2020-01-01 00:00:00.000000999
+
+
+-- !query
+SELECT ifnull(TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', CAST(NULL AS timestamp_ntz(9)))
+-- !query schema
+struct<ifnull(TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', CAST(NULL AS TIMESTAMP_NTZ(9))):timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.000000001
+
+
+-- !query
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE k IN (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') ORDER BY k
+-- !query schema
+struct<k:timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.000000999
+
+
+-- !query
+SELECT (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999')
+-- !query schema
+struct<scalarsubquery():timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.000000999
+
+
+-- !query
+SELECT typeof((SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'))
+-- !query schema
+struct<typeof(scalarsubquery()):string>
+-- !query output
+timestamp_ntz(9)
+
+
+-- !query
+SELECT typeof((SELECT CAST(NULL AS timestamp_ntz(9))))
+-- !query schema
+struct<typeof(scalarsubquery()):string>
+-- !query output
+timestamp_ntz(9)
+
+
+-- !query
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE k = (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') ORDER BY k
+-- !query schema
+struct<k:timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.000000999
+
+
+-- !query
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE EXISTS (SELECT 1 FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS s(v)
+    WHERE s.v = t.k) ORDER BY k
+-- !query schema
+struct<k:timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.000000999
+
+
+-- !query
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE NOT EXISTS (SELECT 1 FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS s(v)
+    WHERE s.v = t.k) ORDER BY k
+-- !query schema
+struct<k:timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.000000999
+
+
+-- !query
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE k NOT IN (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') ORDER BY k
+-- !query schema
+struct<k:timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.000000001
+
+
+-- !query
+SELECT k FROM VALUES
+    ('2020-01-01 00:00:00.0000009' :: timestamp_ntz(7)) AS t(k)
+  WHERE k NOT IN (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') ORDER BY k
+-- !query schema
+struct<k:timestamp_ntz(7)>
+-- !query output
+2020-01-01 00:00:00.0000009
+
+
+-- !query
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE k NOT IN (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'
+                  UNION ALL SELECT CAST(NULL AS timestamp_ntz(9))) ORDER BY k
+-- !query schema
+struct<k:timestamp_ntz(9)>
+-- !query output
+
+
+
+-- !query
+SELECT typeof(col), col FROM (SELECT explode(array(
+    TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001',
+    TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'))) ORDER BY col
+-- !query schema
+struct<typeof(col):string,col:timestamp_ntz(9)>
+-- !query output
+timestamp_ntz(9)	2020-01-01 00:00:00.000000001
+timestamp_ntz(9)	2020-01-01 00:00:00.000000999
+
+
+-- !query
+SELECT element_at(array(
+    TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001',
+    TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'), 2)
+-- !query schema
+struct<element_at(array(TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'), 2):timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.000000999
+
+
+-- !query
+SELECT (named_struct('f', TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789')).f
+-- !query schema
+struct<named_struct(f, TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789').f:timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.123456789
+
+
+-- !query
+SELECT map('k', TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789')['k']
+-- !query schema
+struct<map(k, TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789')[k]:timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.123456789
+
+
+-- !query
+SELECT map(TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 'a',
+           TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 'b')[
+       TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999']
+-- !query schema
+struct<map(TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', a, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', b)[TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999']:string>
+-- !query output
+b
+
+
+-- !query
+SELECT element_at(map(TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 'a',
+           TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 'b'),
+       TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001')
+-- !query schema
+struct<element_at(map(TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', a, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', b), TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'):string>
+-- !query output
+a

@@ -16,13 +16,12 @@
 #
 
 import sys
-
 from typing import Any, Generic, List, NamedTuple, TypeVar
 
-from pyspark import since, SparkContext
-from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
-from pyspark.mllib.util import JavaSaveable, JavaLoader, inherit_doc
+from pyspark import SparkContext, since
 from pyspark.core.rdd import RDD
+from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
+from pyspark.mllib.util import JavaLoader, JavaSaveable, inherit_doc
 
 __all__ = ["FPGrowth", "FPGrowthModel", "PrefixSpan", "PrefixSpanModel"]
 
@@ -205,8 +204,9 @@ class PrefixSpan:
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.mllib.fpm
+    from pyspark.sql import SparkSession
 
     globs = pyspark.mllib.fpm.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("mllib.fpm tests").getOrCreate()

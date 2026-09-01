@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCollation}
@@ -219,5 +220,42 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
 
     a.groupingExpressions.foreach(checkValidGroupingExprs)
     a.aggregateExpressions.foreach(checkValidAggregateExpression)
+  }
+
+  /**
+   * Returns true if `e` is safe to evaluate unconditionally, i.e. on rows where the
+   * original plan would not have evaluated it: evaluating it must not raise an error and
+   * must not change the query result. This is the check to use when relocating an
+   * expression out of a short-circuited position, e.g. moving the base out of the taken
+   * branch of an If/CaseWhen, or hoisting a streamed-side join conjunct above the probe
+   * so it also runs for streamed rows that have no match.
+   *
+   * Only a whitelist of total, deterministic expressions qualifies:
+   *   - leaves: attribute references and literals;
+   *   - total accessors: GetStructField, GetArrayStructFields and GetMapValue never throw.
+   *     Note that GetArrayItem/ElementAt are NOT included: they throw on invalid ordinals
+   *     when ANSI mode is on;
+   *   - logic/predicates: And, Or, Not, comparisons, IsNull, IsNotNull, IsNaN, NullIf,
+   *     Coalesce, In and InSet are total boolean functions.
+   * Anything else (arithmetic, casts, string functions, UDFs, nested IF/CASE WHEN, ...)
+   * conservatively returns false. On top of the whitelist, the expression must be
+   * deterministic and must not contain subqueries.
+   *
+   * Note: this deliberately does not rely on [[Expression.throwable]], which is opt-in
+   * metadata that most expressions do not override. A throwing ScalaUDF with
+   * non-throwing children, for example, reports non-throwable.
+   */
+  def canEvaluateUnconditionally(e: Expression): Boolean =
+    e.deterministic && !e.containsPattern(PLAN_EXPRESSION) &&
+      canEvaluateUnconditionallyInternal(e)
+
+  private def canEvaluateUnconditionallyInternal(e: Expression): Boolean = e match {
+    case _: AttributeReference | _: Literal => true
+    case _: GetStructField | _: GetArrayStructFields | _: GetMapValue =>
+      e.children.forall(canEvaluateUnconditionallyInternal)
+    case _: And | _: Or | _: Not | _: BinaryComparison | _: IsNull | _: IsNotNull |
+         _: IsNaN | _: NullIf | _: Coalesce | _: In | _: InSet =>
+      e.children.forall(canEvaluateUnconditionallyInternal)
+    case _ => false
   }
 }

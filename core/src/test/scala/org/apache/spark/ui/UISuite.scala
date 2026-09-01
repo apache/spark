@@ -534,9 +534,39 @@ class UISuite extends SparkFunSuite {
       lastRequest = req
       res.sendError(HttpServletResponse.SC_OK)
     }
-
   }
 
+  test("SPARK-58521: createProxyHandler forwards X-Forwarded-Context header") {
+    val (conf, securityMgr, sslOptions) = sslDisabledConf()
+    val targetServer = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
+    val proxyServer = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
+
+    @volatile var forwardedContext: String = null
+    val targetHandler = new ServletContextHandler()
+    targetHandler.setContextPath("/")
+    targetHandler.addServlet(new ServletHolder(new HttpServlet {
+      override def doGet(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+        forwardedContext = req.getHeader("X-Forwarded-Context")
+        resp.setStatus(HttpServletResponse.SC_OK)
+      }
+    }), "/*")
+    targetServer.addHandler(targetHandler, securityMgr)
+
+    val targetAddr = s"http://$localhost:${targetServer.boundPort}"
+    val proxyHandler = JettyUtils.createProxyHandler(_ => Some(targetAddr))
+    proxyServer.addHandler(proxyHandler, securityMgr)
+
+    try {
+      val proxyUrl = s"http://$localhost:${proxyServer.boundPort}/proxy/app-123/stages/"
+      TestUtils.withHttpConnection(new URI(proxyUrl).toURL) { conn =>
+        assert(conn.getResponseCode === HttpServletResponse.SC_OK)
+        assert(forwardedContext === "/proxy/app-123")
+      }
+    } finally {
+      stopServer(proxyServer)
+      stopServer(targetServer)
+    }
+  }
 }
 
 // Filter for testing; returns a configurable code for every request.

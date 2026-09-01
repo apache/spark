@@ -284,6 +284,18 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Adds a year-month interval expressed in months to a nanosecond-precision timestamp value while
+   * preserving the `nanosWithinMicro` remainder.
+   */
+  def timestampNanosAddMonths(
+      start: TimestampNanosVal,
+      months: Int,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val epochMicros = timestampAddMonths(start.epochMicros, months, zoneId)
+    TimestampNanosVal.fromParts(epochMicros, start.nanosWithinMicro)
+  }
+
+  /**
    * Adds a day-time interval expressed in microseconds to a timestamp at the given time zone.
    * It converts the input timestamp to a local timestamp, and adds the interval by:
    *   - Splitting the interval to days and microsecond adjustment in a day, and

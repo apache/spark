@@ -129,7 +129,7 @@
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.10.1</asm.version>
     <slf4j.version>2.0.17</slf4j.version>
-    <log4j.version>2.26.0</log4j.version>
+    <log4j.version>2.26.1</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.5.0</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
@@ -173,7 +173,7 @@
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
     <commons.math3.version>3.6.1</commons.math3.version>
-    <commons.collections4.version>4.5.0</commons.collections4.version>
+    <commons.collections4.version>4.6.0</commons.collections4.version>
     <scala.version>2.13.18</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
@@ -185,11 +185,11 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <!-- Should be consistent with SparkBuild.scala and docs -->
-    <fasterxml.jackson.version>2.22.0</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.22.1</fasterxml.jackson.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.8</snappy.version>
     <netlib.ludovic.dev.version>3.2.0</netlib.ludovic.dev.version>
-    <commons-codec.version>1.22.0</commons-codec.version>
+    <commons-codec.version>1.22.1</commons-codec.version>
     <commons-compress.version>1.28.0</commons-compress.version>
     <commons-io.version>2.22.0</commons-io.version>
     <!-- To support Hive UDF jars built by Hive 2.0.0 ~ 2.3.9 and 3.0.0 ~ 3.1.3. -->
@@ -202,7 +202,7 @@
     <guava.version>33.6.0-jre</guava.version>
     <guava.failureaccess.version>1.0.3</guava.failureaccess.version>
     <gson.version>2.14.0</gson.version>
-    <janino.version>3.1.9</janino.version>
+    <janino.version>3.1.12</janino.version>
     <jersey.version>3.1.11</jersey.version>
     <joda.version>2.14.3</joda.version>
     <jsr305.version>3.0.0</jsr305.version>
@@ -222,7 +222,7 @@
             SPARK-53327 workaround should be reverted.
      -->
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.2.16.Final</netty.version>
+    <netty.version>4.2.17.Final</netty.version>
     <netty-tcnative.version>2.0.81.Final</netty-tcnative.version>
     <icu4j.version>78.3</icu4j.version>
     <junit.version>6.0.3</junit.version>
@@ -286,7 +286,6 @@
     -->
     <derby.deps.scope>compile</derby.deps.scope>
     <hadoop.deps.scope>compile</hadoop.deps.scope>
-    <huaweicloud.deps.scope>compile</huaweicloud.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
     <hive.storage.version>2.8.1</hive.storage.version>
     <hive.storage.scope>compile</hive.storage.scope>
@@ -879,12 +878,12 @@
       <dependency>
         <groupId>at.yawk.lz4</groupId>
         <artifactId>lz4-java</artifactId>
-        <version>1.11.1</version>
+        <version>1.11.2</version>
       </dependency>
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.7-9</version>
+        <version>1.5.7-13</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -1008,7 +1007,7 @@
         </exclusions>
       </dependency>
       <!-- SPARK-38885: After Netty 4.1.76, add the following `Netty` dependencies explicitly
-           to ensure `./dev/test-dependencies.sh` produce the same results on Linux and MacOS.
+           to ensure `./dev/test-dependencies.sh` produces the same results on Linux and macOS.
       -->
       <dependency>
         <groupId>io.netty</groupId>
@@ -2315,7 +2314,7 @@
           </exclusion>
         </exclusions>
       </dependency>
-      <!-- hive-llap-client is needed when run MapReduce test in Hive 2.3. -->
+      <!-- hive-llap-client is needed when running MapReduce tests in Hive 2.3. -->
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-llap-client</artifactId>
@@ -2642,7 +2641,7 @@
         <artifactId>arpack</artifactId>
         <version>${netlib.ludovic.dev.version}</version>
       </dependency>
-      <!-- SPARK-16484 add `datasketches-java` for support Datasketches HllSketch -->
+      <!-- SPARK-16484 add `datasketches-java` to support Datasketches HllSketch -->
       <dependency>
         <groupId>org.apache.datasketches</groupId>
         <artifactId>datasketches-java</artifactId>
@@ -3365,10 +3364,10 @@
         </executions>
       </plugin>
       <!--
-        Couple of dependencies are coming in bundle format (bundle is just a normal jar which
-        contains OSGi metadata in the manifest). If one don't use OSGi, then a bundle will work as
+        A couple of dependencies are coming in bundle format (bundle is just a normal jar which
+        contains OSGi metadata in the manifest). If one doesn't use OSGi, then a bundle will work as
         any other jar. Since maven doesn't have native bundle support it needs an external plugin
-        handle it. If the plugin is not added then the build can't resolve bundle dependencies.
+        to handle it. If the plugin is not added then the build can't resolve bundle dependencies.
       -->
       <plugin>
         <groupId>org.apache.felix</groupId>
@@ -3520,6 +3519,13 @@
     </profile>
 
     <profile>
+      <id>credential-aws</id>
+      <modules>
+        <module>connector/credential-aws</module>
+      </modules>
+    </profile>
+
+    <profile>
       <id>test-java-home</id>
       <activation>
         <property><name>env.JAVA_HOME</name></property>
@@ -3540,6 +3546,12 @@
           <url>${env.MAVEN_MIRROR_URL}</url>
         </repository>
       </repositories>
+      <pluginRepositories>
+        <pluginRepository>
+          <id>maven-mirror</id>
+          <url>${env.MAVEN_MIRROR_URL}</url>
+        </pluginRepository>
+      </pluginRepositories>
     </profile>
 
     <!--
@@ -3564,7 +3576,7 @@
     <!--
      This is a profile to enable the use of the ASF snapshot and staging repositories
      during a build. It is useful when testing against nightly or RC releases of dependencies.
-     It MUST NOT be used when building copies of Spark to use in production of for distribution,
+     It MUST NOT be used when building copies of Spark to use in production or for distribution,
      -->
     <profile>
       <id>snapshots-and-staging</id>
@@ -3618,7 +3630,6 @@
       <id>hadoop-provided</id>
       <properties>
         <spark.yarn.isHadoopProvided>true</spark.yarn.isHadoopProvided>
-        <huaweicloud.deps.scope>provided</huaweicloud.deps.scope>
       </properties>
     </profile>
     <profile>
@@ -3639,7 +3650,7 @@
     <profile>
       <id>jjwt-provided</id>
     </profile>
-    <!-- use org.openlabtesting.leveldbjni on aarch64 platform except MacOS -->
+    <!-- use org.openlabtesting.leveldbjni on aarch64 platform except macOS -->
     <profile>
       <id>aarch64</id>
       <properties>

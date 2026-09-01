@@ -50,7 +50,11 @@ private class KillApplication extends K8sSubmitOp  {
       (implicit client: KubernetesClient): Unit = {
     val podToDelete = getPod(namespace, pName)
 
-    if (Option(podToDelete).isDefined) {
+    // `getPod` returns a request handle, which is never null; only resolving it reports whether
+    // the pod exists. Without the `get()` the check below is always true, so a name that is not
+    // in the cluster would issue a delete that the API server answers with a swallowed 404 and
+    // report nothing to the user. `ListStatus.executeOnPod` resolves it the same way.
+    if (Option(podToDelete.get()).isDefined) {
       getGracePeriod(sparkConf) match {
         case Some(period) => podToDelete.withGracePeriod(period).delete()
         case _ => podToDelete.delete()

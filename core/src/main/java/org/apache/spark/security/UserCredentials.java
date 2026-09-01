@@ -38,7 +38,7 @@ import org.apache.spark.annotation.DeveloperApi;
  * This class is transmitted to executors and does <b>not</b> contain any reference
  * to {@link UserContext} or raw identity tokens. It is immutable and {@link Serializable}.
  *
- * @since 4.3.0
+ * @since 4.4.0
  */
 @DeveloperApi
 public final class UserCredentials implements Serializable {

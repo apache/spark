@@ -111,6 +111,11 @@ class ResolverGuard(
         checkFilter(filter)
       case join: Join =>
         checkJoin(join)
+      case asOfJoin: AsOfJoin
+          if conf.getConf(
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION
+          ) =>
+        checkAsOfJoin(asOfJoin)
       case unresolvedSubqueryColumnAliases: UnresolvedSubqueryColumnAliases =>
         checkUnresolvedSubqueryColumnAliases(unresolvedSubqueryColumnAliases)
       case subqueryAlias: SubqueryAlias =>
@@ -283,6 +288,52 @@ class ResolverGuard(
         }
       }
   }
+
+  private def checkAsOfJoin(asOfJoin: AsOfJoin) = {
+    checkOperator(asOfJoin.left)
+      .orElse {
+        checkOperator(asOfJoin.right)
+      }
+      .orElse {
+        asOfJoin.condition match {
+          case Some(condition) => checkExpression(condition)
+          case None => None
+        }
+      }
+      .orElse {
+        asOfJoin.matchLeftOperand match {
+          case Some(expression) => checkExpression(expression)
+          case None => None
+        }
+      }
+      .orElse {
+        asOfJoin.matchRightOperand match {
+          case Some(expression) => checkExpression(expression)
+          case None => None
+        }
+      }
+      .orElse {
+        checkExpression(asOfJoin.asOfCondition)
+      }
+      .orElse {
+        checkExpression(asOfJoin.orderExpression)
+      }
+      .orElse {
+        asOfJoin.toleranceAssertion match {
+          case Some(expression) => checkExpression(expression)
+          case None => None
+        }
+      }
+      .orElse {
+        checkExpressions(asOfJoin.leftSortExprs)
+      }
+      .orElse {
+        checkExpressions(asOfJoin.rightSortExprs)
+      }
+  }
+
+  private def checkExpressions(expressions: Seq[Expression]): Option[String] =
+    expressions.iterator.map(checkExpression).collectFirst { case Some(reason) => reason }
 
   private def checkFilter(unresolvedFilter: Filter) =
     checkOperator(unresolvedFilter.child).orElse(checkExpression(unresolvedFilter.condition))

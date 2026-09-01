@@ -16,12 +16,11 @@
 #
 
 # $example on$
-from pyspark.mllib.classification import LogisticRegressionWithLBFGS
-from pyspark.mllib.util import MLUtils
-from pyspark.mllib.evaluation import MulticlassMetrics
 # $example off$
-
 from pyspark import SparkContext
+from pyspark.mllib.classification import LogisticRegressionWithLBFGS
+from pyspark.mllib.evaluation import MulticlassMetrics
+from pyspark.mllib.util import MLUtils
 
 if __name__ == "__main__":
     sc = SparkContext(appName="MultiClassMetricsExample")

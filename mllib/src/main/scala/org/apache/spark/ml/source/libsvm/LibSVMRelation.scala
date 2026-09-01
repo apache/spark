@@ -27,7 +27,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vectors, VectorUDT}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -82,7 +82,7 @@ private[libsvm] case class LibSVMFileFormat()
     if (
       dataSchema.size != 2 ||
         !DataTypeUtils.sameType(dataSchema(0).dataType, DataTypes.DoubleType) ||
-        !DataTypeUtils.sameType(dataSchema(1).dataType, new VectorUDT()) ||
+        !DataTypeUtils.sameType(dataSchema(1).dataType, SQLDataTypes.VectorType) ||
         !(forWriting || dataSchema(1).metadata.getLong(LibSVMOptions.NUM_FEATURES).toInt > 0)
     ) {
       throw new IOException(s"Illegal schema for libsvm data, schema=$dataSchema")

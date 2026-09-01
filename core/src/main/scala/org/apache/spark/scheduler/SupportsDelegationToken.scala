@@ -43,8 +43,9 @@ private[spark] trait SupportsDelegationToken {
   protected def updateDelegationTokens(tokens: Array[Byte]): Unit
 
   /**
-   * Whether the token manager should be started. Returns true if Hadoop security is enabled
-   * or if direct credential providers are configured.
+   * Whether the token manager should be started. The default implementation returns true when
+   * Hadoop security is enabled. Backends that support direct credential providers override this
+   * method to also check whether those providers are configured.
    */
   protected def tokenManagerRequired(): Boolean = UserGroupInformation.isSecurityEnabled
 

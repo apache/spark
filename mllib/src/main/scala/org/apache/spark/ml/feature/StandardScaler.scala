@@ -62,10 +62,10 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(inputCol), SQLDataTypes.VectorType)
     require(!schema.fieldNames.contains($(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
-    val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
+    val outputFields = schema.fields :+ StructField($(outputCol), SQLDataTypes.VectorType, false)
     StructType(outputFields)
   }
 
