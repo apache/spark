@@ -232,10 +232,15 @@ class MapInPandasTestsMixin:
         ):
             (self.spark.range(10, numPartitions=3).mapInPandas(bad_iter_elem, "a int").count())
 
-        with self.assertRaisesRegex(
-            PythonException,
-            "Return type of the user-defined function should be iterator of pandas.DataFrame, "
-            "but is list",
+        with (
+            self.sql_conf(
+                {"spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled": False}
+            ),
+            self.assertRaisesRegex(
+                PythonException,
+                "Return type of the user-defined function should be iterator of pandas.DataFrame, "
+                "but is list",
+            ),
         ):
             (self.spark.range(10, numPartitions=3).mapInPandas(list_not_iter, "a int").count())
 
