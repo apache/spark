@@ -495,6 +495,18 @@
     ],
     "sqlState" : "22001"
   },
+  "BUCKET_COLUMN_IN_PARTITION_COLUMNS" : {
+    "message" : [
+      "Bucketing column <bucketColumn> should not be part of partition columns <partitionColumns>."
+    ],
+    "sqlState" : "42713"
+  },
+  "BUCKET_SORT_COLUMN_IN_PARTITION_COLUMNS" : {
+    "message" : [
+      "Bucket sort column <sortColumn> should not be part of partition columns <partitionColumns>."
+    ],
+    "sqlState" : "42713"
+  },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
       "The method <methodName> can not be called on streaming Dataset/DataFrame."
@@ -10395,16 +10407,6 @@
   "_LEGACY_ERROR_TEMP_1165" : {
     "message" : [
       "It is not allowed to specify partitioning when the table schema is not defined."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1166" : {
-    "message" : [
-      "Bucketing column '<bucketCol>' should not be part of partition columns '<normalizedPartCols>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1167" : {
-    "message" : [
-      "Bucket sorting column '<sortCol>' should not be part of partition columns '<normalizedPartCols>'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1169" : {
