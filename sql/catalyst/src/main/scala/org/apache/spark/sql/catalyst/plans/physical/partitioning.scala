@@ -854,8 +854,8 @@ object KeyedPartitioning {
     val projectedDataTypes = positions.map(dataTypes)
     val comparableKeyWrapperFactory =
       InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(projectedDataTypes)
-    // A key list is as long as the number of splits the scan reported, so whatever is allocated per
-    // key is allocated tens of thousands of times.
+    // Indexed arrays rather than `Seq`s, because the loop below runs once per key and a key list is
+    // as long as the number of splits the scan reported.
     val positionArray = positions.toArray
     val typeArray = projectedDataTypes.toArray
     val projectedKeys = keys.map { key =>
@@ -888,6 +888,12 @@ object KeyedPartitioning {
     val comparableKeyWrapperFactory =
       InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(reducedDataTypes)
     val typeArray = dataTypes.toArray
+    // `InternalRow.toSeq(dataTypes)`, which the loop below replaces, asserted the row's arity once
+    // per key. All the keys of a partitioning share an arity, so asserting on the first one keeps
+    // the check. The loop also indexes `reducerArray` by the same bound, where the old `zip` would
+    // have truncated to the shorter of the two, so that length is asserted with it.
+    assert(reducerArray.length == typeArray.length)
+    keys.headOption.foreach(k => assert(k.row.numFields == typeArray.length))
     val reducedKeys = keys.map { key =>
       val reducedKey = new Array[Any](typeArray.length)
       var i = 0
