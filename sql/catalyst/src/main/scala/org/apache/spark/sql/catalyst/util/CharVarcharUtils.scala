@@ -32,10 +32,6 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
   // visible for testing
   private[sql] val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
-  private[sql] val CHAR_VARCHAR_STANDARD_SEMANTICS_METADATA_KEY =
-    "__CHAR_VARCHAR_STANDARD_SEMANTICS"
-  private[sql] val CHAR_VARCHAR_STANDARD_SEMANTICS_SCAN_OPTION =
-    "__charVarcharStandardSemantics"
 
   /**
    * Creates a StringRPad expression with the pad literal inheriting the collation from the
@@ -109,45 +105,6 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   }
 
   /**
-   * Cleans the raw CHAR/VARCHAR metadata while retaining the semantics already bound during
-   * analysis. Data source readers use this marker instead of the caller's active SQLConf.
-   */
-  def cleanAttrMetadataForScan(
-      attr: AttributeReference,
-      standardSemantics: Boolean): AttributeReference = {
-    val metadataBuilder = new MetadataBuilder().withMetadata(cleanMetadata(attr.metadata))
-    if (standardSemantics && getRawType(attr.metadata).isDefined) {
-      metadataBuilder.putBoolean(CHAR_VARCHAR_STANDARD_SEMANTICS_METADATA_KEY, true)
-    }
-    attr.withMetadata(metadataBuilder.build())
-  }
-
-  def markStandardSemanticsForScan(
-      schema: StructType,
-      standardSemantics: Boolean): StructType = {
-    if (standardSemantics) {
-      StructType(schema.map { field =>
-        if (hasCharVarchar(field.dataType)) {
-          val metadata = new MetadataBuilder()
-            .withMetadata(field.metadata)
-            .putBoolean(CHAR_VARCHAR_STANDARD_SEMANTICS_METADATA_KEY, true)
-            .build()
-          field.copy(metadata = metadata)
-        } else {
-          field
-        }
-      })
-    } else {
-      schema
-    }
-  }
-
-  def hasStandardSemantics(metadata: Metadata): Boolean = {
-    metadata.contains(CHAR_VARCHAR_STANDARD_SEMANTICS_METADATA_KEY) &&
-      metadata.getBoolean(CHAR_VARCHAR_STANDARD_SEMANTICS_METADATA_KEY)
-  }
-
-  /**
    * Removes the metadata entry that contains the original type string of CharType/VarcharType from
    * the given metadata.
    */
@@ -155,7 +112,6 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
     new MetadataBuilder()
       .withMetadata(metadata)
       .remove(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)
-      .remove(CHAR_VARCHAR_STANDARD_SEMANTICS_METADATA_KEY)
       .build()
   }
 

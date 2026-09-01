@@ -548,10 +548,8 @@ object OrcUtils extends Logging {
       dataSchema: StructType,
       resultSchema: StructType,
       partitionSchema: StructType,
-      conf: Configuration): String = {
-    val charVarcharStandardSemantics =
-      (dataSchema ++ resultSchema ++ partitionSchema)
-        .exists(field => CharVarcharUtils.hasStandardSemantics(field.metadata))
+      conf: Configuration,
+      charVarcharStandardSemantics: Boolean): String = {
     val resultSchemaString = if (canPruneCols) {
       OrcUtils.getOrcSchemaString(resultSchema, charVarcharStandardSemantics)
     } else {

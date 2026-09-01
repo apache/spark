@@ -340,6 +340,9 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           table.map(_.identifier),
           markedForSingleTaskExecution =
             l.getTagValue(MarkSingleTaskExecution.markTag).getOrElse(false))
+      l.getTagValue(ApplyCharTypePadding.standardSemanticsTag).foreach {
+        enabled => scan.setTagValue(ApplyCharTypePadding.standardSemanticsTag, enabled)
+      }
 
       // extra Project node: wrap flat metadata columns to a metadata struct
       val withMetadataProjections = metadataStructOpt.map { metadataStruct =>

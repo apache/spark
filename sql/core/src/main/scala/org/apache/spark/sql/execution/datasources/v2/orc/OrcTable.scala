@@ -21,7 +21,6 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, Write, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.orc.OrcUtils
@@ -38,14 +37,8 @@ case class OrcTable(
     fallbackFileFormat: Class[_ <: FileFormat])
   extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
 
-  override def newScanBuilder(options: CaseInsensitiveStringMap): OrcScanBuilder = {
-    val scanOptions = mergedOptions(options)
-    val standardSemantics =
-      scanOptions.get(CharVarcharUtils.CHAR_VARCHAR_STANDARD_SEMANTICS_SCAN_OPTION) == true.toString
-    val scanDataSchema =
-      CharVarcharUtils.markStandardSemanticsForScan(dataSchema, standardSemantics)
-    OrcScanBuilder(sparkSession, fileIndex, schema, scanDataSchema, scanOptions)
-  }
+  override def newScanBuilder(options: CaseInsensitiveStringMap): OrcScanBuilder =
+    OrcScanBuilder(sparkSession, fileIndex, schema, dataSchema, mergedOptions(options))
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
     OrcUtils.inferSchema(sparkSession, files, options.asScala.toMap)
