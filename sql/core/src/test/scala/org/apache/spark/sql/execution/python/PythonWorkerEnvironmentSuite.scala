@@ -24,6 +24,7 @@ import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, Simp
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
@@ -54,15 +55,25 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
   private def chained(env: Map[String, String]): Seq[(ChainedPythonFunctions, Long)] =
     Seq((ChainedPythonFunctions(Seq(functionWith(env))), 0L))
 
-  /** The environment a non-Arrow scalar runner would hand to a worker. */
+  // The runners below are the ones the physical operators actually instantiate --
+  // `BatchEvalPythonExec`, `ArrowEvalPythonExec` and `ColumnarArrowEvalPythonEvaluatorFactory`
+  // respectively. They are used in preference to their simpler siblings because overriding
+  // `envVars` in a subclass is an established pattern in this package (`ArrowPythonUDTFRunner`
+  // and `CoGroupedArrowPythonRunner` both do it), so testing a sibling would not catch a
+  // production runner that stopped inheriting the merge.
+
+  private val udfSchema = StructType(Seq(StructField("value", StringType)))
+  private val argMetas = Array(Array(ArgumentMetadata(0, None)))
+
+  /** The environment the non-Arrow scalar UDF runner would hand to a worker. */
   private def batchedRunner(
       evalType: Int = PythonEvalType.SQL_BATCHED_UDF,
       funcs: Seq[(ChainedPythonFunctions, Long)] = chained(Map.empty),
-      sessionUUID: Option[String] = None): PythonUDFRunner = {
-    new PythonUDFRunner(
+      sessionUUID: Option[String] = None): BasePythonUDFRunner = {
+    new PythonUDFWithNamedArgumentsRunner(
       funcs = funcs,
       evalType = evalType,
-      argOffsets = Array(Array(0)),
+      argMetas = argMetas,
       pythonMetrics = Map.empty[String, SQLMetric],
       jobArtifactUUID = None,
       sessionUUID = sessionUUID)
@@ -74,22 +85,45 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
       sessionUUID: Option[String] = None): Map[String, String] =
     batchedRunner(evalType, chained(functionEnv), sessionUUID).envVars.asScala.toMap
 
-  /** The environment an Arrow scalar runner would hand to a worker. */
+  /** The environment the Arrow scalar UDF runner would hand to a worker. */
   private def arrowRunnerEnv(
       evalType: Int = PythonEvalType.SQL_ARROW_BATCHED_UDF,
       functionEnv: Map[String, String] = Map.empty,
       sessionUUID: Option[String] = None): Map[String, String] = {
-    new ArrowPythonRunner(
+    new ArrowPythonWithNamedArgumentRunner(
       funcs = chained(functionEnv),
       evalType = evalType,
-      argOffsets = Array(Array(0)),
-      schema = StructType(Seq(StructField("value", StringType))),
+      argMetas = argMetas,
+      schema = udfSchema,
       timeZoneId = "UTC",
       largeVarTypes = false,
       pythonRunnerConf = Map.empty,
       pythonMetrics = Map.empty[String, SQLMetric],
       jobArtifactUUID = None,
       sessionUUID = sessionUUID).envVars.asScala.toMap
+  }
+
+  /**
+   * The environment the columnar Arrow scalar UDF runner would hand to a worker. It inherits the
+   * merge from `BaseArrowPythonRunner` rather than declaring anything of its own, so without a test
+   * this production path would be covered only by that inheritance holding.
+   */
+  private def columnarArrowRunnerEnv(
+      evalType: Int = PythonEvalType.SQL_ARROW_BATCHED_UDF,
+      functionEnv: Map[String, String] = Map.empty,
+      sessionUUID: Option[String] = None): Map[String, String] = {
+    new ColumnarArrowPythonWithNamedArgumentRunner(
+      funcs = chained(functionEnv),
+      evalType = evalType,
+      argMetas = argMetas,
+      schema = udfSchema,
+      timeZoneId = "UTC",
+      largeVarTypes = false,
+      pythonRunnerConf = Map.empty,
+      pythonMetrics = Map.empty[String, SQLMetric],
+      jobArtifactUUID = None,
+      sessionUUID = sessionUUID,
+      inputColumnIndices = Array(0)).envVars.asScala.toMap
   }
 
   /** Overrides a cluster-level limit for the duration of `body`. */
@@ -337,12 +371,20 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-58752: the columnar Arrow scalar UDF runner installs the session environment") {
+    withSQLConf(key("FOO") -> "bar") {
+      assert(columnarArrowRunnerEnv().get("FOO") === Some("bar"))
+    }
+  }
+
   test("SPARK-58752: a runner outside the scope installs nothing") {
     withSQLConf(key("FOO") -> "bar") {
       // Same class as the scalar UDF runner, so only the evaluation type keeps UDTFs out.
       assert(batchedRunnerEnv(evalType = PythonEvalType.SQL_TABLE_UDF).get("FOO").isEmpty)
       // Same for the Arrow hierarchy, which the pandas and window paths share.
       assert(arrowRunnerEnv(evalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF).get("FOO").isEmpty)
+      assert(
+        columnarArrowRunnerEnv(evalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF).get("FOO").isEmpty)
     }
   }
 
@@ -358,13 +400,20 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
         Map("PYSPARK_SPARK_SESSION_UUID" -> "real"))
       assert(arrowRunnerEnv(sessionUUID = Some("real")) ===
         Map("PYSPARK_SPARK_SESSION_UUID" -> "real"))
+      assert(columnarArrowRunnerEnv(sessionUUID = Some("real")) ===
+        Map("PYSPARK_SPARK_SESSION_UUID" -> "real"))
     }
   }
 
   test("SPARK-58752: an invalid environment fails the runner rather than reaching a worker") {
     withSQLConf(key("1INVALID") -> "x") {
-      val ex = intercept[SparkException](batchedRunnerEnv())
-      assert(ex.getCondition === "INVALID_SPARK_CONFIG.INVALID_PYTHON_WORKER_ENV_VAR_NAME")
+      Seq(
+        () => batchedRunnerEnv(),
+        () => arrowRunnerEnv(),
+        () => columnarArrowRunnerEnv()).foreach { build =>
+        val ex = intercept[SparkException](build())
+        assert(ex.getCondition === "INVALID_SPARK_CONFIG.INVALID_PYTHON_WORKER_ENV_VAR_NAME")
+      }
     }
   }
 
