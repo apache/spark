@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.{
   SparkPlan,
   UnionExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
-import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
+import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions.{col, max}
 import org.apache.spark.sql.internal.SQLConf
@@ -564,6 +564,69 @@ class KeyGroupedPartitioningSuite
          |""".stripMargin)
   }
 
+  /**
+   * Creates a table partitioned by `bucket(numBuckets, id)` and holding the ids 0 until `numIds`.
+   * Joining two such tables reduces both sides onto the greatest common divisor of their bucket
+   * counts, unless that divisor is a side's own bucket count, in which case only the other side
+   * reduces. `numIds` has to exceed the smaller of the two bucket counts for a reduce to happen at
+   * all. Below that both sides report one key per id, so they are co-partitioned as they stand
+   * and the join has nothing to reduce.
+   */
+  private def createBucketedIdTable(name: String, numBuckets: Int, numIds: Int = 12): Unit = {
+    val bucketedColumns = Array(
+      Column.create("id", LongType),
+      Column.create("data", StringType))
+    createTable(name, bucketedColumns, Array(bucket(numBuckets, "id")))
+    sql(s"INSERT INTO testcat.ns.$name VALUES " +
+      (0 until numIds).map(i => s"($i, 'v$i')").mkString(", "))
+  }
+
+  /** Creates a `bucket<n>` table for each of the given bucket counts. */
+  private def createBucketedIdTables(bucketCounts: Int*): Unit =
+    bucketCounts.foreach(n => createBucketedIdTable(s"bucket$n", n))
+
+  /** Joins `bucket12`, `bucket8` and `bucket<third>` on `id`, in that order. */
+  private def threeWayBucketJoinDF(third: Int): DataFrame =
+    sql("SELECT b12.id FROM testcat.ns.bucket12 b12 " +
+      "JOIN testcat.ns.bucket8 b8 ON b12.id = b8.id " +
+      s"JOIN testcat.ns.bucket$third b ON b12.id = b.id")
+
+  /**
+   * Creates `days1` and `days2` partitioned by `days(ts)` and `years1` and `years2` by `years(ts)`,
+   * all over `(id, ts)`, with the `toYears`-reducing `days` and `years` functions registered.
+   * `leg1Values` goes into `days1` and `years1`, `leg2Values` into `days2` and `years2`.
+   */
+  private def withReducedTsJoinLegs(leg1Values: String, leg2Values: String)(body: => Unit): Unit = {
+    withFunction(
+      UnboundDaysFunctionWithToYearsReducerWithLongResult,
+      UnboundYearsFunctionWithToYearsReducerWithLongResult) {
+      val tsColumns = Array(
+        Column.create("id", LongType),
+        Column.create("ts", TimestampType))
+      Seq(("days1", leg1Values, days("ts")), ("days2", leg2Values, days("ts")),
+        ("years1", leg1Values, years("ts")), ("years2", leg2Values, years("ts"))).foreach {
+        case (table, values, partition) =>
+          createTable(table, tsColumns, Array(partition))
+          sql(s"INSERT INTO testcat.ns.$table VALUES $values")
+      }
+
+      body
+    }
+  }
+
+  /**
+   * Joins `days1` to `years1` and `days2` to `years2`, each reducing both of its sides onto the
+   * year key space, then joins the two reduced legs to each other.
+   */
+  private val reducedTsLegJoin =
+    """
+      |SELECT l.ts FROM
+      |  (SELECT d.ts FROM testcat.ns.days1 d JOIN testcat.ns.years1 y ON y.ts = d.ts) l
+      |  JOIN
+      |  (SELECT y.ts FROM testcat.ns.days2 d JOIN testcat.ns.years2 y ON y.ts = d.ts) r
+      |  ON l.ts = r.ts
+      |""".stripMargin
+
   private def testWithCustomersAndOrders(
       customers_partitions: Array[Transform],
       orders_partitions: Array[Transform],
@@ -908,6 +971,143 @@ class KeyGroupedPartitioningSuite
     }
     assert(mixedKeyGroupPartitions(a1, dt1, o1).canonicalized ==
       mixedKeyGroupPartitions(a2, dt2, o2).canonicalized)
+  }
+
+  test("SPARK-59121: two sides reduced together are not reduced a second time") {
+    val both = "(0, cast('2020-01-01' as timestamp)), (1, cast('2021-01-03' as timestamp))"
+    val one = "(1, cast('2021-01-03' as timestamp))"
+    withReducedTsJoinLegs(both, one) {
+      // Both inner joins reduce onto the year key space, and the two legs hold different key sets,
+      // so the outer join takes the path that pushes the common keys down and computes reducers.
+      // The two legs are the same pairing, so they are compatible and there is nothing left to
+      // reduce. Deriving a reducer from their expressions again would apply `toYears` to keys
+      // that already hold years.
+      withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        checkAnswer(sql(reducedTsLegJoin), Seq(Row(Timestamp.valueOf("2021-01-03 00:00:00"))))
+      }
+    }
+  }
+
+  test("SPARK-59121: a join does not reduce already reduced partition keys") {
+    createBucketedIdTables(12, 8, 6)
+
+    // The first join reduces both sides onto `id % 4` (the greatest common divisor of 12 and 8), so
+    // `bucket(12, id)` no longer describes its keys. The second join must not derive a `bucket(6)`
+    // reducer from that expression and apply it to keys that are already reduced. It has to
+    // shuffle instead. `(id % 4) % 6` is `id % 4`, so the reduce would leave the left keys alone
+    // while the right side moves to `id % 6`.
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      val df = threeWayBucketJoinDF(6)
+
+      checkAnswer(df, (0 until 12).map(i => Row(i.toLong)))
+      assert(collectShuffles(stripAQEPlan(df.queryExecution.executedPlan)).size == 2,
+        "the second join cannot join on reduced keys, so both its sides are shuffled")
+    }
+  }
+
+  test("SPARK-59121: a union does not merge an already reduced partitioning") {
+    createBucketedIdTables(12, 8)
+
+    // The union's children report the same `bucket(12, id)` expressions, but the join side's keys
+    // were reduced to `id % 4` and its expressions no longer describe them. Merging the two into
+    // one partitioning would claim `bucket(12, id)` for the concatenated keys, and the aggregate
+    // above would then group a key of the reduced side with an unrelated key of the other side.
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      val df = sql("SELECT id, count(*) AS c FROM (" +
+        "SELECT b12.id FROM testcat.ns.bucket12 b12 JOIN testcat.ns.bucket8 b8 ON b12.id = b8.id " +
+        "UNION ALL SELECT id FROM testcat.ns.bucket12) GROUP BY id")
+
+      checkAnswer(df, (0 until 12).map(i => Row(i.toLong, 2L)))
+      val unions = collect(stripAQEPlan(df.queryExecution.executedPlan)) { case u: UnionExec => u }
+      assert(unions.size == 1)
+      assert(!unions.head.outputPartitioning.isInstanceOf[physical.KeyedPartitioning],
+        "the union must not claim a key-grouped partitioning it cannot describe")
+    }
+  }
+
+  test("SPARK-59121: another side is not shuffled onto reduced keys") {
+    createBucketedIdTables(12, 8, 2)
+
+    // The first join reduces both sides onto `id % 4`, and that partitioning has more partitions
+    // than `bucket(2, id)`, so it is the one `EnsureRequirements` would pick to shuffle the third
+    // table onto. It must not. Shuffling evaluates the reported `bucket(12, id)` per row, which
+    // does not produce the reduced keys the partitions are laid out by.
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      val df = threeWayBucketJoinDF(2)
+
+      checkAnswer(df, (0 until 12).map(i => Row(i.toLong)))
+      // The reduced side is the one that gets shuffled, onto `bucket(2, id)`. Nothing is shuffled
+      // onto the reduced keys, which is what the assertion below states directly.
+      val shuffles = collectShuffles(stripAQEPlan(df.queryExecution.executedPlan))
+      assert(shuffles.size == 1)
+      assert(shuffles.forall(_.outputPartitioning match {
+        case kp: physical.KeyedPartitioning => kp.expressionsDescribeKeys
+        case _ => true
+      }))
+    }
+  }
+
+  test("SPARK-59121: two reduced partitionings are not compatible by their transforms") {
+    // 24 ids, so that each leg's two sides really report different key sets and the join reduces
+    // them. With 12 ids `bucket(18, id)` is the identity and the leg would be co-partitioned as it
+    // stands, with nothing reduced and nothing to tell apart.
+    Seq("left12" -> 12, "left8" -> 8, "right12" -> 12, "right18" -> 18).foreach {
+      case (name, buckets) => createBucketedIdTable(name, buckets, numIds = 24)
+    }
+
+    // The two legs reduce onto two different key spaces: `bucket(12) JOIN bucket(8)` onto `id % 4`
+    // and `bucket(12) JOIN bucket(18)` onto `id % 6`. Both legs keep reporting `bucket(12, id)`, so
+    // comparing the transforms says the two sides are co-partitioned when they are not, and an id
+    // sits in a different partition on each side. Only the pairing tells the two spaces apart, and
+    // marking the keys without it is not enough.
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      val df = sql(
+        """
+          |SELECT l.id FROM
+          |  (SELECT l12.id FROM testcat.ns.left12 l12
+          |    JOIN testcat.ns.left8 l8 ON l12.id = l8.id) l
+          |  JOIN
+          |  (SELECT r12.id FROM testcat.ns.right12 r12
+          |    JOIN testcat.ns.right18 r18 ON r12.id = r18.id) r
+          |  ON l.id = r.id
+          |""".stripMargin)
+
+      checkAnswer(df, (0 until 24).map(i => Row(i.toLong)))
+    }
+  }
+
+  test("SPARK-59121: two sides reduced onto the same keys still join without a shuffle") {
+    val values = "(0, cast('2020-01-01' as timestamp)), (1, cast('2021-01-03' as timestamp))"
+    withReducedTsJoinLegs(values, values) {
+      // Each inner join reduces both of its sides onto the year key space, and the projections keep
+      // one reduced partitioning per side. Refusing to compare reduced keys must not go so far as
+      // to refuse these two. They came out of the same pairing, so they carry the same keys and
+      // the outer join is co-partitioned as well.
+      withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        val df = sql(reducedTsLegJoin)
+
+        checkAnswer(df, Seq(
+          Row(Timestamp.valueOf("2020-01-01 00:00:00")),
+          Row(Timestamp.valueOf("2021-01-03 00:00:00"))))
+        val plan = stripAQEPlan(df.queryExecution.executedPlan)
+        assert(collectShuffles(plan).isEmpty, "should not add shuffle for any of the three joins")
+      }
+    }
   }
 
   test("partitioned join: join with two partition keys and matching & sorted partitions") {
@@ -3985,6 +4185,18 @@ class KeyGroupedPartitioningSuite
           assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
           val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
           assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 2))
+
+          // SPARK-59121: neither side's transform describes its keys any more, since both were
+          // reduced onto one year space. They were reduced together, so they must still be
+          // co-partitioned, and refusing to compare reduced keys must not go so far as to break
+          // this. Validate the join subtree rather than the whole plan, because
+          // `ValidateRequirements` walks children and a query stage is a leaf, so validating an
+          // AQE plan checks nothing.
+          val joins = collect(stripAQEPlan(df.queryExecution.executedPlan)) {
+            case smj: SortMergeJoinExec => smj
+          }
+          assert(joins.size == 1)
+          assert(ValidateRequirements.validate(joins.head))
 
           checkAnswer(df, Seq(Row(0, 1), Row(1, 1)))
         }
