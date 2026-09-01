@@ -939,7 +939,8 @@ private[spark] class ExecutorAllocationManager(
           }
         }
         if (taskEnd.taskInfo.speculative) {
-          stageAttemptToSpeculativeTaskIds.get(stageAttempt).foreach(_.remove(taskEnd.taskInfo.taskId))
+          stageAttemptToSpeculativeTaskIds.get(stageAttempt)
+            .foreach(_.remove(taskEnd.taskInfo.taskId))
         }
 
         taskEnd.reason match {
