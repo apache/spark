@@ -599,7 +599,7 @@ public class VariantBuilder {
   // their incidental physical encoding.
   //
   // The metadata dictionary is rebuilt with its keys sorted by (the same order
-  // finishWritingObject} already uses for object fields, so the two stay
+  // finishWritingObject already uses for object fields, so the two stay
   // consistent) and unused entries stripped, with field ids remapped to the sorted positions.
   public static Variant canonicalize(Variant v) {
     // Fast path: a top-level (pos == 0) input that is already canonical is returned unchanged. A
@@ -613,20 +613,9 @@ public class VariantBuilder {
     return builder.result();
   }
 
-  // Populate this freshly constructed builder so that `result()` produces the canonical Variant
-  // equivalent of the element at `pos` within `(value, metadata)` (`pos` is non-zero for a
-  // sub-variant that shares a parent's arrays). First collect every object key the element
-  // references, sort them, and pre-populate the dictionary so ids equal sorted positions. Then
-  // reuse `appendVariantImpl` in normalization mode to re-emit the value: since the dictionary is
-  // already populated in sorted order, its `addKey` calls return those sorted ids without adding,
-  // so the structure is canonical and unreferenced keys (never collected) are stripped, while
-  // scalar values are canonicalized as they are re-emitted (see `appendCanonicalizedScalar`).
   private void buildCanonicalized(byte[] value, byte[] metadata, int pos) {
     ArrayList<String> keys = new ArrayList<>();
     collectAllObjectKeys(value, metadata, pos, keys);
-    // Sort by UTF-8-encoded bytes -- the same order finishWritingObject sorts object fields and
-    // getFieldByKey binary-searches -- so dictionary ids match field order and fields come out
-    // with strictly ascending ids.
     keys.sort((a, b) -> compareKeys(encodeKey(a), encodeKey(b)));
     keys = new ArrayList<>(new LinkedHashSet<>(keys));
     for (String key : keys) {
@@ -635,9 +624,6 @@ public class VariantBuilder {
     appendVariantImpl(value, metadata, pos, /* needNormalization */ true);
   }
 
-  // Recursively collect every object key referenced under `pos` into `keys`, walking objects and
-  // arrays (scalars carry no keys). A key that no field references is never collected, so it is
-  // absent from the rebuilt dictionary -- that is how canonicalization strips unused entries.
   private void collectAllObjectKeys(
       byte[] value, byte[] metadata, int pos, ArrayList<String> keys) {
     checkIndex(pos, value.length);
@@ -685,11 +671,8 @@ public class VariantBuilder {
   //     - string short-encoded when it fits.
   public static boolean isCanonical(byte[] value, byte[] metadata) {
     checkIndex(0, metadata.length);
-    // Metadata offset width must be the minimal width `result()` would pick.
     int metaOffsetSize = ((metadata[0] >> 6) & 0x3) + 1;
     int numKeys = readUnsigned(metadata, 1, metaOffsetSize);
-    // Keys must be strictly ascending by UTF-8 bytes -- the order buildCanonicalized sorts the
-    // dictionary in, and the order finishWritingObject / getFieldByKey use for object fields.
     if (numKeys > 1) {
       byte[] prevKey = encodeKey(getMetadataKey(metadata, 0));
       for (int id = 1; id < numKeys; ++id) {
@@ -700,17 +683,11 @@ public class VariantBuilder {
         prevKey = key;
       }
     }
-    // result() writes header = VERSION | ((offsetSize - 1) << 6): version low nibble, sorted /
-    // reserved bits 0, offset width (from max(total string size, numKeys)) in the top two bits.
-    // Require exactly that byte, so an otherwise-canonical Variant with a set sorted-strings bit
-    // (or a foreign version) is rebuilt rather than wrongly accepted as canonical.
     int lastOffset = readUnsigned(metadata, 1 + (numKeys + 1) * metaOffsetSize, metaOffsetSize);
     long maxSize = Math.max(lastOffset, numKeys);
     if ((metadata[0] & 0xFF) != (VERSION | ((minIntWidth(maxSize) - 1) << 6))) {
       return false;
     }
-    // Walk the value: verify object/array structure is minimal and record which dictionary ids it
-    // references. A canonical Variant references every id in [0, numKeys) with no unused keys.
     boolean[] referenced = new boolean[numKeys];
     if (!isValueCanonical(value, metadata, 0, referenced)) {
       return false;

@@ -25,18 +25,17 @@ import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
  * Direct unit tests for `VariantBuilder.canonicalize`.
  *
  * The canonical form is the contract that `canonicalize(a)` and `canonicalize(b)` are byte-equal
- * iff `a` and `b` are semantically equal. This suite grows as the feature is built up. It currently
- * covers structural canonicalization (metadata dictionary key order, unused-key stripping, object
- * field-id remapping) and value normalization for integers, decimals, float/double, and strings
+ * iff `a` and `b` are semantically equal. It currently covers structural canonicalization
+ * (metadata dictionary key order, unused-key stripping, object field-id remapping)
+ * and value normalization for integers, decimals, float/double, and strings
  * (integer width, integer-promotion, trailing-zero strip, -0.0 -> +0.0, canonical NaN, short-string
  * encoding). The `isCanonical` read-side predicate is complete and checked against `canonicalize`
- * by a soundness oracle over a mixed corpus; the fast-path wiring comes next.
+ * by a soundness oracle over a mixed corpus.
  */
 class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
   private def parse(json: String): Variant =
-    // allowDuplicateKeys = false
-    VariantBuilder.parseJson(json, false)
+    VariantBuilder.parseJson(json, /*allowDuplicateKeys = */ false)
 
   private def canon(v: Variant): Variant = VariantBuilder.canonicalize(v)
 
@@ -59,9 +58,6 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   }
 
   test("object key order does not affect the canonical form") {
-    // The same object written with its keys in different order must canonicalize to equal bytes:
-    // the rebuilt dictionary is sorted and the field ids remapped, so the incoming key order (which
-    // drives the metadata dictionary order) is normalized away.
     val a = canon(parse("""{"a":1,"b":2}"""))
     val b = canon(parse("""{"b":2,"a":1}"""))
     assert(bytesEqual(a, b), "objects equal up to key order must canonicalize to equal bytes")
@@ -74,21 +70,16 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   }
 
   test("canonical form is independent of the incoming metadata dictionary order") {
-    // Two encodings of the same value whose dictionaries are populated in different orders (driven
-    // by the outer key order) must collapse to identical bytes once the dictionary is rebuilt
-    // sorted.
     val a = canon(parse("""{"m":{"a":1},"a":{"b":2}}"""))
     val b = canon(parse("""{"a":{"b":2},"m":{"a":1}}"""))
     assert(bytesEqual(a, b), "canonical metadata must not depend on incoming dictionary order")
   }
 
   test("object key order inside array elements is normalized, array element order is preserved") {
-    // Canonicalization descends into array elements, so per-element object key order is normalized.
     val a = canon(parse("""[{"a":1,"b":2},{"c":3}]"""))
     val b = canon(parse("""[{"b":2,"a":1},{"c":3}]"""))
     assert(bytesEqual(a, b), "object key order within array elements must be normalized")
 
-    // But array element ORDER is semantic and must never be reordered.
     val c = canon(parse("""[1,2]"""))
     val d = canon(parse("""[2,1]"""))
     assert(!bytesEqual(c, d), "array element order is significant and must be preserved")
@@ -121,7 +112,6 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   // ----- Value normalization: DECIMAL -----
 
   test("integer-valued decimal canonicalizes to the integer encoding") {
-    // Sanity: 1.0 and 1 differ before canon, so this genuinely exercises decimal -> long promotion.
     assert(!bytesEqual(parse("1.0"), parse("1")), "1.0 and 1 should differ before canon")
     assert(bytesEqual(canon(parse("1.0")), canon(parse("1"))), "1.0 must canonicalize to 1")
     assert(bytesEqual(canon(parse("1.000")), canon(parse("1"))), "1.000 must canonicalize to 1")
@@ -146,9 +136,7 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   }
 
   test("integer decimal too large for a long is not promoted (stays a decimal)") {
-    // 10^20 exceeds Long range; the fits-long check must reject promotion, else longValue() would
-    // silently wrap. Confirm it parses as a decimal and canonicalizes to a decimal, value intact.
-    val big = "100000000000000000000" // 10^20, 21 digits -> stored as DECIMAL (too big for a long)
+    val big = "100000000000000000000"
     assert(VariantUtil.getType(parse(big).getValue, 0) == VariantUtil.Type.DECIMAL,
       "sanity: 10^20 should parse as a DECIMAL")
     val canonBig = canon(parse(big))
@@ -161,9 +149,6 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   // ----- Value normalization: integer width -----
 
   test("non-minimal integer width is reduced to the smallest") {
-    // parse_json and appendLong always emit minimal-width ints, so hand-build an INT8-encoded 1
-    // (a wide 8-byte encoding of the value 1) to exercise width reduction. Reuse a parsed scalar's
-    // empty-dictionary metadata so only the value bytes are crafted.
     val int8Header =
       ((VariantUtil.INT8 << VariantUtil.BASIC_TYPE_BITS) | VariantUtil.PRIMITIVE).toByte
     val int8One =
@@ -182,9 +167,6 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   }
 
   test("non-canonical NaN canonicalizes to the canonical NaN") {
-    // appendDouble uses doubleToLongBits, which collapses NaN, so a non-canonical NaN can't be
-    // produced via the builder -- hand-craft the value bytes (DOUBLE header + a NaN whose mantissa
-    // differs from the canonical 0x7ff8000000000000). Reuse a parsed scalar's empty metadata.
     val doubleHeader =
       ((VariantUtil.DOUBLE << VariantUtil.BASIC_TYPE_BITS) | VariantUtil.PRIMITIVE).toByte
     val bytes = java.nio.ByteBuffer.allocate(9).order(java.nio.ByteOrder.LITTLE_ENDIAN)
@@ -198,8 +180,6 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   // ----- Value normalization: string encoding -----
 
   test("a short string stored as long_str is re-encoded as a short string") {
-    // parse_json / appendString always short-encode short strings, so hand-craft a LONG_STR-encoded
-    // "hi" (a short string wastefully stored as long) to exercise the re-encoding.
     val longStrHeader =
       ((VariantUtil.LONG_STR << VariantUtil.BASIC_TYPE_BITS) | VariantUtil.PRIMITIVE).toByte
     val text = "hi".getBytes(java.nio.charset.StandardCharsets.UTF_8)
@@ -214,26 +194,18 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   // ----- isCanonical: metadata dictionary -----
 
   test("isCanonical accepts a sorted metadata dictionary and rejects an unsorted one") {
-    // parse_json builds the dictionary in key-encounter order, so an object whose keys are already
-    // ascending is canonical, while one written out of order is not (canon would re-sort it).
     assert(isCanon(parse("""{"a":1,"b":2}""")), "ascending dictionary is canonical")
     assert(!isCanon(parse("""{"b":2,"a":1}""")), "descending dictionary is not canonical")
-    // Encounter order z, a, m is not sorted.
     assert(!isCanon(parse("""{"z":1,"a":2,"m":3}""")), "unsorted dictionary is not canonical")
-    // canon re-sorts the dictionary, so its output is accepted.
     assert(isCanon(canon(parse("""{"b":2,"a":1}"""))), "canon output has a sorted dictionary")
   }
 
   test("isCanonical accepts an empty dictionary") {
-    // Scalars and scalar-only arrays carry an empty dictionary (trivially sorted and minimal).
     assert(isCanon(parse("1")), "a scalar's empty dictionary is canonical")
     assert(isCanon(parse("[1,2,3]")), "an array of scalars has an empty dictionary")
   }
 
   test("isCanonical rejects a non-minimal metadata offset width") {
-    // parse_json always uses the minimal offset width, so hand-craft a one-key dictionary that
-    // wastes 2 bytes per offset where 1 byte fits. Reuse the parsed header byte for VERSION (its
-    // offset-size bits are 0), then set the offset-size bits to select a 2-byte width.
     val emptyMeta = parse("1").getMetadata
     val version = emptyMeta(0)
     val header2 = (version | (1 << 6)).toByte // offset width = 2 bytes
@@ -253,8 +225,6 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   // ----- isCanonical: object / array structure -----
 
   test("isCanonical rejects a dictionary with an unused key") {
-    // A dictionary entry no field references is stripped by canon (parse_json never emits one),
-    // so build a value with an unused key directly: the referenced-key check must reject it.
     val b = new VariantBuilder(false)
     b.addKey("unused")
     b.appendLong(1)
@@ -264,7 +234,6 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   }
 
   test("isCanonical accepts already-canonical nested objects and arrays") {
-    // Encounter order is ascending here, so parse_json already produces the canonical structure.
     assert(isCanon(parse("""{"a":{"b":1}}""")), "a canonical nested object is accepted")
     assert(isCanon(parse("""{"a":[1,2,3]}""")), "a canonical object-of-array is accepted")
     assert(isCanon(parse("[1,2]")), "a scalar array is accepted")
@@ -273,7 +242,6 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   }
 
   test("isCanonical accepts canonicalize's output for nested structures") {
-    // A structural mini-oracle: whatever canon emits must pass the structure + dictionary checks.
     val inputs = Seq(
       """{"b":2,"a":1}""",
       """{"z":{"b":1,"a":2},"m":3}""",
@@ -285,9 +253,6 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   }
 
   test("isCanonical rejects a non-minimal array offset width") {
-    // parse_json always uses the minimal offset width, so hand-craft an array [1] that wastes 2
-    // bytes per offset where 1 byte fits. The value data is a single INT1(1) (2 bytes), so the
-    // canonical offset width is 1.
     val elem = parse("1").getValue // INT1(1), a 2-byte canonical scalar, reused as the element
     val arrayHeader = ((0 << (VariantUtil.BASIC_TYPE_BITS + 2)) |
       ((2 - 1) << VariantUtil.BASIC_TYPE_BITS) | VariantUtil.ARRAY).toByte // 2-byte offset width
@@ -359,8 +324,6 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   // ----- NaN and pass-through type coverage -----
 
   test("canonicalize and isCanonical handle a non-canonical float NaN") {
-    // appendFloat uses floatToIntBits, which collapses NaN, so hand-craft a FLOAT with a
-    // non-canonical NaN bit pattern (mantissa differs from the canonical 0x7fc00000).
     val floatHeader =
       ((VariantUtil.FLOAT << VariantUtil.BASIC_TYPE_BITS) | VariantUtil.PRIMITIVE).toByte
     val bytes = java.nio.ByteBuffer.allocate(1 + 4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
@@ -375,8 +338,6 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   }
 
   test("canonicalize passes through date, timestamp, binary, and uuid unchanged") {
-    // These types have no canonicalization rules (parse_json cannot produce them), so canonicalize
-    // is a no-op and isCanonical accepts them as stored. Build one of each directly.
     def build(f: VariantBuilder => Unit): Variant = {
       val b = new VariantBuilder(false)
       f(b)
@@ -451,15 +412,12 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   // ----- canonicalize: sub-variant (pos != 0) -----
 
   test("canonicalize treats a sub-variant (pos != 0) as a standalone value") {
-    // getFieldByKey returns a pos != 0 view sharing the parent's value/metadata arrays.
-    // Canonicalizing it must produce the standalone canonical form of that element -- equal to
-    // canonicalizing the same object on its own, and independent of the parent's dictionary/order.
     val parent = parse("""{"outer":{"b":2,"a":1},"z":3}""")
     val sub = parent.getFieldByKey("outer") // the object {"b":2,"a":1} as a pos != 0 view
     assert(sub.getType == VariantUtil.Type.OBJECT, "sanity: sub is the nested object")
     assert(bytesEqual(canon(sub), canon(parse("""{"a":1,"b":2}"""))),
       "a sub-variant canonicalizes to the standalone canonical form of that element")
-    // And it must NOT canonicalize the whole parent root instead.
+    // It must NOT canonicalize the whole parent root instead.
     assert(!bytesEqual(canon(sub), canon(parent)),
       "canonicalizing a sub-variant must not canonicalize the whole parent")
     // A doubly-nested array-element sub-variant works too.
