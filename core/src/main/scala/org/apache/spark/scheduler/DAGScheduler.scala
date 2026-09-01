@@ -2910,7 +2910,7 @@ private[spark] class DAGScheduler(
               if (reaches && partialRead) {
                 abortStage(sms, "Pipelined shuffle cannot determine the live reduce-partition " +
                   "set for a partial read (LIMIT/take) through this plan shape; disable " +
-                  "spark.sql.pipelinedShuffle.enabled for this query.", None)
+                  "spark.sql.shuffle.localPipelined.enabled for this query.", None)
                 return
               }
           }

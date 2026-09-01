@@ -35,7 +35,7 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite with AdaptiveSparkPlanHelpe
   private def withPipelinedSession(body: SparkSession => Unit): Unit = {
     // sql/core suites share a JVM. If an earlier suite left an active/default SparkSession behind,
     // getOrCreate() below would return THAT session and silently ignore every .config() here
-    // (spark.shuffle.manager.incremental, spark.sql.pipelinedShuffle.enabled), so no exchange
+    // (spark.shuffle.manager.incremental, spark.sql.shuffle.localPipelined.enabled), so no exchange
     // would be flipped and the assertions would fail pointing nowhere near the cause. Stop and
     // clear any pre-existing session first so this harness gets a fresh one with its own configs.
     SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession).foreach(_.stop())
@@ -51,7 +51,7 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite with AdaptiveSparkPlanHelpe
       .config("spark.shuffle.manager.incremental",
         "org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager")
       .config("spark.sql.adaptive.enabled", "false")   // rule only sees exchanges with AQE off
-      .config("spark.sql.pipelinedShuffle.enabled", "true")
+      .config("spark.sql.shuffle.localPipelined.enabled", "true")
       .config("spark.speculation", "false")
       .config("spark.sql.shuffle.partitions", "4")
       .getOrCreate()

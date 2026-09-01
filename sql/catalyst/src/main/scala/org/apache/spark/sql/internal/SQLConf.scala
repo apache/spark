@@ -1256,7 +1256,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val PIPELINED_SHUFFLE_ENABLED = buildConf("spark.sql.pipelinedShuffle.enabled")
+  val LOCAL_PIPELINED_SHUFFLE_ENABLED = buildConf("spark.sql.shuffle.localPipelined.enabled")
     .doc("When true and the application runs on a single executor (local mode), eligible " +
       "shuffle exchanges are marked pipelined: the concurrent-stage scheduler runs their map " +
       "and reduce stages together, and the shuffle is served by the pipelined shuffle manager " +
@@ -8668,7 +8668,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
-  def pipelinedShuffleEnabled: Boolean = getConf(PIPELINED_SHUFFLE_ENABLED)
+  def localPipelinedShuffleEnabled: Boolean = getConf(LOCAL_PIPELINED_SHUFFLE_ENABLED)
 
   def adaptiveExecutionEnabledInStatelessStreaming: Boolean =
     getConf(ADAPTIVE_EXECUTION_ENABLED_IN_STATELESS_STREAMING)

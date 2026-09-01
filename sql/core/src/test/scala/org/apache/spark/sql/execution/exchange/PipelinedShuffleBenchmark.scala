@@ -80,7 +80,7 @@ object PipelinedShuffleBenchmark extends SqlBasedBenchmark {
       .config("spark.ui.enabled", "false")
     if (pipelined) {
       b.config("spark.shuffle.manager.incremental", channelManagerClass)
-        .config("spark.sql.pipelinedShuffle.enabled", "true")
+        .config("spark.sql.shuffle.localPipelined.enabled", "true")
     }
     b.getOrCreate()
   }
@@ -97,9 +97,9 @@ object PipelinedShuffleBenchmark extends SqlBasedBenchmark {
     mode match {
       case "regular" =>
       case "streaming" =>
-        b.config("spark.sql.pipelinedShuffle.enabled", "true")
+        b.config("spark.sql.shuffle.localPipelined.enabled", "true")
       case "channel" =>
-        b.config("spark.sql.pipelinedShuffle.enabled", "true")
+        b.config("spark.sql.shuffle.localPipelined.enabled", "true")
           .config("spark.shuffle.manager.incremental", channelManagerClass)
     }
     b.getOrCreate()

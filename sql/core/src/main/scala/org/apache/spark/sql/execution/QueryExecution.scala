@@ -798,7 +798,7 @@ object QueryExecution {
       }) ++
       // Opt-in (SPARK-57399): runs last so it observes the final reuse decision (a reused
       // exchange means fan-out, which it refuses to make pipelined).
-      // No-op unless spark.sql.pipelinedShuffle.enabled=true and AQE is off.
+      // No-op unless spark.sql.shuffle.localPipelined.enabled=true and AQE is off.
       Seq(EnablePipelinedShuffle())
   }
 

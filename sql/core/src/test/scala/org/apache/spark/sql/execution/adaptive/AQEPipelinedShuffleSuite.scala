@@ -46,7 +46,7 @@ class AQEPipelinedShuffleSuite extends SparkFunSuite with AdaptiveSparkPlanHelpe
       .config("spark.shuffle.manager.incremental",
         "org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager")
       .config("spark.sql.adaptive.enabled", "true")
-      .config("spark.sql.pipelinedShuffle.enabled", "true")
+      .config("spark.sql.shuffle.localPipelined.enabled", "true")
       .config("spark.speculation", "false")
       .config("spark.sql.shuffle.partitions", "4")
       .getOrCreate()
@@ -162,9 +162,9 @@ class AQEPipelinedShuffleSuite extends SparkFunSuite with AdaptiveSparkPlanHelpe
           .groupBy($"k").count().orderBy($"k".desc)
           .as[(Long, Long)].collect().toSeq
       }
-      spark.conf.set("spark.sql.pipelinedShuffle.enabled", "false")
+      spark.conf.set("spark.sql.shuffle.localPipelined.enabled", "false")
       val baseline = run()
-      spark.conf.set("spark.sql.pipelinedShuffle.enabled", "true")
+      spark.conf.set("spark.sql.shuffle.localPipelined.enabled", "true")
       val pipelined = run()
       assert(pipelined === baseline)
     }

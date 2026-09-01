@@ -43,15 +43,15 @@ private[sql] object PipelinedShuffleEligibility extends Logging {
    * any gate fails, so the caller leaves the plan regular.
    */
   def enabled(plan: SparkPlan, conf: SQLConf): Boolean = {
-    if (!conf.pipelinedShuffleEnabled) {
+    if (!conf.localPipelinedShuffleEnabled) {
       return false
     }
     if (plan.session == null || !plan.session.sparkContext.isLocal) {
       return false
     }
     if (!SparkEnv.get.pipelinedShuffleManager.isInstanceOf[PipelinedChannelShuffleManager]) {
-      logDebug("Pipelined shuffle: spark.sql.pipelinedShuffle.enabled is on but the incremental " +
-        "shuffle manager is not the in-process channel manager " +
+      logDebug("Pipelined shuffle: spark.sql.shuffle.localPipelined.enabled is on but the " +
+        "incremental shuffle manager is not the in-process channel manager " +
         "(spark.shuffle.manager.incremental); leaving the plan regular.")
       return false
     }

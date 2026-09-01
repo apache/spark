@@ -59,7 +59,7 @@ class PipelinedLimitHangSuite extends SparkFunSuite with AdaptiveSparkPlanHelper
       .config("spark.shuffle.manager.incremental",
         "org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager")
       .config("spark.sql.adaptive.enabled", aqe.toString)
-      .config("spark.sql.pipelinedShuffle.enabled", "true")
+      .config("spark.sql.shuffle.localPipelined.enabled", "true")
       .config("spark.speculation", "false")
       .config("spark.sql.shuffle.partitions", "4")
       .getOrCreate()

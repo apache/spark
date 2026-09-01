@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.joins.CartesianProductExec
  * pipelined channel execution path; a production version would be a targeted,
  * cost/shape-aware replacement rather than a blanket rewrite.
  *
- * Enabled only when `spark.sql.pipelinedShuffle.enabled=true`. It runs in the non-AQE
+ * Enabled only when `spark.sql.shuffle.localPipelined.enabled=true`. It runs in the non-AQE
  * `preparations` list, so it also requires AQE to be off (under AQE the plan is hidden behind
  * an opaque `AdaptiveSparkPlanExec` leaf and this rule sees no exchanges).
  *
