@@ -77,6 +77,18 @@ class DriverUIServiceFeatureStepSuite extends SparkFunSuite {
     assert(step.getAdditionalPodSystemProperties().isEmpty)
   }
 
+  test("SPARK-58203: local driver mode rejects the dedicated UI service") {
+    val sparkConf = new SparkConf(false)
+      .set(KUBERNETES_DRIVER_MASTER_URL, "local[*]")
+      .set(KUBERNETES_DRIVER_UI_SERVICE_ENABLED, true)
+    val kconf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+
+    val e = intercept[IllegalArgumentException] {
+      new DriverUIServiceFeatureStep(kconf)
+    }
+    assert(e.getMessage.contains(KUBERNETES_DRIVER_UI_SERVICE_ENABLED.key))
+  }
+
   test("SPARK-58203: spark.ui.port=0 defers the selector and honors the type override") {
     val sparkConf = new SparkConf(false)
       .set(UI_PORT, 0)

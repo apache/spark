@@ -22,6 +22,7 @@ import io.fabric8.kubernetes.api.model.{HasMetadata, ServiceBuilder}
 
 import org.apache.spark.deploy.k8s.{KubernetesDriverConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config.{
+  KUBERNETES_DRIVER_MASTER_URL,
   KUBERNETES_DRIVER_SERVICE_IP_FAMILIES,
   KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY,
   KUBERNETES_DRIVER_UI_SERVICE_ENABLED,
@@ -56,6 +57,10 @@ private[spark] class DriverUIServiceFeatureStep(kubernetesConf: KubernetesDriver
   private val enabled = kubernetesConf.get(KUBERNETES_DRIVER_UI_SERVICE_ENABLED)
   private lazy val serviceType = kubernetesConf.get(KUBERNETES_DRIVER_UI_SERVICE_TYPE)
   private lazy val configuredUIPort = kubernetesConf.get(config.UI.UI_PORT)
+
+  require(
+    !enabled || !kubernetesConf.get(KUBERNETES_DRIVER_MASTER_URL).startsWith("local"),
+    s"${KUBERNETES_DRIVER_UI_SERVICE_ENABLED.key} is only supported in cluster deploy mode.")
 
   private val active: Boolean = if (enabled && !kubernetesConf.get(config.UI.UI_ENABLED)) {
     logWarning(s"Ignoring ${KUBERNETES_DRIVER_UI_SERVICE_ENABLED.key}=true because " +
