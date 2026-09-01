@@ -22,6 +22,7 @@ Validate a built Spark distribution.
 """
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -34,6 +35,7 @@ from pathlib import Path
 REQUIRED_DIST_PATHS = [
     "bin",
     "jars",
+    "python/lib/pyspark.zip",
     "sbin/start-master.sh",
     "sbin/stop-master.sh",
     "sbin/start-worker.sh",
@@ -46,15 +48,12 @@ REQUIRED_DIST_PATHS = [
 ]
 
 SMOKE_TESTS = [
-    ("bin/spark-submit", "--version"),
-    ("bin/spark-shell", "--version"),
-    ("bin/pyspark", "--version"),
-    ("bin/spark-sql", "--version"),
+    ("bin/spark-submit", "--master", "local[1]", "examples/src/main/python/pi.py", "1"),
     ("sbin/start-thriftserver.sh", "--help"),
     ("sbin/start-connect-server.sh", "--help"),
 ]
 
-SMOKE_TEST_TIMEOUT = 60
+SMOKE_TEST_TIMEOUT = 120
 
 # Scripts that must have SPARK_CONNECT_MODE set in the Connect distribution.
 CONNECT_MODE_SCRIPTS = [
@@ -103,6 +102,14 @@ def check_distribution(spark_dist: Path) -> list[str]:
     else:
         print("OK")
 
+    # Isolate from the caller's Spark/Python environment so a source checkout
+    # cannot mask a broken distribution (e.g. SPARK-58428 / missing pyspark.zip).
+    env = os.environ.copy()
+    env["SPARK_HOME"] = str(spark_dist)
+    env["SPARK_CONNECT_MODE"] = "0"
+    env.pop("PYTHONPATH", None)
+    env.pop("SPARK_PREPEND_CLASSES", None)
+
     for rel_path, *args in SMOKE_TESTS:
         label = " ".join([rel_path, *args])
         print(f"Checking {label}...", end=" ", flush=True)
@@ -111,6 +118,8 @@ def check_distribution(spark_dist: Path) -> list[str]:
                 [str(spark_dist / rel_path), *args],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                 timeout=SMOKE_TEST_TIMEOUT,
+                cwd=spark_dist,
+                env=env,
             )
         except subprocess.TimeoutExpired:
             print("FAILED")
