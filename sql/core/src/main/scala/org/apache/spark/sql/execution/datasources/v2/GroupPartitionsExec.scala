@@ -68,7 +68,6 @@ case class GroupPartitionsExec(
     child.outputPartitioning match {
       case p: Partitioning with Expression =>
         // There can be multiple `KeyedPartitioning`s in an output partitioning of a join, but they
-        // There can be multiple `KeyedPartitioning`s in an output partitioning of a join, but they
         // can only differ in `expressions`. Their `partitionKeys` reference and `isCollapsed` flag
         // are shared (enforced by `PartitioningCollection`), so the grouping is computed once.
         // When reducers are applied, the stored reduced expressions are re-targeted at each

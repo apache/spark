@@ -5165,11 +5165,7 @@ class KeyGroupedPartitioningSuite
   test("SPARK-59120: a second join with a non-reducing side plans on the reduced keys") {
     // The first join reduces the identity side onto the year key space and reports the reduced
     // expression `years(a.ts)`, so the second join's identity side reduces onto it as well and
-    // the whole query plans without a shuffle. Under `keyDataTypes` alone (#58420) the reduced
-    // keys were read at their own types but still reported under the stale `identity(ts)`
-    // expression, and this query raised STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES; before
-    // #58420 it threw `ClassCastException`. The error path stays covered by
-    // `SPARK-56046: Reducers with different result types`.
+    // the whole query plans without a shuffle.
     withTable("t_identity", "t_years", "t_identity2") {
       createTsTable("t_identity", Array(identity("ts")))
       createTsTable("t_years", Array(years("ts")))
@@ -5196,10 +5192,7 @@ class KeyGroupedPartitioningSuite
   test("SPARK-59120: another child is shuffled onto the type-correct reduced keys") {
     // The reduced side's expression is reported as `years(a.ts)`, which describes the reduced
     // keys, so `canCreatePartitioning`'s shape gate accepts the reduced layout and only the
-    // unpartitioned side is shuffled onto it. Under `keyDataTypes` alone (#58420) the reduced side
-    // still reported `identity(ts)`, the gate refused it and both of the second join's sides were
-    // shuffled; without the gate the driver died while assembling that shuffle's key map, where
-    // the stored keys are re-wrapped at the expressions' types.
+    // unpartitioned side is shuffled onto it.
     withTable("t_identity", "t_years", "t_plain") {
       createTsTable("t_identity", Array(identity("ts")))
       createTsTable("t_years", Array(years("ts")))
