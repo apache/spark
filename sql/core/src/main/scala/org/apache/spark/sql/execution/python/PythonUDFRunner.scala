@@ -41,11 +41,8 @@ abstract class BasePythonUDFRunner(
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics) {
 
   override val envVars: util.Map[String, String] = {
-    // The session's Python worker environment is installed here, when a worker is launched, rather
-    // than baked into the function when it is built: a function is built once and may be reused
-    // from a cached plan, while this runs for every query, so a worker sees the session's current
-    // values. `appliesTo` limits this to the evaluation types in scope, because
-    // `PythonUDTFRunner` extends this class too.
+    // Installed at worker launch, so a cached plan cannot pin an older environment. `appliesTo` is
+    // what keeps UDTFs out of scope: `PythonUDTFRunner` extends this class too.
     val envVars = if (PythonWorkerEnvironment.appliesTo(evalType)) {
       PythonWorkerEnvironment.mergeValidated(funcs.head._1.funcs.head.envVars, SQLConf.get)
     } else {

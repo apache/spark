@@ -39,7 +39,7 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
 
   private def key(name: String): String = PythonWorkerEnvironment.confPrefix + name
 
-  /** A Python function carrying `env`, as a front end that supplies one would build it. */
+  /** A Python function carrying `env`, as a classic session's `sc.environment` supplies it. */
   private def functionWith(env: Map[String, String]): SimplePythonFunction = {
     SimplePythonFunction(
       command = Seq.empty[Byte],
