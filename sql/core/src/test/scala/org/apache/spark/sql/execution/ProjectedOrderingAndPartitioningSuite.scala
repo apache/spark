@@ -494,6 +494,30 @@ class ProjectedOrderingAndPartitioningSuite
     }
   }
 
+  test("SPARK-58968: keysMaySatisfy asks the collapse gate of a non-grouped partitioning only") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+    val distribution = ClusteredDistribution(Seq(x))
+
+    // Dropping y maps (1,1) and (1,2) onto the same key 1, so the projection collapses and its keys
+    // hold a duplicate.
+    val keys2d = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 1))
+    val collapsed = KeyedPartitioning(Seq(x, y), keys2d).project(Seq(0))
+    assert(collapsed.isCollapsed && !collapsed.isGrouped)
+    val grouped = collapsed.toGrouped
+    assert(grouped.isCollapsed && grouped.isGrouped)
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "false") {
+      // A node over the non-grouped one would coalesce the two x=1 partitions, which the gate
+      // refuses.
+      assert(!collapsed.keysMaySatisfy(distribution))
+      // That coalescing already happened, so the gate has nothing left to govern and the keys
+      // decide. `mayGroupToSatisfy` is the wrong question here, and refuses it.
+      assert(grouped.keysMaySatisfy(distribution))
+      assert(!grouped.mayGroupToSatisfy(distribution))
+    }
+  }
+
   test("SPARK-59057: PartitioningCollection normalizes isCollapsed across its members") {
     val x = AttributeReference("x", IntegerType)()
     val y = AttributeReference("y", IntegerType)()
