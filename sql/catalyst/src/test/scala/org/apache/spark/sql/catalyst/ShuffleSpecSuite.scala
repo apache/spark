@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructType}
 
 class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
   private val passThrough_a_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"a"), 10)
@@ -510,6 +510,120 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       assert(spec.joinKeyPositions === Some(Seq(0)))
       assert(spec.partitioning.partitionKeys.map(_.row.getInt(0)) === Seq(2020, 2021))
     }
+  }
+
+  test("areKeysCompatible: unknown partition keys only allow a subset of the declared keys") {
+    val a = $"a".int
+    val distribution = ClusteredDistribution(Seq(a))
+    def keyedSpec(
+        keys: Seq[Int],
+        hasUnknown: Boolean = false): KeyedShuffleSpec = KeyedShuffleSpec(
+      KeyedPartitioning(Seq(a), keys.map(k => InternalRow(k)))
+        .copy(mayContainUnknownPartitionKeys = hasUnknown), distribution)
+
+    // A partitioning with unknown partition keys (e.g. a side re-shuffled onto a keyed layout by
+    // `KeyedShuffleSpec.createPartitioning`) only guarantees co-location for its declared keys, so
+    // it can only be co-partitioned with a side whose keys are a subset of the declared keys.
+    val unknown12 = keyedSpec(Seq(1, 2), hasUnknown = true)
+    // hasUnknown=true is still compatible with a subset (or equal) partner: every such key is
+    // co-located on both sides.
+    assert(unknown12.areKeysCompatible(keyedSpec(Seq(1))), "subset keys must be compatible")
+    assert(unknown12.areKeysCompatible(keyedSpec(Seq(2))), "another subset key must be compatible")
+    assert(unknown12.areKeysCompatible(keyedSpec(Seq(1, 2))), "equal keys must be compatible")
+    assert(keyedSpec(Seq(1)).areKeysCompatible(unknown12),
+      "compatibility must be symmetric for a subset partner")
+
+    // A larger partner's keys are not all covered by the declared keys.
+    assert(!unknown12.areKeysCompatible(keyedSpec(Seq(1, 2, 3))),
+      "a larger key set must not be compatible with an unknown-keyed partitioning")
+    assert(!keyedSpec(Seq(1, 2, 3)).areKeysCompatible(unknown12),
+      "an unknown-keyed partitioning cannot cover a larger partner's keys")
+
+    // Both sides unknown with the same declared keys: `KeyGroupedPartitioner`'s out-of-set-key
+    // fallback is a deterministic hash of the key, so both sides route those keys to the same
+    // partition and stay compatible -- but only when the declared key order also agrees, since a
+    // GroupPartitionsExec regrouping re-labels partitions by each side's declared order. Different
+    // declared keys or a different order are rejected.
+    assert(unknown12.areKeysCompatible(keyedSpec(Seq(1, 2), hasUnknown = true)),
+      "two unknown-keyed partitionings with the same declared keys must be compatible")
+    assert(!unknown12.areKeysCompatible(keyedSpec(Seq(2, 1), hasUnknown = true)),
+      "two unknown-keyed partitionings must agree on the declared key order")
+    assert(!unknown12.areKeysCompatible(keyedSpec(Seq(1, 2, 3), hasUnknown = true)),
+      "two unknown-keyed partitionings with different declared keys must not be compatible")
+
+    // Without unknown keys, key sets are not compared -- only the partition expressions are.
+    assert(keyedSpec(Seq(1, 2)).areKeysCompatible(keyedSpec(Seq(1, 2, 3))),
+      "without unknown keys, different key sets remain expression-compatible")
+  }
+
+  test("areKeysCompatible: unknown partition keys require the same partition functions") {
+    // A stand-in for a connector partition function such as `bucket`: only the canonical name
+    // matters here, since `TransformExpression.isSameFunction` compares names and bucket counts.
+    val bucketFn = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(LongType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "test.bucket"
+      override def canonicalName(): String = "test.bucket"
+    }
+    def bucket(numBuckets: Int, expr: Expression): TransformExpression =
+      TransformExpression(bucketFn, Seq(expr), Some(numBuckets))
+
+    val a = $"a".long
+    val distribution = ClusteredDistribution(Seq(a))
+    def bucketSpec(
+        keys: Seq[Long],
+        hasUnknown: Boolean = false): KeyedShuffleSpec = KeyedShuffleSpec(
+      KeyedPartitioning(Seq(bucket(4, a)), keys.map(k => InternalRow(k)))
+        .copy(mayContainUnknownPartitionKeys = hasUnknown), distribution)
+    def keyedSpec(
+        keys: Seq[Long],
+        hasUnknown: Boolean = false): KeyedShuffleSpec = KeyedShuffleSpec(
+      KeyedPartitioning(Seq(a), keys.map(k => InternalRow(k)))
+        .copy(mayContainUnknownPartitionKeys = hasUnknown), distribution)
+
+    // `isExpressionCompatible` admits an identity-vs-transform pair when compatible transforms
+    // are allowed, but then the two sides' partition keys live in different domains: raw values
+    // on the identity side and bucket ids on the transform side. The unknown-keyed subset test
+    // would compare unrelated numbers, so the marker path must require the same partition
+    // function per position instead.
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      assert(!keyedSpec(Seq(1), hasUnknown = true).areKeysCompatible(bucketSpec(Seq(0, 1))),
+        "an unknown-keyed identity partitioning must not pair with a transform partitioning")
+      assert(!bucketSpec(Seq(0, 1)).areKeysCompatible(keyedSpec(Seq(1), hasUnknown = true)),
+        "the incompatibility must be symmetric")
+      assert(!keyedSpec(Seq(1), hasUnknown = true).areKeysCompatible(
+          bucketSpec(Seq(0, 1), hasUnknown = true)),
+        "the identity-vs-transform pair must not pair even when both sides are unknown-keyed")
+      // Two unmarked sides keep the pre-existing behavior: the pair stays admissible, and
+      // `EnsureRequirements` computes reducers to reconcile the two key domains.
+      assert(keyedSpec(Seq(1)).areKeysCompatible(bucketSpec(Seq(0, 1))),
+        "unmarked identity-vs-transform pairs remain admissible")
+    }
+  }
+
+  test("areKeysCompatible: incompatibility without unknown partition keys") {
+    val a = $"a".int
+    val b = $"b".int
+    val distribution = ClusteredDistribution(Seq(a))
+
+    // Different arity: the two partitionings partition on a different number of keys.
+    val single = KeyedShuffleSpec(
+      KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2))), distribution)
+    val double = KeyedShuffleSpec(
+      KeyedPartitioning(Seq(a, b), Seq(InternalRow(1, 1), InternalRow(2, 2))), distribution)
+    assert(!single.areKeysCompatible(double), "different arity must not be compatible")
+
+    // Non-overlapping key positions: the partition keys map to disjoint clustering key positions.
+    val ab = ClusteredDistribution(Seq(a, b))
+    val onA = KeyedShuffleSpec(
+      KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2))), ab)
+    val onB = KeyedShuffleSpec(
+      KeyedPartitioning(Seq(b), Seq(InternalRow(1), InternalRow(2))), ab)
+    assert(!onA.areKeysCompatible(onB),
+      "partition keys must overlap on the clustering keys to be compatible")
   }
 
   test("createPartitioning: HashShuffleSpec") {
