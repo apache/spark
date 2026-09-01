@@ -143,13 +143,14 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   /**
    * Reports captured metadata columns that a data column of the same name now hides.
    *
-   * When a data column takes a metadata column's name, a connector that does not rename the
-   * conflict (`canRenameConflictingMetadataColumns` is false) suppresses the metadata column via
-   * `metadataOutputWithOutConflicts`. A suppressed metadata column can no longer be resolved, so a
-   * captured reference to it is broken, and on a partially pruned scan it silently reads the data
-   * column's values instead. The `SupportsMetadataColumns` contract advises a non-renaming source
-   * to reject such a data-column name but does not enforce it, so this reports the conflict
-   * rather than leaving it silent.
+   * When a data column takes a metadata column's name, a fresh relation for a connector that does
+   * not rename the conflict (`canRenameConflictingMetadataColumns` is false) suppresses the
+   * metadata column via `metadataOutputWithOutConflicts`. A refreshed relation retains an already
+   * captured metadata attribute in its output. Later, `PushDownUtils.toOutputAttrs` reconciles the
+   * scan schema to that output by physical name, which can bind the same-named data field to the
+   * metadata attribute and return the data column's values. The `SupportsMetadataColumns` contract
+   * advises a non-renaming source to reject such a data-column name but does not enforce it, so
+   * this reports the conflict rather than leaving it silent.
    */
   private def shadowedMetadataColumnErrors(
       table: Table,
@@ -157,9 +158,9 @@ private[sql] object V2TableUtil extends SQLConfHelper {
     if (reportedMetaCols.isEmpty || renamesConflictingMetadataColumns(table)) {
       Nil
     } else {
-      val dataColNames = table.columns.iterator.map(c => normalize(c.name)).toSet
+      val dataColNames = table.columns.iterator.map(_.name).toSeq
       reportedMetaCols
-        .filter(metaCol => dataColNames.contains(normalize(metaCol.name)))
+        .filter(metaCol => dataColNames.exists(resolver(metaCol.name, _)))
         .map { metaCol =>
           s"${quoteIdentifier(metaCol.name)} metadata column is hidden by a data column " +
             "with the same name"

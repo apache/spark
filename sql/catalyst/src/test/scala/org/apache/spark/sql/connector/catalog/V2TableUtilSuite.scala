@@ -549,6 +549,24 @@ class V2TableUtilSuite extends SparkFunSuite with SQLHelper {
     assert(errors.head == "`index` metadata column is hidden by a data column with the same name")
   }
 
+  test("validateCapturedMetadataColumns - hidden metadata column detection uses SQL resolver " +
+      "for Unicode identifiers") {
+    val originMetaCols = Seq(metaCol("index", IntegerType, nullable = false))
+    // These names are equal under the case-insensitive SQL resolver, but differ after root-locale
+    // lowercasing because the capital I with dot expands to an i followed by a combining dot.
+    val currentDataCols = Array(col("\u0130ndex", IntegerType, nullable = true))
+    val currentMetaCols = Array(metaCol("index", IntegerType, nullable = false))
+    val table = TestTableWithMetadataSupport("test", currentDataCols, currentMetaCols)
+
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      originMetaCols,
+      mode = ALLOW_NEW_FIELDS,
+      checkIds = false)
+    assert(errors.size == 1)
+    assert(errors.head == "`index` metadata column is hidden by a data column with the same name")
+  }
+
   test("validateCapturedMetadataColumns - hidden metadata column detection is case sensitive " +
       "under case-sensitive analysis") {
     val originMetaCols = Seq(metaCol("index", IntegerType, nullable = false))
