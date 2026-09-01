@@ -89,10 +89,32 @@ class MinHashLSHSuite extends MLTest with DefaultReadWriteTest {
     assert(res(2).equals(Vectors.dense(9.0)))
   }
 
-  test("hashFunction: empty vector") {
+  test("hashFunction: empty vector with handleInvalid") {
     val model = new MinHashLSHModel("mh", randCoefficients = Array((0, 1), (1, 2), (3, 0)))
-    val res = model.hashFunction(Vectors.sparse(10, Seq()))
-    assert(res.isEmpty)
+
+    // default / "error": should throw IllegalArgumentException
+    intercept[IllegalArgumentException] {
+      model.hashFunction(Vectors.sparse(10, Seq()))
+    }
+
+    // "keep": should return empty vector array
+    model.setHandleInvalid("keep")
+    val resKeep = model.hashFunction(Vectors.sparse(10, Seq()))
+    assert(resKeep.isEmpty)
+
+    // "skip": should filter out row in transform
+    model.setHandleInvalid("skip")
+    val resSkip = model.hashFunction(Vectors.sparse(10, Seq()))
+    assert(resSkip.isEmpty)
+
+    val emptyDataset = spark.createDataFrame(Seq(
+      Tuple1(Vectors.sparse(10, Seq((2, 1.0)))),
+      Tuple1(Vectors.sparse(10, Seq()))
+    )).toDF("keys")
+
+    model.setInputCol("keys").setOutputCol("values")
+    val transformed = model.transform(emptyDataset)
+    assert(transformed.count() === 1)
   }
 
   test("keyDistance") {
