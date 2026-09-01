@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
-import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
+import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite, RewriteWithExpression}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
@@ -5086,6 +5086,20 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
     withSQLConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX.key -> "false") {
       checkAnswer(sql(query), Row(1, 2))
+    }
+  }
+
+  test("SPARK-59019: BETWEEN succeeds when RewriteWithExpression is in excludedRules") {
+    // RewriteWithExpression is non-excludable, so adding it to excludedRules has no effect.
+    // Before the fix, this threw INTERNAL_ERROR because With nodes reached codegen.
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+      RewriteWithExpression.ruleName) {
+      checkAnswer(
+        sql("SELECT x BETWEEN 1 AND 2 AS in_range FROM (VALUES (1)) AS t(x)"),
+        Row(true))
+      checkAnswer(
+        sql("SELECT x BETWEEN 1 AND 2 AS in_range FROM (VALUES (3)) AS t(x)"),
+        Row(false))
     }
   }
 }
