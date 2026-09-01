@@ -18,7 +18,10 @@ package org.apache.spark.sql.protobuf
 
 import java.util.concurrent.TimeUnit
 
-import com.google.protobuf.{BoolValue, ByteString, BytesValue, DoubleValue, DynamicMessage, FloatValue, Int32Value, Int64Value, Message, StringValue, TypeRegistry, UInt32Value, UInt64Value}
+import scala.collection.mutable
+import scala.jdk.CollectionConverters._
+
+import com.google.protobuf.{BoolValue, ByteString, BytesValue, DoubleValue, DynamicMessage, FloatValue, Int32Value, Int64Value, InvalidProtocolBufferException, Message, StringValue, TypeRegistry, UInt32Value, UInt64Value}
 import com.google.protobuf.Descriptors._
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
 import com.google.protobuf.util.JsonFormat
@@ -92,6 +95,58 @@ private[sql] class ProtobufDeserializer(
       .omittingInsignificantWhitespace()
       .preservingProtoFieldNames()
       .usingTypeRegistry(typeRegistry)
+  }
+
+  // Matches protobuf-java's default recursion limit for wire-format parsing. A nested
+  // google.protobuf.Any is stored as opaque bytes, so JsonFormat.print re-parses each Any
+  // level with a fresh recursion limit while recursing on the JVM stack; without a shared
+  // budget across levels, an Any-in-Any chain a few hundred KB long overflows the stack, and
+  // StackOverflowError is fatal: it escapes the NonFatal-based malformed-record handling
+  // that implements PERMISSIVE/FAILFAST parse modes and kills the task instead.
+  private val anyJsonRecursionLimit = 100
+
+  /**
+   * Performs the same Any unpacking that JsonFormat will perform (against the same type
+   * registry), but iteratively and under a single depth budget, so an over-deep message
+   * fails as an ordinary malformed record (InvalidProtocolBufferException).
+   */
+  private def checkAnyJsonRecursion(root: DynamicMessage): Unit = {
+    val stack = mutable.Stack[(Message, Int)]((root, 0))
+    while (stack.nonEmpty) {
+      val (message, depth) = stack.pop()
+      if (depth > anyJsonRecursionLimit) {
+        throw new InvalidProtocolBufferException(
+          "Message nesting in google.protobuf.Any exceeds the maximum supported depth " +
+            s"($anyJsonRecursionLimit) for JSON conversion")
+      }
+      val descriptor = message.getDescriptorForType
+      if (descriptor.getFullName == "google.protobuf.Any") {
+        val typeUrl =
+          message.getField(descriptor.findFieldByName("type_url")).asInstanceOf[String]
+        // Leave empty or unregistered type URLs for jsonPrinter.print to handle: an empty
+        // Any prints as {}, and an unresolvable type fails there with a descriptive error.
+        if (typeUrl.nonEmpty) {
+          val nestedDescriptor = typeRegistry.getDescriptorForTypeUrl(typeUrl)
+          if (nestedDescriptor != null) {
+            val bytes =
+              message.getField(descriptor.findFieldByName("value")).asInstanceOf[ByteString]
+            stack.push((DynamicMessage.parseFrom(nestedDescriptor, bytes), depth + 1))
+          }
+        }
+      } else {
+        message.getAllFields.asScala.foreach { case (field, fieldValue) =>
+          if (field.getJavaType == MESSAGE) {
+            if (field.isRepeated) {
+              fieldValue.asInstanceOf[java.util.List[Message]].asScala.foreach { item =>
+                stack.push((item, depth + 1))
+              }
+            } else {
+              stack.push((fieldValue.asInstanceOf[Message], depth + 1))
+            }
+          }
+        }
+      }
+    }
   }
 
   private def newArrayWriter(
@@ -302,8 +357,10 @@ private[sql] class ProtobufDeserializer(
       case (MESSAGE, StringType)
         if protoType.getMessageType.getFullName == "google.protobuf.Any" =>
         (updater, ordinal, value) =>
+          val anyMessage = value.asInstanceOf[DynamicMessage]
+          checkAnyJsonRecursion(anyMessage)
           // Convert 'Any' protobuf message to JSON string.
-          val jsonStr = jsonPrinter.print(value.asInstanceOf[DynamicMessage])
+          val jsonStr = jsonPrinter.print(anyMessage)
           updater.set(ordinal, UTF8String.fromString(jsonStr))
 
       // Handle well known wrapper types. We unpack the value field when the desired
