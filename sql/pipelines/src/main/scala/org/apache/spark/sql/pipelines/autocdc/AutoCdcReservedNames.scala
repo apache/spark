@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.types.{StructField, StructType}
 
@@ -60,22 +61,59 @@ private[pipelines] object AutoCdcReservedNames {
 
   /**
    * The schema a materialized AUTO CDC target carries when the user declares a schema: the user's
-   * non-reserved columns, followed by the engine-owned reserved column(s) taken from the
-   * flow-inferred schema. `flowInferredSchema` must be flow-derived (no user-declared columns
-   * merged in), so the appended fields are exactly the engine-produced ones and never a user column
-   * that happens to carry the prefix.
+   * columns with the engine-owned type/nullability substituted into any declared reserved column,
+   * followed by the engine-owned reserved column(s) the declaration omitted. `flowInferredSchema`
+   * must be flow-derived (no user-declared columns merged in), so its reserved fields are exactly
+   * the engine-produced ones and never a user column that happens to carry the prefix.
    *
-   * The appended reserved fields are made nullable so a target created from a declared schema
+   * A declared reserved field keeps its own spelling and position; only its type and nullability
+   * are replaced with the engine's. That matters on the upgrade path: an already-materialized
+   * target may carry the reserved column under a different casing (e.g. an older definition
+   * declared it upper-cased under case-insensitive analysis), `evolveTable` merges that existing
+   * spelling in, and this schema -- which also feeds the analysis-time read path -- must agree with
+   * it so a downstream `SELECT *` plans against the column the target actually has.
+   *
+   * The engine-owned reserved fields are made nullable so a target created from a declared schema
    * matches one created from an omitted schema (that path materializes the inferred schema
-   * `asNullable`), avoiding a spurious nullability diff when a declaration is added or removed
-   * between runs. The same helper feeds both the materialization path and the analysis-time read
-   * path, so a downstream consumer plans against the schema the target is actually created with.
+   * `asNullable`), avoiding a spurious nullability diff when a declaration is added or removed.
    */
   private[pipelines] def appendEngineOwnedReservedFields(
       declaredSchema: StructType,
       flowInferredSchema: StructType,
-      resolver: Resolver): StructType =
-    StructType(
-      stripReservedFields(declaredSchema, resolver).fields ++
-        StructType(reservedFields(flowInferredSchema, resolver)).asNullable.fields)
+      resolver: Resolver): StructType = {
+    val engineReserved = StructType(reservedFields(flowInferredSchema, resolver)).asNullable.fields
+
+    // A declaration may carry at most one field matching each engine-owned reserved column; more
+    // than one (e.g. the metadata column declared twice under case-insensitive analysis) is
+    // ambiguous and schema validation should have rejected it upstream.
+    engineReserved.foreach { ef =>
+      val matches = declaredSchema.fields.filter(df => resolver(df.name, ef.name))
+      if (matches.length > 1) {
+        throw SparkException.internalError(
+          s"Ambiguous reserved AUTO CDC field: ${matches.map(_.name).mkString(", ")} all match " +
+            s"the engine-owned column ${ef.name}.")
+      }
+    }
+
+    // Rebuild the declared schema in place: a declared reserved field keeps its spelling and
+    // position but takes the engine-owned type/nullability. A reserved-prefixed declared field with
+    // no engine counterpart is left as-is (validation rejects it upstream for an AUTO CDC target).
+    val usedEngineNames = scala.collection.mutable.Set.empty[String]
+    val rebuilt = declaredSchema.fields.map { df =>
+      if (isReservedFieldName(df.name, resolver)) {
+        engineReserved.find(ef => resolver(df.name, ef.name)) match {
+          case Some(ef) =>
+            usedEngineNames += ef.name
+            ef.copy(name = df.name)
+          case None => df
+        }
+      } else {
+        df
+      }
+    }
+
+    // Append engine-owned reserved fields the declaration omitted, in canonical form.
+    val appended = engineReserved.filterNot(ef => usedEngineNames.contains(ef.name))
+    StructType(rebuilt ++ appended)
+  }
 }

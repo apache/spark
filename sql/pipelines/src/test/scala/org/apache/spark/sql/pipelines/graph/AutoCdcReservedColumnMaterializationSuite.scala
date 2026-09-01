@@ -122,9 +122,11 @@ class AutoCdcReservedColumnMaterializationSuite
 
       val reserved = spark.table(s"$catalog.$namespace.target").schema.fieldNames
         .filter(_.toLowerCase(Locale.ROOT).startsWith(AutoCdcReservedNames.prefix))
-      assert(
-        reserved.toSeq == Seq(AutoCdcReservedNames.cdcMetadataColName),
-        "expected exactly the engine-owned metadata column, got " + reserved.mkString(", "))
+      // Exactly one reserved column (no duplicate), which is the point of the effective-resolver
+      // fix. Its spelling is the one the user declared -- the engine substitutes only the type,
+      // keeping the declared casing and position.
+      assert(reserved.length == 1,
+        "expected exactly one engine-owned metadata column, got " + reserved.mkString(", "))
       checkAnswer(
         spark.table(s"$catalog.$namespace.target"),
         Seq(Row(1, 5L, cdcMeta(None, Some(5L))))
@@ -269,5 +271,50 @@ class AutoCdcReservedColumnMaterializationSuite
     assert(
       schemaAfterRun2 == schemaAfterRun1,
       s"schema changed across incremental runs: $schemaAfterRun1 -> $schemaAfterRun2")
+  }
+
+  test("an already-materialized target's reserved-column casing is preserved for a " +
+    "case-sensitive downstream SELECT *") {
+    // Upgrade path: a target already exists in the catalog with the reserved metadata column
+    // declared upper-cased (allowed under case-insensitive AUTO CDC). evolveTable merges that
+    // existing spelling in, so the read path must report the SAME casing, otherwise a
+    // case-sensitive downstream `SELECT *` plans the canonical lower-case name and cannot resolve
+    // the upper-case column the target actually has.
+    val upperMeta = AutoCdcReservedNames.cdcMetadataColName.toUpperCase(Locale.ROOT)
+    val del = Scd1BatchProcessor.cdcDeleteSequenceFieldName
+    val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, version BIGINT NOT NULL, " +
+      s"$upperMeta STRUCT<$del:BIGINT,$ups:BIGINT> NOT NULL)")
+
+    val metadataType = new StructType().add(del, LongType).add(ups, LongType)
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("version", LongType, nullable = false)
+      .add(upperMeta, metadataType, nullable = false)
+
+    val stream = MemoryStream[(Int, Long)]
+    stream.addData((1, 5L))
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace),
+        specifiedSchema = Some(declaredSchema))
+      registerFlow(autoCdcFlow(name = "auto_cdc_flow", target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "version")),
+        keys = Seq("id"), sequencing = functions.col("version")))
+      registerMaterializedView("copy", catalog = Some(catalog), database = Some(namespace),
+        sqlConf = Map(SQLConf.CASE_SENSITIVE.key -> "true"),
+        query = readFlowFunc(s"$catalog.$namespace.target"))
+    }
+    runPipeline(ctx)
+
+    val targetFields = spark.table(s"$catalog.$namespace.target").schema.fieldNames.toSeq
+    val copyFields = spark.table(s"$catalog.$namespace.copy").schema.fieldNames.toSeq
+    assert(targetFields.contains(upperMeta),
+      "target should keep the declared upper-case reserved column, got " +
+        targetFields.mkString(","))
+    assert(copyFields == targetFields,
+      s"downstream copy ${copyFields.mkString(",")} should match " +
+        s"target ${targetFields.mkString(",")}")
   }
 }
