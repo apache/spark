@@ -5564,7 +5564,7 @@ object SQLConf {
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PYTHON_PLANNER_EXEC_MEMORY =
     buildConf("spark.sql.planner.pythonExecution.memory")
