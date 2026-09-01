@@ -554,7 +554,8 @@ class V2TableUtilSuite extends SparkFunSuite with SQLHelper {
     val originMetaCols = Seq(metaCol("index", IntegerType, nullable = false))
     // These names are equal under the case-insensitive SQL resolver, but differ after root-locale
     // lowercasing because the capital I with dot expands to an i followed by a combining dot.
-    val currentDataCols = Array(col("\u0130ndex", IntegerType, nullable = true))
+    val unicodeName = new String(Character.toChars(0x130)) + "ndex"
+    val currentDataCols = Array(col(unicodeName, IntegerType, nullable = true))
     val currentMetaCols = Array(metaCol("index", IntegerType, nullable = false))
     val table = TestTableWithMetadataSupport("test", currentDataCols, currentMetaCols)
 
