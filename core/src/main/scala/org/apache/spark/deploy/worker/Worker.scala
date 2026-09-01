@@ -622,7 +622,17 @@ private[deploy] class Worker(
             val localRootDirs = Utils.getOrCreateLocalRootDirs(conf)
             val dirs = localRootDirs.flatMap { dir =>
               try {
-                val appDir = Utils.createDirectory(dir, namePrefix = "executor")
+                // Nest executor local dirs under a per-application directory (the app id as
+                // a path segment) so the external shuffle service can require registered
+                // localDirs to be scoped to the registering application.
+                val appIdDir = new File(dir, appId)
+                appIdDir.mkdirs()
+                if (!appIdDir.isDirectory) {
+                  throw new IOException(s"Failed to create directory $appIdDir")
+                }
+                Utils.chmod700(appIdDir)
+                val appDir = Utils.createDirectory(appIdDir.getAbsolutePath(),
+                  namePrefix = "executor")
                 Utils.chmod700(appDir)
                 Some(appDir.getAbsolutePath())
               } catch {
@@ -777,6 +787,15 @@ private[deploy] class Worker(
             logInfo(log"Cleaning up local directories for application ${MDC(APP_ID, id)}")
             dirList.foreach { dir =>
               Utils.deleteRecursively(new File(dir))
+              // Executor dirs are nested under a per-application directory; remove it too
+              // once it is empty.
+              val appIdDir = new File(dir).getParentFile
+              if (appIdDir != null && appIdDir.getName == id) {
+                val remaining = appIdDir.list()
+                if (remaining != null && remaining.isEmpty) {
+                  appIdDir.delete()
+                }
+              }
             }
           }(cleanupThreadExecutor).failed.foreach(e =>
             logError(log"Clean up app dir ${MDC(PATHS, dirList)} failed", e)
