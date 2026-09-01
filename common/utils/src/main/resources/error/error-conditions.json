@@ -1978,6 +1978,11 @@
           "The <inputName> value must to be a <requireType> literal of <validValues>, but got <inputValue>."
         ]
       },
+      "INVALID_JSON_FORMAT_JSON_INPUT" : {
+        "message" : [
+          "<functionName> FORMAT JSON requires a string argument containing JSON text, but the argument at position <position> has type <inputType>."
+        ]
+      },
       "INVALID_JSON_MAP_KEY_TYPE" : {
         "message" : [
           "Input schema <schema> can only contain STRING as a key type for a MAP."
@@ -1996,6 +2001,11 @@
       "INVALID_JSON_QUERY_WRAPPER_AND_QUOTES" : {
         "message" : [
           "<functionName> cannot combine an OMIT QUOTES clause with a WITH ARRAY WRAPPER clause. OMIT QUOTES applies only to an unwrapped result."
+        ]
+      },
+      "INVALID_JSON_RETURNING_TYPE" : {
+        "message" : [
+          "<functionName> RETURNING clause must be a STRING type, but got <returningType>."
         ]
       },
       "INVALID_JSON_SCALAR_RETURNING_TYPE" : {
@@ -4513,6 +4523,12 @@
       "Collations can only be applied to string types, but the JSON data type is <jsonType>."
     ],
     "sqlState" : "2203G"
+  },
+  "INVALID_JSON_FORMAT_JSON_VALUE" : {
+    "message" : [
+      "<functionName> FORMAT JSON argument at position <position> must contain exactly one well-formed JSON value, but got <value>."
+    ],
+    "sqlState" : "22032"
   },
   "INVALID_JSON_RECORD_TYPE" : {
     "message" : [
