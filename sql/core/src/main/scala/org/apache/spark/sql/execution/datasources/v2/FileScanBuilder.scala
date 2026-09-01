@@ -27,6 +27,10 @@ import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 
+private[sql] trait SupportsCharVarcharStandardSemantics {
+  def bindCharVarcharStandardSemantics(enabled: Boolean): Unit
+}
+
 abstract class FileScanBuilder(
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,

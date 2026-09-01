@@ -34,6 +34,7 @@ import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.datasources.v2.{PushedDownOperators, TableSampleInfo}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -752,15 +753,30 @@ case class FileSourceScanExec(
   lazy val inputRDD: RDD[InternalRow] = {
     val options = relation.options +
       (FileFormat.OPTION_RETURNING_BATCH -> supportsColumnar.toString)
-    val readFile: (PartitionedFile) => Iterator[InternalRow] =
-      relation.fileFormat.buildReaderWithPartitionValues(
-        sparkSession = relation.sparkSession,
-        dataSchema = relation.dataSchema,
-        partitionSchema = relation.partitionSchema,
-        requiredSchema = requiredSchema,
-        filters = pushedDownFilters,
-        options = options,
-        hadoopConf = getHadoopConf(relation.sparkSession, relation.options))
+    val hadoopConf = getHadoopConf(relation.sparkSession, relation.options)
+    val readFile: (PartitionedFile) => Iterator[InternalRow] = relation.fileFormat match {
+      case format: OrcFileFormat
+          if getTagValue(ApplyCharTypePadding.standardSemanticsTag).isDefined =>
+        format.buildReaderWithPartitionValues(
+          sparkSession = relation.sparkSession,
+          dataSchema = relation.dataSchema,
+          partitionSchema = relation.partitionSchema,
+          requiredSchema = requiredSchema,
+          filters = pushedDownFilters,
+          options = options,
+          hadoopConf = hadoopConf,
+          charVarcharStandardSemantics =
+            getTagValue(ApplyCharTypePadding.standardSemanticsTag).get)
+      case format =>
+        format.buildReaderWithPartitionValues(
+          sparkSession = relation.sparkSession,
+          dataSchema = relation.dataSchema,
+          partitionSchema = relation.partitionSchema,
+          requiredSchema = requiredSchema,
+          filters = pushedDownFilters,
+          options = options,
+          hadoopConf = hadoopConf)
+    }
 
     val readRDD = if (bucketedScan) {
       createBucketedReadRDD(relation.bucketSpec.get, readFile, dynamicallySelectedPartitions)

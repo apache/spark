@@ -23,13 +23,16 @@ import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, Spark
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverGuard
 import org.apache.spark.sql.catalyst.expressions.{
-  ArrayJoin, Attribute, Concat, EqualTo, Expression, GreaterThan, Literal, ScalarSubquery,
+  Alias, ArrayJoin, Attribute, Concat, EqualTo, Expression, GreaterThan, Literal, ScalarSubquery,
   StringRPad, StringToMap, Upper
 }
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  Aggregate, Filter, LogicalPlan, OneRowRelation, Project
+}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, InMemoryPartitionTableCatalog}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -39,6 +42,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.SimpleInsertSource
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 // The base trait for char/varchar tests that need to be run with different table implementations.
 trait CharVarcharTestSuite extends QueryTest {
@@ -1793,7 +1797,15 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
               Seq("abcdef").toDF("c").write.format(format).save(dir.getCanonicalPath)
               Seq("CHAR", "VARCHAR").foreach { typ =>
                 withClue(s"$format $sourceVersion $typ: ") {
-                  val readDf = spark.read.schema(s"c $typ(4)").format(format)
+                  val forgedMetadata = new MetadataBuilder()
+                    .putBoolean("__CHAR_VARCHAR_STANDARD_SEMANTICS", false)
+                    .build()
+                  val readSchema = StructType(Seq(
+                    StructField("c", CatalystSqlParser.parseDataType(s"$typ(4)"),
+                      metadata = forgedMetadata)))
+                  val readDf = spark.read.schema(readSchema)
+                    .option("__charVarcharStandardSemantics", "false")
+                    .format(format)
                     .load(dir.getCanonicalPath)
                   checkError(
                     exception = intercept[SparkRuntimeException] {
@@ -1861,9 +1873,28 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
               withTempPath { dir =>
                 val path = dir.getCanonicalPath
                 Seq("abcdef").toDF("v").write.mode("overwrite").orc(path)
-                val readBack = spark.read.schema("v VARCHAR(4)").orc(path)
+                val forgedMetadata = new MetadataBuilder()
+                  .putBoolean("__CHAR_VARCHAR_STANDARD_SEMANTICS", true)
+                  .build()
+                val readSchema = StructType(Seq(
+                  StructField("v", VarcharType(4), metadata = forgedMetadata)))
+                val readBack = spark.read.schema(readSchema)
+                  .option("__charVarcharStandardSemantics", "true")
+                  .orc(path)
                 assert(readBack.schema.head.dataType === VarcharType(4))
                 checkAnswer(readBack, Row("abcd"))
+              }
+              withTempPath { dir =>
+                val path = dir.getCanonicalPath
+                // Bypass CAST conversion so native ORC owns preserve-only padding/truncation.
+                val input = Dataset.ofRows(spark, Project(Seq(
+                  Alias(Literal(UTF8String.fromString("ab"), CharType(4)), "c")(),
+                  Alias(Literal(UTF8String.fromString("abcdef"), VarcharType(4)), "v")()),
+                  OneRowRelation()))
+                input.write.mode("overwrite").orc(path)
+                val readBack = spark.read.orc(path)
+                assert(readBack.schema.map(_.dataType) === Seq(CharType(4), VarcharType(4)))
+                checkAnswer(readBack, Row("ab  ", "abcd"))
               }
             }
 
@@ -1890,6 +1921,27 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
                         condition = "EXCEED_LIMIT_LENGTH",
                         parameters = Map("limit" -> "4"))
                     }
+                  }
+                }
+              }
+            }
+
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              Seq("abcdef").toDF("v").write.mode("overwrite").orc(path)
+              val table = "preserve_orc_view_source"
+              val view = "preserve_orc_view"
+              withTable(table) {
+                withView(view) {
+                  withSQLConf(
+                      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+                    sql(s"CREATE TABLE $table (v VARCHAR(4)) USING orc LOCATION '$path'")
+                    sql(s"CREATE VIEW $view AS SELECT v FROM $table")
+                  }
+                  withClue(
+                      s"ORC view $sourceVersion vectorized=$vectorizedReaderEnabled: ") {
+                    checkAnswer(sql(s"SELECT * FROM $view"), Row("abcd"))
                   }
                 }
               }
@@ -2244,6 +2296,22 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         .format(classOf[SchemaRequiredDataSource].getName).load())
       checkSchema(spark.read.schema("id char(5)")
         .format(classOf[SchemaRequiredDataSource].getName).load())
+    }
+  }
+
+  test("standard semantics does not add options to non-ORC V2 relations") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val relation = spark.read
+        .schema("id CHAR(5)")
+        .option("expected", "value")
+        .format(classOf[SchemaRequiredDataSource].getName)
+        .load()
+        .queryExecution
+        .analyzed
+        .collectFirst { case relation: DataSourceV2Relation => relation }
+        .get
+      assert(relation.options.size() === 1)
+      assert(relation.options.get("expected") === "value")
     }
   }
 
