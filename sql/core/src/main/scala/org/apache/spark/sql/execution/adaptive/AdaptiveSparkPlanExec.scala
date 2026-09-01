@@ -791,9 +791,8 @@ case class AdaptiveSparkPlanExec(
           // There is already an existing ResultQueryStage created in previous `withFinalPlanUpdate
           // e.g, when we do `df.collect` multiple times. Here we create a new result stage to
           // execute it again, as the handler function can be different.
-          val newResultStage = ResultQueryStageExec(context.currentStageId, optimizedPlan,
+          val newResultStage = ResultQueryStageExec(context.getAndIcrementStageID(), optimizedPlan,
             resultHandler)
-          context.incrementStageId
           setLogicalLinkForNewQueryStage(newResultStage, optimizedPlan)
           CreateStageResult(newPlan = newResultStage,
             allChildStagesMaterialized = false,
@@ -941,8 +940,8 @@ case class AdaptiveSparkPlanExec(
       optimizeQueryStage(plan, isFinalStage = true),
       postStageCreationRules(supportsColumnar),
       "AQE Post Stage Creation")
-    val resultStage = ResultQueryStageExec(context.currentStageId, optimizedRootPlan, resultHandler)
-    context.incrementStageId
+    val resultStage = ResultQueryStageExec(context.getAndIcrementStageID(), optimizedRootPlan,
+      resultHandler)
     setLogicalLinkForNewQueryStage(resultStage, plan)
     resultStage
   }
@@ -960,14 +959,14 @@ case class AdaptiveSparkPlanExec(
             throw SparkException.internalError(
               "Custom columnar rules cannot transform shuffle node to something else.")
           }
-          ShuffleQueryStageExec(context.currentStageId, newPlan, e.canonicalized)
+          ShuffleQueryStageExec(context.getAndIcrementStageID(), newPlan, e.canonicalized)
         } else {
           assert(e.isInstanceOf[BroadcastExchangeLike])
           if (!newPlan.isInstanceOf[BroadcastExchangeLike]) {
             throw SparkException.internalError(
               "Custom columnar rules cannot transform broadcast node to something else.")
           }
-          BroadcastQueryStageExec(context.currentStageId, newPlan, e.canonicalized)
+          BroadcastQueryStageExec(context.getAndIcrementStageID(), newPlan, e.canonicalized)
         }
       case i: InMemoryTableScanLike =>
         // Apply `queryStageOptimizerRules` so that we can reuse subquery.
@@ -978,9 +977,8 @@ case class AdaptiveSparkPlanExec(
           throw SparkException.internalError(
             "Custom AQE rules cannot transform table scan node to something else.")
         }
-        TableCacheQueryStageExec(context.currentStageId, newPlan)
+        TableCacheQueryStageExec(context.getAndIcrementStageID(), newPlan)
     }
-    context.incrementStageId
     setLogicalLinkForNewQueryStage(queryStage, plan)
     queryStage
   }
@@ -989,8 +987,7 @@ case class AdaptiveSparkPlanExec(
       existing: ExchangeQueryStageExec,
       exchange: Exchange): ExchangeQueryStageExec = {
     context.markSharedStageResult(existing.resultOption, this)
-    val queryStage = existing.newReuseInstance(context.currentStageId, exchange.output)
-    context.incrementStageId
+    val queryStage = existing.newReuseInstance(context.getAndIcrementStageID(), exchange.output)
     setLogicalLinkForNewQueryStage(queryStage, exchange)
     recordStageId(queryStage)
     queryStage
@@ -1318,13 +1315,13 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
   }
 
   val shuffleIds: ConcurrentHashMap[Int, Boolean] = new ConcurrentHashMap[Int, Boolean]()
-
   private var _currentStageId = 0
   private[adaptive] def currentStageId: Int = this._currentStageId
-  private[adaptive] def incrementStageId: Unit = {
+  private[adaptive] def getAndIcrementStageID(): Int = {
+    val retVal = this._currentStageId
     this._currentStageId += 1
+    retVal
   }
-
 }
 
 /**
