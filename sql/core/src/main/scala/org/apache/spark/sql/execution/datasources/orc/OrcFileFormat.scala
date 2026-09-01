@@ -154,7 +154,7 @@ class OrcFileFormat
       filters,
       options,
       hadoopConf,
-      getSqlConf(sparkSession).charVarcharStandardSemantics)
+      charVarcharStandardSemantics = false)
   }
 
   private[sql] def buildReaderWithPartitionValues(

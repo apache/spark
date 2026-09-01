@@ -1772,7 +1772,8 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
                   }
                   withSQLConf(
                       SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
-                      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+                      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+                      SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
                     assert(DataType.equalsIgnoreNullability(
                       spark.read.format(format).load(path).schema,
                       input.schema))
@@ -1935,7 +1936,8 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
                 withView(view) {
                   withSQLConf(
                       SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
-                      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+                      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+                      SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
                     sql(s"CREATE TABLE $table (v VARCHAR(4)) USING orc LOCATION '$path'")
                     sql(s"CREATE VIEW $view AS SELECT v FROM $table")
                   }
