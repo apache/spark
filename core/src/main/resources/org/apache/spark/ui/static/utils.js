@@ -94,6 +94,7 @@ function getTimeZone() {
  * the scheme. */
 function isHttpOrRelativeUrl(url) {
   if (typeof url !== 'string') return false;
+  /* eslint-disable-next-line no-control-regex */
   var normalized = url.replace(/[\u0000-\u0020]/g, '').toLowerCase();
   return /^https?:\/\//.test(normalized) || !/^[a-z][a-z0-9+.-]*:/.test(normalized);
 }
