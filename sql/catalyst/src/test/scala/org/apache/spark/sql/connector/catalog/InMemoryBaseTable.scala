@@ -780,7 +780,9 @@ abstract class InMemoryBaseTable(
     private def partitionAttributes: Seq[(Seq[String], AttributeReference)] = {
       partitioning.flatMap(_.references()).flatMap { ref =>
         val path = ref.fieldNames.toImmutableArraySeq
-        readSchema.findNestedField(path).orElse(tableSchema.findNestedField(path)).map {
+        val resolver = SQLConf.get.resolver
+        readSchema.findNestedField(path, resolver = resolver)
+          .orElse(tableSchema.findNestedField(path, resolver = resolver)).map {
           case (_, f) =>
             path -> AttributeReference(ref.fieldNames.mkString("."), f.dataType, f.nullable)()
         }
@@ -837,9 +839,9 @@ abstract class InMemoryBaseTable(
     var pushedFilters: Array[Filter] = Array.empty
 
     override def filterAttributes(): Array[NamedReference] = {
-      val scanFields = readSchema.fields.map(_.name).toSet
       partitioning.flatMap(_.references)
-        .filter(ref => scanFields.contains(ref.fieldNames.mkString(".")))
+        .filter(ref => readSchema.findNestedField(
+          ref.fieldNames.toImmutableArraySeq, resolver = SQLConf.get.resolver).isDefined)
     }
 
     override def filter(filters: Array[Filter]): Unit = {
