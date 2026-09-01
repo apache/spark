@@ -1772,6 +1772,42 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
     }
   }
 
+  test("SPARK-59141: columnar union interleaves the partitions it reports as co-located") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "false") {
+      withTable("t1", "t2") {
+        spark.range(0, 20, 1, 1).selectExpr("id % 5 AS k")
+          .write.bucketBy(4, "k").saveAsTable("t1")
+        spark.range(20, 40, 1, 1).selectExpr("id % 5 AS k")
+          .write.bucketBy(4, "k").saveAsTable("t2")
+
+        val query =
+          "SELECT k, count(*) c FROM (SELECT k FROM t1 UNION ALL SELECT k FROM t2) GROUP BY k"
+        val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+          sql(query).collect()
+        }
+
+        val df = sql(query)
+        val plan = df.queryExecution.executedPlan
+        // `FileSourceScanExec` overrides `supportsColumnar` but not `supportsRowBased`, whose
+        // default is its negation, so a bucketed batch-readable scan is columnar-only and so is
+        // this union. It therefore runs `doExecuteColumnar` under a `ColumnarToRowExec` while
+        // reporting the bucketed `HashPartitioning` that lets the aggregate drop its exchange.
+        val unionExec = plan.collect { case u: UnionExec => u }
+        assert(unionExec.size == 1)
+        assert(unionExec.head.supportsColumnar && !unionExec.head.supportsRowBased,
+          "this shape must take the columnar path, or the test exercises nothing")
+        assert(unionExec.head.outputPartitioning.isInstanceOf[HashPartitioning],
+          "this shape must report a co-locatable partitioning, or the test exercises nothing")
+        assert(plan.collect { case s: ShuffleExchangeExec => s }.isEmpty,
+          "the aggregate's exchange must have been dropped, or the test exercises nothing")
+
+        checkAnswer(df, correctResult.toImmutableArraySeq)
+      }
+    }
+  }
+
   test("SPARK-57881: union partitioning - keyed partitioning") {
     withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryCatalog].getName) {
       sql("CREATE TABLE testcat.ns.t1 (id bigint, data string) PARTITIONED BY (id)")

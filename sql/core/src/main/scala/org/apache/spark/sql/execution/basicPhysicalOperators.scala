@@ -1259,7 +1259,16 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   override def supportsRowBased: Boolean = children.forall(_.supportsRowBased)
 
   protected override def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    sparkContext.union(children.map(_.executeColumnar()))
+    // Same split as `doExecute`: a union that reports an index-co-locatable partitioning has to
+    // interleave same-index partitions, or a parent that skipped an exchange on that report reads
+    // a concatenation instead.
+    outputPartitioning match {
+      case _: UnknownPartitioning | _: KeyedPartitioning =>
+        sparkContext.union(children.map(_.executeColumnar()))
+      case partitioning =>
+        val nonEmptyRdds = children.map(_.executeColumnar()).filter(!_.partitions.isEmpty)
+        new SQLPartitioningAwareUnionRDD(sparkContext, nonEmptyRdds, partitioning.numPartitions)
+    }
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): UnionExec =
