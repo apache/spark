@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.dstream
 
-import java.io.EOFException
+import java.io.{EOFException, IOException}
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.{ReadableByteChannel, SocketChannel}
@@ -25,9 +25,10 @@ import java.util.concurrent.ArrayBlockingQueue
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.{StreamingConf, StreamingContext}
 import org.apache.spark.streaming.receiver.Receiver
 
 /**
@@ -56,6 +57,7 @@ class RawNetworkReceiver(host: String, port: Int, storageLevel: StorageLevel)
   var blockPushingThread: Thread = null
 
   def onStart(): Unit = {
+    val maxBlockSize = SparkEnv.get.conf.get(StreamingConf.RAW_INPUT_MAX_BLOCK_SIZE)
     // Open a socket to the target address and keep reading from it
     logInfo("Connecting to " + host + ":" + port)
     val channel = SocketChannel.open()
@@ -84,6 +86,7 @@ class RawNetworkReceiver(host: String, port: Int, storageLevel: StorageLevel)
       readFully(channel, lengthBuffer)
       lengthBuffer.flip()
       val length = lengthBuffer.getInt()
+      RawNetworkReceiver.checkBlockLength(length, maxBlockSize)
       val dataBuffer = ByteBuffer.allocate(length)
       readFully(channel, dataBuffer)
       dataBuffer.flip()
@@ -102,6 +105,23 @@ class RawNetworkReceiver(host: String, port: Int, storageLevel: StorageLevel)
       if (channel.read(dest) == -1) {
         throw new EOFException("End of channel")
       }
+    }
+  }
+}
+
+private[streaming] object RawNetworkReceiver {
+
+  /**
+   * Validates a frame length read from the wire before it can drive an allocation.
+   */
+  def checkBlockLength(length: Int, maxBlockSize: Long): Unit = {
+    if (length < 0) {
+      throw new IOException(s"Invalid negative block length $length received on raw socket.")
+    }
+    if (length > maxBlockSize) {
+      throw new IOException(s"Block length $length received on raw socket exceeds " +
+        s"${StreamingConf.RAW_INPUT_MAX_BLOCK_SIZE.key} ($maxBlockSize bytes); refusing " +
+        "to allocate. Raise the limit if the sender legitimately batches larger blocks.")
     }
   }
 }
