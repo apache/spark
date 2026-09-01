@@ -33,9 +33,12 @@ abstract class DistributionAndOrderingSuiteBase
     extends SharedSparkSession with BeforeAndAfter with AdaptiveSparkPlanHelper {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
+  /** The catalog implementation `testcat` is registered with. */
+  protected def catalogClassName: String = classOf[InMemoryCatalog].getName
+
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
+    spark.conf.set("spark.sql.catalog.testcat", catalogClassName)
   }
 
   override def afterAll(): Unit = {
