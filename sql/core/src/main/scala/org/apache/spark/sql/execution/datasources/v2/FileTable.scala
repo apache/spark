@@ -141,14 +141,13 @@ abstract class FileTable(
    * Whether a read of this table is strict. Under `ignoreCorruptFiles`, a read failure in a column
    * that only the other scan projects is swallowed and the remaining rows of that file are dropped,
    * so the merged scan would not read a superset of either input's rows. `ignoreMissingFiles` drops
-   * the same rows whatever is projected, and is included to match `FileScanRDD.hasStrictFileReads`,
-   * the same predicate on the physical side. Evaluated per call rather than cached, so a table
-   * built before either configuration was set still answers for the read that is running.
+   * the same rows whatever is projected, and counts here because one predicate,
+   * `FileSourceOptions.hasStrictFileReads`, answers for both flags on this side and on the physical
+   * side. Evaluated per call rather than cached, so a table built before either configuration was
+   * set still answers for the read that is running.
    */
-  private def hasStrictFileReads: Boolean = {
-    val fileSourceOptions = new FileSourceOptions(options.asCaseSensitiveMap.asScala.toMap)
-    !fileSourceOptions.ignoreCorruptFiles && !fileSourceOptions.ignoreMissingFiles
-  }
+  private def hasStrictFileReads: Boolean =
+    new FileSourceOptions(options.asCaseSensitiveMap.asScala.toMap).hasStrictFileReads
 
   /**
    * When possible, this method should return the schema of the given `files`.  When the format
