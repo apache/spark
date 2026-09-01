@@ -110,6 +110,26 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("Aggregate: NAAJ pushdown when original and rewritten joins can build right") {
+    val condition = Or($"b" === $"d", IsNull($"b" === $"d"))
+    val originalQuery = testRelation
+      .groupBy($"b")($"b", sum($"c"))
+      .join(testRelation1, joinType = LeftAnti, condition = Some(condition))
+    val correctAnswer = testRelation
+      .join(testRelation1, joinType = LeftAnti, condition = Some(condition))
+      .groupBy($"b")($"b", sum($"c"))
+
+    withSQLConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true") {
+      val analyzedOriginal = originalQuery.analyze
+      val analyzedCorrectAnswer = correctAnswer.analyze
+      val originalJoin = analyzedOriginal.asInstanceOf[Join]
+      val pushedJoin = analyzedCorrectAnswer.asInstanceOf[Aggregate].child.asInstanceOf[Join]
+      assert(PushDownLeftSemiAntiJoin.canPlanAsBroadcastHashJoin(originalJoin, SQLConf.get))
+      assert(PushDownLeftSemiAntiJoin.canPlanAsBroadcastHashJoin(pushedJoin, SQLConf.get))
+      comparePlans(Optimize.execute(analyzedOriginal), analyzedCorrectAnswer)
+    }
+  }
+
   test("Aggregate: NAAJ no pushdown when the original join would build left") {
     val leftKey = $"leftKey".int
     val leftKeyStats = ColumnStat(

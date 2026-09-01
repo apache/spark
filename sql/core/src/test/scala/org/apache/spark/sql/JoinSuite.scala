@@ -1332,11 +1332,14 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       withSQLConf(
         SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
-        val joinExec = sql(
+        val result = sql(
           "select * from naajSmallLeft where key not in (select b from naajLargeRight)")
-          .queryExecution.sparkPlan.collect { case j: BroadcastNestedLoopJoinExec => j }
+        val joinExec = result.queryExecution.sparkPlan.collect {
+          case j: BroadcastNestedLoopJoinExec => j
+        }
         assert(joinExec.size === 1)
         assert(joinExec.head.buildSide === BuildLeft)
+        checkAnswer(result, Seq.empty)
       }
     }
   }

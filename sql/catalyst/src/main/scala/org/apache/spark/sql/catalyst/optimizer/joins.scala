@@ -500,8 +500,8 @@ trait JoinSelectionHelper extends Logging {
       }
     // The null-aware hash join only supports BuildRight. Preserve a generic BuildLeft fallback.
     case j @ ExtractSingleColumnNullAwareAntiJoin(_, _)
-        if getBroadcastNestedLoopJoinBuildSide(j, conf) == BuildRight &&
-          canBroadcastBySize(j.right, conf) =>
+        if canBroadcastBySize(j.right, conf) &&
+          getBroadcastNestedLoopJoinBuildSide(j, conf) == BuildRight =>
       Some(BuildRight)
     case _ => None
   }
