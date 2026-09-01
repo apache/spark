@@ -60,7 +60,11 @@ private[sql] object PythonWorkerEnvironment {
    *
    * Write order is the first line of defence: the runners and `PythonWorkerFactory` apply their own
    * variables after the session's, so anything they set unconditionally already wins --
-   * `PYTHONPATH` and `PYTHONUNBUFFERED` among them, which a session may still set harmlessly.
+   * `PYTHONUNBUFFERED` and `PYTHON_UDF_BATCH_SIZE` among them, which a session may still set
+   * harmlessly. `PYTHONPATH` is a third case rather than a fourth reserved name:
+   * `PythonWorkerFactory` folds the session's value into the path it computes instead of discarding
+   * it, and puts Spark's own entries first, so a session can add to the worker's import path but
+   * cannot displace `pyspark` on it.
    *
    * These are the ones write order does not protect, because Spark sets them only when a condition
    * holds and a session's value survives when it does not. Two of them would desynchronize the JVM
@@ -68,12 +72,14 @@ private[sql] object PythonWorkerEnvironment {
    * choose its wire protocol and `PYTHON_UNIX_DOMAIN_ENABLED` to choose its transport. Rejecting
    * the name, rather than dropping it silently, means the failure says so.
    *
-   * The `SPARK_` and `PYSPARK_` prefixes are reserved wholesale because every variable Spark sets
-   * under them is its own; the `PYTHON` prefix deliberately is not, so a session keeps names such
-   * as `PYTHONWARNINGS`. The cost is that a conditional variable added under that prefix later has
-   * to be added here too.
+   * The `SPARK_`, `PYSPARK_` and `PYTHON_WORKER_FACTORY_` prefixes are reserved wholesale because
+   * every variable Spark sets under them is its own. The last is a prefix rather than a list
+   * because `PythonWorkerFactory` sets one name per socket branch and enumerating them missed
+   * `PYTHON_WORKER_FACTORY_SOCK_DIR`, which only the daemon path sets. The `PYTHON` prefix
+   * deliberately is not reserved, so a session keeps names such as `PYTHONWARNINGS`. The cost is
+   * that a conditional variable added under that prefix later has to be added here too.
    */
-  val reservedNamePrefixes: Seq[String] = Seq("SPARK_", "PYSPARK_")
+  val reservedNamePrefixes: Seq[String] = Seq("SPARK_", "PYSPARK_", "PYTHON_WORKER_FACTORY_")
 
   /** Reserved names outside the reserved prefixes. */
   val reservedNames: Set[String] = Set(
@@ -81,10 +87,7 @@ private[sql] object PythonWorkerEnvironment {
     "PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE",
     "PYTHON_FAULTHANDLER_DIR",
     "PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS",
-    "PYTHON_UNIX_DOMAIN_ENABLED",
-    "PYTHON_WORKER_FACTORY_PORT",
-    "PYTHON_WORKER_FACTORY_SECRET",
-    "PYTHON_WORKER_FACTORY_SOCK_PATH")
+    "PYTHON_UNIX_DOMAIN_ENABLED")
 
   private def isReserved(name: String): Boolean =
     reservedNames.contains(name) || reservedNamePrefixes.exists(name.startsWith)

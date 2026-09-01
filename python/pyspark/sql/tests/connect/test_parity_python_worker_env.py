@@ -14,7 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.tests.test_python_worker_env import PREFIX, NUL, PythonWorkerEnvMixin
+
+from pyspark.sql.tests.test_python_worker_env import NUL, PREFIX, PythonWorkerEnvMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 

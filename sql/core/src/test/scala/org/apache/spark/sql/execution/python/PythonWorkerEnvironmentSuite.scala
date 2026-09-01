@@ -382,6 +382,9 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
       "PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE",
       "PYTHON_UNIX_DOMAIN_ENABLED",
       "PYTHON_WORKER_FACTORY_SECRET",
+      // Set only on the daemon's Unix-domain-socket branch. Enumerating this family missed it, so
+      // the whole `PYTHON_WORKER_FACTORY_` prefix is reserved and this name pins that.
+      "PYTHON_WORKER_FACTORY_SOCK_DIR",
       "OMP_NUM_THREADS").foreach { name =>
       withSQLConf(key(name) -> "1") {
         val ex = intercept[SparkException] {
@@ -407,18 +410,49 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
     // session's environment -- so they are deliberately not reserved. A session setting one is
     // harmless: Spark's value still reaches the worker.
     withSQLConf(
-      key("PYTHONPATH") -> "/tmp/ignored",
       key("PYTHONUNBUFFERED") -> "NO",
       key("PYTHON_UDF_BATCH_SIZE") -> "1",
       key("PYTHONWARNINGS") -> "ignore",
       key("MY_SPARK_SETTING") -> "1") {
       val env = PythonWorkerEnvironment.readValidated(spark.sessionState.conf)
       assert(env.keySet === Set(
-        "PYTHONPATH",
         "PYTHONUNBUFFERED",
         "PYTHON_UDF_BATCH_SIZE",
         "PYTHONWARNINGS",
         "MY_SPARK_SETTING"))
+    }
+  }
+
+  test("SPARK-58752: PYTHONPATH is accepted, because Spark merges it rather than replacing it") {
+    // The only name Spark neither reserves nor overwrites: `PythonWorkerFactory` folds the
+    // session's value into the path it computes, its own entries first. Accepting the name is
+    // therefore deliberate, not an oversight in the reserved list. This pins only that validation
+    // lets the name through; the merge itself needs a running worker, so the end-to-end
+    // `test_pythonpath_is_merged_rather_than_replaced` covers it.
+    withSQLConf(key("PYTHONPATH") -> "/tmp/extra-modules") {
+      assert(
+        PythonWorkerEnvironment.readValidated(spark.sessionState.conf) ===
+          Map("PYTHONPATH" -> "/tmp/extra-modules"))
+    }
+  }
+
+  test("SPARK-58752: the reserved set is pinned, and write-order names stay settable") {
+    // The reserved list is a hand-maintained mirror of the `envVars.put` calls in
+    // `BasePythonRunner.compute` and `PythonWorkerFactory`. Restating it here makes an edit
+    // deliberate rather than incidental; it cannot catch a name Spark adds upstream later, which
+    // is the standing cost of a list and the gap that left `PYTHON_WORKER_FACTORY_SOCK_DIR`
+    // settable until the family became a prefix.
+    assert(PythonWorkerEnvironment.reservedNames === Set(
+      "OMP_NUM_THREADS",
+      "PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE",
+      "PYTHON_FAULTHANDLER_DIR",
+      "PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS",
+      "PYTHON_UNIX_DOMAIN_ENABLED"))
+    // Unconditional writes are protected by write order and must stay settable, so they must not
+    // creep into the reserved set.
+    Seq("PYTHONUNBUFFERED", "PYTHON_UDF_BATCH_SIZE", "PYTHONPATH").foreach { name =>
+      assert(!PythonWorkerEnvironment.reservedNames.contains(name))
+      assert(!PythonWorkerEnvironment.reservedNamePrefixes.exists(name.startsWith))
     }
   }
 

@@ -21,6 +21,8 @@ These run a real Python worker, so they cover what the unit tests cannot: that a
 here and the Spark Connect parity suite, so both front ends are held to the same behaviour.
 """
 
+import os
+
 from pyspark.sql.functions import lit, udf
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -137,13 +139,49 @@ class PythonWorkerEnvMixin:
             self._unset_env("PYTHONUNBUFFERED")
 
     def test_conditionally_set_variable_is_reserved(self):
-        # Spark sets PYTHON_UNIX_DOMAIN_ENABLED only on the Unix-domain-socket path, and the worker
-        # reads it to choose its transport, so write order cannot protect it and the name is refused.
-        with self.assertRaises(Exception) as context:
-            self.spark.sql("SET {}PYTHON_UNIX_DOMAIN_ENABLED=True".format(PREFIX)).collect()
-            self._read_in_worker("ANY")
-        self.assertIn("RESERVED_PYTHON_WORKER_ENV_VAR_NAME", str(context.exception))
-        self._unset_env("PYTHON_UNIX_DOMAIN_ENABLED")
+        # Spark sets PYTHON_UNIX_DOMAIN_ENABLED only on the Unix-domain-socket path, and the
+        # worker reads it to choose its transport, so write order cannot protect it and the name
+        # is refused.
+        # SQL `SET` is intercepted on neither front end, so the write lands and the rejection comes
+        # at worker launch. Kept outside assertRaises so the assertion is about the launch, and
+        # unset in a finally so a failure cannot leak the name into the rest of the shared session.
+        self.spark.sql("SET {}PYTHON_UNIX_DOMAIN_ENABLED=True".format(PREFIX)).collect()
+        try:
+            with self.assertRaises(Exception) as context:
+                self._read_in_worker("ANY")
+            self.assertIn("RESERVED_PYTHON_WORKER_ENV_VAR_NAME", str(context.exception))
+        finally:
+            self._unset_env("PYTHON_UNIX_DOMAIN_ENABLED")
+
+    def test_worker_factory_name_is_reserved_by_prefix(self):
+        # PYTHON_WORKER_FACTORY_SOCK_DIR is set only on the daemon's Unix-domain-socket branch.
+        # The reserved list enumerated three names in this family and missed it, so the prefix is
+        # reserved instead; this covers the name the enumeration let through.
+        self.spark.sql("SET {}PYTHON_WORKER_FACTORY_SOCK_DIR=/tmp".format(PREFIX)).collect()
+        try:
+            with self.assertRaises(Exception) as context:
+                self._read_in_worker("ANY")
+            self.assertIn("RESERVED_PYTHON_WORKER_ENV_VAR_NAME", str(context.exception))
+        finally:
+            self._unset_env("PYTHON_WORKER_FACTORY_SOCK_DIR")
+
+    def test_pythonpath_is_merged_rather_than_replaced(self):
+        # PYTHONPATH is neither reserved nor overridden: PythonWorkerFactory folds the session's
+        # value into the path it computes. So the session's entry is visible to the worker, and
+        # Spark's own entries survive alongside it -- the UDF running at all proves pyspark stayed
+        # importable, which is the property that makes leaving the name settable safe.
+        marker = "/tmp/spark-58752-extra-modules"
+        self._set_env("PYTHONPATH", marker)
+        try:
+            entries = self._read_in_worker("PYTHONPATH").split(os.pathsep)
+            self.assertIn(marker, entries)
+            # Spark's entries come first when the harness supplies any. Guarded because a worker
+            # whose pyspark comes from site-packages needs none, leaving the marker alone on the
+            # path -- which is why "cannot displace pyspark" rests on the UDF having run, not here.
+            if len(entries) > 1:
+                self.assertNotEqual(entries[0], marker)
+        finally:
+            self._unset_env("PYTHONPATH")
 
     # -- families that are not covered yet ------------------------------------
 
