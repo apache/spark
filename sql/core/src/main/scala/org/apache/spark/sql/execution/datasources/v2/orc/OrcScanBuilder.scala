@@ -50,8 +50,7 @@ case class OrcScanBuilder(
   private var finalSchema = new StructType()
 
   private var pushedAggregations = Option.empty[Aggregation]
-  private var charVarcharStandardSemantics =
-    sparkSession.sessionState.conf.charVarcharStandardSemantics
+  private var charVarcharStandardSemantics = false
 
   override def bindCharVarcharStandardSemantics(enabled: Boolean): Unit = {
     charVarcharStandardSemantics = enabled
