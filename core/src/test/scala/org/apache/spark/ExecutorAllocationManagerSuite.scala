@@ -755,8 +755,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     }
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
-    assert(numExecutorsTarget(manager, defaultProfile.id) === 1)
-    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 1)
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 2)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 2)
   }
 
   test("SPARK-30511 remove executors when speculative tasks end") {
@@ -859,11 +859,11 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       createTaskInfo(47, 37, executorId = "11", speculative = true), new ExecutorMetrics, null))
 
     // We should have 2 original tasks (index 38, 39) running, with corresponding 2 speculative
-    // tasks running
+    // tasks running. Locality offset retains 2 executors.
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
-    assert(numExecutorsTarget(manager, defaultProfile.id) === 1)
-    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 1)
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 2)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 2)
     assert(removeExecutorDefaultProfile(manager, "11"))
     onExecutorRemoved(manager, "11")
     // At this point, we still have 2 executors running: ["9", "12"]
@@ -883,8 +883,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       createTaskInfo(50, 39, executorId = "12", speculative = true)))
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
-    assert(numExecutorsTarget(manager, defaultProfile.id) === 1)
-    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 1)
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 2)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 2)
 
     // Task 39 and 48 succeed, task 50 killed
     post(SparkListenerTaskEnd(0, 0, null, Success,
@@ -2135,6 +2135,35 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val killReason = TaskKilled("primary task succeeded", Seq.empty, Seq.empty)
     post(SparkListenerTaskEnd(0, 0, "task", killReason, speculativeTaskInfo0, null, null))
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 2)
+  }
+
+  test("SPARK-49485: count running speculative attempts by taskId, not task index") {
+    val conf = createConf(1, 5, 2).set(config.EXECUTOR_CORES, 2)
+    val manager = createManager(conf)
+
+    post(SparkListenerStageSubmitted(createStageInfo(0, 3)))
+    post(SparkListenerExecutorAdded(0, "executor-1", new ExecutorInfo("host1", 2, Map.empty)))
+    post(SparkListenerExecutorAdded(0, "executor-2", new ExecutorInfo("host2", 2, Map.empty)))
+
+    val taskInfo0 = createTaskInfo(0, 0, "executor-1")
+    val taskInfo1 = createTaskInfo(1, 1, "executor-1")
+    val taskInfo2 = createTaskInfo(2, 2, "executor-2")
+    post(SparkListenerTaskStart(0, 0, taskInfo0))
+    post(SparkListenerTaskStart(0, 0, taskInfo1))
+    post(SparkListenerTaskStart(0, 0, taskInfo2))
+
+    // Speculative attempt 1 for task index 0 (taskId 3)
+    post(new SparkListenerSpeculativeTaskSubmitted(0, 0, 0, 0))
+    val specInfo1 = createTaskInfo(3, 0, "executor-2", speculative = true)
+    post(SparkListenerTaskStart(0, 0, specInfo1))
+
+    // Speculative attempt 2 for same task index 0 (taskId 4)
+    post(new SparkListenerSpeculativeTaskSubmitted(0, 0, 0, 0))
+    val specInfo2 = createTaskInfo(4, 0, "executor-2", speculative = true)
+    post(SparkListenerTaskStart(0, 0, specInfo2))
+
+    // Both specInfo1 (taskId 3) and specInfo2 (taskId 4) are tracked as distinct running attempts
+    assert(manager.listener.runningSpeculativeTasksPerResourceProfile(defaultProfile.id) === 2)
   }
 }
 
