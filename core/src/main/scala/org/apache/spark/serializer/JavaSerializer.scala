@@ -61,7 +61,10 @@ private[spark] class JavaSerializationStream(
   def close(): Unit = { objOut.close() }
 }
 
-private[spark] class JavaDeserializationStream(in: InputStream, loader: ClassLoader)
+private[spark] class JavaDeserializationStream(
+    in: InputStream,
+    loader: ClassLoader,
+    filter: Option[ObjectInputFilter] = None)
     extends DeserializationStream {
 
   private val objIn = new ObjectInputStream(in) {
@@ -84,6 +87,11 @@ private[spark] class JavaDeserializationStream(in: InputStream, loader: ClassLoa
     }
 
   }
+
+  // A JEP-290 deserialization filter for callers that validate persisted data on read
+  // (e.g. the master recovery store). Applied per-stream so it cannot affect other
+  // JavaSerializer users.
+  filter.foreach(objIn.setObjectInputFilter)
 
   def readObject[T: ClassTag](): T = objIn.readObject().asInstanceOf[T]
   def close(): Unit = { objIn.close() }

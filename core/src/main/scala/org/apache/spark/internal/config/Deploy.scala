@@ -51,6 +51,18 @@ private[spark] object Deploy {
     .checkValue(_ > 0, "spark.deploy.recoveryTimeout must be positive.")
     .createOptional
 
+  val RECOVERY_SERIALIZATION_FILTER =
+    ConfigBuilder("spark.deploy.recoverySerializationFilter")
+      .doc("JEP-290 serialization filter pattern applied when the master deserializes " +
+        "recovery state written by the built-in JavaSerializer (currently enforced for " +
+        "the ZOOKEEPER recovery mode). The default allows only JDK, Scala and Spark " +
+        "classes, which covers everything the master persists (ApplicationInfo, " +
+        "DriverInfo, WorkerInfo and their fields); znodes containing anything else are " +
+        "treated as corrupt and dropped during recovery. Set to '*' to disable filtering.")
+      .version("4.4.0")
+      .stringConf
+      .createWithDefault("java.**;scala.**;org.apache.spark.**;!*")
+
   val ZOOKEEPER_URL = ConfigBuilder("spark.deploy.zookeeper.url")
     .doc(s"When `${RECOVERY_MODE.key}` is set to ZOOKEEPER, this " +
       "configuration is used to set the zookeeper URL to connect to.")
