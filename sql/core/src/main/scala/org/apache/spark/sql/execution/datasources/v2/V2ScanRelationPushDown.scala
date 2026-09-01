@@ -995,12 +995,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val normalizedProjects = DataSourceStrategy
         .normalizeExprs(project, sHolder.output)
         .asInstanceOf[Seq[NamedExpression]]
-      // Keep inferred filters below non-deterministic residual filters and include them in column
-      // pruning. This mirrors fully pushed filters when
-      // SupportsReportStatistics.reflectsFullyPushedDownFilters returns false: filter estimation
-      // and execution retain every referenced column.
-      val allFilters = sHolder.inferredFilterExpressions ++
-        filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
+      // Do not retain columns solely for inferred filters. Like the best-effort statistics
+      // adjustment for fully pushed filters, only inferred filters that survive pruning are added
+      // back below.
+      val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
       val normalizedFilters = DataSourceStrategy.normalizeExprs(allFilters, sHolder.output)
       val (scan, output) = PushDownUtils.pruneColumns(
         sHolder.builder, sHolder.relation, normalizedProjects, normalizedFilters)
@@ -1031,9 +1029,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         }
       }.filter(_.references.subsetOf(AttributeSet(output)))
 
-      // Remap inferred filters to the pruned output. They were included in normalizedFilters, so
-      // pruning retained their fields and FIELD_NOT_FOUND cannot occur here.
-      val remappedInferredFilters = sHolder.inferredFilterExpressions.map(projectionFunc)
+      // Remap inferred filters to the pruned output and drop filters whose references are no
+      // longer available.
+      val remappedInferredFilters = sHolder.inferredFilterExpressions.flatMap { filter =>
+        try Some(projectionFunc(filter))
+        catch {
+          case e: SparkIllegalArgumentException if e.getCondition == "FIELD_NOT_FOUND" =>
+            None
+        }
+      }.filter(_.references.subsetOf(AttributeSet(output)))
 
       // Record the fully-pushed filter expressions on the scan relation, keeping their references
       // to the relation's (pre-pruning) output. These include filters on columns that were pruned
@@ -1049,7 +1053,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         // (column pruning + deterministic filters) may be fused. See hasBlockingPushdown.
         mergeableScan = !hasBlockingPushdown(sHolder))
 
-      val finalFilters = normalizedFilters.map(projectionFunc)
+      val finalFilters = remappedInferredFilters ++ normalizedFilters.map(projectionFunc)
       // bottom-most filters are put in the left of the list.
       val withFilter = finalFilters.foldLeft[LogicalPlan](scanRelation)((plan, cond) => {
         Filter(cond, plan)

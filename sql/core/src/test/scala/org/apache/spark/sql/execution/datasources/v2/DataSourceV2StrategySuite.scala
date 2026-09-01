@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, F
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.join.{JoinType => V2JoinType}
-import org.apache.spark.sql.connector.read.{Batch, InputPartition, LocalScan, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTopN, SupportsPushDownVariantExtractions, V1Scan, VariantExtraction}
+import org.apache.spark.sql.connector.read.{Batch, InputPartition, LocalScan, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownTopN, SupportsPushDownVariantExtractions, V1Scan, VariantExtraction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
@@ -1211,34 +1211,6 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       s"ambiguous inferred filter must be ignored:\n$ambiguousPlan")
   }
 
-  test("inferred filters retain referenced columns in the pruned scan schema") {
-    val schema = StructType(Seq(
-      StructField("id", LongType, nullable = false),
-      StructField("part", LongType, nullable = false),
-      StructField("value", LongType, nullable = false)))
-    val inferred =
-      GreaterThanOrEqual(AttributeReference("part", LongType)(), Literal(0L))
-    val table = new PruningCatalystFilterTable(schema, inferred)
-    val relation = DataSourceV2Relation.create(
-      table,
-      None,
-      None,
-      CaseInsensitiveStringMap.empty)
-    val id = relation.output.find(_.name == "id").get
-    val value = relation.output.find(_.name == "value").get
-    val plan = Project(Seq(value), Filter(EqualTo(id, Literal(1L)), relation))
-
-    val pushedPlan = V2ScanRelationPushDown(plan)
-    val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
-    assert(table.builder.requiredSchema.fieldNames.contains("part"))
-    assert(scan.output.exists(_.name == "part"))
-    assert(scan.inferredFilters.exists(_.references.exists(_.name == "part")))
-    assert(pushedPlan.exists {
-      case Filter(condition, _) => condition.exists(_.semanticEquals(scan.inferredFilters.head))
-      case _ => false
-    }, s"the inferred filter must remain executable:\n$pushedPlan")
-  }
-
   test("Boolean simplification preserves executable inferred filters") {
     val schema = StructType(Seq(
       StructField("a", BooleanType, nullable = false),
@@ -1525,49 +1497,6 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     override def pushedFilters: Array[Predicate] = Array.empty
 
     override def inferredFilters: Seq[Expression] = Seq(inferredFilter)
-  }
-
-  private class PruningCatalystFilterTable(
-      tableSchema: StructType,
-      inferredFilter: Expression) extends Table with SupportsRead {
-
-    var builder: PruningCatalystFilterScanBuilder = _
-
-    override def name(): String = "pruning-catalyst-filter-table"
-
-    override def schema(): StructType = tableSchema
-
-    override def capabilities(): java.util.Set[TableCapability] =
-      EnumSet.of(TableCapability.BATCH_READ)
-
-    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      builder = new PruningCatalystFilterScanBuilder(tableSchema, inferredFilter)
-      builder
-    }
-  }
-
-  private class PruningCatalystFilterScanBuilder(
-      tableSchema: StructType,
-      inferredFilter: Expression)
-    extends ScanBuilder
-    with SupportsPushDownCatalystFilters
-    with SupportsPushDownRequiredColumns {
-
-    var requiredSchema: StructType = tableSchema
-
-    override def build(): Scan = new Scan {
-      override def readSchema(): StructType = requiredSchema
-    }
-
-    override def pushFilters(filters: Seq[Expression]): Seq[Expression] = Nil
-
-    override def pushedFilters: Array[Predicate] = Array.empty
-
-    override def inferredFilters: Seq[Expression] = Seq(inferredFilter)
-
-    override def pruneColumns(schema: StructType): Unit = {
-      requiredSchema = schema
-    }
   }
 
   private class PushdownTable(

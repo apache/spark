@@ -35,18 +35,21 @@ trait SupportsPushDownCatalystFilters extends ScanBuilder {
   def pushFilters(filters: Seq[Expression]): Seq[Expression]
 
   /**
-   * Returns additional filters inferred from the query filters passed to [[pushFilters]]. The data
-   * source must guarantee that each inferred filter is implied by the query filters and is
-   * satisfied by every row returned by the scan. Spark currently adds inferred filters to the
-   * logical Filter for optimizer statistics, as it does for fully pushed filters when
-   * `SupportsReportStatistics.reflectsFullyPushedDownFilters` returns `false`.
+   * Returns additional filters inferred from eligible query filters passed to [[pushFilters]].
+   * Each inferred filter must be implied by those query filters and satisfied by every row
+   * returned by the scan.
    *
-   * Spark requests inferred filters after [[pushFilters]] and only when filters are pushed. It
-   * discards them if a join, aggregate, or variant extraction replaces the scan output.
+   * Spark adds inferred filters whose columns remain in the scan output to the logical Filter for
+   * optimizer statistics. This is the same best-effort adjustment used for fully pushed filters
+   * when `SupportsReportStatistics.reflectsFullyPushedDownFilters` returns `false`: columns are not
+   * retained solely for these filters, and filters that reference pruned columns are dropped.
    *
-   * Inferred filters must be deterministic, must not contain subqueries or user-defined
-   * expressions, must resolve to well-typed Boolean expressions, and must not duplicate filters
-   * fully pushed by [[pushFilters]]. Spark ignores invalid inferred filters.
+   * Spark discards inferred filters if a join, aggregate, or variant extraction replaces the scan
+   * output.
+   *
+   * Inferred filters must be deterministic, contain no subqueries or user-defined expressions,
+   * resolve to well-typed Boolean expressions, and not duplicate fully pushed filters. Spark
+   * ignores invalid inferred filters.
    *
    * Column references must be represented by `AttributeReference`. A nested column is represented
    * by a dotted name, with path parts containing dots quoted using Spark SQL identifier syntax.
