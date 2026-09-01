@@ -309,12 +309,12 @@ class CountVectorizerModel(
     val localMinTF = $(minTF)
     val localBinary = $(binary)
     val vectorizer = udf { document: Seq[String] =>
-      val dict = bcDict.value
-      val dictSize = dict.size()
+      val localDict = bcDict.value
+      val dictSize = localDict.size()
       val termCounts = new OpenHashMap[Int, Int]
       var tokenCount = 0L
       document.foreach { term =>
-        val index = dict.get(term)
+        val index = localDict.get(term)
         if (index != null) {
           termCounts.changeValue(index.intValue(), 1, _ + 1)
         }
