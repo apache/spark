@@ -112,19 +112,19 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
       mainErrorClass,
       throw SparkException.internalError(s"Cannot find main error class '$errorClass'"))
 
-    subErrorClass match {
-      case None =>
-        errorInfo.messageTemplate
-      case Some(sub) =>
-        val subClasses = errorInfo.subClass.getOrElse(
-          throw SparkException.internalError(
-            s"Error class '$mainErrorClass' has no subclasses, " +
-              s"but subclass '$sub' was requested."))
-        val errorSubInfo = subClasses.getOrElse(
-          sub,
-          throw SparkException.internalError(
-            s"Error class '$mainErrorClass' has no '$sub' subclass."))
-        errorInfo.messageTemplate + " " + errorSubInfo.messageTemplate
+    if (subErrorClass.isEmpty) {
+      errorInfo.messageTemplate
+    } else {
+      val subClassName = subErrorClass.get
+      val subClasses = errorInfo.subClass.getOrElse(
+        throw SparkException.internalError(
+          s"Error class '$mainErrorClass' has no subclasses, " +
+            s"but subclass '$subClassName' was requested."))
+      val errorSubInfo = subClasses.getOrElse(
+        subClassName,
+        throw SparkException.internalError(
+          s"Error class '$mainErrorClass' has no '$subClassName' subclass."))
+      errorInfo.messageTemplate + " " + errorSubInfo.messageTemplate
     }
   }
 
