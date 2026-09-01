@@ -27,16 +27,16 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
-import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
+import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, CombineFilters, ConstantFolding}
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, JoinHint, Limit, LogicalPlan, Offset, Project, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, JoinHint, Limit, LogicalPlan, Offset, OneRowRelation, Project, Sort}
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, SortOrder => V2SortOrder, VariantGet => V2VariantGet}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.join.{JoinType => V2JoinType}
-import org.apache.spark.sql.connector.read.{Batch, InputPartition, LocalScan, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownTopN, SupportsPushDownVariantExtractions, V1Scan, VariantExtraction}
+import org.apache.spark.sql.connector.read.{Batch, InputPartition, LocalScan, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTopN, SupportsPushDownVariantExtractions, V1Scan, VariantExtraction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
@@ -1147,8 +1147,132 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
-  test("advisory filters are not evaluated for V1 scans") {
-    checkAdvisoryNotEvaluatedForScan { tableSchema =>
+  test("advisory filters exclude non-deterministic and subquery expressions") {
+    val scalarSubquery = ScalarSubquery(
+      Project(Seq(Alias(Literal(1L), "value")()), OneRowRelation()))
+    val invalidAdvisories = Seq(
+      GreaterThan(Rand(0), Literal(0.5)),
+      GreaterThan(scalarSubquery, Literal(0L)))
+
+    invalidAdvisories.foreach { advisory =>
+      val schema = StructType(Seq(StructField("id", LongType, nullable = false)))
+      val relation = DataSourceV2Relation.create(
+        new InMemoryCatalystFilterTable(schema, advisory),
+        None,
+        None,
+        CaseInsensitiveStringMap.empty)
+      val pushedPlan = V2ScanRelationPushDown(
+        Filter(EqualTo(relation.output.head, Literal(1L)), relation))
+      val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+
+      assert(scan.advisoryFilters.isEmpty)
+      assert(!pushedPlan.exists {
+        case Filter(condition, _) => condition.exists(_.semanticEquals(advisory))
+        case _ => false
+      }, s"invalid advisory filter $advisory must be discarded:\n$pushedPlan")
+    }
+  }
+
+  test("advisory filters ignore unresolvable and ill-typed expressions") {
+    val schema = StructType(Seq(StructField("id", LongType, nullable = false)))
+    val invalidAdvisories = Seq(
+      GreaterThan(AttributeReference("missing", LongType)(), Literal(0L)),
+      GreaterThan(AttributeReference("id", StringType)(), Literal("zero")),
+      AttributeReference("id", LongType)())
+
+    invalidAdvisories.foreach { advisory =>
+      val relation = DataSourceV2Relation.create(
+        new InMemoryCatalystFilterTable(schema, advisory),
+        None,
+        None,
+        CaseInsensitiveStringMap.empty)
+      val pushedPlan = V2ScanRelationPushDown(
+        Filter(EqualTo(relation.output.head, Literal(1L)), relation))
+      val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+      assert(scan.advisoryFilters.isEmpty,
+        s"invalid advisory filter $advisory must be ignored:\n$pushedPlan")
+    }
+
+    val ambiguousSchema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("ID", LongType, nullable = false)))
+    val ambiguousAdvisory =
+      GreaterThan(AttributeReference("Id", LongType)(), Literal(0L))
+    val ambiguousRelation = DataSourceV2Relation.create(
+      new InMemoryCatalystFilterTable(ambiguousSchema, ambiguousAdvisory),
+      None,
+      None,
+      CaseInsensitiveStringMap.empty)
+    val ambiguousPlan = V2ScanRelationPushDown(
+      Filter(EqualTo(ambiguousRelation.output.head, Literal(1L)), ambiguousRelation))
+    val ambiguousScan =
+      ambiguousPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+    assert(ambiguousScan.advisoryFilters.isEmpty,
+      s"ambiguous advisory filter must be ignored:\n$ambiguousPlan")
+  }
+
+  test("advisory filters retain referenced columns in the pruned scan schema") {
+    val schema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("part", LongType, nullable = false),
+      StructField("value", LongType, nullable = false)))
+    val advisory =
+      GreaterThanOrEqual(AttributeReference("part", LongType)(), Literal(0L))
+    val table = new PruningCatalystFilterTable(schema, advisory)
+    val relation = DataSourceV2Relation.create(
+      table,
+      None,
+      None,
+      CaseInsensitiveStringMap.empty)
+    val id = relation.output.find(_.name == "id").get
+    val value = relation.output.find(_.name == "value").get
+    val plan = Project(Seq(value), Filter(EqualTo(id, Literal(1L)), relation))
+
+    val pushedPlan = V2ScanRelationPushDown(plan)
+    val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+    assert(table.builder.requiredSchema.fieldNames.contains("part"))
+    assert(scan.output.exists(_.name == "part"))
+    assert(scan.advisoryFilters.exists(_.references.exists(_.name == "part")))
+    assert(pushedPlan.exists {
+      case Filter(condition, _) => condition.exists(_.semanticEquals(scan.advisoryFilters.head))
+      case _ => false
+    }, s"the advisory must remain an executable filter:\n$pushedPlan")
+  }
+
+  test("Boolean simplification preserves executable advisory filters") {
+    val schema = StructType(Seq(
+      StructField("a", BooleanType, nullable = false),
+      StructField("b", BooleanType, nullable = false),
+      StructField("c", BooleanType, nullable = false)))
+    val advisory = Or(
+      EqualTo(AttributeReference("a", BooleanType)(), Literal(true)),
+      EqualTo(AttributeReference("b", BooleanType)(), Literal(true)))
+    val relation = DataSourceV2Relation.create(
+      new InMemoryCatalystFilterTable(schema, advisory),
+      None,
+      None,
+      CaseInsensitiveStringMap.empty)
+    val a = relation.output.find(_.name == "a").get
+    val c = relation.output.find(_.name == "c").get
+    val residual = Or(EqualTo(a, Literal(true)), EqualTo(c, Literal(true)))
+
+    val optimized = BooleanSimplification(CombineFilters(
+      V2ScanRelationPushDown(Filter(residual, relation))))
+    val logicalFilters = optimized.collect { case filter: Filter => filter.condition }
+    assert(logicalFilters.exists(_.references.exists(_.name == "b")),
+      s"the advisory must remain executable after Boolean simplification:\n$optimized")
+    val scan = optimized.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+    assert(scan.advisoryFilters.exists(_.references.exists(_.name == "b")))
+    val physicalPlans = new DataSourceV2Strategy(spark).apply(optimized)
+    assert(physicalPlans.exists(_.exists {
+      case filter: org.apache.spark.sql.execution.FilterExec =>
+        filter.condition.references.exists(_.name == "b")
+      case _ => false
+    }), s"the simplified advisory must remain in FilterExec:\n${physicalPlans.mkString("\n")}")
+  }
+
+  test("advisory filters are evaluated for V1 scans") {
+    checkAdvisoryEvaluatedForScan { tableSchema =>
       new V1Scan {
         override def readSchema(): StructType = tableSchema
 
@@ -1166,8 +1290,8 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
-  test("advisory filters are not evaluated for local scans") {
-    checkAdvisoryNotEvaluatedForScan { tableSchema =>
+  test("advisory filters are evaluated for local scans") {
+    checkAdvisoryEvaluatedForScan { tableSchema =>
       new LocalScan {
         override def readSchema(): StructType = tableSchema
 
@@ -1324,10 +1448,10 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
         scan.advisoryFilters.forall(advisory => filter.condition.exists(_.semanticEquals(advisory)))
       case _ => false
     }, s"expected advisory filter above the scan:\n$plan")
-    assertAdvisoryNotEvaluated(plan)
+    assertAdvisoryEvaluated(plan)
   }
 
-  private def assertAdvisoryNotEvaluated(plan: LogicalPlan): Unit = {
+  private def assertAdvisoryEvaluated(plan: LogicalPlan): Unit = {
     val scan = plan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
     val physicalPlans = new DataSourceV2Strategy(spark).apply(plan)
     assert(physicalPlans.nonEmpty, s"expected DataSourceV2Strategy to plan:\n$plan")
@@ -1335,11 +1459,11 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       case filter: org.apache.spark.sql.execution.FilterExec => filter.condition
     })
     assert(scan.advisoryFilters.forall { advisory =>
-      !physicalFilters.exists(_.exists(_.semanticEquals(advisory)))
-    }, s"advisory filters must not be evaluated:\n${physicalPlans.mkString("\n")}")
+      physicalFilters.exists(_.exists(_.semanticEquals(advisory)))
+    }, s"advisory filters must remain in FilterExec:\n${physicalPlans.mkString("\n")}")
   }
 
-  private def checkAdvisoryNotEvaluatedForScan(scanFactory: StructType => Scan): Unit = {
+  private def checkAdvisoryEvaluatedForScan(scanFactory: StructType => Scan): Unit = {
     val schema = StructType(Seq(
       StructField("id", LongType, nullable = false),
       StructField("value", LongType, nullable = false)))
@@ -1390,6 +1514,8 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     override def build(): Scan = scanFactory.map(_(tableSchema)).getOrElse {
       new Scan {
         override def readSchema(): StructType = tableSchema
+
+        override def toBatch: Batch = emptyBatch
       }
     }
 
@@ -1398,6 +1524,49 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     override def pushedFilters: Array[Predicate] = Array.empty
 
     override def advisoryFilters: Seq[Expression] = Seq(advisoryFilter)
+  }
+
+  private class PruningCatalystFilterTable(
+      tableSchema: StructType,
+      advisoryFilter: Expression) extends Table with SupportsRead {
+
+    var builder: PruningCatalystFilterScanBuilder = _
+
+    override def name(): String = "pruning-catalyst-filter-table"
+
+    override def schema(): StructType = tableSchema
+
+    override def capabilities(): java.util.Set[TableCapability] =
+      EnumSet.of(TableCapability.BATCH_READ)
+
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      builder = new PruningCatalystFilterScanBuilder(tableSchema, advisoryFilter)
+      builder
+    }
+  }
+
+  private class PruningCatalystFilterScanBuilder(
+      tableSchema: StructType,
+      advisoryFilter: Expression)
+    extends ScanBuilder
+    with SupportsPushDownCatalystFilters
+    with SupportsPushDownRequiredColumns {
+
+    var requiredSchema: StructType = tableSchema
+
+    override def build(): Scan = new Scan {
+      override def readSchema(): StructType = requiredSchema
+    }
+
+    override def pushFilters(filters: Seq[Expression]): Seq[Expression] = Nil
+
+    override def pushedFilters: Array[Predicate] = Array.empty
+
+    override def advisoryFilters: Seq[Expression] = Seq(advisoryFilter)
+
+    override def pruneColumns(schema: StructType): Unit = {
+      requiredSchema = schema
+    }
   }
 
   private class PushdownTable(

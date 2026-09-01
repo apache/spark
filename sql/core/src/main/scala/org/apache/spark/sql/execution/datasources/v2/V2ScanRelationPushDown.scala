@@ -35,12 +35,12 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownVariantExtractions, SupportsReportStatistics, V1Scan, VariantExtraction}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters, SupportsPushDownVariantExtractions, SupportsReportStatistics, V1Scan, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation, VariantMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{SupportsPushDownCatalystFilters, VariantExtractionImpl}
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StringType, StructField, StructType, VariantType}
+import org.apache.spark.sql.types.{BooleanType, DataType, DecimalType, IntegerType, StringType, StructField, StructType, VariantType}
 import org.apache.spark.sql.util.SchemaUtils._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -128,8 +128,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
 
       // Keep advisory filters off the plan until the other source pushdowns have run. Their
-      // interactions with Spark-side filters vary, but advisory filters do not need to be
-      // evaluated and therefore must not block an otherwise independent pushdown.
+      // interactions with Spark-side filters vary, but they must not block an otherwise
+      // independent pushdown.
       val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
 
       // Compute the pushed filter expressions: the normalized filters that were fully pushed
@@ -141,13 +141,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         .filterNot(postScanFilterSet.contains)
         .filter(_.deterministic)
       val fullyPushedFilterSet = ExpressionSet(sHolder.pushedFilterExpressions)
-      // Advisory filters are only meaningful when the Catalyst `pushFilters` callback actually ran
-      // with an eligible filter list. `PushDownUtils.pushFilters` prefers `SupportsPushDownFilters`
-      // and `SupportsPushDownV2Filters`, so a builder mixing those with the Catalyst trait never
-      // receives the callback; and subquery-only or non-deterministic-only filters leave no
-      // eligible Catalyst predicate.
+      // Collect advisories only after an eligible Catalyst callback; V1/V2 interfaces take
+      // precedence when a builder implements multiple filter APIs.
       val catalystFiltersPushed = normalizedFiltersWithoutSubquery.exists(_.deterministic) &&
-        PushDownUtils.dispatchesToCatalystFilters(sHolder.builder)
+        pushedFilters.isRight &&
+        sHolder.builder.isInstanceOf[SupportsPushDownCatalystFilters] &&
+        !sHolder.builder.isInstanceOf[SupportsPushDownV2Filters]
       sHolder.advisoryFilterExpressions = if (catalystFiltersPushed) {
         getAdvisoryFilters(sHolder).filterNot(fullyPushedFilterSet.contains)
       } else {
@@ -996,9 +995,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val normalizedProjects = DataSourceStrategy
         .normalizeExprs(project, sHolder.output)
         .asInstanceOf[Seq[NamedExpression]]
-      // Keep advisory filters closest to the scan. A non-deterministic residual filter prevents
-      // PhysicalOperation from collecting filters across it; putting advisory filters below that
-      // barrier ensures DataSourceV2Strategy still sees and removes them with the scan.
+      // Keep advisories below non-deterministic residual filters and include them in column
+      // pruning. This mirrors fully pushed filters when
+      // SupportsReportStatistics.reflectsFullyPushedDownFilters returns false: filter estimation
+      // and execution retain every referenced column.
       val allFilters = sHolder.advisoryFilterExpressions ++
         filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
       val normalizedFilters = DataSourceStrategy.normalizeExprs(allFilters, sHolder.output)
@@ -1031,10 +1031,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         }
       }.filter(_.references.subsetOf(AttributeSet(output)))
 
-      // Also remap to the pruned output the advisory filters that will be removed from the final
-      // FilterExec by DataSourceV2Strategy.
-      // Advisory filters were in normalizedFilters, so pruning retained their fields and
-      // FIELD_NOT_FOUND cannot occur here.
+      // Remap advisory filters to the pruned output. They were included in normalizedFilters, so
+      // pruning retained their fields and FIELD_NOT_FOUND cannot occur here.
       val remappedAdvisoryFilters = sHolder.advisoryFilterExpressions.map(projectionFunc)
 
       // Record the fully-pushed filter expressions on the scan relation, keeping their references
@@ -1298,7 +1296,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             !filter.containsPattern(EXTERNAL_UDF) &&
             !filter.exists(_.isInstanceOf[UserDefinedExpression])
         }
-        rebindFilters(advisoryFilters, sHolder.output).flatMap(splitConjunctivePredicates)
+        val validFilters = rebindFilters(advisoryFilters, sHolder.output).filter { filter =>
+          val valid = filter.resolved && filter.dataType == BooleanType &&
+            filter.checkInputDataTypes().isSuccess
+          if (!valid) {
+            logWarning(s"Ignoring invalid advisory filter reported by the data source: $filter")
+          }
+          valid
+        }.flatMap(splitConjunctivePredicates)
+        ExpressionSet(validFilters).toSeq
       case _ =>
         Nil
     }
@@ -1308,16 +1314,32 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       filters: Seq[Expression],
       output: Seq[AttributeReference]): Seq[Expression] = {
     val outputPlan = LocalRelation(output)
-    filters.map(_.transformUp {
-      case attr: AttributeReference =>
-        outputPlan.resolveQuoted(attr.name, conf.resolver) match {
-          case Some(Alias(child, _)) => child
-          case Some(resolved) => resolved.toAttribute
-          case None =>
-            throw SparkException.internalError(
-              s"Cannot resolve Catalyst filter attribute '${attr.name}'")
+    filters.flatMap { filter =>
+      var unresolvedAttribute: Option[String] = None
+      try {
+        val rebound = filter.transformUp {
+          case attr: AttributeReference =>
+            outputPlan.resolveQuoted(attr.name, conf.resolver) match {
+              case Some(Alias(child, _)) => child
+              case Some(resolved) => resolved.toAttribute
+              case None =>
+                unresolvedAttribute = Some(attr.name)
+                attr
+            }
         }
-    })
+        unresolvedAttribute match {
+          case Some(name) =>
+            logWarning(
+              s"Ignoring advisory filter with an unknown data source column '$name': $filter")
+            None
+          case None => Some(rebound)
+        }
+      } catch {
+        case e: AnalysisException =>
+          logWarning(s"Ignoring advisory filter that cannot be resolved: $filter", e)
+          None
+      }
+    }
   }
 
 }

@@ -347,7 +347,7 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
       checkSamplePushed(df, pushed = true)
       checkAnswer(df, Seq(Row(3L, "c"), Row(4L, "d"), Row(5L, "e")))
       assertAdvisoryOnLogicalPlan(df, advisory)
-      assertAdvisoryNotInFilterExec(df, advisory)
+      assertAdvisoryInFilterExec(df, advisory)
     } finally {
       sql(s"DROP TABLE IF EXISTS $table")
     }
@@ -365,12 +365,12 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
       s"advisory filter $advisory should remain in the logical Filter:\n${plan.treeString}")
   }
 
-  private def assertAdvisoryNotInFilterExec(df: DataFrame, advisory: String): Unit = {
+  private def assertAdvisoryInFilterExec(df: DataFrame, advisory: String): Unit = {
     val execFilters = df.queryExecution.executedPlan.collect {
       case filter: FilterExec => filter.condition
     }
-    assert(!execFilters.exists(containsFilter(_, advisory)),
-      s"advisory filter $advisory should be dropped from FilterExec:\n" +
+    assert(execFilters.exists(containsFilter(_, advisory)),
+      s"advisory filter $advisory should remain in FilterExec:\n" +
         df.queryExecution.executedPlan)
   }
 

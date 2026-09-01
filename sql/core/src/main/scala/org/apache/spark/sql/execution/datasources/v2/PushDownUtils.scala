@@ -149,20 +149,6 @@ object PushDownUtils extends Logging {
   }
 
   /**
-   * Whether [[pushFilters]] dispatches to the [[SupportsPushDownCatalystFilters]] branch for this
-   * builder, i.e. its Catalyst `pushFilters` callback is the one actually invoked. That branch is
-   * reached only when the builder implements neither [[SupportsPushDownFilters]] nor
-   * [[SupportsPushDownV2Filters]], which take precedence. Advisory filters, which a source reports
-   * through [[SupportsPushDownCatalystFilters]] after that callback, are meaningful only then.
-   */
-  def dispatchesToCatalystFilters(scanBuilder: ScanBuilder): Boolean = scanBuilder match {
-    case _: SupportsPushDownFilters => false
-    case _: SupportsPushDownV2Filters => false
-    case _: SupportsPushDownCatalystFilters => true
-    case _ => false
-  }
-
-  /**
    * Rebuilds the Catalyst [[Expression]]s for a sequence of data source [[Predicate]]s, using the
    * mapping from translated data source predicates to their original Catalyst expressions.
    */

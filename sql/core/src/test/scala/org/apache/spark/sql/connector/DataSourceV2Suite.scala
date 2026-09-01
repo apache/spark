@@ -1669,7 +1669,7 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       "non-deterministic filter should be retained as a post-scan Filter")
   }
 
-  test("advisory filters stay in the logical Filter but are not evaluated by FilterExec") {
+  test("advisory filters remain in logical Filter and FilterExec") {
     // Rows satisfy j = -i, so i > 2 implies the advisory predicate j < -2.
     val query = spark.read
       .format(classOf[CatalystFilterDataSourceV2].getName)
@@ -1691,12 +1691,12 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     val execFilters = query.queryExecution.executedPlan.collect {
       case filter: FilterExec => filter.condition
     }
-    assert(!execFilters.exists(containsFilter(_, advisoryFilter)),
-      s"advisory filter $advisoryFilter should be dropped from FilterExec:\n" +
+    assert(execFilters.exists(containsFilter(_, advisoryFilter)),
+      s"advisory filter $advisoryFilter should remain in FilterExec:\n" +
         query.queryExecution.executedPlan)
   }
 
-  test("advisory filters are not evaluated with a non-deterministic residual") {
+  test("advisory filters remain below a non-deterministic residual") {
     val query = spark.read
       .format(classOf[CatalystFilterDataSourceV2].getName)
       .option(CatalystFilterScanBuilder.ADVISORY_DERIVATION,
@@ -1712,12 +1712,18 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
     assert(execFilters.exists(_.exists(!_.deterministic)),
       s"expected a non-deterministic residual FilterExec:\n${query.queryExecution.executedPlan}")
-    assert(!execFilters.exists(containsFilter(_, advisoryFilter)),
-      s"advisory filter $advisoryFilter should be dropped from FilterExec:\n" +
+    assert(execFilters.exists(containsFilter(_, advisoryFilter)),
+      s"advisory filter $advisoryFilter should remain in FilterExec:\n" +
         query.queryExecution.executedPlan)
+    val logicalFilters = query.queryExecution.optimizedPlan.collect {
+      case filter: LogicalFilter => filter.condition
+    }
+    assert(logicalFilters.exists(containsFilter(_, advisoryFilter)),
+      s"advisory filter $advisoryFilter should remain in the logical Filter:\n" +
+        query.queryExecution.optimizedPlan)
   }
 
-  test("compound advisory filters are not evaluated by FilterExec") {
+  test("compound advisory filters remain in logical Filter and FilterExec") {
     // i > 2 AND i < 8 implies j < -2 AND j > -8.
     val query = spark.read
       .format(classOf[CatalystFilterDataSourceV2].getName)
@@ -1733,8 +1739,13 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     val execFilters = query.queryExecution.executedPlan.collect {
       case filter: FilterExec => filter.condition
     }
-    assert(!execFilters.exists(containsFilter(_, "j < -2")))
-    assert(!execFilters.exists(containsFilter(_, "j > -8")))
+    assert(execFilters.exists(containsFilter(_, "j < -2")))
+    assert(execFilters.exists(containsFilter(_, "j > -8")))
+    val logicalFilters = query.queryExecution.optimizedPlan.collect {
+      case filter: LogicalFilter => filter.condition
+    }
+    assert(logicalFilters.exists(containsFilter(_, "j < -2")))
+    assert(logicalFilters.exists(containsFilter(_, "j > -8")))
   }
 
   test("advisory filters do not block join pushdown") {
@@ -1788,8 +1799,8 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     val execFilters = df.queryExecution.executedPlan.collect {
       case filter: FilterExec => filter.condition
     }
-    assert(!execFilters.exists(containsFilter(_, advisoryFilter)),
-      s"advisory filter $advisoryFilter should be dropped from FilterExec:\n" +
+    assert(execFilters.exists(containsFilter(_, advisoryFilter)),
+      s"advisory filter $advisoryFilter should remain in FilterExec:\n" +
         df.queryExecution.executedPlan)
   }
 
@@ -2214,7 +2225,7 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
   override def pushedFilters: Array[Predicate] = Array.empty
 
   override def planInputPartitions(): Array[InputPartition] = {
-    // Spark never evaluates an advisory filter, so the source has to apply it itself.
+    // This test source uses advisories for pruning; Spark still evaluates them after the scan.
     val enforcedFilters = pushedCatalystFilters ++ advisoryFilters
     enforcedFilters.reduceLeftOption(CatalystAnd) match {
       case Some(filter) =>
