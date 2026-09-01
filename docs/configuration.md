@@ -826,9 +826,25 @@ Apart from these, the following properties are also available, and may be useful
     Where both set the same variable, this one wins. An environment variable that Spark sets for a
     Python worker itself takes precedence over both.
     <br /><br />
-    Currently applied to the regular scalar Python UDF, in both its Arrow-optimized and non-Arrow
-    forms. Other Python function families -- pandas UDFs, Python UDTFs, and the streaming and
-    listener paths -- do not receive it yet.
+    Currently applied to the regular scalar Python UDF: its Arrow-optimized form, its non-Arrow
+    form, and the element-wise form a UDF takes inside the lambda of a higher-order function such
+    as <code>transform</code>. Other Python function families -- pandas UDFs, Python UDTFs, and the
+    streaming and listener paths -- do not receive it yet.
+    <br /><br />
+    Names in Spark's own namespace are rejected: any name beginning with <code>SPARK_</code>,
+    <code>PYSPARK_</code> or <code>PYTHON</code>, and <code>OMP_NUM_THREADS</code>. Spark sets these
+    for its Python workers itself, and some of them only under a condition, so a session value
+    would otherwise reach a worker whenever that condition did not hold.
+    <br /><br />
+    Each variable is a separate configuration, so setting several is not atomic: a client that sets
+    a batch may have some applied and then one rejected, leaving the earlier ones in place. Read the
+    configurations back to confirm what the session holds.
+    <br /><br />
+    On Spark Connect a variable whose name matches <code>spark.redaction.regex</code> -- which by
+    default covers names containing <code>secret</code>, <code>password</code>, <code>token</code>
+    or <code>access key</code> -- cannot be read back through <code>spark.conf.get</code>, because
+    the Spark Connect configuration RPC withholds values matching that pattern on every read. The
+    variable still reaches the worker. Classic Spark returns the value.
     <br /><br />
     A variable name must match <code>[A-Za-z_][A-Za-z0-9_]*</code>, and a value must not contain a
     NUL character, which a process environment cannot carry. The number of variables and the total

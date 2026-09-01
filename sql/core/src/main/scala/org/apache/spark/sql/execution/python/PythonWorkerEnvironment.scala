@@ -54,6 +54,25 @@ private[sql] object PythonWorkerEnvironment {
 
   private val compiledNamePattern = namePattern.r
 
+  /**
+   * Name prefixes Spark uses for the variables it sets in a Python worker itself.
+   *
+   * A session may not set a name in this namespace. Write order alone is not enough: the runners
+   * set several of these only when a condition holds -- `SPARK_REUSE_WORKER`,
+   * `SPARK_HIDE_TRACEBACK`, `PYTHON_FAULTHANDLER_DIR`, `SPARK_PIPELINED_UDF` and
+   * `PYSPARK_SPARK_SESSION_UUID` among them -- so with the condition false a session's value would
+   * survive into the worker. `SPARK_PIPELINED_UDF` is the reason this is a rejection rather than a
+   * silent drop: the worker reads it to choose its wire protocol, so a session setting it while the
+   * JVM has pipelining off desynchronizes the two sides.
+   */
+  val reservedNamePrefixes: Seq[String] = Seq("SPARK_", "PYSPARK_", "PYTHON")
+
+  /** Reserved names that carry no Spark prefix. */
+  val reservedNames: Set[String] = Set("OMP_NUM_THREADS")
+
+  private def isReserved(name: String): Boolean =
+    reservedNames.contains(name) || reservedNamePrefixes.exists(name.startsWith)
+
   // A rejected name can be arbitrarily long, so messages carry a bounded prefix of it rather than
   // the whole name.
   private val maxNameCharsInMessage = 32
@@ -117,6 +136,16 @@ private[sql] object PythonWorkerEnvironment {
     variables.foreach { case (name, value) =>
       // `matches` requires the whole name to match. Searching for the pattern instead would accept
       // a name with a trailing newline, because `$` also matches before a terminating line break.
+      if (isReserved(name)) {
+        throw new SparkException(
+          errorClass = "INVALID_SPARK_CONFIG.RESERVED_PYTHON_WORKER_ENV_VAR_NAME",
+          messageParameters = Map(
+            "name" -> describeName(name),
+            "prefix" -> confPrefix,
+            "reservedPrefixes" -> reservedNamePrefixes.mkString(", "),
+            "reservedNames" -> reservedNames.toSeq.sorted.mkString(", ")),
+          cause = null)
+      }
       if (name.length > maxNameLength || !compiledNamePattern.matches(name)) {
         throw new SparkException(
           errorClass = "INVALID_SPARK_CONFIG.INVALID_PYTHON_WORKER_ENV_VAR_NAME",
@@ -180,14 +209,21 @@ private[sql] object PythonWorkerEnvironment {
   /**
    * Whether a Python function with this evaluation type receives the session's environment.
    *
-   * Scoped to the regular scalar Python UDF in both forms: which one runs is decided by
-   * `spark.sql.execution.pythonUDF.arrow.enabled`, enabled by default, so covering only one would
-   * leave the feature inert for the ordinary case. Other families each have their own runner and
-   * are out of scope until that path is tested, so widening this is deliberate rather than
-   * incidental.
+   * Scoped to the regular scalar Python UDF, which reaches a worker under three evaluation types
+   * and is one thing to the user in all of them: `spark.sql.execution.pythonUDF.arrow.enabled`
+   * decides between the batched pair, and a UDF written inside the lambda of a higher-order
+   * function such as `transform` is lifted to the element-wise type by
+   * `ExtractPythonUDFFromLambda`. All three are enabled by default, so omitting any of them would
+   * leave the feature inert for an ordinary UDF.
+   *
+   * The pandas and Arrow families have their own element-wise types and stay out of scope, as do
+   * UDTFs and the streaming paths, until those runners are tested.
    */
-  def appliesTo(evalType: Int): Boolean = {
-    evalType == PythonEvalType.SQL_BATCHED_UDF || evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF
+  def appliesTo(evalType: Int): Boolean = evalType match {
+    case PythonEvalType.SQL_BATCHED_UDF | PythonEvalType.SQL_ARROW_BATCHED_UDF |
+        PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF =>
+      true
+    case _ => false
   }
 
   /**

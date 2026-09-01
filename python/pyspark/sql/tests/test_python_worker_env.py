@@ -127,14 +127,15 @@ class PythonWorkerEnvMixin:
         finally:
             self._unset_env("EMPTY")
 
-    def test_platform_owned_variable_is_not_overridden(self):
-        # The worker factory sets PYTHONUNBUFFERED after applying the session's map, so the
-        # platform value has to win.
-        self._set_env("PYTHONUNBUFFERED", "NO")
-        try:
-            self.assertEqual(self._read_in_worker("PYTHONUNBUFFERED"), "YES")
-        finally:
-            self._unset_env("PYTHONUNBUFFERED")
+    def test_platform_owned_variable_cannot_be_set(self):
+        # PYTHONUNBUFFERED is Spark's to set. Write order used to make the platform value win, which
+        # only held for the variables Spark writes unconditionally; the name is now refused instead,
+        # so the conditional ones are covered too.
+        with self.assertRaises(Exception) as context:
+            self.spark.sql("SET {}PYTHONUNBUFFERED=NO".format(PREFIX)).collect()
+            self._read_in_worker("PYTHONUNBUFFERED")
+        self.assertIn("RESERVED_PYTHON_WORKER_ENV_VAR_NAME", str(context.exception))
+        self._unset_env("PYTHONUNBUFFERED")
 
     # -- families that are not covered yet ------------------------------------
 
@@ -176,14 +177,51 @@ class PythonWorkerEnvMixin:
             self._unset_env("1INVALID")
 
     def test_oversized_environment_fails_the_query(self):
-        self.spark.sql("SET {}TOO_MANY_A=1".format(PREFIX)).collect()
+        # Exceeds the default 128 KiB spark.sql.pythonWorkerEnv.maxTotalSizeBytes. The limits are
+        # static configs, so a shared session cannot lower one for a test; going over the default is
+        # what lets this run end to end. The Scala suite covers the other limits by overriding them
+        # on the SparkConf directly.
+        self.spark.sql("SET {}BIG={}".format(PREFIX, "x" * (200 * 1024))).collect()
         try:
-            with self.assertRaises(Exception):
-                # One variable is already over a limit of zero.
-                with self.sql_conf({"spark.sql.pythonWorkerEnv.maxVariables": 0}):
-                    self._read_in_worker("TOO_MANY_A")
+            with self.assertRaises(Exception) as context:
+                self._read_in_worker("BIG")
+            message = str(context.exception)
+            self.assertIn("PYTHON_WORKER_ENV_TOO_LARGE", message)
+            # The rejection reports sizes, never the offending value.
+            self.assertNotIn("xxxxxxxxxx", message)
         finally:
-            self._unset_env("TOO_MANY_A")
+            self._unset_env("BIG")
+
+    def test_reserved_name_is_rejected(self):
+        # Spark sets SPARK_PIPELINED_UDF only when pipelined execution is on, and the worker reads
+        # it to choose its wire protocol, so a session must not be able to set it at all.
+        with self.assertRaises(Exception) as context:
+            self.spark.sql("SET {}SPARK_PIPELINED_UDF=1".format(PREFIX)).collect()
+            self._read_in_worker("ANY")
+        message = str(context.exception)
+        self.assertIn("RESERVED_PYTHON_WORKER_ENV_VAR_NAME", message)
+        self._unset_env("SPARK_PIPELINED_UDF")
+
+    def test_env_var_reaches_a_udf_inside_a_higher_order_function(self):
+        # A UDF written inside a lambda is lifted to the element-wise eval type, which is enabled by
+        # default. It is the same UDF to the user, so it has to receive the environment too.
+        from pyspark.sql.functions import array, transform
+
+        self._set_env("HOF_SETTING", "lifted")
+        try:
+
+            def read_env(_):
+                import os
+
+                return os.environ.get("HOF_SETTING", "<unset>")
+
+            read_env_udf = udf(read_env, "string")
+            df = self.spark.range(1).select(
+                transform(array(lit(1), lit(2)), lambda x: read_env_udf(x)).alias("value")
+            )
+            self.assertEqual(df.collect()[0]["value"], ["lifted", "lifted"])
+        finally:
+            self._unset_env("HOF_SETTING")
 
 
 class PythonWorkerEnvTests(PythonWorkerEnvMixin, ReusedSQLTestCase):

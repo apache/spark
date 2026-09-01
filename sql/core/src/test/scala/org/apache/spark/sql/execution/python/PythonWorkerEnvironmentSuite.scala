@@ -337,9 +337,76 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
   // The evaluation types in scope
   // ---------------------------------------------------------------------------
 
-  test("SPARK-58752: appliesTo covers the regular scalar Python UDF in both forms") {
+  test("SPARK-58752: appliesTo covers every form of the regular scalar Python UDF") {
+    // A UDF inside a higher-order function's lambda is lifted to the element-wise type by
+    // `ExtractPythonUDFFromLambda`, and that is on by default, so it is the same UDF to the user.
     assert(PythonWorkerEnvironment.appliesTo(PythonEvalType.SQL_BATCHED_UDF))
     assert(PythonWorkerEnvironment.appliesTo(PythonEvalType.SQL_ARROW_BATCHED_UDF))
+    assert(PythonWorkerEnvironment.appliesTo(PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF))
+  }
+
+  test("SPARK-58752: an element-wise scalar UDF runner installs the session environment") {
+    withSQLConf(key("FOO") -> "bar") {
+      val evalType = PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF
+      assert(arrowRunnerEnv(evalType = evalType).get("FOO") === Some("bar"))
+      assert(columnarArrowRunnerEnv(evalType = evalType).get("FOO") === Some("bar"))
+    }
+  }
+
+  test("SPARK-58752: the pandas element-wise types stay out of scope") {
+    // Lifting a pandas or Arrow UDF produces its own element-wise type, which keeps that family's
+    // batching contract and is not covered here.
+    Seq(
+      PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF,
+      PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF).foreach { evalType =>
+      assert(!PythonWorkerEnvironment.appliesTo(evalType), s"evalType $evalType is not in scope")
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Spark's own namespace
+  // ---------------------------------------------------------------------------
+
+  test("SPARK-58752: a name in Spark's namespace is rejected") {
+    // Write order protects only the variables Spark sets unconditionally. Several are conditional
+    // -- SPARK_REUSE_WORKER, SPARK_HIDE_TRACEBACK, PYTHON_FAULTHANDLER_DIR, SPARK_PIPELINED_UDF,
+    // PYSPARK_SPARK_SESSION_UUID -- so with the condition false a session's value would otherwise
+    // reach the worker. SPARK_PIPELINED_UDF is read by the worker to pick its wire protocol.
+    Seq(
+      "SPARK_PIPELINED_UDF",
+      "SPARK_REUSE_WORKER",
+      "SPARK_HIDE_TRACEBACK",
+      "PYTHON_FAULTHANDLER_DIR",
+      "PYTHONPATH",
+      "PYSPARK_SPARK_SESSION_UUID",
+      "OMP_NUM_THREADS").foreach { name =>
+      withSQLConf(key(name) -> "1") {
+        val ex = intercept[SparkException] {
+          PythonWorkerEnvironment.readValidated(spark.sessionState.conf)
+        }
+        assert(
+          ex.getCondition === "INVALID_SPARK_CONFIG.RESERVED_PYTHON_WORKER_ENV_VAR_NAME",
+          s"$name should be rejected as reserved")
+        assert(ex.getMessage.contains(name))
+      }
+    }
+  }
+
+  test("SPARK-58752: a reserved name is rejected before a worker is launched") {
+    withSQLConf(key("SPARK_PIPELINED_UDF") -> "1") {
+      val ex = intercept[SparkException](batchedRunnerEnv())
+      assert(ex.getCondition === "INVALID_SPARK_CONFIG.RESERVED_PYTHON_WORKER_ENV_VAR_NAME")
+    }
+  }
+
+  test("SPARK-58752: a name that merely contains a reserved word is accepted") {
+    // The rule is a prefix on Spark's own namespace, not a search for the word anywhere. Note that
+    // it does cost the user any name starting with PYTHON, PYTHONIC included.
+    withSQLConf(key("MY_SPARK_SETTING") -> "1", key("APP_PYTHON_HOME") -> "2") {
+      assert(
+        PythonWorkerEnvironment.readValidated(spark.sessionState.conf) ===
+          Map("MY_SPARK_SETTING" -> "1", "APP_PYTHON_HOME" -> "2"))
+    }
   }
 
   test("SPARK-58752: appliesTo excludes the families this change does not cover") {
@@ -393,15 +460,19 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
     assert(arrowRunnerEnv().get("FOO").isEmpty)
   }
 
-  test("SPARK-58752: a session cannot override a Spark-owned variable") {
+  test("SPARK-58752: a Spark-owned name is refused rather than silently overridden") {
+    // Superseded by the reserved-name rule: `PYSPARK_SPARK_SESSION_UUID` is only written when a
+    // session UUID is present, so relying on write order left a session's value in place whenever
+    // it was absent. Rejecting the name removes that gap for the conditional and unconditional
+    // cases alike.
     withSQLConf(key("PYSPARK_SPARK_SESSION_UUID") -> "forged") {
-      // The runner applies its own variables after the session's, so Spark wins.
-      assert(batchedRunnerEnv(sessionUUID = Some("real")) ===
-        Map("PYSPARK_SPARK_SESSION_UUID" -> "real"))
-      assert(arrowRunnerEnv(sessionUUID = Some("real")) ===
-        Map("PYSPARK_SPARK_SESSION_UUID" -> "real"))
-      assert(columnarArrowRunnerEnv(sessionUUID = Some("real")) ===
-        Map("PYSPARK_SPARK_SESSION_UUID" -> "real"))
+      Seq(
+        () => batchedRunnerEnv(sessionUUID = None),
+        () => batchedRunnerEnv(sessionUUID = Some("real")),
+        () => arrowRunnerEnv(sessionUUID = None)).foreach { build =>
+        val ex = intercept[SparkException](build())
+        assert(ex.getCondition === "INVALID_SPARK_CONFIG.RESERVED_PYTHON_WORKER_ENV_VAR_NAME")
+      }
     }
   }
 

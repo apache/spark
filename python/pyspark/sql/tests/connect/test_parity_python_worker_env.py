@@ -23,6 +23,18 @@ class PythonWorkerEnvParityTests(PythonWorkerEnvMixin, ReusedConnectTestCase):
     # path that can refuse an invalid environment before it is stored. Classic has no such point,
     # so these two are specific to Connect rather than part of the shared mixin.
 
+    def test_a_secret_looking_name_cannot_be_read_back(self):
+        # The config RPC withholds any value whose key matches spark.redaction.regex, and the
+        # default pattern covers "token". So a variable named like a secret still reaches the
+        # worker but reads back as absent -- unlike classic, which returns it. Pinned here so the
+        # asymmetry is a recorded decision rather than a surprise.
+        self.spark.conf.set(PREFIX + "API_TOKEN", "abc")
+        try:
+            self.assertIsNone(self.spark.conf.get(PREFIX + "API_TOKEN", None))
+            self.assertEqual(self._read_in_worker("API_TOKEN"), "abc")
+        finally:
+            self.spark.conf.unset(PREFIX + "API_TOKEN")
+
     def test_invalid_name_fails_the_set(self):
         with self.assertRaises(Exception) as context:
             self.spark.conf.set(PREFIX + "1INVALID", "x")
