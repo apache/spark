@@ -19,6 +19,8 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.InMemoryTable
+import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.DeleteSummary
 
 class GroupBasedRowLevelOperationCatalystRuntimeFilterSuite
@@ -44,6 +46,35 @@ class GroupBasedRowLevelOperationCatalystRuntimeFilterSuite
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(2, 2, 150, "software") :: Row(3, 3, 120, "hr") :: Nil)
+
+    checkReplacedPartitions(Seq("hr"))
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
+  }
+
+  test("delete runtime group filtering by a nested attribute") {
+    val schema = "pk INT NOT NULL, id INT, salary INT, " +
+      "dep STRUCT<name: STRING, region: STRING>"
+    createTable(schema, Array[Transform](identity(reference(Seq("dep", "name")))))
+    append(schema,
+      """{"pk":1,"id":1,"salary":300,"dep":{"name":"hr","region":"west"}}
+        |{"pk":2,"id":2,"salary":150,"dep":{"name":"software","region":"west"}}
+        |{"pk":3,"id":3,"salary":120,"dep":{"name":"hr","region":"east"}}
+        |""".stripMargin)
+
+    val executedPlan = executeAndKeepPlan {
+      sql(s"DELETE FROM $tableNameAsString WHERE salary IN (300, 400, 500)")
+    }
+    assertCatalystGroupFilter(
+      executedPlan,
+      expectedFilterAttrs = Seq("dep.name"),
+      expectedFilter = GroupFilter(
+        scanSchema = "salary INT, dep STRUCT<name: STRING>", groups = Seq("hr")),
+      expectedFilterPaths = Some(Seq(Seq("dep", "name"))))
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(2, 2, 150, Row("software", "west")) ::
+        Row(3, 3, 120, Row("hr", "east")) :: Nil)
 
     checkReplacedPartitions(Seq("hr"))
     checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)

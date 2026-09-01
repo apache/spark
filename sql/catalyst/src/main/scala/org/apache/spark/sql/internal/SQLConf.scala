@@ -2647,6 +2647,18 @@ object SQLConf {
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
 
+  val DATAFRAME_CACHE_PLAN_ID_NAME_ENABLED =
+    buildConf("spark.sql.dataframeCache.planIdName.enabled")
+      .internal()
+      .doc("When true and the cached table has no name, use the physical plan id, e.g. " +
+        "'CachedRDD (plan_id=42)', as the cached name instead of the abbreviated plan tree " +
+        "string. Rendering the plan tree string can be expensive for large plans. The name " +
+        "is resolved when the cache is first materialized.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val DROP_TABLE_VIEW_ENABLED =
     buildConf("spark.sql.dropTableOnView.enabled")
       .doc("When true, DROP TABLE command will work on VIEW as well.")
@@ -5553,7 +5565,7 @@ object SQLConf {
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PYTHON_PLANNER_EXEC_MEMORY =
     buildConf("spark.sql.planner.pythonExecution.memory")

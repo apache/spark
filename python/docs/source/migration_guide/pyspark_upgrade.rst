@@ -19,10 +19,6 @@
 Upgrading PySpark
 ==================
 
-Upgrading from PySpark 4.2 to 4.3
----------------------------------
-* In Spark 4.3, a ``mapInPandas`` UDF must return an iterator of ``pandas.DataFrame``\s; returning any other iterable such as a ``list`` now raises ``UDF_RETURN_TYPE``, matching the existing ``mapInArrow`` behavior and the declared ``Iterator[...]`` signature. To restore the previous behavior of accepting any iterable for both ``mapInPandas`` and ``mapInArrow``, set ``spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled`` to ``true``.
-
 Upgrading from PySpark 4.1 to 4.2
 ---------------------------------
 * In Spark 4.2, the minimum supported version for PyArrow has been raised from 15.0.0 to 18.0.0 in PySpark.

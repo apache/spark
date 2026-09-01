@@ -116,6 +116,117 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
+  test("nested fully pushed filter attribute -> rejected without a runtime filter") {
+    val tbl = s"$catalogName.tbl_nested_fully_pushed"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id INT, s STRUCT<part: INT, other: INT>) USING $v2Source " +
+        "PARTITIONED BY (s.part) " +
+        "TBLPROPERTIES('fully-pushed-filter-attributes' = 's.part')")
+
+      val df = sql(s"SELECT * FROM $tbl")
+      val scanClass = df.queryExecution.optimizedPlan.collectFirst {
+        case r: DataSourceV2ScanRelation => r.scan.getClass.getName
+      }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
+      val e = intercept[AnalysisException] {
+        df.queryExecution.executedPlan
+      }
+      checkError(
+        exception = e,
+        condition = "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE.NOT_TOP_LEVEL",
+        parameters = Map(
+          "attribute" -> "`s`.`part`",
+          "method" -> "fullyPushedFilterAttributes()",
+          "scanClass" -> scanClass,
+          "relationOutput" -> "\"STRUCT<id: INT, s: STRUCT<part: INT, other: INT>>\""),
+        sqlState = "KD000")
+    }
+  }
+
+  test("nested filter attribute under a non-struct column -> rejected during resolution") {
+    val tbl = s"$catalogName.tbl_malformed_nested_filter_attr"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
+
+      val scanRelation = sql(s"SELECT * FROM $tbl").queryExecution.optimizedPlan.collectFirst {
+        case r: DataSourceV2ScanRelation => r
+      }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
+      val e = intercept[AnalysisException] {
+        scanRelation.copy(scan = new NestedFilterAttributeScan).runtimeFilterAttrs
+      }
+      val scanClass = classOf[NestedFilterAttributeScan].getName
+      checkError(
+        exception = e,
+        condition = "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE.CANNOT_RESOLVE",
+        parameters = Map(
+          "attribute" -> "`part`.`nested`",
+          "method" -> "filterAttributes()",
+          "scanClass" -> scanClass,
+          "relationOutput" -> "\"STRUCT<id: INT, part: INT>\""),
+        sqlState = "KD000")
+      checkError(
+        exception = e.getCause.asInstanceOf[AnalysisException],
+        condition = "INVALID_EXTRACT_BASE_FIELD_TYPE",
+        parameters = Map("base" -> "\"part\"", "other" -> "\"INT\""))
+    }
+  }
+
+  test("missing filter attribute -> rejected") {
+    val tbl = s"$catalogName.tbl_missing_filter_attr"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
+
+      val scanRelation = sql(s"SELECT * FROM $tbl").queryExecution.optimizedPlan.collectFirst {
+        case r: DataSourceV2ScanRelation => r
+      }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
+      val e = intercept[AnalysisException] {
+        scanRelation.copy(scan = new MissingFilterAttributeScan).runtimeFilterAttrs
+      }
+      val scanClass = classOf[MissingFilterAttributeScan].getName
+      checkError(
+        exception = e,
+        condition = "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE.CANNOT_RESOLVE",
+        parameters = Map(
+          "attribute" -> "`missing`",
+          "method" -> "filterAttributes()",
+          "scanClass" -> scanClass,
+          "relationOutput" -> "\"STRUCT<id: INT, part: INT>\""),
+        sqlState = "KD000")
+      checkError(
+        exception = e.getCause.asInstanceOf[AnalysisException],
+        condition = "_LEGACY_ERROR_TEMP_1137",
+        parameters = Map("name" -> "missing", "outputStr" -> "id,part"))
+    }
+  }
+
+  test("missing fully pushed filter attribute -> identifies the declaring method") {
+    val tbl = s"$catalogName.tbl_missing_fully_pushed_filter_attr"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
+
+      val scanRelation = sql(s"SELECT * FROM $tbl").queryExecution.optimizedPlan.collectFirst {
+        case r: DataSourceV2ScanRelation => r
+      }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
+      val e = intercept[AnalysisException] {
+        scanRelation.copy(scan = new MissingFullyPushedFilterAttributeScan)
+          .fullyPushedRuntimeFilterAttrs
+      }
+      val scanClass = classOf[MissingFullyPushedFilterAttributeScan].getName
+      checkError(
+        exception = e,
+        condition = "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE.CANNOT_RESOLVE",
+        parameters = Map(
+          "attribute" -> "`missing`",
+          "method" -> "fullyPushedFilterAttributes()",
+          "scanClass" -> scanClass,
+          "relationOutput" -> "\"STRUCT<id: INT, part: INT>\""),
+        sqlState = "KD000")
+      checkError(
+        exception = e.getCause.asInstanceOf[AnalysisException],
+        condition = "_LEGACY_ERROR_TEMP_1137",
+        parameters = Map("name" -> "missing", "outputStr" -> "id,part"))
+    }
+  }
+
   test("non-deterministic predicate on fully pushed attributes -> evaluated after the scan") {
     val tbl = s"$catalogName.tbl_nondeterministic"
     val dim = s"$catalogName.dim_nondeterministic"
@@ -244,37 +355,61 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
-  test("DPP filter on a nested partition field -> pushed with the nested access intact") {
+  test("DPP filter on a nested partition source -> pushed with the nested access intact") {
     val fact = s"$catalogName.fact_nested_dpp"
     val dim = s"$catalogName.dim_nested_dpp"
     withTable(fact, dim) {
-      sql(s"CREATE TABLE $fact (id INT, s STRUCT<part: INT>) USING $v2Source " +
-        "PARTITIONED BY (s.part)")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $fact VALUES ($i, named_struct('part', $i))")
-      }
-      sql(s"CREATE TABLE $dim (dim_id INT, dim_val STRING) USING $v2Source")
-      sql(s"INSERT INTO $dim VALUES (2, 'two')")
+      sql(s"CREATE TABLE $fact " +
+        "(id INT, derives STRUCT<toStr: STRING, other: STRING>) USING " +
+        s"$v2Source PARTITIONED BY (derives.toStr)")
+      sql(s"INSERT INTO $fact VALUES " +
+        "(1, named_struct('toStr', 'AA', 'other', 'a')), " +
+        "(2, named_struct('toStr', 'BB', 'other', 'b')), " +
+        "(3, named_struct('toStr', 'CC', 'other', 'c'))")
+      sql(s"CREATE TABLE $dim (value STRING, selected INT) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES ('AA', 0), ('BB', 1)")
 
       withDPPConf {
         val df = sql(
           s"""SELECT f.id FROM $fact f JOIN $dim d
-             |ON f.s.part = d.dim_id WHERE d.dim_val = 'two'""".stripMargin)
+             |ON f.derives.toStr = d.value WHERE d.selected = 1""".stripMargin)
         checkAnswer(df, Row(2))
 
         assertDPPRuntimeFilters(df)
-        // The scan only reports `s`, the struct holding the partition field, but the predicate it
-        // receives keeps the nested access, so it can still tell which partition to keep.
+        // The scan reports `derives.toStr`, and the predicate it receives keeps that nested access.
         val pushed = getPushedCatalystPredicates(df)
         assert(pushed.size === 1, s"expected a single pushed predicate, got $pushed")
         assert(pushed.head.exists(_.isInstanceOf[GetStructField]),
           s"expected the pushed predicate to keep the nested access, got ${pushed.head}")
 
         val batchScan = collectBatchScan(df)
-        assert(batchScan.inputPartitions.size === 5)
+        assert(batchScan.inputPartitions.size === 3)
         assert(batchScan.filteredPartitions.flatten.size === 1,
           s"expected 1 partition after pruning, got ${batchScan.filteredPartitions.flatten.size}")
       }
+    }
+  }
+
+  test("sibling of a nested filter attribute remains evaluated after the scan") {
+    val fact = s"$catalogName.fact_nested_sibling"
+    val dim = s"$catalogName.dim_nested_sibling"
+    withTable(fact, dim) {
+      sql(s"CREATE TABLE $fact (id INT, s STRUCT<part: INT, other: INT>) USING $v2Source " +
+        "PARTITIONED BY (s.part)")
+      sql(s"INSERT INTO $fact VALUES " +
+        "(1, named_struct('part', 1, 'other', 10)), " +
+        "(2, named_struct('part', 1, 'other', 20)), " +
+        "(3, named_struct('part', 2, 'other', 30))")
+      sql(s"CREATE TABLE $dim (value INT) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES (10)")
+
+      val df = sql(s"SELECT id FROM $fact WHERE s.other = (SELECT max(value) FROM $dim)")
+      checkAnswer(df, Row(1))
+
+      // A nested reference currently contributes its root attribute to eligibility, so `s.other`
+      // may be routed to a scan that advertises `s.part`. It must remain above the scan unless
+      // eligibility becomes path-aware.
+      assertScalarSubqueryEvaluatedAfterScan(df, expected = true)
     }
   }
 
@@ -364,9 +499,9 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       sql(s"CREATE TABLE $dim (val STRING) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES ('tz1')")
 
-      // The scan declares the top-level struct column `s` as its filter attribute, so the
-      // predicate qualifies for pushdown even though it reaches into `s.tz`. Matching the nested
-      // access against the partition layout is left to the scan, which this fixture does.
+      // The scan declares the nested partition source `s.tz` as its filter attribute. The
+      // predicate arrives with the nested access intact, and matching it against the partition
+      // layout is left to the scan, which this fixture does.
       val df = sql(s"SELECT * FROM $tbl WHERE s.tz = (SELECT max(val) FROM $dim)")
       checkAnswer(df, Row(1, Row("tz1")))
 
@@ -411,46 +546,6 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       assert(batchScan.inputPartitions.size === 5)
       assert(batchScan.filteredPartitions.flatten.size === 1,
         s"expected 1 partition after pruning, got ${batchScan.filteredPartitions.flatten.size}")
-    }
-  }
-
-  test("filterAttributes that is not a top-level scan attribute") {
-    val tbl = s"$catalogName.tbl_unresolvable_attr"
-    withTable(tbl) {
-      sql(s"CREATE TABLE $tbl (id INT, part INT, s STRUCT<tz: STRING>) USING $v2Source " +
-        "PARTITIONED BY (part)")
-      sql(s"INSERT INTO $tbl VALUES (1, 1, named_struct('tz', 'a'))")
-
-      val scanRelation = sql(s"SELECT * FROM $tbl").queryExecution.optimizedPlan.collectFirst {
-        case r: DataSourceV2ScanRelation => r
-      }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
-
-      // An attribute the read schema does not carry, such as one pruned out of the projection.
-      val missing = intercept[AnalysisException] {
-        scanRelation.copy(scan = new MissingFilterAttributeScan).runtimeFilterAttrs
-      }
-      checkError(
-        exception = missing,
-        condition = "_LEGACY_ERROR_TEMP_1137",
-        parameters = Map("name" -> "missing", "outputStr" -> "id,part,s"))
-
-      // A nested reference is rejected up front, since `filterAttributes()` must return
-      // top-level read-schema attributes. This holds even over an int column that could never
-      // carry a nested field.
-      val nested = intercept[SparkException] {
-        scanRelation.copy(scan = new NestedFilterAttributeScan).runtimeFilterAttrs
-      }
-      assert(nested.getMessage.contains("must be a top-level attribute"),
-        s"expected the nested reference to be rejected, got ${nested.getMessage}")
-
-      // Over a struct it is rejected the same way, rather than widening to the struct column:
-      // accepting `s.tz` would make runtime filters over every field of `s` eligible, not just
-      // `s.tz`.
-      val struct = intercept[SparkException] {
-        scanRelation.copy(scan = new StructNestedFilterAttributeScan).runtimeFilterAttrs
-      }
-      assert(struct.getMessage.contains("must be a top-level attribute"),
-        s"expected the nested struct reference to be rejected, got ${struct.getMessage}")
     }
   }
 
@@ -637,8 +732,8 @@ private class BothRuntimeFilteringInterfacesScan
   override def filter(expressions: Array[Expression]): Unit = {}
 }
 
-/** A scan declaring a filter attribute the read schema does not carry. */
-private class MissingFilterAttributeScan extends Scan with SupportsRuntimeCatalystFiltering {
+/** A scan declaring a filter attribute that its read schema does not contain. */
+private class MissingFilterAttributeScan extends SupportsRuntimeCatalystFiltering {
 
   override def readSchema(): StructType = new StructType().add("part", IntegerType)
 
@@ -647,30 +742,26 @@ private class MissingFilterAttributeScan extends Scan with SupportsRuntimeCataly
   override def filter(expressions: Array[Expression]): Unit = {}
 }
 
-/**
- * A scan breaking the rule that a filter attribute must be a top level read schema column: it
- * reports `part.nested` over the int column `part`, so it is rejected as a nested reference.
- */
-private class NestedFilterAttributeScan extends Scan with SupportsRuntimeCatalystFiltering {
+/** A scan declaring a fully pushed filter attribute that its relation output does not contain. */
+private class MissingFullyPushedFilterAttributeScan extends SupportsRuntimeCatalystFiltering {
+
+  override def readSchema(): StructType = new StructType().add("part", IntegerType)
+
+  override def filterAttributes(): Array[NamedReference] = Array(FieldReference("part"))
+
+  override def fullyPushedFilterAttributes(): Array[NamedReference] =
+    Array(FieldReference("missing"))
+
+  override def filter(expressions: Array[Expression]): Unit = {}
+}
+
+/** A scan declaring a nested runtime-filter attribute beneath an integer column. */
+private class NestedFilterAttributeScan extends SupportsRuntimeCatalystFiltering {
 
   override def readSchema(): StructType = new StructType().add("part", IntegerType)
 
   override def filterAttributes(): Array[NamedReference] =
     Array(FieldReference(Seq("part", "nested")))
-
-  override def filter(expressions: Array[Expression]): Unit = {}
-}
-
-/**
- * A scan breaking the same rule over a struct column: it reports `s.tz` where `s` is a struct.
- * The nested reference is rejected rather than widening to the struct column `s`.
- */
-private class StructNestedFilterAttributeScan extends Scan with SupportsRuntimeCatalystFiltering {
-
-  override def readSchema(): StructType =
-    new StructType().add("s", new StructType().add("tz", StringType))
-
-  override def filterAttributes(): Array[NamedReference] = Array(FieldReference(Seq("s", "tz")))
 
   override def filter(expressions: Array[Expression]): Unit = {}
 }
