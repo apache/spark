@@ -908,6 +908,22 @@ package object config {
       .stringConf
       .createWithDefault("spark_shuffle")
 
+  private[spark] val SHUFFLE_SERVICE_REQUIRE_APP_SCOPED_LOCAL_DIRS =
+    ConfigBuilder("spark.shuffle.service.requireAppScopedLocalDirs")
+      .doc("Whether the external shuffle service requires every local directory an executor " +
+        "reports at registration to lie inside the registering application's own " +
+        "per-application directory: the application id must appear as a path segment of the " +
+        "directory's canonical path, under one of the service's configured local directory " +
+        "roots. This keeps each application's shuffle and RDD blocks within its own directory " +
+        "scope at registration and cleanup time. Only affects standalone mode. Enable it only " +
+        "after every Worker in the cluster creates executor local directories under a " +
+        "per-application directory (Workers on this version do); executors launched by older " +
+        "Workers report unscoped paths and their registrations are rejected while this is " +
+        "enabled.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val KEYTAB = ConfigBuilder("spark.kerberos.keytab")
     .doc("Location of user's keytab.")
     .version("3.0.0")

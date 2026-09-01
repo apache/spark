@@ -83,8 +83,15 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
 
   /** Create a new shuffle block handler. Factored out for subclasses to override. */
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalBlockHandler = {
-    // Constrain registered localDirs to the configured local directories.
+    // Constrain registered localDirs to the configured local directories and, when
+    // spark.shuffle.service.requireAppScopedLocalDirs is enabled, to the registering
+    // application's own per-app directory (the Worker creates executor local dirs under a
+    // path containing the app id). The check is opt-in: executors launched by Workers that
+    // predate the per-app layout register unscoped paths and would be rejected, so enable it
+    // only once every Worker is upgraded.
     val localDirs = Utils.getConfiguredLocalDirs(sparkConf)
+    val requireAppScopedLocalDirs =
+      sparkConf.get(config.SHUFFLE_SERVICE_REQUIRE_APP_SCOPED_LOCAL_DIRS)
     if (sparkConf.get(config.SHUFFLE_SERVICE_DB_ENABLED) && enabled) {
       val shuffleDBName = sparkConf.get(config.SHUFFLE_SERVICE_DB_BACKEND)
       logInfo(
@@ -92,9 +99,9 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
         log"${MDC(SHUFFLE_DB_BACKEND_KEY, config.SHUFFLE_SERVICE_DB_BACKEND.key)}")
       new ExternalBlockHandler(conf,
         findRegisteredExecutorsDBFile(shuffleDBName.fileName(registeredExecutorsDB)),
-        localDirs, false)
+        localDirs, requireAppScopedLocalDirs)
     } else {
-      new ExternalBlockHandler(conf, null, localDirs, false)
+      new ExternalBlockHandler(conf, null, localDirs, requireAppScopedLocalDirs)
     }
   }
 

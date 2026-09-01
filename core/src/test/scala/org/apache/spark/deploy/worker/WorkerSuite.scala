@@ -443,4 +443,56 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with P
     assert(getHeartbeatTask(worker) == heartbeatTask)
     assert(getWorkDirCleanupTask(worker) == workDirCleanupTask)
   }
+
+  test("app cleanup removes the per-application local-dir parent only when it becomes empty") {
+    val externalShuffleServiceSupplier = new Supplier[ExternalShuffleService] {
+      override def get: ExternalShuffleService = shuffleService
+    }
+    val worker = makeWorker(new SparkConf(), externalShuffleServiceSupplier)
+    val root = Utils.createTempDir(namePrefix = "worker-local-root")
+    try {
+      // New layout: LaunchExecutor creates executor local dirs as <root>/<appId>/executor-*.
+      // App A: its executor dir is the per-app parent's only entry, so cleanup must remove
+      // the parent as well.
+      val appA = "app-20260811000000-0001"
+      val appDirA = new File(root, appA)
+      val executorDirA = new File(appDirA, "executor-0001")
+      assert(executorDirA.mkdirs())
+
+      // App B: the per-app parent still holds another entry after the executor dir is
+      // deleted, so the parent must survive.
+      val appB = "app-20260811000000-0002"
+      val appDirB = new File(root, appB)
+      val executorDirB = new File(appDirB, "executor-0002")
+      assert(executorDirB.mkdirs())
+      val leftoverB = new File(appDirB, "leftover")
+      assert(leftoverB.createNewFile())
+
+      // App C: pre-upgrade layout (no per-app parent). Cleanup must delete only the executor
+      // dir and never touch its parent, which is the shared local root.
+      val appC = "app-20260811000000-0003"
+      val executorDirC = new File(root, "executor-0003")
+      assert(executorDirC.mkdirs())
+
+      Seq((appA, executorDirA), (appB, executorDirB), (appC, executorDirC)).foreach {
+        case (appId, executorDir) =>
+          worker.appDirectories(appId) = Seq(executorDir.getAbsolutePath)
+          worker.finishedApps += appId
+          worker.handleExecutorStateChanged(
+            ExecutorStateChanged(appId, 0, ExecutorState.EXITED, None, None))
+      }
+
+      eventually(timeout(1.second), interval(10.milliseconds)) {
+        assert(!executorDirA.exists())
+        assert(!appDirA.exists())
+        assert(!executorDirB.exists())
+        assert(appDirB.exists())
+        assert(leftoverB.exists())
+        assert(!executorDirC.exists())
+        assert(root.exists())
+      }
+    } finally {
+      Utils.deleteRecursively(root)
+    }
+  }
 }
