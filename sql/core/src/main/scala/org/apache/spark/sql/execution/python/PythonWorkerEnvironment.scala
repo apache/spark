@@ -55,20 +55,36 @@ private[sql] object PythonWorkerEnvironment {
   private val compiledNamePattern = namePattern.r
 
   /**
-   * Name prefixes Spark uses for the variables it sets in a Python worker itself.
+   * Names Spark uses for the variables it sets in a Python worker itself, which a session may not
+   * set.
    *
-   * A session may not set a name in this namespace. Write order alone is not enough: the runners
-   * set several of these only when a condition holds -- `SPARK_REUSE_WORKER`,
-   * `SPARK_HIDE_TRACEBACK`, `PYTHON_FAULTHANDLER_DIR`, `SPARK_PIPELINED_UDF` and
-   * `PYSPARK_SPARK_SESSION_UUID` among them -- so with the condition false a session's value would
-   * survive into the worker. `SPARK_PIPELINED_UDF` is the reason this is a rejection rather than a
-   * silent drop: the worker reads it to choose its wire protocol, so a session setting it while the
-   * JVM has pipelining off desynchronizes the two sides.
+   * Write order is the first line of defence: the runners and `PythonWorkerFactory` apply their own
+   * variables after the session's, so anything they set unconditionally already wins --
+   * `PYTHONPATH` and `PYTHONUNBUFFERED` among them, which a session may still set harmlessly.
+   *
+   * These are the ones write order does not protect, because Spark sets them only when a condition
+   * holds and a session's value survives when it does not. Two of them would desynchronize the JVM
+   * and the worker rather than merely change a setting: the worker reads `SPARK_PIPELINED_UDF` to
+   * choose its wire protocol and `PYTHON_UNIX_DOMAIN_ENABLED` to choose its transport. Rejecting
+   * the name, rather than dropping it silently, means the failure says so.
+   *
+   * The `SPARK_` and `PYSPARK_` prefixes are reserved wholesale because every variable Spark sets
+   * under them is its own; the `PYTHON` prefix deliberately is not, so a session keeps names such
+   * as `PYTHONWARNINGS`. The cost is that a conditional variable added under that prefix later has
+   * to be added here too.
    */
-  val reservedNamePrefixes: Seq[String] = Seq("SPARK_", "PYSPARK_", "PYTHON")
+  val reservedNamePrefixes: Seq[String] = Seq("SPARK_", "PYSPARK_")
 
-  /** Reserved names that carry no Spark prefix. */
-  val reservedNames: Set[String] = Set("OMP_NUM_THREADS")
+  /** Reserved names outside the reserved prefixes. */
+  val reservedNames: Set[String] = Set(
+    "OMP_NUM_THREADS",
+    "PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE",
+    "PYTHON_FAULTHANDLER_DIR",
+    "PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS",
+    "PYTHON_UNIX_DOMAIN_ENABLED",
+    "PYTHON_WORKER_FACTORY_PORT",
+    "PYTHON_WORKER_FACTORY_SECRET",
+    "PYTHON_WORKER_FACTORY_SOCK_PATH")
 
   private def isReserved(name: String): Boolean =
     reservedNames.contains(name) || reservedNamePrefixes.exists(name.startsWith)

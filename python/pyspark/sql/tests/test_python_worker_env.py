@@ -127,15 +127,23 @@ class PythonWorkerEnvMixin:
         finally:
             self._unset_env("EMPTY")
 
-    def test_platform_owned_variable_cannot_be_set(self):
-        # PYTHONUNBUFFERED is Spark's to set. Write order used to make the platform value win, which
-        # only held for the variables Spark writes unconditionally; the name is now refused instead,
-        # so the conditional ones are covered too.
+    def test_platform_owned_variable_is_not_overridden(self):
+        # The worker factory sets PYTHONUNBUFFERED after applying the session's map, so the platform
+        # value wins by write order and the name does not need reserving.
+        self._set_env("PYTHONUNBUFFERED", "NO")
+        try:
+            self.assertEqual(self._read_in_worker("PYTHONUNBUFFERED"), "YES")
+        finally:
+            self._unset_env("PYTHONUNBUFFERED")
+
+    def test_conditionally_set_variable_is_reserved(self):
+        # Spark sets PYTHON_UNIX_DOMAIN_ENABLED only on the Unix-domain-socket path, and the worker
+        # reads it to choose its transport, so write order cannot protect it and the name is refused.
         with self.assertRaises(Exception) as context:
-            self.spark.sql("SET {}PYTHONUNBUFFERED=NO".format(PREFIX)).collect()
-            self._read_in_worker("PYTHONUNBUFFERED")
+            self.spark.sql("SET {}PYTHON_UNIX_DOMAIN_ENABLED=True".format(PREFIX)).collect()
+            self._read_in_worker("ANY")
         self.assertIn("RESERVED_PYTHON_WORKER_ENV_VAR_NAME", str(context.exception))
-        self._unset_env("PYTHONUNBUFFERED")
+        self._unset_env("PYTHON_UNIX_DOMAIN_ENABLED")
 
     # -- families that are not covered yet ------------------------------------
 

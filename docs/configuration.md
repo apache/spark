@@ -831,10 +831,14 @@ Apart from these, the following properties are also available, and may be useful
     as <code>transform</code>. Other Python function families -- pandas UDFs, Python UDTFs, and the
     streaming and listener paths -- do not receive it yet.
     <br /><br />
-    Names in Spark's own namespace are rejected: any name beginning with <code>SPARK_</code>,
-    <code>PYSPARK_</code> or <code>PYTHON</code>, and <code>OMP_NUM_THREADS</code>. Spark sets these
-    for its Python workers itself, and some of them only under a condition, so a session value
-    would otherwise reach a worker whenever that condition did not hold.
+    Names Spark reserves for itself are rejected: any name beginning with <code>SPARK_</code> or
+    <code>PYSPARK_</code>, together with <code>OMP_NUM_THREADS</code> and the
+    <code>PYTHON_*</code> variables Spark sets only under a condition
+    (<code>PYTHON_FAULTHANDLER_DIR</code>, <code>PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS</code>,
+    <code>PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE</code>,
+    <code>PYTHON_UNIX_DOMAIN_ENABLED</code> and the <code>PYTHON_WORKER_FACTORY_*</code> names).
+    Where Spark sets a variable unconditionally, such as <code>PYTHONPATH</code> or
+    <code>PYTHONUNBUFFERED</code>, a session may still set it and Spark's value simply wins.
     <br /><br />
     Each variable is a separate configuration, so setting several is not atomic: a client that sets
     a batch may have some applied and then one rejected, leaving the earlier ones in place. Read the

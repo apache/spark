@@ -376,9 +376,12 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
       "SPARK_PIPELINED_UDF",
       "SPARK_REUSE_WORKER",
       "SPARK_HIDE_TRACEBACK",
-      "PYTHON_FAULTHANDLER_DIR",
-      "PYTHONPATH",
       "PYSPARK_SPARK_SESSION_UUID",
+      "PYTHON_FAULTHANDLER_DIR",
+      "PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS",
+      "PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE",
+      "PYTHON_UNIX_DOMAIN_ENABLED",
+      "PYTHON_WORKER_FACTORY_SECRET",
       "OMP_NUM_THREADS").foreach { name =>
       withSQLConf(key(name) -> "1") {
         val ex = intercept[SparkException] {
@@ -399,13 +402,23 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-58752: a name that merely contains a reserved word is accepted") {
-    // The rule is a prefix on Spark's own namespace, not a search for the word anywhere. Note that
-    // it does cost the user any name starting with PYTHON, PYTHONIC included.
-    withSQLConf(key("MY_SPARK_SETTING") -> "1", key("APP_PYTHON_HOME") -> "2") {
-      assert(
-        PythonWorkerEnvironment.readValidated(spark.sessionState.conf) ===
-          Map("MY_SPARK_SETTING" -> "1", "APP_PYTHON_HOME" -> "2"))
+  test("SPARK-58752: a name Spark sets unconditionally is still the session's to set") {
+    // Write order already protects these -- the runner and the worker factory apply them after the
+    // session's environment -- so they are deliberately not reserved. A session setting one is
+    // harmless: Spark's value still reaches the worker.
+    withSQLConf(
+      key("PYTHONPATH") -> "/tmp/ignored",
+      key("PYTHONUNBUFFERED") -> "NO",
+      key("PYTHON_UDF_BATCH_SIZE") -> "1",
+      key("PYTHONWARNINGS") -> "ignore",
+      key("MY_SPARK_SETTING") -> "1") {
+      val env = PythonWorkerEnvironment.readValidated(spark.sessionState.conf)
+      assert(env.keySet === Set(
+        "PYTHONPATH",
+        "PYTHONUNBUFFERED",
+        "PYTHON_UDF_BATCH_SIZE",
+        "PYTHONWARNINGS",
+        "MY_SPARK_SETTING"))
     }
   }
 
