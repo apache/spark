@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode, GenerateMutableProjection}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType}
 
 /**
  * Evaluation of [[With]] and the memoization it gives a [[CommonExpressionRef]]. The rewrite that
@@ -177,11 +177,11 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
     // numbers and not a law. Emitting the body into a method here makes it 2 at any depth, so the
     // bound no longer grows with depth wherever the threshold sits.
     //
-    // Whole-stage codegen is neither covered nor fixed: it generates the operators a `With` reaches
-    // with `currentVars` set, so neither this method nor `reduceCodeSize` applies, and the body is
-    // pasted per reference -- measured 2, 4, 8, ... 256 at depths 1 to 8. A bare `CodegenContext`
-    // has `INPUT_ROW` set and `currentVars` null, which is what a method needs and the only shape
-    // below.
+    // What is not covered here is the shape where the input arrives as local variables, which is
+    // what a whole-stage `Project` or `Filter` hands an expression: `currentVars` is set, so
+    // neither this method nor `reduceCodeSize` applies and the body is pasted per reference -- 2,
+    // 4, 8, ... 256 at depths 1 to 8. A bare `CodegenContext` has `INPUT_ROW` set and `currentVars`
+    // null, which is what a method needs.
     val marker = 1234567
     def nested(depth: Int): Expression = {
       val leaf: Expression = Add(BoundReference(0, IntegerType, nullable = false), Literal(marker))
@@ -256,6 +256,62 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
     assert(generated.getMessage.contains("references it"))
     val interpreted = intercept[SparkException](w.eval(InternalRow.empty))
     assert(interpreted.getMessage.contains("outside its With"))
+  }
+
+  test("SPARK-58902: the generated path does not compute a definition on a row that skips it") {
+    // The interpreted no-reference tests use `Counter`, which has no codegen, and the end-to-end
+    // skip case never enters the `With` at all. Here the `With` is entered on every row and the
+    // branch inside it decides whether a reference is reached, so an eager fill would show up as
+    // ids consumed on the rows that take the other arm.
+    val id = MonotonicallyIncreasingID()
+    val w = With(id) { case Seq(ref) =>
+      If(BoundReference(0, BooleanType, nullable = false), ref, Literal(-1L))
+    }
+    val proj = GenerateMutableProjection.generate(Seq(w))
+    proj.initialize(0)
+    val got = Seq(false, true, false, true).map { reached =>
+      proj(InternalRow(reached)).getLong(0)
+    }
+    // Only the rows that reach the reference take an id, so the ids stay 0 and 1.
+    assert(got == Seq(-1L, 0L, -1L, 1L))
+  }
+
+  test("SPARK-58902: two surviving definitions in one With keep their own state") {
+    // Every other runtime case has a single definition, so a slot that aliased two definitions, or
+    // a clear that reset the wrong one, would go unnoticed. The two are scaled differently to make
+    // which slot answered visible in the value.
+    def build(): Expression = With(
+      MonotonicallyIncreasingID(),
+      Multiply(MonotonicallyIncreasingID(), Literal(100L))) { case Seq(a, b) =>
+        Add(Add(a, a), Add(b, b))
+      }
+    // Row n reads a = n and b = 100n once each, so the sum is 2n + 200n. Aliasing the two slots
+    // would give 4n or 400n, and clearing only one of them would drift after the first row.
+    val proj = GenerateMutableProjection.generate(Seq(build()))
+    proj.initialize(0)
+    assert((0 until 3).map(_ => proj(InternalRow.empty).getLong(0)) == Seq(0L, 202L, 404L))
+
+    val interpreted = build()
+    interpreted.foreach {
+      case n: Nondeterministic => n.initialize(0)
+      case _ =>
+    }
+    assert((0 until 3).map(_ => interpreted.eval(InternalRow.empty)) == Seq(0L, 202L, 404L))
+  }
+
+  test("SPARK-58902: a refused scope leaves no slot behind in the context") {
+    // The duplicate-id check throws partway through allocating, after earlier definitions of the
+    // same `With` are already in scope. If those were left there, a later reference to one of those
+    // ids in the same context would resolve an orphan and generate code from it instead of saying
+    // the id is not in scope.
+    val ctx = new CodegenContext
+    val id = new CommonExpressionId()
+    val w = With(Literal(0), Seq(CommonExpressionDef(Literal(1), id), CommonExpressionDef(
+      Literal(2), id)))
+    val refused = intercept[SparkException](w.genCode(ctx))
+    assert(refused.getMessage.contains("is already being generated"))
+    val gone = intercept[SparkException](ctx.getCommonExpr(id.id))
+    assert(gone.getMessage.contains("is not in scope"))
   }
 
   test("SPARK-58902: a reference under a CodegenFallback still memoizes") {

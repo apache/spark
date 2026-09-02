@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 class RewriteWithExpressionSuite extends PlanTest {
@@ -263,6 +264,65 @@ class RewriteWithExpressionSuite extends PlanTest {
     val kept = With(a + b) { case Seq(ref) => ref * ref }
     val keptPlan = testRelation.select(Coalesce(Seq(b, kept)).as("col"))
     comparePlans(Optimizer.execute(keptPlan), keptPlan)
+  }
+
+  test("SPARK-58902: an inner substitution that duplicates an outer reference is counted") {
+    val Seq(a, b) = testRelation.output
+    def udf(e: Expression, deterministic: Boolean): PythonUDF =
+      PythonUDF("udf", null, IntegerType, Seq(e), PythonEvalType.SQL_BATCHED_UDF, deterministic)
+
+    // With this conf off, `CollapseProject.isCheap` calls any `PythonUDF` cheap whatever its
+    // children are, which is what lets an inner definition carrying an outer reference be
+    // substituted at both of its references. Counting the outer reference before that happens says
+    // once, and the branch path runs bottom-up, so a plan-wide count taken up front would inline
+    // the nondeterministic outer definition into both copies -- two draws where there must be one.
+    withSQLConf(SQLConf.AVOID_COLLAPSE_UDF_WITH_EXPENSIVE_EXPR.key -> "false") {
+      val outerDef = CommonExpressionDef(udf(a, deterministic = false))
+      val outerRef = new CommonExpressionRef(outerDef)
+      val innerDef = CommonExpressionDef(udf(outerRef, deterministic = true))
+      val innerRef = new CommonExpressionRef(innerDef)
+      val inner = With(Add(innerRef, innerRef), Seq(innerDef))
+      val outer = With(inner, Seq(outerDef))
+      val rewritten = Optimizer.execute(testRelation.select(Coalesce(Seq(b, outer)).as("col")))
+
+      val nondet = rewritten.expressions.flatMap(_.collect {
+        case u: PythonUDF if !u.udfDeterministic => u
+      })
+      assert(nondet.length == 1, s"the nondeterministic definition was inlined twice:\n$rewritten")
+      // It stayed memoized: the surviving `With` still defines it, and both reads go through a
+      // reference to it.
+      val withs = rewritten.expressions.flatMap(_.collect { case w: With => w })
+      assert(withs.length == 1, s"expected one surviving With:\n$rewritten")
+      assert(withs.head.defs.map(_.child) == nondet, s"the wrong definition survived:\n$rewritten")
+      assert(withs.head.child.collect { case r: CommonExpressionRef => r }.length == 2,
+        s"expected two references to the surviving definition:\n$rewritten")
+    }
+  }
+
+  test("SPARK-58902: a reference inside a sibling definition keeps that definition memoized") {
+    val Seq(a, b) = testRelation.output
+    def udf(e: Expression, deterministic: Boolean): PythonUDF =
+      PythonUDF("udf", null, IntegerType, Seq(e), PythonEvalType.SQL_BATCHED_UDF, deterministic)
+
+    // The reference to the first definition sits inside the second one, once. Substituting the
+    // second definition at both of its references would duplicate it, so counting it as read once
+    // would inline the nondeterministic first definition into both copies. Nothing builds this
+    // shape -- the helper puts references only in `child` -- but the rewrite is what would have to
+    // survive it, and it cannot fall back on evaluation failing.
+    withSQLConf(SQLConf.AVOID_COLLAPSE_UDF_WITH_EXPENSIVE_EXPR.key -> "false") {
+      val firstDef = CommonExpressionDef(udf(a, deterministic = false))
+      val firstRef = new CommonExpressionRef(firstDef)
+      val secondDef = CommonExpressionDef(udf(firstRef, deterministic = true))
+      val secondRef = new CommonExpressionRef(secondDef)
+      val w = With(Add(secondRef, secondRef), Seq(firstDef, secondDef))
+      val rewritten = Optimizer.execute(testRelation.select(Coalesce(Seq(b, w)).as("col")))
+
+      val nondet = rewritten.expressions.flatMap(_.collect {
+        case u: PythonUDF if !u.udfDeterministic => u
+      })
+      assert(nondet.length == 1,
+        s"the nondeterministic definition was inlined more than once:\n$rewritten")
+    }
   }
 
   test("SPARK-58902: a branch-local With keeps only the definitions worth memoizing") {

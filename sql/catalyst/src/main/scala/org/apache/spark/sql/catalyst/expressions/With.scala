@@ -207,6 +207,16 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
    * whose expressions hold the offending `CodegenFallback` -- it is visible there, since a `With`
    * in a conditional branch reaches execution inside `plan.expressions` like any other expression.
    *
+   * No builder in the tree reaches this today. `Between` and `NullIf` are the only expressions
+   * that build a `With` over a user expression, and every position they put a reference in is under
+   * a node that generates code, once `ReplaceExpressions` has removed the `TypedNullLiteral` that
+   * `NullIf` wraps one of them in, so a user's `CodegenFallback` cannot come to hold one.
+   * Substituting a definition would relocate the references inside it, and duplicate them, but a
+   * definition never holds a reference of its own `With`: the builder creates those objects and
+   * puts them only in the child it replaces. A nested `With` standing as a definition takes its own
+   * references along, whose parents move with them. It is here for the next builder that does, and
+   * for the nested case, which needs a real one underneath it.
+   *
    * One object is registered however many times this is generated, so two generated occurrences of
    * one `With` call `eval` on the same instance. `GenerateOrdering` does generate a key twice, once
    * per side of the comparison, which makes a stateful definition advance across the two sides.
@@ -353,6 +363,11 @@ object CommonExpressionId {
  * so a definition still compares and canonicalizes by its id and child, and `copy` gives the copy a
  * fresh one. The enclosing [[With]] binds each reference to the cell of the definition standing in
  * the tree with it, so a cell that a transform left behind is never read.
+ *
+ * Staying `Unevaluable` is what keeps optimizer-time folding away from a `With` that survives in a
+ * conditional branch: `ConvertToLocalRelation` refuses a projection holding one, so a branch over a
+ * `LocalRelation` is not executed while the plan is still being optimized. Making a definition
+ * evaluable would start folding those branches.
  */
 case class CommonExpressionDef(child: Expression, id: CommonExpressionId = new CommonExpressionId())
   extends UnaryExpression with Unevaluable {
@@ -381,9 +396,15 @@ case class CommonExpressionRef(id: CommonExpressionId, dataType: DataType, nulla
    * are wired by the enclosing [[With]] before it evaluates its child, and are left out of the case
    * class parameters so that equality and canonicalization are unchanged -- and so that a rule
    * comparing two references does not compare their cells.
+   *
+   * `@transient` for the reason [[CommonExpressionCell]]'s own fields are: a binding lives only for
+   * the duration of one `With.eval`, which restores it on the way out, so serializing a task sees
+   * null. A serialization that happens while an evaluation is still on the stack would otherwise
+   * capture a live binding, and the deserialized reference would evaluate that definition rather
+   * than raise, dragging the definition's whole subtree along with it.
    */
-  private var definition: Expression = _
-  private var cell: CommonExpressionCell = _
+  @transient private var definition: Expression = _
+  @transient private var cell: CommonExpressionCell = _
 
   private[expressions] def bindTo(exprDef: CommonExpressionDef): Unit = {
     definition = exprDef.child

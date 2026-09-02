@@ -227,6 +227,14 @@ class CodegenContext extends Logging {
      * emits behind that flag. Generated once and cached, so that every reference shares whatever
      * mutable state the definition allocated, such as an RNG, rather than getting its own.
      *
+     * The cache lives on the slot and so lasts exactly as long as the scope, which is as long as it
+     * may: the code is generated against whichever `INPUT_ROW` and `currentVars` are in effect at
+     * the time and names them, so a slot reused across two scopes emits the first scope's names in
+     * the second. `GenerateOrdering` generates its key once per comparison side, under a different
+     * row variable each time, so a slot shared between the sides reads the first side's row -- and
+     * where the reference sits inside a method `Expression.reduceCodeSize` hoisted, which takes
+     * just that side's row, does not compile.
+     *
      * A definition that references its own id would re-enter this while the first call is still
      * generating it, since `fillCode` is set only after `definition.genCode` returns. `filling`
      * turns that into the error `With.refsToBind` documents for the interpreted path, rather than a
@@ -240,8 +248,10 @@ class CodegenContext extends Logging {
      * once per scope rather than once per reference up to that threshold, and a bound that no
      * longer grows with depth wherever the threshold sits. It is only possible where the definition
      * reads the input row rather than local variables -- the condition `reduceCodeSize` splits
-     * under, and for the same reason. Whole-stage codegen generates the operators a `With` reaches
-     * with `currentVars` set, so neither applies there and the body is pasted per reference.
+     * under, and for the same reason. That condition is what decides it, not whether whole-stage
+     * codegen is on: a whole-stage `Project` or `Filter` hands an expression its input as local
+     * variables, so no method is possible there, while `SortMergeJoinExec.createJoinKey` and the
+     * aggregate output paths generate against a row with `currentVars` cleared and can get one.
      */
     def fill: Block = {
       if (fillCode.isEmpty) {
@@ -277,6 +287,12 @@ class CodegenContext extends Logging {
          |${value.value} = ${defGen.value};
          |$computed = true;
        """.stripMargin
+      // TODO: cover the local-variable case too, by passing the `currentVars` values a definition
+      //   reads into the method as parameters, the way
+      //   `subexpressionEliminationForWholeStageCodegen` does. It needs a decision first:
+      //   `getLocalInputVariableValues` hoists an input variable that is not evaluated yet to
+      //   before the call, which for a reference behind a branch means evaluating it on rows that
+      //   never reach the reference.
       val canPutInMethod = INPUT_ROW != null && currentVars == null
       // A definition that is or holds another `With` is the shape whose code doubles per level,
       // and what this is aimed at. It is not the only one -- a definition referencing a sibling
@@ -320,28 +336,36 @@ class CodegenContext extends Logging {
    */
   def withCommonExprs(defs: Seq[CommonExpressionDef])(f: Seq[CommonExprSlots] => ExprCode)
     : ExprCode = {
-    val slots = defs.map { d =>
-      val id = d.id.id
-      if (currentCommonExprs.contains(id)) {
-        throw SparkException.internalError(s"Common expression $id is already being generated")
-      }
-      val isNull = if (d.nullable) {
-        JavaCode.isNullGlobal(addMutableState(JAVA_BOOLEAN, "commonExprIsNull"))
-      } else {
-        FalseLiteral
-      }
-      val value = addMutableState(javaType(d.dataType), "commonExprValue")
-      val slot = CommonExprSlots(
-        ExprCode(isNull, JavaCode.global(value, d.dataType)),
-        addMutableState(JAVA_BOOLEAN, "commonExprComputed"),
-        d.child)
-      currentCommonExprs.put(id, slot)
-      slot
-    }
+    // The ids this call registered, so the cleanup takes back exactly those. Allocating inside the
+    // `try` is what makes the cleanup run at all: the duplicate-id check throws partway, and the
+    // slots of the definitions before it would otherwise stay registered, leaving a later
+    // `getCommonExpr` for one of those ids to resolve an orphan and generate code from it rather
+    // than report that the id is not in scope. Removing by the full `defs` list instead would
+    // take the duplicate id out of the enclosing scope that still owns it.
+    val added = mutable.ArrayBuffer.empty[Long]
     try {
+      val slots = defs.map { d =>
+        val id = d.id.id
+        if (currentCommonExprs.contains(id)) {
+          throw SparkException.internalError(s"Common expression $id is already being generated")
+        }
+        val isNull = if (d.nullable) {
+          JavaCode.isNullGlobal(addMutableState(JAVA_BOOLEAN, "commonExprIsNull"))
+        } else {
+          FalseLiteral
+        }
+        val value = addMutableState(javaType(d.dataType), "commonExprValue")
+        val slot = CommonExprSlots(
+          ExprCode(isNull, JavaCode.global(value, d.dataType)),
+          addMutableState(JAVA_BOOLEAN, "commonExprComputed"),
+          d.child)
+        currentCommonExprs.put(id, slot)
+        added += id
+        slot
+      }
       f(slots)
     } finally {
-      defs.map(_.id.id).foreach(currentCommonExprs.remove)
+      added.foreach(currentCommonExprs.remove)
     }
   }
 
