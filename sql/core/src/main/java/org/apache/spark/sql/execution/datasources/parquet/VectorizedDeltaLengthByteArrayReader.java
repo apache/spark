@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import static org.apache.spark.sql.execution.datasources.parquet.VectorizedReaderBase.checkLength;
 import static org.apache.spark.sql.types.DataTypes.IntegerType;
 
 import java.io.EOFException;
@@ -62,7 +63,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
       try {
         buffer = in.slice(length);
       } catch (EOFException e) {
-        throw new ParquetDecodingException("Failed to read " + length + " bytes");
+        throw new ParquetDecodingException("Failed to read " + length + " bytes", e);
       }
       outputWriter.write(c, rowId + i, buffer, length);
     }
@@ -94,7 +95,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
         // Converts WKB into a physical representation of geometry/geography.
         physicalValue = converter.convert(in.readNBytes(length), srid);
       } catch (IOException e) {
-        throw new ParquetDecodingException("Failed to read " + length + " bytes");
+        throw new ParquetDecodingException("Failed to read " + length + " bytes", e);
       }
 
       outputWriter.write(c, rowId + i, ByteBuffer.wrap(physicalValue), physicalValue.length);
@@ -107,7 +108,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
     try {
       return in.slice(length);
     } catch (EOFException e) {
-      throw new ParquetDecodingException("Failed to read " + length + " bytes");
+      throw new ParquetDecodingException("Failed to read " + length + " bytes", e);
     }
   }
 
@@ -123,18 +124,5 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
       throw new ParquetDecodingException("Failed to skip " + totalSkip + " bytes", e);
     }
     currentRow += total;
-  }
-
-  /**
-   * Validates a length decoded from the page. Lengths are file-supplied and unverified, so a
-   * negative value (whether crafted or corrupt) must be rejected before it reaches
-   * {@code in.slice}, {@code in.skipFully}, or the column vector, where it would otherwise read
-   * stale bytes, rewind the stream, or move {@code elementsAppended} backwards silently.
-   */
-  private static int checkLength(int length) {
-    if (length < 0) {
-      throw new ParquetDecodingException("Encountered negative length: " + length);
-    }
-    return length;
   }
 }

@@ -16,9 +16,15 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.parquet.bytes.DirectByteBufferAllocator
+import java.nio.ByteBuffer
+
+import org.apache.parquet.bytes.{ByteBufferInputStream, BytesInput, DirectByteBufferAllocator}
 import org.apache.parquet.column.values.Utils
+import org.apache.parquet.column.values.delta.DeltaBinaryPackingValuesWriterForInteger
+import org.apache.parquet.column.values.deltalengthbytearray.DeltaLengthByteArrayValuesWriter
 import org.apache.parquet.column.values.deltastrings.DeltaByteArrayWriter
+import org.apache.parquet.io.ParquetDecodingException
+import org.apache.parquet.io.api.Binary
 
 import org.apache.spark.sql.catalyst.util.STUtils
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
@@ -57,6 +63,47 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
 
   test("random strings with skipN") {
     assertReadWriteWithSkipN(writer, reader, randvalues)
+  }
+
+  test("readBinary rejects a negative decoded length (prefix and suffix)") {
+    // A DELTA_BYTE_ARRAY page is concat(prefixLengthHeader, suffixSection), where the suffix
+    // section is itself a DELTA_LENGTH_BYTE_ARRAY page concat(suffixLengthHeader, suffixData).
+    // Spark's writer never emits a negative length, but a corrupt/third-party file can carry one
+    // in either the prefix or the suffix lengths. Both must be rejected: the suffix through
+    // suffixReader.getBytes, the prefix through the reader's own checkLength guard.
+    val alloc = new DirectByteBufferAllocator()
+    def deltaBinaryPacked(values: Int*): BytesInput = {
+      val w = new DeltaBinaryPackingValuesWriterForInteger(128, 4, 100, 200, alloc)
+      values.foreach(w.writeInteger)
+      w.getBytes
+    }
+    def deltaLengthByteArray(values: String*): BytesInput = {
+      val w = new DeltaLengthByteArrayValuesWriter(64 * 1024, 64 * 1024, alloc)
+      values.foreach(s => w.writeBytes(Binary.fromString(s)))
+      w.getBytes
+    }
+    def firstRowThenNegative(page: Array[Byte]): Unit = {
+      reader = new VectorizedDeltaByteArrayReader()
+      reader.initFromPage(2, ByteBufferInputStream.wrap(ByteBuffer.wrap(page)))
+      val vector = new OnHeapColumnVector(2, StringType)
+      reader.readBinary(1, vector, 0)
+      assert("abc".getBytes() sameElements vector.getBinary(0))
+      val error = intercept[ParquetDecodingException] {
+        reader.readBinary(1, vector, 1)
+      }
+      assert(error.getMessage.contains("negative length"))
+    }
+
+    // Negative prefix length: value 0 has prefix 0 (valid), value 1 has prefix -6.
+    firstRowThenNegative(
+      BytesInput.concat(deltaBinaryPacked(0, -6), deltaLengthByteArray("abc", "def")).toByteArray)
+
+    // Negative suffix length: prefixes are 0, suffix lengths are [3, -6] over data "abc".
+    firstRowThenNegative(
+      BytesInput.concat(
+        deltaBinaryPacked(0, 0),
+        deltaBinaryPacked(3, -6),
+        BytesInput.from("abc".getBytes())).toByteArray)
   }
 
   test("test lengths") {
