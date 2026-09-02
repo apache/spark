@@ -530,3 +530,78 @@ Project [x#x]
          +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
             +- SubqueryAlias T
                +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW nullable_struct AS SELECT * FROM VALUES
+  (0, CAST(NULL AS STRUCT<a: INT, b: INT, s2: STRUCT<c: INT, d: INT>>)),
+  (1, named_struct("a", 1, "b", 11, "s2", CAST(NULL AS STRUCT<c: INT, d: INT>))),
+  (2, named_struct("a", 2, "b", 22, "s2", named_struct("c", 222, "d", 2222)))
+AS nullable_struct(id, data)
+-- !query analysis
+CreateViewCommand `nullable_struct`, SELECT * FROM VALUES
+  (0, CAST(NULL AS STRUCT<a: INT, b: INT, s2: STRUCT<c: INT, d: INT>>)),
+  (1, named_struct("a", 1, "b", 11, "s2", CAST(NULL AS STRUCT<c: INT, d: INT>))),
+  (2, named_struct("a", 2, "b", 22, "s2", named_struct("c", 222, "d", 2222)))
+AS nullable_struct(id, data), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [id#x, data#x]
+      +- SubqueryAlias nullable_struct
+         +- LocalRelation [id#x, data#x]
+
+
+-- !query
+SELECT * EXCEPT (data.a) FROM nullable_struct
+-- !query analysis
+Project [id#x, if (isnull(data#x)) null else named_struct(b, data#x.b, s2, data#x.s2) AS data#x]
++- SubqueryAlias nullable_struct
+   +- View (`nullable_struct`, [id#x, data#x])
+      +- Project [cast(id#x as int) AS id#x, cast(data#x as struct<a:int,b:int,s2:struct<c:int,d:int>>) AS data#x]
+         +- Project [id#x, data#x]
+            +- SubqueryAlias nullable_struct
+               +- LocalRelation [id#x, data#x]
+
+
+-- !query
+SELECT id, data IS NULL FROM (SELECT * EXCEPT (data.a) FROM nullable_struct)
+-- !query analysis
+Project [id#x, isnull(data#x) AS (data IS NULL)#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [id#x, if (isnull(data#x)) null else named_struct(b, data#x.b, s2, data#x.s2) AS data#x]
+      +- SubqueryAlias nullable_struct
+         +- View (`nullable_struct`, [id#x, data#x])
+            +- Project [cast(id#x as int) AS id#x, cast(data#x as struct<a:int,b:int,s2:struct<c:int,d:int>>) AS data#x]
+               +- Project [id#x, data#x]
+                  +- SubqueryAlias nullable_struct
+                     +- LocalRelation [id#x, data#x]
+
+
+-- !query
+SELECT id, data IS NULL, data.s2 IS NULL FROM (SELECT * EXCEPT (data.s2.c) FROM nullable_struct)
+-- !query analysis
+Project [id#x, isnull(data#x) AS (data IS NULL)#x, isnull(data#x.s2) AS (data.s2 IS NULL)#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [id#x, if (isnull(data#x)) null else named_struct(a, data#x.a, b, data#x.b, s2, if (isnull(data#x.s2)) null else named_struct(d, data#x.s2.d)) AS data#x]
+      +- SubqueryAlias nullable_struct
+         +- View (`nullable_struct`, [id#x, data#x])
+            +- Project [cast(id#x as int) AS id#x, cast(data#x as struct<a:int,b:int,s2:struct<c:int,d:int>>) AS data#x]
+               +- Project [id#x, data#x]
+                  +- SubqueryAlias nullable_struct
+                     +- LocalRelation [id#x, data#x]
+
+
+-- !query
+SELECT data.* EXCEPT (s2.c) FROM nullable_struct
+-- !query analysis
+Project [data#x.a AS a#x, data#x.b AS b#x, if (isnull(data#x.s2)) null else named_struct(d, data#x.s2.d) AS s2#x]
++- SubqueryAlias nullable_struct
+   +- View (`nullable_struct`, [id#x, data#x])
+      +- Project [cast(id#x as int) AS id#x, cast(data#x as struct<a:int,b:int,s2:struct<c:int,d:int>>) AS data#x]
+         +- Project [id#x, data#x]
+            +- SubqueryAlias nullable_struct
+               +- LocalRelation [id#x, data#x]
+
+
+-- !query
+DROP VIEW nullable_struct
+-- !query analysis
+DropTempViewCommand nullable_struct, false

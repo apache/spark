@@ -76,3 +76,16 @@ SELECT 1 FROM v1 WHERE 4 IN (*);
 SELECT T.* FROM v1, LATERAL (SELECT  v1.*) AS T(c1, c2, c3, c4, c5);
 SELECT T.* FROM v1, LATERAL (SELECT  COALESCE(v1.*)) AS T(x);
 
+-- EXCEPT a nested field preserves the nullness of the enclosing struct
+CREATE TEMPORARY VIEW nullable_struct AS SELECT * FROM VALUES
+  (0, CAST(NULL AS STRUCT<a: INT, b: INT, s2: STRUCT<c: INT, d: INT>>)),
+  (1, named_struct("a", 1, "b", 11, "s2", CAST(NULL AS STRUCT<c: INT, d: INT>))),
+  (2, named_struct("a", 2, "b", 22, "s2", named_struct("c", 222, "d", 2222)))
+AS nullable_struct(id, data);
+
+SELECT * EXCEPT (data.a) FROM nullable_struct;
+SELECT id, data IS NULL FROM (SELECT * EXCEPT (data.a) FROM nullable_struct);
+SELECT id, data IS NULL, data.s2 IS NULL FROM (SELECT * EXCEPT (data.s2.c) FROM nullable_struct);
+SELECT data.* EXCEPT (s2.c) FROM nullable_struct;
+
+DROP VIEW nullable_struct;
