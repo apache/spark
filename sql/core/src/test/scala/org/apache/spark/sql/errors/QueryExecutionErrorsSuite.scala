@@ -59,7 +59,7 @@ import org.apache.spark.sql.vectorized.ColumnVector
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.Utils
-import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.{assertEquals, assertNotNull, assertNull}
 
 
 class QueryExecutionErrorsSuite
@@ -1425,45 +1425,31 @@ class QueryExecutionErrorsSuite
   }
 
   test("SPARK-49634: Numeric value out of range") {
+    def assertSingleRow(result: DataFrame, expectedValue: Option[BigDecimal]): Unit = {
+      val actualResult = result.collect()
+      assertEquals(1, actualResult.length)
+      val row = actualResult.head
+      assertNotNull(row)
+      assertEquals(1, row.length)
+      expectedValue match {
+        case Some(expectedValue: BigDecimal) =>
+          assertEquals(expectedValue.toString(), row.get(0).toString)
+        case None => assertNull(row.get(0))
+      }
+    }
+
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       val query = "select cast('123.45' as decimal(4, 2)) as row0"
-      // OneRowRelation
-      // val query = "select cast(2147483647 as int) + cast(5 as int)"
-      // def extract
-      /* checkError(
-        exception = intercept[SparkArithmeticException] {
-          spark.sql(query).show()
-        },
-        condition = "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
-        parameters = Map(
-          "value" -> "123.45",
-          "precision" -> "4",
-          "scale" -> "2"
-        ),
-        context = ExpectedContext(
-          fragment = query.substring(7), start = 7, stop = 37
-        )
-      ) */
 
       val actualResult = spark.sql(query)
-      val expectedResult = spark.createDataFrame(
-        rowRDD = spark.sparkContext.parallelize(
-          Seq(
-            Row(null)
-          )
-        ),
-        schema = StructType.apply(
-          Seq(
-            StructField("row0", DecimalType(4, 2)
-            )
-          )
-        )
-      )
+      assertSingleRow(actualResult, Option.empty)
+    }
 
-      assertEquals(
-        actualResult.collect(),
-        expectedResult.collect()
-      )
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val query_successful = "select cast('123.45' as decimal(5,2)) as row0"
+
+      val result = spark.sql(query_successful)
+      assertSingleRow(result, Option(BigDecimal("123.45")))
     }
   }
 }
