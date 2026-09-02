@@ -1056,6 +1056,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(FormatString(Literal("%.2f"), Literal(Decimal("1234.5"))), "1234.50")
     checkEvaluation(FormatString(Literal("%,.2f"), Literal(Decimal("1234.5"))), "1,234.50")
     checkEvaluation(FormatString(Literal("%e"), Literal(Decimal("1.5"))), "1.500000e+00")
+    checkEvaluation(FormatString(Literal("%g"), Literal(Decimal("1.5"))), "1.50000")
+
+    // %a is not supported for decimals: Formatter accepts it only for float and double.
+    checkExceptionInExpression[IllegalFormatConversionException](
+      FormatString(Literal("%a"), Literal(Decimal("1.5"))), "a != java.math.BigDecimal")
 
     // Not routed through a double, so digits beyond double precision survive.
     checkEvaluation(
@@ -1070,6 +1075,16 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkExceptionInExpression[IllegalFormatConversionException](
       FormatString(Literal("%f"), Literal(1)), "f != java.lang.Integer")
+  }
+
+  test("FormatString with a decimal-backed UDT argument") {
+    // The generated row accessors use the UDT's underlying sqlType, so codegen sees a Decimal
+    // just like interpreted evaluation does. Both paths must convert it.
+    val udt = new DecimalWrapperUDT
+    val arg = Literal.create(udt.serialize(DecimalWrapper(Decimal("1.5"))), udt)
+    checkEvaluation(FormatString(Literal("%f"), arg), "1.500000")
+    checkEvaluation(FormatString(Literal("%s"), arg), "1.5")
+    checkEvaluation(FormatString(Literal("%f"), Literal.create(null, udt)), "null")
   }
 
   test("SPARK-22603: FormatString should not generate codes beyond 64KB") {
@@ -2381,4 +2396,18 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "functionName" -> "`normalize`",
         "form" -> "'NFE'"))
   }
+}
+
+private case class DecimalWrapper(d: Decimal)
+
+private class DecimalWrapperUDT extends UserDefinedType[DecimalWrapper] {
+  override def sqlType: DataType = DecimalType(10, 2)
+
+  override def serialize(obj: DecimalWrapper): Any = obj.d
+
+  override def deserialize(datum: Any): DecimalWrapper = datum match {
+    case d: Decimal => DecimalWrapper(d)
+  }
+
+  override def userClass: Class[DecimalWrapper] = classOf[DecimalWrapper]
 }
