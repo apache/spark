@@ -762,7 +762,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(master.getLocations("a1").size > 0, "master was not told about a1")
 
     master.removeExecutor(store.blockManagerId.executorId)
-    assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
+    assert(master.getLocations("a1").isEmpty, "a1 was not removed from master")
 
     val reregister = !master.driverHeartbeatEndPoint.askSync[Boolean](
       BlockManagerHeartbeat(store.blockManagerId))
@@ -794,7 +794,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(master.getLocations("a1").size > 0, "master was not told about a1")
 
     master.removeExecutor(store.blockManagerId.executorId)
-    assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
+    assert(master.getLocations("a1").isEmpty, "a1 was not removed from master")
 
     store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY)
     store.waitForAsyncReregister()
