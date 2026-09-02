@@ -1635,28 +1635,7 @@ class JDBCSuite extends SharedSparkSession {
       Some(TimestampType))
   }
 
-  test("SPARK-58876: Oracle DATE and TIMESTAMP map to TimestampNTZType by default") {
-    val oracleDialect = JdbcDialects.get("jdbc:oracle")
-    // Oracle DATE and TIMESTAMP are zoneless and arrive as JDBC Types.TIMESTAMP (bare typeName,
-    // precision in scale), so by default they map to TimestampNTZType, independent of the
-    // preferTimestampNTZ read option, and are marked so the read conversion is wall-clock.
-    Seq("DATE", "TIMESTAMP").foreach { typeName =>
-      val md = new MetadataBuilder()
-      assert(oracleDialect.getCatalystType(java.sql.Types.TIMESTAMP, typeName, 0, md) ===
-        Some(TimestampNTZType), s"typeName=$typeName")
-      assert(md.build().contains(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK), s"typeName=$typeName")
-    }
-    // The legacy flag restores the pre-4.4 behavior: defer to the shared default mapping, which
-    // yields TimestampType (or TimestampNTZType only when preferTimestampNTZ is set), and sets no
-    // wall-clock marker, so the read falls back to the base UTC-rebased conversion.
-    withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
-      val md = new MetadataBuilder()
-      assert(oracleDialect.getCatalystType(java.sql.Types.TIMESTAMP, "TIMESTAMP", 0, md) === None)
-      assert(!md.build().contains(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK))
-    }
-  }
-
-  test("SPARK-58876: Oracle marks NTZ columns for wall-clock writes, legacy-gated, even wrapped") {
+  test("SPARK-58876: Oracle stamps the NTZ wall-clock write marker, legacy-gated, even wrapped") {
     val custom = new JdbcDialect {
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
       override def getCatalystType(
@@ -1684,7 +1663,7 @@ class JDBCSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-58876: Oracle stamps the wall-clock read marker via getCatalystType, even wrapped") {
+  test("SPARK-58876: Oracle DATE/TIMESTAMP map to NTZ, read marker, legacy-gated, even wrapped") {
     val custom = new JdbcDialect {
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
       override def getCatalystType(
@@ -1695,17 +1674,19 @@ class JDBCSuite extends SharedSparkSession {
       new AggregatedDialect(List(custom, OracleDialect())),
       new AggregatedDialect(List(OracleDialect(), custom)))
     dialects.foreach { dialect =>
-      val md = new MetadataBuilder()
-      assert(dialect.getCatalystType(java.sql.Types.TIMESTAMP, "TIMESTAMP", 0, md) ===
-        Some(TimestampNTZType), s"dialect=$dialect")
-      assert(md.build().contains(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK), s"dialect=$dialect")
+      Seq("DATE", "TIMESTAMP").foreach { typeName =>
+        val hint = s"dialect=$dialect typeName=$typeName"
+        val md = new MetadataBuilder()
+        assert(dialect.getCatalystType(java.sql.Types.TIMESTAMP, typeName, 0, md) ===
+          Some(TimestampNTZType), hint)
+        assert(md.build().contains(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK), hint)
 
-      withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
-        val legacyMd = new MetadataBuilder()
-        assert(dialect.getCatalystType(java.sql.Types.TIMESTAMP, "TIMESTAMP", 0, legacyMd) === None,
-          s"dialect=$dialect")
-        assert(!legacyMd.build().contains(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK),
-          s"dialect=$dialect")
+        withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
+          val legacyMd = new MetadataBuilder()
+          val legacyType = dialect.getCatalystType(java.sql.Types.TIMESTAMP, typeName, 0, legacyMd)
+          assert(legacyType === None, hint)
+          assert(!legacyMd.build().contains(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK), hint)
+        }
       }
     }
   }

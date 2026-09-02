@@ -294,7 +294,6 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
     def checkRow(row: Row): Unit = {
       assert(row.getDecimal(0).equals(BigDecimal.valueOf(1)))
       assert(row.getDate(1).equals(Date.valueOf("1991-11-09")))
-      // Oracle TIMESTAMP column t maps to TimestampNTZType, materialized as a LocalDateTime.
       assert(row.get(2) === LocalDateTime.of(1996, 1, 1, 1, 23, 45))
     }
     checkRow(sql("SELECT * FROM datetime where id = 1").head())
@@ -447,7 +446,6 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
       (3, "2018-07-08", "2018-07-08 13:32:01"),
       (4, "2018-07-12", "2018-07-12 09:51:15")
     ).map { case (id, date, timestamp) =>
-      // DATE d stays DateType under mapDateToTimestamp=false; Oracle TIMESTAMP t maps to NTZ.
       Row(BigDecimal.valueOf(id), Date.valueOf(date), Timestamp.valueOf(timestamp).toLocalDateTime)
     }
 
@@ -732,26 +730,25 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
   }
 
   test("TimestampNTZType round-trips through an Oracle write and read") {
-    val ldt = LocalDateTime.of(1996, 1, 1, 1, 23, 45, 123456000)
+    // The zoneless NTZ wall-clock (incl. sub-second) must survive a write+read regardless of the
+    // JVM default zone, since getObject/setObject(LocalDateTime) bypass the java.sql.Timestamp zone
+    // bridge. Each (zone, value) case is written and read back and must equal the original.
+    val cases = Seq(
+      (UTC, LocalDateTime.of(1996, 1, 1, 1, 23, 45, 123456000)),
+      (LA, LocalDateTime.of(1996, 1, 1, 1, 23, 45, 123456000)),
+      // 2024-03-10 02:30 has no instant in America/Los_Angeles (spring-forward DST gap); the
+      // java.sql.Timestamp path would shift it an hour, getObject/setObject keep it exact.
+      (LA, LocalDateTime.of(2024, 3, 10, 2, 30, 0)))
     val schema = StructType(Seq(StructField("T", TimestampNTZType)))
-    // Write and read under several JVM zones; the zoneless NTZ wall-clock (incl. microseconds) must
-    // survive the round-trip regardless of the zone.
-    Seq(UTC, LA).foreach { zone =>
+    cases.foreach { case (zone, ldt) =>
       withDefaultTimeZone(zone) {
-        val dfWrite = spark.createDataFrame(
-          spark.sparkContext.parallelize(Seq(Row(ldt))), schema)
-        dfWrite.write.format("jdbc")
-          .mode(SaveMode.Overwrite)
-          .option("url", jdbcUrl)
-          .option("dbtable", "ntz_write_roundtrip")
-          .save()
-
+        spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(ldt))), schema)
+          .write.format("jdbc").mode(SaveMode.Overwrite)
+          .option("url", jdbcUrl).option("dbtable", "ntz_write_roundtrip").save()
         val dfRead = spark.read.format("jdbc")
-          .option("url", jdbcUrl)
-          .option("dbtable", "ntz_write_roundtrip")
-          .load()
-        assert(dfRead.schema.fields.head.dataType === TimestampNTZType)
-        assert(dfRead.collect().head.get(0) === ldt)
+          .option("url", jdbcUrl).option("dbtable", "ntz_write_roundtrip").load()
+        assert(dfRead.schema.fields.head.dataType === TimestampNTZType, s"zone=$zone ldt=$ldt")
+        assert(dfRead.collect().head.get(0) === ldt, s"zone=$zone ldt=$ldt")
       }
     }
   }
@@ -774,22 +771,6 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
         .option("url", jdbcUrl).option("dbtable", "ntz_legacy_write").load()
       assert(df.schema.fields.head.dataType === TimestampNTZType)
       assert(df.collect().head.get(0) === expected)
-    }
-  }
-
-  test("TimestampNTZ preserves a wall-clock value in the JVM DST gap via getObject/setObject") {
-    // 2024-03-10 02:30 does not exist in America/Los_Angeles (spring-forward gap); routing NTZ
-    // through java.sql.Timestamp would shift it an hour, getObject(LocalDateTime) keeps it exact.
-    val gap = LocalDateTime.of(2024, 3, 10, 2, 30, 0)
-    val schema = StructType(Seq(StructField("T", TimestampNTZType)))
-    withDefaultTimeZone(LA) {
-      spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(gap))), schema)
-        .write.format("jdbc").mode(SaveMode.Overwrite)
-        .option("url", jdbcUrl).option("dbtable", "ntz_dst_gap").save()
-      val df = spark.read.format("jdbc")
-        .option("url", jdbcUrl).option("dbtable", "ntz_dst_gap").load()
-      assert(df.schema.fields.head.dataType === TimestampNTZType)
-      assert(df.collect().head.get(0) === gap)
     }
   }
 

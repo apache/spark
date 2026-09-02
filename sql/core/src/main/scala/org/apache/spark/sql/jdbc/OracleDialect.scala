@@ -184,9 +184,8 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       case INTERVAL_DS => Some(DayTimeIntervalType())
       case Types.TIMESTAMP if !conf.legacyOracleTimestampNTZMappingEnabled && typeName != null &&
           typeName.toUpperCase(Locale.ROOT).matches("DATE|TIMESTAMP") =>
-        // Oracle DATE and TIMESTAMP are zoneless and both surface as Types.TIMESTAMP with typeName
-        // DATE/TIMESTAMP, so NTZ is faithful; WITH [LOCAL] TIME ZONE hit TIMESTAMP_TZ/LTZ above.
-        // Snapshot the (non-legacy) wall-clock decision so a later flag flip can't desync the read.
+        // Oracle DATE and TIMESTAMP are zoneless; map to NTZ and mark it wall-clock so a later flag
+        // flip can't desync the read. TZ/LTZ variants are handled above.
         if (md != null) md.putBoolean(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK, value = true)
         // TODO: map sub-microsecond TIMESTAMP(7-9) to TimestampNTZNanosType when the nanosecond
         // timestamp preview is enabled, instead of truncating to microsecond TimestampNTZType.
@@ -195,8 +194,6 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     }
   }
 
-  // Mark an NTZ column bound for Oracle so makeSetter writes zoneless wall-clock, matching the read
-  // mapping. Legacy flag: skip the mark, restoring the pre-4.4 UTC-rebased write.
   override def updateExtraColumnMetaForWrite(dt: DataType, metadata: MetadataBuilder): Unit = {
     dt match {
       case TimestampNTZType if !conf.legacyOracleTimestampNTZMappingEnabled =>
@@ -230,8 +227,6 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     // Appendix A Reference Information.
     case stringValue: String => s"'${escapeSql(stringValue)}'"
     case timestampValue: Timestamp => "{ts '" + timestampValue + "'}"
-    // Filters on a TimestampNTZType-mapped column push down a LocalDateTime; render it via the same
-    // JDBC {ts ...} escape (LocalDateTime.toString would be an invalid literal for the driver).
     case localDateTimeValue: LocalDateTime => "{ts '" + Timestamp.valueOf(localDateTimeValue) + "'}"
     case dateValue: Date => "{d '" + dateValue + "'}"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")

@@ -55,11 +55,8 @@ import org.apache.spark.util.ArrayImplicits._
  */
 object JdbcUtils extends Logging with SQLConfHelper {
 
-  // Markers a dialect stamps on an NTZ column that must read (resp. write) as wall-clock regardless
-  // of dialect, so the value can't desync from the resolved type if a session flag flips. Read and
-  // write use distinct keys: the read marker rides on the resolved schema and must not be
-  // honored on a later write to a different dialect (it would force wall-clock over that dialect's
-  // own conversion); the write marker is re-derived per write by the target dialect.
+  // Marks an NTZ column to read (resp. write) as wall-clock. Distinct keys so a read marker on the
+  // resolved schema can't force wall-clock on a later write to a different dialect.
   private[sql] val READ_TIMESTAMP_NTZ_WALL_CLOCK = "read_timestamp_ntz_wall_clock"
   private[sql] val WRITE_TIMESTAMP_NTZ_WALL_CLOCK = "write_timestamp_ntz_wall_clock"
 
