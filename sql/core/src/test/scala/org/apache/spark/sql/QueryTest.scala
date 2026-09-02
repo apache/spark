@@ -282,9 +282,6 @@ trait QueryTestBase
 
   protected def sparkContext = spark.sparkContext
 
-  // Shorthand for running a query using our SparkSession
-  protected lazy val sql: String => DataFrame = spark.sql _
-
   /**
    * A helper object for importing SQL implicits.
    *

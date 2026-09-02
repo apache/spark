@@ -2201,6 +2201,15 @@ class SparkConnectPlanner(
     createUserDefinedPythonFunction(fun)
       .builder(fun.getArgumentsList.asScala.map(transformExpression).toSeq) match {
       case udaf: PythonUDAF => udaf.toAggregateExpression()
+      case agg: PythonAggregate =>
+        // The two-stage incremental aggregation operators do not implement DISTINCT. The SQL path
+        // rejects it in FunctionResolution, but a Connect aggregate is already resolved and skips
+        // that guard, so reject `is_distinct` here rather than silently dropping it and returning a
+        // non-distinct result.
+        if (fun.getIsDistinct) {
+          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(agg.name, "DISTINCT")
+        }
+        agg.toAggregateExpression()
       case other => other
     }
   }
@@ -2214,7 +2223,9 @@ class SparkConnectPlanner(
       func = function,
       dataType = transformDataType(udf.getOutputType),
       pythonEvalType = udf.getEvalType,
-      udfDeterministic = fun.getDeterministic)
+      udfDeterministic = fun.getDeterministic,
+      // Set only for incremental Python aggregators (see PythonAggregate).
+      bufferType = if (udf.hasBufferType) transformDataType(udf.getBufferType) else null)
   }
 
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
@@ -3946,13 +3957,16 @@ class SparkConnectPlanner(
       name -> new TaskResourceRequest(res.getResourceName, res.getAmount)
     }.toMap
 
-    // Create ResourceProfile add add it to ResourceProfileManager
-    val profile = if (ereqs.isEmpty) {
+    // Create the ResourceProfile and register it, reusing an already-registered profile with
+    // equal resources if one exists so that equivalent profiles share a single id (and thus
+    // can reuse the same executors instead of triggering new allocations).
+    val newProfile = if (ereqs.isEmpty) {
       new TaskResourceProfile(treqs)
     } else {
       new ResourceProfile(ereqs, treqs)
     }
-    session.sparkContext.resourceProfileManager.addResourceProfile(profile)
+    val profile =
+      session.sparkContext.resourceProfileManager.getOrAddEquivalentProfile(newProfile)
 
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(

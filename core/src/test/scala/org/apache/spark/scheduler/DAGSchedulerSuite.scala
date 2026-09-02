@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, At
 
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+import scala.concurrent.Promise
 import scala.jdk.CollectionConverters._
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
@@ -41,7 +42,7 @@ import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.{LEGACY_ABORT_STAGE_AFTER_KILL_TASKS, Tests}
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
-import org.apache.spark.rdd.{DeterministicLevel, RDD}
+import org.apache.spark.rdd.{DeterministicLevel, RDD, ReliableRDDCheckpointData}
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, TaskResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.rpc.RpcTimeoutException
@@ -393,6 +394,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     @volatile var outstandingTasksForOtherWorkForTest: (Int, Set[Int]) => Int = (_, _) => 0
     override protected def outstandingTasksForOtherWork(rpId: Int, excludeStageIds: Set[Int]): Int =
       outstandingTasksForOtherWorkForTest(rpId, excludeStageIds)
+
+    // Seam for the hold state (SPARK-58828) read by the barrier retry-budget freeze. Default
+    // false so existing tests are unaffected.
+    @volatile var executorsHeldForTest: Boolean = false
+    override protected def executorsHeld: Boolean = executorsHeldForTest
 
     /**
      * Schedules shuffle merge finalize.
@@ -1559,6 +1565,149 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("SPARK-58887: a barrier job can be cancelled while its slot check is being retried") {
+    // 3 barrier tasks on the local[2] backend fail the max concurrent tasks check, so the
+    // submission enters the retry window during which the job is registered nowhere but
+    // `deferredBarrierJobs`. A cancellation in that window must fail the job immediately
+    // instead of silently no-oping until the retries run out.
+    val barrierRdd = new MyRDD(sc, 3, Nil).barrier().mapPartitions(iter => iter)
+    val failure = new AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    val jobId = submit(barrierRdd, Array(0, 1, 2), listener = failListener)
+    assert(failure.get() === null, "a barrier job in its slot-check retry window must wait")
+    assert(scheduler.deferredBarrierJobs.containsKey(jobId))
+    assert(scheduler.barrierJobIdToNumTasksCheckFailures.containsKey(jobId))
+    cancel(jobId)
+    assert(failure.get() !== null, "cancelling a deferred barrier job must fail its listener")
+    assert(failure.get().getMessage.contains(s"Job $jobId cancelled"),
+      "the listener must fail with the cancellation error, not the exhausted-retries one")
+    assert(!scheduler.barrierJobIdToNumTasksCheckFailures.containsKey(jobId),
+      "a cancelled deferral must not leak its slot-check failure count")
+    // The pending re-post fires regardless of the cancellation; simulate its arrival and check
+    // it is dropped instead of resurrecting the cancelled job.
+    runEvent(JobSubmitted(jobId, barrierRdd, jobComputeFunc, Array(0, 1, 2), CallSite("", ""),
+      failListener, JobArtifactSet.getActiveOrDefault(sc), null))
+    assert(scheduler.deferredBarrierJobs.isEmpty,
+      "a re-post arriving after the cancellation must be dropped, not re-deferred")
+    assert(scheduler.barrierJobIdToNumTasksCheckFailures.isEmpty)
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-58887: cancelAllJobs also fails a barrier job deferred for a slot-check retry") {
+    val barrierRdd = new MyRDD(sc, 3, Nil).barrier().mapPartitions(iter => iter)
+    val failure = new AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    val jobId = submit(barrierRdd, Array(0, 1, 2), listener = failListener)
+    assert(failure.get() === null)
+    assert(scheduler.deferredBarrierJobs.containsKey(jobId))
+    runEvent(AllJobsCancelled())
+    assert(failure.get() !== null, "cancelAllJobs must fail a deferred barrier job's listener")
+    assert(failure.get().getMessage.contains(s"Job $jobId cancelled"))
+    assert(!scheduler.barrierJobIdToNumTasksCheckFailures.containsKey(jobId))
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-58887: cancelJobGroup also fails a barrier job deferred for a slot-check retry") {
+    val barrierRdd = new MyRDD(sc, 3, Nil).barrier().mapPartitions(iter => iter)
+    val failure = new AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    val props = new Properties()
+    props.setProperty(SparkContext.SPARK_JOB_GROUP_ID, "deferredGroup")
+    val jobId = submit(barrierRdd, Array(0, 1, 2), listener = failListener, properties = props)
+    assert(failure.get() === null)
+    assert(scheduler.deferredBarrierJobs.containsKey(jobId))
+    runEvent(JobGroupCancelled("deferredGroup", cancelFutureJobs = false, None))
+    assert(failure.get() !== null, "cancelJobGroup must fail a deferred barrier job's listener")
+    assert(failure.get().getMessage.contains(s"Job $jobId cancelled"))
+    assert(!scheduler.barrierJobIdToNumTasksCheckFailures.containsKey(jobId))
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-58887: cancelJobsWithTag also fails a deferred barrier job") {
+    val barrierRdd = new MyRDD(sc, 3, Nil).barrier().mapPartitions(iter => iter)
+    val failure = new AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    val props = new Properties()
+    props.setProperty(SparkContext.SPARK_JOB_TAGS, "deferredTag")
+    val jobId = submit(barrierRdd, Array(0, 1, 2), listener = failListener, properties = props)
+    assert(failure.get() === null)
+    assert(scheduler.deferredBarrierJobs.containsKey(jobId))
+    runEvent(JobTagCancelled("deferredTag", None, None))
+    assert(failure.get() !== null,
+      "cancelJobsWithTag must fail a deferred barrier job's listener")
+    assert(failure.get().getMessage.contains(s"Job $jobId cancelled"))
+    assert(!scheduler.barrierJobIdToNumTasksCheckFailures.containsKey(jobId))
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-58887: tag cancellation reports a deferred barrier job in its promise") {
+    val barrierRdd = new MyRDD(sc, 3, Nil).barrier().mapPartitions(iter => iter)
+    val failure = new AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    val props = new Properties()
+    props.setProperty(SparkContext.SPARK_JOB_TAGS, "reportedTag")
+    val jobId = submit(barrierRdd, Array(0, 1, 2), listener = failListener, properties = props)
+    assert(scheduler.deferredBarrierJobs.containsKey(jobId))
+    val cancelledJobs = Promise[Seq[CancelledJobInfo]]()
+    runEvent(JobTagCancelled("reportedTag", None, Some(cancelledJobs)))
+    assert(failure.get() !== null)
+    // The handler completes the promise synchronously; the deferred job must be reported with
+    // its submission-time properties (e.g. for SQL execution id extraction), even though it
+    // never had an ActiveJob.
+    val reported = cancelledJobs.future.value.get.get
+    assert(reported.map(_.jobId) === Seq(jobId))
+    assert(reported.head.properties.getProperty(SparkContext.SPARK_JOB_TAGS) === "reportedTag")
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-58887: cancelling a deferred barrier job drops its partial stage registrations") {
+    // An ordinary shuffle upstream of the barrier stage is created and registered before the
+    // barrier slot check throws, so the deferred job is NOT registered nowhere. Cancelling it
+    // must drop those registrations too, or a later cancellation of the same job id finds
+    // jobIdToStageIds populated without an ActiveJob and crashes the event loop.
+    val ordinaryRdd = new MyRDD(sc, 2, Nil)
+    val ordinaryDep = new ShuffleDependency(ordinaryRdd, new HashPartitioner(3))
+    val barrierRdd = new MyRDD(sc, 3, List(ordinaryDep), tracker = mapOutputTracker)
+      .barrier().mapPartitions(iter => iter)
+    val barrierDep = new ShuffleDependency(barrierRdd, new HashPartitioner(2))
+    val resultRdd = new MyRDD(sc, 2, List(barrierDep), tracker = mapOutputTracker)
+    val failure = new AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    val jobId = submit(resultRdd, Array(0, 1), listener = failListener)
+    assert(failure.get() === null)
+    assert(scheduler.deferredBarrierJobs.containsKey(jobId))
+    assert(scheduler.jobIdToStageIds.contains(jobId),
+      "the ordinary ancestor stage must have been registered before the slot check threw")
+    cancel(jobId)
+    assert(failure.get() !== null)
+    assert(!scheduler.jobIdToStageIds.contains(jobId),
+      "cancelling a deferred job must drop its partial stage registrations")
+    // The pending re-post arrives and is dropped; cancelling once more must then be a harmless
+    // no-op instead of tripping over leftover registrations without an ActiveJob.
+    runEvent(JobSubmitted(jobId, resultRdd, jobComputeFunc, Array(0, 1), CallSite("", ""),
+      failListener, JobArtifactSet.getActiveOrDefault(sc), null))
+    cancel(jobId)
+    assertDataStructuresEmpty()
+  }
+
   test("Fail the job if a barrier ResultTask failed") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
@@ -2332,6 +2481,34 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(runningTaskInfos.isEmpty)
     assert(scheduler.runningStages.isEmpty)
     assert(scheduler.waitingStages.isEmpty)
+  }
+
+  test("SPARK-58616: cancelAllJobs surfaces the supplied reason in the job failure") {
+    val jobId = submit(new MyRDD(sc, 1, Nil), Array(0))
+    assert(scheduler.runningStages.size === 1)
+    runEvent(AllJobsCancelled(Some("because the user requested cancellation")))
+    checkError(
+      exception = failure.asInstanceOf[SparkException],
+      condition = "SPARK_JOB_CANCELLED",
+      sqlState = "XXKDA",
+      parameters = scala.collection.immutable.Map(
+        "jobId" -> jobId.toString,
+        "reason" -> "because the user requested cancellation"))
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-58616: cancelAllJobs falls back to the default reason when none is supplied") {
+    val jobId = submit(new MyRDD(sc, 1, Nil), Array(0))
+    assert(scheduler.runningStages.size === 1)
+    runEvent(AllJobsCancelled())
+    checkError(
+      exception = failure.asInstanceOf[SparkException],
+      condition = "SPARK_JOB_CANCELLED",
+      sqlState = "XXKDA",
+      parameters = scala.collection.immutable.Map(
+        "jobId" -> jobId.toString,
+        "reason" -> "as part of cancellation of all jobs"))
+    assertDataStructuresEmpty()
   }
 
   test("misbehaved accumulator should not crash DAGScheduler and SparkContext") {
@@ -4666,6 +4843,27 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(mergedRp.getExecutorCores.get == 4)
   }
 
+  test("merge of default and no-op task-only resource profiles uses default profile") {
+    conf.set(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key, "true")
+    conf.set(config.DYN_ALLOCATION_ENABLED, false)
+
+    val defaultProfile = sc.resourceProfileManager.defaultResourceProfile
+    val taskOnlyProfile = new ResourceProfileBuilder()
+      .require(new TaskResourceRequests().cpus(1))
+      .build()
+    val rdd = sc.parallelize(1 to 10, 2)
+      .withResources(defaultProfile)
+      .map(x => (x, x))
+      .withResources(taskOnlyProfile)
+
+    submit(rdd, Array(0, 1))
+
+    assert(taskSets.length === 1)
+    assert(taskSets.head.resourceProfileId === ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    assert(sc.resourceProfileManager.resourceProfileFromId(taskSets.head.resourceProfileId) eq
+      defaultProfile)
+  }
+
   test("test multiple resource profiles created from merging use same rp") {
     conf.set(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key, "true")
 
@@ -6432,6 +6630,31 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("pipelined shuffle: a regular-shuffle prefix feeding a pipelined producer is rejected") {
+    // Also mixed: a regular shuffle in the PREFIX that feeds a pipelined producer
+    // (regularRoot --regular--> producer(pipelined) --pipelined--> consumer). Rather than treat
+    // the regular edge as an ordinary external input to the group and support a mid-DAG regular
+    // prefix, a pipelined job rejects ANY regular shuffle up front (the supported shape is
+    // scan-of-files --pipelined--> stateful, with no upstream shuffle).
+    val regularRoot = new MyRDD(sc, 2, Nil)
+    val regularDep = new ShuffleDependency(regularRoot, new HashPartitioner(2))
+    val producerRdd = new MyRDD(sc, 2, List(regularDep), tracker = mapOutputTracker)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    submit(consumerRdd, Array(0, 1), listener = failListener)
+
+    assert(failure.get() != null, "a pipelined job with a regular-shuffle prefix must fail")
+    assert(failure.get().getMessage.contains("all-regular or all-pipelined"),
+      s"expected a mixed-job rejection, got: ${failure.get().getMessage}")
+    assert(taskSets.isEmpty, "no stage should be submitted for a rejected mixed job")
+    assertDataStructuresEmpty()
+  }
+
   test("pipelined shuffle: deep chain A->B->C is submitted fully concurrently") {
     // A --pipelined--> B --pipelined--> C : all three co-scheduled (each edge is non-sequencing).
     val rddA = new MyRDD(sc, 2, Nil)
@@ -6456,6 +6679,35 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val tsC = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddC).get
     complete(tsC, Seq((Success, 42), (Success, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: an explicit job cancellation cleans up a buffered consumer deferral") {
+    // A buffered deferral is the only mutable state this feature adds; it must never outlive its
+    // job. Job cancellation goes through failJobAndIndependentStages ->
+    // cleanupStateForJobAndIndependentStages, which drops the entry (as a consumer key) and removes
+    // the stage from every other consumer's pending-producer set. Verify a consumer whose
+    // completion is buffered while its producer runs leaves NO deferral behind when the job is
+    // cancelled, and no buffered success is later applied as a result.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    val jobId = submit(consumerRdd, Array(0, 1))
+    val consumerTaskSet = taskSets.find { ts =>
+      scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd
+    }.get
+
+    // Consumer finishes ahead of its producer -> its completion is buffered (a deferral exists).
+    complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
+    assert(scheduler.dependentStageMap.nonEmpty, "a deferral must exist while the producer runs")
+    assert(results.isEmpty, "the consumer result must be deferred, not applied yet")
+
+    // Cancel the job. The deferral must be torn down with everything else -- no stale entry, and
+    // the buffered success must not be replayed as a result.
+    cancel(jobId)
+    assert(scheduler.dependentStageMap.isEmpty,
+      "job cancellation must clean up the buffered consumer deferral (no state outlives the job)")
+    assert(results.isEmpty, "a cancelled job's buffered consumer success must not be applied")
     assertDataStructuresEmpty()
   }
 
@@ -6530,65 +6782,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       sc.conf.set(config.DYN_ALLOCATION_ENABLED, false)
       sc.conf.set(config.DYN_ALLOCATION_TESTING, false)
     }
-  }
-
-  test("pipelined shuffle: a member on a non-default resource profile is rejected up front") {
-    // Admission measures capacity/occupancy against the DEFAULT resource profile, but a stage
-    // derives its profile from its RDDs. A pipelined group member on a custom profile would be
-    // admitted against the default pool's free slots yet run in a different (often smaller) pool
-    // and could deadlock there. Reject such a job before any stage is created.
-    // Ensure the default profile exists (id 0) before building a custom one, so the custom profile
-    // gets a distinct, non-default id regardless of test-execution order (profile ids come from a
-    // process-wide counter, and the default profile occupies id 0).
-    sc.resourceProfileManager.defaultResourceProfile
-    val ereqs = new ExecutorResourceRequests().cores(4)
-    val treqs = new TaskResourceRequests().cpus(2)
-    val customRp = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
-    val producerRdd = new MyRDD(sc, 2, Nil)
-    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
-    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
-      .withResources(customRp)
-    // Sanity: the consumer really carries a non-default profile (otherwise the test is vacuous).
-    assert(consumerRdd.getResourceProfile() != null &&
-      consumerRdd.getResourceProfile().id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
-      s"test setup: expected a non-default profile, got id " +
-        s"${Option(consumerRdd.getResourceProfile()).map(_.id)}")
-    val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
-    val failListener = new JobListener {
-      override def taskSucceeded(index: Int, result: Any): Unit = {}
-      override def jobFailed(exception: Exception): Unit = failure.set(exception)
-    }
-    submit(consumerRdd, Array(0, 1), listener = failListener)
-    assert(failure.get() != null,
-      "a pipelined job with a non-default-resource-profile member should be rejected")
-    assert(failure.get().getMessage.contains("non-default resource profile"))
-    assert(taskSets.isEmpty, "no stage should be created for a rejected job")
-    assertDataStructuresEmpty()
-  }
-
-  test("pipelined shuffle: a barrier group member is rejected up front") {
-    // A barrier stage exposes its output only after a global sync, which is incompatible with a
-    // pipelined consumer reading the producer's output incrementally. It is also a recovery hazard:
-    // a barrier task failure fails the stage and RESUBMITS it (markStageAsFinished without
-    // willRetry), and if such a producer were co-scheduled, the resubmit would drop a fan-in
-    // consumer's buffered completions and the job could never complete. Reject any job whose
-    // pipelined group contains a barrier member before any stage is created, so that path is
-    // unreachable.
-    val producerRdd = new MyRDD(sc, 2, Nil).barrier().mapPartitions(iter => iter)
-    assert(producerRdd.isBarrier(), "test setup: the producer must be a barrier RDD")
-    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
-    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
-    val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
-    val failListener = new JobListener {
-      override def taskSucceeded(index: Int, result: Any): Unit = {}
-      override def jobFailed(exception: Exception): Unit = failure.set(exception)
-    }
-    submit(consumerRdd, Array(0, 1), listener = failListener)
-    assert(failure.get() != null,
-      "a pipelined job with a barrier group member should be rejected")
-    assert(failure.get().getMessage.contains("barrier"))
-    assert(taskSets.isEmpty, "no stage should be created for a rejected job")
-    assertDataStructuresEmpty()
   }
 
   test("regular shuffle job with dynamic allocation enabled is NOT rejected (path is inert)") {
@@ -6698,6 +6891,27 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       assertDataStructuresEmpty()
     } finally {
       scheduler.asInstanceOf[MyDAGScheduler].maxConcurrentTasksForTest = 1000
+    }
+  }
+
+  test("SPARK-58828: a barrier job does not consume its retry budget while held") {
+    // 4 barrier tasks on a local[2] backend fail the slot check; while held that must not
+    // count against spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures.
+    val barrierRdd = new MyRDD(sc, 4, Nil).barrier().mapPartitions(iter => iter)
+    val myScheduler = scheduler.asInstanceOf[MyDAGScheduler]
+    myScheduler.executorsHeldForTest = true
+    try {
+      val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+      val failListener = new JobListener {
+        override def taskSucceeded(index: Int, result: Any): Unit = {}
+        override def jobFailed(exception: Exception): Unit = failure.set(exception)
+      }
+      submit(barrierRdd, Array(0, 1, 2, 3), listener = failListener)
+      assert(failure.get() === null, "a barrier job submitted while held must wait, not fail")
+      assert(scheduler.barrierJobIdToNumTasksCheckFailures.isEmpty,
+        "the retry budget must not be consumed while held")
+    } finally {
+      myScheduler.executorsHeldForTest = false
     }
   }
 
@@ -6832,13 +7046,19 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
-  test("pipelined shuffle: a diamond reusing one producer counts its tasks once for admission") {
+  test("pipelined shuffle: admission counts a reused producer once (diamond rejected for " +
+      "fan-out, not for slots)") {
     // Fan-out/diamond: ONE PipelinedShuffleDependency (one producer, one shuffle id) is read by TWO
-    // consumers that are then narrow-joined into the result. Execution creates ONE producer stage
-    // (getOrCreateShuffleMapStage keys on shuffle id), so the group's real concurrent demand is
-    // producer(2) + result(2) = 4 -- NOT 6. Counting the producer once per consumer EDGE would make
-    // demand 6 and wrongly reject this group at capacity 4. Pinning capacity to exactly 4 admits
-    // the correctly-deduped group and would fail if the producer were double-counted.
+    // consumers that are then narrow-joined into the result. Fan-out is unsupported, so the group
+    // is ultimately rejected -- but WHICH rejection it gets proves the admission demand is deduped.
+    // The up-front slot admission (rejectUnadmittablePipelinedGroup) runs BEFORE the fan-out idiom
+    // check (checkPipelinedGroupsSupportedInRDDGraph). Execution creates ONE producer stage
+    // (getOrCreateShuffleMapStage keys on shuffle id), so the real concurrent demand is
+    // producer(2) + result(2) = 4. Counting the producer once per consumer EDGE would inflate it
+    // to 6. Pinning capacity to exactly 4: the deduped group PASSES the slot check and is then
+    // rejected for fan-out (PIPELINED_SHUFFLE_UNSUPPORTED); a double-counted group (6 > 4) would
+    // instead be rejected earlier for CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT. So a dedup regression
+    // flips the error class -- which this test detects.
     val producerRdd = new MyRDD(sc, 2, Nil)
     val myScheduler = scheduler.asInstanceOf[MyDAGScheduler]
     myScheduler.maxConcurrentTasksForTest = 4
@@ -6852,13 +7072,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       val resultRdd = new MyRDD(
         sc, 2, List(new OneToOneDependency(consumer1), new OneToOneDependency(consumer2)),
         tracker = mapOutputTracker)
-      submit(resultRdd, Array(0, 1))
-      assert(taskSets.size === 2,
-        s"diamond group is producer + result (both consumers); got ${taskSets.size} task sets")
-      // Drain to completion: producer stage first, then the result stage.
-      completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
-      complete(taskSets(1), Seq((Success, 42), (Success, 43)))
-      assert(results === Map(0 -> 42, 1 -> 43))
+      val failure = submitAndCaptureFailure(resultRdd, Array(0, 1))
+      // Rejected for fan-out (demand fit within capacity 4), NOT for slots -- proving the reused
+      // producer was counted once.
+      assertPipelinedUnsupported(failure, "more than one consumer")
+      assert(!failure.getMessage.contains("CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT"),
+        s"a reused producer must be counted once (fit capacity 4), got a slot rejection: " +
+          s"${failure.getMessage}")
       assertDataStructuresEmpty()
     } finally {
       myScheduler.maxConcurrentTasksForTest = 1000
@@ -6866,10 +7086,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
-  test("pipelined shuffle: a wide fan-out reusing one producer counts its tasks once") {
+  test("pipelined shuffle: admission counts a reused producer once across a wide fan-out " +
+      "(rejected for fan-out, not for slots)") {
     // Wider fan-out: ONE producer feeds THREE consumers, all narrow-joined into the result. Real
-    // demand is still producer(2) + result(2) = 4; a per-edge count would be 2 + 3*2 = 8. Capacity
-    // 4 admits the deduped group and would reject the double-counted one.
+    // demand is still producer(2) + result(2) = 4; a per-edge count would be 2 + 3*2 = 8. At
+    // capacity 4 the deduped group passes the slot check and is rejected for fan-out; a
+    // double-counted group (8 > 4) would be rejected first for insufficient slots. See the diamond
+    // test above for the ordering rationale.
     val producerRdd = new MyRDD(sc, 2, Nil)
     val myScheduler = scheduler.asInstanceOf[MyDAGScheduler]
     myScheduler.maxConcurrentTasksForTest = 4
@@ -6880,12 +7103,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         new OneToOneDependency(new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker))
       }.toList
       val resultRdd = new MyRDD(sc, 2, consumers, tracker = mapOutputTracker)
-      submit(resultRdd, Array(0, 1))
-      assert(taskSets.size === 2,
-        s"wide fan-out group is producer + result; got ${taskSets.size} task sets")
-      completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
-      complete(taskSets(1), Seq((Success, 42), (Success, 43)))
-      assert(results === Map(0 -> 42, 1 -> 43))
+      val failure = submitAndCaptureFailure(resultRdd, Array(0, 1))
+      assertPipelinedUnsupported(failure, "more than one consumer")
+      assert(!failure.getMessage.contains("CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT"),
+        s"a reused producer must be counted once (fit capacity 4), got a slot rejection: " +
+          s"${failure.getMessage}")
       assertDataStructuresEmpty()
     } finally {
       myScheduler.maxConcurrentTasksForTest = 1000
@@ -7075,6 +7297,85 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       s"a dropped fan-in consumer must not replay when a surviving producer succeeds; got $results")
   }
 
+  test("pipelined shuffle: a fan-in group leaks no scheduler state when a producer fails and the " +
+      "job is torn down") {
+    // Leak check for the multi-producer (fan-in) deferral: a consumer deferred against TWO
+    // producers buffers its completions; when one producer fails and the job is torn down, ALL
+    // scheduler state -- the consumer's dependentStageMap deferral keyed on both producers --
+    // must be cleaned up. The sibling "dropped as soon as one producer fails" test stops at the
+    // drop-vs-replay outcome; this one drives the failure to full job teardown and asserts no leak.
+    val producerA = new MyRDD(sc, 2, Nil)
+    val psdA = new PipelinedShuffleDependency(producerA, new HashPartitioner(2))
+    val producerB = new MyRDD(sc, 2, Nil)
+    val psdB = new PipelinedShuffleDependency(producerB, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(psdA, psdB), tracker = mapOutputTracker)
+    val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = results.put(index, result)
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    submit(consumerRdd, Array(0, 1), listener = failListener)
+    assert(taskSets.size === 3, s"A, B and the consumer must be co-scheduled; got ${taskSets.size}")
+    val consumerTaskSet =
+      taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd).get
+    val consumerStage = scheduler.stageIdToStage(consumerTaskSet.stageId)
+    val producerATaskSet =
+      taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq producerA).get
+
+    // Consumer finishes early -> buffered (deferred) against BOTH producers.
+    complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
+    assert(results.isEmpty, "consumer completions should be buffered while its producers run")
+    assert(scheduler.dependentStageMap.get(consumerStage).exists(_.parents.size == 2),
+      "the consumer must be deferred against both producers")
+
+    // Producer A fails its whole task set -> the job fails and the group is torn down.
+    failed(producerATaskSet, "producer A blew up")
+    assert(failure.get() != null, "the job must fail when a fan-in producer fails")
+    assert(results.isEmpty, "buffered consumer successes must be dropped, not applied, on failure")
+    sc.listenerBus.waitUntilEmpty(10000)
+    // The whole point: no leak. Every scheduler map (including the two-parent deferral) empties.
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: a multi-producer consumer's buffered successes are dropped when one " +
+      "producer fails (no stale replay via a sibling)") {
+    // Group-atomic drop across MULTIPLE producers. Consumer C reads TWO pipelined producers P1 and
+    // P2 (a join; purely all-pipelined, no regular shuffle). C finishes early -> its successes are
+    // buffered against BOTH producers. If P1 then fails, the whole group must be torn down and C's
+    // successes DROPPED -- they depended on P1's (now-invalid) output. Note the release path
+    // evaluates producerFailed per finishing producer, so a naive impl could remove P1
+    // (parents still has P2, no drop), then later see P2 "succeed" and REPLAY. This asserts the
+    // shipped stack drops instead: a member failure aborts the whole group, which tears C down.
+    val rddP1 = new MyRDD(sc, 2, Nil)
+    val psdP1 = new PipelinedShuffleDependency(rddP1, new HashPartitioner(2))
+    val rddP2 = new MyRDD(sc, 2, Nil)
+    val psdP2 = new PipelinedShuffleDependency(rddP2, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(psdP1, psdP2), tracker = mapOutputTracker)
+    val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = results.put(index, result)
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    submit(consumerRdd, Array(0, 1), listener = failListener)
+    // P1, P2, and C are all co-scheduled (purely all-pipelined join, admitted up front).
+    assert(taskSets.size === 3, s"expected P1, P2, consumer co-scheduled, got ${taskSets.size}")
+    val tsP1 = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddP1).get
+    val tsC = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd).get
+
+    // Consumer finishes early -> buffered against both P1 and P2.
+    complete(tsC, Seq((Success, 42), (Success, 43)))
+    assert(results.isEmpty, "consumer completions should be buffered while producers run")
+    assert(scheduler.dependentStageMap.keys.exists(_.rdd eq consumerRdd),
+      "consumer should be deferred against its two producers")
+
+    // P1 fails. The group is torn down; C's buffered successes must be DROPPED, never replayed --
+    // even though P2 has not (and now will not) complete.
+    failed(tsP1, "producer P1 blew up")
+    assert(failure.get() != null, "the job must fail when a pipelined producer fails")
+    assert(results.isEmpty,
+      "a multi-producer consumer's buffered successes must be dropped when any producer fails")
+    assertDataStructuresEmpty()
+  }
 
   test("pipelined shuffle: a deferred consumer task fires its TaskEnd exactly once (at replay)") {
     // A deferred CompletionEvent must have its side effects (task-end listener event, accumulator
@@ -7217,6 +7518,788 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     } finally {
       sc.removeSparkListener(countingListener)
     }
+  }
+
+  test("pipelined shuffle: both producer and consumer task sets are marked isPipelined") {
+    // The TaskSet.isPipelined flag drives group-atomic failure in the task scheduler; verify the
+    // DAGScheduler sets it for both members of a pipelined group (producer and consumer).
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    assert(taskSets.size === 2)
+    val producerTs =
+      taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq producerRdd).get
+    val consumerTs =
+      taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd).get
+    assert(producerTs.isPipelined, "the pipelined producer's task set must be marked isPipelined")
+    assert(consumerTs.isPipelined, "the pipelined consumer's task set must be marked isPipelined")
+
+    completeShuffleMapStageSuccessfully(producerTs.stageId, 0, 2)
+    complete(consumerTs, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("regular shuffle: task sets are NOT marked isPipelined (inertness)") {
+    // A regular producer/consumer must not be marked isPipelined.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val regularDep = new ShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(regularDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    assert(taskSets.head.isPipelined === false, "a regular producer must not be marked isPipelined")
+    completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+    assert(taskSets(1).isPipelined === false, "a regular consumer must not be marked isPipelined")
+    complete(taskSets(1), Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  // ==========================================================================================
+  // Cross-job / cross-time reuse prevention at both layers: a consumed pipelined
+  // producer whose executor is lost must not be resubmitted
+  // ==========================================================================================
+
+  test("pipelined shuffle: producer availability is tracked on the stage, not the" +
+      "MapOutputTracker") {
+    // A pipelined producer's completed partitions are tracked on ShuffleMapStage (monotonic), not
+    // registered as durable outputs in the MapOutputTracker. Verify: after the producer's map tasks
+    // succeed, the stage is available WITHOUT the shuffle having map outputs in the tracker.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val shuffleId = pipelinedDep.shuffleId
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    val producerStageId = taskSets.head.stageId
+    val producerStage =
+      scheduler.stageIdToStage(producerStageId).asInstanceOf[ShuffleMapStage]
+
+    // Complete the producer's two map tasks.
+    complete(taskSets.head, Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+
+    // The stage is available via its local completed-partition set...
+    assert(producerStage.isAvailable,
+      "pipelined producer should be available after its tasks finish")
+    assert(producerStage.isPipelined)
+    // ...but the pipelined shuffle has NO map outputs registered in the MapOutputTracker.
+    assert(mapOutputTracker.getNumAvailableOutputs(shuffleId) === 0,
+      "a pipelined shuffle must not register durable map outputs in the MapOutputTracker")
+
+    complete(taskSets(1), Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: numAvailableOutputs/findMissingPartitions reflect the exact " +
+      "incomplete partition set") {
+    // Pin the availability CONTRACT for a partially-complete pipelined producer, not just the
+    // all-done / none-done endpoints: numAvailableOutputs must be the count of completed partitions
+    // and findMissingPartitions must return the exact ids still missing (identity, not just size).
+    // Without this, a plausible refactor (revert the findMissingPartitions isPipelined branch to
+    // the
+    // tracker, use a bare counter, drop/take by size, or invert the filter) would silently break
+    // the
+    // contract yet pass every full-completion test.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    val producerTs = taskSets.head
+    val producerStage =
+      scheduler.stageIdToStage(producerTs.stageId).asInstanceOf[ShuffleMapStage]
+
+    // Complete ONLY partition 1, leaving partition 0 missing.
+    runEvent(makeCompletionEvent(producerTs.tasks(1), Success, makeMapStatus("hostB", 2)))
+    assert(producerStage.numAvailableOutputs === 1)
+    assert(!producerStage.isAvailable)
+    assert(producerStage.findMissingPartitions() === Seq(0),
+      "findMissingPartitions must name the exact missing partition, not just a right-sized set")
+
+    // Complete partition 0; now nothing is missing.
+    runEvent(makeCompletionEvent(producerTs.tasks(0), Success, makeMapStatus("hostA", 2)))
+    assert(producerStage.numAvailableOutputs === 2)
+    assert(producerStage.isAvailable)
+    assert(producerStage.findMissingPartitions() === Seq.empty)
+
+    // Drain the consumer cleanly.
+    val consumerTs = taskSets.find { ts =>
+      scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd
+    }.get
+    complete(consumerTs, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: a post-executor-loss straggler success must not resubmit the producer " +
+      "(bogus-epoch race)") {
+    // A pipelined producer's map task can succeed on an executor whose loss is already recorded
+    // (its StatusUpdate raced the executor-loss event). That completion hits the "possibly bogus
+    // epoch" branch, which for a regular shuffle simply ignores it (a healthy reattempt will
+    // re-register the output). But the same branch also runs `pendingPartitions -= partitionId`
+    // first, so if it is the last pending partition and we do NOT record it in the pipelined
+    // completed set, the stage looks "done but not available" and processShuffleMapStageCompletion
+    // resubmits the transient producer -- the exact streaming-writer hang. A pipelined stage must
+    // record the partition as completed even on the bogus-epoch path (its output is monotonic and
+    // MapOutputTracker's executor-loss stripping does not apply to it).
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    val producerTs = taskSets.head
+    val producerStage =
+      scheduler.stageIdToStage(producerTs.stageId).asInstanceOf[ShuffleMapStage]
+
+    // Partition 0 completes normally on executor "hostA-exec" (recorded). Note makeMapStatus(host)
+    // builds executorId = host + "-exec", so pass host "hostA" to get executorId "hostA-exec".
+    runEvent(makeCompletionEvent(producerTs.tasks(0), Success, makeMapStatus("hostA", 2)))
+    assert(producerStage.numAvailableOutputs === 1)
+    val taskSetsBefore = taskSets.size
+
+    // Executor "hostA-exec" is lost: this records executorFailureEpoch("hostA-exec") = current
+    // epoch.
+    runEvent(ExecutorLost("hostA-exec", ExecutorExited(-100, false, "Container marked as failed")))
+
+    // Now a delayed straggler Success for partition 1 arrives FROM the lost executor "hostA-exec".
+    // Its task epoch is the default (-1) <= the recorded failure epoch, so it is treated as
+    // possibly-bogus. It must still be recorded for a pipelined stage, so the producer becomes
+    // available and is NOT resubmitted.
+    runEvent(makeCompletionEvent(producerTs.tasks(1), Success, makeMapStatus("hostA", 2)))
+
+    assert(producerStage.isAvailable,
+      "a pipelined producer must be available after all partitions succeed, even via a " +
+      "bogus-epoch " +
+        "straggler")
+    assert(producerStage.findMissingPartitions() === Seq.empty)
+    assert(taskSets.size === taskSetsBefore,
+      "the pipelined producer must NOT be resubmitted by a post-loss straggler success")
+
+    // Consumer drains normally; no hang.
+    val consumerTs = taskSets.find { ts =>
+      scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd
+    }.get
+    complete(consumerTs, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: a producer success with ignoreOldTaskAttempts set is still recorded " +
+      "(no resubmit)") {
+    // Sibling of the bogus-epoch case, for the OTHER guard that gates a regular shuffle's
+    // recording:
+    // ignoreOldTaskAttempts (set when a stage is rolled back, e.g. as a succeeding stage of an
+    // indeterminate ancestor). A pipelined producer's completed set is monotonic and never rolled
+    // back, so its success must be recorded even when ignoreOldTaskAttempts is true -- otherwise
+    // the
+    // last partition is dropped (pendingPartitions decremented, not recorded) -> "done but not
+    // available" -> processShuffleMapStageCompletion resubmits the transient producer.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    val producerTs = taskSets.head
+    val producerStage =
+      scheduler.stageIdToStage(producerTs.stageId).asInstanceOf[ShuffleMapStage]
+
+    runEvent(makeCompletionEvent(producerTs.tasks(0), Success, makeMapStatus("hostA", 2)))
+    assert(producerStage.numAvailableOutputs === 1)
+    val taskSetsBefore = taskSets.size
+
+    // Force ignoreOldTaskAttempts=true for the next completion: maxAttemptIdToIgnore >= the task's
+    // stageAttemptId (0). For a regular stage this would drop the completion; a pipelined stage
+    // must
+    // still record it.
+    producerStage.maxAttemptIdToIgnore = Some(0)
+    runEvent(makeCompletionEvent(producerTs.tasks(1), Success, makeMapStatus("hostB", 2)))
+
+    assert(producerStage.isAvailable,
+      "a pipelined producer success must be recorded even when ignoreOldTaskAttempts is set")
+    assert(producerStage.findMissingPartitions() === Seq.empty)
+    assert(taskSets.size === taskSetsBefore,
+      "the pipelined producer must NOT be resubmitted when a success arrives under " +
+        "ignoreOldTaskAttempts")
+
+    val consumerTs = taskSets.find { ts =>
+      scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd
+    }.get
+    complete(consumerTs, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: losing an executor does NOT flip a completed producer to unavailable " +
+      "or resubmit it") {
+    // A completed, consumed pipelined producer whose executor is lost must NOT be
+    // resubmitted (which would hang the streaming writer in awaitTerminationAcks). Because
+    // pipelined
+    // availability is tracked on the stage (monotonic) and not the MapOutputTracker, executor loss
+    // cannot flip isAvailable, so the producer is not resubmitted.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    val producerStageId = taskSets.head.stageId
+    val producerStage =
+      scheduler.stageIdToStage(producerStageId).asInstanceOf[ShuffleMapStage]
+    // Producer completes on hostA (both partitions). makeMapStatus("hostA") registers the output
+    // under executor id "hostA-exec" (makeBlockManagerId appends "-exec"), so the ExecutorLost
+    // below -- which loses executor id "hostA-exec" -- actually matches the registered output.
+    complete(taskSets.head, Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostA", 2))))
+    assert(producerStage.isAvailable)
+    val taskSetsAfterProducer = taskSets.size
+
+    // Lose the executor that ran the producer ("hostA-exec"). For a regular shuffle this would
+    // strip the outputs and flip isAvailable -> resubmit; for a pipelined shuffle it must be inert.
+    runEvent(ExecutorLost("hostA-exec", ExecutorExited(-100, false, "Container marked as failed")))
+
+    assert(producerStage.isAvailable,
+      "a completed pipelined producer must remain available after executor loss (no tracker strip)")
+    // Pin the underlying completed set directly (not just the derived isAvailable boolean):
+    // executor
+    // loss must not remove any completed partition, so nothing is missing.
+    assert(producerStage.findMissingPartitions() === Seq.empty,
+      "executor loss must not strip a pipelined producer's completed partitions (monotonic)")
+    assert(taskSets.size === taskSetsAfterProducer,
+      "the pipelined producer must NOT be resubmitted on executor loss")
+
+    // The consumer completes normally; no hang, no extra producer attempt.
+    val consumerTaskSet = taskSets.find { ts =>
+      scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd
+    }.get
+    complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: binding a live producer stage to a second concurrent job fails fast") {
+    // A pipelined shuffle is a once-through live stream with no retained output, so two concurrent
+    // jobs cannot share one producer stage. While job 0 is still active its producer
+    // stage stays cached in shuffleIdToMapStage bound to job 0; a second concurrent job that reuses
+    // the SAME PipelinedShuffleDependency would bind that live stage to a second jobId, which is
+    // the
+    // forbidden cross-job reuse. Fail fast rather than let job 1 attach to job 0's live stream.
+    // (A sequential re-run is NOT this case: after job 0 finishes, cleanup drops the stage from
+    // shuffleIdToMapStage, so a later job gets a fresh producer bound to only its own job --
+    // exactly how each streaming micro-batch reruns its producer.)
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+
+    // Job 0: submit but leave it active (do not complete the producer or the result stage), so the
+    // producer stage remains cached in shuffleIdToMapStage bound to job 0.
+    val firstConsumer = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(firstConsumer, Array(0, 1))
+    val producerStage =
+      scheduler.stageIdToStage(taskSets.head.stageId).asInstanceOf[ShuffleMapStage]
+    assert(producerStage.jobIds === Set(0))
+    val shuffleStagesBeforeJob1 = scheduler.shuffleIdToMapStage.size
+    val stagesBeforeJob1 = scheduler.stageIdToStage.size
+
+    // Job 1: a second concurrent job reusing the SAME pipelined dependency -> cross-job reuse of a
+    // live producer stage -> fail fast.
+    val secondConsumer = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    submit(secondConsumer, Array(0, 1), listener = failListener)
+    assert(failure.get() != null,
+      "binding a live pipelined producer to a second concurrent job must fail the job")
+    assert(failure.get().getMessage.contains("PIPELINED_SHUFFLE_CROSS_JOB_REUSE") ||
+      failure.get().getMessage.contains("reused across jobs"),
+      s"expected a cross-job-reuse error, got: ${failure.get().getMessage}")
+    // Job 0's producer stage was never bound to job 1, and the failed job 1 left no scheduler
+    // residue (the throw happened during stage creation, before any job-1 state was registered).
+    assert(producerStage.jobIds === Set(0))
+    assert(scheduler.shuffleIdToMapStage.size === shuffleStagesBeforeJob1,
+      "the failed cross-job submission must not add a shuffle->stage mapping")
+    assert(scheduler.stageIdToStage.size === stagesBeforeJob1,
+      "the failed cross-job submission must not leave orphaned stages")
+
+    // Job 0 can still complete normally -- the rejected job 1 did not corrupt its shared producer.
+    completeShuffleMapStageSuccessfully(producerStage.id, 0, 2)
+    val job0Consumer = taskSets.find { ts =>
+      scheduler.stageIdToStage(ts.stageId).rdd eq firstConsumer
+    }.get
+    complete(job0Consumer, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: sequential re-run of the same producer is sound (fresh stage per job)") {
+    // Contrast with the concurrent case above: after a job using a pipelined dependency finishes,
+    // cleanup removes its producer from shuffleIdToMapStage, so re-submitting a job on the SAME
+    // dependency creates a fresh producer stage bound to only the new job. This is sound (it is how
+    // a streaming micro-batch reruns) and must NOT trip the cross-job-reuse fail-fast.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+
+    val consumer0 = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumer0, Array(0, 1))
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+    complete(taskSets(1), Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+    results.clear()
+
+    // Second, sequential job on the same dependency: a fresh producer stage, no fail-fast, no hang.
+    // taskSets is a growing buffer across both jobs, so the second job's task sets are at index 2+.
+    val consumer1 = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumer1, Array(0, 1))
+    complete(taskSets(2), Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+    complete(taskSets(3), Seq((Success, 4), (Success, 5)))
+    assert(results === Map(0 -> 4, 1 -> 5))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: a FetchFailed on a group member fails the group, not a single-stage " +
+      "resubmit") {
+    // A FetchFailed must fail a pipelined (streaming) query promptly rather than trigger the
+    // base scheduler's single-stage resubmit -> serial recompute -> deadlock. The transient
+    // pipelined shuffle cannot be re-read, and members are co-scheduled, so a lone-stage resubmit
+    // is never valid. Any member's FetchFailed must abort the whole group (-> job abort ->
+    // the caller reruns the batch). Note the base TaskSetManager does NOT count a FetchFailed (it
+    // marks the task successful and zombies the set), so the group-atomic maxTaskFailures=1 lever
+    // does not apply to FetchFailed; the routing must be enforced in the DAGScheduler.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    val producerTs = taskSets.head
+    val producerStage =
+      scheduler.stageIdToStage(producerTs.stageId).asInstanceOf[ShuffleMapStage]
+
+    // Producer completes (its outputs are tracked locally on the pipelined stage).
+    complete(producerTs, Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+    val consumerTs = taskSets.find { ts =>
+      scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd
+    }.get
+    val taskSetsBeforeFetchFailure = taskSets.size
+
+    // A consumer task hits a FetchFailed reading the pipelined shuffle.
+    runEvent(makeCompletionEvent(
+      consumerTs.tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), pipelinedDep.shuffleId, 0L, 0, 0, "ignored"),
+      null))
+
+    // The job must be failed (group-atomic), and no single stage may be resubmitted: no new task
+    // set is created, and the scheduler is not left waiting to recompute the producer in isolation.
+    // scheduleResubmit posts ResubmitFailedStages on a timer, so drive any pending resubmit and
+    // confirm nothing new is launched.
+    scheduler.resubmitFailedStages()
+    assert(failure != null, "a FetchFailed on a pipelined group member must fail the job")
+    assert(taskSets.size === taskSetsBeforeFetchFailure,
+      "a pipelined group member's FetchFailed must NOT resubmit a single stage")
+    assert(!scheduler.runningStages.exists(_.isInstanceOf[ShuffleMapStage]),
+      "the pipelined producer must not be left running/resubmitted after the group fails")
+    sc.listenerBus.waitUntilEmpty()
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: a consumer result task throwing aborts the whole group") {
+    // Defense-in-depth for the group-atomic model at the DAGScheduler layer: a CONSUMER (result)
+    // task failing must tear down the whole group, not just its own stage. Result and map tasks
+    // share handleFailedTask / effectiveMaxTaskFailures=1, so the first consumer-task exception
+    // makes the TaskSetManager abort the set (delivered here as TaskSetFailed, exactly as a
+    // maxTaskFailures=1 abort surfaces to the DAGScheduler), which must abort the group and tear
+    // down the still-running producer -- the caller then reruns the batch. Complements the
+    // TaskSetManager-layer maxTaskFailures=1 tests and the producer-failure drop test.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    val consumerTs = taskSets.find { ts =>
+      scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd
+    }.get
+    val producerStage = scheduler.stageIdToStage(taskSets.head.stageId)
+    // The producer is STILL RUNNING (co-scheduled, not yet completed) when the consumer fails --
+    // this is what gives the assertion teeth: group-atomic teardown must reach a running producer.
+    assert(scheduler.runningStages.contains(producerStage),
+      "the pipelined producer must be co-scheduled and running alongside the consumer")
+
+    // The consumer's task set aborts on the first task exception (maxTaskFailures=1 for a pipelined
+    // member). This must fail the whole group and tear down the still-running producer.
+    failed(consumerTs, "consumer result task threw")
+    assert(failure != null, "a consumer task failure must fail the group's job")
+    assert(!scheduler.runningStages.contains(producerStage),
+      "the still-running pipelined producer must be torn down when the consumer fails the group")
+    sc.listenerBus.waitUntilEmpty()
+    assertDataStructuresEmpty()
+  }
+
+  // ==========================================================================================
+  // Group-atomic rerun resets per-partition commit authorization
+  // ==========================================================================================
+
+  test("pipelined shuffle: a group rerun resets per-partition commit authorization") {
+    // A pipelined group is atomic, so a failure reruns the WHOLE group -- including a result
+    // stage whose tasks already succeeded and committed. Those committed partitions are rerun and
+    // must be allowed to commit again. OutputCommitCoordinator permanently denies re-commit for a
+    // committed partition (a Success clears nothing; keyed by stage id). The rerun stays correct
+    // two ways, both asserted here: (b) the group teardown runs the committed result stage through
+    // markStageAsFinished -> stageEnd, clearing its committer state (so no stale authorization
+    // survives); and (a) the caller's rerun is a NEW job whose stages get FRESH stage ids, so the
+    // coordinator has no prior committer for them regardless.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    submit(consumerRdd, Array(0, 1), listener = failListener)
+    // Locate producer/consumer defensively by RDD identity (not task-set order).
+    val producerTaskSet =
+      taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq producerRdd).get
+    val consumerTaskSet =
+      taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd).get
+    val firstConsumerStageId = consumerTaskSet.stageId
+
+    // Both stages register OutputCommitCoordinator state at submission (stageStart), so the
+    // coordinator holds per-stage commit-authorization state that a rerun must not inherit. (This
+    // asserts stage state exists to be reset; it does not claim a committer was authorized -- that
+    // needs a live canCommit RPC, which the mock backend does not drive.)
+    assert(!scheduler.outputCommitCoordinator.isEmpty,
+      "the coordinator must hold commit-authorization state for the submitted group's stages")
+
+    // The producer now fails -> group-atomic failure -> the whole group is torn down and the job
+    // fails; the caller will rerun the batch as a new job.
+    failed(producerTaskSet, "producer blew up")
+    assert(failure.get() != null, "the group must fail atomically when the producer fails")
+    // Teardown ran the group's stages through markStageAsFinished -> stageEnd, clearing their
+    // coordinator state: the commit-authorization state does not survive the failed attempt.
+    // (isEmpty here proves stageEnd reached every stage the teardown covered.)
+    assert(scheduler.outputCommitCoordinator.isEmpty,
+      "group teardown must reset per-partition commit authorization; none may survive")
+    assertDataStructuresEmpty()
+
+    // The caller reruns the batch as a NEW job on the same dependency. Its stages get fresh ids, so
+    // the coordinator has no prior committer, and the rerun's partition 0 can commit again. Only
+    // the
+    // task sets submitted from here on belong to the rerun (earlier ones' stages were cleaned up,
+    // so
+    // look them up defensively).
+    val taskSetsBeforeRerun = taskSets.size
+    val rerunConsumer = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(rerunConsumer, Array(0, 1))
+    val rerunTaskSets = taskSets.drop(taskSetsBeforeRerun)
+    val rerunConsumerTaskSet = rerunTaskSets.find { ts =>
+      scheduler.stageIdToStage.get(ts.stageId).exists(_.rdd eq rerunConsumer)
+    }.get
+    val rerunProducerTaskSet = rerunTaskSets.find { ts =>
+      scheduler.stageIdToStage.get(ts.stageId).exists(_.rdd eq producerRdd)
+    }.get
+    assert(rerunConsumerTaskSet.stageId != firstConsumerStageId,
+      "the rerun's result stage must get a fresh stage id (fresh coordinator state)")
+    complete(rerunProducerTaskSet, Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+    complete(rerunConsumerTaskSet, Seq((Success, 7), (Success, 8)))
+    assert(results === Map(0 -> 7, 1 -> 8), "the rerun must complete, re-committing its partitions")
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: a buffered consumer success is dropped on group abort, and its " +
+      "TaskEnd is flushed so the stage is not leaked as running") {
+    // A consumer's successful task has its whole completion event buffered while its producer runs
+    // (coarse model) -- no TaskEnd yet. If the group is then torn down before the producer finishes
+    // (here: the consumer's OTHER task hits a FetchFailed, which aborts the group), the buffered
+    // success's result must NOT be applied, but its TaskEnd IS flushed on the drop path. A listener
+    // that tracks active tasks (e.g. AppStatusListener, which removes a stage once activeTasks hits
+    // 0) therefore does not leak the consumer stage as perpetually running: the success's TaskStart
+    // was delivered, and its matching TaskEnd arrives at teardown even though the result is
+    // dropped.
+    val endedTaskIds = new java.util.concurrent.ConcurrentHashMap[Long, Boolean]()
+    val recordingListener = new SparkListener {
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit =
+        endedTaskIds.put(taskEnd.taskInfo.taskId, true)
+    }
+    sc.addSparkListener(recordingListener)
+    try {
+      val producerRdd = new MyRDD(sc, 2, Nil)
+      val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+      val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+      val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+      val failListener = new JobListener {
+        override def taskSucceeded(index: Int, result: Any): Unit = results.put(index, result)
+        override def jobFailed(exception: Exception): Unit = failure.set(exception)
+      }
+      submit(consumerRdd, Array(0, 1), listener = failListener)
+      // Identify the co-scheduled consumer (ResultStage over consumerRdd) and its still-running
+      // pipelined producer by RDD identity rather than task-set order.
+      val consumerTaskSet = taskSets.find { ts =>
+        scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd
+      }.get
+      assert(scheduler.dependentStageMap.size === 1,
+        "the consumer must be co-scheduled with a running producer (a deferral must exist)")
+
+      // Consumer partition 0 succeeds. Its whole completion event is buffered (no job result and no
+      // TaskEnd yet). Give it a known taskId so we can assert the drop path flushes it later.
+      val bufferedTaskId = 7007L
+      runEvent(makeCompletionEvent(consumerTaskSet.tasks(0), Success, 42,
+        taskInfo = createFakeTaskInfoWithId(bufferedTaskId)))
+      sc.listenerBus.waitUntilEmpty()
+      assert(!endedTaskIds.containsKey(bufferedTaskId),
+        "the buffered consumer success must not emit its TaskEnd while the producer still runs")
+      assert(results.isEmpty, "the consumer's job result must still be deferred (producer running)")
+      assert(scheduler.dependentStageMap.get(scheduler.stageIdToStage(consumerTaskSet.stageId))
+        .exists(_.delayedTaskCompletionEvents.nonEmpty),
+        "the consumer's completion event must be buffered while its producer runs")
+
+      // The consumer's OTHER task now hits a FetchFailed. For a pipelined group member this aborts
+      // the whole group (group-atomic failure) WITHOUT the producer ever finishing. The buffered
+      // success is dropped (its result must not be applied), but its TaskEnd is flushed on the drop
+      // path so active-task-tracking listeners see the task finish.
+      runEvent(makeCompletionEvent(
+        consumerTaskSet.tasks(1),
+        FetchFailed(makeBlockManagerId("hostA"), pipelinedDep.shuffleId, 0L, 0, 0, "ignored"),
+        null))
+      scheduler.resubmitFailedStages()
+      assert(failure.get() != null, "the job must fail")
+
+      sc.listenerBus.waitUntilEmpty()
+      assert(results.isEmpty,
+        "the deferred consumer success must be dropped on abort, not applied as a result")
+      assert(endedTaskIds.containsKey(bufferedTaskId),
+        "the buffered consumer success's TaskEnd must be flushed on the drop path, so the stage " +
+          "is not leaked as perpetually running")
+      assertDataStructuresEmpty()
+    } finally {
+      sc.removeSparkListener(recordingListener)
+    }
+  }
+
+  test("pipelined shuffle: a barrier producer stage is rejected") {
+    // A barrier stage exposes output only after a global sync, incompatible with incremental reads.
+    val producerRdd = new MyRDD(sc, 2, Nil).barrier().mapPartitions(iter => iter)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    assertPipelinedUnsupported(submitAndCaptureFailure(consumerRdd, Array(0, 1)), "barrier")
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: a statically-indeterminate producer is rejected") {
+    // Indeterminate output's recovery is stage rollback-and-recompute, which a group never performs
+    // (so it never applies); reject rather than carry dead machinery.
+    val producerRdd = new MyRDD(sc, 2, Nil, indeterminate = true)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    assertPipelinedUnsupported(submitAndCaptureFailure(consumerRdd, Array(0, 1)), "indeterminate")
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: a reliable RDD checkpoint in a PRODUCER's chain is rejected") {
+    // A reliable checkpoint writes a durable, lineage-truncated snapshot -> reintroduces cross-time
+    // reuse of a transient edge and needs a post-success recompute of the vanished input. Rejected
+    // by walking the producer's within-stage chain for a ReliableRDDCheckpointData. Keyed on
+    // checkpointData (not isCheckpointed): the write has not happened yet at group-creation time.
+    withTempDir { dir =>
+      sc.setCheckpointDir(dir.getCanonicalPath)
+      val checkpointableRdd = new MyCheckpointRDD(sc, 2, Nil)
+      checkpointableRdd.checkpoint() // sets checkpointData to a ReliableRDDCheckpointData
+      assert(checkpointableRdd.checkpointData.exists(_.isInstanceOf[ReliableRDDCheckpointData[_]]))
+      val pipelinedDep = new PipelinedShuffleDependency(checkpointableRdd, new HashPartitioner(2))
+      val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+      assertPipelinedUnsupported(
+        submitAndCaptureFailure(consumerRdd, Array(0, 1)), "reliable RDD checkpoint")
+      assertDataStructuresEmpty()
+    }
+  }
+
+  test("pipelined shuffle: a reliable RDD checkpoint in a CONSUMER's chain is rejected") {
+    // The rejection must cover a consumer member's chain too, not just the producer's: a consumer's
+    // transient input IS the pipelined shuffle, so a reliable checkpoint there would re-read the
+    // vanished stream on recompute. Purely all-pipelined shape (no regular shuffle -- those are
+    // rejected separately): producer --pipelined--> consumer(checkpointed, result). The consumer
+    // reads the pipelined shuffle and its within-stage chain carries the reliable checkpoint.
+    withTempDir { dir =>
+      sc.setCheckpointDir(dir.getCanonicalPath)
+      val producerRdd = new MyRDD(sc, 2, Nil)
+      val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+      // The consumer RDD reads the pipelined shuffle AND is reliably checkpointed.
+      val consumerRdd = new MyCheckpointRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+      consumerRdd.checkpoint()
+      assert(consumerRdd.checkpointData.exists(_.isInstanceOf[ReliableRDDCheckpointData[_]]))
+      assertPipelinedUnsupported(
+        submitAndCaptureFailure(consumerRdd, Array(0, 1)), "reliable RDD checkpoint")
+      assertDataStructuresEmpty()
+    }
+  }
+
+  test("pipelined shuffle: a reliable checkpoint DOWNSTREAM in the consumer stage (not on the " +
+      "reading RDD) is still rejected") {
+    // Coverage for a checkpoint that is NOT on the RDD reading the pipelined shuffle, but on a
+    // narrow-dep child of it WITHIN the same consumer stage. Purely all-pipelined shape:
+    //   producer --pipelined--> reads --(narrow)--> checkpointed (result).
+    // `reads` and `checkpointed` are one stage. Rooting the check at the pipelined-reading RDD and
+    // walking parents would MISS this (the checkpoint is downstream of the read); the check must
+    // instead recognize that `checkpointed`'s own within-stage chain reads a pipelined shuffle.
+    withTempDir { dir =>
+      sc.setCheckpointDir(dir.getCanonicalPath)
+      val producerRdd = new MyRDD(sc, 2, Nil)
+      val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+      val readsRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+      // A narrow-dep child of the reading RDD, in the SAME stage, that is reliably checkpointed,
+      // and is the result RDD (no regular shuffle after -- that would be separately rejected).
+      val checkpointedRdd = new MyCheckpointRDD(sc, 2, List(new OneToOneDependency(readsRdd)))
+      checkpointedRdd.checkpoint()
+      assert(checkpointedRdd.checkpointData.exists(_.isInstanceOf[ReliableRDDCheckpointData[_]]))
+      assertPipelinedUnsupported(
+        submitAndCaptureFailure(checkpointedRdd, Array(0, 1)), "reliable RDD checkpoint")
+      assertDataStructuresEmpty()
+    }
+  }
+
+  test("pipelined shuffle: a producer feeding more than one consumer (fan-out) is rejected") {
+    // 1:N fan-out is deferred to a later version and rejected up front here. Fan-out is
+    // detected at the RDD level -- two DISTINCT RDDs listing the same pipelined shuffle as a
+    // dependency -- so it is expressible in an all-pipelined job without any regular shuffle: two
+    // consumer RDDs both read the same pipelined producer, unioned by a narrow dependency into the
+    // result. checkPipelinedGroupsSupportedInRDDGraph counts 2 distinct consumers for the shuffle.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerA = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    val consumerB = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    val union = new MyRDD(sc, 2,
+      List(new OneToOneDependency(consumerA), new OneToOneDependency(consumerB)),
+      tracker = mapOutputTracker)
+    assertPipelinedUnsupported(
+      submitAndCaptureFailure(union, Array(0, 1)), "more than one consumer")
+    assertDataStructuresEmpty()
+  }
+
+  // Resource-profile rejection. The gang slot check measures capacity against the DEFAULT
+  // resource profile, so the whole group must run on the default profile; any member with an
+  // explicit non-default profile is rejected. The three shapes below must all be rejected; the
+  // uniform-non-default and non-default-plus-default cases in particular would each pass a
+  // "more than one DISTINCT profile" check yet still be admitted against the wrong (default) pool.
+  private def rpWithCores(cores: Int, cpus: Int): ResourceProfile =
+    new ResourceProfileBuilder()
+      .require(new ExecutorResourceRequests().cores(cores))
+      .require(new TaskResourceRequests().cpus(cpus)).build()
+
+  test("pipelined shuffle: a group with two distinct non-default resource profiles is rejected") {
+    val producerRdd = new MyRDD(sc, 2, Nil).withResources(rpWithCores(4, 1))
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+      .withResources(rpWithCores(8, 2))
+    assertPipelinedUnsupported(
+      submitAndCaptureFailure(consumerRdd, Array(0, 1)), "non-default resource profile")
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: a group uniformly on one non-default resource profile is rejected") {
+    // Both members share ONE non-default profile -- a "distinct profile count" of 1, which a
+    // more-than-one-distinct-profile check would wrongly admit, then measure against the default
+    // profile's capacity (the wrong pool). Must be rejected: the whole group is off the default RP.
+    val rp = rpWithCores(4, 1)
+    val producerRdd = new MyRDD(sc, 2, Nil).withResources(rp)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+      .withResources(rp)
+    assertPipelinedUnsupported(
+      submitAndCaptureFailure(consumerRdd, Array(0, 1)), "non-default resource profile")
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: a group mixing a non-default profile with the default is rejected") {
+    // The producer carries an explicit non-default profile; the consumer is left on the default.
+    // The set of EXPLICIT profiles is again size 1, so a distinct-explicit-profile check would miss
+    // it, but the group genuinely spans the non-default and default profiles. Must be rejected.
+    val producerRdd = new MyRDD(sc, 2, Nil).withResources(rpWithCores(4, 1))
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    assertPipelinedUnsupported(
+      submitAndCaptureFailure(consumerRdd, Array(0, 1)), "non-default resource profile")
+    assertDataStructuresEmpty()
+  }
+
+  test("regular shuffle idioms are NOT rejected (inertness of the pipelined fail-fast)") {
+    // The pipelined fail-fast checks (indeterminate producer, reliable-checkpoint-in-chain) must be
+    // inert for a job with NO pipelined dependency: a regular shuffle whose producer is BOTH
+    // indeterminate AND reliably checkpointed -- the two idioms most likely to false-fire -- must
+    // run exactly as before. (Actually exercise both, not just the flag.)
+    withTempDir { dir =>
+      sc.setCheckpointDir(dir.getCanonicalPath)
+      val producerRdd = new MyCheckpointRDD(sc, 2, Nil, indeterminate = true)
+      producerRdd.checkpoint()
+      assert(producerRdd.checkpointData.exists(_.isInstanceOf[ReliableRDDCheckpointData[_]]))
+      assert(producerRdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE)
+      val regularDep = new ShuffleDependency(producerRdd, new HashPartitioner(2))
+      val consumerRdd = new MyRDD(sc, 2, List(regularDep), tracker = mapOutputTracker)
+      submit(consumerRdd, Array(0, 1))
+      // The job proceeds normally (producer stage submitted), i.e. NOT failed by a pipelined check.
+      assert(failure === null, "a regular shuffle must not be rejected by the pipelined fail-fast")
+      completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+      complete(taskSets(1), Seq((Success, 42), (Success, 43)))
+      assert(results === Map(0 -> 42, 1 -> 43))
+      assertDataStructuresEmpty()
+    }
+  }
+
+  test("regular job on a non-default resource profile is NOT rejected (RP check is pipelined)") {
+    // The resource-profile rejection is not keyed on a pipelined dependency, so it must run ONLY
+    // for a job that has one (handleJobSubmitted gates checkPipelinedGroupsSupportedInRDDGraph on
+    // hasPipelined). A perfectly ordinary job that merely attaches a non-default profile via
+    // RDD.withResources -- a GA stage-level-scheduling feature -- has NO pipelined dependency and
+    // must run untouched. Without the gate the whole graph walk fires and rejects it with
+    // PIPELINED_SHUFFLE_UNSUPPORTED, a regression on plain withResources jobs.
+    val rdd = new MyRDD(sc, 2, Nil).withResources(rpWithCores(4, 2))
+    // A non-default profile drives submitMissingTasks through addPySparkConfigsToProperties, which
+    // needs a non-null Properties; pass one (the default submit() overload leaves it null).
+    submit(rdd, Array(0, 1), properties = new Properties())
+    assert(failure === null,
+      "a regular job with a non-default resource profile must not be rejected by the pipelined " +
+        "fail-fast")
+    assert(taskSets.nonEmpty, "the job must proceed to task submission, not be failed up front")
+    complete(taskSets(0), Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  private def submitAndCaptureFailure(finalRdd: RDD[_], partitions: Array[Int]): Exception = {
+    val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    submit(finalRdd, partitions, listener = failListener)
+    failure.get()
+  }
+
+  private def assertPipelinedUnsupported(failure: Exception, reasonSubstring: String): Unit = {
+    assert(failure != null, "the job must fail fast on the unsupported pipelined idiom")
+    val msg = failure.getMessage
+    assert(msg.contains("PIPELINED_SHUFFLE_UNSUPPORTED") || msg.contains("unsupported feature"),
+      s"expected a PIPELINED_SHUFFLE_UNSUPPORTED error, got: $msg")
+    assert(msg.contains(reasonSubstring),
+      s"expected reason to mention '$reasonSubstring', got: $msg")
+  }
+
+  test("submitMapStage on an RDD with 0 partitions reports an internal error") {
+    val shuffleMapRdd = new MyRDD(sc, 0, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+    // `ShuffleExchangeExec` guards this case, so reaching it means an internal invariant broke.
+    checkError(
+      exception = intercept[SparkException] {
+        scheduler.submitMapStage(shuffleDep, (_: MapOutputStatistics) => (), CallSite("", ""),
+          new Properties())
+      },
+      condition = "INTERNAL_ERROR",
+      sqlState = Some("XX000"),
+      parameters = scala.collection.immutable.Map(
+        "message" -> "Can't run submitMapStage on RDD with 0 partitions."))
+    assertDataStructuresEmpty()
   }
 
 }

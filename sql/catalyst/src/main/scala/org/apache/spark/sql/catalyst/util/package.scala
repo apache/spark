@@ -130,6 +130,11 @@ package object util extends Logging {
     case c: Cast if !c.containsTag(Cast.USER_SPECIFIED_CAST) =>
       PrettyAttribute(usePrettyExpression(c.child, shouldTrimTempResolvedColumn).sql, c.dataType)
     case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
+    // Present a transpiled UDF exactly like the UDF it wraps, so auto-generated
+    // column names stay `f(a)` whether or not transpilation engages (the node
+    // carries the rewrite options as extra children, which must not leak into
+    // user-visible names).
+    case t: TranspiledPythonUDF => PrettyPythonUDF(t.name, t.dataType, t.pythonUDFExpr.children)
   }
 
   def quoteIdentifier(name: String): String = {
@@ -248,7 +253,9 @@ package object util extends Logging {
     FileSourceGeneratedMetadataStructField.FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY,
     MetadataColumn.PRESERVE_ON_DELETE,
     MetadataColumn.PRESERVE_ON_UPDATE,
-    MetadataColumn.PRESERVE_ON_REINSERT
+    MetadataColumn.PRESERVE_ON_REINSERT,
+    GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY,
+    GeneratedColumn.AUTO_FILLED_GENERATED_COLUMN_METADATA_KEY
   )
 
   def removeInternalMetadata(schema: StructType, keepFieldIds: Boolean = false): StructType = {

@@ -128,6 +128,7 @@ class MicroBatchExecutionContext(
     var _batchId: Long,
     sparkSession: SparkSession,
     val offsetLogFormatVersionOpt: Option[Int],
+    val commitLogFormatVersionOpt: Option[Int],
     var previousContext: Option[MicroBatchExecutionContext])
   extends StreamExecutionContext(
     id,
@@ -192,6 +193,7 @@ class MicroBatchExecutionContext(
       batchId + 1,
       sparkSession,
       offsetLogFormatVersionOpt,
+      commitLogFormatVersionOpt,
       Some(this))
   }
 

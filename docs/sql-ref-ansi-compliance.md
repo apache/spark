@@ -484,6 +484,7 @@ Below is a list of all the keywords in Spark SQL.
 |COMPUTE|non-reserved|non-reserved|non-reserved|
 |CONCATENATE|non-reserved|non-reserved|non-reserved|
 |CONDITION|non-reserved|non-reserved|non-reserved|
+|CONDITIONAL|non-reserved|non-reserved|non-reserved|
 |CONSTRAINT|reserved|non-reserved|reserved|
 |CONTAINS|non-reserved|non-reserved|non-reserved|
 |CONTINUE|non-reserved|non-reserved|non-reserved|
@@ -537,8 +538,10 @@ Below is a list of all the keywords in Spark SQL.
 |DROP|non-reserved|non-reserved|reserved|
 |ELSE|reserved|non-reserved|reserved|
 |ELSEIF|non-reserved|non-reserved|non-reserved|
+|EMPTY|non-reserved|non-reserved|reserved|
 |END|reserved|non-reserved|reserved|
 |ENFORCED|non-reserved|non-reserved|non-reserved|
+|ERROR|non-reserved|non-reserved|non-reserved|
 |ESCAPE|reserved|non-reserved|reserved|
 |ESCAPED|non-reserved|non-reserved|non-reserved|
 |EVOLUTION|non-reserved|non-reserved|non-reserved|
@@ -616,6 +619,11 @@ Below is a list of all the keywords in Spark SQL.
 |ITERATE|non-reserved|non-reserved|non-reserved|
 |JOIN|reserved|strict-non-reserved|reserved|
 |JSON|non-reserved|non-reserved|non-reserved|
+|JSON_EXISTS|non-reserved|non-reserved|reserved|
+|JSON_QUERY|non-reserved|non-reserved|reserved|
+|JSON_TABLE|non-reserved|non-reserved|reserved|
+|JSON_VALUE|non-reserved|non-reserved|reserved|
+|KEEP|non-reserved|non-reserved|non-reserved|
 |KEY|non-reserved|non-reserved|non-reserved|
 |KEYS|non-reserved|non-reserved|non-reserved|
 |LANGUAGE|non-reserved|non-reserved|reserved|
@@ -675,8 +683,10 @@ Below is a list of all the keywords in Spark SQL.
 |NULL|reserved|non-reserved|reserved|
 |NULLS|non-reserved|non-reserved|non-reserved|
 |NUMERIC|non-reserved|non-reserved|non-reserved|
+|OBJECT|non-reserved|non-reserved|non-reserved|
 |OF|non-reserved|non-reserved|reserved|
 |OFFSET|reserved|non-reserved|reserved|
+|OMIT|non-reserved|non-reserved|reserved|
 |ON|reserved|strict-non-reserved|reserved|
 |ONLY|reserved|non-reserved|reserved|
 |OPEN|non-reserved|non-reserved|reserved|
@@ -684,6 +694,7 @@ Below is a list of all the keywords in Spark SQL.
 |OPTIONS|non-reserved|non-reserved|non-reserved|
 |OR|reserved|non-reserved|reserved|
 |ORDER|reserved|non-reserved|reserved|
+|ORDINALITY|non-reserved|non-reserved|non-reserved|
 |OUT|non-reserved|non-reserved|reserved|
 |OUTER|reserved|non-reserved|reserved|
 |OUTPUTFORMAT|non-reserved|non-reserved|non-reserved|
@@ -709,6 +720,7 @@ Below is a list of all the keywords in Spark SQL.
 |QUALIFY|non-reserved|non-reserved|non-reserved|
 |QUARTER|non-reserved|non-reserved|non-reserved|
 |QUERY|non-reserved|non-reserved|non-reserved|
+|QUOTES|non-reserved|non-reserved|non-reserved|
 |RANGE|non-reserved|non-reserved|reserved|
 |READ|non-reserved|non-reserved|non-reserved|
 |READS|non-reserved|non-reserved|non-reserved|
@@ -732,6 +744,7 @@ Below is a list of all the keywords in Spark SQL.
 |RESPECT|non-reserved|non-reserved|non-reserved|
 |RESTRICT|non-reserved|non-reserved|non-reserved|
 |RETURN|non-reserved|non-reserved|reserved|
+|RETURNING|non-reserved|non-reserved|non-reserved|
 |RETURNS|non-reserved|non-reserved|reserved|
 |REVOKE|non-reserved|non-reserved|reserved|
 |RIGHT|reserved|strict-non-reserved|reserved|
@@ -818,11 +831,13 @@ Below is a list of all the keywords in Spark SQL.
 |UNARCHIVE|non-reserved|non-reserved|non-reserved|
 |UNBOUNDED|non-reserved|non-reserved|non-reserved|
 |UNCACHE|non-reserved|non-reserved|non-reserved|
+|UNCONDITIONAL|non-reserved|non-reserved|non-reserved|
 |UNIFORM|non-reserved|non-reserved|non-reserved|
 |UNION|reserved|strict-non-reserved|reserved|
 |UNIQUE|reserved|non-reserved|reserved|
 |UNKNOWN|reserved|non-reserved|reserved|
 |UNLOCK|non-reserved|non-reserved|non-reserved|
+|UNNEST|non-reserved|non-reserved|non-reserved|
 |UNPIVOT|non-reserved|non-reserved|non-reserved|
 |UNSET|non-reserved|non-reserved|non-reserved|
 |UNTIL|non-reserved|non-reserved|non-reserved|
@@ -851,6 +866,7 @@ Below is a list of all the keywords in Spark SQL.
 |WITH|reserved|non-reserved|reserved|
 |WITHIN|reserved|non-reserved|reserved|
 |WITHOUT|non-reserved|non-reserved|non-reserved|
+|WRAPPER|non-reserved|non-reserved|non-reserved|
 |X|non-reserved|non-reserved|non-reserved|
 |YEAR|non-reserved|non-reserved|non-reserved|
 |YEARS|non-reserved|non-reserved|non-reserved|

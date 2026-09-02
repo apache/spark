@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Cast, Exists, IsNull, ListQuery, Literal, Not}
+import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, Exists, InSubquery, IsNull, ListQuery, Literal, Not, Or}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.LongType
 
@@ -70,6 +70,33 @@ class RewriteSubquerySuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-58365: NOT-IN nested in OR deduplicates conflicting attrs on the join right side") {
+    // Nesting the NOT-IN under an OR routes it through rewriteExistentialExprWithAttrs,
+    // whose join condition must be built from the deduplicated subquery output. Build the
+    // colliding-attribute plan directly: the analyzer's DeduplicateRelations would renew
+    // the shared exprId before the optimizer runs, hiding the rule's behavior.
+    val a = $"a".int
+    val b = $"b".int
+    val relation = LocalRelation(a, b)
+    // The subquery reuses `a`, so its output conflicts with the outer plan by exprId.
+    val subquery = relation.select(a)
+    val query = Filter(
+      Or(EqualTo(b, Literal(1)), Not(InSubquery(Seq(a), ListQuery(subquery, numCols = 1)))),
+      relation)
+
+    val optimized = Optimize.execute(query)
+
+    val join = optimized.collectFirst { case j: Join => j }.get
+    // dedupSubqueryOnSelfJoin aliases the conflicting attr to a fresh exprId, so the join
+    // is duplicate-resolved regardless. The real check: the condition must reference that
+    // deduplicated right-side attr. The pre-fix code zips against the stale pre-dedup
+    // output, so the condition only touches the outer side and the right side dangles.
+    assert(join.duplicateResolved)
+    assert(join.condition.get.references.intersect(join.right.outputSet).nonEmpty,
+      s"join condition ${join.condition.get} must reference the right child output " +
+        s"${join.right.outputSet}")
   }
 
   test("SPARK-34598: Filters without subquery must not be modified by RewritePredicateSubquery") {

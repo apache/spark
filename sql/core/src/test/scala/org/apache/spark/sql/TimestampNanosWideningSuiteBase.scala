@@ -120,6 +120,40 @@ abstract class TimestampNanosWideningSuiteBase extends SharedSparkSession {
     checkAnswer(ntz.selectExpr("a IN (b)"), Row(false))
   }
 
+  test("SPARK-56822: NOT IN / NOT EXISTS / scalar subquery over nanosecond timestamps") {
+    val ntzA = LocalDateTime.parse("2020-01-01T00:00:00.000000001")
+    val ntzB = LocalDateTime.parse("2020-01-01T00:00:00.000000999")
+    // Two sub-microsecond-distinct nanos values in the outer relation.
+    val outer = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(ntzA), Row(ntzB))),
+      new StructType().add("c", TimestampNTZNanosType(9)))
+
+    withTempView("outer_t") {
+      outer.createOrReplaceTempView("outer_t")
+
+      // NOT IN over the nanos key: only the value absent from the subquery set survives, and the
+      // nanosecond digit -- not just the microsecond -- decides membership.
+      checkAnswer(
+        spark.sql(
+          "SELECT c FROM outer_t WHERE c NOT IN " +
+            "(SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999')"),
+        Row(ntzA))
+
+      // NOT EXISTS correlated on the nanos key: the outer row survives iff no matching key exists.
+      checkAnswer(
+        spark.sql(
+          "SELECT o.c FROM outer_t o WHERE NOT EXISTS " +
+            "(SELECT 1 FROM outer_t i WHERE i.c = o.c AND " +
+            "i.c = TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001')"),
+        Row(ntzB))
+    }
+
+    // A scalar subquery carries the nanos type into its result column.
+    val scalar = spark.sql("SELECT (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS c")
+    assert(scalar.schema("c").dataType === TimestampNTZNanosType(9))
+    checkAnswer(scalar, Row(ntzB))
+  }
+
   test("SPARK-57454: binary comparison widens nanosecond timestamps") {
     // Equal absolute instants stored at different precisions compare equal.
     val ltzEq = twoCols(TimestampType, instantA, TimestampLTZNanosType(9), instantA)
@@ -131,6 +165,29 @@ abstract class TimestampNanosWideningSuiteBase extends SharedSparkSession {
 
     val ntzEq = twoCols(TimestampNTZType, ldtA, TimestampNTZNanosType(9), ldtA)
     checkAnswer(ntzEq.selectExpr("a = b", "a < b"), Row(true, false))
+  }
+
+  test("SPARK-57811: string operand coerces to the nanosecond timestamp type") {
+    // Equality on the exact sub-microsecond value: the string is parsed at nanos precision, so a
+    // string that differs only in the 9th digit does NOT compare equal. The paired
+    // `= '...789' => true` / `= '...788' => false` is the load-bearing pair: it rules out
+    // micro-truncation (truncating the operand to micros would make both strings equal the column).
+    // The nanos-vs-string-promotion distinction is locked separately by the analyzer goldens
+    // (explicit `cast as timestamp_ntz(9)`) and the unit tests in TypeCoercionSuite.
+    val ntz =
+      single(TimestampNTZNanosType(9), LocalDateTime.parse("2020-01-02T03:04:05.123456789"))
+    checkAnswer(
+      ntz.selectExpr(
+        "c = '2020-01-02 03:04:05.123456789'",
+        "c = '2020-01-02 03:04:05.123456788'",
+        "c < '2020-01-02 03:04:05.123456790'",
+        "c > '2020-01-02 03:04:05.123456788'"),
+      Row(true, false, true, true))
+
+    // LTZ operand: the string literal is parsed in the session zone (America/Los_Angeles), so the
+    // 2020-01-01T00:00:00Z instant equals the local wall-clock time eight hours earlier.
+    val ltz = single(TimestampLTZNanosType(9), Instant.parse("2020-01-01T00:00:00Z"))
+    checkAnswer(ltz.selectExpr("c = '2019-12-31 16:00:00'"), Row(true))
   }
 }
 

@@ -24,7 +24,7 @@ import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericRecordBuilder}
 import org.apache.avro.message.{BinaryMessageDecoder, BinaryMessageEncoder}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, NoopFilters, OrderedFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
@@ -298,6 +298,72 @@ class AvroCatalystDataConversionSuite extends SharedSparkSession
       case Some(d) =>
         assert(checkResult(d, deserialized.get, dataType, exprNullable = false))
     }
+  }
+
+  private def deserializerFor(schema: Schema, dataType: DataType): AvroDeserializer = {
+    new AvroDeserializer(
+      schema,
+      dataType,
+      false,
+      RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
+      new NoopFilters,
+      false,
+      "",
+      -1)
+  }
+
+  test("SPARK-58218: null array element for non-null Catalyst type reports a typed error") {
+    val avroSchema = new Schema.Parser().parse(
+      """
+        |{ "type": "record",
+        |  "name": "record",
+        |  "fields": [{
+        |    "name": "array",
+        |    "type": { "type": "array", "items": ["null", "int"] }
+        |  }]
+        |}
+      """.stripMargin)
+    // The Avro element is nullable, but the target Catalyst element type is not, so a null
+    // element must surface as a typed error rather than a generic RuntimeException.
+    val catalystType = new StructType()
+      .add("array", ArrayType(IntegerType, containsNull = false), nullable = false)
+    val data = new GenericRecordBuilder(avroSchema)
+      .set("array", util.Arrays.asList(1, null, 3))
+      .build()
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        deserializerFor(avroSchema, catalystType).deserialize(data)
+      },
+      condition = "AVRO_CANNOT_READ_NULL_FIELD",
+      parameters = Map("name" -> "field 'array.element'"))
+  }
+
+  test("SPARK-58218: null map value for non-null Catalyst type reports a typed error") {
+    val avroSchema = new Schema.Parser().parse(
+      """
+        |{ "type": "record",
+        |  "name": "record",
+        |  "fields": [{
+        |    "name": "map",
+        |    "type": { "type": "map", "values": ["null", "int"] }
+        |  }]
+        |}
+      """.stripMargin)
+    val catalystType = new StructType()
+      .add("map", MapType(StringType, IntegerType, valueContainsNull = false), nullable = false)
+    val values = new util.HashMap[String, Integer]()
+    values.put("k", null)
+    val data = new GenericRecordBuilder(avroSchema)
+      .set("map", values)
+      .build()
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        deserializerFor(avroSchema, catalystType).deserialize(data)
+      },
+      condition = "AVRO_CANNOT_READ_NULL_FIELD",
+      parameters = Map("name" -> "field 'map.value'"))
   }
 
   test("avro array can be generic java collection") {

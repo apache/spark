@@ -410,6 +410,9 @@ object WindowFunctionType {
         case PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF => PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF
         case PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF => PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF
       }
+      // The incremental aggregator has a single window eval type: the window operator sends each
+      // frame's rows to the worker, which folds them with `reduce` and produces `finish`.
+      case _: PythonAggregate => PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF
     }
   }
 }

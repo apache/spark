@@ -65,6 +65,7 @@ class JDBCTableCatalogSuite extends SharedSparkSession {
       jdbcClientType: String): Metadata = new MetadataBuilder()
     .putLong("scale", 0)
     .putBoolean("isTimestampNTZ", false)
+    .putBoolean("preferTimestampNanos", false)
     .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
     .putString("jdbcClientType", jdbcClientType)
     .build()

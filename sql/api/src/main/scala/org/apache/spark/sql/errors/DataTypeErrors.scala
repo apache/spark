@@ -139,7 +139,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
 
   def decimalCannotGreaterThanPrecisionError(scale: Int, precision: Int): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1228",
+      errorClass = "DECIMAL_SCALE_EXCEEDS_PRECISION",
       messageParameters = Map("scale" -> scale.toString, "precision" -> precision.toString))
   }
 

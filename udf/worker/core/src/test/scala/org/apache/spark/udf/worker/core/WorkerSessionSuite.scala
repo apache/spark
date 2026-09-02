@@ -95,6 +95,18 @@ class WorkerSessionSuite extends AnyFunSuite {
     assert(ex.getMessage.contains("exactly once"))
   }
 
+  test("init rejects a null message before changing state") {
+    var initCalled = false
+    val s = new FakeWorkerSession(onInit = _ => {
+      initCalled = true
+      InitResponse.getDefaultInstance
+    })
+    val ex = intercept[IllegalArgumentException](s.init(null))
+    assert(ex.getMessage.contains("message is required"))
+    assert(!initCalled)
+    assert(s.state == SessionState.Created)
+  }
+
   test("process before init is rejected") {
     val s = new FakeWorkerSession()
     val ex = intercept[IllegalStateException](s.process(Iterator.empty))
@@ -163,6 +175,21 @@ class WorkerSessionSuite extends AnyFunSuite {
     })
     assert(s.close() == Termination.Failed(err))
     assert(h.invalidated == 0)
+    assert(h.released == 1)
+  }
+
+  test("close marks a worker invalid after an unacknowledged Interrupted termination") {
+    val h = new RecordingHandle
+    val cause = new InterruptedException("task killed")
+    // The interrupt itself is an engine-side event, but Interrupted means no
+    // CancelResponse was received. Without that acknowledgement (or a separate
+    // liveness proof), the worker's state is unknown and it must not be reused.
+    val s = new FakeWorkerSession(handle = h, onCloseHook = (self, _) => {
+      self.settle(Termination.Interrupted(cause))
+      self.term
+    })
+    assert(s.close() == Termination.Interrupted(cause))
+    assert(h.invalidated == 1)
     assert(h.released == 1)
   }
 
@@ -261,6 +288,7 @@ class WorkerSessionSuite extends AnyFunSuite {
     assert(termFor(Termination.Cancelled(can)) == Termination.Cancelled(can))
     assert(termFor(Termination.Failed(err)) == Termination.Failed(err))
     assert(termFor(Termination.TransportFailed(cause)) == Termination.TransportFailed(cause))
+    assert(termFor(Termination.Interrupted(cause)) == Termination.Interrupted(cause))
   }
 
   test("settledTermination throws before a terminal is settled") {

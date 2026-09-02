@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.{LogEntry, Logging}
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.execution.{BaseSubqueryExec, QueryExecution, ReusedSubqueryExec, SparkPlan, SubqueryAdaptiveBroadcastExec, SubqueryBroadcastExec, SubqueryExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{BaseSubqueryExec, ProjectedBroadcastValueSubqueryExec, QueryExecution, ReusedSubqueryExec, SparkPlan, SubqueryAdaptiveBroadcastExec, SubqueryBroadcastExec, SubqueryExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.util.{AccumulatorV2, LastAttemptAccumulator}
@@ -368,7 +368,7 @@ object SQLLastAttemptAccumulator extends Logging {
           // ```
           // will launch stages in scope of child.
           scopeIds(s.child)
-        case _: SubqueryBroadcastExec =>
+        case _: SubqueryBroadcastExec | _: ProjectedBroadcastValueSubqueryExec =>
           // Used by DPP filter only, not part of main flow of query execution.
           Nil
         case _: SubqueryAdaptiveBroadcastExec =>

@@ -18,13 +18,13 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import java.lang.Thread.sleep
-import java.time.{LocalDateTime, ZoneId}
+import java.time.{Instant, LocalDateTime, ZoneId}
 
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters.MapHasAsScala
 
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Cast, CurrentDate, CurrentTime, CurrentTimestamp, CurrentTimeZone, Expression, InSubquery, ListQuery, Literal, LocalTimestamp, Now}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Cast, CurrentDate, CurrentTime, CurrentTimestamp, CurrentTimestampNanos, CurrentTimeZone, Expression, InSubquery, ListQuery, Literal, LocalTimestamp, LocalTimestampNanos, Now}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DateType, IntegerType, StringType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 class ComputeCurrentTimeSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -197,6 +197,70 @@ class ComputeCurrentTimeSuite extends PlanTest {
     assert(lits(0) == lits(1))
   }
 
+  test("SPARK-57837: analyzer should replace current_timestamp(p) with nanos literals") {
+    Seq(7, 8, 9).foreach { p =>
+      val in = Project(
+        Seq(Alias(CurrentTimestampNanos(p), "a")(), Alias(CurrentTimestampNanos(p), "b")()),
+        LocalRelation())
+
+      val min = DateTimeUtils.instantToMicros(Instant.now())
+      val plan = Optimize.execute(in.analyze).asInstanceOf[Project]
+      val max = DateTimeUtils.instantToMicros(Instant.now())
+
+      // The literals carry the nanosecond TIMESTAMP_LTZ(p) type.
+      val typedLits = literalsWithType(plan, TimestampLTZNanosType(p))
+      assert(typedLits.size == 2, s"precision $p should yield two TIMESTAMP_LTZ($p) literals")
+      val vals = typedLits.map(_.asInstanceOf[TimestampNanosVal])
+      // All calls in one query return the same value.
+      assert(vals(0) == vals(1))
+      assert(vals(0).epochMicros >= min && vals(0).epochMicros <= max)
+      // Sub-precision digits are floored: at p == 7 the last two nanos-within-micro digits are 0,
+      // at p == 8 the last digit is 0, at p == 9 all three are kept.
+      val step = math.pow(10, 9 - p).toInt % 1000
+      if (step != 0) {
+        assert(vals(0).nanosWithinMicro % step == 0,
+          s"nanosWithinMicro ${vals(0).nanosWithinMicro} should be floored to precision $p")
+      }
+    }
+  }
+
+  test("SPARK-57837: analyzer should replace localtimestamp(p) with nanos literals") {
+    Seq(7, 8, 9).foreach { p =>
+      val in = Project(
+        Seq(Alias(LocalTimestampNanos(p), "a")(), Alias(LocalTimestampNanos(p), "b")()),
+        LocalRelation())
+
+      val plan = Optimize.execute(in.analyze).asInstanceOf[Project]
+
+      val typedLits = literalsWithType(plan, TimestampNTZNanosType(p))
+      assert(typedLits.size == 2, s"precision $p should yield two TIMESTAMP_NTZ($p) literals")
+      val vals = typedLits.map(_.asInstanceOf[TimestampNanosVal])
+      assert(vals(0) == vals(1))
+      val step = math.pow(10, 9 - p).toInt % 1000
+      if (step != 0) {
+        assert(vals(0).nanosWithinMicro % step == 0,
+          s"nanosWithinMicro ${vals(0).nanosWithinMicro} should be floored to precision $p")
+      }
+    }
+  }
+
+  test("SPARK-57837: nanos current-timestamp respects time flow across analyses") {
+    val in = Project(Alias(CurrentTimestampNanos(9), "t1")() :: Nil, LocalRelation())
+
+    val planT1 = Optimize.execute(in.analyze).asInstanceOf[Project]
+    sleep(5)
+    val planT2 = Optimize.execute(in.analyze).asInstanceOf[Project]
+
+    val t1 = literalsWithType(planT1, TimestampLTZNanosType(9))
+      .head.asInstanceOf[TimestampNanosVal]
+    val t2 = literalsWithType(planT2, TimestampLTZNanosType(9))
+      .head.asInstanceOf[TimestampNanosVal]
+
+    // A later analysis observes a strictly newer instant (each re-analysis re-reads the clock).
+    assert(t2.epochMicros > t1.epochMicros,
+      s"Expected a newer time in the second analysis, but got t1=$t1, t2=$t2")
+  }
+
   test("analyzer should use equal timestamps across subqueries") {
     val timestampInSubQuery = Project(Seq(Alias(LocalTimestamp(), "timestamp1")()), LocalRelation())
     val listSubQuery = ListQuery(timestampInSubQuery)
@@ -342,6 +406,20 @@ class ComputeCurrentTimeSuite extends PlanTest {
       }
     }
     literals
+  }
+
+  private def literalsWithType(
+      plan: LogicalPlan,
+      dataType: org.apache.spark.sql.types.DataType)
+    : scala.collection.mutable.ArrayBuffer[Any] = {
+    val buf = new scala.collection.mutable.ArrayBuffer[Any]
+    plan.transformWithSubqueries { case subQuery =>
+      subQuery.transformAllExpressions { case lit: Literal if lit.dataType == dataType =>
+        buf += lit.value
+        lit
+      }
+    }
+    buf
   }
 
   test("SPARK-57748: TIME->TIMESTAMP cast is rewritten even with no CURRENT_LIKE node") {

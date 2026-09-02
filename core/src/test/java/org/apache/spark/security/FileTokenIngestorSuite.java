@@ -19,6 +19,7 @@ package org.apache.spark.security;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.util.Comparator;
@@ -141,6 +142,25 @@ public class FileTokenIngestorSuite {
     Optional<UserContext> result2 = ingestor.load();
     assertEquals("user2", result2.get().getPrincipal());
     assertEquals(token2, result2.get().getRawToken());
+  }
+
+  @Test
+  public void loadDetectsFileRotationWhenMtimeIsUnchanged() throws Exception {
+    Path tokenFile = tempDir.resolve("token");
+    String token1 = createUnsignedJwt("user1", "https://issuer.example.com");
+    writeToken(tokenFile, token1);
+
+    FileTokenIngestor ingestor = new FileTokenIngestor(tokenFile);
+    assertEquals("user1", ingestor.load().get().getPrincipal());
+    FileTime originalMtime = Files.getLastModifiedTime(tokenFile);
+
+    String token2 = createUnsignedJwt("user2", "https://issuer.example.com");
+    writeToken(tokenFile, token2);
+    Files.setLastModifiedTime(tokenFile, originalMtime);
+
+    Optional<UserContext> result = ingestor.load();
+    assertEquals("user2", result.get().getPrincipal());
+    assertEquals(token2, result.get().getRawToken());
   }
 
   @Test

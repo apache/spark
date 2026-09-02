@@ -163,6 +163,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case TimestampNTZType => Option(JdbcType("TIMESTAMP", java.sql.Types.TIMESTAMP))
       case DateType => Option(JdbcType("DATE", java.sql.Types.DATE))
       case t: TimeType => Option(JdbcType(s"TIME(${t.precision})", java.sql.Types.TIME))
+      // Nanosecond-capable timestamps (precision 7-9) map to SQL TIMESTAMP(p). Dialects may
+      // override this, e.g. to emit TIMESTAMP(p) WITH TIME ZONE for the LTZ variant.
+      case t: TimestampNTZNanosType =>
+        Option(JdbcType(s"TIMESTAMP(${t.precision})", java.sql.Types.TIMESTAMP))
+      case t: TimestampLTZNanosType =>
+        Option(JdbcType(s"TIMESTAMP(${t.precision})", java.sql.Types.TIMESTAMP))
       case t: DecimalType => Option(
         JdbcType(s"DECIMAL(${t.precision},${t.scale})", java.sql.Types.DECIMAL))
       case _ => None
@@ -178,6 +184,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
     if (isTimestampNTZ) TimestampNTZType else TimestampType
   }
 
+  private def getTimestampNanosType(isTimestampNTZ: Boolean, precision: Int): DataType = {
+    if (isTimestampNTZ) TimestampNTZNanosType(precision) else TimestampLTZNanosType(precision)
+  }
+
   /**
    * Maps a JDBC type to a Catalyst type.  This function is called only when
    * the JdbcDialect class corresponding to your database driver returns null.
@@ -191,7 +201,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       precision: Int,
       scale: Int,
       signed: Boolean,
-      isTimestampNTZ: Boolean): DataType = sqlType match {
+      isTimestampNTZ: Boolean,
+      preferTimestampNanos: Boolean = false): DataType = sqlType match {
     case java.sql.Types.BIGINT => if (signed) LongType else DecimalType(20, 0)
     case java.sql.Types.BINARY => BinaryType
     case java.sql.Types.BIT => BooleanType // @see JdbcDialect for quirks
@@ -233,7 +244,16 @@ object JdbcUtils extends Logging with SQLConfHelper {
           else TimeType.DEFAULT_PRECISION
         TimeType(timePrecision)
       } else getTimestampType(isTimestampNTZ)
-    case java.sql.Types.TIMESTAMP => getTimestampType(isTimestampNTZ)
+    case java.sql.Types.TIMESTAMP =>
+      // When nanosecond timestamps are requested (and the preview feature is enabled), a driver
+      // TIMESTAMP that reports a sub-microsecond fractional-second scale (7-9) is mapped to the
+      // nanosecond-capable type. Otherwise the historical microsecond mapping is preserved.
+      if (preferTimestampNanos &&
+        scale >= TimestampNTZNanosType.MIN_PRECISION &&
+        scale <= TimestampNTZNanosType.MAX_PRECISION &&
+        conf.timestampNanosTypesEnabled) {
+        getTimestampNanosType(isTimestampNTZ, scale)
+      } else getTimestampType(isTimestampNTZ)
     case java.sql.Types.TINYINT => IntegerType
     case java.sql.Types.VARBINARY => BinaryType
     case java.sql.Types.VARCHAR if conf.charVarcharAsString => StringType
@@ -262,7 +282,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       try {
         statement.setQueryTimeout(options.queryTimeout)
         Some(getSchema(conn, statement.executeQuery(), dialect,
-          isTimestampNTZ = options.preferTimestampNTZ))
+          isTimestampNTZ = options.preferTimestampNTZ,
+          preferTimestampNanos = options.preferTimestampNanos))
       } catch {
         case _: SQLException => None
       } finally {
@@ -286,7 +307,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       resultSet: ResultSet,
       dialect: JdbcDialect,
       alwaysNullable: Boolean = false,
-      isTimestampNTZ: Boolean = false): StructType = {
+      isTimestampNTZ: Boolean = false,
+      preferTimestampNanos: Boolean = false): StructType = {
     val rsmd = resultSet.getMetaData
     val ncols = rsmd.getColumnCount
     val fields = new Array[StructField](ncols)
@@ -326,13 +348,15 @@ object JdbcUtils extends Logging with SQLConfHelper {
       }
       metadata.putBoolean("isSigned", isSigned)
       metadata.putBoolean("isTimestampNTZ", isTimestampNTZ)
+      metadata.putBoolean("preferTimestampNanos", preferTimestampNanos)
       metadata.putLong("scale", fieldScale)
       metadata.putString("jdbcClientType", typeName)
       dialect.updateExtraColumnMeta(conn, rsmd, i + 1, metadata)
 
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
-          getCatalystType(dataType, typeName, fieldSize, fieldScale, isSigned, isTimestampNTZ))
+          getCatalystType(dataType, typeName, fieldSize, fieldScale, isSigned, isTimestampNTZ,
+            preferTimestampNanos))
       fields(i) = StructField(columnName, columnType, nullable, metadata.build())
       i = i + 1
     }
@@ -448,6 +472,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case TimestampNTZType if metadata.contains("logical_time_type") =>
       JDBCValueGetter.LogicalTimeNTZGetter(dialect)
     case TimestampNTZType => JDBCValueGetter.TimestampNTZGetter(dialect)
+    case t: TimestampNTZNanosType => JDBCValueGetter.TimestampNTZNanosGetter(t.precision)
+    case t: TimestampLTZNanosType => JDBCValueGetter.TimestampLTZNanosGetter(dialect, t.precision)
     case BinaryType if metadata.contains("binarylong") => JDBCValueGetter.BinaryBitGetter
     case BinaryType => JDBCValueGetter.BytesGetter
     case _: YearMonthIntervalType => JDBCValueGetter.YearMonthIntervalGetter(dialect)
@@ -517,6 +543,23 @@ object JdbcUtils extends Logging with SQLConfHelper {
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setTimestamp(pos + 1,
           dialect.convertTimestampNTZToJavaTimestamp(row.getAs[java.time.LocalDateTime](pos)))
+
+    // Nanosecond-precision timestamps are always materialized as java.time values by the Nanos
+    // encoders (independent of the datetimeJava8Api flag).
+    // NTZ is time-zone independent: write the LocalDateTime wall-clock directly (mirroring the
+    // TimeType setter) so the full sub-microsecond fraction survives without a zone shift.
+    case _: TimestampNTZNanosType =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setObject(pos + 1, row.getAs[java.time.LocalDateTime](pos))
+
+    // LTZ is an absolute instant: go through the micro java.sql.Timestamp path (matching the
+    // TimestampType setter), then restore the full nanosecond-of-second the micro path drops.
+    case _: TimestampLTZNanosType =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        val instant = row.getAs[Instant](pos)
+        val ts = toJavaTimestamp(instantToMicros(instant))
+        ts.setNanos(instant.getNano)
+        stmt.setTimestamp(pos + 1, ts)
 
     case DateType =>
       if (conf.datetimeJava8ApiEnabled) {

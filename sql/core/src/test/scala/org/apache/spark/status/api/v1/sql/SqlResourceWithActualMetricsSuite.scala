@@ -197,6 +197,7 @@ class SqlResourceWithActualMetricsSuite
       assert((firstRow \ "status").extract[String].nonEmpty)
       assert((firstRow \ "description").extract[String] != null)
       assert((firstRow \ "duration").extract[Long] >= 0)
+      assert((firstRow \ "totalTaskTime").extract[Long] >= 0)
 
       // Test search filter
       val searchUrl = new URI(

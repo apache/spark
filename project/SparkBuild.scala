@@ -72,10 +72,10 @@ object BuildCommons {
     udfWorkerProjects
 
   val optionallyEnabledProjects@Seq(kubernetes, yarn,
-    sparkGangliaLgpl, streamingKinesisAsl, profiler,
+    sparkGangliaLgpl, streamingKinesisAsl, profiler, credentialAws,
     dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests) =
     Seq("kubernetes", "yarn",
-      "ganglia-lgpl", "streaming-kinesis-asl", "profiler",
+      "ganglia-lgpl", "streaming-kinesis-asl", "profiler", "credential-aws",
       "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests").map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(networkYarn, streamingKafka010Assembly, streamingKinesisAslAssembly) =
@@ -416,7 +416,8 @@ object SparkBuild extends PomBuild {
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, pipelines, connectCommon, connect,
-      connectJdbc, connectClient, variant, connectShims, profiler, commonUtilsJava, sparkConfig,
+      connectJdbc, connectClient, variant, connectShims, profiler, credentialAws,
+      commonUtilsJava, sparkConfig,
       udfWorkerProto, udfWorkerCore, udfWorkerGrpc
     ).contains(x)
   }
@@ -553,7 +554,7 @@ object SparkParallelTestGrouping {
   // SBT project. Here, we take an opt-in approach where the default behavior is to run all
   // tests sequentially in a single JVM, requiring us to manually opt-in to the extra parallelism.
   //
-  // There are a reasons why such an opt-in approach is good:
+  // There are reasons why such an opt-in approach is good:
   //
   //    1. Launching one JVM per suite adds significant overhead for short-running suites. In
   //       addition to JVM startup time and JIT warmup, it appears that initialization of Derby
@@ -1307,7 +1308,7 @@ object KubernetesIntegrationTests {
  * Overrides to work around sbt's dependency resolution being different from Maven's.
  */
 object DependencyOverrides {
-  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.22.0")
+  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.22.1")
   lazy val jacksonDeps = Bom.dependencies("com.fasterxml.jackson" % "jackson-bom" % jacksonVersion)
   lazy val grpcVersion = sys.props.get("io.grpc.version").getOrElse("1.76.0")
   lazy val grpcDeps = Bom.dependencies("io.grpc" % "grpc-bom" % grpcVersion)

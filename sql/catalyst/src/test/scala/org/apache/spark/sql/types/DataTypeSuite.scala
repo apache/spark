@@ -24,6 +24,7 @@ import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFunSuite}
 import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -1656,22 +1657,27 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("SPARK-56965: JSON parser rejects nanos timestamp types when preview flag is off") {
+  test("SPARK-57835: JSON parser reconstructs nanos timestamp types when preview flag is off") {
+    // Read-through policy: unlike the SQL parser (DataTypeAstBuilder), the JSON path is how a
+    // persisted schema is restored from the catalog, so it must reconstruct nanos types even
+    // when the preview flag is off. Otherwise a table written with the flag on would become
+    // completely inaccessible (DESCRIBE / SHOW CREATE TABLE / DROP) once it is off. The flag is
+    // instead enforced at analysis/execution time (TypeUtils.failUnsupportedDataType). This
+    // mirrors how TIME types round-trip through fromJson regardless of their own flag.
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
       Seq(
-        "\"timestamp_ltz(7)\"" -> "Nanosecond-precision timestamp types",
-        "\"timestamp_ntz(9)\"" -> "Nanosecond-precision timestamp types").foreach {
-        case (json, featureName) =>
-          checkError(
-            exception = intercept[SparkException] {
-              DataType.fromJson(json)
-            },
-            condition = "FEATURE_NOT_ENABLED",
-            parameters = Map(
-              "featureName" -> featureName,
-              "configKey" -> "spark.sql.timestampNanosTypes.enabled",
-              "configValue" -> "true"))
+        "\"timestamp_ltz(7)\"" -> TimestampLTZNanosType(7),
+        "\"timestamp_ntz(9)\"" -> TimestampNTZNanosType(9)).foreach {
+        case (json, expected) =>
+          assert(DataType.fromJson(json) === expected)
       }
+      // Nested nanos types (inside struct/array/map) also reconstruct with the flag off, since
+      // that is exactly how catalog schemas are shaped.
+      val nested = StructType(Seq(
+        StructField("s", StructType(Seq(StructField("ntz", TimestampNTZNanosType(7))))),
+        StructField("a", ArrayType(TimestampLTZNanosType(8), containsNull = false)),
+        StructField("m", MapType(StringType, TimestampNTZNanosType(9)))))
+      assert(DataType.fromJson(nested.json) === nested)
       // Precision 6 maps to the GA types and stays accepted with the gate off.
       assert(DataType.fromJson("\"timestamp_ltz(6)\"") === TimestampType)
       assert(DataType.fromJson("\"timestamp_ntz(6)\"") === TimestampNTZType)
@@ -1728,5 +1734,15 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
       assert(PhysicalDataType(nonSingleton) != UninitializedPhysicalType,
         s"${clazz.getSimpleName}: PhysicalDataType should recognize non-singleton instance")
     }
+  }
+
+  test("SPARK-58350: DecimalType with scale greater than precision throws " +
+    "DECIMAL_SCALE_EXCEEDS_PRECISION") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        DecimalType(2, 3)
+      },
+      condition = "DECIMAL_SCALE_EXCEEDS_PRECISION",
+      parameters = Map("scale" -> "3", "precision" -> "2"))
   }
 }

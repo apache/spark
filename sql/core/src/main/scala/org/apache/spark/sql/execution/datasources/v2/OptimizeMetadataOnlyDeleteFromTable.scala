@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, PredicateHelper, S
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, DeleteFromTableWithFilters, LogicalPlan, ReplaceData, RowLevelWrite, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.{REPLACE_DATA, WRITE_DELTA}
 import org.apache.spark.sql.connector.catalog.{SupportsDeleteV2, TruncatableTable}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.RowLevelOperation
@@ -37,7 +38,8 @@ import org.apache.spark.util.ArrayImplicits._
  */
 object OptimizeMetadataOnlyDeleteFromTable extends Rule[LogicalPlan] with PredicateHelper {
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+      _.containsAnyPattern(REPLACE_DATA, WRITE_DELTA)) {
     case RewrittenRowLevelCommand(rowLevelPlan, DELETE, cond, relation: DataSourceV2Relation) =>
       relation.table match {
         case table: SupportsDeleteV2 if !SubqueryExpression.hasSubquery(cond) =>

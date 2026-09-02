@@ -27,7 +27,7 @@ import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
 import org.apache.avro.mapreduce.AvroJob
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, GlobPattern, Path}
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
@@ -97,7 +97,8 @@ private[sql] object AvroUtils extends Logging {
         }
         if (archives.nonEmpty) {
           inferAvroSchemaFromArchives(archives, nonArchives, conf, parsedOptions.ignoreExtension,
-            fileSourceOptions.ignoreCorruptFiles, fileSourceOptions.ignoreMissingFiles)
+            fileSourceOptions.ignoreCorruptFiles, fileSourceOptions.ignoreMissingFiles,
+            fileSourceOptions.archivePathFilterPattern)
         } else {
           inferAvroSchemaFromFiles(files, conf, parsedOptions.ignoreExtension,
             fileSourceOptions.ignoreCorruptFiles)
@@ -250,10 +251,12 @@ private[sql] object AvroUtils extends Logging {
       conf: Configuration,
       ignoreExtension: Boolean,
       ignoreCorruptFiles: Boolean,
-      ignoreMissingFiles: Boolean): Schema = {
+      ignoreMissingFiles: Boolean,
+      archivePathFilter: Option[GlobPattern]): Schema = {
     archives.iterator
       .flatMap { f =>
-        firstArchiveEntrySchema(f.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles)
+        firstArchiveEntrySchema(
+          f.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles, archivePathFilter)
       }
       .nextOption()
       .getOrElse {
@@ -274,11 +277,13 @@ private[sql] object AvroUtils extends Logging {
       path: Path,
       conf: Configuration,
       ignoreCorruptFiles: Boolean,
-      ignoreMissingFiles: Boolean): Option[Schema] = {
+      ignoreMissingFiles: Boolean,
+      archivePathFilter: Option[GlobPattern]): Option[Schema] = {
     try {
       // `readArchiveEntries` returns a Closeable iterator; take the first entry's schema and close
       // it so the archive stream is released without draining the remaining entries.
-      val entries = SupportsArchiveFormat.readArchiveEntries(path, conf) { (_, in) =>
+      val entries = SupportsArchiveFormat.readArchiveEntries(
+          path, conf, archivePathFilter = archivePathFilter) { (_, in) =>
         val stream = new DataFileStream[GenericRecord](in, new GenericDatumReader[GenericRecord]())
         try {
           Iterator.single(stream.getSchema)

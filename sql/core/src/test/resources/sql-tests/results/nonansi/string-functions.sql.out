@@ -2701,3 +2701,52 @@ select instr(null, null, cast(null as int), cast(null as int))
 struct<instr(NULL, NULL, CAST(NULL AS INT), CAST(NULL AS INT)):int>
 -- !query output
 NULL
+
+
+-- !query
+select normalize('hello')
+-- !query schema
+struct<normalize(hello, NFC):string>
+-- !query output
+hello
+
+
+-- !query
+select normalize('hello', 'NFD')
+-- !query schema
+struct<normalize(hello, NFD):string>
+-- !query output
+hello
+
+
+-- !query
+select normalize('ﬁ', 'NFKC')
+-- !query schema
+struct<normalize(ﬁ, NFKC):string>
+-- !query output
+fi
+
+
+-- !query
+select normalize(null, 'NFC')
+-- !query schema
+struct<normalize(NULL, NFC):string>
+-- !query output
+NULL
+
+
+-- !query
+select normalize('hello', 'not_a_form')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.NORMALIZE_FORM",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "form" : "'not_a_form'",
+    "functionName" : "`normalize`",
+    "parameter" : "`form`"
+  }
+}

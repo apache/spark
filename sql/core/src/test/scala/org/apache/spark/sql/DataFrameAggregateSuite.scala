@@ -573,6 +573,56 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
+  testWithWholeStageCodegenOnAndOff("SPARK-58213: corr returns NULL for zero variance") { _ =>
+    val input = Seq(
+      ("both-constant", Some(1.0), Some(1.0)),
+      ("both-constant", Some(1.0), Some(1.0)),
+      ("empty", None, None),
+      ("normal", Some(1.0), Some(1.0)),
+      ("normal", Some(2.0), Some(2.0)),
+      ("normal", Some(3.0), Some(3.0)),
+      ("partial-null", None, Some(0.0)),
+      ("partial-null", Some(1.0), Some(1.0)),
+      ("partial-null", Some(2.0), None),
+      ("partial-null", Some(3.0), Some(3.0)),
+      ("single", Some(1.0), Some(2.0)),
+      ("x-constant", Some(1.0), Some(1.0)),
+      ("x-constant", Some(1.0), Some(2.0)),
+      ("x-constant", Some(1.0), Some(3.0)),
+      ("y-constant", Some(1.0), Some(1.0)),
+      ("y-constant", Some(2.0), Some(1.0)),
+      ("y-constant", Some(3.0), Some(1.0)),
+      ("zero-correlation", Some(0.0), Some(1.0)),
+      ("zero-correlation", Some(1.0), Some(-2.0)),
+      ("zero-correlation", Some(2.0), Some(1.0))).toDF("case", "x", "y")
+
+    Seq(true, false).foreach { ansiEnabled =>
+      Seq(true, false).foreach { legacyStatisticalAggregate =>
+        withSQLConf(
+            SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
+            SQLConf.LEGACY_STATISTICAL_AGGREGATE.key ->
+              legacyStatisticalAggregate.toString) {
+          val singleRow = if (legacyStatisticalAggregate) {
+            Row("single", Double.NaN)
+          } else {
+            Row("single", null)
+          }
+          checkAnswer(
+            input.groupBy($"case").agg(corr($"x", $"y")).orderBy($"case"),
+            Seq(
+              Row("both-constant", null),
+              Row("empty", null),
+              Row("normal", 1.0),
+              Row("partial-null", 1.0),
+              singleRow,
+              Row("x-constant", null),
+              Row("y-constant", null),
+              Row("zero-correlation", 0.0)))
+        }
+      }
+    }
+  }
+
   test("null moments") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
     checkAnswer(emptyTableData.agg(
@@ -674,6 +724,72 @@ class DataFrameAggregateSuite extends SharedSparkSession
       df.select(array_agg($"a"), array_agg($"b")),
       Seq(Row(Seq(1, 2, 3), Seq(2, 2, 4)))
     )
+  }
+
+  test("collect_union function") {
+    // Distinct union of array elements across rows.
+    val df = Seq(Seq(1, 2), Seq(2, 3), Seq(1)).toDF("arr")
+    checkDataset(
+      df.select(collect_union($"arr").as("u")).as[Set[Int]],
+      Set(1, 2, 3))
+    checkAnswer(
+      df.select(sort_array(collect_union($"arr"))),
+      Seq(Row(Seq(1, 2, 3))))
+    checkAnswer(
+      df.selectExpr("sort_array(collect_union(arr))"),
+      Seq(Row(Seq(1, 2, 3))))
+
+    // NULL array inputs are always skipped.
+    val dfNulls = Seq(Seq(1, 2), null, Seq(2, 3)).toDF("arr")
+    checkAnswer(
+      dfNulls.select(sort_array(collect_union($"arr"))),
+      Seq(Row(Seq(1, 2, 3))))
+
+    // NULL elements: dropped by default (IGNORE NULLS, matching collect_set) ...
+    val dfNullElem = Seq(Seq(Integer.valueOf(1), null), Seq(Integer.valueOf(2))).toDF("arr")
+    checkAnswer(
+      dfNullElem.select(sort_array(collect_union($"arr"))),
+      Seq(Row(Seq(1, 2))))
+    // ... and kept (a single null) with RESPECT NULLS, matching
+    // array_distinct(flatten(collect_list(...))). sort_array puts null first in asc order.
+    checkAnswer(
+      dfNullElem.selectExpr("sort_array(collect_union(arr) RESPECT NULLS)"),
+      Seq(Row(Seq(null, 1, 2))))
+    // Equivalent to array_distinct(flatten(collect_list(...))) under RESPECT NULLS. Compare
+    // order-insensitively via sort_array, since element order in either result is unspecified.
+    checkAnswer(
+      dfNullElem.selectExpr("sort_array(collect_union(arr) RESPECT NULLS)"),
+      dfNullElem.selectExpr("sort_array(array_distinct(flatten(collect_list(arr))))"))
+
+    // Per-group union.
+    val g = Seq(("a", Seq(1, 2)), ("a", Seq(2, 3)), ("b", Seq(4))).toDF("k", "arr")
+    checkAnswer(
+      g.groupBy("k").agg(sort_array(collect_union($"arr"))).orderBy("k"),
+      Seq(Row("a", Seq(1, 2, 3)), Row("b", Seq(4))))
+
+    // Empty result: only-NULL arrays produce an empty array, not null.
+    val dfEmpty = Seq[Seq[Int]](null, null).toDF("arr")
+    checkAnswer(
+      dfEmpty.select(collect_union($"arr")),
+      Seq(Row(Seq.empty[Int])))
+  }
+
+  test("collect_union requires an array input") {
+    // A non-array (scalar) input is rejected at analysis time.
+    val df = Seq(1, 2, 3).toDF("a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(collect_union($"a")).collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"collect_union(a)\"",
+        "paramIndex" -> "first",
+        "inputSql" -> "\"a\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"ARRAY\""),
+      context = ExpectedContext(
+        fragment = "collect_union", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("SPARK-55256: array_agg and collect_list skip nulls by default") {
@@ -2738,6 +2854,70 @@ class DataFrameAggregateSuite extends SharedSparkSession
         df.explain("codegen")
       }
       assert(output.toString().contains("public class hashAgg_FastHashMap_0"))
+    }
+  }
+
+  // Byte 3 of the serialized sketch holds lgConfigK, so SUBSTRING(hex(...), 7, 2) reads it as a
+  // hex pair: 0x0F = 15, 0x0C = 12.
+  private val allNullGroupSketches =
+    """
+      |with sketches as (
+      |  select 'has_data' as grp, hll_sketch_agg(cast(id as string), 15) as sketch
+      |  from (select explode(sequence(1, 1000)) as id)
+      |  union all
+      |  select 'all_null' as grp, cast(null as binary) as sketch
+      |)
+      |""".stripMargin
+
+  test("hll_union_agg reports the default lgConfigK for a group with no non-NULL sketch") {
+    // hll_union_agg has no lgConfigK parameter, and the all-NULL group holds no sketch to take one
+    // from, so it cannot report the 15 the other group was built at. The estimate is correct either
+    // way; the mismatched precision is what the next test has to cope with.
+    checkAnswer(
+      sql(allNullGroupSketches +
+        """
+          |select
+          |  grp,
+          |  substring(hex(hll_union_agg(sketch)), 7, 2) as lg_config_k,
+          |  hll_sketch_estimate(hll_union_agg(sketch)) as estimate
+          |from sketches
+          |group by grp
+          |""".stripMargin),
+      Seq(Row("all_null", "0C", 0L), Row("has_data", "0F", 1000L)))
+  }
+
+  test("hll_union_agg and hll_union re-merge the empty sketch produced for an all-NULL group") {
+    // The stored sketches are now an empty lgConfigK=12 one beside a populated lgConfigK=15 one.
+    // Rolling them back up must not fail under default settings, because an empty sketch holds no
+    // coupons and so cannot cost precision at any lgConfigK.
+    val stored = sql(allNullGroupSketches +
+      "select grp, hll_union_agg(sketch) as sketch from sketches group by grp")
+      .collect()
+      .map(row => row.getString(0) -> row.getAs[Array[Byte]]("sketch"))
+      .toMap
+
+    Seq(
+      "empty sketch first" -> Seq(stored("all_null"), stored("has_data")),
+      "empty sketch last" -> Seq(stored("has_data"), stored("all_null"))
+    ).foreach { case (order, sketches) =>
+      // One partition exercises update(); two exercise the partial-to-final merge() as well.
+      Seq(1, 2).foreach { numPartitions =>
+        withClue(s"hll_union_agg, $order, $numPartitions partition(s): ") {
+          checkAnswer(
+            sketches.toDF("sketch").repartition(numPartitions).selectExpr(
+              "substring(hex(hll_union_agg(sketch)), 7, 2) as lg_config_k",
+              "hll_sketch_estimate(hll_union_agg(sketch)) as estimate"),
+            Seq(Row("0F", 1000L)))
+        }
+      }
+
+      withClue(s"hll_union, $order: ") {
+        checkAnswer(
+          Seq((sketches.head, sketches.last)).toDF("left", "right").selectExpr(
+            "substring(hex(hll_union(left, right)), 7, 2) as lg_config_k",
+            "hll_sketch_estimate(hll_union(left, right)) as estimate"),
+          Seq(Row("0F", 1000L)))
+      }
     }
   }
 

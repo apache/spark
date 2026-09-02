@@ -70,7 +70,7 @@ PySpark requires the same minor version of Python in both driver and workers. It
 you can specify which version of Python you want to use by `PYSPARK_PYTHON`, for example:
 
 {% highlight bash %}
-$ PYSPARK_PYTHON=python3.8 bin/pyspark
+$ PYSPARK_PYTHON=python3.11 bin/pyspark
 {% endhighlight %}
 
 </div>

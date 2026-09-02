@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
 }
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ResolverGuardSuite extends ResolverGuardSuiteBase {
@@ -452,6 +453,27 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
         "SELECT 1",
         unsupportedReason = Some("configuration: persistentCatalogFirst")
       )
+    }
+  }
+
+  gridTest("ASOF JOIN")(Seq(true, false)) { enabled =>
+    val asOfJoinQuery =
+      "SELECT t.symbol, q.bid_price FROM " +
+      "VALUES (TIMESTAMP '2026-06-29 10:00:05', 'AAPL') AS t(trade_time, symbol) " +
+      "ASOF JOIN VALUES (TIMESTAMP '2026-06-29 10:00:00', 'AAPL', 180.10) " +
+      "AS q(quote_time, symbol, bid_price) " +
+      "MATCH_CONDITION (t.trade_time >= q.quote_time) ON t.symbol = q.symbol"
+    val expectedReason = if (enabled) {
+      None
+    } else {
+      Some("class org.apache.spark.sql.catalyst.plans.logical.AsOfJoin operator resolution")
+    }
+    withSQLConf(
+      SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key ->
+      enabled.toString
+    ) {
+      checkResolverGuard(asOfJoinQuery, expectedReason)
     }
   }
 

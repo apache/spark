@@ -72,7 +72,7 @@
   },
   "CANNOT_CONVERT_COLUMN_INTO_BOOL": {
     "message": [
-      "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
+      "Cannot convert column into bool (offending column: <column>): please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
     ]
   },
   "CANNOT_CONVERT_TYPE": {
@@ -204,7 +204,7 @@
   },
   "DATA_SOURCE_PUSHDOWN_DISABLED": {
     "message": [
-      "<type> implements pushFilters() but filter pushdown is disabled because configuration '<conf>' is false. Set it to true to enable filter pushdown."
+      "<type> implements <method>() but the corresponding pushdown is disabled because configuration '<conf>' is false. Set it to true to enable it."
     ]
   },
   "DATA_SOURCE_RETURN_SCHEMA_MISMATCH": {
@@ -546,6 +546,16 @@
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
     ]
   },
+  "LOCAL_CONNECT_RUNTIME_DIR_UNAVAILABLE": {
+    "message": [
+      "Cannot claim the per-user runtime directory <path> (was it created by another user?); remove it or point SPARK_LOCAL_CONNECT_DISCOVERY at a path you own."
+    ]
+  },
+  "LOCAL_CONNECT_SERVER_START_FAILED": {
+    "message": [
+      "Failed to start a persistent local Spark Connect server: <reason>."
+    ]
+  },
   "LOCAL_RELATION_SIZE_LIMIT_EXCEEDED": {
     "message": [
       "Local relation size (<actualSize> bytes) exceeds the limit (<sizeLimit> bytes)."
@@ -851,11 +861,7 @@
       "An Observation can be used with a DataFrame only once."
     ]
   },
-  "SCHEMA_MISMATCH_FOR_PANDAS_UDF": {
-    "message": [
-      "Result vector from <udf_type> was not the required length: expected <expected>, got <actual>."
-    ]
-  },
+
   "SESSION_ALREADY_EXIST": {
     "message": [
       "Cannot start a remote Spark session because there is a regular Spark session already running."

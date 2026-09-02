@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 
 import com.univocity.parsers.csv.CsvParser
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, GlobPattern, Path}
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
@@ -36,7 +36,7 @@ import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVInferSchema, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -76,14 +76,10 @@ abstract class CSVDataSource extends Serializable with Logging with SupportsArch
         val hasArchive = parsedOptions.archiveFormatEnabled &&
           inputPaths.exists(f => SupportsArchiveFormat.isArchivePath(f.getPath))
         if (hasArchive && supportsArchiveScan) {
-          // Archives (and any loose files alongside them) are inferred in a single CSVInferSchema
-          // pass over all inputs -- archive entries are streamed, never unpacked -- so the result
-          // matches what the scan returns for the same files.
           Some(inferWithArchives(sparkSession, inputPaths, parsedOptions))
         } else if (hasArchive) {
-          // The caller's scan path cannot read archives (e.g. the DSv2 reader), so refuse to infer
-          // a schema when any input is an archive: returning None raises UNABLE_TO_INFER_SCHEMA,
-          // which fails loudly instead of letting the scan parse raw archive bytes as CSV.
+          // The caller's scan cannot read archives (e.g. DSv2), so refuse rather than let it
+          // mis-read raw archive bytes as CSV.
           None
         } else if (inputPaths.nonEmpty) {
           Some(infer(sparkSession, inputPaths, parsedOptions))
@@ -122,6 +118,7 @@ abstract class CSVDataSource extends Serializable with Logging with SupportsArch
    * @param getHeaderChecker builds a fresh [[CSVHeaderChecker]] for `(isStartOfFile, source)`.
    * @param ignoredPathSegmentRegex the compiled effective `ignoredPathSegmentRegex` option, so
    *                           hidden entries are skipped exactly like Spark's file listing would.
+   * @param archivePathFilter optional glob matched against the entry's full path
    */
   def readArchive(
       conf: Configuration,
@@ -129,7 +126,8 @@ abstract class CSVDataSource extends Serializable with Logging with SupportsArch
       getParser: () => UnivocityParser,
       getHeaderChecker: (Boolean, String) => CSVHeaderChecker,
       requiredSchema: StructType,
-      ignoredPathSegmentRegex: Pattern): Iterator[InternalRow]
+      ignoredPathSegmentRegex: Pattern,
+      archivePathFilter: Option[GlobPattern]): Iterator[InternalRow]
 
   /**
    * Shared driver used by the [[readArchive]] implementations: streams each non-skipped entry's
@@ -142,11 +140,12 @@ abstract class CSVDataSource extends Serializable with Logging with SupportsArch
       file: PartitionedFile,
       getParser: () => UnivocityParser,
       getHeaderChecker: (Boolean, String) => CSVHeaderChecker,
-      ignoredPathSegmentRegex: Pattern)(
+      ignoredPathSegmentRegex: Pattern,
+      archivePathFilter: Option[GlobPattern])(
       parseEntry: (UnivocityParser, CSVHeaderChecker, InputStream) => Iterator[InternalRow])
     : Iterator[InternalRow] = {
     SupportsArchiveFormat.readArchiveEntries(
-        file.toPath, conf, ignoredPathSegmentRegex) { (entry, in) =>
+        file.toPath, conf, ignoredPathSegmentRegex, archivePathFilter) { (entry, in) =>
       val headerChecker =
         getHeaderChecker(true, s"CSV archive entry: ${file.urlEncodedPath}!/${entry.getName}")
       val parser = getParser()
@@ -172,29 +171,41 @@ abstract class CSVDataSource extends Serializable with Logging with SupportsArch
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): StructType = {
     val baseRdd = CSVDataSource.createBaseRdd(sparkSession, inputPaths, parsedOptions)
-    def tokens(dropHeader: Boolean): RDD[Array[String]] = baseRdd.flatMap { stream =>
-      val path = new Path(stream.getPath())
-      try {
-        if (SupportsArchiveFormat.isArchivePath(path)) {
-          SupportsArchiveFormat.readArchiveEntries(path, stream.getConfiguration) { (_, in) =>
-            tokenizeForInference(in, dropHeader, parsedOptions)
+    // Inference must see the same entries the scan reads, so it honors archivePathFilter too.
+    // Capture the glob string: the compiled GlobPattern is not serializable, so each task
+    // compiles it once when the archive branch is taken.
+    val archivePathFilterGlob = parsedOptions.archivePathFilter
+    def tokens(dropHeader: Boolean): RDD[Array[String]] = baseRdd.mapPartitions { streams =>
+      // Compile at most once per partition: lazy so a partition of only loose files never
+      // compiles, while a partition with archives reuses one matcher across all of them.
+      lazy val archivePathFilter =
+        archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)
+      streams.flatMap { stream =>
+        val path = new Path(stream.getPath())
+        try {
+          if (SupportsArchiveFormat.isArchivePath(path)) {
+            SupportsArchiveFormat.readArchiveEntries(
+              path, stream.getConfiguration, archivePathFilter = archivePathFilter) {
+              (_, in) =>
+              tokenizeForInference(in, dropHeader, parsedOptions)
+            }
+          } else {
+            tokenizeForInference(
+              CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path),
+              dropHeader, parsedOptions)
           }
-        } else {
-          tokenizeForInference(
-            CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path),
-            dropHeader, parsedOptions)
+        } catch {
+          case e: FileNotFoundException if parsedOptions.ignoreMissingFiles =>
+            logWarning(log"Skipped missing input: ${MDC(PATH, stream.getPath())}", e)
+            Iterator.empty
+          case e: FileNotFoundException => throw e
+          case e @ (_: RuntimeException | _: IOException) if parsedOptions.ignoreCorruptFiles =>
+            logWarning(log"Skipped the corrupted input: ${MDC(PATH, stream.getPath())}", e)
+            Iterator.empty
+          case NonFatal(e) =>
+            throw QueryExecutionErrors.cannotReadFilesError(
+              e, SparkPath.fromPathString(stream.getPath()).urlEncoded)
         }
-      } catch {
-        case e: FileNotFoundException if parsedOptions.ignoreMissingFiles =>
-          logWarning(log"Skipped missing input: ${MDC(PATH, stream.getPath())}", e)
-          Iterator.empty
-        case e: FileNotFoundException => throw e
-        case e @ (_: RuntimeException | _: IOException) if parsedOptions.ignoreCorruptFiles =>
-          logWarning(log"Skipped the corrupted input: ${MDC(PATH, stream.getPath())}", e)
-          Iterator.empty
-        case NonFatal(e) =>
-          throw QueryExecutionErrors.cannotReadFilesError(
-            e, SparkPath.fromPathString(stream.getPath()).urlEncoded)
       }
     }
     tokens(dropHeader = false).take(1).headOption match {
@@ -303,10 +314,12 @@ object TextInputCSVDataSource extends CSVDataSource {
       getParser: () => UnivocityParser,
       getHeaderChecker: (Boolean, String) => CSVHeaderChecker,
       requiredSchema: StructType,
-      ignoredPathSegmentRegex: Pattern): Iterator[InternalRow] =
+      ignoredPathSegmentRegex: Pattern,
+      archivePathFilter: Option[GlobPattern]): Iterator[InternalRow] =
     // Stream each tar entry through the line-based parser, treating the entry exactly like a
     // standalone CSV file (a fresh parser/header checker is built per entry).
-    streamArchiveEntries(conf, file, getParser, getHeaderChecker, ignoredPathSegmentRegex) {
+    streamArchiveEntries(
+        conf, file, getParser, getHeaderChecker, ignoredPathSegmentRegex, archivePathFilter) {
       (parser, headerChecker, in) =>
         UnivocityParser.parseIterator(
           entryLines(in, parser.options), parser, headerChecker, requiredSchema)
@@ -432,10 +445,12 @@ object MultiLineCSVDataSource extends CSVDataSource {
       getParser: () => UnivocityParser,
       getHeaderChecker: (Boolean, String) => CSVHeaderChecker,
       requiredSchema: StructType,
-      ignoredPathSegmentRegex: Pattern): Iterator[InternalRow] =
+      ignoredPathSegmentRegex: Pattern,
+      archivePathFilter: Option[GlobPattern]): Iterator[InternalRow] =
     // Stream each tar entry whole through the multi-line parser (a fresh parser/header checker is
     // built per entry).
-    streamArchiveEntries(conf, file, getParser, getHeaderChecker, ignoredPathSegmentRegex) {
+    streamArchiveEntries(
+        conf, file, getParser, getHeaderChecker, ignoredPathSegmentRegex, archivePathFilter) {
       (parser, headerChecker, in) =>
         UnivocityParser.parseStream(in, parser, headerChecker, requiredSchema)
     }

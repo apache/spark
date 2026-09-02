@@ -870,6 +870,7 @@ class ExecutorSuite extends SparkFunSuite
       properties = new Properties,
       cpus = 1,
       resources = Map.empty,
+      None,
       serializedTask)
   }
 

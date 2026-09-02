@@ -826,6 +826,193 @@ NULL
 
 
 -- !query
+select json_typeof()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`json_typeof`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "json_typeof()"
+  } ]
+}
+
+
+-- !query
+select json_typeof(null)
+-- !query schema
+struct<json_typeof(NULL):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_typeof(200)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"200\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"json_typeof(200)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "json_typeof(200)"
+  } ]
+}
+
+
+-- !query
+select json_typeof('')
+-- !query schema
+struct<json_typeof():string>
+-- !query output
+NULL
+
+
+-- !query
+select json_typeof('{}')
+-- !query schema
+struct<json_typeof({}):string>
+-- !query output
+object
+
+
+-- !query
+select json_typeof('{"key": 1, "arr": [1, 2]}')
+-- !query schema
+struct<json_typeof({"key": 1, "arr": [1, 2]}):string>
+-- !query output
+object
+
+
+-- !query
+select json_typeof('[]')
+-- !query schema
+struct<json_typeof([]):string>
+-- !query output
+array
+
+
+-- !query
+select json_typeof('[1, 2, 3]')
+-- !query schema
+struct<json_typeof([1, 2, 3]):string>
+-- !query output
+array
+
+
+-- !query
+select json_typeof('"hello"')
+-- !query schema
+struct<json_typeof("hello"):string>
+-- !query output
+string
+
+
+-- !query
+select json_typeof('123')
+-- !query schema
+struct<json_typeof(123):string>
+-- !query output
+number
+
+
+-- !query
+select json_typeof('1.5')
+-- !query schema
+struct<json_typeof(1.5):string>
+-- !query output
+number
+
+
+-- !query
+select json_typeof('-123')
+-- !query schema
+struct<json_typeof(-123):string>
+-- !query output
+number
+
+
+-- !query
+select json_typeof('-1.5')
+-- !query schema
+struct<json_typeof(-1.5):string>
+-- !query output
+number
+
+
+-- !query
+select json_typeof('true')
+-- !query schema
+struct<json_typeof(true):string>
+-- !query output
+boolean
+
+
+-- !query
+select json_typeof('false')
+-- !query schema
+struct<json_typeof(false):string>
+-- !query output
+boolean
+
+
+-- !query
+select json_typeof('null')
+-- !query schema
+struct<json_typeof(null):string>
+-- !query output
+null
+
+
+-- !query
+select json_typeof('bad')
+-- !query schema
+struct<json_typeof(bad):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_typeof('{"key": 45, "random_string"}')
+-- !query schema
+struct<json_typeof({"key": 45, "random_string"}):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_typeof('123 true')
+-- !query schema
+struct<json_typeof(123 true):string>
+-- !query output
+NULL
+
+
+-- !query
 DROP VIEW IF EXISTS jsonTable
 -- !query schema
 struct<>
@@ -1095,3 +1282,706 @@ select from_json('{"time": "14:30:45"}', 'time TIME') LIMIT 1
 struct<from_json({"time": "14:30:45"}):struct<time:time(6)>>
 -- !query output
 {"time":14:30:45}
+
+
+-- !query
+select json_value('{"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}', '$.name')
+-- !query schema
+struct<JSON_VALUE({"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}, '$.name'):string>
+-- !query output
+Ada
+
+
+-- !query
+select json_value('{"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}', '$.id' RETURNING INT)
+-- !query schema
+struct<JSON_VALUE({"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}, '$.id' RETURNING INT):int>
+-- !query output
+7
+
+
+-- !query
+select json_value('{"id":7,"name":"Ada"}', '$.id' RETURNING INT) + 1
+-- !query schema
+struct<(JSON_VALUE({"id":7,"name":"Ada"}, '$.id' RETURNING INT) + 1):int>
+-- !query output
+8
+
+
+-- !query
+select json_value('{"score":null}', '$.score')
+-- !query schema
+struct<JSON_VALUE({"score":null}, '$.score'):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_value('{"addr":{"city":"NYC"}}', '$.addr')
+-- !query schema
+struct<JSON_VALUE({"addr":{"city":"NYC"}}, '$.addr'):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_value('{"tags":["x","y"]}', '$.tags')
+-- !query schema
+struct<JSON_VALUE({"tags":["x","y"]}, '$.tags'):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_value('{"id":7}', '$.missing')
+-- !query schema
+struct<JSON_VALUE({"id":7}, '$.missing'):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_value(cast(null as string), '$.a')
+-- !query schema
+struct<JSON_VALUE(CAST(NULL AS STRING), '$.a'):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_value('{"id":7}', '$.missing' DEFAULT '?' ON EMPTY)
+-- !query schema
+struct<JSON_VALUE({"id":7}, '$.missing' DEFAULT ? ON EMPTY):string>
+-- !query output
+?
+
+
+-- !query
+select json_value('{"id":7}', '$.missing' RETURNING INT DEFAULT 42 ON EMPTY)
+-- !query schema
+struct<JSON_VALUE({"id":7}, '$.missing' RETURNING INT DEFAULT 42 ON EMPTY):int>
+-- !query output
+42
+
+
+-- !query
+select json_value('{"id":7}', '$.missing' ERROR ON EMPTY)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "JSON_VALUE_ON_ERROR.EMPTY",
+  "sqlState" : "2203G",
+  "messageParameters" : {
+    "functionName" : "`json_value`",
+    "path" : "'$.missing'"
+  }
+}
+
+
+-- !query
+select json_value('{"addr":{"city":"NYC"}}', '$.addr' DEFAULT 'n/a' ON ERROR)
+-- !query schema
+struct<JSON_VALUE({"addr":{"city":"NYC"}}, '$.addr' DEFAULT n/a ON ERROR):string>
+-- !query output
+n/a
+
+
+-- !query
+select json_value('not json', '$.a' DEFAULT 'bad' ON ERROR)
+-- !query schema
+struct<JSON_VALUE(not json, '$.a' DEFAULT bad ON ERROR):string>
+-- !query output
+bad
+
+
+-- !query
+select json_value('not json', '$.a' ERROR ON ERROR)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "JSON_VALUE_ON_ERROR.ERROR",
+  "sqlState" : "2203G",
+  "messageParameters" : {
+    "functionName" : "`json_value`",
+    "path" : "'$.a'"
+  }
+}
+
+
+-- !query
+select json_value('{"name":"Ada"}', '$.name' RETURNING INT)
+-- !query schema
+struct<JSON_VALUE({"name":"Ada"}, '$.name' RETURNING INT):int>
+-- !query output
+NULL
+
+
+-- !query
+select json_value('{"name":"Ada"}', '$.name' RETURNING INT ERROR ON ERROR)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "JSON_VALUE_ON_ERROR.ERROR",
+  "sqlState" : "2203G",
+  "messageParameters" : {
+    "functionName" : "`json_value`",
+    "path" : "'$.name'"
+  }
+}
+
+
+-- !query
+select json_value('{"name":"Ada"}', '$.name' RETURNING INT DEFAULT -1 ON ERROR)
+-- !query schema
+struct<JSON_VALUE({"name":"Ada"}, '$.name' RETURNING INT DEFAULT -1 ON ERROR):int>
+-- !query output
+-1
+
+
+-- !query
+select json_value('{"a":"x"}', '$.b' DEFAULT 'e' ON EMPTY DEFAULT 'r' ON ERROR)
+-- !query schema
+struct<JSON_VALUE({"a":"x"}, '$.b' DEFAULT e ON EMPTY DEFAULT r ON ERROR):string>
+-- !query output
+e
+
+
+-- !query
+select json_value('{"v":"3.14"}', '$.v' RETURNING DOUBLE)
+-- !query schema
+struct<JSON_VALUE({"v":"3.14"}, '$.v' RETURNING DOUBLE):double>
+-- !query output
+3.14
+
+
+-- !query
+select json_value('{"v":"true"}', '$.v' RETURNING BOOLEAN)
+-- !query schema
+struct<JSON_VALUE({"v":"true"}, '$.v' RETURNING BOOLEAN):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_value('{"v":"2020-01-02"}', '$.v' RETURNING DATE)
+-- !query schema
+struct<JSON_VALUE({"v":"2020-01-02"}, '$.v' RETURNING DATE):date>
+-- !query output
+2020-01-02
+
+
+-- !query
+select json_value('{"a":[1,2]}', '$.a[*]')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_PATH",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_value`",
+    "path" : "'$.a[*]'",
+    "sqlExpr" : "\"JSON_VALUE({\"a\":[1,2]}, '$.a[*]')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "json_value('{\"a\":[1,2]}', '$.a[*]')"
+  } ]
+}
+
+
+-- !query
+select json_value('{"a":1}', '$.a' RETURNING STRUCT<x:INT>)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_SCALAR_RETURNING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_value`",
+    "returningType" : "\"STRUCT<x: INT>\"",
+    "sqlExpr" : "\"JSON_VALUE({\"a\":1}, '$.a' RETURNING STRUCT<x: INT>)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 59,
+    "fragment" : "json_value('{\"a\":1}', '$.a' RETURNING STRUCT<x:INT>)"
+  } ]
+}
+
+
+-- !query
+select json_value('{}', '$.x' RETURNING INT DEFAULT array(1) ON EMPTY)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"JSON_VALUE({}, '$.x' RETURNING INT DEFAULT array(1) ON EMPTY)\"",
+    "srcType" : "\"ARRAY<INT>\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 70,
+    "fragment" : "json_value('{}', '$.x' RETURNING INT DEFAULT array(1) ON EMPTY)"
+  } ]
+}
+
+
+-- !query
+select json_exists('{"id":7,"addr":{"city":"NYC"},"score":null,"tags":["x","y"]}', '$.addr.city')
+-- !query schema
+struct<JSON_EXISTS({"id":7,"addr":{"city":"NYC"},"score":null,"tags":["x","y"]}, '$.addr.city'):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists('{"score":null}', '$.score')
+-- !query schema
+struct<JSON_EXISTS({"score":null}, '$.score'):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists('{"addr":{"city":"NYC"}}', '$.addr.zip')
+-- !query schema
+struct<JSON_EXISTS({"addr":{"city":"NYC"}}, '$.addr.zip'):boolean>
+-- !query output
+false
+
+
+-- !query
+select json_exists('{"addr":{"city":"NYC"}}', '$.addr')
+-- !query schema
+struct<JSON_EXISTS({"addr":{"city":"NYC"}}, '$.addr'):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists('{"tags":["x","y"]}', '$.tags[0]')
+-- !query schema
+struct<JSON_EXISTS({"tags":["x","y"]}, '$.tags[0]'):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists(cast(null as string), '$.a')
+-- !query schema
+struct<JSON_EXISTS(CAST(NULL AS STRING), '$.a'):boolean>
+-- !query output
+NULL
+
+
+-- !query
+select json_exists('not json', '$.a')
+-- !query schema
+struct<JSON_EXISTS(not json, '$.a'):boolean>
+-- !query output
+false
+
+
+-- !query
+select json_exists('not json', '$.a' TRUE ON ERROR)
+-- !query schema
+struct<JSON_EXISTS(not json, '$.a' TRUE ON ERROR):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists('not json', '$.a' FALSE ON ERROR)
+-- !query schema
+struct<JSON_EXISTS(not json, '$.a'):boolean>
+-- !query output
+false
+
+
+-- !query
+select json_exists('not json', '$.a' UNKNOWN ON ERROR)
+-- !query schema
+struct<JSON_EXISTS(not json, '$.a' UNKNOWN ON ERROR):boolean>
+-- !query output
+NULL
+
+
+-- !query
+select json_exists('not json', '$.a' ERROR ON ERROR)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "JSON_EXISTS_ON_ERROR",
+  "sqlState" : "2203G",
+  "messageParameters" : {
+    "functionName" : "`json_exists`",
+    "path" : "'$.a'"
+  }
+}
+
+
+-- !query
+select json_exists('{"a":[1,2]}', '$.a[*]')
+-- !query schema
+struct<JSON_EXISTS({"a":[1,2]}, '$.a[*]'):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists('{"a":[]}', '$.a[*]')
+-- !query schema
+struct<JSON_EXISTS({"a":[]}, '$.a[*]'):boolean>
+-- !query output
+false
+
+
+-- !query
+select json_exists('{"a":5}', '$.a[*]')
+-- !query schema
+struct<JSON_EXISTS({"a":5}, '$.a[*]'):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists('{"a":[{"b":1},{"c":2}]}', '$.a[*].b')
+-- !query schema
+struct<JSON_EXISTS({"a":[{"b":1},{"c":2}]}, '$.a[*].b'):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists('{"a":[1,2]}', '$.a[5]')
+-- !query schema
+struct<JSON_EXISTS({"a":[1,2]}, '$.a[5]'):boolean>
+-- !query output
+false
+
+
+-- !query
+select json_exists('{"a":[{"b":1},{"b":2}]}', '$.a.b')
+-- !query schema
+struct<JSON_EXISTS({"a":[{"b":1},{"b":2}]}, '$.a.b'):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists('{"addr":{"city":"NYC"}}', '$.*')
+-- !query schema
+struct<JSON_EXISTS({"addr":{"city":"NYC"}}, '$.*'):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists('{"a":1}', '$[')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_PATH",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_exists`",
+    "path" : "'$['",
+    "sqlExpr" : "\"JSON_EXISTS({\"a\":1}, '$[')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "json_exists('{\"a\":1}', '$[')"
+  } ]
+}
+
+
+-- !query
+select json_query('{"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}', '$.addr')
+-- !query schema
+struct<JSON_QUERY({"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}, '$.addr'):string>
+-- !query output
+{"city":"NYC"}
+
+
+-- !query
+select json_query('{"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}', '$.tags')
+-- !query schema
+struct<JSON_QUERY({"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}, '$.tags'):string>
+-- !query output
+["x","y"]
+
+
+-- !query
+select json_query('{"id":7}', '$.id')
+-- !query schema
+struct<JSON_QUERY({"id":7}, '$.id'):string>
+-- !query output
+7
+
+
+-- !query
+select json_query('{"name":"Ada"}', '$.name')
+-- !query schema
+struct<JSON_QUERY({"name":"Ada"}, '$.name'):string>
+-- !query output
+"Ada"
+
+
+-- !query
+select json_query('{"score":null}', '$.score')
+-- !query schema
+struct<JSON_QUERY({"score":null}, '$.score'):string>
+-- !query output
+null
+
+
+-- !query
+select json_query('{"id":7}', '$.missing')
+-- !query schema
+struct<JSON_QUERY({"id":7}, '$.missing'):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_query(cast(null as string), '$.a')
+-- !query schema
+struct<JSON_QUERY(CAST(NULL AS STRING), '$.a'):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_query('{"tags":["x","y"]}', '$.tags[0]' WITH ARRAY WRAPPER)
+-- !query schema
+struct<JSON_QUERY({"tags":["x","y"]}, '$.tags[0]' WITH UNCONDITIONAL ARRAY WRAPPER):string>
+-- !query output
+["x"]
+
+
+-- !query
+select json_query('{"tags":["x","y"]}', '$.tags' WITH UNCONDITIONAL ARRAY WRAPPER)
+-- !query schema
+struct<JSON_QUERY({"tags":["x","y"]}, '$.tags' WITH UNCONDITIONAL ARRAY WRAPPER):string>
+-- !query output
+[["x","y"]]
+
+
+-- !query
+select json_query('{"id":7}', '$.id' WITH ARRAY WRAPPER)
+-- !query schema
+struct<JSON_QUERY({"id":7}, '$.id' WITH UNCONDITIONAL ARRAY WRAPPER):string>
+-- !query output
+[7]
+
+
+-- !query
+select json_query('{"id":7}', '$.id' WITH CONDITIONAL ARRAY WRAPPER)
+-- !query schema
+struct<JSON_QUERY({"id":7}, '$.id' WITH CONDITIONAL ARRAY WRAPPER):string>
+-- !query output
+[7]
+
+
+-- !query
+select json_query('{"addr":{"city":"NYC"}}', '$.addr' WITH CONDITIONAL ARRAY WRAPPER)
+-- !query schema
+struct<JSON_QUERY({"addr":{"city":"NYC"}}, '$.addr' WITH CONDITIONAL ARRAY WRAPPER):string>
+-- !query output
+{"city":"NYC"}
+
+
+-- !query
+select json_query('{"name":"Ada"}', '$.name' OMIT QUOTES)
+-- !query schema
+struct<JSON_QUERY({"name":"Ada"}, '$.name' OMIT QUOTES):string>
+-- !query output
+Ada
+
+
+-- !query
+select json_query('{"name":"Ada"}', '$.name' KEEP QUOTES)
+-- !query schema
+struct<JSON_QUERY({"name":"Ada"}, '$.name'):string>
+-- !query output
+"Ada"
+
+
+-- !query
+select json_query('{"id":7}', '$.missing' EMPTY ARRAY ON EMPTY)
+-- !query schema
+struct<JSON_QUERY({"id":7}, '$.missing' EMPTY ARRAY ON EMPTY):string>
+-- !query output
+[]
+
+
+-- !query
+select json_query('{"id":7}', '$.missing' EMPTY OBJECT ON EMPTY)
+-- !query schema
+struct<JSON_QUERY({"id":7}, '$.missing' EMPTY OBJECT ON EMPTY):string>
+-- !query output
+{}
+
+
+-- !query
+select json_query('{"id":7}', '$.missing' ERROR ON EMPTY)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "JSON_QUERY_ON_ERROR.EMPTY",
+  "sqlState" : "2203G",
+  "messageParameters" : {
+    "functionName" : "`json_query`",
+    "path" : "'$.missing'"
+  }
+}
+
+
+-- !query
+select json_query('not json', '$.a')
+-- !query schema
+struct<JSON_QUERY(not json, '$.a'):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_query('not json', '$.a' EMPTY ARRAY ON ERROR)
+-- !query schema
+struct<JSON_QUERY(not json, '$.a' EMPTY ARRAY ON ERROR):string>
+-- !query output
+[]
+
+
+-- !query
+select json_query('not json', '$.a' EMPTY OBJECT ON ERROR)
+-- !query schema
+struct<JSON_QUERY(not json, '$.a' EMPTY OBJECT ON ERROR):string>
+-- !query output
+{}
+
+
+-- !query
+select json_query('not json', '$.a' ERROR ON ERROR)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "JSON_QUERY_ON_ERROR.ERROR",
+  "sqlState" : "2203G",
+  "messageParameters" : {
+    "functionName" : "`json_query`",
+    "path" : "'$.a'"
+  }
+}
+
+
+-- !query
+select json_query('{"addr":{"city":"NYC"}}', '$.addr' RETURNING STRING)
+-- !query schema
+struct<JSON_QUERY({"addr":{"city":"NYC"}}, '$.addr'):string>
+-- !query output
+{"city":"NYC"}
+
+
+-- !query
+select json_query('{"a":[1,2]}', '$.a[*]')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_PATH",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_query`",
+    "path" : "'$.a[*]'",
+    "sqlExpr" : "\"JSON_QUERY({\"a\":[1,2]}, '$.a[*]')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "json_query('{\"a\":[1,2]}', '$.a[*]')"
+  } ]
+}
+
+
+-- !query
+select json_query('{"a":1}', '$.a' RETURNING INT)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_QUERY_RETURNING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_query`",
+    "returningType" : "\"INT\"",
+    "sqlExpr" : "\"JSON_QUERY({\"a\":1}, '$.a' RETURNING INT)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 49,
+    "fragment" : "json_query('{\"a\":1}', '$.a' RETURNING INT)"
+  } ]
+}
+
+
+-- !query
+select json_query('{"name":"Ada"}', '$.name' WITH ARRAY WRAPPER OMIT QUOTES)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_QUERY_WRAPPER_AND_QUOTES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_query`",
+    "sqlExpr" : "\"JSON_QUERY({\"name\":\"Ada\"}, '$.name' WITH UNCONDITIONAL ARRAY WRAPPER OMIT QUOTES)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 76,
+    "fragment" : "json_query('{\"name\":\"Ada\"}', '$.name' WITH ARRAY WRAPPER OMIT QUOTES)"
+  } ]
+}

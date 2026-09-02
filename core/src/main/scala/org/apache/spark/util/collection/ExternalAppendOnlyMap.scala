@@ -309,7 +309,7 @@ class ExternalAppendOnlyMap[K, V, C](
     inputStreams.foreach { it =>
       val kcPairs = new ArrayBuffer[(K, C)]
       readNextHashCode(it, kcPairs)
-      if (kcPairs.length > 0) {
+      if (kcPairs.nonEmpty) {
         mergeHeap.enqueue(new StreamBuffer(it, kcPairs))
       }
     }
@@ -426,11 +426,11 @@ class ExternalAppendOnlyMap[K, V, C](
         val pairs: ArrayBuffer[(K, C)])
       extends Comparable[StreamBuffer] {
 
-      def isEmpty: Boolean = pairs.length == 0
+      def isEmpty: Boolean = pairs.isEmpty
 
       // Invalid if there are no more pairs in this stream
       def minKeyHash: Int = {
-        assert(pairs.length > 0)
+        assert(pairs.nonEmpty)
         hashKey(pairs.head)
       }
 

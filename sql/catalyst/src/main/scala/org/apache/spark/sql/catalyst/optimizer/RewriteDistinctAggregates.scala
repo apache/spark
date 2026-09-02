@@ -21,7 +21,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, CASE_WHEN, IF}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.util.collection.Utils
 
@@ -223,8 +224,9 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     case a: Aggregate if mayNeedtoRewrite(a) => rewrite(a)
   }
 
-  def rewrite(a: Aggregate): Aggregate = {
+  def rewrite(origAgg: Aggregate): Aggregate = {
 
+    val a = normalizeCountDistinctConditional(origAgg)
     val aggExpressions = collectAggregateExprs(a)
     val distinctAggs = aggExpressions.filter(_.isDistinct)
 
@@ -417,6 +419,63 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     } else {
       a
     }
+  }
+
+  /**
+   * Canonicalizes COUNT(DISTINCT IF(cond, base, NULL)) and
+   * COUNT(DISTINCT CASE WHEN cond THEN base END) to COUNT(DISTINCT base) FILTER (WHERE cond).
+   * This reduces the number of distinct groups: multiple conditional counts on the same base
+   * column collapse into one group, shrinking the Expand fan-out from Nx to 1x.
+   *
+   * Note that the rewrite moves `base` out of the protective conditional branch: after the
+   * rewrite the Expand operator evaluates the distinct child for every input row, while
+   * originally it was only evaluated on rows where `cond` holds. To preserve the
+   * short-circuit semantics of IF/CASE WHEN, the rewrite is restricted to base
+   * expressions that can be evaluated unconditionally, i.e. cannot raise errors or change
+   * results when evaluated on extra rows (see [[ExprUtils.canEvaluateUnconditionally]]).
+   */
+  private def normalizeCountDistinctConditional(a: Aggregate): Aggregate = {
+    if (!SQLConf.get.rewriteCountDistinctConditionalEnabled) return a
+    a.transformExpressionsUpWithPruning(
+      _.containsAnyPattern(IF, CASE_WHEN)) {
+      case ae @ AggregateExpression(count: Count, _, true, None, _)
+          if count.children.size == 1 =>
+        extractCondAndBase(count.children.head) match {
+          case Some((cond, base)) =>
+            ae.copy(
+              aggregateFunction = Count(base),
+              filter = Some(cond))
+          case None => ae
+        }
+    }
+  }
+
+  /**
+   * Matches IF(cond, base, null), CASE WHEN cond THEN base END, and
+   * CASE WHEN cond THEN base ELSE NULL END (including null wrapped in Cast).
+   * Multi-branch CaseWhen is intentionally not rewritten -- Or-flattening is out of scope.
+   * The base must be safe to evaluate unconditionally (the rewrite evaluates it on rows
+   * where the original branch would not have been taken, see
+   * [[ExprUtils.canEvaluateUnconditionally]]); the condition needs no check because it is
+   * evaluated unconditionally as the IF/CASE WHEN predicate anyway.
+   * Returns None for anything else.
+   */
+  private def extractCondAndBase(expr: Expression): Option[(Expression, Expression)] =
+    expr match {
+      case If(cond, base, e) if isNullExpr(e) && ExprUtils.canEvaluateUnconditionally(base) =>
+        Some((cond, base))
+      case CaseWhen(Seq((cond, base)), None) if ExprUtils.canEvaluateUnconditionally(base) =>
+        Some((cond, base))
+      case CaseWhen(Seq((cond, base)), Some(e))
+          if isNullExpr(e) && ExprUtils.canEvaluateUnconditionally(base) =>
+        Some((cond, base))
+      case _ => None
+    }
+
+  private def isNullExpr(e: Expression): Boolean = e match {
+    case Literal(null, _) => true
+    case Cast(child, _, _, _) => isNullExpr(child)
+    case _ => false
   }
 
   private def collectAggregateExprs(a: Aggregate): Seq[AggregateExpression] = {

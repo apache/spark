@@ -22,7 +22,7 @@ import scala.annotation.nowarn
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationChanges, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationChanges, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedInsertTarget, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -47,17 +47,18 @@ class PlanParserSuite extends AnalysisTest {
     // We don't care the write privileges in this suite.
     val parsed = parsePlan(sqlCommand).transform {
       case u: UnresolvedRelation => u.clearWritePrivileges
-      case i: InsertIntoStatement =>
-        i.table match {
-          case u: UnresolvedRelation => i.copy(table = u.clearWritePrivileges)
-          case _ => i
-        }
+      case u: UnresolvedInsertTarget => UnresolvedRelation(u.multipartIdentifier, u.options)
     }
     comparePlans(parsed, plan, checkAnalysis = false)
   }
 
   private def parseException(sqlText: String): SparkThrowable = {
     super.parseException(parsePlan)(sqlText)
+  }
+
+  private def unresolvedInsertInto(tableName: String, query: LogicalPlan): LogicalPlan = {
+    UnresolvedInsert(
+      table(tableName), Map.empty, Nil, query, overwrite = false, ifPartitionNotExists = false)
   }
 
   private def cte(
@@ -359,8 +360,8 @@ class PlanParserSuite extends AnalysisTest {
       parameters = Map("error" -> "'from'", "hint" -> ""))
     assertEqual(
       "from a insert into tbl1 select * insert into tbl2 select * where s < 10",
-      table("a").select(star()).insertInto("tbl1").union(
-        table("a").where($"s" < 10).select(star()).insertInto("tbl2")))
+      unresolvedInsertInto("tbl1", table("a").select(star())).union(
+        unresolvedInsertInto("tbl2", table("a").where($"s" < 10).select(star()))))
     assertEqual(
       "select * from (from a select * select *)",
       table("a").select(star())
@@ -458,7 +459,7 @@ class PlanParserSuite extends AnalysisTest {
         partition: Map[String, Option[String]],
         overwrite: Boolean = false,
         ifPartitionNotExists: Boolean = false): LogicalPlan =
-      InsertIntoStatement(table("s"), partition, Nil, plan, overwrite, ifPartitionNotExists)
+      UnresolvedInsert(table("s"), partition, Nil, plan, overwrite, ifPartitionNotExists)
 
     // Single inserts
     assertEqual(s"insert overwrite table s $sql",
@@ -473,7 +474,7 @@ class PlanParserSuite extends AnalysisTest {
     // Multi insert
     val plan2 = table("t").where($"x" > 5).select(star())
     assertEqual("from t insert into s select * limit 1 insert into u select * where x > 5",
-      plan.limit(1).insertInto("s").union(plan2.insertInto("u")))
+      unresolvedInsertInto("s", plan.limit(1)).union(unresolvedInsertInto("u", plan2)))
   }
 
   test("aggregation") {
@@ -579,11 +580,10 @@ class PlanParserSuite extends AnalysisTest {
         |select *
         |where s < 10
       """.stripMargin,
-      Union(from
+      Union(unresolvedInsertInto("t2", from
         .generate(jsonTuple, alias = Some("jtup"), outputNames = Seq("q", "z"))
-        .select(star())
-        .insertInto("t2"),
-        from.where($"s" < 10).select(star()).insertInto("t3")))
+        .select(star())),
+        unresolvedInsertInto("t3", from.where($"s" < 10).select(star()))))
 
     // Unresolved generator.
     val expected = table("t")
@@ -671,6 +671,85 @@ class PlanParserSuite extends AnalysisTest {
         fragment = fragment3,
         start = 9,
         stop = 115))
+  }
+
+  test("unnest in FROM clause") {
+    def unnest(
+        exprs: Seq[Expression],
+        withOrdinality: Boolean = false): LogicalPlan =
+      Generate(
+        Unnest(exprs, withOrdinality),
+        unrequiredChildIndex = Nil,
+        outer = false,
+        qualifier = None,
+        generatorOutput = Nil,
+        child = OneRowRelation())
+
+    // Single array.
+    assertEqual(
+      "select * from unnest(array(1, 2, 3))",
+      unnest(Seq(UnresolvedFunction("array", Seq(Literal(1), Literal(2), Literal(3)),
+        isDistinct = false))).select(star()))
+
+    // Multiple arrays.
+    assertEqual(
+      "select * from unnest(a, b)",
+      unnest(Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b"))).select(star()))
+
+    // WITH ORDINALITY.
+    assertEqual(
+      "select * from unnest(a) with ordinality",
+      unnest(Seq(UnresolvedAttribute("a")), withOrdinality = true).select(star()))
+
+    // Table alias only.
+    assertEqual(
+      "select * from unnest(a) t",
+      unnest(Seq(UnresolvedAttribute("a"))).as("t").select(star()))
+
+    // Table alias with column aliases.
+    assertEqual(
+      "select * from unnest(a, b) t(x, y)",
+      SubqueryAlias(
+        "t",
+        UnresolvedSubqueryColumnAliases(
+          Seq("x", "y"),
+          unnest(Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b"))))).select(star()))
+
+    // Correlated via LATERAL, with WITH ORDINALITY and column aliases.
+    assertEqual(
+      "select * from t, lateral unnest(t.arr) with ordinality u(v, o)",
+      table("t").lateralJoin(
+        SubqueryAlias(
+          "u",
+          UnresolvedSubqueryColumnAliases(
+            Seq("v", "o"),
+            unnest(Seq(UnresolvedAttribute(Seq("t", "arr"))), withOrdinality = true))))
+        .select(star()))
+
+    // With no arguments the dedicated UNNEST relation rule does not match; the statement instead
+    // parses as a generic table-valued function call named `unnest`, which is not registered and
+    // therefore fails later during analysis rather than at parse time.
+    assertEqual(
+      "select * from unnest()",
+      UnresolvedTableValuedFunction("unnest", Nil).select(star()))
+
+    // `UNNEST` and `ORDINALITY` are non-reserved keywords, so they remain usable as regular
+    // table and column identifiers for backwards compatibility.
+    assertEqual(
+      "select ordinality from unnest",
+      table("unnest").select($"ordinality"))
+    assertEqual(
+      "select unnest.ordinality from unnest",
+      table("unnest").select($"unnest.ordinality"))
+
+    // Quoting the name bypasses the UNNEST relation syntax, so a table-valued function named
+    // `unnest` can still be invoked. This is the escape hatch for the non-reserved keyword.
+    assertEqual(
+      "select * from `unnest`(array(1, 2))",
+      UnresolvedTableValuedFunction(
+        "unnest",
+        Seq(UnresolvedFunction("array", Seq(Literal(1), Literal(2)), isDistinct = false)))
+        .select(star()))
   }
 
   test("joins") {
@@ -1617,7 +1696,7 @@ class PlanParserSuite extends AnalysisTest {
 
     assertEqual(
       "INSERT INTO s SELECT /*+ REPARTITION(100), COALESCE(500), COALESCE(10) */ * FROM t",
-      InsertIntoStatement(table("s"), Map.empty, Nil,
+      UnresolvedInsert(table("s"), Map.empty, Nil,
         UnresolvedHint("REPARTITION", Seq(Literal(100)),
           UnresolvedHint("COALESCE", Seq(Literal(500)),
             UnresolvedHint("COALESCE", Seq(Literal(10)),

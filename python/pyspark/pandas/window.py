@@ -21,24 +21,24 @@ from typing import Any, Callable, Generic, List, Optional
 import numpy as np
 import pandas as pd
 
+from pyspark import pandas as ps  # noqa: F401
 from pyspark.loose_version import LooseVersion
-from pyspark.sql import Window
-from pyspark.sql import functions as F
-from pyspark.sql.internal import InternalFunction as SF
+from pyspark.pandas._typing import FrameLike
+from pyspark.pandas.groupby import DataFrameGroupBy, GroupBy
+from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, SPARK_INDEX_NAME_FORMAT
 from pyspark.pandas.missing.window import (
-    MissingPandasLikeRolling,
-    MissingPandasLikeRollingGroupby,
     MissingPandasLikeExpanding,
     MissingPandasLikeExpandingGroupby,
     MissingPandasLikeExponentialMoving,
     MissingPandasLikeExponentialMovingGroupby,
+    MissingPandasLikeRolling,
+    MissingPandasLikeRollingGroupby,
 )
-from pyspark import pandas as ps  # noqa: F401
-from pyspark.pandas._typing import FrameLike
-from pyspark.pandas.groupby import GroupBy, DataFrameGroupBy
-from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, SPARK_INDEX_NAME_FORMAT
 from pyspark.pandas.utils import scol_for
+from pyspark.sql import Window
+from pyspark.sql import functions as F
 from pyspark.sql.column import Column
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.types import (
     DoubleType,
 )
@@ -3036,11 +3036,12 @@ class ExponentialMovingGroupby(ExponentialMovingLike[FrameLike]):
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.window
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

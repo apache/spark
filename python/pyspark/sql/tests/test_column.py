@@ -15,17 +15,17 @@
 # limitations under the License.
 #
 
-from enum import Enum
-from itertools import chain
 import datetime
 import unittest
 import uuid
+from enum import Enum
+from itertools import chain
 
+from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.sql import Column, Row
 from pyspark.sql import functions as sf
+from pyspark.sql.types import IntegerType, LongType, StringType, StructField, StructType
 from pyspark.sql.window import Window
-from pyspark.sql.types import StructType, StructField, IntegerType, LongType, StringType
-from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import have_pandas, pandas_requirement_message
 
@@ -47,8 +47,8 @@ class ColumnTestsMixin:
         self.assertRaises(ValueError, lambda: not self.df.key == 1)
 
     def test_validate_column_types(self):
-        from pyspark.sql.functions import udf, to_json
         from pyspark.sql.classic.column import _to_java_column
+        from pyspark.sql.functions import to_json, udf
 
         self.assertTrue("Column" in _to_java_column("a").getClass().toString())
         self.assertTrue("Column" in _to_java_column("a").getClass().toString())
@@ -204,7 +204,7 @@ class ColumnTestsMixin:
         self.assertEqual(~75, result["~b"])
 
     def test_with_field(self):
-        from pyspark.sql.functions import lit, col
+        from pyspark.sql.functions import col, lit
 
         df = self.spark.createDataFrame([Row(a=Row(b=1, c=2))])
         self.assertIsInstance(df["a"].withField("b", lit(3)), Column)

@@ -100,30 +100,24 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     val driverUIPort = SparkUI.getUIPort(conf.sparkConf)
     val driverSparkConnectServerPort =
       conf.sparkConf.getInt(CONNECT_GRPC_BINDING_PORT, DEFAULT_SPARK_CONNECT_SERVER_PORT)
+    // 0 is invalid as kubernetes containerPort request, we shall leave it unmounted.
+    val driverContainerPorts = Seq(
+      DRIVER_PORT_NAME -> driverPort,
+      BLOCK_MANAGER_PORT_NAME -> driverBlockManagerPort,
+      UI_PORT_NAME -> driverUIPort,
+      SPARK_CONNECT_SERVER_PORT_NAME -> driverSparkConnectServerPort
+    ).collect { case (name, port) if port != 0 =>
+      new ContainerPortBuilder()
+        .withName(name)
+        .withContainerPort(port)
+        .withProtocol("TCP")
+        .build()
+    }
     val driverContainer = new ContainerBuilder(pod.container)
       .withName(Option(pod.container.getName).getOrElse(DEFAULT_DRIVER_CONTAINER_NAME))
       .withImage(driverContainerImage)
       .withImagePullPolicy(conf.imagePullPolicy)
-      .addNewPort()
-        .withName(DRIVER_PORT_NAME)
-        .withContainerPort(driverPort)
-        .withProtocol("TCP")
-        .endPort()
-      .addNewPort()
-        .withName(BLOCK_MANAGER_PORT_NAME)
-        .withContainerPort(driverBlockManagerPort)
-        .withProtocol("TCP")
-        .endPort()
-      .addNewPort()
-        .withName(UI_PORT_NAME)
-        .withContainerPort(driverUIPort)
-        .withProtocol("TCP")
-        .endPort()
-      .addNewPort()
-        .withName(SPARK_CONNECT_SERVER_PORT_NAME)
-        .withContainerPort(driverSparkConnectServerPort)
-        .withProtocol("TCP")
-        .endPort()
+      .addAllToPorts(driverContainerPorts.asJava)
       .addNewEnv()
         .withName(ENV_SPARK_USER)
         .withValue(Utils.getCurrentUserName())

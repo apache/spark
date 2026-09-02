@@ -74,7 +74,7 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     SchemaUtils.validateVectorCompatibleColumn(schema, getFeaturesCol)
     val schemaWithPredictionCol = SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
-    SchemaUtils.appendColumn(schemaWithPredictionCol, $(probabilityCol), new VectorUDT)
+    SchemaUtils.appendColumn(schemaWithPredictionCol, $(probabilityCol), SQLDataTypes.VectorType)
   }
 }
 
@@ -225,8 +225,9 @@ class GaussianMixtureModel private[ml] (
   private[spark] override def estimatedSize: Long = {
     var size = estimateMatadataSize
     // weights: Array[Double]
-    // gaussians: Array[MultivariateGaussian], each containing a mean Vector and covariance Matrix
-    size += SizeEstimator.estimate((weights, gaussians))
+    size += SizeEstimator.estimate(weights)
+    // gaussians: Array[MultivariateGaussian], each with mean: Vector and cov: Matrix
+    gaussians.foreach(gaussian => size += SizeEstimator.estimate((gaussian.mean, gaussian.cov)))
     size
   }
 

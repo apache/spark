@@ -101,6 +101,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     new MetadataBuilder()
       .putLong("scale", 0)
       .putBoolean("isTimestampNTZ", false)
+      .putBoolean("preferTimestampNanos", false)
       .putBoolean(
         "isSigned",
         dataType.isInstanceOf[NumericType] || dataType.isInstanceOf[StringType])

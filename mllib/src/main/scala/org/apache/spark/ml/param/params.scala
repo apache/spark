@@ -658,6 +658,37 @@ trait Params extends Identifiable with Serializable {
   }
 
   /**
+   * Estimates metadata size while omitting params that can retain shared runtime state.
+   *
+   * A `Param` may hold this state indirectly through a validation closure that captures its
+   * owning instance, which can retain a `SparkSession`. Its value may also be a complex object,
+   * such as an `Estimator` in a `Param[Estimator[_]]`, that retains a `SparkSession`. Exclude
+   * such params to avoid accounting for shared infrastructure.
+   *
+   * @param excluded params to omit from the estimate
+   */
+  private[ml] def estimateMatadataSize(excluded: Seq[Param[_]]): Long = {
+    if (excluded.isEmpty) {
+      estimateMatadataSize
+    } else {
+      val filteredParamMap = mutable.Map.empty[Param[Any], Any]
+      paramMap.toSeq.foreach { pair =>
+        if (!excluded.contains(pair.param)) {
+          filteredParamMap(pair.param.asInstanceOf[Param[Any]]) = pair.value
+        }
+      }
+      val filteredDefaultParamMap = mutable.Map.empty[Param[Any], Any]
+      defaultParamMap.toSeq.foreach { pair =>
+        if (!excluded.contains(pair.param)) {
+          filteredDefaultParamMap(pair.param.asInstanceOf[Param[Any]]) = pair.value
+        }
+      }
+      SizeEstimator.estimate((
+        new ParamMap(filteredParamMap), new ParamMap(filteredDefaultParamMap), uid))
+    }
+  }
+
+  /**
    * Returns all params sorted by their names. The default implementation uses Java reflection to
    * list all public methods that have no arguments and return [[Param]].
    *

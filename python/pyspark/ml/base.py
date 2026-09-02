@@ -15,10 +15,11 @@
 # limitations under the License.
 #
 
-from abc import ABCMeta, abstractmethod
 import copy
 import threading
+from abc import ABCMeta, abstractmethod
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Generic,
@@ -31,17 +32,16 @@ from typing import (
     Union,
     cast,
     overload,
-    TYPE_CHECKING,
 )
 
 from pyspark import since
-from pyspark.ml.param import P
 from pyspark.ml.common import inherit_doc
+from pyspark.ml.param import P
 from pyspark.ml.param.shared import (
-    HasInputCol,
-    HasOutputCol,
-    HasLabelCol,
     HasFeaturesCol,
+    HasInputCol,
+    HasLabelCol,
+    HasOutputCol,
     HasPredictionCol,
     Params,
 )

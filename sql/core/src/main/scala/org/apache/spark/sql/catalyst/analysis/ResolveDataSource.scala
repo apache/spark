@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.analysis.NamedStreamingRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnresolvedDataSource}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, TableProvider}
@@ -112,7 +111,7 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
               import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
               StreamingRelationV2(
                   Some(provider), source, table, dsOptions,
-                  toAttributes(table.columns.asSchema), None, None, v1Relation,
+                  table.columns.toOutputAttributes, None, None, v1Relation,
                   v1DataSource.streamingSourceIdentifyingName)
 
             // fallback to v1
@@ -173,7 +172,7 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
               import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
               StreamingRelationV2(
                   Some(provider), source, table, dsOptions,
-                  toAttributes(table.columns.asSchema), None, None, v1Relation,
+                  table.columns.toOutputAttributes, None, None, v1Relation,
                   v1DataSource.streamingSourceIdentifyingName)
 
             // fallback to v1

@@ -74,9 +74,8 @@ object ColumnSelection {
    * @param columnSelection The user-provided selection. `None` is a no-op and returns `schema`
    *                        unchanged.
    * @param resolver        Determines whether two column names are considered equal. Callers
-   *                        should pass the session resolver, e.g.
-   *                        `session.sessionState.conf.resolver`, so column matching stays
-   *                        consistent with `spark.sql.caseSensitive`.
+   *                        should pass the resolver for the effective `spark.sql.caseSensitive`
+   *                        of the operation being validated.
    */
   def applyToSchema(
       schemaName: String,

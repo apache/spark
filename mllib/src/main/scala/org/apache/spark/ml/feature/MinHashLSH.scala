@@ -24,7 +24,7 @@ import scala.util.Random
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util._
@@ -71,14 +71,12 @@ class MinHashLSHModel private[ml](
 
   @Since("2.1.0")
   override protected[ml] def hashFunction(elems: Vector): Array[Vector] = {
-    require(elems.nonZeroIterator.nonEmpty, "Must have at least 1 non zero entry.")
-    val hashValues = randCoefficients.map { case (a, b) =>
-      elems.nonZeroIterator.map { case (i, _) =>
-        ((1L + i) * a + b) % MinHashLSH.HASH_PRIME
-      }.min.toDouble
-    }
-    // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
-    hashValues.map(Vectors.dense(_))
+    MinHashLSHModel.hashFunction(elems, randCoefficients)
+  }
+
+  override protected[ml] def createTransformFunc: Vector => Array[Vector] = {
+    val localRandCoefficients = randCoefficients
+    elems => MinHashLSHModel.hashFunction(elems, localRandCoefficients)
   }
 
   @Since("2.1.0")
@@ -201,7 +199,7 @@ class MinHashLSH(override val uid: String) extends LSH[MinHashLSHModel] with Has
 
   @Since("2.1.0")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(inputCol), SQLDataTypes.VectorType)
     validateAndTransformSchema(schema)
   }
 
@@ -220,6 +218,20 @@ object MinHashLSH extends DefaultParamsReadable[MinHashLSH] {
 
 @Since("2.1.0")
 object MinHashLSHModel extends MLReadable[MinHashLSHModel] {
+
+  private def hashFunction(
+      elems: Vector,
+      randCoefficients: Array[(Int, Int)]): Array[Vector] = {
+    require(elems.nonZeroIterator.nonEmpty, "Must have at least 1 non zero entry.")
+    val hashValues = randCoefficients.map { case (a, b) =>
+      elems.nonZeroIterator.map { case (i, _) =>
+        ((1L + i) * a + b) % MinHashLSH.HASH_PRIME
+      }.min.toDouble
+    }
+    // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
+    hashValues.map(Vectors.dense(_))
+  }
+
   private[ml] case class Data(randCoefficients: Array[Int])
 
   private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {

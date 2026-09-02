@@ -25,7 +25,9 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SparkPlanGraphCluster, SparkPlanGraphEdge, SparkPlanGraphNode, SQLExecutionUIData, SQLPlanMetric}
-import org.apache.spark.status.api.v1.JacksonMessageWriter
+import org.apache.spark.status.{AppStatusStore, StageDataWrapper}
+import org.apache.spark.status.api.v1.{JacksonMessageWriter, StageData, StageStatus}
+import org.apache.spark.util.kvstore.InMemoryStore
 
 object SqlResourceSuite {
 
@@ -157,6 +159,89 @@ object SqlResourceSuite {
     assert(executionData.errorMessage == null)
     assert(executionData.rootExecutionId == 1)
     assert(executionData.modifiedConfigs == MODIFIED_CONFIGS)
+    // The fixture execution has no stages to aggregate, so the task time is
+    // unknown and reported as -1 rather than a misleading zero.
+    assert(executionData.totalTaskTime == -1L)
+  }
+
+  private def newAppStore(stageDatas: Seq[StageData]): AppStatusStore = {
+    val kvStore = new InMemoryStore()
+    val store = new AppStatusStore(kvStore)
+    stageDatas.foreach { s =>
+      kvStore.write(new StageDataWrapper(s, Set.empty, Map.empty))
+    }
+    store
+  }
+
+  private def stageData(
+      stageId: Int,
+      attemptId: Int,
+      executorRunTime: Long): StageData = {
+    new StageData(
+      status = StageStatus.COMPLETE,
+      stageId = stageId,
+      attemptId = attemptId,
+      numTasks = 1,
+      numActiveTasks = 0,
+      numCompleteTasks = 1,
+      numFailedTasks = 0,
+      numKilledTasks = 0,
+      numCompletedIndices = 1,
+      submissionTime = Some(new Date(0)),
+      firstTaskLaunchedTime = Some(new Date(0)),
+      completionTime = Some(new Date(1)),
+      failureReason = None,
+      executorDeserializeTime = 0,
+      executorDeserializeCpuTime = 0,
+      executorRunTime = executorRunTime,
+      executorCpuTime = 0,
+      resultSize = 0,
+      jvmGcTime = 0,
+      resultSerializationTime = 0,
+      memoryBytesSpilled = 0,
+      diskBytesSpilled = 0,
+      peakExecutionMemory = 0,
+      inputBytes = 0,
+      inputRecords = 0,
+      outputBytes = 0,
+      outputRecords = 0,
+      shuffleRemoteBlocksFetched = 0,
+      shuffleLocalBlocksFetched = 0,
+      shuffleFetchWaitTime = 0,
+      shuffleRemoteBytesRead = 0,
+      shuffleRemoteBytesReadToDisk = 0,
+      shuffleLocalBytesRead = 0,
+      shuffleReadBytes = 0,
+      shuffleReadRecords = 0,
+      shuffleCorruptMergedBlockChunks = 0,
+      shuffleMergedFetchFallbackCount = 0,
+      shuffleMergedRemoteBlocksFetched = 0,
+      shuffleMergedLocalBlocksFetched = 0,
+      shuffleMergedRemoteChunksFetched = 0,
+      shuffleMergedLocalChunksFetched = 0,
+      shuffleMergedRemoteBytesRead = 0,
+      shuffleMergedLocalBytesRead = 0,
+      shuffleRemoteReqsDuration = 0,
+      shuffleMergedRemoteReqsDuration = 0,
+      shuffleWriteBytes = 0,
+      shuffleWriteTime = 0,
+      shuffleWriteRecords = 0,
+      name = null,
+      description = None,
+      details = "",
+      schedulingPool = "",
+      rddIds = Seq.empty,
+      accumulatorUpdates = Seq.empty,
+      tasks = None,
+      executorSummary = None,
+      speculationSummary = None,
+      killedTasksSummary = Map.empty,
+      resourceProfileId = 0,
+      peakExecutorMetrics = None,
+      taskMetricsDistributions = None,
+      executorMetricsDistributions = None,
+      isShufflePushEnabled = false,
+      shuffleMergersCount = 0)
   }
 
 }
@@ -174,7 +259,8 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
   test("Prepare ExecutionData when details = false and planDescription = false") {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        sqlExecutionUIData, SparkPlanGraph(Seq.empty, Seq.empty), false, false)
+        sqlExecutionUIData, SparkPlanGraph(Seq.empty, Seq.empty), false, false,
+        newAppStore(Seq.empty))
     verifyExpectedExecutionData(executionData, edges = Seq.empty,
       nodes = Seq.empty, planDescription = "")
   }
@@ -182,7 +268,8 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
   test("Prepare ExecutionData when details = true and planDescription = false") {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        sqlExecutionUIData, SparkPlanGraph(nodes, edges), true, false)
+        sqlExecutionUIData, SparkPlanGraph(nodes, edges), true, false,
+        newAppStore(Seq.empty))
     verifyExpectedExecutionData(
       executionData,
       nodes = getNodes(),
@@ -193,7 +280,8 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
   test("Prepare ExecutionData when details = true and planDescription = true") {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        sqlExecutionUIData, SparkPlanGraph(nodes, edges), true, true)
+        sqlExecutionUIData, SparkPlanGraph(nodes, edges), true, true,
+        newAppStore(Seq.empty))
     verifyExpectedExecutionData(
       executionData,
       nodes = getNodes(),
@@ -204,7 +292,8 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
   test("Prepare ExecutionData when details = true and planDescription = false and WSCG = off") {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        sqlExecutionUIData, SparkPlanGraph(nodesWhenCodegenIsOff, edges), true, false)
+        sqlExecutionUIData, SparkPlanGraph(nodesWhenCodegenIsOff, edges), true, false,
+        newAppStore(Seq.empty))
     verifyExpectedExecutionData(
       executionData,
       nodes = getExpectedNodesWhenWholeStageCodegenIsOff(),
@@ -237,7 +326,7 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
         d,
-        SparkPlanGraph(nodes, edges), true, true)
+        SparkPlanGraph(nodes, edges), true, true, newAppStore(Seq.empty))
     assert(executionData.status == "FAILED")
     assert(executionData.errorMessage == "now you see me, now you don't")
     assert(executionData.rootExecutionId == 1)
@@ -254,10 +343,39 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
       errorMessage = None, queryId = null)
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        d, SparkPlanGraph(Seq.empty, Seq.empty), false, false)
+        d, SparkPlanGraph(Seq.empty, Seq.empty), false, false, newAppStore(Seq.empty))
     assert(executionData.queryId == null)
     assert(executionData.errorMessage == null)
     assert(executionData.rootExecutionId == -1)
+  }
+
+  test("SPARK-58552: totalTaskTime aggregates executorRunTime across all attempts " +
+      "of all stages") {
+    // Stage 0 has two attempts (10 and 30 ms) - the retried attempt still
+    // consumed task time, so both count. Stage 1 has a single 20 ms attempt.
+    val store = newAppStore(Seq(
+      stageData(stageId = 0, attemptId = 0, executorRunTime = 10L),
+      stageData(stageId = 0, attemptId = 1, executorRunTime = 30L),
+      stageData(stageId = 1, attemptId = 0, executorRunTime = 20L)))
+    val exec = new SQLExecutionUIData(
+      executionId = 0,
+      rootExecutionId = 0,
+      description = "agg",
+      details = "",
+      physicalPlanDescription = "",
+      modifiedConfigs = Map.empty,
+      metrics = Seq.empty,
+      submissionTime = 0L,
+      completionTime = Some(new Date(1L)),
+      jobs = Map.empty[Int, JobExecutionStatus],
+      stages = Set(0, 1),
+      metricValues = Map.empty,
+      errorMessage = None,
+      queryId = null)
+    val executionData =
+      sqlResource invokePrivate prepareExecutionData(
+        exec, SparkPlanGraph(Seq.empty, Seq.empty), false, false, store)
+    assert(executionData.totalTaskTime == 60L)
   }
 
   test("SPARK-57987: JSON serialization of default modifiedConfigs and node desc") {
@@ -279,5 +397,7 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
     assert(executionJson.contains("\"modifiedConfigs\":{}"))
     assert(executionJson.contains(
       "\"nodes\":[{\"nodeId\":0,\"nodeName\":\"Scantext\",\"metrics\":[]}]"))
+    // totalTaskTime defaults to -1 (unknown) when not provided.
+    assert(executionData.totalTaskTime == -1L)
   }
 }
