@@ -21,7 +21,7 @@ import com.fasterxml.jackson.core.{JsonFactory, JsonProcessingException}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
@@ -1649,6 +1649,129 @@ object JsonArray {
     case udt: UserDefinedType[_] => containsUnsupportedJsonType(udt.sqlType)
     case _ => false
   }
+}
+
+// Built-in forms for the plain SQL/JSON constructor and path-function calls that `AstBuilder`
+// routes through function resolution. Each rebuilds its expression with the standard clause
+// defaults when unshadowed.
+
+@ExpressionDescription(
+  usage = "_FUNC_([expr[, ...]]) - Returns a JSON array string with NULL elements dropped.",
+  arguments = """
+    Arguments:
+      * expr - the elements to place in the array.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1, 'x', true);
+       [1,"x",true]
+      > SELECT _FUNC_(1, NULL, 3);
+       [1,3]
+      > SELECT _FUNC_();
+       []
+  """,
+  since = "4.4.0",
+  group = "json_funcs")
+object JsonArrayExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    // A routed call carries no lexical FORMAT JSON, so every element is a plain value (quoted).
+    // Splicing a nested constructor is only reachable via `JSON_ARRAY(...)` syntax (which freezes
+    // the decision lexically); doing so through a routed call is left as a follow-up.
+    val flags = expressions.map(_ => false)
+    JsonArray(expressions, flags, flags, JsonConstructorNullBehavior.Absent, StringType)
+  }
+}
+
+/**
+ * Shared builder for the plain `JSON_VALUE` / `JSON_QUERY` / `JSON_EXISTS` forms. The path must
+ * be a foldable string expression; the parser-only SQL/JSON syntax supplies a string literal,
+ * while ordinary function-call syntax can reach this builder with any constant string expression.
+ */
+abstract class JsonPathExpressionBuilder extends ExpressionBuilder {
+  protected def buildWithPath(jsonExpr: Expression, path: String): Expression
+
+  override final def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    if (expressions.length != 2) {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), expressions.length)
+    }
+    val pathExpr = expressions(1)
+    pathExpr.dataType match {
+      case _: StringType if pathExpr.foldable =>
+        val pathValue = pathExpr.eval()
+        if (pathValue == null) {
+          throw QueryCompilationErrors.unexpectedNullError("path", pathExpr)
+        }
+        buildWithPath(expressions.head, pathValue.toString)
+      case _: StringType =>
+        throw QueryCompilationErrors.nonFoldableArgumentError(
+          funcName, "path", pathExpr.dataType)
+      case _ =>
+        throw QueryCompilationErrors.unexpectedInputDataTypeError(
+          funcName, 2, StringType, pathExpr)
+    }
+  }
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(jsonStr, path) - Extracts a SQL scalar as a string.",
+  arguments = """
+    Arguments:
+      * jsonStr - a JSON string.
+      * path - a SQL/JSON path expression given as a foldable string expression.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('{"id":7,"name":"Ada"}', '$.name');
+       Ada
+  """,
+  since = "4.4.0",
+  group = "json_funcs")
+object JsonValueExpressionBuilder extends JsonPathExpressionBuilder {
+  override protected def buildWithPath(jsonExpr: Expression, path: String): Expression =
+    JsonValue(
+      jsonExpr, path, StringType, JsonValueBehavior.Null, JsonValueBehavior.Null, None, None)
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(jsonStr, path) - Extracts a JSON fragment as JSON text.",
+  arguments = """
+    Arguments:
+      * jsonStr - a JSON string.
+      * path - a SQL/JSON path expression given as a foldable string expression.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('{"a":[1,2]}', '$.a');
+       [1,2]
+  """,
+  since = "4.4.0",
+  group = "json_funcs")
+object JsonQueryExpressionBuilder extends JsonPathExpressionBuilder {
+  override protected def buildWithPath(jsonExpr: Expression, path: String): Expression =
+    JsonQuery(
+      jsonExpr, path, StringType, JsonQueryWrapper.Without, JsonQueryQuotes.Keep,
+      JsonQueryBehavior.Null, JsonQueryBehavior.Null)
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(jsonStr, path) - Returns true if the path selects at least one value.",
+  arguments = """
+    Arguments:
+      * jsonStr - a JSON string.
+      * path - a SQL/JSON path expression given as a foldable string expression.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('{"a":1}', '$.a');
+       true
+      > SELECT _FUNC_('{"a":1}', '$.b');
+       false
+  """,
+  since = "4.4.0",
+  group = "json_funcs")
+object JsonExistsExpressionBuilder extends JsonPathExpressionBuilder {
+  override protected def buildWithPath(jsonExpr: Expression, path: String): Expression =
+    JsonExists(jsonExpr, path, JsonExistsBehavior.False)
 }
 
 /**

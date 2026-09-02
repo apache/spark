@@ -309,11 +309,11 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("JSON_VALUE expressions") {
     import org.apache.spark.sql.catalyst.expressions.JsonValueBehavior
-    // Bare form: default STRING RETURNING, NULL ON EMPTY / NULL ON ERROR.
+    // Bare form (no clause) is an ordinary function call, routed through function resolution; the
+    // registered `json_value` built-in reconstructs the JsonValue when nothing shadows it.
     assertEqual(
       "json_value(a, '$.b')",
-      JsonValue($"a", "$.b", StringType, JsonValueBehavior.Null, JsonValueBehavior.Null,
-        None, None))
+      UnresolvedFunction("json_value", Seq($"a", Literal("$.b")), isDistinct = false))
     // RETURNING.
     assertEqual(
       "json_value(a, '$.b' RETURNING INT)",
@@ -333,8 +333,10 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("JSON_EXISTS expressions") {
     import org.apache.spark.sql.catalyst.expressions.JsonExistsBehavior
-    // Bare form defaults to FALSE ON ERROR.
-    assertEqual("json_exists(a, '$.b')", JsonExists($"a", "$.b", JsonExistsBehavior.False))
+    // Bare form (no clause) is an ordinary function call, routed through function resolution.
+    assertEqual(
+      "json_exists(a, '$.b')",
+      UnresolvedFunction("json_exists", Seq($"a", Literal("$.b")), isDistinct = false))
     assertEqual(
       "json_exists(a, '$.b' TRUE ON ERROR)", JsonExists($"a", "$.b", JsonExistsBehavior.True))
     assertEqual(
@@ -349,11 +351,10 @@ class ExpressionParserSuite extends AnalysisTest {
   test("JSON_QUERY expressions") {
     import org.apache.spark.sql.catalyst.expressions.{JsonQueryBehavior, JsonQueryQuotes,
       JsonQueryWrapper}
-    // Bare form: default STRING RETURNING, WITHOUT wrapper, KEEP quotes, NULL ON EMPTY / ON ERROR.
+    // Bare form (no clause) is an ordinary function call, routed through function resolution.
     assertEqual(
       "json_query(a, '$.b')",
-      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Without, JsonQueryQuotes.Keep,
-        JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+      UnresolvedFunction("json_query", Seq($"a", Literal("$.b")), isDistinct = false))
     // WITH ARRAY WRAPPER defaults to UNCONDITIONAL; the ARRAY word is optional.
     assertEqual(
       "json_query(a, '$.b' WITH ARRAY WRAPPER)",

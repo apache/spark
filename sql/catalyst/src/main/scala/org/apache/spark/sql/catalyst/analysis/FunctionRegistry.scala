@@ -1025,7 +1025,13 @@ object FunctionRegistry {
     expression[SchemaOfJson]("schema_of_json"),
     expression[LengthOfJsonArray]("json_array_length"),
     expression[JsonObjectKeys]("json_object_keys"),
-    expression[JsonTypeof]("json_typeof")
+    expression[JsonTypeof]("json_typeof"),
+    // Built-in forms of the SQL:2016 JSON constructor and path functions, resolved for plain calls
+    // that carry no SQL/JSON clauses (the dedicated grammar handles clause-bearing syntax).
+    expressionBuilder("json_value", JsonValueExpressionBuilder),
+    expressionBuilder("json_query", JsonQueryExpressionBuilder),
+    expressionBuilder("json_exists", JsonExistsExpressionBuilder),
+    expressionBuilder("json_array", JsonArrayExpressionBuilder)
   )
 
   private def variantExpressions: Seq[FunctionRegistryEntry] = Seq(

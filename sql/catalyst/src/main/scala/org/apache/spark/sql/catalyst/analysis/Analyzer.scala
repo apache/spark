@@ -2105,21 +2105,11 @@ class Analyzer(
      * This is used for special syntax transformations (e.g., COUNT(*) -> COUNT(1)) that
      * should only apply to builtin functions, not to user-defined functions.
      *
-     * When the effective SQL PATH puts `system.session` before `system.builtin`, temp
-     * functions shadow builtins, so an unqualified name that matches a temp function
-     * should NOT be treated as builtin.
+     * Mirrors function resolution precedence, including SQL PATH shadowing for unqualified names
+     * and `spark.sql.legacy.persistentCatalogFirst` for two-part `builtin.name` references.
      */
-    private def matchesFunctionName(nameParts: Seq[String], expectedName: String): Boolean = {
-      if (!FunctionResolution.isUnqualifiedOrBuiltinFunctionName(nameParts, expectedName)) {
-        return false
-      }
-      if (nameParts.size == 1 && functionResolution.isSessionBeforeBuiltinInPath) {
-        val v1Catalog = catalogManager.v1SessionCatalog
-        !v1Catalog.isTemporaryFunction(FunctionIdentifier(nameParts.head))
-      } else {
-        true
-      }
-    }
+    private def matchesFunctionName(nameParts: Seq[String], expectedName: String): Boolean =
+      functionResolution.functionNameResolvesToBuiltin(nameParts, expectedName)
 
     /**
      * Expands the matching attribute.*'s in `child`'s output.
@@ -2135,6 +2125,13 @@ class Analyzer(
           // the same qualification.
           f0.copy(arguments = Seq(Literal(1)))
         case f1: UnresolvedFunction if containsStar(f1.arguments) =>
+          // A routed SQL/JSON constructor (json_array(*)) forbids a bare `*`; reject it rather than
+          // expand below. A nested star (json_array(array(*))) is expanded bottom-up before we get
+          // here, and count(*) is rewritten above -- so only a bare `*` reaches this guard.
+          if (functionResolution.resolvesToStarDisallowedJsonConstructor(f1.nameParts)) {
+            throw QueryCompilationErrors.invalidStarUsageError(
+              s"expression `${f1.prettyName}`", extractStar(f1.arguments))
+          }
           // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*) will
           // be expanded while count(*) will be converted to count(1). They will produce different
           // results and confuse users if there are any null values. For count(t1.*, t2.*), it is

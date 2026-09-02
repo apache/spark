@@ -77,22 +77,6 @@ class FunctionResolution(
       nameParts.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME)
 
   /**
-   * True iff `system.session` is searched before `system.builtin` in the effective SQL PATH.
-   *
-   * Drives the `count(*) -> count(1)` rewrite (which must skip transformation when a temp
-   * `count` shadows the builtin) and the `SessionCatalog` security check that blocks creating
-   * a temp function with a builtin's name. Reads the live PATH via `CatalogManager` and
-   * applies the same kinds extraction that drives `SessionCatalog`'s fast-path provider, so
-   * the predicate stays in sync with the lookup loop's actual order. Uses the consolidated
-   * snapshot helper (SPARK-56939) so the (catalog, namespace, path) triple is observed
-   * atomically.
-   */
-  def isSessionBeforeBuiltinInPath: Boolean = {
-    catalogManager.sessionFunctionKindsForUnqualifiedResolution().headOption
-      .contains(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Temp)
-  }
-
-  /**
    * Produces the ordered list of candidate names for resolution. Expansion happens in two cases:
    *
    * 1. Single-part names: expanded via [[CatalogManager.sqlResolutionPathEntries]] (same list as
@@ -401,6 +385,87 @@ class FunctionResolution(
       case None =>
         if (n == 1) v1SessionCatalog.lookupBuiltinOrTempTableFunction(nameParts.head)
         else None
+    }
+  }
+
+  /**
+   * Returns whether an unqualified function name reaches `system.builtin` before any temp or
+   * persistent function in the effective SQL PATH. When a temp or persistent function shadows the
+   * builtin, special-syntax rewrites (e.g. `count(*) -> count(1)`) must not fire, since the name no
+   * longer refers to Spark's builtin.
+   */
+  def unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow(functionName: String): Boolean = {
+    // Walk the PATH in order and stop at the first entry that owns the name. The default order puts
+    // system.builtin first, so the common case returns on the first entry with no catalog lookup;
+    // only a custom PATH that lists a persistent catalog ahead of system.builtin reaches the probe
+    // below (one lookup per such preceding entry, recomputed on each call -- not cached).
+    sqlResolutionPathEntriesForAnalysis.foreach { pathEntry =>
+      val candidate = pathEntry :+ functionName
+      FunctionResolution.sessionNamespaceKind(candidate) match {
+        case Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Builtin) =>
+          return true
+        case Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Temp) =>
+          if (v1SessionCatalog.isTemporaryFunction(FunctionIdentifier(functionName))) {
+            return false
+          }
+        case None =>
+          if (persistentFunctionExists(candidate)) {
+            return false
+          }
+      }
+    }
+    false
+  }
+
+  /**
+   * Returns true when a function reference resolves to the system built-in with the requested name.
+   * This mirrors [[resolveFunction]] for special parser/analyzer rewrites that must run only for
+   * Spark's built-ins. In particular, two-part `builtin.name` is not always a system built-in:
+   * with `spark.sql.legacy.persistentCatalogFirst=true`, an existing persistent
+   * `current_catalog.builtin.name` takes precedence.
+   */
+  def functionNameResolvesToBuiltin(nameParts: Seq[String], expectedName: String): Boolean = {
+    if (!FunctionRegistry.functionSet.contains(
+          FunctionRegistry.builtinFunctionIdentifier(expectedName)) ||
+        !FunctionResolution.isUnqualifiedOrBuiltinFunctionName(nameParts, expectedName)) {
+      return false
+    }
+    nameParts.length match {
+      case 1 =>
+        unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow(nameParts.head)
+      case 2 =>
+        conf.prioritizeSystemCatalog || !persistentFunctionExists(nameParts)
+      case 3 =>
+        true
+      case _ =>
+        false
+    }
+  }
+
+  private val starDisallowedJsonConstructors =
+    Set("json_array", "json_exists", "json_query", "json_value")
+
+  /** True if `nameParts` resolves to a built-in SQL/JSON constructor that forbids bare `*`. */
+  def resolvesToStarDisallowedJsonConstructor(nameParts: Seq[String]): Boolean =
+    starDisallowedJsonConstructors.exists(functionNameResolvesToBuiltin(nameParts, _))
+
+  private def persistentFunctionExists(nameParts: Seq[String]): Boolean = {
+    try {
+      // Expand through the view's frozen catalog/namespace exactly as `resolveFunctionCandidate`
+      // does, so the shadow probe queries the same catalog the real resolver would inside a view.
+      relationResolution.expandIdentifier(nameParts) match {
+        case CatalogAndIdentifier(catalog, ident) =>
+          catalog.asFunctionCatalog.functionExists(ident)
+        case _ =>
+          false
+      }
+    } catch {
+      case _: NoSuchFunctionException
+         | _: NoSuchNamespaceException
+         | _: CatalogNotFoundException =>
+        false
+      case e: AnalysisException if e.getCondition == "FORBIDDEN_OPERATION" =>
+        false
     }
   }
 
