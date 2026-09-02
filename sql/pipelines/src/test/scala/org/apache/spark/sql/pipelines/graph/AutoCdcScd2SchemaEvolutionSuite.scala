@@ -75,40 +75,71 @@ class AutoCdcScd2SchemaEvolutionSuite
 
   test("legacy SCD2 CDC metadata schema evolves to include the version map") {
     val targetName = s"$catalog.$namespace.target"
+    val auxiliaryName = auxTableNameFor("target")
     val cdcMetadataCol = AutoCdcReservedNames.cdcMetadataColName
     val recordStartAt = Scd2BatchProcessor.recordStartAtFieldName
+    val legacyMetadataDdl =
+      s"${Scd2BatchProcessor.startAtColName} BIGINT, " +
+      s"${Scd2BatchProcessor.endAtColName} BIGINT, " +
+      s"$cdcMetadataCol STRUCT<$recordStartAt:BIGINT> NOT NULL"
     spark.sql(
       s"CREATE TABLE $targetName " +
       s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, " +
-      s"${Scd2BatchProcessor.startAtColName} BIGINT, " +
-      s"${Scd2BatchProcessor.endAtColName} BIGINT, " +
-      s"$cdcMetadataCol STRUCT<$recordStartAt:BIGINT> NOT NULL)"
+      s"$legacyMetadataDdl)"
+    )
+    // Pre-create the auxiliary table too, so both persisted SCD2 schemas take the upgrade path.
+    spark.sql(
+      s"""CREATE TABLE $auxiliaryName """ +
+      s"""(id INT, name STRING, version BIGINT, $legacyMetadataDdl, """ +
+      s"""${Scd2BatchProcessor.deletedByBatchIdColName} BIGINT) """ +
+      s"""TBLPROPERTIES (""" +
+      s"""'${AutoCdcAuxiliaryTable.scdTypePropertyKey}' = '${ScdType.Type2.label}', """ +
+      s"""'${AutoCdcAuxiliaryTable.keyColumnNamesProperty}' = '["id"]', """ +
+      s"""'${AutoCdcAuxiliaryTable.trackHistoryColumnNamesProperty}' = '["name"]')"""
     )
     spark.sql(
-      s"INSERT INTO $targetName SELECT 1, 'alice', CAST(1 AS BIGINT), " +
+      s"INSERT INTO $targetName SELECT 1, 'alice', CAST(5 AS BIGINT), " +
       s"CAST(1 AS BIGINT), CAST(NULL AS BIGINT), " +
-      s"named_struct('$recordStartAt', CAST(1 AS BIGINT))"
+      s"named_struct('$recordStartAt', CAST(5 AS BIGINT))"
+    )
+    spark.sql(
+      s"INSERT INTO $auxiliaryName SELECT 1, 'alice', CAST(1 AS BIGINT), " +
+      s"CAST(1 AS BIGINT), CAST(NULL AS BIGINT), " +
+      s"named_struct('$recordStartAt', CAST(1 AS BIGINT)), CAST(NULL AS BIGINT)"
     )
 
     val stream = MemoryStream[(Int, String, Long)]
-    stream.addData((2, "bob", 2L))
+    // Reconcile both legacy rows: one event extends their run, and the next closes it.
+    stream.addData((1, "alice", 3L), (1, "alicia", 6L))
     runPipeline(singleAutoCdcFlowPipeline(
       flowName = "auto_cdc_flow",
       target = "target",
       sourceDf = stream.toDF().toDF("id", "name", "version"),
       keys = Seq("id"),
       sequencing = functions.col("version"),
-      scdType = ScdType.Type2))
+      scdType = ScdType.Type2,
+      trackHistorySelection =
+        Option(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name"))))))
 
     val target = spark.table(targetName)
+    val expectedMetadataSchema = Scd2BatchProcessor.cdcMetadataColSchema(LongType)
     assert(
-      target.schema(cdcMetadataCol).dataType ===
-        Scd2BatchProcessor.cdcMetadataColSchema(LongType).asNullable)
+      target.schema(cdcMetadataCol).dataType === expectedMetadataSchema.asNullable)
+    assert(
+      spark.table(auxiliaryName).schema(cdcMetadataCol).dataType ===
+        expectedMetadataSchema)
     checkAnswer(
       target,
       Seq(
-        Row(1, "alice", 1L, 1L, null, scd2Meta(1L)),
-        Row(2, "bob", 2L, 2L, null, scd2Meta(2L))
+        Row(1, "alice", 5L, 1L, 6L, scd2Meta(5L)),
+        Row(1, "alicia", 6L, 6L, null, scd2Meta(6L))
+      )
+    )
+    checkAnswer(
+      spark.table(auxiliaryName),
+      Seq(
+        Row(1, "alice", 1L, 1L, null, scd2Meta(1L), null),
+        Row(1, "alice", 3L, 1L, null, scd2Meta(3L), null)
       )
     )
   }

@@ -70,7 +70,7 @@ import org.apache.spark.sql.types.{BooleanType, MapType, StringType}
  * after creation, it does not change the set of columns whose null values are considered
  * authored/unauthored. Therefore authorship information encoded by the mutated version map is
  * still invariant, and independent of a changing ignore-null configuration. New rows materialized
- * in the map are still compliant to whatever the ignore-null selection was at ingestion time.
+ * in the map are still compliant with whatever the ignore-null selection was at ingestion time.
  */
 private[pipelines] object Scd2VersionMap {
 
