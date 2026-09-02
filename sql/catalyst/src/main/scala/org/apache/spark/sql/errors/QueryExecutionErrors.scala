@@ -43,11 +43,11 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
+import org.apache.spark.sql.catalyst.plans.physical.KeyReducer
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{sideBySide, CharsetProvider, DateTimeUtils, FailFastMode, IntervalUtils, MapData}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
@@ -3174,12 +3174,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def storagePartitionJoinIncompatibleReducedTypesError(
-      leftReducers: Option[Seq[Option[Reducer[_, _]]]],
+      leftReducers: Option[Seq[Option[KeyReducer]]],
       leftReducedDataTypes: Seq[DataType],
-      rightReducers: Option[Seq[Option[Reducer[_, _]]]],
+      rightReducers: Option[Seq[Option[KeyReducer]]],
       rightReducedDataTypes: Seq[DataType]): Throwable = {
-    def reducersNames(reducers: Option[Seq[Option[Reducer[_, _]]]]) = {
-      reducers.toSeq.flatMap(_.map(_.map(_.displayName()).getOrElse("identity")))
+    def reducersNames(reducers: Option[Seq[Option[KeyReducer]]]) = {
+      reducers.toSeq.flatMap(_.map(_.map(_.reducer.displayName()).getOrElse("identity")))
         .mkString("[", ", ", "]")
     }
 

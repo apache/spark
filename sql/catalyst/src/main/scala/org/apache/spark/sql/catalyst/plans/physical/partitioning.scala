@@ -503,7 +503,7 @@ case class KeyedPartitioning(
    * Returns the reduced keys and their data types.
    */
   def reduceKeys(
-      reducers: Seq[Option[Reducer[_, _]]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) =
+      reducers: Seq[Option[KeyReducer]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) =
     KeyedPartitioning.reduceKeys(partitionKeys, keyDataTypes, reducers)
 
   override def satisfies0(required: Distribution): Boolean = {
@@ -622,9 +622,9 @@ object KeyedPartitioning {
   def reduceKeys(
       keys: Seq[InternalRowComparableWrapper],
       dataTypes: Seq[DataType],
-      reducers: Seq[Option[Reducer[_, _]]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) = {
+      reducers: Seq[Option[KeyReducer]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) = {
     val reducedDataTypes = dataTypes.zip(reducers).map {
-      case (_, Some(reducer: Reducer[Any, Any])) => reducer.resultType()
+      case (_, Some(KeyReducer(reducer: Reducer[Any, Any], _))) => reducer.resultType()
       case (t, _) => t
     }
     val comparableKeyWrapperFactory =
@@ -632,7 +632,7 @@ object KeyedPartitioning {
     val reducedKeys = keys.map { key =>
       val keyValues = key.row.toSeq(dataTypes)
       val reducedKey = keyValues.zip(reducers).map {
-        case (v, Some(reducer: Reducer[Any, Any])) => reducer.reduce(v)
+        case (v, Some(KeyReducer(reducer: Reducer[Any, Any], _))) => reducer.reduce(v)
         case (v, _) => v
       }.toArray
       comparableKeyWrapperFactory(new GenericInternalRow(reducedKey))
@@ -976,6 +976,48 @@ case class CoalescedHashShuffleSpec(
 }
 
 /**
+ * A [[Reducer]] paired with the reduced partition expression it produces.
+ *
+ * When a key-grouped partitioning is reduced onto another partitioning's key space, the original
+ * partition expressions no longer describe the reduced keys (their data type and their value are
+ * those of the target key space). This pair carries both the reducer and the expression the
+ * reduced keys correspond to, so the output partitioning can report a type-correct expression.
+ *
+ * @param reducer reducer that maps this side's partition key values onto the other side's key space
+ * @param reducedExpression expression whose data type matches the reduced keys. Stored as-is from
+ *                          the expression pair that produced the reducer; the only structural
+ *                          consumer, `GroupPartitionsExec`, re-targets it at each reported
+ *                          `KeyedPartitioning`'s own key attribute in `outputPartitioning` and
+ *                          normalizes it positionally in `doCanonicalize`, so the attribute it
+ *                          carries here is not load-bearing.
+ */
+case class KeyReducer(reducer: Reducer[_, _], reducedExpression: TransformExpression)
+
+/**
+ * A [[Reducer]] that reduces an identity transform onto a partition transform: it applies the
+ * given partition transform to the raw value of the identity transform's key. For instance, an
+ * `identity(id)` side joined to a `bucket(4, id)` side reduces with
+ * `IdentityReducer(bucket(4, id))`, which maps each raw id value to its `bucket(4, id)` value.
+ *
+ * It is a case class so that structurally identical reducers compare by value, and plans holding
+ * them stay canonicalization-equal.
+ *
+ * @param transform the partition transform, re-targeted at the identity side's key attribute
+ */
+case class IdentityReducer(transform: TransformExpression) extends Reducer[Any, Any] {
+  // `transform` has a single leaf attribute (`KeyedPartitioning.supportsExpressions`), which is
+  // bound to ordinal 0 of the single-value row `reduce` evaluates it against.
+  @transient private lazy val bound: Expression =
+    BindReferences.bindReference(transform, AttributeSeq(transform.references.toSeq))
+
+  override def reduce(v: Any): Any = bound.eval(new GenericInternalRow(Array[Any](v)))
+
+  override def resultType(): DataType = transform.dataType
+
+  override def displayName(): String = transform.toString
+}
+
+/**
  * [[ShuffleSpec]] created by [[KeyedPartitioning]].
  *
  * @param partitioning key grouped partitioning
@@ -1066,44 +1108,82 @@ case class KeyedShuffleSpec(
     }
 
   /**
-   * Return a set of [[Reducer]] for the partition expressions of this shuffle spec,
-   * on the partition expressions of another shuffle spec.
+   * Compute the reducers for both sides of a join between this shuffle spec and `other`, in a
+   * single pass over the two sides' partition expressions. A pair's reducer lookups
+   * (`TransformExpression.reducers`) are shared between the two directions: the reverse lookup a
+   * direction needs to detect a single-side reduce is exactly the other direction's reducer, so
+   * this materializes each catalog `Reducer` once per direction.
    * <p>
-   * A [[Reducer]] exists for a partition expression function of this shuffle spec if it is
-   * 'reducible' on the corresponding partition expression function of the other shuffle spec.
+   * A [[Reducer]] exists for a partition expression of one side if it is 'reducible' on the
+   * corresponding partition expression of the other side. If a side's value is returned, there
+   * must be one entry per partition expression of that side. A None entry indicates that the
+   * particular partition expression is not reducible on the corresponding expression.
    * <p>
-   * If a value is returned, there must be one [[Reducer]] per partition expression.
-   * A None value in the set indicates that the particular partition expression is not reducible
-   * on the corresponding expression on the other shuffle spec.
-   * <p>
-   * Returning none also indicates that none of the partition expressions can be reduced on the
-   * corresponding expression on the other shuffle spec.
+   * Returning none for a side indicates that none of its partition expressions can be reduced on
+   * the corresponding expression of the other side.
    *
    * @param other other key-grouped shuffle spec
+   * @return the reducers for this side and for `other` w.r.t. each other
    */
-  def reducers(other: KeyedShuffleSpec): Option[Seq[Option[Reducer[_, _]]]] = {
-    val results = partitioning.expressions.zip(other.partitioning.expressions).map {
-      case (e1: TransformExpression, e2: TransformExpression) => e1.reducers(e2)
+  def reducersBothWays(other: KeyedShuffleSpec)
+      : (Option[Seq[Option[KeyReducer]]], Option[Seq[Option[KeyReducer]]]) = {
+    val results: Seq[(Option[KeyReducer], Option[KeyReducer])] =
+      partitioning.expressions.zip(other.partitioning.expressions).map {
+      case (e1: TransformExpression, e2: TransformExpression) =>
+        val thisReducer = e1.reducers(e2)
+        val otherReducer = e2.reducers(e1)
+
+        val thisResult = thisReducer.map { reducer =>
+          if (otherReducer.isEmpty) {
+            // Only this side reduces. The reducer contract is r(f1(x)) = f2(x) where "=" matches
+            // both value and data type, so the reduced keys equal the target transform applied to
+            // this side's child. Report the target transform (re-targeted at the reporting
+            // partitioning's key attribute by `GroupPartitionsExec`) instead of the un-reduced
+            // `e1`, whose type can differ from the reduced keys. A connector that violates the
+            // contract with a reducer of a different result type fails the reduced-types check in
+            // `EnsureRequirements`, since the other side's keys are typed by the target transform.
+            KeyReducer(reducer, e2)
+          } else {
+            // Both sides reduce: the reduced keys are r1(f1(x)) = r2(f2(x)), which no single
+            // transform describes. Keep reporting the original expression; its type can differ
+            // from the reduced keys, which a downstream shuffle or grouping can then fail on with
+            // a ClassCastException. Known gap, tracked in SPARK-59121.
+            KeyReducer(reducer, e1)
+          }
+        }
+
+        val otherResult = otherReducer.map { reducer =>
+          if (thisReducer.isEmpty) {
+            // Only the other side reduces; symmetric to the single-side case above.
+            KeyReducer(reducer, e1)
+          } else {
+            // Both sides reduce; symmetric to the both-sides case above.
+            KeyReducer(reducer, e2)
+          }
+        }
+
+        (thisResult, otherResult)
 
       // Identity transform on this side, arbitrary transform on the other side: create a reducer
-      // that applies the other's transform to the raw identity values. The symmetric case
-      // (TransformExpression, AttributeReference) is handled when the other side calls reducers.
-      // Each partition expression is guaranteed to have exactly one leaf child (asserted in
-      // keyPositions), so `a` lives at position 0 in the row we construct.
+      // that applies the other's transform to the raw identity values. Each partition expression
+      // is guaranteed to have exactly one leaf child (asserted in keyPositions), which
+      // `IdentityReducer` binds to ordinal 0.
       case (a: AttributeReference, t: TransformExpression) =>
-        val reducerExpr = t.transform { case _: AttributeReference => a }
-        val boundExpr = BindReferences.bindReference(reducerExpr, AttributeSeq(Seq(a)))
-        Some(new Reducer[Any, Any] {
-          override def reduce(v: Any): Any = boundExpr.eval(new GenericInternalRow(Array[Any](v)))
-          override def resultType(): DataType = reducerExpr.dataType
-          override def displayName(): String = reducerExpr.toString
-        })
+        (Some(KeyReducer(IdentityReducer(t.withReference(a)), t)), None)
 
-      case (_, _) => None
+      // Symmetric: identity transform on the other side.
+      case (t: TransformExpression, a: AttributeReference) =>
+        (None, Some(KeyReducer(IdentityReducer(t.withReference(a)), t)))
+
+      case (_, _) => (None, None)
     }
 
     // optimize to not return a value, if none of the partition expressions are reducible
-    if (results.forall(p => p.isEmpty)) None else Some(results)
+    val thisReducers = results.map(_._1)
+    val otherReducers = results.map(_._2)
+    val thisResult = if (thisReducers.forall(_.isEmpty)) None else Some(thisReducers)
+    val otherResult = if (otherReducers.forall(_.isEmpty)) None else Some(otherReducers)
+    (thisResult, otherResult)
   }
 
   override def canCreatePartitioning: Boolean =
