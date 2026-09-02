@@ -1782,13 +1782,8 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
         spark.range(20, 40, 1, 1).selectExpr("id % 5 AS k")
           .write.bucketBy(4, "k").saveAsTable("t2")
 
-        val query =
-          "SELECT k, count(*) c FROM (SELECT k FROM t1 UNION ALL SELECT k FROM t2) GROUP BY k"
-        val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
-          sql(query).collect()
-        }
-
-        val df = sql(query)
+        val df = sql(
+          "SELECT k, count(*) c FROM (SELECT k FROM t1 UNION ALL SELECT k FROM t2) GROUP BY k")
         val plan = df.queryExecution.executedPlan
         // `FileSourceScanExec` overrides `supportsColumnar` but not `supportsRowBased`, whose
         // default is its negation, so a bucketed batch-readable scan is columnar-only and so is
@@ -1803,7 +1798,10 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
         assert(plan.collect { case s: ShuffleExchangeExec => s }.isEmpty,
           "the aggregate's exchange must have been dropped, or the test exercises nothing")
 
-        checkAnswer(df, correctResult.toImmutableArraySeq)
+        // Interleaving puts a key's bucket from each table in one partition, so its eight rows
+        // land together; concatenating would split them and the exchange-free aggregate would
+        // report the key twice with four.
+        checkAnswer(df, (0L until 5L).map(k => Row(k, 8L)))
       }
     }
   }
