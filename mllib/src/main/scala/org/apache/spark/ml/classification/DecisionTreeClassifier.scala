@@ -185,6 +185,7 @@ class DecisionTreeClassificationModel private[ml] (
     @Since("1.6.0")override val numFeatures: Int,
     @Since("1.5.0")override val numClasses: Int)
   extends ProbabilisticClassificationModel[Vector, DecisionTreeClassificationModel]
+  with ProbabilisticClassificationModelTransform[Vector, DecisionTreeClassificationModel]
   with DecisionTreeModel with DecisionTreeClassifierParams with MLWritable with Serializable {
 
   require(rootNode != null,
@@ -209,53 +210,18 @@ class DecisionTreeClassificationModel private[ml] (
     rootNode.predictImpl(features).prediction
   }
 
-  override protected def predictRawColumn(features: Column): Column = {
+  override protected def predictRawFunction: Vector => Vector = {
     val localRootNode = rootNode
-    udf((features: Vector) =>
-      DecisionTreeClassificationModel.predictRaw(features, localRootNode)
-    ).apply(features)
+    features => DecisionTreeClassificationModel.predictRaw(features, localRootNode)
   }
 
-  override protected def raw2probabilityColumn(rawPrediction: Column): Column = {
-    udf((rawPrediction: Vector) =>
-      DecisionTreeClassificationModel.raw2probability(rawPrediction)
-    ).apply(rawPrediction)
+  override protected def raw2probabilityFunction: Vector => Vector = {
+    rawPrediction => DecisionTreeClassificationModel.raw2probability(rawPrediction)
   }
 
-  override protected def predictProbabilityColumn(features: Column): Column = {
+  override protected def predictionFunction: Vector => Double = {
     val localRootNode = rootNode
-    udf((features: Vector) => {
-      val rawPrediction = DecisionTreeClassificationModel.predictRaw(features, localRootNode)
-      DecisionTreeClassificationModel.raw2probability(rawPrediction)
-    }).apply(features)
-  }
-
-  override protected def raw2predictionColumn(rawPrediction: Column): Column = {
-    if (isDefined(thresholds)) {
-      val localThresholds = getThresholds.clone()
-      udf((rawPrediction: Vector) => {
-        val probability = DecisionTreeClassificationModel.raw2probability(rawPrediction)
-        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
-      }).apply(rawPrediction)
-    } else {
-      udf((rawPrediction: Vector) => rawPrediction.argmax.toDouble).apply(rawPrediction)
-    }
-  }
-
-  override protected def probability2predictionColumn(probability: Column): Column = {
-    if (isDefined(thresholds)) {
-      val localThresholds = getThresholds.clone()
-      udf((probability: Vector) =>
-        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
-      ).apply(probability)
-    } else {
-      udf((probability: Vector) => probability.argmax.toDouble).apply(probability)
-    }
-  }
-
-  override protected def predictionColumn(features: Column): Column = {
-    val localRootNode = rootNode
-    udf((features: Vector) => localRootNode.predictImpl(features).prediction).apply(features)
+    features => localRootNode.predictImpl(features).prediction
   }
 
   @Since("3.0.0")

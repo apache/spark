@@ -242,6 +242,7 @@ class GBTClassificationModel private[ml](
     @Since("1.6.0") override val numFeatures: Int,
     @Since("2.2.0") override val numClasses: Int)
   extends ProbabilisticClassificationModel[Vector, GBTClassificationModel]
+  with ProbabilisticClassificationModelTransform[Vector, GBTClassificationModel]
   with GBTClassifierParams with TreeEnsembleModel[DecisionTreeRegressionModel]
   with MLWritable with Serializable {
 
@@ -313,73 +314,34 @@ class GBTClassificationModel private[ml](
     }
   }
 
-  override protected def predictRawColumn(features: Column): Column = {
+  override protected def predictRawFunction: Vector => Vector = {
     val localRootNodes = _trees.map(_.rootNode)
     val localTreeWeights = _treeWeights.clone()
-    udf((features: Vector) =>
-      GBTClassificationModel.predictRaw(features, localRootNodes, localTreeWeights)
-    ).apply(features)
+    features => GBTClassificationModel.predictRaw(features, localRootNodes, localTreeWeights)
   }
 
-  override protected def raw2probabilityColumn(rawPrediction: Column): Column = {
+  override protected def raw2probabilityFunction: Vector => Vector = {
     val localLoss = loss
-    udf((rawPrediction: Vector) =>
-      GBTClassificationModel.raw2probability(rawPrediction, localLoss)
-    ).apply(rawPrediction)
+    rawPrediction => GBTClassificationModel.raw2probability(rawPrediction, localLoss)
   }
 
-  override protected def predictProbabilityColumn(features: Column): Column = {
-    val localRootNodes = _trees.map(_.rootNode)
-    val localTreeWeights = _treeWeights.clone()
-    val localLoss = loss
-    udf((features: Vector) => {
-      val rawPrediction =
-        GBTClassificationModel.predictRaw(features, localRootNodes, localTreeWeights)
-      GBTClassificationModel.raw2probability(rawPrediction, localLoss)
-    }).apply(features)
-  }
-
-  override protected def raw2predictionColumn(rawPrediction: Column): Column = {
-    if (isDefined(thresholds)) {
-      val localThresholds = getThresholds.clone()
-      val localLoss = loss
-      udf((rawPrediction: Vector) => {
-        val probability = GBTClassificationModel.raw2probability(rawPrediction, localLoss)
-        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
-      }).apply(rawPrediction)
-    } else {
-      udf((rawPrediction: Vector) => rawPrediction.argmax.toDouble).apply(rawPrediction)
-    }
-  }
-
-  override protected def probability2predictionColumn(probability: Column): Column = {
-    if (isDefined(thresholds)) {
-      val localThresholds = getThresholds.clone()
-      udf((probability: Vector) =>
-        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
-      ).apply(probability)
-    } else {
-      udf((probability: Vector) => probability.argmax.toDouble).apply(probability)
-    }
-  }
-
-  override protected def predictionColumn(features: Column): Column = {
+  override protected def predictionFunction: Vector => Double = {
     val localRootNodes = _trees.map(_.rootNode)
     val localTreeWeights = _treeWeights.clone()
     if (isDefined(thresholds)) {
       val localThresholds = getThresholds.clone()
       val localLoss = loss
-      udf((features: Vector) => {
+      features => {
         val rawPrediction =
           GBTClassificationModel.predictRaw(features, localRootNodes, localTreeWeights)
         val probability = GBTClassificationModel.raw2probability(rawPrediction, localLoss)
         ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
-      }).apply(features)
+      }
     } else {
-      udf((features: Vector) => {
+      features => {
         val margin = GBTClassificationModel.margin(features, localRootNodes, localTreeWeights)
         if (margin > 0.0) 1.0 else 0.0
-      }).apply(features)
+      }
     }
   }
 
@@ -478,8 +440,13 @@ object GBTClassificationModel extends MLReadable[GBTClassificationModel] {
       features: Vector,
       rootNodes: Array[Node],
       treeWeights: Array[Double]): Double = {
-    val treePredictions = rootNodes.map(_.predictImpl(features).prediction)
-    BLAS.nativeBLAS.ddot(rootNodes.length, treePredictions, 1, treeWeights, 1)
+    var prediction = 0.0
+    var i = 0
+    while (i < rootNodes.length) {
+      prediction += rootNodes(i).predictImpl(features).prediction * treeWeights(i)
+      i += 1
+    }
+    prediction
   }
 
   private def predictRaw(
