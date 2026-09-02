@@ -194,6 +194,9 @@ case class Scd2BatchProcessor(
       colName = AutoCdcReservedNames.cdcMetadataColName,
       col = Scd2BatchProcessor.constructCdcMetadataCol(
         recordStartAt = changeArgs.sequencing,
+        // TODO (SC-XXXXX): actually populate version map according to ignore-null selection and
+        // actual authorship in microbatch.
+        versionMap = F.lit(null),
         sequencingType = resolvedSequencingType
       )
     )
@@ -514,6 +517,9 @@ case class Scd2BatchProcessor(
             colName,
             Scd2BatchProcessor.constructCdcMetadataCol(
               recordStartAt = F.lit(null).cast(resolvedSequencingType),
+              // Decomposition tails are synthetic rows that carry no column-level authorship; they
+              // are instead row wide delete markers. They should always hold a null version map.
+              versionMap = F.lit(null),
               sequencingType = resolvedSequencingType
             )
           )
@@ -922,6 +928,9 @@ case class Scd2BatchProcessor(
           isDecompositionTail,
           Scd2BatchProcessor.constructCdcMetadataCol(
             recordStartAt = endAt,
+            // Tombstone rows carry no column-level authorship; they are instead row wide delete
+            // markers. They should always hold a null version map.
+            versionMap = F.lit(null),
             sequencingType = resolvedSequencingType
           )
         ).otherwise(F.col(c)).as(c, metadata)
@@ -1357,6 +1366,9 @@ object Scd2BatchProcessor {
    */
   private[pipelines] val recordStartAtFieldName: String = "__RECORD_START_AT"
 
+  /** CDC metadata field for the ignore-null version map. */
+  private[pipelines] val versionMapFieldName: String = "__VERSION_MAP"
+
   /**
    * Aux-table only column that holds the microbatch id by which a row was logically
    * deleted (null if the row is still live). Future microbatches must treat any row with a
@@ -1567,6 +1579,10 @@ object Scd2BatchProcessor {
   private def recordStartAtOf(cdcMetadataCol: Column): Column =
     cdcMetadataCol.getField(recordStartAtFieldName)
 
+  /** Project the [[versionMapFieldName]] out of an SCD2 CDC metadata column. */
+  private[autocdc] def versionMapOf(cdcMetadataCol: Column): Column =
+    cdcMetadataCol.getField(versionMapFieldName)
+
   /**
    * The [[Scd2IntervalColumns]] of a row read from either the auxiliary or the target table, in
    * the canonical SCD2 row schema. The columns are unresolved name references, so they read from
@@ -1587,7 +1603,11 @@ object Scd2BatchProcessor {
         // The sequence value of the originating CDC event for this row. Nullable because
         // decomposition tails, which are temporarily and synthetically constructed during
         // reconciliation, have a null record start at.
-        StructField(recordStartAtFieldName, sequencingType, nullable = true)
+        StructField(recordStartAtFieldName, sequencingType, nullable = true),
+        // null  = no authorship info (row predates ignore-null, or is synthetic).
+        // empty = no null-valued leaves to record (all columns were non-null).
+        // non-empty = keys are null-valued leaf column paths with authored/declined flags.
+        StructField(versionMapFieldName, Scd2VersionMap.mapType, nullable = true)
       )
     )
 
@@ -1597,11 +1617,13 @@ object Scd2BatchProcessor {
    */
   private[pipelines] def constructCdcMetadataCol(
       recordStartAt: Column,
+      versionMap: Column,
       sequencingType: DataType
   ): Column = {
     val cdcMetadataFieldsInOrder = cdcMetadataColSchema(sequencingType).fields.map { field =>
       val value = field.name match {
         case `recordStartAtFieldName` => recordStartAt
+        case `versionMapFieldName` => versionMap
         case other =>
           throw SparkException.internalError(
             s"Unable to construct SCD2 CDC metadata column due to unknown `${other}` field."
