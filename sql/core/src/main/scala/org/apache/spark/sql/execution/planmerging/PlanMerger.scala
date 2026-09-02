@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.{Cross, Inner, JoinType, LeftAnti, Le
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.catalog.TableCapability
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -52,8 +53,19 @@ case class MergeResult(
  * @param merged Whether this plan is the result of merging two or more plans (true), or
  *               is an original unmerged plan (false). Merged plans typically require special
  *               handling such as wrapping in CTEs.
+ * @param projectionSensitiveReads The columns the plans behind this entry read from each
+ *                                 projection-sensitive relation, recorded when the entry was
+ *                                 first cached. Every plan merged into the entry read those same
+ *                                 columns, which is what merging one in requires, so the record
+ *                                 stays true of the entry. It cannot be re-derived from `plan`,
+ *                                 because a merge leaves projections that the `ColumnPruning`
+ *                                 rerun after this rule narrows again. See
+ *                                 `PlanMerger.collectProjectionSensitiveReads`.
  */
-case class MergedPlan(plan: LogicalPlan, merged: Boolean)
+case class MergedPlan(
+    plan: LogicalPlan,
+    merged: Boolean,
+    projectionSensitiveReads: Map[LogicalPlan, Seq[Set[String]]])
 
 object PlanMerger {
   // Marker tag placed on Filter nodes that were produced by filter propagation. Its presence
@@ -162,6 +174,9 @@ class PlanMerger(
    *         - An attribute mapping for rewriting expressions
    */
   def merge(plan: LogicalPlan, subqueryPlan: Boolean): MergeResult = {
+    // Read once per call rather than once per cache entry, and empty for a plan that reads no
+    // projection-sensitive relation, which is the common case.
+    lazy val projectionSensitiveReads = collectProjectionSensitiveReads(plan)
     cache.zipWithIndex.collectFirst(Function.unlift {
       case (mp, i) =>
         checkIdenticalPlans(plan, mp.plan).map { _ =>
@@ -169,24 +184,30 @@ class PlanMerger(
           // `ReusedSubqueryExec` rule can handle them without extracting the plans to CTEs.
           // But, when a non-subquery subplan is identical to a cached plan we need to mark the plan
           // `merged` and so extract it to a CTE later.
-          val newMergedPlan = MergedPlan(mp.plan, mp.merged || !subqueryPlan)
+          val newMergedPlan = mp.copy(merged = mp.merged || !subqueryPlan)
           cache(i) = newMergedPlan
           val outputMap = AttributeMap(plan.output.zipWithIndex)
           MergeResult(newMergedPlan, i, outputMap)
         }.orElse {
-          tryMergePlans(plan, mp.plan, MergeContext(filterPropagationSupported = false)).collect {
-            case TryMergeResult(mergedPlan, npMapping, None, None, None, _) =>
-              val newMergedPlan = MergedPlan(mergedPlan, true)
-              cache(i) = newMergedPlan
-              val outputMap = AttributeMap(npMapping.iterator.map { case (origAttr, mergedAttr) =>
-                origAttr -> mergedPlan.output.indexWhere(_.exprId == mergedAttr.exprId)
-              }.toSeq)
-              MergeResult(newMergedPlan, i, outputMap)
+          if (widensProjectionSensitiveRead(projectionSensitiveReads, mp)) {
+            // Reusing the shared relation would widen a read whose rows depend on the set of
+            // columns it is asked for, see `collectProjectionSensitiveReads`.
+            None
+          } else {
+            tryMergePlans(plan, mp.plan, MergeContext(filterPropagationSupported = false)).collect {
+              case TryMergeResult(mergedPlan, npMapping, None, None, None, _) =>
+                val newMergedPlan = mp.copy(plan = mergedPlan, merged = true)
+                cache(i) = newMergedPlan
+                val outputMap = AttributeMap(npMapping.iterator.map { case (origAttr, mergedAttr) =>
+                  origAttr -> mergedPlan.output.indexWhere(_.exprId == mergedAttr.exprId)
+                }.toSeq)
+                MergeResult(newMergedPlan, i, outputMap)
+            }
           }
         }
       case _ => None
     }).getOrElse {
-      val newMergedPlan = MergedPlan(plan, false)
+      val newMergedPlan = MergedPlan(plan, false, projectionSensitiveReads)
       cache += newMergedPlan
       val outputMap = AttributeMap(plan.output.zipWithIndex)
       MergeResult(newMergedPlan, cache.length - 1, outputMap)
@@ -210,6 +231,74 @@ class PlanMerger(
     } else {
       None
     }
+  }
+
+  /**
+   * The columns each projection-sensitive relation in `plan` is read with, keyed by the
+   * canonicalized relation. One entry per occurrence, in the order the relations appear, since a
+   * plan can read the same relation more than once (a self join) with a different set of columns
+   * each time, and `tryMergePlans` pairs occurrences in that same order.
+   *
+   * Top-level column pruning for a V1 file source happens in physical planning, from the attributes
+   * referenced above the relation, so two `LogicalRelation`s over the same files canonicalize equal
+   * whatever each side projects, and reusing one of them widens its read to the union of the two
+   * column sets. For most relations that only changes how much is read, but not for the ones
+   * [[DataSourceUtils.isProjectionSensitiveRead]] names, where it can change the rows themselves.
+   *
+   * Keyed by column name rather than by attribute, because the two plans that get compared were
+   * analyzed separately and carry different expression ids for the same column.
+   *
+   * Only ever called on a plan as it arrives, never on a merged one: merging rebuilds projections
+   * from a side's whole output, which for a V1 relation is its full schema, and what narrows that
+   * again is the `ColumnPruning` that `SparkOptimizer`'s `Extract Python UDFs` batch reruns, after
+   * this rule. A merged cache entry therefore carries the record taken when it was first cached,
+   * see [[MergedPlan]].
+   *
+   * This compares columns only. Symmetric filter propagation, which is off by default, can also
+   * widen the set of *files* a scan reads, by OR-ing the two sides' filters: a disjunct mixing a
+   * partition predicate with a data predicate prunes no partition at all, so the merged scan can
+   * read the whole table. Each side's own filter above the scan drops the rows that adds, so no
+   * answer changes, but a projection-sensitive read can still fail on a file neither side selected.
+   */
+  private def collectProjectionSensitiveReads(
+      plan: LogicalPlan): Map[LogicalPlan, Seq[Set[String]]] = {
+    lazy val referenced = AttributeSet(plan.flatMap(_.references)) ++ AttributeSet(plan.output)
+    plan.collect {
+      case l: LogicalRelation if DataSourceUtils.isProjectionSensitiveRead(l.relation) =>
+        l.canonicalized -> readColumnNames(referenced, l)
+    }.groupMap(_._1)(_._2)
+  }
+
+  /**
+   * Whether merging a plan whose projection-sensitive reads are `reads` into `cachedPlan` could
+   * change what either of them reads. The two records have to match exactly: a relation read a
+   * different number of times, or with a different set of columns, or read by only one of the two,
+   * all count, and a plan that reads a strict subset counts too, because after the merge the entry
+   * would read more than that plan asked for.
+   *
+   * Only [[tryMergePlans]] needs this. Reuse of an identical plan cannot widen a read, because the
+   * two whole plans are canonically equal there, so everything above the relation references the
+   * same columns. The relation's own output says nothing about that: on the V1 path it is the full
+   * schema whatever each side projects, which is what makes this check necessary in the first
+   * place.
+   */
+  private def widensProjectionSensitiveRead(
+      reads: Map[LogicalPlan, Seq[Set[String]]],
+      cachedPlan: MergedPlan): Boolean = reads != cachedPlan.projectionSensitiveReads
+
+  /**
+   * Which of `relation`'s columns `referenced` covers, by name. `referenced` is every attribute the
+   * plan refers to plus its own output, since a merged plan is extracted to a CTE and everything
+   * the CTE outputs is read. Partition columns are left out, because their values come from the
+   * path rather than from the file, so referencing one does not widen what the reader parses.
+   */
+  private def readColumnNames(
+      referenced: AttributeSet, relation: LogicalRelation): Set[String] = {
+    val partitionColumns = relation.relation match {
+      case hs: HadoopFsRelation => hs.partitionSchema.fieldNames.toSet
+      case _ => Set.empty[String]
+    }
+    referenced.filter(relation.outputSet.contains).map(_.name).toSet -- partitionColumns
   }
 
   /**

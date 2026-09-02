@@ -257,6 +257,23 @@ abstract class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAn
     val manager = new HistoryServerDiskManager(conf, testDir, store, new ManualClock())
     assert(manager.appStorePath("appId", None).getName.endsWith(extension))
   }
+
+  test("appStorePath neutralizes path traversal in log-derived app and attempt ids") {
+    val conf = new SparkConf().set(HYBRID_STORE_DISK_BACKEND, backend.toString)
+    val manager = new HistoryServerDiskManager(conf, testDir, store, new ManualClock())
+    val appsDir = new File(testDir, "apps").getCanonicalFile
+
+    // Legitimate cluster-manager-generated ids keep their store name.
+    assert(manager.appStorePath("app-20260811120000-0001", Some("1")).getName ===
+      "app-20260811120000-0001_1" + extension)
+
+    // Reject the non-standard paths
+    Seq("../listing", "..", "../../tmp/evil", "a/b").foreach { appId =>
+      val storePath = manager.appStorePath(appId, Some("../1"))
+      assert(storePath.getCanonicalFile.getParentFile === appsDir,
+        s"appId '$appId' escaped the store directory: $storePath")
+    }
+  }
 }
 
 @ExtendedLevelDBTest
