@@ -81,10 +81,28 @@ object ValidatorUtil extends Logging {
    * Creates a [[Validator]] for the given schema that does not resolve external DTDs,
    * entities, or schema references found in the document being validated. The record
    * parser does not process DTDs, so validation applies the same restrictions to keep
-   * the two consistent. All validation of record data must go through this method.
+   * the two consistent. All validation of record data must use a Validator returned by
+   * this method, or one reused through [[reset]].
    */
   def newValidator(schema: Schema): Validator = {
     val validator = schema.newValidator()
+    configureForRecordValidation(validator)
+    validator
+  }
+
+  /**
+   * Resets a [[Validator]] created by [[newValidator]] and re-applies the
+   * record-validation configuration. [[Validator.reset]] does not retain configuration
+   * applied after construction, so the secure-processing settings must be re-applied on
+   * every reset. Reusing one Validator across records avoids the per-record allocation
+   * cost of [[newValidator]].
+   */
+  def reset(validator: Validator): Unit = {
+    validator.reset()
+    configureForRecordValidation(validator)
+  }
+
+  private def configureForRecordValidation(validator: Validator): Unit = {
     try {
       validator.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "")
       validator.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
@@ -96,6 +114,5 @@ object ValidatorUtil extends Logging {
           "The JAXP Validator implementation in use does not support disabling external " +
             "DTD/schema access; refusing to validate with it.", e)
     }
-    validator
   }
 }
