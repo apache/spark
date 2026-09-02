@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.physical.{IdentityReducer, KeyedPartitioning, KeyReducer, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{IdentityReducer, KeyedPartitioning, KeyReducer, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.execution.{SafeForKWayMerge, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.internal.SQLConf
@@ -79,21 +79,16 @@ case class GroupPartitionsExec(
         // single-side-transform reducers; for the both-sides-reduce shape no single transform
         // describes the keys (see `KeyedShuffleSpec.reducersBothWays`).
         val partitionKeys = grouping.partitions.map(_._1)
-        // Members carry a uniform marker (mixed collections are cleared at construction by
-        // `ShuffledJoin`), so any member answers for all of them.
-        val mayContainUnknownKeys = p.exists {
-          case k: KeyedPartitioning => k.mayContainUnknownPartitionKeys
-          case _ => false
-        }
         // A reduction coarsens the declared set, which a marked claim cannot survive (see
         // `KeyedPartitioning.mayContainUnknownPartitionKeys`), and the regrouping rewrites the
         // layout, so no child claim remains to fall back to: give up the keyed partitioning at
         // the physical output count (one per group, padding included) that a parent's
-        // `PartitioningCollection` requires for uniformity. No planner path with built-in
+        // `PartitioningCollection` requires for uniformity. The reducer check comes first, so
+        // the marker lookup runs only when a reduction is applied. No planner path with built-in
         // transforms reaches this (see the gates in `createShuffleSpec` and
         // `areKeysCompatible`); the branch guards third-party `ReducibleFunction`s with a
         // self-reducer and is pinned directly in `GroupPartitionsExecSuite`.
-        if (mayContainUnknownKeys && reducers.isDefined) {
+        if (reducers.isDefined && PartitioningCollection.mayContainUnknownPartitionKeys(p)) {
           return UnknownPartitioning(grouping.partitions.size)
         }
         p.transform {
