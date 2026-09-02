@@ -467,8 +467,9 @@ case class CoalescedNullAwareHashPartitioning(
  *   or a `GroupPartitionsExec` can coalesce the partitions that share a key.
  *
  * == Distribution Satisfaction and Grouping ==
- * Besides the default `satisfies()`, `KeyedPartitioning` answers three questions. They differ in
- * what they let happen to the data before the distribution counts as met.
+ * Besides the default `satisfies()`, `KeyedPartitioning` answers four questions. They differ in
+ * what they let happen to the data before the distribution counts as met. Only `keysMaySatisfy()`
+ * is asked from outside the class. The other three build it and `satisfies()` up.
  *
  * - `nonGroupedSatisfies()`: is the distribution met by the partitioning as it stands, with no node
  *   inserted? It is the default `Partitioning` implementation, so for a `ClusteredDistribution` it
@@ -480,6 +481,10 @@ case class CoalescedNullAwareHashPartitioning(
  *   distribution? It is asked of non-grouped partitionings only, where such a node coalesces the
  *   duplicate keys. So the answer is `keysSatisfy()`, plus whether that coalescing is allowed.
  *   "Key Collapse" below says when it is not.
+ * - `keysMaySatisfy()`: the same question for a partitioning that may already be grouped, which is
+ *   what `EnsureRequirements` asks. It is `mayGroupToSatisfy()` for a non-grouped one, and
+ *   `keysSatisfy()` for a grouped one, which has no duplicate keys left for the node to coalesce,
+ *   and so nothing for the permission to govern.
  *
  * For `OrderedDistribution`, `GroupPartitionsExec` must also sort the partition keys to meet the
  * ordering requirement.
@@ -689,6 +694,26 @@ case class KeyedPartitioning(
     KeyedPartitioning.projectKeys(partitionKeys, keyDataTypes, positions)
 
   /**
+   * The number of partitions a `GroupPartitionsExec` projecting these keys to `positions` would
+   * leave, which is the number of distinct projected keys. `positions` must be distinct and in
+   * range, as it must be for `project` and `projectKeys`.
+   *
+   * A projection that keeps every position is the identity on the key values, so it needs no
+   * projected rows at all. The rest allocate a row per partition and hash it with an uncached
+   * `hashCode`, which makes this the expensive question to ask of a partitioning. A caller asking
+   * it for several position sets should memoize on the set.
+   */
+  def numPartitionsProjectedOn(positions: Seq[Int]): Int = {
+    if (positions.length < expressions.length) {
+      projectKeys(positions)._2.distinct.size
+    } else if (isGrouped) {
+      numPartitions
+    } else {
+      partitionKeys.distinct.size
+    }
+  }
+
+  /**
    * Reduces this partitioning's partition keys by applying the given reducers.
    * Returns the reduced keys and their data types.
    */
@@ -700,9 +725,10 @@ case class KeyedPartitioning(
     nonGroupedSatisfies(required) || (isGrouped && keysSatisfy(required))
   }
 
-  def nonGroupedSatisfies(required: Distribution): Boolean = super.satisfies0(required)
+  /** The first of the four questions the class doc lists. */
+  private def nonGroupedSatisfies(required: Distribution): Boolean = super.satisfies0(required)
 
-  /** The first of the three questions the class doc lists. */
+  /** The second of the four questions the class doc lists. */
   private def keysSatisfy(required: Distribution): Boolean = {
     required match {
       case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
@@ -738,10 +764,10 @@ case class KeyedPartitioning(
   }
 
   /**
-   * The third of the three questions the class doc lists. Ask it only of a partitioning that is not
-   * grouped, since a grouped one has nothing to coalesce and `satisfies` is the question for it.
+   * The third of the four questions the class doc lists. Ask it only of a partitioning that is not
+   * grouped, since a grouped one has nothing to coalesce and `keysMaySatisfy` covers both.
    */
-  def mayGroupToSatisfy(required: Distribution): Boolean = {
+  private[sql] def mayGroupToSatisfy(required: Distribution): Boolean = {
     val mayCoalesce = required match {
       case _: ClusteredDistribution =>
         !isCollapsed || SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys
@@ -749,6 +775,11 @@ case class KeyedPartitioning(
     }
     // The permission is the cheap half, so it is asked first.
     mayCoalesce && keysSatisfy(required)
+  }
+
+  /** The fourth of the four questions the class doc lists. */
+  private[sql] def keysMaySatisfy(required: Distribution): Boolean = {
+    if (isGrouped) keysSatisfy(required) else mayGroupToSatisfy(required)
   }
 
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec = {
@@ -854,11 +885,17 @@ object KeyedPartitioning {
     val projectedDataTypes = positions.map(dataTypes)
     val comparableKeyWrapperFactory =
       InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(projectedDataTypes)
-    val positionsWithTypes = positions.zip(projectedDataTypes)
+    // Indexed arrays rather than `Seq`s, because the loop below runs once per key and a key list is
+    // as long as the number of splits the scan reported.
+    val positionArray = positions.toArray
+    val typeArray = projectedDataTypes.toArray
     val projectedKeys = keys.map { key =>
-      val projectedKey = positionsWithTypes.map {
-        case (position, dataType) => key.row.get(position, dataType)
-      }.toArray[Any]
+      val projectedKey = new Array[Any](positionArray.length)
+      var i = 0
+      while (i < positionArray.length) {
+        projectedKey(i) = key.row.get(positionArray(i), typeArray(i))
+        i += 1
+      }
       comparableKeyWrapperFactory(new GenericInternalRow(projectedKey))
     }
 
@@ -872,18 +909,31 @@ object KeyedPartitioning {
       keys: Seq[InternalRowComparableWrapper],
       dataTypes: Seq[DataType],
       reducers: Seq[Option[KeyReducer]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) = {
-    val reducedDataTypes = dataTypes.zip(reducers).map {
-      case (_, Some(KeyReducer(reducer: Reducer[Any, Any], _))) => reducer.resultType()
-      case (t, _) => t
+    // The `Reducer[Any, Any]` match is erased, so it only ever checks for `Some`. Settling it per
+    // position keeps it out of the key loop below, and gives the result types with it.
+    val reducerArray =
+      reducers.map(_.map(_.reducer.asInstanceOf[Reducer[Any, Any]]).orNull).toArray
+    val reducedDataTypes = dataTypes.zip(reducerArray).map {
+      case (t, reducer) => if (reducer == null) t else reducer.resultType()
     }
     val comparableKeyWrapperFactory =
       InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(reducedDataTypes)
+    val typeArray = dataTypes.toArray
+    // `InternalRow.toSeq(dataTypes)`, which the loop below replaces, asserted the row's arity once
+    // per key. All the keys of a partitioning share an arity, so asserting on the first one keeps
+    // the check. The loop also indexes `reducerArray` by the same bound, where the old `zip` would
+    // have truncated to the shorter of the two, so that length is asserted with it.
+    assert(reducerArray.length == typeArray.length)
+    keys.headOption.foreach(k => assert(k.row.numFields == typeArray.length))
     val reducedKeys = keys.map { key =>
-      val keyValues = key.row.toSeq(dataTypes)
-      val reducedKey = keyValues.zip(reducers).map {
-        case (v, Some(KeyReducer(reducer: Reducer[Any, Any], _))) => reducer.reduce(v)
-        case (v, _) => v
-      }.toArray
+      val reducedKey = new Array[Any](typeArray.length)
+      var i = 0
+      while (i < typeArray.length) {
+        val value = key.row.get(i, typeArray(i))
+        val reducer = reducerArray(i)
+        reducedKey(i) = if (reducer == null) value else reducer.reduce(value)
+        i += 1
+      }
       comparableKeyWrapperFactory(new GenericInternalRow(reducedKey))
     }
 

@@ -2737,6 +2737,10 @@ public class CollationSupportSuite {
     assertSubstringIndex("a🙃b🙃c", "d", -1, UTF8_LCASE, "a🙃b🙃c");
     assertSubstringIndex("a🙃b🙃c", "d", -1, UNICODE, "a🙃b🙃c");
     assertSubstringIndex("a🙃b🙃c", "d", -1, UNICODE_CI, "a🙃b🙃c");
+    assertSubstringIndex("a.b.c", ".", Integer.MIN_VALUE, UTF8_BINARY, "a.b.c");
+    assertSubstringIndex("a.b.c", ".", Integer.MIN_VALUE, UTF8_LCASE, "a.b.c");
+    assertSubstringIndex("a.b.c", ".", Integer.MIN_VALUE, UNICODE, "a.b.c");
+    assertSubstringIndex("a.b.c", ".", Integer.MIN_VALUE, UNICODE_CI, "a.b.c");
   }
 
   /**
@@ -4192,6 +4196,14 @@ public class CollationSupportSuite {
     // Boundary: start out of range (forward/backward)
     assertStringInstrWithOccurrence("İoi\u0307oİo", "İo", 10, 1, UTF8_LCASE, 0);
     assertStringInstrWithOccurrence("İoi\u0307oİo", "İo", -10, 1, UNICODE_CI, 0);
+    assertStringInstrWithOccurrence("abcabc", "abc", Integer.MIN_VALUE, 1, UTF8_BINARY, 0);
+    assertStringInstrWithOccurrence("abcabc", "abc", Integer.MIN_VALUE, 1, UTF8_LCASE, 0);
+    assertStringInstrWithOccurrence("abcabc", "abc", Integer.MIN_VALUE, 1, UNICODE, 0);
+    assertStringInstrWithOccurrence("abcabc", "abc", Integer.MIN_VALUE, 1, UNICODE_CI, 0);
+    assertStringInstrWithOccurrence("İoi\u0307oİo", "İo", Integer.MIN_VALUE, 1, UTF8_BINARY, 0);
+    assertStringInstrWithOccurrence("İoi\u0307oİo", "İo", Integer.MIN_VALUE, 1, UTF8_LCASE, 0);
+    assertStringInstrWithOccurrence("İoi\u0307oİo", "İo", Integer.MIN_VALUE, 1, UNICODE, 0);
+    assertStringInstrWithOccurrence("İoi\u0307oİo", "İo", Integer.MIN_VALUE, 1, UNICODE_CI, 0);
     String sigmaStr = "σΣςσΣς";  // 1:σ, 2:Σ, 3:ς, 4:σ, 5:Σ, 6:ς
     // UTF8_BINARY: all sigma forms are distinct, only exact byte matches succeed
     assertStringInstrWithOccurrence("σΣςσΣς", "Σ", 1, 2, UTF8_BINARY, 5);
