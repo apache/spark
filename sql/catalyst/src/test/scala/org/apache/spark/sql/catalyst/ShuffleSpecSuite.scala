@@ -673,6 +673,10 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       // Unmarked, the compatible-transform relaxation still pairs them (pre-existing behavior).
       assert(bucketSpec(4, false).areKeysCompatible(bucketSpec(8, false)),
         "unmarked compatible transforms remain admissible")
+      // Positive control: the same marked function with the same keys must stay compatible, so
+      // the refusals above are the function difference's doing, not the marker path always false.
+      assert(bucketSpec(4, true).areKeysCompatible(bucketSpec(4, true)),
+        "identical marked functions remain compatible")
     }
   }
 

@@ -21,10 +21,11 @@ import org.apache.spark.SparkFunSuite
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CollationAwareMurmur3Hash, Expression, Literal, Pmod}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types.IntegerType
 
-class DistributionSuite extends SparkFunSuite {
+class DistributionSuite extends SparkFunSuite with SQLHelper {
 
   protected def checkSatisfied(
       inputPartitioning: Partitioning,
@@ -445,6 +446,30 @@ class DistributionSuite extends SparkFunSuite {
     val combined = PartitioningCollection.fromPartitionings(Seq(nested, kpY))
     val interned = combined.partitionings.last.asInstanceOf[KeyedPartitioning]
     assert(interned.partitionKeys eq kpX.partitionKeys)
+  }
+
+  test("SPARK-59050: a marked one-partition layout keeps the global ordering claim") {
+    // The one-partition exemption inside `keysSatisfy`'s ordered branch: a single partition
+    // holds every row, so an out-of-set key cannot break the cross-partition sequence, while
+    // two partitions can (the e2e `ORDER BY` repro measures that). Positive control: an
+    // always-false gate would shuffle these plans for nothing.
+    val a = AttributeReference("a", IntegerType)()
+    val ordered = OrderedDistribution(
+      Seq(org.apache.spark.sql.catalyst.expressions.SortOrder(a,
+        org.apache.spark.sql.catalyst.expressions.Ascending)))
+    val markedOne = KeyedPartitioning(Seq(a), Seq(org.apache.spark.sql.catalyst.InternalRow(1)))
+      .copy(mayContainUnknownPartitionKeys = true)
+    val markedTwo = KeyedPartitioning(Seq(a),
+      Seq(org.apache.spark.sql.catalyst.InternalRow(1),
+        org.apache.spark.sql.catalyst.InternalRow(2)))
+      .copy(mayContainUnknownPartitionKeys = true)
+    withSQLConf(
+        org.apache.spark.sql.internal.SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
+      assert(markedOne.satisfies(ordered),
+        "a marked layout with a single partition is trivially globally ordered")
+      assert(!markedTwo.satisfies(ordered),
+        "the multi-partition case stays refused, pairing the positive above")
+    }
   }
 
   test("SPARK-59050: fromPartitionings normalizes the unknown-keys marker by OR") {

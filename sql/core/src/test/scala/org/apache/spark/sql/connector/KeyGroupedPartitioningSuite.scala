@@ -6512,9 +6512,10 @@ class KeyGroupedPartitioningSuite
   test("SPARK-59050: SPJ: inner join marker clearing reaches nested collections") {
     // `ShuffledJoin`'s `InnerLike` arm passes each child's partitioning into the joined
     // collection as reported, so the next inner join can find marked members nested inside a
-    // collection inherited from an all-marked inner join below. That nesting cannot be planned
-    // through SQL (an inner join's own clearing already flattens what SQL puts in it), so the
-    // nodes are hand-built here through the same exchange-leaf idiom used above.
+    // collection inherited from an all-marked inner join below. SQL cannot produce that shape:
+    // every inner join clears the markers of the mixed collection it builds, so an all-marked
+    // collection only ever appears beside marked siblings, never an unmarked one. The nodes are
+    // hand-built here, through the same exchange-leaf idiom used above.
     val attrA = AttributeReference("a", IntegerType)()
     val attrB = AttributeReference("b", IntegerType)()
     val keys = Seq(InternalRow(1), InternalRow(2))

@@ -89,24 +89,23 @@ trait ShuffledJoin extends JoinCodegenSupport {
 
   /**
    * Clears the `mayContainUnknownPartitionKeys` marker of every `KeyedPartitioning` in
-   * `partitionings` when at least one member is unmarked. Only `ShuffledJoin`'s `InnerLike` arm
-   * can mix the two; see the call site for the argument. The interning `fromPartitionings` does
-   * afterwards changes no marker.
+   * `partitionings` when marked and unmarked members meet. Only `ShuffledJoin`'s `InnerLike` arm
+   * can mix the two; see the call site for the argument. The subsequent interning in
+   * `fromPartitionings` does not change any markers.
    */
   private def clearUnknownPartitionKeys(
       partitionings: Seq[Partitioning]): Seq[Partitioning] = {
-    // Only a marked member among an unmarked one needs the rebuild. On the common all-unmarked
-    // path, even a no-op `copy` is not free: `transform`'s `fastEquals` would fall through to
-    // comparing every partition key.
-    val marked = partitionings.view.flatMap(PartitioningCollection.flatten)
-      .collect { case k: KeyedPartitioning => k }
-    if (!marked.exists(_.mayContainUnknownPartitionKeys) ||
-        marked.forall(_.mayContainUnknownPartitionKeys)) {
+    // Marker uniformity is a constructor invariant, so one cached representative answers per
+    // input instead of re-flattening a left-deep join chain. The all-unmarked path must reach no
+    // `copy`: `transform`'s `fastEquals` would compare every partition key.
+    val markers = partitionings.map(PartitioningCollection.mayContainUnknownPartitionKeys)
+    if (markers.forall(_ == markers.head)) {
       partitionings
     } else {
       partitionings.map {
-        case e: Expression =>
-          e.transform {
+        case partitioning: Partitioning with Expression
+            if PartitioningCollection.mayContainUnknownPartitionKeys(partitioning) =>
+          partitioning.transform {
             case k: KeyedPartitioning if k.mayContainUnknownPartitionKeys =>
               k.copy(mayContainUnknownPartitionKeys = false)
           }.asInstanceOf[Partitioning]

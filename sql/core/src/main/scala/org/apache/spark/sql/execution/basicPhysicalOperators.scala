@@ -987,7 +987,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       // may carry the marker: the merged set declares the other legs' keys, so an out-of-set row
       // can sit in the wrong partition for the merged claim (rule (1) of the
       // `KeyedPartitioning.mayContainUnknownPartitionKeys` doc). Unlike a join, a union keeps
-      // every leg's rows, so an unmarked leg excuses a marked one nothing.
+      // every leg's rows: an unmarked leg does not excuse a marked one.
       val compatible = kps.forall(kp =>
         !kp.mayContainUnknownPartitionKeys && comparePartitioning(kp, headKp))
       if (compatible) {

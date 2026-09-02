@@ -588,10 +588,11 @@ case class CoalescedNullAwareHashPartitioning(
  *                                 re-shuffled onto this partitioning (see
  *                                 `KeyedShuffleSpec.createPartitioning`), so co-location holds
  *                                 for whole keys only: two marked partitionings declaring the
- *                                 same keys in the same order still pair (equal undeclared keys
- *                                 hash to the same partition), but a row of an undeclared key
- *                                 sits in the partition of some other declared key, away from
- *                                 rows sharing a subset of its columns. `satisfies` and
+ *                                 same keys in the same order and using the same partition
+ *                                 function per position still pair (equal undeclared keys hash
+ *                                 to the same partition), but a row of an undeclared key sits in
+ *                                 the partition of some other declared key, away from rows
+ *                                 sharing a subset of its columns. `satisfies` and
  *                                 `KeyedShuffleSpec.areKeysCompatible` therefore accept a marked
  *                                 partitioning only for full-key clustering, never for a subset
  *                                 of its partition columns and never for a global ordering
@@ -1184,6 +1185,15 @@ object PartitioningCollection {
     case pc: PartitioningCollection => pc.firstKeyedPartitioning
     case _ => None
   }
+
+  /**
+   * Whether `p` or any nested [[KeyedPartitioning]] may contain unknown partition keys, read
+   * from its first keyed member, the same one `checkKeyedPartitioningInvariant` compares
+   * against. Keyless inputs answer false: `EnsureRequirements` normalizes a shuffled join's
+   * children onto one template, so they never meet a keyed sibling here.
+   */
+  private[sql] def mayContainUnknownPartitionKeys(p: Partitioning): Boolean =
+    representativeOf(p).exists(_.mayContainUnknownPartitionKeys)
 
   /**
    * Builds a [[PartitioningCollection]], unifying the `partitionKeys` reference across all
