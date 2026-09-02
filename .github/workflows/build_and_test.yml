@@ -1073,8 +1073,6 @@ jobs:
     env:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
-      PYSPARK_DRIVER_PYTHON: python3.9
-      PYSPARK_PYTHON: python3.9
       GITHUB_PREV_SHA: ${{ github.event.before }}
     container:
       image: ${{ needs.precondition.outputs.image_docs_url_link }}
