@@ -58,6 +58,23 @@ class SpecialDatetimeValuesSuite extends PlanTest {
     }
   }
 
+  test("applyForExpression rewrites a foldable special datetime cast to a literal") {
+    val zoneId = ZoneId.systemDefault()
+    val cast = Cast(Literal("epoch"), DateType, Some(zoneId.getId))
+    assert(SpecialDatetimeValues.applyForExpression(cast) == Literal(0, DateType))
+  }
+
+  test("applyForExpression folds special timestamp values") {
+    val cast = Cast(Literal("epoch"), TimestampType, Some("UTC"))
+    assert(SpecialDatetimeValues.applyForExpression(cast) == Literal(0L, TimestampType))
+  }
+
+  test("applyForExpression leaves non-special casts and other expressions unchanged") {
+    val cast = Cast(Literal("2021-01-01"), DateType, Some("UTC"))
+    assert(SpecialDatetimeValues.applyForExpression(cast) == cast)
+    assert(SpecialDatetimeValues.applyForExpression(Literal(1)) == Literal(1))
+  }
+
   private def testSpecialTs(tsType: AtomicType, expected: Set[Long], zoneId: ZoneId): Unit = {
     val in = Project(Seq(
       Alias(Cast(Literal("epoch"), tsType, Some(zoneId.getId)), "epoch")(),
