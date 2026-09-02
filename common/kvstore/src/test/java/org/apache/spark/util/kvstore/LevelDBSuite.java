@@ -113,6 +113,24 @@ public class LevelDBSuite {
   }
 
   @Test
+  public void testNextAfterEntityDelete() throws Exception {
+    CustomType1 t = createCustomType1(1);
+    db.write(t);
+
+    // Entries of a non-copy secondary index hold only the natural key, and next() resolves
+    // the entity with a live db.get() lookup.
+    try (KVStoreIterator<CustomType1> it =
+        db.view(CustomType1.class).index("id").closeableIterator()) {
+      assertTrue(it.hasNext());
+      // Delete the entity after hasNext() buffered its index entry: the iterator still
+      // sees the entry, but the live lookup in next() misses the key.
+      db.delete(t.getClass(), t.key);
+      NoSuchElementException e = assertThrows(NoSuchElementException.class, it::next);
+      assertTrue(e.getMessage().contains(t.key));
+    }
+  }
+
+  @Test
   public void testMultipleObjectWriteReadDelete() throws Exception {
     CustomType1 t1 = createCustomType1(1);
     CustomType1 t2 = createCustomType1(2);

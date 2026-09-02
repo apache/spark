@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.iq80.leveldb.DBIterator;
@@ -148,7 +149,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
         byte[] key = ti.buildKey(false, ti.naturalIndex().keyPrefix(null), next);
         ret = db.get(key, type);
         if (ret == null) {
-          throw new NoSuchElementException();
+          throw new NoSuchElementException(new String(key, UTF_8));
         }
       }
       next = null;
