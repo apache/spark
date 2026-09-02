@@ -16,13 +16,13 @@
 #
 
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.utils import is_ansi_mode_test
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.utils import is_ansi_mode_test
 
 
 class NumMulDivTestsMixin:
@@ -117,6 +117,51 @@ class NumMulDivTestsMixin:
             self.assertRaises(TypeError, lambda: psdf["float32"] // psdf["decimal"])
             self.assertRaises(TypeError, lambda: psdf["decimal"] // 0.1)
             self.assertRaises(TypeError, lambda: 0.1 // psdf["decimal"])
+
+        # A divisor that is not exactly representable: 1.0 / 0.1 rounds up to exactly 10.0,
+        # so flooring the quotient gives 10 where pandas returns 9.
+        pser = pd.Series([1.0, 10.0, -1.0, 2.5])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser // 0.1, psser // 0.1)
+
+        # An integral operand above 2**53 loses its low bits when divided as double. pandas
+        # returns int64 here, which Spark's division cannot, so compare the values.
+        pser = pd.Series([9007199254740993, -9007199254740993])
+        psser = ps.from_pandas(pser)
+        self.assert_eq((pser // 2).astype(float), psser // 2)
+        self.assert_eq((pser // 3).astype(float), psser // 3)
+
+        # An infinite divisor leaves a quotient of 0 or -1, and an infinite dividend has no
+        # finite floor, which pandas reports as nan.
+        pser = pd.Series([1.0, -1.0, np.inf, -np.inf])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser // np.inf, psser // np.inf)
+        self.assert_eq(pser // -np.inf, psser // -np.inf)
+        pser = pd.Series([np.inf, -np.inf, np.nan, 1.0])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser // 2.0, psser // 2.0)
+
+        # Finite operands whose quotient overflows to an infinity, which is its own floor.
+        edge_pdf = pd.DataFrame({"a": [1e300, -1e300], "b": [1e-300, 1e-300]})
+        edge_psdf = ps.from_pandas(edge_pdf)
+        self.assert_eq(edge_pdf.a // edge_pdf.b, edge_psdf.a // edge_psdf.b)
+
+        # A negative zero divisor negates the result, and a zero dividend keeps its own sign.
+        pser = pd.Series([1.0, -1.0, 2.5])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser // -0.0, psser // -0.0)
+        pser = pd.Series([-0.0, 0.0])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser // 3.0, psser // 3.0)
+        # An equality check cannot see the sign of a zero, so compare it directly.
+        self.assertEqual(
+            np.signbit(pser // 3.0).tolist(), np.signbit((psser // 3.0).to_pandas()).tolist()
+        )
+
+        # The only quotient that does not fit in a long, where pandas wraps around.
+        pser = pd.Series([-(2**63)])
+        psser = ps.from_pandas(pser)
+        self.assert_eq((pser // -1).astype(float), psser // -1)
 
     def test_mod(self):
         pdf, psdf = self.pdf, self.psdf

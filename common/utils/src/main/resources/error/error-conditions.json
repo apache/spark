@@ -489,6 +489,24 @@
     ],
     "sqlState" : "0A000"
   },
+  "BITMAP_INPUT_TOO_LARGE" : {
+    "message" : [
+      "The input bitmap has <inputNumBytes> bytes, which exceeds the maximum supported size of <maxNumBytes> bytes."
+    ],
+    "sqlState" : "22001"
+  },
+  "BUCKET_COLUMN_IN_PARTITION_COLUMNS" : {
+    "message" : [
+      "Bucketing column <bucketColumn> should not be part of partition columns <partitionColumns>."
+    ],
+    "sqlState" : "42713"
+  },
+  "BUCKET_SORT_COLUMN_IN_PARTITION_COLUMNS" : {
+    "message" : [
+      "Bucket sort column <sortColumn> should not be part of partition columns <partitionColumns>."
+    ],
+    "sqlState" : "42713"
+  },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
       "The method <methodName> can not be called on streaming Dataset/DataFrame."
@@ -993,6 +1011,13 @@
     },
     "sqlState" : "XX000"
   },
+  "CHECKPOINT_DIRECTORY_NOT_SET" : {
+    "message" : [
+      "Cannot checkpoint because no checkpoint directory is configured.",
+      "Set one with `SparkContext.setCheckpointDir` or the \"spark.checkpoint.dir\" configuration."
+    ],
+    "sqlState" : "55019"
+  },
   "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED" : {
     "message" : [
       "Checksum verification failed, the file may be corrupted. File: <fileName>",
@@ -1007,6 +1032,13 @@
       "If this problem persists, you may consider using `rdd.checkpoint()` instead, which is slower than local checkpointing but more fault-tolerant."
     ],
     "sqlState" : "56000"
+  },
+  "CHECKPOINT_RDD_PARTITION_COUNT_MISMATCH" : {
+    "message" : [
+      "The checkpoint of RDD <originalRDDId> has <newRDDLength> partition(s), but the RDD itself has <originalRDDLength>. The checkpoint RDD is <newRDDId>.",
+      "This usually means the checkpoint directory is not on storage that both the driver and the executors can read and write, or that some checkpoint files did not survive until the checkpoint was read back."
+    ],
+    "sqlState" : "58030"
   },
   "CHECK_CONSTRAINT_VIOLATION" : {
     "message" : [
@@ -1953,6 +1985,11 @@
           "The <inputName> value must to be a <requireType> literal of <validValues>, but got <inputValue>."
         ]
       },
+      "INVALID_JSON_FORMAT_JSON_INPUT" : {
+        "message" : [
+          "<functionName> FORMAT JSON requires a string argument containing JSON text, but the argument at position <position> has type <inputType>."
+        ]
+      },
       "INVALID_JSON_MAP_KEY_TYPE" : {
         "message" : [
           "Input schema <schema> can only contain STRING as a key type for a MAP."
@@ -1960,7 +1997,22 @@
       },
       "INVALID_JSON_PATH" : {
         "message" : [
-          "<functionName> has an invalid or unsupported JSON path <path>. Only simple, wildcard-free paths are supported."
+          "<functionName> has an invalid or unsupported JSON path <path>."
+        ]
+      },
+      "INVALID_JSON_QUERY_RETURNING_TYPE" : {
+        "message" : [
+          "<functionName> cannot return a value of type <returningType>. The RETURNING type must be a string type."
+        ]
+      },
+      "INVALID_JSON_QUERY_WRAPPER_AND_QUOTES" : {
+        "message" : [
+          "<functionName> cannot combine an OMIT QUOTES clause with a WITH ARRAY WRAPPER clause. OMIT QUOTES applies only to an unwrapped result."
+        ]
+      },
+      "INVALID_JSON_RETURNING_TYPE" : {
+        "message" : [
+          "<functionName> RETURNING clause must be a STRING type, but got <returningType>."
         ]
       },
       "INVALID_JSON_SCALAR_RETURNING_TYPE" : {
@@ -2230,6 +2282,24 @@
     ],
     "sqlState" : "KD010"
   },
+  "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE" : {
+    "message" : [
+      "The runtime filter attribute <attribute> reported by `<method>` in data source scan <scanClass> is invalid for the scan relation output <relationOutput>."
+    ],
+    "subClass" : {
+      "CANNOT_RESOLVE" : {
+        "message" : [
+          "The attribute cannot be resolved."
+        ]
+      },
+      "NOT_TOP_LEVEL" : {
+        "message" : [
+          "The attribute must be top-level, but it is a nested reference."
+        ]
+      }
+    },
+    "sqlState" : "KD000"
+  },
   "DATA_SOURCE_METADATA_SCHEMA_NOT_IMPLEMENTED" : {
     "message" : [
       "<class> does not implement metadataSchema."
@@ -2491,6 +2561,12 @@
     ],
     "sqlState" : "42815"
   },
+  "EMPTY_COLLECTION_NOT_ALLOWED" : {
+    "message" : [
+      "empty collection"
+    ],
+    "sqlState" : "0A000"
+  },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
       "Failed to parse an empty string for data type <dataType>."
@@ -2655,6 +2731,12 @@
       "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
     ],
     "sqlState" : "42822"
+  },
+  "FAILED_CREATE_CHECKPOINT_DIRECTORY" : {
+    "message" : [
+      "Failed to create the checkpoint directory <path> as FileSystem.mkdirs returned false."
+    ],
+    "sqlState" : "58030"
   },
   "FAILED_EXECUTE_UDF" : {
     "message" : [
@@ -3752,6 +3834,12 @@
     },
     "sqlState" : "42K03"
   },
+  "INVALID_CHECKPOINT_DIRECTORY" : {
+    "message" : [
+      "Cannot read the checkpoint directory <path>: expected the partition file <expectedFileName> but found <fileName>. The partition files must be numbered contiguously from part-00000."
+    ],
+    "sqlState" : "58030"
+  },
   "INVALID_CLONE_SESSION_REQUEST" : {
     "message" : [
       "Invalid session clone request."
@@ -4215,17 +4303,20 @@
       "SESSION_CHANGED" : {
         "message" : [
           "The existing Spark server driver instance has restarted. Please reconnect."
-        ]
+        ],
+        "sqlState" : "08003"
       },
       "SESSION_CLOSED" : {
         "message" : [
           "Session was closed."
-        ]
+        ],
+        "sqlState" : "08003"
       },
       "SESSION_NOT_FOUND" : {
         "message" : [
           "Session not found."
-        ]
+        ],
+        "sqlState" : "08003"
       }
     },
     "sqlState" : "HY000"
@@ -4439,6 +4530,12 @@
       "Collations can only be applied to string types, but the JSON data type is <jsonType>."
     ],
     "sqlState" : "2203G"
+  },
+  "INVALID_JSON_FORMAT_JSON_VALUE" : {
+    "message" : [
+      "<functionName> FORMAT JSON argument at position <position> must contain exactly one well-formed JSON value, but got <value>."
+    ],
+    "sqlState" : "22032"
   },
   "INVALID_JSON_RECORD_TYPE" : {
     "message" : [
@@ -4827,6 +4924,11 @@
           "expects one of the units 'HOUR', 'MINUTE', 'SECOND', 'MILLISECOND', 'MICROSECOND', but got '<invalidValue>'."
         ]
       },
+      "TRIM_ARRAY_LENGTH" : {
+        "message" : [
+          "Expects a value between 0 and the array cardinality (<numElements>), but got <length>."
+        ]
+      },
       "ZERO_INDEX" : {
         "message" : [
           "expects %1$, %2$ and so on, but got %0$."
@@ -4882,6 +4984,18 @@
       "<value> is an invalid property value, please use quotes, e.g. SET <key>=<value>"
     ],
     "sqlState" : "42602"
+  },
+  "INVALID_PYTHON_AGGREGATOR_BUFFER_SCHEMA" : {
+    "message" : [
+      "The incremental Python aggregate function <functionName> requires a struct (StructType) intermediate buffer schema, but got <bufferType>."
+    ],
+    "sqlState" : "42000"
+  },
+  "INVALID_PYTHON_UDF_PLACEMENT" : {
+    "message" : [
+      "The Python user-defined aggregate function(s) <functionList> cannot be invoked together with other kinds of aggregate function in the same aggregation. Multiple such functions may be used together, but not mixed with SQL or differently-typed aggregate functions."
+    ],
+    "sqlState" : "0A000"
   },
   "INVALID_QUERY_MIXED_QUERY_PARAMETERS" : {
     "message" : [
@@ -5589,6 +5703,30 @@
     ],
     "sqlState" : "42K0E"
   },
+  "JSON_EXISTS_ON_ERROR" : {
+    "message" : [
+      "<functionName> could not evaluate the path <path>: the input is not valid JSON. This error was requested by the ERROR ON ERROR clause."
+    ],
+    "sqlState" : "2203G"
+  },
+  "JSON_QUERY_ON_ERROR" : {
+    "message" : [
+      "<functionName> could not extract a value at path <path>."
+    ],
+    "subClass" : {
+      "EMPTY" : {
+        "message" : [
+          "The path matched no value. This error was requested by the ERROR ON EMPTY clause."
+        ]
+      },
+      "ERROR" : {
+        "message" : [
+          "The input is not valid JSON. This error was requested by the ERROR ON ERROR clause."
+        ]
+      }
+    },
+    "sqlState" : "2203G"
+  },
   "JSON_VALUE_ON_ERROR" : {
     "message" : [
       "<functionName> could not extract a scalar value at path <path>."
@@ -5673,6 +5811,12 @@
       "LOAD DATA input path does not exist: <path>."
     ],
     "sqlState" : "42K03"
+  },
+  "LOCAL_BLOCK_DATA_NOT_FOUND" : {
+    "message" : [
+      "Block <blockId> had block metadata but its data was missing from both the memory and disk stores. The block has been removed, so a later read must fetch it from another replica or recompute it."
+    ],
+    "sqlState" : "58030"
   },
   "LOCAL_MUST_WITH_SCHEMA_FILE" : {
     "message" : [
@@ -6958,6 +7102,12 @@
     ],
     "sqlState" : "42K05"
   },
+  "SHUFFLE_BLOCK_MIGRATION_NOT_SUPPORTED" : {
+    "message" : [
+      "Shuffle block <blockId> cannot be migrated to the receiving executor: its shuffle block resolver <resolverClass> must implement MigratableResolver. See the cause for details."
+    ],
+    "sqlState" : "0A000"
+  },
   "SKETCH_INVALID_LG_NOM_ENTRIES" : {
     "message" : [
       "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
@@ -7787,6 +7937,11 @@
         "message" : [
           "The following session configuration(s) are incompatible with Real-Time Mode: <invalidReasons>. Update or remove them and restart the query."
         ]
+      },
+      "STATEFUL_OPERATORS_BEFORE_UNION_NOT_SUPPORTED" : {
+        "message" : [
+          "Streaming queries in real-time mode cannot include stateful operators (e.g. aggregate, deduplicate, transformWithState) before a union. Please restructure your query to apply the union before any stateful operations."
+        ]
       }
     },
     "sqlState" : "0A000"
@@ -7806,6 +7961,14 @@
   "STREAMING_SHUFFLE_UNEXPECTED_MESSAGE_TYPE" : {
     "message" : [
       "Unexpected message type <messageType> encountered during streaming shuffle."
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT" : {
+    "message" : [
+      "Streaming shuffle <shuffleId> writer <writerId> timed out after <timeoutMs> ms waiting for reader <readerId> to connect.",
+      "This can occur when the reader task is delayed because cluster resources are unavailable or when network connectivity prevents the reader from reaching the writer.",
+      "Check cluster resources and network connectivity. If the reader needs more time to start, increase 'spark.shuffle.streaming.writerConnectionTimeout', or set it to -1 to wait indefinitely."
     ],
     "sqlState" : "XXKST"
   },
@@ -7907,6 +8070,12 @@
         ]
       }
     },
+    "sqlState" : "42601"
+  },
+  "TABLE_LOCATION_URI_NOT_SPECIFIED" : {
+    "message" : [
+      "Table <identifier> did not specify locationUri."
+    ],
     "sqlState" : "42601"
   },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
@@ -8162,6 +8331,12 @@
     ],
     "sqlState" : "42KD9"
   },
+  "UNABLE_TO_REGISTER_WITH_EXTERNAL_SHUFFLE_SERVICE" : {
+    "message" : [
+      "Unable to register with the external shuffle service: <message>"
+    ],
+    "sqlState" : "58030"
+  },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
       "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to either a SQL literal or collection constructor functions such as `map()`, `array()`, `struct()`."
@@ -8261,7 +8436,8 @@
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [
-      "Unrecognized SQL type - name: <typeName>, id: <jdbcType>."
+      "Unrecognized SQL type - name: <typeName>, id: <jdbcType>.",
+      "To read this column, map it explicitly with the `customSchema` option, or register a custom `JdbcDialect` that handles this type."
     ],
     "sqlState" : "42704"
   },
@@ -8846,6 +9022,11 @@
       "MULTIPLE_BUCKET_TRANSFORMS" : {
         "message" : [
           "Multiple bucket TRANSFORMs."
+        ]
+      },
+      "MULTIPLE_PYTHON_UDF_TYPES_IN_WINDOW" : {
+        "message" : [
+          "Cannot use Python user-defined functions of different types together over a single window: <functionList>. Use a separate window specification for each."
         ]
       },
       "MULTI_ACTION_ALTER" : {
@@ -9734,6 +9915,12 @@
     ],
     "sqlState" : "42601"
   },
+  "WRITING_JOB_FAILED" : {
+    "message" : [
+      "Writing job failed."
+    ],
+    "sqlState" : "58030"
+  },
   "WRONG_COMMAND_FOR_OBJECT_TYPE" : {
     "message" : [
       "The operation <operation> requires a <requiredType>. But <objectName> is a <foundType>. Use <alternative> instead."
@@ -10002,11 +10189,6 @@
       "ADD COLUMN with v1 tables cannot specify NOT NULL."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1058" : {
-    "message" : [
-      "Cannot create table with both USING <provider> and <serDeInfo>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1059" : {
     "message" : [
       "STORED AS with file format '<serdeInfo>' is invalid."
@@ -10040,11 +10222,6 @@
   "_LEGACY_ERROR_TEMP_1080" : {
     "message" : [
       "Table <identifier> did not specify database."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1081" : {
-    "message" : [
-      "Table <identifier> did not specify locationUri."
     ]
   },
   "_LEGACY_ERROR_TEMP_1082" : {
@@ -10231,16 +10408,6 @@
   "_LEGACY_ERROR_TEMP_1165" : {
     "message" : [
       "It is not allowed to specify partitioning when the table schema is not defined."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1166" : {
-    "message" : [
-      "Bucketing column '<bucketCol>' should not be part of partition columns '<normalizedPartCols>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1167" : {
-    "message" : [
-      "Bucket sorting column '<sortCol>' should not be part of partition columns '<normalizedPartCols>'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1169" : {
@@ -10823,11 +10990,6 @@
   "_LEGACY_ERROR_TEMP_2068" : {
     "message" : [
       "Missing database location."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2070" : {
-    "message" : [
-      "Writing job failed."
     ]
   },
   "_LEGACY_ERROR_TEMP_2071" : {
@@ -11515,66 +11677,14 @@
       "Can only zip RDDs with same number of elements in each partition"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3014" : {
-    "message" : [
-      "empty collection"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3015" : {
     "message" : [
       "countByValueApprox() does not support arrays"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3016" : {
-    "message" : [
-      "Checkpoint directory has not been set in the SparkContext"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3017" : {
-    "message" : [
-      "Invalid checkpoint file: <path>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3018" : {
-    "message" : [
-      "Failed to create checkpoint path <checkpointDirPath>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3019" : {
-    "message" : [
-      "Checkpoint RDD has a different number of partitions from original RDD. Original",
-      "RDD [ID: <originalRDDId>, num of partitions: <originalRDDLength>];",
-      "Checkpoint RDD [ID: <newRDDId>, num of partitions: <newRDDLength>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3020" : {
-    "message" : [
-      "Checkpoint dir must be specified."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3028" : {
     "message" : [
       "<errorMsg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3033" : {
-    "message" : [
-      "Unable to register with external shuffle server due to : <message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3035" : {
-    "message" : [
-      "Unexpected shuffle block <blockId> with unsupported shuffle resolver <shuffleBlockResolver>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3036" : {
-    "message" : [
-      "Failure while trying to store block <blockId> on <blockManagerId>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3037" : {
-    "message" : [
-      "Block <blockId> was not found even though it's read-locked"
     ]
   },
   "_LEGACY_ERROR_TEMP_3052" : {

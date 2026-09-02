@@ -3245,6 +3245,51 @@ class TaskSetManagerSuite
     }
   }
 
+  test("resourceOffer attaches current userCredentials to TaskDescription") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(3)
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+
+    try {
+      // Initially no credentials in SparkEnv store
+      assert(SparkEnv.get.userCredentials.get() == null)
+      val taskOpt1 = manager.resourceOffer("exec1", "host1", TaskLocality.ANY)._1
+      assert(taskOpt1.isDefined)
+      assert(taskOpt1.get.userCredentials.isEmpty,
+        "TaskDescription should have None when credential store is empty")
+
+      // Set credentials to version 1
+      val v1Bytes = Array[Byte](10, 20, 30, 40, 50)
+      VersionedCredentials.updateIfNewer(SparkEnv.get.userCredentials, 1L, v1Bytes)
+
+      // Offer another task from the same set -- should carry v1
+      val taskOpt2 = manager.resourceOffer("exec1", "host1", TaskLocality.ANY)._1
+      assert(taskOpt2.isDefined)
+      assert(taskOpt2.get.userCredentials.isDefined,
+        "TaskDescription should carry credentials after store is populated")
+      assert(taskOpt2.get.userCredentials.get._1 === 1L,
+        "TaskDescription should carry version 1")
+      assert(taskOpt2.get.userCredentials.get._2 === v1Bytes,
+        "TaskDescription should carry the v1 credential bytes")
+
+      // Update store to version 2
+      val v2Bytes = Array[Byte](50, 60, 70, 80, 90)
+      VersionedCredentials.updateIfNewer(SparkEnv.get.userCredentials, 2L, v2Bytes)
+
+      // Offer another task -- should carry v2
+      val taskOpt3 = manager.resourceOffer("exec1", "host1", TaskLocality.ANY)._1
+      assert(taskOpt3.isDefined)
+      assert(taskOpt3.get.userCredentials.get._1 === 2L,
+        "After renewal, TaskDescription should carry version 2")
+      assert(taskOpt3.get.userCredentials.get._2 === v2Bytes,
+        "TaskDescription should carry the v2 credential bytes")
+    } finally {
+      SparkEnv.get.userCredentials.set(null)
+    }
+  }
+
 }
 
 class FakeLongTasks(stageId: Int, partitionId: Int) extends FakeTask(stageId, partitionId) {

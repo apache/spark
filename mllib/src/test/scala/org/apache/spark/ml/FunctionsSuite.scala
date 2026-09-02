@@ -19,15 +19,56 @@ package org.apache.spark.ml
 
 import org.apache.spark.SparkException
 import org.apache.spark.ml.functions._
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.{Matrices, MatrixUDT, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.util.MLTest
-import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.functions.col
+import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, MatrixUDT => OldMatrixUDT,
+  Vector => OldVector, Vectors => OldVectors, VectorUDT => OldVectorUDT}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.functions.{col, unwrap_udt, wrap_udt}
+import org.apache.spark.sql.types.{StructField, StructType, UserDefinedType}
 
 class FunctionsSuite extends MLTest {
 
   import testImplicits._
+
+  private def checkWrapUDTConversion(
+      df: DataFrame,
+      targetUDT: UserDefinedType[_],
+      expected: Any): Unit = {
+    val converted = df.select(wrap_udt(unwrap_udt(col("value")), targetUDT).as("value"))
+    assert(converted.schema("value").dataType === targetUDT)
+    assert(converted.first().get(0) === expected)
+  }
+
+  private def checkWrapUDTTypeMismatch(df: DataFrame, targetUDT: UserDefinedType[_]): Unit = {
+    val e = intercept[AnalysisException] {
+      df.select(wrap_udt(unwrap_udt(col("value")), targetUDT).as("value")).collect()
+    }
+    assert(e.getCondition === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+  }
+
+  private def checkNullableWrapUDTConversion(
+      value: Any,
+      sourceUDT: UserDefinedType[_],
+      targetUDT: UserDefinedType[_],
+      expected: Any): Unit = {
+    val schema = StructType(Seq(StructField("value", sourceUDT, nullable = true)))
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(value), Row(null))),
+      schema)
+    val converted = df.select(wrap_udt(unwrap_udt(col("value")), targetUDT).as("value"))
+
+    assert(converted.schema("value").dataType === targetUDT)
+    assert(converted.schema("value").nullable)
+    assert(converted.collect().map(_.get(0)).toSeq === Seq(expected, null))
+  }
+
+  private def normalizeNaN(rows: Seq[(Int, Int, Double)]): Seq[(Int, Int, String)] = {
+    rows.map {
+      case (id, index, value) if value.isNaN => (id, index, "NaN")
+      case (id, index, value) => (id, index, value.toString)
+    }
+  }
 
   test("test vector_to_array") {
     val df = Seq(
@@ -103,6 +144,77 @@ class FunctionsSuite extends MLTest {
     assert(resultVec3 === Vectors.dense(Array(1.0, 2.0)))
   }
 
+  test("test vector_posexplode with vector UDT") {
+    val df = Seq(
+      (0, Vectors.dense(1.0, 0.0, 3.0), OldVectors.dense(10.0, 0.0, 30.0)),
+      (1, Vectors.sparse(4, Seq((1, 2.0), (2, 0.0), (3, 4.0))),
+        OldVectors.sparse(4, Seq((0, 20.0), (1, 0.0), (2, 30.0)))),
+      (2, null.asInstanceOf[Vector], null.asInstanceOf[OldVector]),
+      (3, Vectors.sparse(10, Array.emptyIntArray, Array.emptyDoubleArray),
+        OldVectors.sparse(10, Array.emptyIntArray, Array.emptyDoubleArray)),
+      (4, Vectors.dense(Array.emptyDoubleArray),
+        OldVectors.dense(Array.emptyDoubleArray))
+    ).toDF("id", "vec", "oldVec")
+
+    val result = df.select($"id", vector_posexplode($"vec"))
+      .as[(Int, Int, Double)]
+      .collect()
+      .toSeq
+    assert(normalizeNaN(result) === Seq(
+      (0, -4, "NaN"),
+      (0, 0, "1.0"),
+      (0, 2, "3.0"),
+      (1, -5, "NaN"),
+      (1, 1, "2.0"),
+      (1, 3, "4.0"),
+      (3, -11, "NaN"),
+      (4, -1, "NaN")))
+
+    val oldResult = df.select($"id", vector_posexplode($"oldVec"))
+      .as[(Int, Int, Double)]
+      .collect()
+      .toSeq
+    assert(normalizeNaN(oldResult) === Seq(
+      (0, -4, "NaN"),
+      (0, 0, "10.0"),
+      (0, 2, "30.0"),
+      (1, -5, "NaN"),
+      (1, 0, "20.0"),
+      (1, 2, "30.0"),
+      (3, -11, "NaN"),
+      (4, -1, "NaN")))
+
+    val denseResult = df
+      .where($"id" === 1)
+      .select($"id", vector_posexplode($"vec", mode = "dense"))
+      .as[(Int, Int, Double)]
+      .collect()
+      .toSeq
+    assert(normalizeNaN(denseResult) === Seq(
+      (1, -5, "NaN"),
+      (1, 0, "0.0"),
+      (1, 1, "2.0"),
+      (1, 2, "0.0"),
+      (1, 3, "4.0")))
+
+    val sparseResult = df.select($"id", vector_posexplode($"vec", mode = "sparse"))
+      .as[(Int, Int, Double)]
+      .collect()
+      .toSeq
+    assert(normalizeNaN(sparseResult) === Seq(
+      (0, -4, "NaN"),
+      (0, 0, "1.0"),
+      (0, 2, "3.0"),
+      (1, -5, "NaN"),
+      (1, 1, "2.0"),
+      (1, 3, "4.0"),
+      (3, -11, "NaN"),
+      (4, -1, "NaN")))
+
+    val schema = df.select(vector_posexplode($"vec")).schema
+    assert(schema.simpleString === "struct<index:int,value:double>")
+  }
+
   test("test get_vector") {
     val df = Seq(
       (Vectors.dense(1.0, 2.0, 3.0), 0),
@@ -129,5 +241,91 @@ class FunctionsSuite extends MLTest {
 
     val result = df.select(array_argmax(col("arr"))).as[Int].collect()
     assert(result === Array(2, 1, 0, 1, 0, -1))
+  }
+
+  test("wrap and unwrap vector and matrix UDT columns") {
+    val oldVector = OldVectors.sparse(3, Array(1), Array(2.0))
+    val oldVectorDF = Seq(Tuple1(oldVector)).toDF("value")
+    checkWrapUDTConversion(
+      oldVectorDF,
+      new OldVectorUDT,
+      oldVector)
+    checkWrapUDTConversion(
+      oldVectorDF,
+      new VectorUDT,
+      oldVector.asML)
+    checkWrapUDTTypeMismatch(
+      oldVectorDF,
+      new OldMatrixUDT)
+    checkWrapUDTTypeMismatch(
+      oldVectorDF,
+      new MatrixUDT)
+
+    val mlVector = Vectors.dense(1.0, 2.0)
+    val mlVectorDF = Seq(Tuple1(mlVector)).toDF("value")
+    checkWrapUDTConversion(
+      mlVectorDF,
+      new VectorUDT,
+      mlVector)
+    checkWrapUDTConversion(
+      mlVectorDF,
+      new OldVectorUDT,
+      OldVectors.fromML(mlVector))
+    checkWrapUDTTypeMismatch(
+      mlVectorDF,
+      new OldMatrixUDT)
+    checkWrapUDTTypeMismatch(
+      mlVectorDF,
+      new MatrixUDT)
+
+    val oldMatrix = OldMatrices.dense(2, 2, Array(1.0, 2.0, 3.0, 4.0))
+    val oldMatrixDF = Seq(Tuple1(oldMatrix)).toDF("value")
+    checkWrapUDTConversion(
+      oldMatrixDF,
+      new OldMatrixUDT,
+      oldMatrix)
+    checkWrapUDTConversion(
+      oldMatrixDF,
+      new MatrixUDT,
+      oldMatrix.asML)
+    checkWrapUDTTypeMismatch(
+      oldMatrixDF,
+      new OldVectorUDT)
+    checkWrapUDTTypeMismatch(
+      oldMatrixDF,
+      new VectorUDT)
+
+    val mlMatrix = Matrices.dense(2, 2, Array(1.0, 2.0, 3.0, 4.0))
+    val mlMatrixDF = Seq(Tuple1(mlMatrix)).toDF("value")
+    checkWrapUDTConversion(
+      mlMatrixDF,
+      new MatrixUDT,
+      mlMatrix)
+    checkWrapUDTConversion(
+      mlMatrixDF,
+      new OldMatrixUDT,
+      OldMatrices.fromML(mlMatrix))
+    checkWrapUDTTypeMismatch(
+      mlMatrixDF,
+      new OldVectorUDT)
+    checkWrapUDTTypeMismatch(
+      mlMatrixDF,
+      new VectorUDT)
+  }
+
+  test("wrap and unwrap nullable vector UDT columns") {
+    val oldVector = OldVectors.sparse(3, Array(1), Array(2.0))
+    checkNullableWrapUDTConversion(
+      oldVector,
+      new OldVectorUDT,
+      new VectorUDT,
+      oldVector.asML)
+
+    val mlVector = Vectors.dense(1.0, 2.0)
+    checkNullableWrapUDTConversion(
+      mlVector,
+      new VectorUDT,
+      new OldVectorUDT,
+      OldVectors.fromML(mlVector))
   }
 }

@@ -23,12 +23,16 @@ import java.net.{URI, URL}
 import java.sql.{Connection, DatabaseMetaData, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
 import java.time.LocalDateTime
 import java.util.{Locale, Properties, ServiceConfigurationError}
+
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
+
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, spy, when}
 import org.scalatest.time.SpanSugar._
+import org.junit.jupiter.api.Assertions.{assertEquals, assertNotNull, assertNull}
+
 import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoder, KryoData, Row, SaveMode}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
@@ -45,7 +49,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProv
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.execution.streaming.checkpointing.FileSystemBasedCheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.{FileSystemBasedCheckpointFileManager, HDFSMetadataLog}
 import org.apache.spark.sql.execution.vectorized.{ColumnVectorUtils, ConstantColumnVector, MutableColumnarRow, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy.EXCEPTION
@@ -59,14 +63,13 @@ import org.apache.spark.sql.vectorized.ColumnVector
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.Utils
-import org.junit.jupiter.api.Assertions.{assertEquals, assertNotNull, assertNull}
 
 
 class QueryExecutionErrorsSuite
   extends ParquetTest
-    with OrcTest
-    with SharedSparkSession
-    with DataTypeErrorsBase {
+  with OrcTest
+  with SharedSparkSession
+  with DataTypeErrorsBase {
 
   import testImplicits._
 
@@ -125,7 +128,6 @@ class QueryExecutionErrorsSuite
 
   test("INVALID_PARAMETER_VALUE.AES_KEY_LENGTH: invalid key lengths in AES functions") {
     val (df1, df2) = getAesInputs()
-
     def checkInvalidKeyLength(df: => DataFrame, inputBytes: Int): Unit = {
       checkError(
         exception = intercept[SparkRuntimeException] {
@@ -181,7 +183,6 @@ class QueryExecutionErrorsSuite
     val key16 = "abcdefghijklmnop"
     val key32 = "abcdefghijklmnop12345678ABCDEFGH"
     val (df1, df2) = getAesInputs()
-
     def checkUnsupportedMode(df: => DataFrame, mode: String, padding: String): Unit = {
       checkError(
         exception = intercept[SparkRuntimeException] {
@@ -189,8 +190,8 @@ class QueryExecutionErrorsSuite
         },
         condition = "UNSUPPORTED_FEATURE.AES_MODE",
         parameters = Map("mode" -> mode,
-          "padding" -> padding,
-          "functionName" -> "`aes_encrypt`/`aes_decrypt`"),
+        "padding" -> padding,
+        "functionName" -> "`aes_encrypt`/`aes_decrypt`"),
         sqlState = "0A000")
     }
 
@@ -214,14 +215,11 @@ class QueryExecutionErrorsSuite
   test("UNSUPPORTED_FEATURE: unsupported types (map and struct) in lit()") {
     def checkUnsupportedTypeInLiteral(v: Any, literal: String, dataType: String): Unit = {
       checkError(
-        exception = intercept[SparkRuntimeException] {
-          spark.expression(lit(v))
-        },
+        exception = intercept[SparkRuntimeException] { spark.expression(lit(v)) },
         condition = "UNSUPPORTED_FEATURE.LITERAL_TYPE",
         parameters = Map("value" -> literal, "type" -> dataType),
         sqlState = "0A000")
     }
-
     checkUnsupportedTypeInLiteral(Map("key1" -> 1, "key2" -> 2),
       "Map(key1 -> 1, key2 -> 2)",
       "class scala.collection.immutable.Map$Map2")
@@ -238,7 +236,7 @@ class QueryExecutionErrorsSuite
       exception = e2,
       condition = "UNSUPPORTED_FEATURE.PIVOT_TYPE",
       parameters = Map("value" -> "[dotnet,Dummies]",
-        "type" -> "unknown"),
+      "type" -> "unknown"),
       sqlState = "0A000")
   }
 
@@ -483,8 +481,7 @@ class QueryExecutionErrorsSuite
   test("FAILED_EXECUTE_UDF: execute user defined function with registered UDF") {
     val luckyCharOfWord = udf { (word: String, index: Int) => {
       word.substring(index, index + 1)
-    }
-    }
+    }}
     spark.udf.register("luckyCharOfWord", luckyCharOfWord)
 
     val functionNameRegex = if (Utils.isJavaVersionAtLeast21) {
@@ -517,8 +514,7 @@ class QueryExecutionErrorsSuite
   test("FAILED_EXECUTE_UDF: execute user defined function") {
     val luckyCharOfWord = udf { (word: String, index: Int) => {
       word.substring(index, index + 1)
-    }
-    }
+    }}
     val functionNameRegex = if (Utils.isJavaVersionAtLeast21) {
       "`QueryExecutionErrorsSuite\\$\\$Lambda/\\w+`"
     } else {
@@ -596,7 +592,7 @@ class QueryExecutionErrorsSuite
   test("SPARK-42330: rule id not found") {
     checkError(
       exception = intercept[SparkException] {
-        RuleIdCollection.getRuleId("incorrect")
+          RuleIdCollection.getRuleId("incorrect")
       },
       condition = "RULE_ID_NOT_FOUND",
       parameters = Map("ruleName" -> "incorrect")
@@ -604,23 +600,23 @@ class QueryExecutionErrorsSuite
   }
 
   test("CANNOT_RESTORE_PERMISSIONS_FOR_PATH: can't set permission") {
-    withTable("t") {
-      withSQLConf(
-        "fs.file.impl" -> classOf[FakeFileSystemSetPermission].getName,
-        "fs.file.impl.disable.cache" -> "true") {
-        sql("CREATE TABLE t(c String) USING parquet")
+      withTable("t") {
+        withSQLConf(
+          "fs.file.impl" -> classOf[FakeFileSystemSetPermission].getName,
+          "fs.file.impl.disable.cache" -> "true") {
+          sql("CREATE TABLE t(c String) USING parquet")
 
-        val e = intercept[AnalysisException] {
-          sql("TRUNCATE TABLE t")
-        }
-        assert(e.getCause.isInstanceOf[SparkSecurityException])
+          val e = intercept[AnalysisException] {
+            sql("TRUNCATE TABLE t")
+          }
+          assert(e.getCause.isInstanceOf[SparkSecurityException])
 
-        checkError(
-          exception = e.getCause.asInstanceOf[SparkSecurityException],
-          condition = "CANNOT_RESTORE_PERMISSIONS_FOR_PATH",
-          parameters = Map("permission" -> ".+",
-            "path" -> ".+"),
-          matchPVals = true)
+          checkError(
+            exception = e.getCause.asInstanceOf[SparkSecurityException],
+            condition = "CANNOT_RESTORE_PERMISSIONS_FOR_PATH",
+            parameters = Map("permission" -> ".+",
+              "path" -> ".+"),
+            matchPVals = true)
       }
     }
   }
@@ -685,7 +681,7 @@ class QueryExecutionErrorsSuite
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
 
       override def getCatalystType(sqlType: Int, typeName: String, size: Int,
-                                   md: MetadataBuilder): Option[DataType] = {
+        md: MetadataBuilder): Option[DataType] = {
         sqlType match {
           case _ => None
         }
@@ -761,7 +757,7 @@ class QueryExecutionErrorsSuite
 
   test(
     "SCALAR_SUBQUERY_TOO_MANY_ROWS: " +
-      "More than one row returned by a subquery used as an expression") {
+    "More than one row returned by a subquery used as an expression") {
     checkError(
       exception = intercept[SparkException] {
         sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
@@ -986,6 +982,22 @@ class QueryExecutionErrorsSuite
     }
   }
 
+  test("SPARK-43940: BATCH_METADATA_NOT_FOUND") {
+    withTempDir { dir =>
+      val metadataLog = new HDFSMetadataLog[String](spark, dir.getAbsolutePath)
+      val e = intercept[SparkFileNotFoundException] {
+        metadataLog.applyFnToBatchByStream(0L) { _ => () }
+      }
+
+      val batchMetadataFile = new Path(dir.getAbsolutePath, "0").toString
+      checkError(
+        exception = e,
+        condition = "BATCH_METADATA_NOT_FOUND",
+        parameters = Map("batchMetadataFile" -> batchMetadataFile),
+        sqlState = "42K03")
+    }
+  }
+
   test("UNSUPPORTED_FEATURE.MULTI_ACTION_ALTER: The target JDBC server hosting table " +
     "does not support ALTER TABLE with multiple actions.") {
     withTempDir { tempDir =>
@@ -996,7 +1008,7 @@ class QueryExecutionErrorsSuite
         conn = DriverManager.getConnection(url, new Properties())
         conn.prepareStatement("""CREATE SCHEMA "test"""").executeUpdate()
         conn.prepareStatement(
-            """CREATE TABLE "test"."people" (name TEXT(32) NOT NULL, id INTEGER NOT NULL)""")
+          """CREATE TABLE "test"."people" (name TEXT(32) NOT NULL, id INTEGER NOT NULL)""")
           .executeUpdate()
         conn.commit()
       } finally {
@@ -1076,19 +1088,20 @@ class QueryExecutionErrorsSuite
 
           // Error is thrown due to a race condition. Ensure it happens with high likelihood in the
           // test by spawning many threads.
-          val exceptions = ThreadUtils.parmap(Seq.range(1, 50), "QueryExecutionErrorsSuite", 50) { _ =>
-            var exception = None: Option[SparkConcurrentModificationException]
-            try {
-              val restartedQuery = ds.writeStream.format("parquet")
-                .option("checkpointLocation", chkLocation).start(dataLocation)
-              restartedQuery.stop()
-              restartedQuery.awaitTermination()
-            } catch {
-              case e: SparkConcurrentModificationException =>
-                exception = Some(e)
+          val exceptions = ThreadUtils.parmap(Seq.range(1, 50), "QueryExecutionErrorsSuite", 50)
+            { _ =>
+              var exception = None : Option[SparkConcurrentModificationException]
+              try {
+                val restartedQuery = ds.writeStream.format("parquet")
+                  .option("checkpointLocation", chkLocation).start(dataLocation)
+                restartedQuery.stop()
+                restartedQuery.awaitTermination()
+              } catch {
+                case e: SparkConcurrentModificationException =>
+                  exception = Some(e)
+              }
+              exception
             }
-            exception
-          }
           // Only check if errors exist to deflake. We couldn't guarantee that
           // the above 50 runs must hit this error.
           exceptions.flatten.map { e =>
@@ -1423,6 +1436,7 @@ class QueryExecutionErrorsSuite
       condition = "DATATYPE_CANNOT_ORDER",
       parameters = Map("dataType" -> "PhysicalCalendarIntervalType"))
   }
+
 
   test("SPARK-49634: Numeric value out of range") {
     def assertSingleRow(result: DataFrame, expectedValue: Option[BigDecimal]): Unit = {

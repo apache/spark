@@ -15,13 +15,34 @@
 # limitations under the License.
 #
 
+import platform
+import unittest
+from decimal import Decimal
+
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas import set_option, reset_option
+from pyspark.loose_version import LooseVersion
+from pyspark.pandas import reset_option, set_option
 from pyspark.sql import functions as F
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
+
+# np.reciprocal(int 0) and the fmax/fmin signed-zero tie are unspecified by C/IEEE, so NumPy's
+# own answer varies by CPU architecture and NumPy version. pandas-on-Spark returns one fixed
+# value everywhere, which matches NumPy only on the environment it was verified against, so the
+# tests comparing the two run only there.
+_numpy_matches_spark = (
+    platform.system() == "Linux"
+    and platform.machine() == "x86_64"
+    and LooseVersion(np.__version__) >= LooseVersion("2.3.0")
+)
+_skip_if_numpy_differs = unittest.skipIf(
+    not _numpy_matches_spark,
+    "NumPy's reciprocal(int 0) and fmax/fmin signed-zero tie vary by architecture and NumPy "
+    "version, while pandas-on-Spark returns one fixed value that matches NumPy only on "
+    "Linux x86_64 with NumPy >= 2.3.0",
+)
 
 
 class NumPyCompatTestsMixin:
@@ -37,13 +58,14 @@ class NumPyCompatTestsMixin:
         "conjugate",
         "isnat",
         "matmul",
-        "frexp",
         # Values are close enough but tests failed.
         "log",  # flaky
         "log10",  # flaky
         "log1p",  # flaky
-        "modf",
     ]
+    # The sweeps below draw random integers including 0, where reciprocal diverges.
+    if not _numpy_matches_spark:
+        blacklist = blacklist + ["reciprocal"]
 
     @property
     def pdf(self):
@@ -140,6 +162,7 @@ class NumPyCompatTestsMixin:
 
                 self.assert_eq(np_func(psdf.a), np_func(pdf.a), almost=True)
 
+    @_skip_if_numpy_differs
     def test_np_reciprocal_integer(self):
         # np.reciprocal on an integer column does integer division (truncated
         # toward zero): 1 -> 1, -1 -> -1, and every other magnitude -> 0. The
@@ -156,6 +179,31 @@ class NumPyCompatTestsMixin:
                 psdf = ps.from_pandas(pdf)
 
                 self.assert_eq(np.reciprocal(psdf.a), np.reciprocal(pdf.a), almost=True)
+
+    @_skip_if_numpy_differs
+    def test_np_reciprocal_non_default_dtypes(self):
+        # The non-floating reciprocal branch also serves narrower integers,
+        # booleans, and decimals. numpy divides integers (and booleans, as
+        # int8) toward zero, so 0 overflows to the width-specific minimum
+        # (0 for int8/int16, int32 min for int32), while decimals take a true
+        # floating reciprocal. Lock in parity with pandas for each.
+        for dtype in ("int8", "int16", "int32"):
+            with self.subTest(dtype=dtype):
+                pdf = pd.DataFrame({"a": np.array([-2, -1, 0, 1, 2], dtype=dtype)})
+                psdf = ps.from_pandas(pdf)
+
+                self.assert_eq(np.reciprocal(psdf.a), np.reciprocal(pdf.a), almost=True)
+
+        # Boolean: numpy promotes to int8 (True -> 1, False -> 0).
+        pdf = pd.DataFrame({"a": [True, False, True]})
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(np.reciprocal(psdf.a), np.reciprocal(pdf.a), almost=True)
+
+        # Decimal: numpy takes a floating reciprocal. 0 is excluded because
+        # numpy raises DivisionByZero on Decimal('0').
+        pdf = pd.DataFrame({"a": [Decimal("2.5"), Decimal("-4"), Decimal("0.5")]})
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(np.reciprocal(psdf.a), np.reciprocal(pdf.a), almost=True)
 
     def test_np_bitwise_shift_functions(self):
         pdf = pd.DataFrame(
@@ -264,8 +312,160 @@ class NumPyCompatTestsMixin:
 
             self.assert_eq(np.fmod(psdf.x1, psdf.x2), np.fmod(pdf.x1, pdf.x2), almost=True)
 
+        # Integral operands above 2**53, where casting an operand to double would drop its low
+        # bits: fmod(9007199254740993, 2) is 1, not 0. Compared exactly, since almost=True would
+        # accept an off-by-one at these magnitudes.
+        pdf = pd.DataFrame(
+            {
+                "x1": [9007199254740993, 9007199254740995, -9007199254740993, 4611686018427387905],
+                "x2": [2, 4, 2, 1000000000],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(np.fmod(psdf.x1, psdf.x2), np.fmod(pdf.x1, pdf.x2).astype("float64"))
+
+        # almost=True treats -0.0 and 0.0 as equal, so check the sign of zero explicitly:
+        # an integral remainder is never negative zero, unlike a double one.
+        pdf = pd.DataFrame({"x1": [-64, -2, 0, 64], "x2": [2, 2, 3, 2]})
+        psdf = ps.from_pandas(pdf)
+
+        result = np.fmod(psdf.x1, psdf.x2)
+        expected = np.fmod(pdf.x1, pdf.x2)
+        self.assert_eq(np.signbit(result.to_pandas()), np.signbit(expected))
+
+    def test_np_modf(self):
+        # np.modf(x) returns a tuple (fractional part, integral part).
+        for pdf in (
+            pd.DataFrame({"a": [-64, -2, -1, 0, 1, 2, 64]}),
+            pd.DataFrame(
+                {"a": [-np.inf, -64.0, -2.0, -0.5, -0.0, 0.0, 0.5, 2.0, 64.0, np.inf, np.nan]}
+            ),
+            pd.DataFrame({"a": pd.array([1, -2, None], dtype="Int64")}),
+        ):
+            psdf = ps.from_pandas(pdf)
+            ps_fractional, ps_integral = np.modf(psdf.a)
+            pd_fractional, pd_integral = np.modf(pdf.a)
+            self.assert_eq(ps_fractional, pd_fractional, almost=True)
+            self.assert_eq(ps_integral, pd_integral, almost=True)
+
+        # almost=True treats -0.0 and 0.0 as equal, so verify the sign of zero explicitly:
+        # the fractional part of a negative whole number (-2.0 -> -0.0) and the fractional
+        # part of -inf (-> -0.0) must keep the input's sign, as must the integral part of a
+        # value in (-1, 0) (-0.5 -> -0.0).
+        pdf = pd.DataFrame({"a": [-2.0, -0.5, -0.0, 0.0, 0.5, 2.0, -np.inf, np.inf]})
+        psdf = ps.from_pandas(pdf)
+        ps_fractional, ps_integral = np.modf(psdf.a)
+        pd_fractional, pd_integral = np.modf(pdf.a)
+        self.assert_eq(np.signbit(ps_fractional.to_pandas()), np.signbit(pd_fractional))
+        self.assert_eq(np.signbit(ps_integral.to_pandas()), np.signbit(pd_integral))
+
+        # DataFrame input: np.modf returns a tuple of DataFrames, one per output.
+        pdf = pd.DataFrame(
+            {
+                "a": [-3.5, -2.0, -0.5, 0.0, 2.7],
+                "b": [1.5, -0.0, np.inf, -np.inf, np.nan],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        ps_fractional, ps_integral = np.modf(psdf)
+        pd_fractional, pd_integral = np.modf(pdf)
+        self.assert_eq(ps_fractional, pd_fractional, almost=True)
+        self.assert_eq(ps_integral, pd_integral, almost=True)
+        self.assert_eq(np.signbit(ps_fractional.to_pandas()), np.signbit(pd_fractional))
+        self.assert_eq(np.signbit(ps_integral.to_pandas()), np.signbit(pd_integral))
+
+        # A DataFrame with no columns has no per-column result to inspect, so the number of
+        # outputs comes from the ufunc; pandas returns one empty DataFrame per output here too.
+        ps_fractional, ps_integral = np.modf(psdf[[]])
+        pd_fractional, pd_integral = np.modf(pdf[[]])
+        self.assert_eq(ps_fractional, pd_fractional)
+        self.assert_eq(ps_integral, pd_integral)
+
+        # Index input: np.modf returns a tuple of Index objects.
+        pidx = pd.Index([-3.5, -2.0, -0.5, 0.0, 2.7])
+        psidx = ps.from_pandas(pidx)
+        ps_fractional, ps_integral = np.modf(psidx)
+        pd_fractional, pd_integral = np.modf(pidx)
+        self.assert_eq(ps_fractional, pd_fractional, almost=True)
+        self.assert_eq(ps_integral, pd_integral, almost=True)
+
+    def test_np_frexp(self):
+        # np.frexp(x) returns a tuple (mantissa, exponent), where x == mantissa * 2**exponent.
+        for pdf in (
+            pd.DataFrame({"a": [-64, -3, -1, 0, 1, 3, 64]}),
+            pd.DataFrame(
+                {"a": [-np.inf, -64.0, -1.5, -0.5, -0.0, 0.0, 0.5, 1.5, 64.0, np.inf, np.nan]}
+            ),
+            pd.DataFrame({"a": pd.array([1, -2, None], dtype="Int64")}),
+        ):
+            psdf = ps.from_pandas(pdf)
+            ps_mantissa, ps_exponent = np.frexp(psdf.a)
+            pd_mantissa, pd_exponent = np.frexp(pdf.a)
+            self.assert_eq(ps_mantissa, pd_mantissa, almost=True)
+            self.assert_eq(ps_exponent, pd_exponent, almost=True)
+
+        # Values next to a power of two, where the logarithm behind the exponent needs its
+        # correction, and both ends of the double range. Compared exactly, not with almost=True.
+        pdf = pd.DataFrame(
+            {
+                "a": [
+                    np.nextafter(2.0, 0.0),
+                    2.0,
+                    np.nextafter(2.0, np.inf),
+                    np.nextafter(-2.0, 0.0),
+                    np.finfo(np.float64).max,
+                    np.finfo(np.float64).tiny,
+                    np.nextafter(0.0, 1.0),  # the smallest subnormal
+                ]
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        ps_mantissa, ps_exponent = np.frexp(psdf.a)
+        pd_mantissa, pd_exponent = np.frexp(pdf.a)
+        self.assert_eq(ps_mantissa, pd_mantissa)
+        self.assert_eq(ps_exponent, pd_exponent)
+
+        # almost=True treats -0.0 and 0.0 as equal, so check the sign of zero explicitly:
+        # the mantissa of a zero is that zero, and of +-inf that infinity.
+        pdf = pd.DataFrame({"a": [-2.0, -0.5, -0.0, 0.0, 0.5, 2.0, -np.inf, np.inf]})
+        psdf = ps.from_pandas(pdf)
+        ps_mantissa, _ = np.frexp(psdf.a)
+        pd_mantissa, _ = np.frexp(pdf.a)
+        self.assert_eq(np.signbit(ps_mantissa.to_pandas()), np.signbit(pd_mantissa))
+
+        # DataFrame input: np.frexp returns a tuple of DataFrames, one per output.
+        pdf = pd.DataFrame(
+            {
+                "a": [-3.5, -1.0, -0.5, 0.0, 6.0],
+                "b": [1.5, -0.0, np.inf, -np.inf, np.nan],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        ps_mantissa, ps_exponent = np.frexp(psdf)
+        pd_mantissa, pd_exponent = np.frexp(pdf)
+        self.assert_eq(ps_mantissa, pd_mantissa, almost=True)
+        self.assert_eq(ps_exponent, pd_exponent, almost=True)
+        self.assert_eq(np.signbit(ps_mantissa.to_pandas()), np.signbit(pd_mantissa))
+
+        # Index input: np.frexp returns a tuple of Index objects.
+        pidx = pd.Index([-3.5, -1.0, -0.5, 0.0, 6.0])
+        psidx = ps.from_pandas(pidx)
+        ps_mantissa, ps_exponent = np.frexp(psidx)
+        pd_mantissa, pd_exponent = np.frexp(pidx)
+        self.assert_eq(ps_mantissa, pd_mantissa, almost=True)
+        self.assert_eq(ps_exponent, pd_exponent, almost=True)
+
     def test_floor_divide_func(self):
-        from pyspark.pandas.numpy_compat import _floor_divide_func
+        from pyspark.pandas.utils import _floor_divide_func
+
+        def floor_divided(pdf):
+            psdf = ps.from_pandas(pdf)
+            return (
+                psdf.spark.frame()
+                .select(_floor_divide_func(F.col("x1"), F.col("x2")).alias("result"))
+                .toPandas()["result"]
+                .rename(None)
+            )
 
         for pdf in (
             pd.DataFrame(
@@ -321,14 +521,39 @@ class NumPyCompatTestsMixin:
                 }
             ),
         ):
-            psdf = ps.from_pandas(pdf)
-            result = (
-                psdf.spark.frame()
-                .select(_floor_divide_func(F.col("x1"), F.col("x2")).alias("result"))
-                .toPandas()["result"]
-                .rename(None)
-            )
-            self.assert_eq(result, np.floor_divide(pdf.x1, pdf.x2), almost=True)
+            self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2), almost=True)
+
+        # Divisors binary cannot represent exactly, where the quotient rounds up across an
+        # integer: 1.0 / 0.1 rounds to 10.0, so flooring it gives 10 instead of 9. Compared
+        # exactly, since almost=True would accept an off-by-one on the large values below.
+        pdf = pd.DataFrame(
+            {
+                "x1": [1.0, 10.0, 2.0, 0.5, 7.0, -1.0, -10.0, 3.0],
+                "x2": [0.1, 0.1, 0.2, 0.1, 0.7, 0.1, 0.1, 7.0],
+            }
+        )
+        self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2))
+
+        # Integral operands above 2**53, where casting an operand to double would drop its
+        # low bits: -9007199254740993 // 2 is -4503599627370497, not -4503599627370496.
+        pdf = pd.DataFrame(
+            {
+                "x1": [9007199254740993, -9007199254740993, 4611686018427387905, 7, -7],
+                "x2": [1, 2, 3, 3, 3],
+            }
+        )
+        self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2).astype("float64"))
+
+        # The most negative long divided by -1, whose quotient a long cannot hold. NumPy wraps
+        # around, while Spark's integer division raises.
+        pdf = pd.DataFrame({"x1": [-(2**63), -(2**63)], "x2": [-1, 2]})
+        self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2).astype("float64"))
+
+        # Finite operands whose quotient overflows to an infinity, which is its own floor.
+        pdf = pd.DataFrame(
+            {"x1": [1e300, -1e300, 1e300, -1e300], "x2": [1e-300, 1e-300, -1e-300, -1e-300]}
+        )
+        self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2))
 
     def test_np_logaddexp(self):
         for pdf in (
@@ -380,6 +605,7 @@ class NumPyCompatTestsMixin:
                 self.assert_eq(result, expected, almost=True)
                 self.assert_eq(np.signbit(result.to_pandas()), np.signbit(expected))
 
+    @_skip_if_numpy_differs
     def test_np_fmax_fmin(self):
         for pdf in (
             pd.DataFrame({"x1": [-2, -1, 0, 1, 2], "x2": [2, 1, 0, -1, -2]}),
@@ -402,6 +628,104 @@ class NumPyCompatTestsMixin:
                     [np.signbit(np_func(x1, x2)) for x1, x2 in zip(pdf.x1, pdf.x2)]
                 )
                 self.assert_eq(np.signbit(result.to_pandas()), expected_signbit)
+
+    def test_np_fmax_fmin_integer_precision(self):
+        # The result keeps the operands' type, so an integral pair stays exact past 2^53,
+        # where a double result rounds to the nearest even value. The last row also pins the
+        # tie branch, which returns an operand rather than a comparison; it is an equal
+        # non-zero pair, so no signed-zero tie arises and the test needs no skip.
+        pdf = pd.DataFrame(
+            {
+                "x1": [2**53 + 1, -(2**53 + 1), 2**53 + 1],
+                "x2": [2, -2, 2**53 + 1],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        for np_func in (np.fmax, np.fmin):
+            self.assert_eq(np_func(psdf.x1, psdf.x2), np_func(pdf.x1, pdf.x2))
+
+    def test_np_fmax_fmin_non_default_dtypes(self):
+        # Both helpers select an operand, so the result keeps the operands' type for every
+        # dtype NumPy also preserves. Tie rows are equal non-zero pairs, since the signed-zero
+        # tie is the one case where NumPy's own answer varies; keep them that way so this test
+        # needs no skip either.
+        for dtype in ("int8", "int16", "int32", "float32"):
+            with self.subTest(dtype=dtype):
+                pdf = pd.DataFrame(
+                    {
+                        "x1": np.array([-2, 1, 3], dtype=dtype),
+                        "x2": np.array([2, -1, 3], dtype=dtype),
+                    }
+                )
+                psdf = ps.from_pandas(pdf)
+
+                for np_func in (np.fmax, np.fmin):
+                    self.assert_eq(np_func(psdf.x1, psdf.x2), np_func(pdf.x1, pdf.x2))
+
+        for pdf in (
+            pd.DataFrame({"x1": [True, False, True], "x2": [False, False, True]}),
+            pd.DataFrame(
+                {
+                    "x1": [Decimal("7.5"), Decimal("-2.5"), Decimal("3.0")],
+                    "x2": [Decimal("2.0"), Decimal("-9.0"), Decimal("3.0")],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "x1": pd.to_datetime(["2020-01-01", "2021-06-01"]),
+                    "x2": pd.to_datetime(["2020-06-01", "2021-01-01"]),
+                }
+            ),
+        ):
+            psdf = ps.from_pandas(pdf)
+
+            for np_func in (np.fmax, np.fmin):
+                self.assert_eq(np_func(psdf.x1, psdf.x2), np_func(pdf.x1, pdf.x2))
+
+    def test_np_copysign(self):
+        for pdf in (
+            pd.DataFrame(
+                {
+                    "x1": [-64, -2, -1, 0, 1, 2, 64],
+                    "x2": [2, -3, -2, -3, 3, -1, 2],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "x1": [-np.inf, -64.0, -2.0, -0.0, 0.0, 2.0, 64.0, np.inf, np.nan, 1.0],
+                    "x2": [2.0, -3.0, -2.0, 0.0, -0.0, -1.0, np.inf, -np.inf, 2.0, np.nan],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "x1": pd.array([1, -2, 3, None, None], dtype="Int64"),
+                    "x2": pd.array([-2, 3, None, 2, None], dtype="Int64"),
+                }
+            ),
+        ):
+            psdf = ps.from_pandas(pdf)
+            result = np.copysign(psdf.x1, psdf.x2)
+            expected = np.copysign(pdf.x1, pdf.x2)
+            self.assert_eq(result, expected, almost=True)
+            # copysign only differs from |x| in the sign bit, so assert on signbit
+            # explicitly -- 0.0 == -0.0 numerically and would hide a wrong sign.
+            self.assert_eq(np.signbit(result.to_pandas()), np.signbit(expected))
+
+    def test_np_copysign_signed_zero(self):
+        # np.copysign takes the sign from y's IEEE-754 sign bit, not from y < 0:
+        # copysign(1.0, -0.0) == -1.0 and copysign(1.0, 0.0) == 1.0.
+        pdf = pd.DataFrame(
+            {
+                "x1": [1.0, 1.0, -0.0, -0.0, 3.0],
+                "x2": [0.0, -0.0, 0.0, -0.0, -0.0],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        result = np.copysign(psdf.x1, psdf.x2).to_pandas()
+        expected = np.copysign(pdf.x1, pdf.x2)
+        self.assert_eq(result, expected)
+        self.assert_eq(np.signbit(result), np.signbit(expected))
 
     def test_np_heaviside(self):
         for pdf in (
@@ -434,7 +758,7 @@ class NumPyCompatTestsMixin:
             self.assert_eq(np.signbit(psdf.a), np.signbit(pdf.a))
 
     def test_np_spark_compat_series(self):
-        from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
+        from pyspark.pandas.numpy_compat import binary_np_spark_mappings, unary_np_spark_mappings
 
         # Use randomly generated dataFrame
         pdf = pd.DataFrame(
@@ -484,7 +808,7 @@ class NumPyCompatTestsMixin:
             reset_option("compute.ops_on_diff_frames")
 
     def test_np_spark_compat_frame(self):
-        from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
+        from pyspark.pandas.numpy_compat import binary_np_spark_mappings, unary_np_spark_mappings
 
         # Use randomly generated dataFrame
         pdf = pd.DataFrame(

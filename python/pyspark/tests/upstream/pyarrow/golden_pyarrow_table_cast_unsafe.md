@@ -1,0 +1,22 @@
+| test case                 | pyarrow table                                                               | cast result                                                                                   |
+|---------------------------|-----------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
+| types:downcast            | {a: [1, 2, 3], b: [1.5, 2.5, 3.5]}@Table[a: int64, b: float64]              | {a: [1, 2, 3], b: [1.5, 2.5, 3.5]}@Table[a: int32, b: float32]                                |
+| types:upcast              | {a: [1, 2, 3], b: [1.5, 2.5, 3.5]}@Table[a: int32, b: float32]              | {a: [1, 2, 3], b: [1.5, 2.5, 3.5]}@Table[a: int64, b: float64]                                |
+| overflow:int64->int32     | {a: [1099511627776, 1]}@Table[a: int64]                                     | {a: [0, 1]}@Table[a: int32]                                                                   |
+| truncate:float->int       | {a: [1.9, -2.1]}@Table[a: float64]                                          | {a: [1, -2]}@Table[a: int64]                                                                  |
+| names:mismatch            | {a: [1, 2], b: [1.5, 2.5]}@Table[a: int64, b: float64]                      | ERR@ValueError                                                                                |
+| names:reordered           | {a: [1, 2], b: [1.5, 2.5]}@Table[a: int64, b: float64]                      | ERR@ValueError                                                                                |
+| names:field-count         | {a: [1, 2], b: [1.5, 2.5]}@Table[a: int64, b: float64]                      | ERR@ValueError                                                                                |
+| nullable:false-with-nulls | {a: [1, None]}@Table[a: int64]                                              | ERR@ValueError                                                                                |
+| nullable:false-no-nulls   | {a: [1, 2]}@Table[a: int64]                                                 | {a: [1, 2]}@Table[a: int32]                                                                   |
+| timestamp:us->ns          | {ts: [1970-01-01 00:00:00, 1970-01-01 00:00:01]}@Table[ts: timestamp[us]]   | {ts: [1970-01-01 00:00:00, 1970-01-01 00:00:01]}@Table[ts: timestamp[ns]]                     |
+| timestamp:attach-tz       | {ts: [1970-01-01 00:00:00, 1970-01-01 00:00:01]}@Table[ts: timestamp[us]]   | {ts: [1970-01-01 00:00:00+00:00, 1970-01-01 00:00:01+00:00]}@Table[ts: timestamp[us, tz=UTC]] |
+| string->large_string      | {s: [hello, world, None]}@Table[s: string]                                  | {s: [hello, world, None]}@Table[s: large_string]                                              |
+| binary->large_binary      | {b: [b'x', b'yz', None]}@Table[b: binary]                                   | {b: [b'x', b'yz', None]}@Table[b: large_binary]                                               |
+| nested:list               | {lst: [[1, 2], [3], None]}@Table[lst: list<item: int64>]                    | {lst: [[1, 2], [3], None]}@Table[lst: list<item: int32>]                                      |
+| nested:list-overflow      | {lst: [[1099511627776, 1]]}@Table[lst: list<item: int64>]                   | {lst: [[0, 1]]}@Table[lst: list<item: int32>]                                                 |
+| nested:struct             | {st: [[('x', 1), ('y', 'a')], None]}@Table[st: struct<x: int64, y: string>] | {st: [[('x', 1), ('y', 'a')], None]}@Table[st: struct<x: int32, y: large_string>]             |
+| nested:map                | {m: [[('k', 1), ('j', 2)], None]}@Table[m: map<string, int64>]              | {m: [[('k', 1), ('j', 2)], None]}@Table[m: map<string, int32>]                                |
+| multi-chunk-column        | {a: [1, 2, 3, None]}@Table[a: int64]                                        | {a: [1, 2, 3, None]}@Table[a: int32]                                                          |
+| empty:0-columns           | {}@Table[]                                                                  | {}@Table[]                                                                                    |
+| empty:columns-no-rows     | {i: [], s: []}@Table[i: int64, s: string]                                   | {i: [], s: []}@Table[i: int32, s: large_string]                                               |

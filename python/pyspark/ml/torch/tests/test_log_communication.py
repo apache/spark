@@ -18,18 +18,18 @@
 from __future__ import absolute_import, division, print_function
 
 import contextlib
-from io import StringIO
 import sys
 import time
-from typing import Any, Callable
 import unittest
+from io import StringIO
+from typing import Any, Callable
 
 import pyspark.ml.torch.log_communication
 from pyspark.ml.torch.log_communication import (
-    LogStreamingServer,
+    _SERVER_POLL_INTERVAL,
     LogStreamingClient,
     LogStreamingClientBase,
-    _SERVER_POLL_INTERVAL,
+    LogStreamingServer,
 )
 
 

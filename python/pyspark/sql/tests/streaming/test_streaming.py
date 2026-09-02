@@ -20,11 +20,11 @@ import shutil
 import tempfile
 import time
 
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import Row
 from pyspark.sql.functions import lit
-from pyspark.sql.types import StructType, StructField, IntegerType, StringType, TimestampType
+from pyspark.sql.types import IntegerType, StringType, StructField, StructType, TimestampType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.errors import PySparkTypeError, PySparkValueError
 
 
 class StreamingTestsMixin:
@@ -364,8 +364,8 @@ class StreamingTestsMixin:
             finally:
                 sq.stop()
 
-            from pyspark.sql.functions import col, udf
             from pyspark.errors import StreamingQueryException
+            from pyspark.sql.functions import col, udf
 
             bad_udf = udf(lambda x: 1 / 0)
             sq = (

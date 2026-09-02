@@ -93,18 +93,18 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             }
           }
           <div id="plan-viz-download-btn-container">
-            <select id="plan-viz-format-select">
+            <select id="plan-viz-format-select" aria-label="Plan visualization download format">
               <option value="svg">SVG</option>
               <option value="dot">DOT</option>
               <option value="txt">TXT</option>
             </select>
-            <label for="plan-viz-format-select">
-              <a id="plan-viz-download-btn" class="downloadbutton">Download</a>
-            </label>
+            <button id="plan-viz-download-btn" class="btn btn-sm btn-outline-secondary ms-2"
+                    type="button" title="Download plan visualization">
+              &#x2b07;&#xfe0f; Download</button>
             <button id="copy-plan-btn" class="btn btn-sm btn-outline-secondary ms-2"
                     type="button" title="Copy physical plan to clipboard">
               &#x1f4cb; Copy Plan</button>
-            <button id="copy-link-btn" class="btn btn-sm btn-outline-secondary ms-1"
+            <button id="copy-link-btn" class="btn btn-sm btn-outline-secondary ms-2"
                     type="button" title="Copy shareable link to this execution">
               &#x1f517; Copy Link</button>
           </div>

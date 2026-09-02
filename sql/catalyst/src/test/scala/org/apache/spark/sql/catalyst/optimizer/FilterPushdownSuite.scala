@@ -1645,6 +1645,55 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimizedQueryWithoutStep, correctAnswer)
   }
 
+  test("SPARK-58627: do not push down predicate with raise_error through joins") {
+    val x = testStringRelation.subquery("x")
+    val y = testRelation1.subquery("y")
+
+    // raise_error over literals references no columns, so it looks evaluable on either side and
+    // gets pushed into the left relation, where it fires on rows the join would have dropped.
+    val queryWithRaiseError = x.join(y, joinType = Inner, condition = Some($"x.a" === $"y.d"))
+      .where(IsNull(RaiseError(Literal("boom"))))
+      .analyze
+    comparePlans(Optimize.execute(queryWithRaiseError), queryWithRaiseError)
+  }
+
+  test("SPARK-58627: do not push down predicate with a throwing child of sequence through joins") {
+    val x = testStringRelation.subquery("x")
+    val y = testRelation1.subquery("y")
+
+    // Sequence overrides `throwable` for its step check, so it also has to fall back to its
+    // children. Without that fallback a RaiseError under a stepless sequence reports
+    // non-throwable and the predicate gets pushed below the join.
+    val raiseErrorInt = RaiseError(
+      Literal("USER_RAISED_EXCEPTION"),
+      CreateMap(Seq(Literal("errorMessage"), $"x.e")),
+      IntegerType)
+    val queryWithRaiseError = x.join(y, joinType = Inner, condition = Some($"x.a" === $"y.d"))
+      .where(IsNotNull(Sequence($"x.a", raiseErrorInt, None)))
+      .analyze
+    comparePlans(Optimize.execute(queryWithRaiseError), queryWithRaiseError)
+  }
+
+  test("SPARK-58627: do not combine predicate with raise_error with other filters") {
+    val x = testStringRelation.subquery("x")
+
+    // Do not combine. Two stacked Filters pin raise_error above the inner predicate, while a
+    // single merged And does not: execution does not guarantee the conjuncts are evaluated in
+    // order, and later rules are free to re-split and relocate them independently. Either way
+    // raise_error can end up evaluated on rows the inner filter would have removed.
+    val queryWithRaiseError = x.where($"x.a" > 1)
+      .where(IsNull(RaiseError($"x.e")))
+      .analyze
+    comparePlans(Optimize.execute(queryWithRaiseError), queryWithRaiseError)
+
+    // The same shape without raise_error is combined into a single filter.
+    val queryWithoutRaiseError = x.where($"x.a" > 1)
+      .where(IsNotNull($"x.e"))
+      .analyze
+    val correctAnswer = x.where(IsNotNull($"x.e") && $"x.a" > 1).analyze
+    comparePlans(Optimize.execute(queryWithoutRaiseError), correctAnswer)
+  }
+
   test("push down deterministic predicate through BinBy") {
     // Relation: ts_start, ts_end, value (DISTRIBUTE), label (pass-through).
     val tsStart = AttributeReference("ts_start", TimestampType, nullable = false)()

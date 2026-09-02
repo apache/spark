@@ -67,7 +67,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       refs: Array[NamedReference],
       output: Seq[Attribute]): AttributeSet = {
     val plan = LocalRelation(output)
-    AttributeSet(resolveRefs[Attribute](refs.toImmutableArraySeq, plan))
+    AttributeSet(resolveRefs[NamedExpression](refs.toImmutableArraySeq, plan))
   }
 
   /**

@@ -41,9 +41,8 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * Returns attributes this scan can be filtered by at runtime.
    *
    * Spark will call [[filter]] if it can derive a runtime filter for any of these attributes.
-   * Each reference must be a top-level attribute present in [[Scan.readSchema]]. Nested
-   * references and attributes pruned out of the read schema fail to resolve when Spark builds
-   * the scan relation.
+   * Each reference must resolve against the scan relation output when Spark builds it. Attributes
+   * pruned out of [[Scan.readSchema]] fail to resolve.
    */
   def filterAttributes(): Array[NamedReference]
 
@@ -64,8 +63,11 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * predicate over it.
    *
    * Each reference must be a top-level attribute present in [[Scan.readSchema]]. Nested
-   * references and attributes pruned out of the read schema fail to resolve when Spark builds
-   * the scan relation.
+   * references are rejected, and attributes pruned out of the read schema fail to resolve, when
+   * Spark builds the scan relation. Spark cannot currently represent an individual fully pushed
+   * nested path. A scan must not return the root struct as a substitute unless it can fully
+   * evaluate predicates over every nested field, since Spark would remove their post-scan
+   * evaluation as well.
    */
   def fullyPushedFilterAttributes(): Array[NamedReference] = Array.empty
 
@@ -76,9 +78,9 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * Implementations may use the expressions to prune initially planned
    * [[org.apache.spark.sql.connector.read.InputPartition]]s.
    *
-   * An expression may access nested fields of an attribute returned by [[filterAttributes]], as
-   * that attribute is required to be top-level. The scan is responsible for matching such
-   * accesses against its own partition layout.
+   * Spark tracks runtime-filter eligibility by root attribute. If [[filterAttributes]] returns a
+   * nested reference, an expression may access another nested field under the same root. The scan
+   * must match each access against its own partition layout and use only expressions it can apply.
    *
    * Spark may call this method more than once for the same scan instance: a plan can hold several
    * scan nodes sharing one scan (e.g. the two branches of a group-based UPDATE), and each pushes

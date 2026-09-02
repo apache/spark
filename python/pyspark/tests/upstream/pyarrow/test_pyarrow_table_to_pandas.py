@@ -47,13 +47,13 @@ import datetime
 import unittest
 
 from pyspark.loose_version import LooseVersion
-from pyspark.testing.utils import (
-    have_pyarrow,
-    have_pandas,
-    pyarrow_requirement_message,
-    pandas_requirement_message,
-)
 from pyspark.testing.goldenutils import GoldenFileTestMixin
+from pyspark.testing.utils import (
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 
 if have_pandas:
     import pandas as pd
@@ -70,24 +70,6 @@ class _PyArrowTableToPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
     its own.
     """
 
-    @staticmethod
-    def _repr_dataframe(df) -> str:
-        """
-        Format a pandas DataFrame result as a golden-file cell: per-column tolist()
-        for a stable, Python-native representation, mirroring goldenutils'
-        ``repr_pandas_series_value`` for the Series case.
-
-        This deliberately does NOT go through ``repr_value``/``repr_pandas_value``
-        (which use ``to_json``). With the default date_as_object=True a far-future
-        date (year 9999) comes back as an object column of Python ``datetime.date``
-        objects, and ``DataFrame.to_json`` overflows converting each to an epoch
-        nanosecond int (OverflowError); tolist() returns the objects as-is, so
-        nothing overflows.
-        """
-        body = str({name: col.tolist() for name, col in df.items()}).replace("\n", " ")
-        schema = ", ".join(f"{t} {d.name}" for t, d in df.dtypes.items())
-        return f"{body}@Dataframe[{schema}]"
-
     def _to_pandas_cell(self, table, **to_pandas_kwargs) -> str:
         """
         Convert ``table`` via ``to_pandas(**to_pandas_kwargs)`` and format the result
@@ -99,7 +81,7 @@ class _PyArrowTableToPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
             pdf = table.to_pandas(**to_pandas_kwargs)
         except Exception as e:
             return f"ERR@{type(e).__name__}"
-        return self._repr_dataframe(pdf)
+        return self.repr_value(pdf, max_len=0)
 
     def _structural_tables(self):
         """Assembly shapes and empty edges (no temporal coercion involved)."""

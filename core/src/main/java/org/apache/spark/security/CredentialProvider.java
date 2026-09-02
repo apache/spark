@@ -103,17 +103,46 @@ public interface CredentialProvider extends AutoCloseable {
   }
 
   /**
+   * Returns additional Spark configuration properties that should be set when this
+   * provider is active.
+   * <p>
+   * This method is called after {@link #init(Map)} and a successful
+   * {@link #resolve(UserContext, URI)} invocation. Implementations may
+   * assume that provider state is fully initialized when this is called.
+   * <p>
+   * The credential management layer applies these entries to {@code SparkConf} after
+   * successful startup, only if the user has not already set them explicitly. This
+   * allows provider modules to declare executor-side wiring (e.g., the Hadoop
+   * credentials provider class for a particular filesystem scheme) without requiring
+   * core to have vendor-specific knowledge.
+   * <p>
+   * Keys must use the {@code spark.} prefix to be effective (SparkConf convention).
+   * Keys with the {@code spark.hadoop.} prefix are propagated to executor-side
+   * Hadoop {@code Configuration} with the prefix stripped. Other {@code spark.*}
+   * keys are applied as Spark-internal configuration.
+   * <p>
+   * The default implementation returns an empty map (no additional properties).
+   *
+   * @return an unmodifiable map of property key-value pairs (never null).
+   *         Keys and values within the map must not be {@code null}.
+   * @since 4.4.0
+   */
+  default Map<String, String> additionalSparkProperties() {
+    return Map.of();
+  }
+
+  /**
    * Releases any resources held by this provider (e.g., HTTP clients, connection pools).
    * <p>
    * Called by the credential management layer during shutdown. The default implementation
    * is a no-op; providers that allocate long-lived resources in {@link #init(Map)} should
    * override this method to clean them up.
    * <p>
-   * {@code close()} may be invoked while another thread is still executing
-   * {@link #resolve(UserContext, URI)}: shutdown interrupts the renewal thread but does
-   * not wait for in-flight calls to complete. Implementations must tolerate a concurrent
-   * or subsequent {@code resolve()} failing after resources have been released, and
-   * {@code close()} itself must not block indefinitely.
+   * Shutdown interrupts the renewal thread and waits a bounded time for in-flight calls to
+   * complete. If the wait times out or the shutdown thread is interrupted, {@code close()} may
+   * be invoked while another thread is still executing {@link #resolve(UserContext, URI)}.
+   * Implementations must tolerate a concurrent or subsequent {@code resolve()} failing after
+   * resources have been released, and {@code close()} itself must not block indefinitely.
    * <p>
    * Implementations that do not throw checked exceptions may narrow the {@code throws}
    * clause in their override (e.g., declare {@code close()} with no {@code throws} or

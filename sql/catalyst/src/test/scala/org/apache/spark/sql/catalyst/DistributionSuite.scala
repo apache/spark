@@ -401,11 +401,11 @@ class DistributionSuite extends SparkFunSuite {
     assert(!nonGroupedKP.isGrouped)
     // satisfies() must return false: the partitions are not yet grouped.
     checkSatisfied(nonGroupedKP, ClusteredDistribution(Seq(x)), false)
-    // groupedSatisfies() returns true: it CAN satisfy once GroupPartitionsExec groups them.
-    assert(nonGroupedKP.groupedSatisfies(ClusteredDistribution(Seq(x))))
+    // mayGroupToSatisfy() returns true, because grouping them makes it satisfy.
+    assert(nonGroupedKP.mayGroupToSatisfy(ClusteredDistribution(Seq(x))))
 
     // Grouped: all distinct keys, so isGrouped=true and satisfies() delegates to
-    // groupedSatisfies().
+    // keysSatisfy().
     val groupedKP = KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))
     assert(groupedKP.isGrouped)
     checkSatisfied(groupedKP, ClusteredDistribution(Seq(x)), true)
@@ -465,5 +465,18 @@ class DistributionSuite extends SparkFunSuite {
       PartitioningCollection(Seq(nested, kpXY))
     }
     assert(arityMismatch.getMessage.contains("matching expression arity"))
+  }
+
+  test("SPARK-59057: toGrouped and KeyedShuffleSpec.createPartitioning keep isCollapsed sticky") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+
+    val collapsedKP = KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(1), InternalRow(2)))
+      .copy(isCollapsed = true)
+    assert(collapsedKP.toGrouped.isCollapsed, "toGrouped must keep isCollapsed sticky")
+
+    val spec = KeyedShuffleSpec(collapsedKP, ClusteredDistribution(Seq(x)))
+    val created = spec.createPartitioning(Seq(y)).asInstanceOf[KeyedPartitioning]
+    assert(created.isCollapsed, "createPartitioning must keep isCollapsed sticky")
   }
 }

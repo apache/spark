@@ -101,7 +101,7 @@ Configuration of in-memory caching can be done via `spark.conf.set` or by runnin
     <td>None</td>
     <td>
       The suggested (not guaranteed) maximum number of split file partitions. If it is set,
-      Spark will rescale each partition to make the number of partitions is close to this
+      Spark will rescale each partition to make the number of partitions close to this
       value if the initial number of partitions exceeds this value. This configuration is
       effective only when using file-based sources such as Parquet, JSON and ORC.
     </td>
@@ -180,6 +180,74 @@ Missing or inaccurate statistics will hinder Spark's ability to select an optima
 - **Data object statistics**: You can inspect the statistics on a table or column with [`DESCRIBE EXTENDED`](sql-ref-syntax-aux-describe-table.html).
 - **Query plan estimates**: You can inspect Spark's cost estimates in the optimized query plan via [`EXPLAIN COST`](sql-ref-syntax-qry-explain.html) or `DataFrame.explain(mode="cost")`.
 - **Runtime statistics**: You can inspect these statistics in the [SQL UI](web-ui.html#sql-tab) under the "Details" section as a query is running. Look for `Statistics(..., isRuntime=true)` in the plan.
+
+## Optimizing the Aggregate
+
+### Adaptive Partial Aggregation
+
+A grouping aggregation normally runs in two phases: a partial aggregation before the shuffle and a
+final aggregation after it. The partial aggregation is only worthwhile when it actually reduces the
+number of rows; when the grouping keys are close to unique it maintains, and possibly spills, an
+aggregation map roughly as large as its input while emitting almost as many rows as it consumed.
+
+When adaptive partial aggregation is enabled, hash aggregation measures the compaction ratio (the
+number of processed rows divided by the number of keys held in its aggregation maps) at runtime
+and, if the partial aggregation is not collapsing enough rows to be worthwhile, stops populating
+the aggregation map and passes the remaining rows through as single-row partial aggregation buffers
+for the final aggregation to merge. Once pass-through is active the map is frozen and its output
+always comes before the passed-through rows: rows that collide with the frozen map are held in a
+queue behind it and flushed only after it drains, so a duplicate of a key already in the map still
+merges after that key's accumulated rows, keeping an order-sensitive aggregate such as
+`first`/`last` consistent with a run that never bypasses. The ratio is evaluated periodically, and
+again right before the aggregation map would spill, in which case the spill is skipped entirely.
+
+Both evaluations use the cumulative rows and keys of the current map epoch and, once triggered,
+pass-through is not reversed for the rest of the task, so a skewed prefix biases the outcome in
+either direction. A favorable prefix can mask a later distinct-heavy tail, keeping the aggregation
+on until a spill restarts the accounting; conversely, a distinct-heavy prefix can trip the
+pass-through early and keep it tripped even where the rest of the input would aggregate well. To
+catch the former without waiting for a spill, raise `minCompaction` so the cumulative ratio trips
+the threshold on a weaker late turn (a higher threshold also bypasses more readily on other inputs).
+To avoid committing the task to pass-through on the latter, raise `minRows` so the periodic
+evaluations start later.
+
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
+  <tr>
+    <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.enabled</code></td>
+    <td>false</td>
+    <td>
+      When true, hash aggregation adaptively bypasses the pre-shuffle partial aggregation at runtime
+      when it observes that the partial aggregation is not reducing the number of rows enough to be
+      worthwhile. This applies only to hash aggregation with grouping keys.
+    </td>
+    <td>4.4.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.minRows</code></td>
+    <td>100000</td>
+    <td>
+      The number of rows between periodic compaction-ratio evaluations. Setting this to
+      <code>0</code> disables the periodic evaluation. The ratio may still be evaluated when the
+      aggregation map is about to spill. A larger value also delays the periodic evaluations, so
+      when one of them trips pass-through the frozen map tends to hold more rows; the frozen map
+      stays resident until its output is drained, so a larger value raises that transient memory
+      peak.
+    </td>
+    <td>4.4.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.minCompaction</code></td>
+    <td>1.05</td>
+    <td>
+      The minimum compaction ratio required to keep the partial aggregation. A ratio of 10 means the
+      partial aggregation collapses ten rows into one key; when an evaluation finds the ratio below
+      this value the partial aggregation is bypassed for the rest of the input. A larger value
+      bypasses more aggressively.
+    </td>
+    <td>4.4.0</td>
+  </tr>
+</table>
 
 ## Optimizing the Join Strategy
 
@@ -272,7 +340,9 @@ SELECT
 
 They are merged into one aggregate that computes `min` and `max` together, so `store_sales` is read once. In `EXPLAIN` output a merged subplan shows up as a subquery whose single output column is named `mergedValue`, and the sites that share it as `ReusedSubquery`.
 
-Two subplans are merged when their plans match node by node: `Project` lists are unioned, `Aggregate`s must have the same grouping and use the same aggregation implementation (so a `min` is not merged with a `collect_list`), `Filter`s must have the same condition, `Join`s must have the same type, condition and hints, and the leaves must read the same input. Subplans that differ only in their `WHERE` conditions can be merged as well, by turning each side's condition into a boolean column and giving each side's aggregate expressions a `FILTER (WHERE ...)` clause. That is controlled by the configurations below. Queries that still contain a `WITH` clause when this rule runs (one that was not inlined) are skipped.
+Two subplans are merged when their plans match node by node: `Project` lists are unioned, `Aggregate`s must have the same grouping and use the same aggregation implementation (so a `min` is not merged with a `collect_list`), `Filter`s must have the same condition, `Join`s must have the same type, condition and hints, and the leaves must read the same input. A V1 file relation whose rows depend on which columns the read asked for is merged only when both subplans read the same columns of it: `csv`, `json` and `xml`, whose parsers decide what counts as a malformed record from the required schema, `avro` read with `positionalFieldMatching`, which pairs a column with the Avro field at its position in that schema, and any file relation read with `spark.sql.files.ignoreCorruptFiles` enabled, as a read option or through the configuration, where a failure in a column only one side reads is swallowed together with the rest of that file's rows. `spark.sql.files.ignoreMissingFiles` counts too, not for that reason but because one predicate answers for both. Subplans that differ only in their `WHERE` conditions can be merged as well, by turning each side's condition into a boolean column and giving each side's aggregate expressions a `FILTER (WHERE ...)` clause. That is controlled by the configurations below. Queries that still contain a `WITH` clause when this rule runs (one that was not inlined) are skipped.
+
+On the DataSource V2 read path the requirement that the leaves read the same input is relaxed for a source that declares the `SCAN_MERGING` table capability: two leaves that differ only in their projected columns merge into a single scan reading the union of those columns. Among the built-in file formats Parquet, ORC, text and Avro declare it; a format reaches its V2 read path only when it is removed from `spark.sql.sources.useV1SourceList`. A file table withholds the capability when `spark.sql.files.ignoreCorruptFiles` is true, because a read failure in a column that only the other subplan projects would then be swallowed along with the rest of that file's rows, and when `spark.sql.files.ignoreMissingFiles` is true, to match the strictness predicate the file reader uses. Avro withholds it under `positionalFieldMatching`, which resolves a column by its position in the projection.
 
 When only one of the two subplans has a filter, merging is always beneficial, because the unfiltered side reads all the data anyway. This case is on by default, unless the filter has to cross a `Join` to reach the aggregate, which needs the through-join configuration below. When both sides have a filter (the symmetric case), the merged scan filter becomes `OR(f1, f2)`, which is less selective than either original filter and can therefore read more data - for example when the filters prune partitions or Parquet row groups. That is why the symmetric case is disabled by default.
 
@@ -316,7 +386,7 @@ In TPC-DS benchmark runs, enabling symmetric filter propagation made `q9` and `q
     <td><code>spark.sql.optimizer.mergeSubplans.filterPropagation.dsv2SymmetricFilterPropagation.enabled</code></td>
     <td>false</td>
     <td>
-      When true, two DataSource V2 scans that pushed the same strictly enforced filters but carry different best-effort (post-scan) filters can be merged even when <code>spark.sql.optimizer.mergeSubplans.filterPropagation.symmetricFilterPropagation.enabled</code> is false. In this case widening cannot change the set of rows the scan is required to return, as the strict filters are re-pushed unchanged and the enclosing <code>Filter</code> re-checks the rest above the scan. This applies only to V2 sources that opt in to scan merging with the <code>SCAN_MERGING</code> table capability; no built-in source does.
+      When true, two DataSource V2 scans that pushed the same strictly enforced filters but carry different best-effort (post-scan) filters can be merged even when <code>spark.sql.optimizer.mergeSubplans.filterPropagation.symmetricFilterPropagation.enabled</code> is false. In this case widening cannot change the set of rows the scan is required to return, as the strict filters are re-pushed unchanged and the enclosing <code>Filter</code> re-checks the rest above the scan. This applies only to V2 sources that opt in to scan merging with the <code>SCAN_MERGING</code> table capability. For a file source the strictly enforced filters are the partition filters, so this configuration is what lets two scans over the same partitions but with different data filters merge.
     </td>
     <td>4.3.0</td>
   </tr>
@@ -361,7 +431,7 @@ This feature coalesces the post shuffle partitions based on the map output stati
      <td><code>spark.sql.adaptive.coalescePartitions.parallelismFirst</code></td>
      <td>true</td>
      <td>
-       When true, Spark ignores the target size specified by <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> (default 64MB) when coalescing contiguous shuffle partitions, and only respect the minimum partition size specified by <code>spark.sql.adaptive.coalescePartitions.minPartitionSize</code> (default 1MB), to maximize the parallelism. This is to avoid performance regressions when enabling adaptive query execution. It's recommended to set this config to false on a busy cluster to make resource utilization more efficient (not many small tasks).
+       When true, Spark ignores the target size specified by <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> (default 64MB) when coalescing contiguous shuffle partitions, and only respects the minimum partition size specified by <code>spark.sql.adaptive.coalescePartitions.minPartitionSize</code> (default 1MB), to maximize the parallelism. This is to avoid performance regressions when enabling adaptive query execution. It's recommended to set this config to false on a busy cluster to make resource utilization more efficient (not many small tasks).
      </td>
      <td>3.2.0</td>
    </tr>
@@ -414,7 +484,7 @@ This feature coalesces the post shuffle partitions based on the map output stati
      <td><code>spark.sql.adaptive.rebalancePartitionsSmallPartitionFactor</code></td>
      <td>0.2</td>
      <td>
-       A partition will be merged during splitting if its size is small than this factor multiply <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>.
+       A partition will be merged during splitting if its size is smaller than this factor multiplying <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>.
      </td>
      <td>3.3.0</td>
    </tr>
@@ -554,7 +624,7 @@ You can control the details of how AQE works by providing your own cost evaluato
 
 ## Storage Partition Join
 
-Storage Partition Join (SPJ) is an optimization technique in Spark SQL that makes use the existing storage layout to avoid the shuffle phase.
+Storage Partition Join (SPJ) is an optimization technique in Spark SQL that makes use of the existing storage layout to avoid the shuffle phase.
 
 This is a generalization of the concept of Bucket Joins, which is only applicable for [bucketed](sql-data-sources-load-save-functions.html#bucketing-sorting-and-partitioning) tables, to tables partitioned by functions registered in FunctionCatalog. Storage Partition Joins are currently supported for compatible V2 DataSources.
 

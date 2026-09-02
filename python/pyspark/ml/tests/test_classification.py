@@ -21,11 +21,18 @@ from shutil import rmtree
 import numpy as np
 
 from pyspark.errors import PySparkException
-from pyspark.ml.linalg import Vectors, Matrices
-from pyspark.sql import DataFrame, Row
 from pyspark.ml.classification import (
-    NaiveBayes,
-    NaiveBayesModel,
+    BinaryLogisticRegressionSummary,
+    BinaryRandomForestClassificationSummary,
+    BinaryRandomForestClassificationTrainingSummary,
+    DecisionTreeClassificationModel,
+    DecisionTreeClassifier,
+    FMClassificationModel,
+    FMClassificationSummary,
+    FMClassificationTrainingSummary,
+    FMClassifier,
+    GBTClassificationModel,
+    GBTClassifier,
     LinearSVC,
     LinearSVCModel,
     LinearSVCSummary,
@@ -33,27 +40,20 @@ from pyspark.ml.classification import (
     LogisticRegression,
     LogisticRegressionModel,
     LogisticRegressionSummary,
-    BinaryLogisticRegressionSummary,
-    FMClassifier,
-    FMClassificationModel,
-    FMClassificationSummary,
-    FMClassificationTrainingSummary,
-    DecisionTreeClassifier,
-    DecisionTreeClassificationModel,
-    RandomForestClassifier,
-    RandomForestClassificationModel,
-    RandomForestClassificationSummary,
-    RandomForestClassificationTrainingSummary,
-    BinaryRandomForestClassificationSummary,
-    BinaryRandomForestClassificationTrainingSummary,
-    GBTClassifier,
-    GBTClassificationModel,
-    MultilayerPerceptronClassifier,
     MultilayerPerceptronClassificationModel,
     MultilayerPerceptronClassificationSummary,
     MultilayerPerceptronClassificationTrainingSummary,
+    MultilayerPerceptronClassifier,
+    NaiveBayes,
+    NaiveBayesModel,
+    RandomForestClassificationModel,
+    RandomForestClassificationSummary,
+    RandomForestClassificationTrainingSummary,
+    RandomForestClassifier,
 )
+from pyspark.ml.linalg import Matrices, Vectors
 from pyspark.ml.regression import DecisionTreeRegressionModel
+from pyspark.sql import DataFrame, Row
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
