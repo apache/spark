@@ -63,6 +63,7 @@ import org.apache.spark.util.SparkClassUtils
  * @groupname datetime_funcs Date and Timestamp functions
  * @groupname hash_funcs Hash functions
  * @groupname collection_funcs Collection functions
+ * @groupname lambda_funcs Lambda functions
  * @groupname array_funcs Array functions
  * @groupname struct_funcs Struct functions
  * @groupname map_funcs Map functions
@@ -13867,7 +13868,7 @@ object functions {
    *
    * @param e
    *   The array to sort. A column that evaluates to an array.
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 2.4.0
    * @return
    *   Returns a column that evaluates to an array.
@@ -13885,7 +13886,7 @@ object functions {
    * @param comparator
    *   A binary comparator function that returns a negative integer, 0, or a positive integer as
    *   the first element is less than, equal to, or greater than the second element.
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.4.0
    * @return
    *   Returns a column that evaluates to an array.
@@ -14045,7 +14046,7 @@ object functions {
    * @param f
    *   col => transformed_col, the lambda function to transform the input column.
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to an array.
@@ -14066,7 +14067,7 @@ object functions {
    *   (col, index) => transformed_col, the lambda function to transform the input column given
    *   the index. Indices start at 0.
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to an array.
@@ -14085,7 +14086,7 @@ object functions {
    * @param f
    *   col => predicate, the Boolean predicate to check the input column.
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to a boolean.
@@ -14104,7 +14105,7 @@ object functions {
    * @param f
    *   col => predicate, the Boolean predicate to check the input column.
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to a boolean.
@@ -14123,7 +14124,7 @@ object functions {
    * @param f
    *   col => predicate, the Boolean predicate to filter the input column.
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to an array.
@@ -14143,7 +14144,7 @@ object functions {
    *   (col, index) => predicate, the Boolean predicate to filter the input column given the
    *   index. Indices start at 0.
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to an array.
@@ -14170,7 +14171,7 @@ object functions {
    *   combined_value => final_value, the lambda function to convert the combined value of all
    *   inputs to final result.
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column of the same type as the initial value.
@@ -14196,7 +14197,7 @@ object functions {
    * @param merge
    *   (combined_value, input_value) => combined_value, the merge function to merge an input value
    *   to the combined_value
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column of the same type as the initial value.
@@ -14223,7 +14224,7 @@ object functions {
    *   combined_value => final_value, the lambda function to convert the combined value of all
    *   inputs to final result.
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.5.0
    * @return
    *   Returns a column of the same type as the initial value.
@@ -14249,7 +14250,7 @@ object functions {
    * @param merge
    *   (combined_value, input_value) => combined_value, the merge function to merge an input value
    *   to the combined_value
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.5.0
    * @return
    *   Returns a column of the same type as the initial value.
@@ -14272,7 +14273,7 @@ object functions {
    * @param f
    *   (lCol, rCol) => col, the lambda function to merge two input columns into one column.
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to an array.
@@ -14292,7 +14293,7 @@ object functions {
    * @param f
    *   (key, value) => new_key, the lambda function to transform the key of input map column
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to a map.
@@ -14316,7 +14317,7 @@ object functions {
    * @param f
    *   (key, value) => new_value, the lambda function to transform the value of input map column
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to a map.
@@ -14335,7 +14336,7 @@ object functions {
    * @param f
    *   (key, value) => predicate, the Boolean predicate to filter the input map column
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to a map.
@@ -14356,7 +14357,7 @@ object functions {
    * @param f
    *   (key, value1, value2) => new_value, the lambda function to merge the map values
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to a map.
