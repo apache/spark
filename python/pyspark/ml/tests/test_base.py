@@ -21,8 +21,8 @@ from pyspark.sql.types import DoubleType, IntegerType
 from pyspark.testing.mlutils import (
     MockDataset,
     MockEstimator,
-    MockUnaryTransformer,
     MockTransformer,
+    MockUnaryTransformer,
     SparkSessionTestCase,
 )
 

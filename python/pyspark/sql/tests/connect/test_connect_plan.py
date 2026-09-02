@@ -14,35 +14,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
-import uuid
 import datetime
 import decimal
 import math
+import unittest
+import uuid
+from unittest.mock import MagicMock
 
+from pyspark.errors import PySparkValueError
 from pyspark.testing.connectutils import (
     PlanOnlyTestFixture,
-    should_test_connect,
     connect_requirement_message,
+    should_test_connect,
 )
-from pyspark.errors import PySparkValueError
-
-from unittest.mock import MagicMock
 
 if should_test_connect:
     import pyspark.sql.connect.proto as proto
     from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql.connect.plan import (
-        WriteOperation,
-        Read,
-        Join,
-        SetOperation,
-        CollectMetrics,
-        LogicalPlan,
-    )
-    from pyspark.sql.connect.observation import Observation
-    from pyspark.sql.connect.readwriter import DataFrameReader
     from pyspark.sql.connect.expressions import LiteralExpression
     from pyspark.sql.connect.functions import (
         bitmap_and,
@@ -55,15 +44,25 @@ if should_test_connect:
         min,
         sum,
     )
+    from pyspark.sql.connect.observation import Observation
+    from pyspark.sql.connect.plan import (
+        CollectMetrics,
+        Join,
+        LogicalPlan,
+        Read,
+        SetOperation,
+        WriteOperation,
+    )
+    from pyspark.sql.connect.readwriter import DataFrameReader
     from pyspark.sql.connect.types import pyspark_types_to_proto_types
     from pyspark.sql.types import (
-        StringType,
-        StructType,
-        StructField,
-        IntegerType,
-        MapType,
         ArrayType,
         DoubleType,
+        IntegerType,
+        MapType,
+        StringType,
+        StructField,
+        StructType,
     )
 
 

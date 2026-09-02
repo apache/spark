@@ -17,52 +17,50 @@
 
 # mypy: disable-error-code="operator"
 
-from pyspark.resource import ResourceProfile
-
-from typing import (
-    Any,
-    Iterator,
-    List,
-    Optional,
-    Type,
-    Sequence,
-    Union,
-    cast,
-    TYPE_CHECKING,
-    Mapping,
-    Dict,
-    Tuple,
-)
 import functools
 import json
 import pickle
+from inspect import isclass, signature
 from threading import Lock
-from inspect import signature, isclass
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+    cast,
+)
 
 import pyarrow as pa
 
-from pyspark.serializers import CloudPickleSerializer
-from pyspark.storagelevel import StorageLevel
-from pyspark.sql.types import DataType, StructType
-
 import pyspark.sql.connect.proto as proto
-from pyspark.sql.column import Column
-from pyspark.sql.connect.logging import logger
-from pyspark.sql.connect.proto import base_pb2 as spark_dot_connect_dot_base__pb2
-from pyspark.sql.connect.conversion import storage_level_to_proto
-from pyspark.sql.connect.expressions import Expression, SubqueryExpression
-from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
 from pyspark.errors import (
     AnalysisException,
-    PySparkValueError,
     PySparkPicklingError,
+    PySparkValueError,
 )
+from pyspark.resource import ResourceProfile
+from pyspark.serializers import CloudPickleSerializer
+from pyspark.sql.column import Column
+from pyspark.sql.connect.conversion import storage_level_to_proto
+from pyspark.sql.connect.expressions import Expression, SubqueryExpression
+from pyspark.sql.connect.logging import logger
+from pyspark.sql.connect.proto import base_pb2 as spark_dot_connect_dot_base__pb2
+from pyspark.sql.connect.types import UnparsedDataType, pyspark_types_to_proto_types
+from pyspark.sql.types import DataType, StructType
+from pyspark.storagelevel import StorageLevel
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
-    from pyspark.sql.connect.udf import UserDefinedFunction
     from pyspark.sql.connect.observation import Observation
     from pyspark.sql.connect.session import SparkSession
+    from pyspark.sql.connect.udf import UserDefinedFunction
 
 
 class LogicalPlan:
@@ -785,7 +783,15 @@ class CachedRemoteRelation(LogicalPlan):
                             response_deserializer=response_deserializer,
                         )
                         metadata = session.client._execute_plan_metadata(req.operation_id)
-                        channel(req, metadata=metadata)  # type: ignore[arg-type]
+                        # Bound this blocking call with a client-side deadline. It is issued from a
+                        # finalizer with no other timeout at any layer; without a deadline it can
+                        # block forever if the response is never delivered, which stalls the
+                        # foreachBatch Connect handshake (the Python worker never sends its
+                        # completion signal and the driver JVM blocks on the per-batch read). A
+                        # timeout here is non-fatal: the eviction is best effort and the server
+                        # performs it independently, so on timeout we log and move on.
+                        timeout = session.client._rpc_deadlines.release_relation
+                        channel(req, metadata=metadata, timeout=timeout)  # type: ignore[arg-type]
             except Exception as e:
                 logger.warning(f"RemoveRemoteCachedRelation failed with exception: {e}.")
 

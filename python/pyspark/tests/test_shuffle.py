@@ -14,21 +14,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import random
 import unittest
 from tempfile import TemporaryDirectory
-import os
+from unittest import mock
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark import shuffle, CPickleSerializer, SparkConf, SparkContext
+from pyspark import CPickleSerializer, SparkConf, SparkContext, shuffle
 from pyspark.shuffle import (
     Aggregator,
+    ExternalGroupBy,
     ExternalMerger,
     ExternalSorter,
-    SimpleAggregator,
     Merger,
-    ExternalGroupBy,
+    SimpleAggregator,
 )
 
 
@@ -40,6 +41,23 @@ class MergerTests(unittest.TestCase):
         self.agg = Aggregator(
             lambda x: [x], lambda x, y: x.append(y) or x, lambda x, y: x.extend(y) or x
         )
+
+    def test_local_dirs_use_unique_per_process_root(self):
+        # Pins the per-process root contract of pyspark.shuffle._get_spill_dir_root.
+        self.addCleanup(shuffle._spill_dir_roots.clear)
+        with TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"SPARK_LOCAL_DIRS": tmp}):
+                shuffle._spill_dir_roots.clear()
+                (d,) = shuffle._get_local_dirs("sub")
+                legacy = os.path.join(tmp, "python", str(os.getpid()))
+                self.assertFalse(d.startswith(legacy))
+                root = shuffle._spill_dir_roots[tmp]
+                self.assertEqual(os.path.dirname(d), root)
+                if os.name != "nt":
+                    self.assertEqual(os.stat(root).st_mode & 0o777, 0o700)
+                # The root is reused for the lifetime of the process.
+                (d2,) = shuffle._get_local_dirs("sub2")
+                self.assertEqual(os.path.dirname(d2), root)
 
     def test_small_dataset(self):
         m = ExternalMerger(self.agg, 1000)

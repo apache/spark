@@ -22,7 +22,7 @@ import scala.xml.Node
 import jakarta.servlet.http.HttpServletRequest
 import org.json4s.JValue
 
-import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, MasterStateResponse, RequestKillDriver, RequestMasterState}
+import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, MasterStateResponse, RequestApplicationHold, RequestKillDriver, RequestMasterState}
 import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.StandaloneResourceUtils._
 import org.apache.spark.deploy.master._
@@ -60,6 +60,27 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     handleKillRequest(request, id => {
       master.ask[KillDriverResponse](RequestKillDriver(id))
     })
+  }
+
+  def handleAppHoldRequest(request: HttpServletRequest): Unit = {
+    handleHoldRequest(request, hold = true)
+  }
+
+  def handleAppResumeRequest(request: HttpServletRequest): Unit = {
+    handleHoldRequest(request, hold = false)
+  }
+
+  private def handleHoldRequest(request: HttpServletRequest, hold: Boolean): Unit = {
+    if (parent.holdEnabled &&
+        parent.master.securityMgr.checkModifyPermissions(request.getRemoteUser)) {
+      Option(request.getParameter("id")).foreach { id =>
+        // Sent rather than asked: the driver drains its executors before answering, which takes
+        // far longer than this request should. The outcome is rendered on a later page load.
+        master.send(RequestApplicationHold(id, hold))
+
+        Thread.sleep(100)
+      }
+    }
   }
 
   private def handleKillRequest(request: HttpServletRequest, action: String => Unit): Unit = {
@@ -314,17 +335,37 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private def appRow(app: ApplicationInfo): Seq[Node] = {
     val killLink = if (parent.killEnabled &&
       (app.state == ApplicationState.RUNNING || app.state == ApplicationState.WAITING)) {
-      <form action="app/kill/" method="POST" class="d-inline">
+      <form action="app/kill/" method="POST" class="d-inline float-end">
         <input type="hidden" name="id" value={app.id}/>
         <input type="hidden" name="terminate" value="true"/>
-        <a href="#"
-           data-kill-message={s"Are you sure you want to kill application ${app.id} ?"}
-           class="kill-link float-end">(kill)</a>
+        <button type="submit"
+                data-kill-message={s"Are you sure you want to kill application ${app.id} ?"}
+                class="btn btn-sm btn-outline-danger kill-link">Kill</button>
+      </form>
+    }
+    // Offered only for an application whose driver reported it as holdable and which did not
+    // disable the controls itself through spark.ui.holdEnabled. Rendered before the kill link:
+    // floated controls stack right to left, so this keeps the two adjacent and leaves the kill
+    // button's left margin between the application id and the pair.
+    val holdLink = if (parent.holdEnabled && app.desc.holdEnabled && app.holdSupported &&
+      !app.isFinished) {
+      val (action, message) = if (app.isHeld) {
+        ("resume", s"Are you sure you want to resume application ${app.id} ?")
+      } else {
+        ("hold", s"Are you sure you want to hold application ${app.id}? All executors will " +
+          "be decommissioned after finishing their running tasks, and cached blocks are lost.")
+      }
+      val label = action.capitalize
+      <form action={s"app/$action/"} method="POST" class="d-inline float-end">
+        <input type="hidden" name="id" value={app.id}/>
+        <button type="submit" data-confirm-message={message}
+                class="btn btn-sm btn-outline-secondary confirm-link">{label}</button>
       </form>
     }
     <tr>
       <td>
         <a href={"app/?appId=" + app.id}>{app.id}</a>
+        {holdLink}
         {killLink}
       </td>
       <td>
@@ -348,7 +389,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       </td>
       <td>{UIUtils.formatDate(app.submitDate)}</td>
       <td>{app.desc.user}</td>
-      <td>{app.state.toString}</td>
+      <td>{app.stateText}</td>
       <td sorttable_customkey={app.duration.toString}>
         {UIUtils.formatDuration(app.duration)}
       </td>
@@ -363,12 +404,12 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     val killLink = if (parent.killEnabled &&
       (driver.state == DriverState.RUNNING ||
         driver.state == DriverState.SUBMITTED)) {
-      <form action="driver/kill/" method="POST" class="d-inline">
+      <form action="driver/kill/" method="POST" class="d-inline float-end">
         <input type="hidden" name="id" value={driver.id}/>
         <input type="hidden" name="terminate" value="true"/>
-        <a href="#"
-           data-kill-message={s"Are you sure you want to kill driver ${driver.id} ?"}
-           class="kill-link float-end">(kill)</a>
+        <button type="submit"
+                data-kill-message={s"Are you sure you want to kill driver ${driver.id} ?"}
+                class="btn btn-sm btn-outline-danger kill-link">Kill</button>
       </form>
     }
     <tr>

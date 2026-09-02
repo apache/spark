@@ -548,6 +548,57 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     testVariantGet(json, "$." + numKeys, IntegerType, null)
   }
 
+  test("SPARK-58949: object keys use unsigned UTF-8 order") {
+    val bmpKey = new String(Character.toChars(65535))
+    val supplementaryKey = new String(Character.toChars(0x10000))
+    val quote = 34.toChar.toString
+    val asciiFields = (0 until 32).map(i => quote + i + quote + ":" + i)
+    val objectJson = (asciiFields ++ Seq(
+      quote + supplementaryKey + quote + ":99",
+      quote + bmpKey + quote + ":98")).mkString("{", ",", "}")
+
+    val variant = VariantBuilder.parseJson(objectJson, false)
+    assert(variant.getFieldAtIndex(32).key === bmpKey)
+    assert(variant.getFieldAtIndex(33).key === supplementaryKey)
+    assert(variant.getFieldByKey(bmpKey).getLong === 98L)
+    assert(variant.getFieldByKey(supplementaryKey).getLong === 99L)
+    assert(variant.getFieldByKey("missing") === null)
+
+    val nestedJson = "{" + quote + "nested" + quote + ":" + objectJson + "}"
+    val nested = VariantBuilder.parseJson(nestedJson, false)
+      .getFieldByKey("nested")
+    assert(nested.getFieldAtIndex(32).key === bmpKey)
+    assert(nested.getFieldByKey(supplementaryKey).getLong === 99L)
+
+    // Reorder the last two field entries to reproduce the UTF-16 order written by older Spark.
+    val legacyValue = variant.getValue.clone()
+    handleObject[Unit](legacyValue, 0,
+      (size, idSize, offsetSize, idStart, offsetStart, _dataStart) => {
+        def swap(start: Int, width: Int): Unit = {
+          val left = start + (size - 2) * width
+          val right = left + width
+          val leftValue = readUnsigned(legacyValue, left, width)
+          val rightValue = readUnsigned(legacyValue, right, width)
+          writeLong(legacyValue, left, rightValue, width)
+          writeLong(legacyValue, right, leftValue, width)
+        }
+        swap(idStart, idSize)
+        swap(offsetStart, offsetSize)
+      })
+    val legacy = new Variant(legacyValue, variant.getMetadata)
+    assert(legacy.getFieldAtIndex(32).key === supplementaryKey)
+    assert(legacy.getFieldByKey("31").getLong === 31L)
+    assert(legacy.getFieldByKey(bmpKey).getLong === 98L)
+    assert(legacy.getFieldByKey("missing") === null)
+
+    val expectedSchemaNames = ((0 until 32).map(_.toString).sorted ++
+      Seq(supplementaryKey, bmpKey)).toArray
+    Seq(variant, legacy).foreach { v =>
+      val schema = SchemaOfVariant.schemaOf(v).asInstanceOf[StructType]
+      assert(schema.fieldNames === expectedSchemaNames)
+    }
+  }
+
   test("variant_get timestamp") {
     DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {

@@ -479,6 +479,67 @@ class JDBCSuite extends SharedSparkSession {
     assert(lastPredicate == """"PartitionColumn" >= '2020-08-02'""")
   }
 
+  test("columnPartition supports TimestampNTZType partition column") {
+    val schema = StructType(Seq(
+      StructField("PartitionColumn", TimestampNTZType)
+    ))
+
+    // (lowerBound, upperBound, numPartitions, expected where clauses in partition order).
+    val cases = Seq(
+      ("2018-07-06 10:00:00", "2018-07-06 16:00:00", "3", Seq(
+        """"PartitionColumn" < '2018-07-06 12:00:00' or "PartitionColumn" is null""",
+        """"PartitionColumn" >= '2018-07-06 12:00:00' AND """ +
+          """"PartitionColumn" < '2018-07-06 14:00:00'""",
+        """"PartitionColumn" >= '2018-07-06 14:00:00'""")),
+      // Fractional-second bounds parse, and the zoneless midpoint keeps sub-second precision.
+      ("2018-07-06 10:00:00.100", "2018-07-06 10:00:00.300", "2", Seq(
+        """"PartitionColumn" < '2018-07-06 10:00:00.2' or "PartitionColumn" is null""",
+        """"PartitionColumn" >= '2018-07-06 10:00:00.2'"""))
+    )
+
+    // NTZ bounds are zoneless, so the generated predicates must be identical regardless of the
+    // session time zone (unlike TimestampType, which shifts by the zone).
+    Seq("UTC", "America/Los_Angeles", "Asia/Kolkata").foreach { tz =>
+      cases.foreach { case (lowerBound, upperBound, numPartitions, expected) =>
+        val partitions = JDBCRelation.columnPartition(
+          schema,
+          analysis.caseInsensitiveResolution,
+          tz,
+          new JDBCOptions(url, "table", Map(
+            "lowerBound" -> lowerBound,
+            "upperBound" -> upperBound,
+            "numPartitions" -> numPartitions,
+            "partitionColumn" -> "PartitionColumn")))
+
+        val clauses = partitions.map(_.asInstanceOf[JDBCPartition].whereClause)
+        assert(clauses === expected.toArray,
+          s"NTZ partition clauses should be time-zone independent, but differed for tz=$tz " +
+            s"(bounds $lowerBound..$upperBound)")
+      }
+    }
+  }
+
+  test("columnPartition rejects zoned bounds for a TimestampNTZType partition column") {
+    val schema = StructType(Seq(
+      StructField("PartitionColumn", TimestampNTZType)
+    ))
+    // allowTimeZone = false: a bound carrying a zone offset is rejected rather than silently
+    // shifted, so NTZ bounds stay zoneless.
+    val e = intercept[IllegalArgumentException] {
+      JDBCRelation.columnPartition(
+        schema,
+        analysis.caseInsensitiveResolution,
+        "America/Los_Angeles",
+        new JDBCOptions(url, "table", Map(
+          "lowerBound" -> "2018-07-06 10:00:00+05:00",
+          "upperBound" -> "2018-07-06 16:00:00+05:00",
+          "numPartitions" -> "2",
+          "partitionColumn" -> "PartitionColumn")))
+    }
+    assert(e.getMessage.contains("Cannot parse the bound value"))
+    assert(e.getMessage.contains("2018-07-06 10:00:00+05:00"))
+  }
+
   test("overflow of partition bound difference does not give negative stride") {
     val df = sql("SELECT * FROM partsoverflow")
     checkNumPartitions(df, expectedNumPartitions = 3)
@@ -1169,6 +1230,54 @@ class JDBCSuite extends SharedSparkSession {
           s"Unexpected lookup SQL for $jdbcUrl: ${sqlCaptor.getValue}")
       }
     }
+  }
+
+  test("rename table query quotes the new table name by jdbc dialect") {
+    // The base JdbcDialect.renameTable quotes both sides; the Postgres and Derby overrides left
+    // the new name unquoted, so a name needing quotes could not be renamed to.
+    val ident = (ns: String, name: String) => Identifier.of(Array(ns), name)
+    assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+      .renameTable(ident("s", "t1"), ident("s", "new tbl")) ===
+      "ALTER TABLE \"s\".\"t1\" RENAME TO \"new tbl\"")
+    assert(JdbcDialects.get("jdbc:derby:memory:db")
+      .renameTable(ident("s", "t1"), ident("s", "new tbl")) ===
+      "RENAME TABLE \"s\".\"t1\" TO \"new tbl\"")
+  }
+
+  test("MySQLDialect quotes the table name in dropIndex and listIndexes") {
+    // createIndex and indexExists put the table name at identifier position via quoteIdentifier;
+    // dropIndex and listIndexes build the same position and now match them.
+    val dialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val ident = Identifier.of(Array.empty[String], "ta ble")
+
+    assert(dialect.dropIndex("i 1", ident) === "DROP INDEX `i 1` ON `ta ble`")
+
+    val conn = mock(classOf[Connection])
+    val stmt = mock(classOf[Statement])
+    val rs = mock(classOf[ResultSet])
+    when(conn.createStatement()).thenReturn(stmt)
+    when(stmt.executeQuery(anyString())).thenReturn(rs)
+
+    val options =
+      new JDBCOptions("jdbc:mysql://127.0.0.1/db", "ta ble", Map.empty[String, String])
+    dialect.listIndexes(conn, ident, options)
+
+    val sqlCaptor = ArgumentCaptor.forClass(classOf[String])
+    verify(stmt).executeQuery(sqlCaptor.capture())
+    assert(sqlCaptor.getValue.contains("SHOW INDEXES FROM `ta ble`"),
+      s"Unexpected listIndexes SQL: ${sqlCaptor.getValue}")
+  }
+
+  test("MsSqlServerDialect escapes a single quote in the renamed column name") {
+    // getRenameColumnQuery passes the qualified "table.column" name to sp_rename as a SQL string
+    // literal, so a single quote in the column name must be escaped to keep the literal
+    // well-formed. The table name arrives already quoted from JDBCTableCatalog.
+    val dialect = JdbcDialects.get("jdbc:sqlserver://127.0.0.1;databaseName=db")
+    assert(dialect.getRenameColumnQuery("\"tbl\"", "it's", "fine", 0) ===
+      "EXEC sp_rename '\"tbl\".\"it''s\"', \"fine\", 'COLUMN'")
+    // A name without a single quote produces the same statement as before.
+    assert(dialect.getRenameColumnQuery("\"db\".\"tbl\"", "ID", "RENAMED", 0) ===
+      "EXEC sp_rename '\"db\".\"tbl\".\"ID\"', \"RENAMED\", 'COLUMN'")
   }
 
   test("quote column names by jdbc dialect") {
@@ -2485,6 +2594,52 @@ class JDBCSuite extends SharedSparkSession {
           """"T" >= '2018-07-15 20:50:32.5'"""))
     }
     checkAnswer(df2, expectedResult)
+  }
+
+  test("support TimestampNTZType partition column end-to-end") {
+    val tableName = "timestamp_ntz_partition_table"
+    // Write a genuine TimestampNTZType column through Spark so it round-trips as a zoneless
+    // wall-clock value (a raw JDBC TIMESTAMP column would pick up a JVM-time-zone shift on read).
+    val df = Seq(
+      "2018-07-06T05:50:00",
+      "2018-07-06T08:10:08",
+      "2018-07-08T13:32:01",
+      "2018-07-12T09:51:15"
+    ).map(LocalDateTime.parse).toDF("t")
+    df.write.format("jdbc")
+      .mode("overwrite")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", tableName)
+      .save()
+
+    // Bounds are zoneless, so both the generated predicates and the results must be identical
+    // regardless of the JVM default time zone.
+    DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+      DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+        val readDf = spark.read.format("jdbc")
+          .option("url", urlWithUserAndPass)
+          .option("dbtable", tableName)
+          .option("preferTimestampNTZ", true)
+          .option("partitionColumn", "t")
+          .option("lowerBound", "2018-07-04 03:30:00")
+          .option("upperBound", "2018-07-27 14:11:05")
+          .option("numPartitions", 2)
+          .load()
+
+        assert(readDf.schema("t").dataType === TimestampNTZType)
+
+        readDf.logicalPlan match {
+          case LogicalRelationWithTable(JDBCRelation(_, parts, _, _), _) =>
+            val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
+            assert(whereClauses === Set(
+              """"t" < '2018-07-15 20:50:32.5' or "t" is null""",
+              """"t" >= '2018-07-15 20:50:32.5'"""),
+              s"NTZ partition predicates should be time-zone independent, but differed for " +
+                s"zone=$zoneId")
+        }
+        checkAnswer(readDf, df)
+      }
+    }
   }
 
   test("throws an exception for unsupported partition column types") {

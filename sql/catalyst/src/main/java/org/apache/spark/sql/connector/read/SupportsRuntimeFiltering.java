@@ -39,9 +39,8 @@ public interface SupportsRuntimeFiltering extends SupportsRuntimeV2Filtering {
    * Spark will call {@link #filter(Filter[])} if it can derive a runtime
    * predicate for any of the filter attributes.
    * <p>
-   * Each reference must be a top-level attribute present in {@link Scan#readSchema()}.
-   * Nested references and attributes pruned out of the read schema fail to resolve when
-   * Spark builds the scan relation.
+   * Each reference must resolve against the scan relation output when Spark builds it. Attributes
+   * pruned out of {@link Scan#readSchema()} fail to resolve.
    */
   NamedReference[] filterAttributes();
 
@@ -50,6 +49,13 @@ public interface SupportsRuntimeFiltering extends SupportsRuntimeV2Filtering {
    * <p>
    * The provided expressions must be interpreted as a set of filters that are ANDed together.
    * Implementations may use the filters to prune initially planned {@link InputPartition}s.
+   * <p>
+   * Spark tracks runtime-filter eligibility by root attribute. If {@link #filterAttributes()}
+   * returns a nested reference, this method may receive a filter on another nested field under
+   * the same root. Implementations must inspect each filter and use only filters they can apply.
+   * Nested paths are encoded in a V1 {@link Filter} as dot-separated names, with each path part
+   * quoted as needed, such as {@code parent.`child.with.dot`}. A top-level column whose name
+   * contains a dot remains quoted, such as {@code `parent.child`}.
    * <p>
    * If the scan also implements {@link SupportsReportPartitioning}, it must preserve
    * the originally reported partitioning during runtime filtering. While applying runtime filters,

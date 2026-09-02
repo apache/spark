@@ -266,8 +266,15 @@ private class HistoryServerDiskManager(
   }
 
   private[history] def appStorePath(appId: String, attemptId: Option[String]): File = {
-    val fileName = appId + attemptId.map("_" + _).getOrElse("") + extension
-    new File(appStoreDir, fileName)
+    val fileName = Utils.sanitizeDirName(appId) +
+      attemptId.map("_" + Utils.sanitizeDirName(_)).getOrElse("") + extension
+    val storePath = new File(appStoreDir, fileName)
+    // Validate the app store path is valid
+    if (storePath.getCanonicalFile.getParentFile != appStoreDir.getCanonicalFile) {
+      throw new IllegalArgumentException(
+        s"Store path for app $appId / $attemptId escapes the application store directory")
+    }
+    storePath
   }
 
   private def updateApplicationStoreInfo(

@@ -22,7 +22,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.linalg.{BLAS, DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
@@ -367,8 +367,13 @@ class GBTClassificationModel private[ml](
 
   /** Raw prediction for the positive class. */
   private def margin(features: Vector): Double = {
-    val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
-    BLAS.nativeBLAS.ddot(getNumTrees, treePredictions, 1, _treeWeights, 1)
+    var prediction = 0.0
+    var i = 0
+    while (i < _trees.length) {
+      prediction += _trees(i).rootNode.predictImpl(features).prediction * _treeWeights(i)
+      i += 1
+    }
+    prediction
   }
 
   /** (private[ml]) Convert to a model in the old API */

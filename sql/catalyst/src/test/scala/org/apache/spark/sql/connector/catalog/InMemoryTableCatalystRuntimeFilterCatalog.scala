@@ -19,32 +19,43 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util
 
-import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
+import org.apache.spark.sql.connector.distributions.Distribution
+import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 
-class InMemoryTableCatalystRuntimeFilterCatalog extends InMemoryTableCatalog {
-  import CatalogV2Implicits._
-
-  override def createTable(
-      ident: Identifier,
+/**
+ * Mix-in that constructs [[InMemoryCatalystRuntimeFilterTable]] from the shared in-memory
+ * catalog factory used by both CREATE TABLE and ALTER TABLE.
+ */
+trait InMemoryCatalystRuntimeFilterTableFactory { self: BasicInMemoryTableCatalog =>
+  // scalastyle:off argcount
+  override protected def newInMemoryTable(
+      name: String,
       columns: Array[Column],
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
-    if (tables.containsKey(ident)) {
-      throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
-    }
-
-    InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
-
-    val tableName = s"$name.${ident.quoted}"
-    val table = new InMemoryCatalystRuntimeFilterTable(
-      tableName, columns, partitions, properties)
-    tables.put(ident, table)
-    namespaces.putIfAbsent(ident.namespace.toList, Map())
-    table
-  }
-
-  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
-    createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties)
+      partitioning: Array[Transform],
+      properties: util.Map[String, String],
+      constraints: Array[Constraint],
+      distribution: Distribution,
+      ordering: Array[SortOrder],
+      requiredNumPartitions: Option[Int],
+      advisoryPartitionSize: Option[Long],
+      distributionStrictlyRequired: Boolean,
+      numRowsPerSplit: Int,
+      id: String): InMemoryBaseTable = {
+    // scalastyle:on argcount
+    new InMemoryCatalystRuntimeFilterTable(
+      name, columns, partitioning, properties, constraints, distribution, ordering,
+      requiredNumPartitions, advisoryPartitionSize, distributionStrictlyRequired, numRowsPerSplit)
   }
 }
+
+class InMemoryTableCatalystRuntimeFilterCatalog extends InMemoryTableCatalog
+    with InMemoryCatalystRuntimeFilterTableFactory
+
+/**
+ * The [[InMemoryCatalog]] counterpart of [[InMemoryTableCatalystRuntimeFilterCatalog]]: it hands
+ * out tables whose scans take runtime filters as Catalyst expressions, and honors
+ * `numRowsPerSplit` so that a partition key can have several splits.
+ */
+class InMemoryCatalystRuntimeFilterCatalog extends InMemoryCatalog
+    with InMemoryCatalystRuntimeFilterTableFactory

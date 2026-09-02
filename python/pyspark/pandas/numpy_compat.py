@@ -14,16 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Callable, no_type_check
+from typing import Any, Callable, Tuple, Union, no_type_check
 
 import numpy as np
 
 from pyspark.loose_version import LooseVersion
-from pyspark.sql import Column, functions as F
-from pyspark.sql.pandas.functions import pandas_udf
-from pyspark.sql.types import DoubleType, BooleanType
+from pyspark.pandas._typing import SeriesOrIndex
 from pyspark.pandas.base import IndexOpsMixin
-
+from pyspark.pandas.utils import _floor_divide_func
+from pyspark.sql import Column
+from pyspark.sql import functions as F
+from pyspark.sql.pandas.functions import pandas_udf
+from pyspark.sql.types import BooleanType, DoubleType
 
 unary_np_spark_mappings = {
     "abs": F.abs,
@@ -49,8 +51,6 @@ unary_np_spark_mappings = {
     "expm1": F.expm1,
     "fabs": lambda c: F.abs(c.cast("double")),
     "floor": F.floor,
-    "frexp": lambda _: NotImplemented,  # 'frexp' output lengths become different
-    # and it cannot be supported via pandas UDF.
     "invert": F.bitwise_not,
     "isfinite": lambda c: F.coalesce(
         ~(F.isnan(c) | (c == float("inf")) | (c == float("-inf"))), F.lit(False)
@@ -69,30 +69,44 @@ unary_np_spark_mappings = {
     "rad2deg": F.degrees,
     "radians": F.radians,
     "reciprocal": lambda c: F.when(
-        F.typeof(c).isin("float", "double"),
+        # Floating-point and decimal inputs take a true reciprocal; numpy
+        # applies it element-wise to Decimal objects as well.
+        F.typeof(c).isin("float", "double") | F.typeof(c).startswith("decimal"),
         F.when(c.isNull(), c.cast("double"))
         .when(
-            c == 0,
+            # Cast to double so the zero check also analyzes for the integer and
+            # boolean columns that fall through to the otherwise branch (Spark
+            # type-checks every branch of the CASE, not just the taken one).
+            c.cast("double") == 0,
             F.when(c.cast("string") == "-0.0", F.lit(float("-inf"))).otherwise(F.lit(float("inf"))),
         )
-        .otherwise(F.lit(1.0) / c),
+        .otherwise(F.lit(1.0) / c.cast("double")),
     ).otherwise(
-        # Integer input: numpy does integer division (truncated toward zero),
-        # so casting the float quotient to long reproduces 1 -> 1, -1 -> -1,
-        # and every other magnitude -> 0. Dividing by 0 overflows to the int64
-        # minimum, matching numpy's behavior on integer arrays.
-        F.when(c == 0, F.lit(float(np.iinfo(np.int64).min))).otherwise(
-            (F.lit(1) / c).cast("long").cast("double")
-        )
+        # Integer and boolean inputs: numpy does integer division (truncated
+        # toward zero), so only +/-1 survive and every other magnitude -> 0.
+        # Dividing by 0 overflows to the width-specific integer minimum for int
+        # (int32) and bigint (int64), while narrower widths (tinyint, smallint,
+        # and boolean promoted to int8) return 0. Cast through long so boolean
+        # and narrower integers can take part in the division.
+        F.when(
+            c.cast("long") == 0,
+            F.when(F.typeof(c) == "int", F.lit(float(np.iinfo(np.int32).min)))
+            .when(F.typeof(c) == "bigint", F.lit(float(np.iinfo(np.int64).min)))
+            .otherwise(F.lit(0.0)),
+        ).otherwise((F.lit(1) / c.cast("long")).cast("long").cast("double"))
     ),
     "rint": lambda c: F.rint(c.cast("double")),
     "sign": F.signum,
     "signbit": lambda c: F.when(
-        # A genuine <NA> from a nullable dtype (e.g. Int64) arrives as a non-double
-        # null and must propagate. A NaN from a default (numpy-backed) dtype arrives
-        # as a double null and must map to False (np.signbit(nan) is False); it falls
-        # through to otherwise(False) below. A nullable Float64 <NA> is also a double
-        # null, indistinguishable from a NaN after from_pandas, so it cannot propagate.
+        # A genuine <NA> from a nullable dtype (e.g. Int64) arrives as a non-floating null
+        # and must propagate. A NaN from a default (numpy-backed) dtype arrives as a floating
+        # null and must map to False (np.signbit(nan) is False); it falls through to
+        # otherwise(False) below. Two cases this expression cannot match, seeing only the Spark
+        # value and not the pandas dtype: a nullable float dtype's <NA> (Float32 or Float64) is
+        # also a floating null, indistinguishable from a NaN after from_pandas, so it reads False
+        # instead of propagating; and the sign of a NaN never reaches here (from_pandas nulls a
+        # NaN, and a NaN computed in Spark arrives as +NaN), so a negative NaN reads False where
+        # np.signbit reports True.
         c.isNull() & ~F.typeof(c).isin("float", "double"),
         F.lit(None).cast("boolean"),
     )
@@ -117,21 +131,48 @@ unary_np_spark_mappings = {
 }
 
 
+def _copysign_func(c1: Column, c2: Column) -> Column:
+    # Sign of y is taken from its IEEE-754 sign bit, so -0.0 counts as negative.
+    # c2 < 0 misses -0.0, so detect it via the string cast, the same way the
+    # 'reciprocal' mapping distinguishes -0.0 from 0.0. NaN's sign bit is positive
+    # and c2 < 0 is already false for NaN, so it correctly falls through to +1.0.
+    sign = F.when((c2 < 0) | (c2.cast("string") == "-0.0"), F.lit(-1.0)).otherwise(F.lit(1.0))
+    # An integer y column's NULL is a genuine missing value and propagates. A
+    # float/double column instead stores its missing value as NaN (surfaced as a
+    # Spark NULL by pandas-on-Spark), for which copysign(x, NaN) returns |x|. A
+    # nullable Float64 <NA> collapses to that same Spark NULL, so it is likewise
+    # treated as NaN and returns |x| rather than propagating; this cannot be
+    # distinguished here and matches the prior pandas_udf behavior.
+    return F.when(
+        c2.isNull() & ~F.typeof(c2).isin("float", "double"), F.lit(None).cast("double")
+    ).otherwise(F.abs(c1.cast("double")) * sign)
+
+
 def _fmod_func(c1: Column, c2: Column) -> Column:
     c1_double = c1.cast("double")
     c2_double = c2.cast("double")
+    integral_types = ["tinyint", "smallint", "int", "bigint"]
 
-    return F.when(
-        F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
+    return (
+        # A null or a nan propagates for every operand type.
         F.when(c1.isNull() | F.isnan(c1), c1_double)
         .when(c2.isNull() | F.isnan(c2), c2_double)
-        .when(c2_double == 0, F.lit(float("nan")))
-        .otherwise(F.try_mod(c1_double, c2_double)),
-    ).otherwise(
-        F.when(c1.isNull() | F.isnan(c1), c1_double)
-        .when(c2.isNull() | F.isnan(c2), c2_double)
-        .when(c2_double == 0, F.lit(0.0))
-        .otherwise(F.try_mod(c1_double, c2_double))
+        # Integral operands take the remainder as longs: a double cannot hold 9007199254740993.
+        .when(
+            F.typeof(c1).isin(integral_types) & F.typeof(c2).isin(integral_types),
+            F.when(c2_double == 0, F.lit(0.0)).otherwise(
+                F.try_mod(c1.cast("long"), c2.cast("long")).cast("double")
+            ),
+        )
+        # Floating operands, where a zero divisor is nan rather than the 0 above.
+        .when(
+            F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
+            F.when(c2_double == 0, F.lit(float("nan"))).otherwise(F.try_mod(c1_double, c2_double)),
+        )
+        # A decimal falls through here, since typeof carries its precision, as in decimal(10,2).
+        # np.fmod raises on Decimal objects, so there is no NumPy behavior to match: a zero
+        # divisor returns 0 and any other divisor takes the remainder in double.
+        .otherwise(F.when(c2_double == 0, F.lit(0.0)).otherwise(F.try_mod(c1_double, c2_double)))
     )
 
 
@@ -155,55 +196,6 @@ def _logaddexp_func(c1: Column, c2: Column, base2: bool = False) -> Column:
     )
 
 
-def _floor_divide_func(c1: Column, c2: Column) -> Column:
-    c1_double = c1.cast("double")
-    c2_double = c2.cast("double")
-
-    return F.when(
-        F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
-        F.when(c1.isNull() | F.isnan(c1), c1_double)
-        .when(c2.isNull() | F.isnan(c2), c2_double)
-        .when(
-            c1_double.isin(float("-inf"), float("inf")),
-            F.when(
-                c2_double == 0,
-                F.when(
-                    (c1_double < 0) != (c2_double.cast("string") == "-0.0"),
-                    F.lit(float("-inf")),
-                ).otherwise(F.lit(float("inf"))),
-            ).otherwise(F.lit(float("nan"))),
-        )
-        .when(
-            c2_double.isin(float("-inf"), float("inf")),
-            F.when(c1_double == 0, c1_double / c2_double)
-            .when((c1_double < 0) != (c2_double < 0), F.lit(-1.0))
-            .otherwise(F.lit(0.0)),
-        )
-        .when(
-            c2_double == 0,
-            F.when(c1_double == 0, F.lit(float("nan")))
-            .when(
-                (c1_double < 0) != (c2_double.cast("string") == "-0.0"),
-                F.lit(float("-inf")),
-            )
-            .otherwise(F.lit(float("inf"))),
-        )
-        .when(c1_double == 0, c1_double / c2_double)
-        .otherwise((c1_double / c2_double) - F.pmod(c1_double / c2_double, F.lit(1.0))),
-    ).otherwise(
-        # np.floor_divide on pandas Series returns IEEE values for an integral zero divisor.
-        F.when(c1.isNull() | F.isnan(c1), c1_double)
-        .when(c2.isNull() | F.isnan(c2), c2_double)
-        .when(
-            c2_double == 0,
-            F.when(c1_double == 0, F.lit(float("nan")))
-            .when(c1_double < 0, F.lit(float("-inf")))
-            .otherwise(F.lit(float("inf"))),
-        )
-        .otherwise((c1_double / c2_double) - F.pmod(c1_double / c2_double, F.lit(1.0)))
-    )
-
-
 # NumPy 2.3.0 changed how fmax/fmin break a signed-zero tie: for equal operands
 # (for example +0.0 and -0.0) it returns the first operand, while older versions
 # returned the second. Track the installed NumPy so the result keeps the matching
@@ -211,6 +203,8 @@ def _floor_divide_func(c1: Column, c2: Column) -> Column:
 _tie_returns_first_operand = LooseVersion(np.__version__) >= LooseVersion("2.3.0")
 
 
+# Every branch returns one of the operands, so without a cast the result keeps their
+# common type: an integral pair stays exact past 2^53 and the dtype matches NumPy's.
 def _fmax_func(c1: Column, c2: Column) -> Column:
     tie = c1 if _tie_returns_first_operand else c2
     return (
@@ -218,13 +212,12 @@ def _fmax_func(c1: Column, c2: Column) -> Column:
         .when(F.isnan(c2.cast("double")), c1)
         .when(c1 == c2, tie)
         .otherwise(F.greatest(c1, c2))
-        .cast("double")
     )
 
 
 def _fmin_func(c1: Column, c2: Column) -> Column:
     tie = c1 if _tie_returns_first_operand else c2
-    return F.when(c1 == c2, tie).otherwise(F.least(c1, c2)).cast("double")
+    return F.when(c1 == c2, tie).otherwise(F.least(c1, c2))
 
 
 binary_np_spark_mappings = {
@@ -232,9 +225,7 @@ binary_np_spark_mappings = {
     "bitwise_and": lambda c1, c2: c1.bitwiseAND(c2),
     "bitwise_or": lambda c1, c2: c1.bitwiseOR(c2),
     "bitwise_xor": lambda c1, c2: c1.bitwiseXOR(c2),
-    "copysign": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.copysign(s1, s2), DoubleType()
-    ),
+    "copysign": _copysign_func,
     "float_power": lambda c1, c2: F.pow(c1.cast("double"), c2.cast("double")),
     # np.floor_divide dispatches to the pandas-on-Spark floordiv dunder operation
     # before this registry is consulted, so this mapping is not used for that case.
@@ -272,7 +263,6 @@ binary_np_spark_mappings = {
     ),
     "maximum": F.greatest,
     "minimum": F.least,
-    "modf": pandas_udf(lambda s1, s2: np.modf(s1, s2), DoubleType()),  # type: ignore[call-overload]
     "nextafter": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.nextafter(s1, s2), DoubleType()
     ),
@@ -284,11 +274,95 @@ binary_np_spark_mappings = {
 }
 
 
+def _modf_fractional_func(c: Column) -> Column:
+    c_double = c.cast("double")
+    # signum * (abs % 1) keeps the fractional magnitude with the sign of the input,
+    # including the signed zero of a whole number (for example -2.0 -> -0.0), the same
+    # way the "trunc" mapping (reused below for the integral part) relies on signum.
+    fractional = F.signum(c_double) * (F.abs(c_double) % F.lit(1.0))
+    return (
+        F.when(c.isNull() | F.isnan(c_double), c_double)
+        # +-inf has no fractional part; numpy returns a zero with the input's sign.
+        .when(c_double == float("inf"), F.lit(0.0))
+        .when(c_double == float("-inf"), F.lit(-0.0))
+        .otherwise(fractional)
+    )
+
+
+def _frexp_scale(c_double: Column, exponent: Column) -> Column:
+    # x * 2**-exponent, in two halves because a single 2**exponent is not finite across
+    # frexp's range (-1073 for the smallest subnormal, 1024 for the largest double).
+    half = F.floor(exponent / F.lit(2.0))
+    return c_double / F.pow(F.lit(2.0), half) / F.pow(F.lit(2.0), exponent - half)
+
+
+def _frexp_finite_exponent(c_double: Column) -> Column:
+    # floor(log2|x|) + 1, which the logarithm can put on the wrong side of an integer next
+    # to a power of two, but never by more than one: check the scaled magnitude against
+    # frexp's [0.5, 1) range and step the estimate where it falls outside.
+    estimate = F.floor(F.log2(F.abs(c_double))) + F.lit(1)
+    magnitude = F.abs(_frexp_scale(c_double, estimate))
+    return (
+        F.when(magnitude >= F.lit(1.0), estimate + F.lit(1))
+        .when(magnitude < F.lit(0.5), estimate - F.lit(1))
+        .otherwise(estimate)
+    )
+
+
+def _frexp_is_special_value(c: Column) -> Column:
+    # frexp returns 0, +-inf and nan unchanged as the mantissa, keeping the sign of a zero,
+    # and pairs them with a zero exponent. from_pandas delivers a NaN as a null; the sign of a
+    # NaN never survives to here, so numpy's -nan mantissa reads +nan.
+    c_double = c.cast("double")
+    return (
+        c.isNull()
+        | F.isnan(c_double)
+        | (c_double == 0)
+        | c_double.isin(float("-inf"), float("inf"))
+    )
+
+
+def _frexp_mantissa_func(c: Column) -> Column:
+    c_double = c.cast("double")
+    return F.when(_frexp_is_special_value(c), c_double).otherwise(
+        _frexp_scale(c_double, _frexp_finite_exponent(c_double))
+    )
+
+
+def _frexp_exponent_func(c: Column) -> Column:
+    return (
+        F.when(
+            # A genuine <NA> from a nullable dtype (e.g. Int64) arrives as a non-floating null
+            # and must propagate; a NaN arrives as a floating null and takes the zero branch
+            # below. A nullable float dtype's <NA> (Float32 or Float64) is a floating null too,
+            # indistinguishable from a NaN after from_pandas, so it reads 0 instead.
+            c.isNull() & ~F.typeof(c).isin("float", "double"),
+            F.lit(None),
+        )
+        .when(_frexp_is_special_value(c), F.lit(0))
+        .otherwise(_frexp_finite_exponent(c.cast("double")))
+        # numpy returns the exponent as an int32.
+        .cast("int")
+    )
+
+
+# Every multi-output ufunc numpy ships (modf, frexp) has exactly two outputs, so each entry
+# maps to a pair of Column->Column functions applied independently and returned as a 2-tuple
+# that numpy's __array_ufunc__ unpacks (for example `fractional, integral = np.modf(series)`).
+multi_output_np_spark_mappings = {
+    # np.frexp(x) -> (mantissa, exponent) with x == mantissa * 2**exponent, the mantissa
+    # keeping x's sign at a magnitude in [0.5, 1).
+    "frexp": (_frexp_mantissa_func, _frexp_exponent_func),
+    # np.modf(x) -> (fractional part, integral part); the integral part is exactly trunc.
+    "modf": (_modf_fractional_func, unary_np_spark_mappings["trunc"]),
+}
+
+
 # Copied from pandas.
 # See also https://docs.scipy.org/doc/numpy/reference/arrays.classes.html#standard-array-subclasses
 def maybe_dispatch_ufunc_to_dunder_op(
     ser_or_index: IndexOpsMixin, ufunc: Callable, method: str, *inputs: Any, **kwargs: Any
-) -> IndexOpsMixin:
+) -> SeriesOrIndex:
     special = {
         "add",
         "sub",
@@ -354,10 +428,21 @@ def maybe_dispatch_ufunc_to_dunder_op(
 # See also https://docs.scipy.org/doc/numpy/reference/arrays.classes.html#standard-array-subclasses
 def maybe_dispatch_ufunc_to_spark_func(
     ser_or_index: IndexOpsMixin, ufunc: Callable, method: str, *inputs: Any, **kwargs: Any
-) -> IndexOpsMixin:
+) -> Union[SeriesOrIndex, Tuple[SeriesOrIndex, SeriesOrIndex]]:
     from pyspark.pandas.base import column_op
 
     op_name = ufunc.__name__
+
+    if (
+        method == "__call__"
+        and op_name in multi_output_np_spark_mappings
+        and kwargs.get("out") is None
+    ):
+        # These ufuncs are unary in their input, so the single input is always a Series
+        # that column_op unwraps to a Column -- no literal wrapping needed. Build one
+        # Series per output and return them as a 2-tuple (see the mapping's docstring).
+        first_func, second_func = multi_output_np_spark_mappings[op_name]
+        return column_op(first_func)(*inputs), column_op(second_func)(*inputs)
 
     if (
         method == "__call__"
@@ -379,11 +464,12 @@ def maybe_dispatch_ufunc_to_spark_func(
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.numpy_compat
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 
