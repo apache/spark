@@ -18,7 +18,9 @@
 package org.apache.spark.ui
 
 import java.net.{URI, URL, URLDecoder}
-import java.util.{EnumSet, List => JList}
+import java.nio.charset.StandardCharsets.UTF_8
+import java.security.{MessageDigest, SecureRandom}
+import java.util.{EnumSet, HexFormat, List => JList, Locale}
 
 import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
@@ -127,13 +129,25 @@ private[spark] object JettyUtils extends Logging {
     contextHandler
   }
 
-  /** Create a handler that always redirects the user to the given path */
+  /**
+   * Create a handler that always redirects the user to the given path.
+   *
+   * @param csrfToken when defined, mark the handler as state-changing and guard it:
+   *                  requests must carry the token as the "csrfToken" parameter or they
+   *                  are rejected with 403 (see isValidCsrfToken), prefetch requests are
+   *                  rejected with 403 (see isPrefetchRequest), and HEAD is refused with
+   *                  405 instead of being delegated to doGet. A cross-site page can
+   *                  neither read the token out of the UI's pages (same-origin policy)
+   *                  nor guess it, so it cannot forge a request. Set this for handlers
+   *                  that change state (e.g. the job/stage kill endpoints).
+   */
   def createRedirectHandler(
       srcPath: String,
       destPath: String,
       beforeRedirect: HttpServletRequest => Unit = x => (),
       basePath: String = "",
-      httpMethods: Set[String] = Set("GET")): ServletContextHandler = {
+      httpMethods: Set[String] = Set("GET"),
+      csrfToken: Option[String] = None): ServletContextHandler = {
     val prefixedDestPath = basePath + destPath
     val servlet = new HttpServlet {
       override def doGet(request: HttpServletRequest, response: HttpServletResponse): Unit = {
@@ -150,7 +164,26 @@ private[spark] object JettyUtils extends Logging {
           response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
         }
       }
+      // HEAD must be safe (RFC 9110) but HttpServlet.doHead delegates to doGet, which would
+      // run beforeRedirect; refuse to route HEAD to a state-changing handler at all.
+      protected override def doHead(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+        if (csrfToken.isDefined) {
+          res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
+        } else {
+          super.doHead(req, res)
+        }
+      }
       private def doRequest(request: HttpServletRequest, response: HttpServletResponse): Unit = {
+        if (csrfToken.isDefined && isPrefetchRequest(request)) {
+          response.sendError(HttpServletResponse.SC_FORBIDDEN,
+            "Prefetch request rejected on a state-changing endpoint.")
+          return
+        }
+        if (!csrfToken.forall(isValidCsrfToken(request, _))) {
+          response.sendError(HttpServletResponse.SC_FORBIDDEN,
+            "Missing or invalid CSRF token on a state-changing endpoint.")
+          return
+        }
         beforeRedirect(request)
         // Make sure we don't end up with "//" in the middle
         val requestURL = new URI(request.getRequestURL.toString).toURL
@@ -165,6 +198,44 @@ private[spark] object JettyUtils extends Logging {
       }
     }
     createServletHandler(srcPath, servlet, basePath)
+  }
+
+  /**
+   * True when the request identifies itself as a prefetch rather than a deliberate user
+   * navigation: Chrome and derivatives send "Sec-Purpose: prefetch" (or the older
+   * "Purpose: prefetch", and compound values such as "prefetch;prerender"), and Firefox
+   * sends "X-Moz: prefetch". State-changing endpoints reject these so that a link
+   * prefetcher cannot trigger the action: a prefetch of a kill link must not kill.
+   */
+  private[spark] def isPrefetchRequest(request: HttpServletRequest): Boolean = {
+    val purpose = Option(request.getHeader("Sec-Purpose"))
+      .orElse(Option(request.getHeader("Purpose")))
+    purpose.exists(_.toLowerCase(Locale.ROOT).contains("prefetch")) ||
+      request.getHeader("X-Moz") != null
+  }
+
+  /**
+   * A fresh token for guarding a UI's state-changing endpoints. 128 random bits, which a
+   * cross-site page cannot guess; see createRedirectHandler and isValidCsrfToken.
+   */
+  private[spark] def newCsrfToken(): String = {
+    val bytes = new Array[Byte](16)
+    new SecureRandom().nextBytes(bytes)
+    HexFormat.of().formatHex(bytes)
+  }
+
+  /**
+   * Synchronizer-token check for state-changing endpoints: the request must carry the
+   * per-UI random token (embedded in the links and forms the UI renders) as the
+   * "csrfToken" parameter. A cross-site page cannot read the token out of the UI's pages
+   * (same-origin policy) and cannot guess it, so forged kill/hold requests fail here
+   * regardless of which headers the browser sends or suppresses. Constant-time
+   * comparison, though the token is not exactly timing-sensitive at 128 bits.
+   */
+  private[spark] def isValidCsrfToken(request: HttpServletRequest, expected: String): Boolean = {
+    Option(request.getParameter("csrfToken")).exists { provided =>
+      MessageDigest.isEqual(provided.getBytes(UTF_8), expected.getBytes(UTF_8))
+    }
   }
 
   /** Create a handler for serving files from a static directory */

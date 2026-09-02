@@ -105,6 +105,21 @@ private[spark] object UI {
     .booleanConf
     .createWithDefault(true)
 
+  val UI_KILL_VIA_GET_ENABLED = ConfigBuilder("spark.ui.killViaGetEnabled")
+    .doc("Whether the job/stage kill endpoints of the web UI accept HTTP GET requests in " +
+      "addition to POST. Unset, this defaults to true when spark.master is yarn, because " +
+      "the YARN ResourceManager/AM proxy does not forward POST requests (SPARK-6846), and " +
+      "to false everywhere else. Either way the state-changing endpoints require the " +
+      "random per-UI CSRF token embedded in the links and forms the UI renders, and " +
+      "reject prefetch requests (Purpose/Sec-Purpose/X-Moz headers) and HEAD requests, so " +
+      "forged cross-site requests and incidental link fetches cannot trigger them; " +
+      "prefetch rejection relies on the prefetcher identifying itself via those headers. " +
+      "Introduced in 4.3.0; also available in 3.5.10, 4.0.5, 4.1.4 and 4.2.1; and in all " +
+      "versions after 4.3.0.")
+    .version("4.3.0")
+    .booleanConf
+    .createOptional
+
   val UI_THREAD_DUMPS_ENABLED = ConfigBuilder("spark.ui.threadDumpsEnabled")
     .doc("Whether to show a link for executor thread dumps in Stages and Executor pages.")
     .version("1.2.0")
