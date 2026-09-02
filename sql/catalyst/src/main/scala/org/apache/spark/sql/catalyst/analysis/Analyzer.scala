@@ -4448,7 +4448,7 @@ class Analyzer(
           if (windowExpressionToAliasMap.isEmpty && !hasWindowInPlan(child)) {
             throw QueryCompilationErrors.qualifyRequiresWindowFunctionError()
           }
-          if (windowExpressionToAliasMap.size() > 0) {
+          if (!windowExpressionToAliasMap.isEmpty) {
             val projectList =
               windowExpressionToAliasMap.values().asScala.toSeq
             Filter(newCond, Project(newChild.output ++ projectList, newChild))

@@ -617,7 +617,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
           .sql(s"select * from $tableName")
           .collect()
           .toSeq
-        assert(rows.size > 0)
+        assert(rows.nonEmpty)
         assert(rows.map(_.getLong(1)).sum > 0)
         logInfo(s"Rows in $tableName: $rows")
       }
@@ -660,7 +660,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
           .sql(s"select * from $tableName")
           .collect()
           .toSeq
-        assert(rows.size > 0)
+        assert(rows.nonEmpty)
         assert(rows.map(_.getLong(1)).sum > 0)
         logInfo(s"Rows in $tableName: $rows")
       }
