@@ -186,6 +186,8 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
           case With(child, defs) =>
             // For With in the conditional branches, they may not be evaluated at all and we can't
             // pull the common expressions into a project which will always be evaluated. Inline it.
+            // SPARK-58902: Inlining nondeterministic expressions can cause multiple evaluations
+            // per row. Lazy per-row memoization is recommended for multi-referenced expressions.
             val refToExpr = defs.map(d => d.id -> d.child).toMap
             child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
               case ref: CommonExpressionRef => refToExpr(ref.id)
