@@ -1318,7 +1318,7 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
   private val stageIdCounter = new AtomicInteger(0)
 
   private[adaptive] def getAndIncrementStageID: Int = {
-    stageIdCounter.getAndDecrement()
+    stageIdCounter.getAndIncrement()
   }
 }
 
