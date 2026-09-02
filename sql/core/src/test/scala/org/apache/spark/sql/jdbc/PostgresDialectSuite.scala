@@ -18,13 +18,16 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Connection
+import java.sql.{Connection, ResultSet, ResultSetMetaData, Statement, Types}
 
+import org.mockito.ArgumentCaptor
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.types.MetadataBuilder
 
 class PostgresDialectSuite extends SparkFunSuite with MockitoSugar {
 
@@ -77,5 +80,28 @@ class PostgresDialectSuite extends SparkFunSuite with MockitoSugar {
     // No explicit fetchsize - should use Postgres default (1000) and set autoCommit=false
     dialect.beforeFetch(conn, createJDBCOptions(Map.empty))
     verify(conn).setAutoCommit(false)
+  }
+
+  test("updateExtraColumnMeta escapes a single quote in the table and column name") {
+    // The array-dimension lookup embeds the table and column name as SQL string literals, so a
+    // single quote in either must be escaped to keep the WHERE clause well-formed.
+    val conn = mock[Connection]
+    val stmt = mock[Statement]
+    val rs = mock[ResultSet]
+    val rsmd = mock[ResultSetMetaData]
+    when(conn.createStatement()).thenReturn(stmt)
+    when(stmt.executeQuery(anyString())).thenReturn(rs)
+    when(rsmd.getColumnType(1)).thenReturn(Types.ARRAY)
+    when(rsmd.getTableName(1)).thenReturn("ta'ble")
+    when(rsmd.getColumnName(1)).thenReturn("co'l")
+
+    dialect.updateExtraColumnMeta(conn, rsmd, 1, new MetadataBuilder())
+
+    val sqlCaptor = ArgumentCaptor.forClass(classOf[String])
+    verify(stmt).executeQuery(sqlCaptor.capture())
+    assert(sqlCaptor.getValue.contains("pg_class.relname = 'ta''ble'"),
+      s"Unexpected lookup SQL: ${sqlCaptor.getValue}")
+    assert(sqlCaptor.getValue.contains("pg_attribute.attname = 'co''l'"),
+      s"Unexpected lookup SQL: ${sqlCaptor.getValue}")
   }
 }
