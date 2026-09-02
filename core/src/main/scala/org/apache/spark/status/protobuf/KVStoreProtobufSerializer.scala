@@ -19,9 +19,12 @@ package org.apache.spark.status.protobuf
 
 import java.lang.reflect.ParameterizedType
 import java.util.ServiceLoader
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 
 private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
@@ -39,7 +42,7 @@ private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
     }
 }
 
-private[spark] object KVStoreProtobufSerializer {
+private[spark] object KVStoreProtobufSerializer extends Logging {
 
   private[this] lazy val serializerMap: Map[Class[_], ProtobufSerDe[Any]] = {
     def getGenericsType(klass: Class[_]): Class[_] = {
@@ -51,6 +54,14 @@ private[spark] object KVStoreProtobufSerializer {
     }.toMap
   }
 
-  def getSerializer(klass: Class[_]): Option[ProtobufSerDe[Any]] =
-    serializerMap.get(klass)
+  private[this] val missedClasses = ConcurrentHashMap.newKeySet[Class[_]]()
+
+  def getSerializer(klass: Class[_]): Option[ProtobufSerDe[Any]] = {
+    val serializer = serializerMap.get(klass)
+    if (serializer.isEmpty && missedClasses.add(klass)) {
+      logWarning(log"No Protobuf SerDe found for class ${MDC(CLASS_NAME, klass.getName)}, " +
+        log"falling back to use the JSON SerDe.")
+    }
+    serializer
+  }
 }
