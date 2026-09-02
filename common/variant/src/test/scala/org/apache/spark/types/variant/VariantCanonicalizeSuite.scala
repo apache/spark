@@ -35,7 +35,7 @@ import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
   private def parse(json: String): Variant =
-    VariantBuilder.parseJson(json, /*allowDuplicateKeys = */ false)
+    VariantBuilder.parseJson(json, /* allowDuplicateKeys = */ false)
 
   private def canon(v: Variant): Variant = VariantBuilder.canonicalize(v)
 
@@ -434,8 +434,8 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     // UTF-8 / code-point order has U+E000 < U+1F600 (k1 < k2). canonicalize must sort by UTF-8
     // (the order finishWritingObject emits fields and getFieldByKey binary-searches) so field ids
     // come out ascending and isCanonical accepts the result; a UTF-16 sort would break both.
-    val k1 = "\uE000"
-    val k2 = "\uD83D\uDE00"
+    val k1 = new String(Character.toChars(0xE000))
+    val k2 = new String(Character.toChars(0x1F600))
     val a = canon(parse(s"""{"$k1":1,"$k2":2}"""))
     val b = canon(parse(s"""{"$k2":2,"$k1":1}"""))
     assert(bytesEqual(a, b), "canonical form must not depend on incoming non-ASCII key order")
@@ -446,8 +446,8 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   }
 
   test("isCanonical uses UTF-8, not UTF-16, order for non-ASCII dictionary keys") {
-    val k1 = "\uE000" // U+E000
-    val k2 = "\uD83D\uDE00" // U+1F600 (surrogate pair)
+    val k1 = new String(Character.toChars(0xE000))
+    val k2 = new String(Character.toChars(0x1F600))
     // [k1, k2] is ascending in UTF-8 (U+E000 < U+1F600), so it is canonical.
     assert(isCanon(parse(s"""{"$k1":1,"$k2":2}""")), "UTF-8-ascending non-ASCII dictionary")
     // [k2, k1] is ascending in UTF-16 (0xD83D < 0xE000) but DESCENDING in UTF-8. A UTF-16 check
