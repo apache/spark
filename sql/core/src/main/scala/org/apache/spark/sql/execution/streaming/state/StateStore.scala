@@ -655,7 +655,7 @@ case class StateStoreCustomTimingMetric(name: String, desc: String) extends Stat
     SQLMetrics.createTimingMetric(sparkContext, desc)
 }
 
-trait StateStoreInstanceMetric {
+trait StateStoreInstanceMetric extends Serializable {
   def metricPrefix: String
   def descPrefix: String
   def partitionId: Option[Int]
@@ -680,6 +680,14 @@ trait StateStoreInstanceMetric {
    * the original metric value is at its initial value.
    */
   def combine(originalMetric: SQLMetric, value: Long): Long
+
+  def combine(originalValue: Long, value: Long): Long = {
+    if (originalValue == initValue) {
+      value
+    } else {
+      Math.max(originalValue, value)
+    }
+  }
 
   def name: String = {
     assert(partitionId.isDefined, "Partition ID must be defined for instance metric name")
@@ -724,7 +732,15 @@ case class StateStoreSnapshotLastUploadInstanceMetric(
     } else {
       // Use max to grab the most recent snapshot version across all executors
       // of the same store instance
-      Math.max(originalMetric.value, value)
+      combine(originalMetric.value, value)
+    }
+  }
+
+  override def combine(originalValue: Long, value: Long): Long = {
+    if (originalValue == initValue) {
+      value
+    } else {
+      Math.max(originalValue, value)
     }
   }
 

@@ -209,8 +209,6 @@ trait StateStoreWriter
   def operatorStateMetadataVersion: Int = 1
 
   override lazy val metrics = {
-    // Lazy initialize instance metrics, but do not include these with regular metrics
-    instanceMetrics
     statefulOperatorCustomMetrics ++ Map(
       "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       "numRowsDroppedByWatermark" -> SQLMetrics
@@ -230,21 +228,15 @@ trait StateStoreWriter
   }
 
   /**
-   * Map of all instance metrics (including partition ID and store names) to
-   * their SQLMetric counterpart.
-   *
-   * The instance metric objects hold additional information on how to report these metrics,
-   * while the SQLMetric objects store the metric values.
-   *
-   * This map is similar to the metrics map, but needs to be kept separate to prevent propagating
-   * all initialized instance metrics to SparkUI.
+   * Aggregator used for executors to pass instance metrics (per partition/store) back to driver.
    */
-  lazy val instanceMetrics: Map[StateStoreInstanceMetric, SQLMetric] =
-    stateStoreInstanceMetrics
+  val instanceMetricsAccumulator: CollectionAccumulator[(StateStoreInstanceMetric, Long)] = {
+    SparkContext.getActive.map(_.collectionAccumulator[(StateStoreInstanceMetric, Long)]).get
+  }
 
   override def resetMetrics(): Unit = {
     super.resetMetrics()
-    instanceMetrics.valuesIterator.foreach(_.reset())
+    instanceMetricsAccumulator.reset()
   }
 
   val stateStoreNames: Seq[String] = Seq(StateStoreId.DEFAULT_STORE_NAME)
@@ -354,17 +346,25 @@ trait StateStoreWriter
    * the driver after this SparkPlan has been executed and metrics have been updated.
    */
   def getProgress(): StateOperatorProgress = {
-    val instanceMetricsToReport = instanceMetrics
+    val reportedMetrics = instanceMetricsAccumulator.value.asScala.toSeq
+    val combinedMetrics: Map[StateStoreInstanceMetric, Long] = reportedMetrics
+      .groupBy(_._1)
+      .map { case (metric, entries) =>
+        val combinedValue = entries.map(_._2).reduce((v1, v2) => metric.combine(v1, v2))
+        metric -> combinedValue
+      }
+
+    val instanceMetricsToReport = combinedMetrics
       .filter {
-        case (metricConf, sqlMetric) =>
+        case (metricConf, value) =>
           // Keep instance metrics that are updated or aren't marked to be ignored,
           // as their initial value could still be important.
-          !metricConf.ignoreIfUnchanged || !sqlMetric.isZero
+          !metricConf.ignoreIfUnchanged || value != metricConf.initValue
       }
       .groupBy {
         // Group all instance metrics underneath their common metric prefix
         // to ignore partition and store names.
-        case (metricConf, sqlMetric) => metricConf.metricPrefix
+        case (metricConf, _) => metricConf.metricPrefix
       }
       .flatMap {
         case (_, metrics) =>
@@ -373,12 +373,9 @@ trait StateStoreWriter
           val metricConf = metrics.head._1
           metrics
             .map {
-              case (metricConf, sqlMetric) =>
+              case (metricConf, value) =>
                 // Use metric name as it will be combined with custom metrics in progress reports.
-                // All metrics that are at their initial value at this stage should not be ignored
-                // and should show their real initial value.
-                metricConf.name -> (if (sqlMetric.isZero) metricConf.initValue
-                                    else sqlMetric.value)
+                metricConf.name -> value
             }
             .toSeq
             .sortBy(_._2)(metricConf.ordering)
@@ -407,7 +404,7 @@ trait StateStoreWriter
       numShufflePartitions = stateInfo.map(_.numPartitions.toLong).getOrElse(-1L),
       numStateStoreInstances = longMetric("numStateStoreInstances").value,
       javaConvertedCustomMetrics,
-      snapshotCustomMetricNames
+      snapshotCustomMetricNames ++ instanceMetricsToReport.keySet
     )
   }
 
@@ -468,8 +465,7 @@ trait StateStoreWriter
       otherStoreInstanceMetrics: Map[StateStoreInstanceMetric, Long]): Unit = {
     otherStoreInstanceMetrics.foreach {
       case (metric, value) =>
-        // Update the metric's value based on the defined combine method
-        instanceMetrics(metric).set(metric.combine(instanceMetrics(metric), value))
+        instanceMetricsAccumulator.add((metric, value))
     }
   }
 
@@ -480,29 +476,9 @@ trait StateStoreWriter
     }.toMap
   }
 
-  // All instance metrics with their (partitionId, storeName) bindings; consumed by
-  // both `stateStoreInstanceMetrics` (for SQLMetric registration) and
-  // `snapshotCustomMetricNames` (for the snapshot-name set). The result is a
-  // serializable Seq so storing it as a lazy val on this trait is safe even when
-  // the enclosing SparkPlan is shipped to executors. The provider itself is NOT
-  // stored as a field (it is non-serializable), so each consumer below recreates
-  // it locally.
-  private lazy val stateStoreInstanceMetricsWithIds: Seq[StateStoreInstanceMetric] = {
-    val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
-    val maxPartitions =
-      stateInfo.map(_.numPartitions).getOrElse(conf.defaultNumShufflePartitions)
-    (0 until maxPartitions).flatMap { partitionId =>
-      provider.supportedInstanceMetrics.flatMap { metric =>
-        stateStoreNames.map(metric.withNewId(partitionId, _))
-      }
-    }
-  }
-
   // Names of customMetrics entries treated as snapshots; preserved by
   // StateOperatorProgress.copyForNoExecution() on no-data trigger events. Includes
-  // provider- and operator-level metrics with isSnapshot = true, and all instance
-  // metric names (instance metrics use sentinel inits like -1 with monotonic
-  // combine, so they are always snapshot-style).
+  // provider- and operator-level metrics with isSnapshot = true.
   private lazy val snapshotCustomMetricNames: Set[String] = {
     val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
     val customSnapshots = provider.supportedCustomMetrics.collect {
@@ -511,13 +487,7 @@ trait StateStoreWriter
     val operatorSnapshots = customStatefulOperatorMetrics.collect {
       case m if m.isSnapshot => m.name
     }.toSet
-    customSnapshots ++ operatorSnapshots ++ stateStoreInstanceMetricsWithIds.map(_.name).toSet
-  }
-
-  private def stateStoreInstanceMetrics: Map[StateStoreInstanceMetric, SQLMetric] = {
-    stateStoreInstanceMetricsWithIds.map { metric =>
-      (metric, metric.createSQLMetric(sparkContext))
-    }.toMap
+    customSnapshots ++ operatorSnapshots
   }
 
   /**
