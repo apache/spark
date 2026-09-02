@@ -21,7 +21,7 @@ from pyspark.sql.functions import partitioning  # noqa: F401
 from pyspark.sql.functions.builtin import *  # noqa: F403
 
 __all__ = [  # noqa: F405
-    # Normal functions
+    # Normal Functions
     "broadcast",
     "call_function",
     "col",
@@ -621,7 +621,7 @@ __all__ = [  # noqa: F405
     "vector_normalize",
     "vector_avg",
     "vector_sum",
-    # Call Functions
+    # UDF, UDTF and UDT
     "call_udf",
     "pandas_udf",
     "udaf",
