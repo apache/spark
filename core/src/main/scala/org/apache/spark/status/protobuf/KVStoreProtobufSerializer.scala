@@ -23,10 +23,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.deploy.history.FsHistoryProviderMetadata
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_NAME
-import org.apache.spark.status.AppStatusStoreMetadata
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 import org.apache.spark.util.kvstore.{LevelDB, RocksDB}
 
@@ -59,11 +57,10 @@ private[spark] object KVStoreProtobufSerializer extends Logging {
 
   private[this] val missedClasses = ConcurrentHashMap.newKeySet[Class[_]]()
 
-  // KVStore bookkeeping values fall back to the JSON SerDe by design: they are tiny,
-  // written at most once per store open, and gain nothing from Protobuf. Skip warning.
+  // The KVStore backends' own bookkeeping values fall back to the JSON SerDe by design:
+  // they are internals of the kvstore library, which the ProtobufSerDe SPI does not cover.
+  // Skip warning for them.
   private[this] val jsonByDesignClasses: Set[Class[_]] = Set(
-    classOf[AppStatusStoreMetadata],
-    classOf[FsHistoryProviderMetadata],
     classOf[LevelDB.TypeAliases],
     classOf[RocksDB.TypeAliases])
 

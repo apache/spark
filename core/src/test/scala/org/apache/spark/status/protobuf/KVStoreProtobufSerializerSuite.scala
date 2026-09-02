@@ -33,6 +33,7 @@ import org.apache.spark.status._
 import org.apache.spark.status.api.v1._
 import org.apache.spark.ui.scope.{RDDOperationEdge, RDDOperationNode}
 import org.apache.spark.util.Utils.tryWithResource
+import org.apache.spark.util.kvstore.{LevelDB, RocksDB}
 
 class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   private val serializer = new KVStoreProtobufSerializer()
@@ -56,7 +57,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     KVStoreProtobufSerializer.resetMissedClassesForTesting()
     val appender = new LogAppender("KVStoreProtobufSerializer by-design fallback")
     withLogAppender(appender, loggerNames = Seq(classOf[KVStoreProtobufSerializer].getName)) {
-      serializer.serialize(AppStatusStoreMetadata(1L))
+      assert(KVStoreProtobufSerializer.getSerializer(classOf[RocksDB.TypeAliases]).isEmpty)
+      assert(KVStoreProtobufSerializer.getSerializer(classOf[LevelDB.TypeAliases]).isEmpty)
     }
     val warnings = appender.loggingEvents.filter(_.getLevel == Level.WARN)
     assert(warnings.isEmpty)
