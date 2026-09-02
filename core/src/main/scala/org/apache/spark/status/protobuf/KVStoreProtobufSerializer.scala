@@ -60,7 +60,7 @@ private[spark] object KVStoreProtobufSerializer extends Logging {
     val serializer = serializerMap.get(klass)
     if (serializer.isEmpty && missedClasses.add(klass)) {
       logWarning(log"No Protobuf SerDe found for class ${MDC(CLASS_NAME, klass.getName)}, " +
-        log"falling back to use the JSON SerDe.")
+        "falling back to use the JSON SerDe.")
     }
     serializer
   }
