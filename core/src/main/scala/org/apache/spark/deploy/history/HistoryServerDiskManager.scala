@@ -67,6 +67,8 @@ private class HistoryServerDiskManager(
   private val maxUsage = conf.get(MAX_LOCAL_DISK_USAGE)
   private val currentUsage = new AtomicLong(0L)
   private val committedUsage = new AtomicLong(0L)
+  // Besides the map itself, this lock guards the store directories, their listing entries and
+  // the committed usage: whether a store is still counted is decided and acted on in one hold.
   private val active = new HashMap[(String, Option[String]), Long]()
 
   def initialize(): Unit = {
@@ -139,23 +141,17 @@ private class HistoryServerDiskManager(
    * being used so that it's not evicted when running out of designated space.
    */
   def openStore(appId: String, attemptId: Option[String]): Option[File] = {
-    var newSize: Long = 0
-    val storePath = active.synchronized {
+    active.synchronized {
       val path = appStorePath(appId, attemptId)
       if (path.isDirectory()) {
-        newSize = sizeOf(path)
+        val newSize = sizeOf(path)
         active(appId -> attemptId) = newSize
+        updateApplicationStoreInfo(appId, attemptId, newSize)
         Some(path)
       } else {
         None
       }
     }
-
-    storePath.foreach { path =>
-      updateApplicationStoreInfo(appId, attemptId, newSize)
-    }
-
-    storePath
   }
 
   /**
@@ -164,11 +160,16 @@ private class HistoryServerDiskManager(
    * @param delete Whether to delete the store from disk.
    */
   def release(appId: String, attemptId: Option[String], delete: Boolean = false): Unit = {
-    // Update the accounting for this application when it's closed. Do the whole operation under
-    // the active lock so a concurrent openStore() or makeRoom() eviction cannot deduct the same
+    // Because disk-based stores may modify the structure of the store files even when just reading,
+    // update the accounting for this application when it's closed. Do the whole operation under
+    // the active lock so a concurrent openStore(), commit() or makeRoom() cannot deduct the same
     // store size twice.
     active.synchronized {
       val oldSizeOpt = active.remove(appId -> attemptId)
+
+      oldSizeOpt.foreach { oldSize =>
+        updateUsage(-oldSize, committed = true)
+      }
 
       // Apply the store operation regardless of whether the app was in the active map, since
       // the store directory may still exist on disk (e.g., when the app was never opened after
@@ -176,12 +177,13 @@ private class HistoryServerDiskManager(
       val path = appStorePath(appId, attemptId)
       if (path.isDirectory()) {
         if (delete) {
-          // Use the tracked size if the app was active; otherwise measure it from disk.
-          val size = oldSizeOpt.getOrElse(sizeOf(path))
-          updateUsage(-size, committed = true)
+          // If the app was not actively tracked, its size was not deducted above; do it now.
+          if (oldSizeOpt.isEmpty) {
+            val size = sizeOf(path)
+            updateUsage(-size, committed = true)
+          }
           deleteStore(path)
         } else if (oldSizeOpt.isDefined) {
-          updateUsage(-oldSizeOpt.get, committed = true)
           // Re-measure the size since the store may have changed while it was open.
           val newSize = sizeOf(path)
           val newInfo = listing.read(classOf[ApplicationStoreInfo], path.getAbsolutePath())
@@ -190,9 +192,9 @@ private class HistoryServerDiskManager(
           updateUsage(newSize, committed = true)
         }
       } else if (oldSizeOpt.isDefined) {
-        // The store directory is already gone (e.g., deleted out of band); just drop the
-        // accounting.
-        updateUsage(-oldSizeOpt.get, committed = true)
+        // The store directory is gone (e.g., deleted out of band) and its size was deducted
+        // above; drop its listing entry too, so makeRoom() does not deduct it again.
+        deleteStore(path)
       }
     }
   }
@@ -246,32 +248,35 @@ private class HistoryServerDiskManager(
         }
       }
 
-      if (evicted.nonEmpty) {
-        val freed = new ListBuffer[Long]()
-        evicted.foreach { info =>
-          val path = new File(info.path)
-          active.synchronized {
-            // The candidate may have become active or been deleted by a concurrent release()
-            // since it was collected; re-check under the lock to deduct its size at most once.
-            if (!active.contains(info.appId -> info.attemptId)) {
-              if (path.isDirectory()) {
-                logInfo(log"Deleting store for" +
-                  log" ${MDC(APP_ID, info.appId)}/${MDC(APP_ATTEMPT_ID, info.attemptId)}.")
-                deleteStore(path)
-                updateUsage(-info.size, committed = true)
-                freed += info.size
-              } else {
-                // The store directory is already gone (e.g., deleted out of band); drop the
-                // leftover listing entry so it stops counting against future evictions.
-                listing.delete(classOf[ApplicationStoreInfo], info.path)
-              }
+      var freedCount = 0
+      var freedBytes = 0L
+      evicted.foreach { candidate =>
+        active.synchronized {
+          // Re-check under the lock: since the candidate was collected, it may have become
+          // active, or a concurrent release() or commit() may have deleted it along with its
+          // listing entry. Deduct the size the listing holds now, which may have changed as well.
+          if (!active.contains(candidate.appId -> candidate.attemptId)) {
+            val current = try {
+              Some(listing.read(classOf[ApplicationStoreInfo], candidate.path))
+            } catch {
+              case _: NoSuchElementException => None
+            }
+            current.foreach { info =>
+              logInfo(log"Deleting store for" +
+                log" ${MDC(APP_ID, info.appId)}/${MDC(APP_ATTEMPT_ID, info.attemptId)}.")
+              deleteStore(new File(info.path))
+              updateUsage(-info.size, committed = true)
+              freedCount += 1
+              freedBytes += info.size
             }
           }
         }
+      }
 
-        logInfo(log"Deleted ${MDC(NUM_BYTES_EVICTED, freed.size)} store(s)" +
-          log" to free ${MDC(NUM_BYTES_TO_FREE, Utils.bytesToString(freed.sum))}" +
-          log" (target = ${MDC(NUM_BYTES, Utils.bytesToString(size))}).")
+      if (freedCount > 0) {
+        logInfo(log"Deleted ${MDC(NUM_APPS, freedCount)} store(s)" +
+          log" to free ${MDC(NUM_BYTES_EVICTED, Utils.bytesToString(freedBytes))}" +
+          log" (target = ${MDC(NUM_BYTES_TO_FREE, Utils.bytesToString(size))}).")
       } else {
         logWarning(log"Unable to free any space to make room for " +
           log"${MDC(NUM_BYTES, Utils.bytesToString(size))}.")
@@ -334,21 +339,22 @@ private class HistoryServerDiskManager(
 
       val newSize = sizeOf(tmpPath)
       makeRoom(newSize)
-      tmpPath.renameTo(dst)
 
-      updateUsage(newSize, committed = true)
+      // Move the store into place, account for it and mark the app active in one step, so a
+      // concurrent release() or makeRoom() cannot delete the store before it is tracked.
+      active.synchronized {
+        tmpPath.renameTo(dst)
+        updateUsage(newSize, committed = true)
+        updateApplicationStoreInfo(appId, attemptId, newSize)
+        active(appId -> attemptId) = newSize
+      }
+
       if (committedUsage.get() > maxUsage) {
         val current = Utils.bytesToString(committedUsage.get())
         val max = Utils.bytesToString(maxUsage)
         logWarning(log"Commit of application ${MDC(APP_ID, appId)} / " +
           log"${MDC(APP_ATTEMPT_ID, attemptId)} causes maximum disk usage to be " +
           log"exceeded (${MDC(NUM_BYTES, current)} > ${MDC(NUM_BYTES_MAX, max)}")
-      }
-
-      updateApplicationStoreInfo(appId, attemptId, newSize)
-
-      active.synchronized {
-        active(appId -> attemptId) = newSize
       }
       dst
     }
