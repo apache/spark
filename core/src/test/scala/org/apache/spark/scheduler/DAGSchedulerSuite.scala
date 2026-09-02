@@ -6576,6 +6576,83 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("pipelined shuffle: a non-mixed job is classified by the cheap kinds pre-pass") {
+    // classifyJobShuffleShape runs on EVERY job submission, including on deployments that never
+    // enable this feature, so a non-mixed job must not pay the precise (RDD, belowRegular)-keyed
+    // walk that only a pipelined/regular MIX needs.
+    //
+    // This is a COST property, not a behavioral one: for a non-mixed job both paths return the same
+    // shape, so no assertion on the result can distinguish them. What is pinned here instead is the
+    // contract the pre-pass rests on -- the kinds pre-pass alone determines the answer for a
+    // non-mixed graph -- for each of the three non-mixed shapes. If a future change makes the
+    // shape depend on the precise walk for these graphs, these equalities break.
+    def shapeOf(rdd: MyRDD): (Boolean, Boolean, Boolean) = {
+      val sh = scheduler.classifyJobShuffleShape(rdd)
+      (sh.hasPipelined, sh.hasUnmaterializedRegularBoundary, sh.hasPipelinedBelowRegular)
+    }
+
+    // (1) all-regular, boundary unmaterialized: not a mix -> nothing to report.
+    val regularDep = new ShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val overRegular = new MyRDD(sc, 2, List(regularDep), tracker = mapOutputTracker)
+    assert(scheduler.classifyJobShuffleKinds(overRegular) === (false, true))
+    assert(shapeOf(overRegular) === (false, false, false))
+
+    // (2) all-pipelined: not a mix -> hasPipelined only.
+    val pipelinedDep = new PipelinedShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val overPipelined = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    assert(scheduler.classifyJobShuffleKinds(overPipelined) === (true, false))
+    assert(shapeOf(overPipelined) === (true, false, false))
+
+    // (3) no shuffle at all.
+    val noShuffle = new MyRDD(sc, 2, Nil)
+    assert(scheduler.classifyJobShuffleKinds(noShuffle) === (false, false))
+    assert(shapeOf(noShuffle) === (false, false, false))
+
+    // And the MIX still gets the precise answer (the expensive walk does run when it matters):
+    // a pipelined dep below an unmaterialized regular boundary must be detected.
+    val deepPipelined =
+      new PipelinedShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val belowRegular = new MyRDD(sc, 2, List(deepPipelined), tracker = mapOutputTracker)
+    val regularOverPipelined = new ShuffleDependency(belowRegular, new HashPartitioner(2))
+    val mixed = new MyRDD(sc, 2, List(regularOverPipelined), tracker = mapOutputTracker)
+    assert(scheduler.classifyJobShuffleKinds(mixed) === (true, true), "this graph IS a mix")
+    val mixedShape = scheduler.classifyJobShuffleShape(mixed)
+    assert(mixedShape.hasPipelinedBelowRegular,
+      "the precise walk must still detect a pipelined dependency below a regular boundary")
+    assert(mixedShape.isUnsupportedMix, "and such a job must be rejected as an unsupported mix")
+  }
+
+  test("pipelined shuffle: a manager that does not consume the live-reduce hint gets no hint") {
+    // The scheduler's live-reduce-partition hint and per-run epoch exist for a transport whose
+    // writer PARKS on a partition nobody drains (the in-process channel's bounded queue). The RPC
+    // streaming transport -- the default `spark.shuffle.manager.incremental`, and what Real-Time
+    // Mode runs on -- reads neither property, so a pipelined job on it must be left exactly as it
+    // is without this feature: no cloned Properties, no epoch, no live set, and no partial-read
+    // abort whose remedy (disabling the batch SQL flag) does not even apply to it.
+    assert(!sc.env.pipelinedShuffleManager.supportsLiveReducePartitionHints,
+      "precondition: the default incremental manager does not consume the hint")
+
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    // A PARTIAL read (one of two result partitions) is the shape that would compute and stamp the
+    // hint -- and, if unmappable, abort the stage.
+    submit(consumerRdd, Array(0))
+
+    assert(taskSets.nonEmpty, "the pipelined group should have been submitted")
+    taskSets.foreach { ts =>
+      val props = Option(ts.properties)
+      assert(props.forall(p =>
+        p.getProperty(SparkContext.SPARK_PIPELINED_RUN_EPOCH) == null),
+        s"no epoch may be stamped for a manager that does not consume it (stage ${ts.stageId})")
+      assert(props.forall(p =>
+        p.getProperty(SparkContext.SPARK_PIPELINED_LIVE_REDUCE_PARTITIONS) == null),
+        s"no live-reduce set may be stamped for such a manager (stage ${ts.stageId})")
+    }
+    // And the job was not aborted by the partial-read fail-fast path.
+    assert(failure == null, s"the job must not be aborted; got: $failure")
+  }
+
   test("pipelined shuffle: deep chain A->B->C is submitted fully concurrently") {
     // A --pipelined--> B --pipelined--> C : all three co-scheduled (each edge is non-sequencing).
     val rddA = new MyRDD(sc, 2, Nil)

@@ -149,6 +149,35 @@ private[spark] trait PipelinedShuffleManager extends ShuffleManager {
    * channel transport shares object references across threads and overrides this to true.
    */
   def requiresDetachedRecords: Boolean = false
+
+  /**
+   * Whether this manager's writer consumes the driver's live-reduce-partition hint -- the set of
+   * reduce partitions a partial read (LIMIT / executeTake) will actually drain, stamped into the
+   * producer's task properties as `SPARK_PIPELINED_LIVE_REDUCE_PARTITIONS`, plus the per-run epoch
+   * `SPARK_PIPELINED_RUN_EPOCH` that keys its rendezvous.
+   *
+   * Only a transport whose writer would BLOCK on a partition nobody drains needs the hint: the
+   * in-process channel hands batches across a bounded queue, so feeding a reader-less partition
+   * fills it and parks the writer forever. A transport that does not block that way (the RPC
+   * streaming shuffle, whose writer never reads either property) returns false, and the scheduler
+   * then skips computing and stamping the hint entirely -- leaving the Real-Time Mode path exactly
+   * as it is without this feature, rather than paying for a hint nobody reads and risking an abort
+   * whose remedy does not apply to it.
+   */
+  def supportsLiveReducePartitionHints: Boolean = false
+
+  /**
+   * Whether this manager currently holds driver-side cleanup state for `shuffleId`.
+   *
+   * A manager that keeps NO output tracker (an in-process transport) has its shuffles in neither
+   * output tracker, so the `ContextCleaner` cannot tell one of them apart from an already-cleaned
+   * regular shuffle by tracker membership; it asks here instead, and only frees what a manager
+   * actually holds. Answer from the state that would leak -- not from a registration record, which
+   * an unregister-before-run sequence drops while the state itself is recreated lazily when the job
+   * finally runs. Defaults to false: a manager whose shuffles ARE in an output tracker is found
+   * that way and never needs this.
+   */
+  def holdsShuffle(shuffleId: Int): Boolean = false
 }
 
 /**

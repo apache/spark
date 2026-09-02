@@ -45,7 +45,7 @@ import org.apache.spark.network.shuffle.{BlockStoreClient, MergeFinalizerListene
 import org.apache.spark.network.shuffle.protocol.MergeStatuses
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
-import org.apache.spark.rdd.{DeterministicLevel, RDD, RDDCheckpointData, ReliableRDDCheckpointData}
+import org.apache.spark.rdd.{DeterministicLevel, RDD, RDDCheckpointData, ReliableRDDCheckpointData, ShuffleReducePartitionMapping}
 import org.apache.spark.resource.{CpuAmount, ResourceProfile, TaskResourceProfile}
 import org.apache.spark.resource.ResourceProfile.{CPUS, DEFAULT_RESOURCE_PROFILE_ID, EXECUTOR_CORES_LOCAL_PROPERTY, MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
 import org.apache.spark.rpc.RpcTimeout
@@ -1151,7 +1151,7 @@ private[spark] class DAGScheduler(
    * suffix group, and (if the boundary were unmaterialized) would have to run under a regime the
    * group machinery does not cover.
    */
-  private case class JobShuffleShape(
+  private[scheduler] case class JobShuffleShape(
       hasPipelined: Boolean,
       hasUnmaterializedRegularBoundary: Boolean,
       hasPipelinedBelowRegular: Boolean) {
@@ -1160,16 +1160,51 @@ private[spark] class DAGScheduler(
       hasPipelinedBelowRegular || (hasPipelined && hasUnmaterializedRegularBoundary)
   }
 
+  /**
+   * Which KINDS of shuffle boundary the RDD graph rooted at `finalRDD` contains: any
+   * [[PipelinedShuffleDependency]], and any regular (non-pipelined) `ShuffleDependency`. Narrow
+   * dependencies are not boundaries and are ignored. Walks the RDD graph directly (before any stage
+   * exists) over the shared `traverseRDDGraph`, whose visited set is keyed on the RDD alone -- so
+   * this pass allocates nothing per visit.
+   *
+   * This is the cheap pre-pass for [[classifyJobShuffleShape]]: a job with only one kind cannot be
+   * an unsupported mix, so the precise (and more expensive) below-regular analysis is only needed
+   * when both kinds are present.
+   */
+  private[scheduler] def classifyJobShuffleKinds(finalRDD: RDD[_]): (Boolean, Boolean) = {
+    var hasPipelined = false
+    var hasRegular = false
+    traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
+      rdd.dependencies.foreach { dep =>
+        dep match {
+          case _: PipelinedShuffleDependency[_, _, _] => hasPipelined = true
+          case _: ShuffleDependency[_, _, _] => hasRegular = true
+          case _ => // narrow dependency: not a boundary
+        }
+        // Descend through every edge (shuffle and narrow) so a pipelined boundary behind a regular
+        // one -- or vice versa -- anywhere in the graph is still detected. traverseRDDGraph dedups.
+        enqueue(dep.rdd)
+      }
+    }
+    (hasPipelined, hasRegular)
+  }
+
   /** Classify `finalRDD`'s shuffle graph; see [[JobShuffleShape]] for the shape semantics. */
-  private def classifyJobShuffleShape(finalRDD: RDD[_]): JobShuffleShape = {
-    // Early-out for every deployment without the opt-in transport: with no pipelined shuffle
-    // manager configured, no PipelinedShuffleDependency can exist, so the shape is trivially
-    // all-regular. This keeps the walk below (a HashMap of boundaries, a visited set of
-    // (RDD, Boolean) tuples, one tuple allocated per node per context) off the critical path of
-    // EVERY job submission on a default cluster -- an opt-in feature must not tax the default path.
-    if (SparkEnv.get == null || SparkEnv.get.pipelinedShuffleManager == null) {
+  private[scheduler] def classifyJobShuffleShape(finalRDD: RDD[_]): JobShuffleShape = {
+    // Cheap pre-pass first: which KINDS of boundary the graph has, over the shared
+    // `traverseRDDGraph` (a HashSet[RDD] visited set, no per-visit allocation). Only a job with
+    // BOTH kinds can be an unsupported mix, and only then are the two below-regular facts
+    // meaningful:
+    //   - all-regular  (no pipelined dep)  => nothing can be pipelined-below-regular;
+    //   - all-pipelined (no regular dep)   => no regular boundary to be below, or to materialize.
+    // So every job that is not mixed -- which is EVERY job on a deployment that never enables the
+    // feature -- costs exactly what it costs without this feature, instead of paying for the
+    // (RDD, Boolean)-keyed two-context walk and the boundary map below.
+    val (hasPipelinedKind, hasRegularKind) = classifyJobShuffleKinds(finalRDD)
+    if (!hasPipelinedKind || !hasRegularKind) {
       return JobShuffleShape(
-        hasPipelined = false, hasUnmaterializedRegularBoundary = false,
+        hasPipelined = hasPipelinedKind,
+        hasUnmaterializedRegularBoundary = false,
         hasPipelinedBelowRegular = false)
     }
     var hasPipelined = false
@@ -1855,6 +1890,18 @@ private[spark] class DAGScheduler(
    * pipelined producer, whose consumers may run concurrently with it. Callers that need the
    * producer/consumer relationship check `child.parents.contains(stage)` separately.
    */
+  /**
+   * Whether the configured pipelined manager consumes the driver's live-reduce-partition hint and
+   * per-run epoch (see `PipelinedShuffleManager.supportsLiveReducePartitionHints`). False for the
+   * RPC streaming transport, whose writer reads neither -- so for a Real-Time Mode job the
+   * scheduler skips computing and stamping them, and skips the partial-read abort whose remedy
+   * (disabling the batch SQL flag) does not apply to it.
+   */
+  private def pipelinedManagerWantsLiveReduceHints: Boolean = {
+    val mgr = sc.env.pipelinedShuffleManager
+    mgr != null && mgr.supportsLiveReducePartitionHints
+  }
+
   private def isPipelinedProducer(stage: Stage): Boolean = stage match {
     case m: ShuffleMapStage => m.shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]]
     case _ => false
@@ -1912,8 +1959,22 @@ private[spark] class DAGScheduler(
         case sd: ShuffleDependency[_, _, _] if sd.shuffleId == targetShuffleId => sd
       } match {
         case Some(sd) =>
-          if (cur.partitions.length == sd.partitioner.numPartitions) resultReduce ++= live
-          else unmappable = true // a non-identity reader spec (e.g. an offset coalesce)
+          // Ask the reader RDD which reduce partition each live partition index reads, rather than
+          // assuming index == reduce id when the counts happen to match: a reader that skew-splits
+          // one reducer and coalesces two others has the same count and a different mapping, and
+          // guessing wrong here is not a hang but SILENTLY DROPPED records (the producer skips
+          // every partition outside the set it is told about). A reader that cannot name a single
+          // reduce partition for some live index makes the whole mapping uncomputable, which the
+          // caller treats as "keep everything live".
+          cur match {
+            case mapping: ShuffleReducePartitionMapping =>
+              val mapped = live.map(mapping.reducePartitionIndex)
+              if (mapped.exists(_.isEmpty)) unmappable = true
+              else resultReduce ++= mapped.flatten
+            case _ =>
+              // An unknown reader RDD: no way to establish the mapping, so do not risk dropping.
+              unmappable = true
+          }
         case None =>
           // Follow every dependency whose subtree reaches the target, mapping the live set through
           // that (narrow) dependency's getParents. A reaching non-narrow edge (should not occur --
@@ -2376,7 +2437,7 @@ private[spark] class DAGScheduler(
     // Properties rather than mutating it. Inert for a non-pipelined job (property never set,
     // never read).
     val jobProperties =
-      if (hasPipelined) {
+      if (hasPipelined && pipelinedManagerWantsLiveReduceHints) {
         val p = Utils.cloneProperties(if (properties == null) new Properties() else properties)
         p.setProperty(SparkContext.SPARK_PIPELINED_RUN_EPOCH, jobId.toString)
         p
@@ -2873,7 +2934,8 @@ private[spark] class DAGScheduler(
     // walk), so liveReduceSet returns None and the property is left unset -- fully live -- which
     // is correct. See the None handling below for the fail-fast case.
     stage match {
-      case sms: ShuffleMapStage if isPipelinedProducer(stage) =>
+      case sms: ShuffleMapStage
+          if isPipelinedProducer(stage) && pipelinedManagerWantsLiveReduceHints =>
         val resultStage = jobIdToActiveJob.get(jobId).map(_.finalStage)
           .collect { case rs: ResultStage => rs }
         resultStage.foreach { rs =>

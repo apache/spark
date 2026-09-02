@@ -43,7 +43,7 @@ private[spark] class ChannelShuffleWriter[K, V](
     mapId: Long,
     batchSize: Int,
     writeMetrics: ShuffleWriteMetricsReporter)
-  extends ShuffleWriter[K, V] {
+  extends ShuffleWriter[K, V] with org.apache.spark.internal.Logging {
 
   require(batchSize > 0, s"batchSize must be positive, got $batchSize")
 
@@ -146,13 +146,24 @@ private[spark] class ChannelShuffleWriter[K, V](
     // numPartitions * batchSize empty slots up front.
     val batches = new Array[Array[AnyRef]](numPartitions)
     val sizes = new Array[Int](numPartitions)
+    // Records skipped because their reduce partition has no consumer (see liveMask).
+    // Reported at the end of write().
+    var droppedRecords = 0L
 
     while (records.hasNext) {
       val rec = records.next()
       val pid = partitioner.getPartition(rec._1)
       // Only accumulate for partitions a consumer reads (liveMask). Abandonment is not checked
       // here -- it is handled at hand-off in putUnlessAbandoned (see liveMask's comment).
-      if (liveMask(pid)) {
+      if (!liveMask(pid)) {
+        // This record is routed to a reduce partition the driver said no consumer reads, so it is
+        // dropped -- see liveMask. Count it: dropping is CORRECT only if the live set was computed
+        // correctly, and everything else here fails loudly (a wrong width fails a require, a
+        // reader-less live partition hangs the writer), while an under-approximated live set would
+        // instead lose rows quietly. A non-zero count at the end of a job whose result looks wrong
+        // is the thread to pull.
+        droppedRecords += 1
+      } else {
         if (batches(pid) == null) batches(pid) = new Array[AnyRef](batchSize)
         // Records must already be detached from the producer's reused row buffers by the time
         // they reach here (the producer reuses its output UnsafeRow across iterations, and the
@@ -193,6 +204,17 @@ private[spark] class ChannelShuffleWriter[K, V](
         }
       }
       p += 1
+    }
+
+    // Report what this task dropped. Correct for a partial read (those partitions have no reader),
+    // but the only quiet failure mode on this path, so leave a trace: a wrong live set shows up
+    // here as drops on a job whose result is short. Not a metric -- shuffleWrite counters mean
+    // "bytes/records that crossed the transport", which these did not.
+    if (droppedRecords > 0) {
+      logDebug(s"Pipelined shuffle $shuffleId map $mapId dropped $droppedRecords record(s) " +
+        s"routed " +
+        s"to reduce partitions with no consumer (live set: " +
+        s"${liveReducePartitions.map(_.toArray.sorted.mkString(",")).getOrElse("all")})")
     }
   }
 
@@ -285,12 +307,17 @@ private[spark] class ChannelShuffleReader[K, C](
       // fetch-wait time.
       private def takeItem(): AnyRef = {
         var item: AnyRef = null
+        // Time the WHOLE wait and convert once, the way ShuffleBlockFetcherIterator's
+        // withFetchWaitTimeTracked does. Converting each poll separately truncated every
+        // sub-millisecond wait to zero -- and a normal hand-off returns in microseconds -- so a
+        // consumer that really was waiting reported ~0, inverting what this metric is for.
+        val start = System.nanoTime()
         while (item == null) {
           Option(TaskContext.get()).foreach(_.killTaskIfInterrupted())
-          val start = System.nanoTime()
           item = q.poll(100, java.util.concurrent.TimeUnit.MILLISECONDS)
-          readMetrics.incFetchWaitTime((System.nanoTime() - start) / 1000000L)
         }
+        readMetrics.incFetchWaitTime(
+          java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start))
         item
       }
 

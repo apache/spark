@@ -77,6 +77,20 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
   // SQL layer must detach each row from the producer's reused buffer before the writer sees it.
   override def requiresDetachedRecords: Boolean = true
 
+  // The channel writer parks on a full bounded queue, so it needs the driver's
+  // live-reduce-partition
+  // hint to drop records routed to partitions no reader will drain (see ChannelShuffleWriter's
+  // liveMask), and the per-run epoch to key its rendezvous.
+  override def supportsLiveReducePartitionHints: Boolean = true
+
+  // Answer from the rendezvous -- the state that would leak -- rather than from a registration
+  // record: a shuffle unregistered BEFORE its job runs (Dataset.rdd under fileCleanup)
+  // recreates its
+  // queues lazily when the job does run, and a registry dropped at unregister would never list it
+  // again, leaking those queues for the life of the context.
+  override def holdsShuffle(shuffleId: Int): Boolean =
+    ChannelShuffleRendezvous.holdsShuffle(shuffleId)
+
   override def registerShuffle[K, V, C](
       shuffleId: Int,
       dependency: ShuffleDependency[K, V, C]): ShuffleHandle =

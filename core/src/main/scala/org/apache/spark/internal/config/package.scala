@@ -1853,7 +1853,7 @@ package object config {
       .createWithDefault("streaming")
 
   private[spark] val SHUFFLE_PIPELINED_CHANNEL_BATCH_SIZE =
-    ConfigBuilder("spark.shuffle.pipelined.channel.batchSize")
+    ConfigBuilder("spark.shuffle.channel.batchSize")
       .doc("Number of records the in-process pipelined channel shuffle accumulates per output " +
         "partition before handing a batch across its queue in one operation. Larger batches " +
         "amortize the queue's per-operation lock cost at the price of higher hand-off latency " +
@@ -1866,11 +1866,11 @@ package object config {
       .createWithDefault(1024)
 
   private[spark] val SHUFFLE_PIPELINED_CHANNEL_QUEUE_CAPACITY =
-    ConfigBuilder("spark.shuffle.pipelined.channel.queueCapacity")
+    ConfigBuilder("spark.shuffle.channel.queueCapacity")
       .doc("Depth, in BATCHES, of each per-reduce-partition queue in the in-process pipelined " +
         "channel shuffle. This is the backpressure bound: a producer blocks once a partition's " +
         "queue holds this many batches. It also sets the worst-case heap the transport pins for " +
-        "one shuffle -- roughly queueCapacity * spark.shuffle.pipelined.channel.batchSize * " +
+        "one shuffle -- roughly queueCapacity * spark.shuffle.channel.batchSize * " +
         "numPartitions rows held as strong references (not tracked by the memory manager and not " +
         "spilled), so raise it together with an eye on that product. Only used when " +
         "spark.shuffle.manager.incremental is the in-process channel manager.")

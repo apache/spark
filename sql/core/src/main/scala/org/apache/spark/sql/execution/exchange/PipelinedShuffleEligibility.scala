@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.execution.exchange
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config
 import org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
@@ -35,6 +38,10 @@ import org.apache.spark.sql.internal.SQLConf
  */
 private[sql] object PipelinedShuffleEligibility extends Logging {
 
+  // The flag/manager mismatch is a start-up misconfiguration, so warn once per JVM rather than on
+  // every query planned in the session.
+  private val mismatchWarned = new AtomicBoolean(false)
+
   /**
    * Whether the pipelined channel transport may be used for `plan` at all, independent of plan
    * shape. Requires: the opt-in flag on; single-executor local mode (the in-process channel
@@ -49,10 +56,33 @@ private[sql] object PipelinedShuffleEligibility extends Logging {
     if (plan.session == null || !plan.session.sparkContext.isLocal) {
       return false
     }
+    // Batch only. `IncrementalExecution.preparations` inherits QueryExecution's list, so without
+    // this gate a streaming plan would be rewritten here: every micro-batch exchange (the
+    // state-store shuffles, the static side of a stream-static join) would be flipped to pipelined
+    // BEFORE `MarkPipelinedShuffleForRealTimeMode` runs. That contradicts what the Real-Time Mode
+    // rule deliberately does -- it leaves the static side regular, because pulling it into the gang
+    // would demand slots for stages that must instead finish first, failing admission. Streaming
+    // marks its own pipelined boundaries; this opt-in batch path must not pre-empt that decision.
+    // (`logicalLink.exists(_.isStreaming)` is the same signal InsertAdaptiveSparkPlan uses to keep
+    // AQE off streaming plans.)
+    if (plan.exists(_.logicalLink.exists(_.isStreaming))) {
+      logDebug("Pipelined shuffle: the plan is a streaming plan; leaving it to the streaming " +
+        "engine's own pipelined-shuffle marking.")
+      return false
+    }
     if (!SparkEnv.get.pipelinedShuffleManager.isInstanceOf[PipelinedChannelShuffleManager]) {
-      logDebug("Pipelined shuffle: spark.sql.shuffle.localPipelined.enabled is on but the " +
-        "incremental shuffle manager is not the in-process channel manager " +
-        "(spark.shuffle.manager.incremental); leaving the plan regular.")
+      // WARN, not DEBUG, and once per JVM: the user asked for this feature and is silently not
+      // getting it, which no plan or metric reveals. The flag alone cannot select the transport --
+      // the manager is a separate, start-up-only config -- so the mismatch is a misconfiguration
+      // the user has to act on, unlike the plan-shape fallbacks (reuse, coalesce) which are normal
+      // outcomes and stay at DEBUG.
+      if (mismatchWarned.compareAndSet(false, true)) {
+        logWarning(s"${SQLConf.LOCAL_PIPELINED_SHUFFLE_ENABLED.key} is enabled but " +
+          s"${config.SHUFFLE_MANAGER_INCREMENTAL.key} is not the in-process channel manager, so " +
+          s"no shuffle will be pipelined. Set it to " +
+          s"${classOf[PipelinedChannelShuffleManager].getName} to enable the feature, or unset " +
+          s"the SQL flag to silence this warning.")
+      }
       return false
     }
     true

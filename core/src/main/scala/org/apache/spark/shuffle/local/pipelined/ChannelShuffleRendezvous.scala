@@ -73,22 +73,27 @@ private[spark] object ChannelShuffleRendezvous {
       .map(_.toInt)
       .getOrElse(0)
 
-  // Keyed by (shuffleId, epoch, reducePartitionId). Values are AnyRef because the queue carries
-  // both record batches (Array[AnyRef]) and the EndOfStream marker.
+  // State is nested by shuffleId FIRST, then keyed by (epoch, reducePartitionId) within it. The
+  // outer level exists so the two per-shuffle operations the ContextCleaner drives -- holdsShuffle
+  // and removeShuffle -- are O(1) map lookups instead of a scan of every live entry: holdsShuffle
+  // now runs for EVERY shuffle cleaned in a feature-on session, including the regular prefix
+  // shuffles this feature itself produces, so a flat key made that O(live entries) per cleanup.
+  //
+  // Queue values are AnyRef because a queue carries both record batches (Array[AnyRef]) and the
+  // EndOfStream marker.
   private val queues =
-    new ConcurrentHashMap[(Int, Int, Int), LinkedBlockingQueue[AnyRef]]()
+    new ConcurrentHashMap[Int, ConcurrentHashMap[(Int, Int), LinkedBlockingQueue[AnyRef]]]()
 
-  // (shuffleId, epoch, reducePartitionId) keys whose reader has departed (its reduce task
-  // finished) and will drain no more. A writer stops feeding an abandoned partition and drops
-  // the rest. This covers the LIVE-partition early-stop case (e.g. a LIMIT reader that pulled
-  // enough and quit): without it the writer fills the partition's bounded queue and blocks
-  // forever.
+  // (epoch, reducePartitionId) keys, per shuffleId, whose reader has departed (its reduce task
+  // finished) and will drain no more. A writer stops feeding an abandoned partition and drops the
+  // rest. This covers the LIVE-partition early-stop case (e.g. a LIMIT reader that pulled enough
+  // and quit): without it the writer fills the partition's bounded queue and blocks forever.
   private val abandoned =
-    java.util.concurrent.ConcurrentHashMap.newKeySet[(Int, Int, Int)]()
+    new ConcurrentHashMap[Int, java.util.Set[(Int, Int)]]()
 
   /**
    * Per-queue capacity in BATCHES (not rows), the backpressure bound and the heap-residency
-   * knob (see spark.shuffle.pipelined.channel.queueCapacity). Set once by the channel manager at
+   * knob (see spark.shuffle.channel.queueCapacity). Set once by the channel manager at
    * construction from that conf; defaults to 64 (with the default 1024-row batch, ~64K rows per
    * reduce partition in flight) until a manager sets it. `@volatile` because the manager sets it
    * on the driver while writer/reader threads read it.
@@ -99,14 +104,18 @@ private[spark] object ChannelShuffleRendezvous {
   private[pipelined] def setCapacity(batches: Int): Unit = { capacity = batches }
 
   /** The queue for one `(shuffleId, epoch, reducePartitionId)`, created on first access. */
-  def queue(shuffleId: Int, epoch: Int, reducePartitionId: Int): LinkedBlockingQueue[AnyRef] =
-    queues.computeIfAbsent(
-      (shuffleId, epoch, reducePartitionId),
-      _ => new LinkedBlockingQueue[AnyRef](capacity))
+  def queue(shuffleId: Int, epoch: Int, reducePartitionId: Int): LinkedBlockingQueue[AnyRef] = {
+    val perShuffle = queues.computeIfAbsent(
+      shuffleId, _ => new ConcurrentHashMap[(Int, Int), LinkedBlockingQueue[AnyRef]]())
+    perShuffle.computeIfAbsent(
+      (epoch, reducePartitionId), _ => new LinkedBlockingQueue[AnyRef](capacity))
+  }
 
   /** Whether this reduce partition's reader has departed for this run (see [[abandon]]). */
-  def isAbandoned(shuffleId: Int, epoch: Int, reducePartitionId: Int): Boolean =
-    abandoned.contains((shuffleId, epoch, reducePartitionId))
+  def isAbandoned(shuffleId: Int, epoch: Int, reducePartitionId: Int): Boolean = {
+    val marks = abandoned.get(shuffleId)
+    marks != null && marks.contains((epoch, reducePartitionId))
+  }
 
   /**
    * Mark a reduce partition abandoned: its reader task has finished and will drain no more.
@@ -116,9 +125,14 @@ private[spark] object ChannelShuffleRendezvous {
    * writer's next abandoned-check stops it cooperatively (no reliance on interrupt).
    */
   def abandon(shuffleId: Int, epoch: Int, reducePartitionId: Int): Unit = {
-    abandoned.add((shuffleId, epoch, reducePartitionId))
-    val q = queues.get((shuffleId, epoch, reducePartitionId))
-    if (q != null) q.clear()
+    abandoned
+      .computeIfAbsent(shuffleId, _ => ConcurrentHashMap.newKeySet[(Int, Int)]())
+      .add((epoch, reducePartitionId))
+    val perShuffle = queues.get(shuffleId)
+    if (perShuffle != null) {
+      val q = perShuffle.get((epoch, reducePartitionId))
+      if (q != null) q.clear()
+    }
   }
 
   /**
@@ -133,14 +147,9 @@ private[spark] object ChannelShuffleRendezvous {
    * hazard is handled by audit rather than a runtime sentinel -- see the class scaladoc.
    */
   def removeShuffle(shuffleId: Int): Unit = {
-    val it = queues.keySet().iterator()
-    while (it.hasNext) {
-      if (it.next()._1 == shuffleId) it.remove()
-    }
-    val ai = abandoned.iterator()
-    while (ai.hasNext) {
-      if (ai.next()._1 == shuffleId) ai.remove()
-    }
+    // One atomic remove per map, dropping every epoch of the shuffle with it.
+    queues.remove(shuffleId)
+    abandoned.remove(shuffleId)
   }
 
   /**
@@ -153,15 +162,9 @@ private[spark] object ChannelShuffleRendezvous {
    * and is still false for a regular shuffle (never present here), so the arm stays scoped.
    */
   def holdsShuffle(shuffleId: Int): Boolean = {
-    val qi = queues.keySet().iterator()
-    while (qi.hasNext) {
-      if (qi.next()._1 == shuffleId) return true
-    }
-    val ai = abandoned.iterator()
-    while (ai.hasNext) {
-      if (ai.next()._1 == shuffleId) return true
-    }
-    false
+    val perShuffle = queues.get(shuffleId)
+    val marks = abandoned.get(shuffleId)
+    (perShuffle != null && !perShuffle.isEmpty) || (marks != null && !marks.isEmpty)
   }
 
   /**
@@ -178,5 +181,10 @@ private[spark] object ChannelShuffleRendezvous {
   }
 
   /** Visible for testing: number of live queues. */
-  private[pipelined] def numQueuesForTesting: Int = queues.size()
+  private[pipelined] def numQueuesForTesting: Int = {
+    var n = 0
+    val it = queues.values().iterator()
+    while (it.hasNext) n += it.next().size()
+    n
+  }
 }

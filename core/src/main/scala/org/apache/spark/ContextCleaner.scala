@@ -297,15 +297,13 @@ private[spark] class ContextCleaner(
    * in a feature-on session (never present in the rendezvous) -- so an already-cleaned shuffle
    * reaching that else stays a no-op rather than firing a duplicate cluster-wide RemoveShuffle RPC.
    *
-   * The "holds" test consults the rendezvous, not the manager's registration, on purpose: a
-   * channel shuffle unregistered BEFORE its job runs (Dataset.rdd under fileCleanup) then run
-   * recreates its queues lazily even though the manager no longer lists it; keying off the
-   * rendezvous frees those recreated queues, where keying off a manager registry would leak them.
+   * The manager answers `holdsShuffle` from the state that would leak rather than from a
+   * registration record -- see `PipelinedShuffleManager.holdsShuffle` -- so a shuffle unregistered
+   * before its job ran, whose state the run then recreated, is still freed here.
    */
   private def heldByTracklessPipelinedManager(shuffleId: Int): Boolean = {
-    val mgr = SparkEnv.get.pipelinedShuffleManager
-    mgr != null && !mgr.usesStreamingShuffleOutputTracker &&
-      org.apache.spark.shuffle.local.pipelined.ChannelShuffleRendezvous.holdsShuffle(shuffleId)
+    val mgr = sc.env.pipelinedShuffleManager
+    mgr != null && !mgr.usesStreamingShuffleOutputTracker && mgr.holdsShuffle(shuffleId)
   }
 
   /** Perform broadcast cleanup. */

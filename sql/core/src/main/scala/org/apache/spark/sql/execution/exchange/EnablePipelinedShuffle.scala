@@ -25,9 +25,13 @@ import org.apache.spark.sql.execution.joins.CartesianProductExec
  * Opt-in (SPARK-57399). Rewrites EVERY [[ShuffleExchangeExec]] in a
  * batch physical plan to `pipelined = true`, so each shuffle is served by the in-process
  * pipelined channel manager and the concurrent-stage scheduler runs the map and reduce stages
- * together. This is the minimal SQL entry point that lets a batch query exercise the
- * pipelined channel execution path; a production version would be a targeted,
- * cost/shape-aware replacement rather than a blanket rewrite.
+ * together.
+ *
+ * The rewrite is deliberately unconditional rather than cost-based: the scheduler requires a job to
+ * be all-pipelined (or a materialized prefix below a pipelined suffix), so choosing per exchange
+ * would produce exactly the mixed shapes it rejects. What the rule does decide is ELIGIBILITY --
+ * the environment gates in [[PipelinedShuffleEligibility]] and the plan shapes below that force the
+ * whole plan back to regular.
  *
  * Enabled only when `spark.sql.shuffle.localPipelined.enabled=true`. It runs in the non-AQE
  * `preparations` list, so it also requires AQE to be off (under AQE the plan is hidden behind
@@ -67,7 +71,7 @@ import org.apache.spark.sql.execution.joins.CartesianProductExec
  *         on a limit takes `executeTake` and never hits `doExecute`; `.write` / `.toLocalIterator`
  *         / a non-root position do.)
  */
-case class EnablePipelinedShuffle() extends Rule[SparkPlan] {
+object EnablePipelinedShuffle extends Rule[SparkPlan] {
 
   override def apply(plan: SparkPlan): SparkPlan = {
     // Shared environment gate (opt-in flag, single-executor local mode, channel manager active),

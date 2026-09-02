@@ -150,7 +150,7 @@ case class AdaptiveSparkPlanExec(
       // Flips the final unmaterialized tail's exchanges to pipelined (SPARK-57399 pipelined
       // channel, opt-in). Runs last so skew handling and sort cleanup have settled
       // before placement is decided.
-      AQEEnablePipelinedShuffle()
+      AQEEnablePipelinedShuffle
     ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules
   }
 

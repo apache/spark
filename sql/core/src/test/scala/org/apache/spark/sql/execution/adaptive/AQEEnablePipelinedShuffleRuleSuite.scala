@@ -75,7 +75,7 @@ class AQEEnablePipelinedShuffleRuleSuite extends QueryTest with SharedSparkSessi
       // Root: UnionExec with E1 on one side (free) and join subtree with E2 on the other (blocked)
       val root = UnionExec(Seq(freeTwin, join))
 
-      val rule = AQEEnablePipelinedShuffle()
+      val rule = AQEEnablePipelinedShuffle
       val flipped = rule.flipEligibleExchanges(root)
 
       val flippedUnion = flipped match {
