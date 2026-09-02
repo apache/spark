@@ -53,33 +53,33 @@ import org.apache.spark.util.SparkClassUtils
  * only `Column` but also other types such as a native string. The other variants currently exist
  * for historical reasons.
  *
- * @groupname udf_funcs UDF, UDAF and UDT
- * @groupname agg_funcs Aggregate functions
- * @groupname datetime_funcs Date and Timestamp functions
- * @groupname sort_funcs Sort functions
  * @groupname normal_funcs Normal functions
- * @groupname math_funcs Mathematical functions
- * @groupname bitwise_funcs Bitwise functions
- * @groupname predicate_funcs Predicate functions
  * @groupname conditional_funcs Conditional functions
- * @groupname hash_funcs Hash functions
- * @groupname misc_funcs Misc functions
- * @groupname sketch_funcs Datasketch functions
- * @groupname window_funcs Window functions
- * @groupname generator_funcs Generator functions
+ * @groupname predicate_funcs Predicate functions
+ * @groupname sort_funcs Sort functions
+ * @groupname math_funcs Mathematical functions
  * @groupname string_funcs String functions
+ * @groupname bitwise_funcs Bitwise functions
+ * @groupname datetime_funcs Date and Timestamp functions
+ * @groupname hash_funcs Hash functions
  * @groupname collection_funcs Collection functions
  * @groupname array_funcs Array functions
- * @groupname map_funcs Map functions
  * @groupname struct_funcs Struct functions
- * @groupname st_funcs ST geospatial functions
+ * @groupname map_funcs Map functions
+ * @groupname agg_funcs Aggregate functions
+ * @groupname window_funcs Window functions
+ * @groupname generator_funcs Generator functions
+ * @groupname partition_transforms Partition transform functions
  * @groupname csv_funcs CSV functions
  * @groupname json_funcs JSON functions
  * @groupname variant_funcs VARIANT functions
- * @groupname vector_funcs Vector functions
  * @groupname xml_funcs XML functions
  * @groupname url_funcs URL functions
- * @groupname partition_transforms Partition transform functions
+ * @groupname misc_funcs Misc functions
+ * @groupname sketch_funcs Datasketch functions
+ * @groupname st_funcs ST geospatial functions
+ * @groupname vector_funcs Vector functions
+ * @groupname udf_funcs UDF, UDAF and UDT
  * @groupname Ungrouped Support functions for DataFrames
  * @since 1.3.0
  */
@@ -87,6 +87,9 @@ import org.apache.spark.util.SparkClassUtils
 // scalastyle:off
 object functions {
 // scalastyle:on
+
+  // Function groups are defined by the @group tags above each function and the corresponding
+  // @groupname declarations. Section headings in this implementation file are navigation aids.
 
   /**
    * Returns a [[Column]] based on the given column name.
@@ -4686,7 +4689,7 @@ object functions {
    *
    * @param e
    *   the value to compute the mean of. A column that evaluates to a numeric or interval.
-   * @group math_funcs
+   * @group agg_funcs
    * @since 3.5.0
    * @return
    *   Returns a column that evaluates to a double.
@@ -4757,7 +4760,7 @@ object functions {
    *
    * @param e
    *   the value to compute the sum of. A column that evaluates to a numeric or interval.
-   * @group math_funcs
+   * @group agg_funcs
    * @since 3.5.0
    * @return
    *   Returns a column that evaluates to a numeric.

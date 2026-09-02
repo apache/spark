@@ -109,6 +109,9 @@ if TYPE_CHECKING:
 # even though there might be few exceptions for legacy or inevitable reasons.
 # If you are fixing other language APIs together, also please note that Scala side is not the case
 # since it requires making every single overridden definition.
+# Public function groups are defined by pyspark.sql.functions.__all__ and mirrored in the API
+# reference.
+# Section headings in this implementation file are only navigation aids.
 
 
 def _get_jvm_function(name: str, sc: "SparkContext") -> Callable:
