@@ -41,7 +41,10 @@ case class LogicalRelation(
     output: Seq[AttributeReference],
     catalogTable: Option[CatalogTable],
     override val isStreaming: Boolean,
-    @transient stream: Option[SparkDataStream])
+    @transient stream: Option[SparkDataStream],
+    // Bound at analysis so sameResult / cache reuse distinguish preserve-only vs standard
+    // CHAR/VARCHAR scans. None means the relation was not analyzed under first-class types.
+    charVarcharStandardSemantics: Option[Boolean])
   extends LeafNode
   with StreamSourceAwareLogicalPlan
   with MultiInstanceRelation
@@ -116,14 +119,14 @@ object LogicalRelation {
     // The v1 source may return schema containing char/varchar type. We replace char/varchar
     // with "annotated" string type here as the query engine doesn't support char/varchar yet.
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(relation.schema)
-    LogicalRelation(relation, toAttributes(schema), None, isStreaming, None)
+    LogicalRelation(relation, toAttributes(schema), None, isStreaming, None, None)
   }
 
   def apply(relation: BaseRelation, table: CatalogTable): LogicalRelation = {
     // The v1 source may return schema containing char/varchar type. We replace char/varchar
     // with "annotated" string type here as the query engine doesn't support char/varchar yet.
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(relation.schema)
-    LogicalRelation(relation, toAttributes(schema), Some(table), false, None)
+    LogicalRelation(relation, toAttributes(schema), Some(table), false, None, None)
   }
 }
 

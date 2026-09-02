@@ -77,7 +77,7 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
         removeUnnecessaryDynamicPruningSubquery(p)
       // pass through anything that is pushed down into PhysicalOperation
       case p @ NodeWithOnlyDeterministicProjectAndFilter(
-          HiveTableRelation(_, _, _, _, _)) =>
+          HiveTableRelation(_, _, _, _, _, _)) =>
         removeUnnecessaryDynamicPruningSubquery(p)
       case p @ NodeWithOnlyDeterministicProjectAndFilter(
           _: DataSourceV2ScanRelation) =>

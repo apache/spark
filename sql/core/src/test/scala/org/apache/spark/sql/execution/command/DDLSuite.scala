@@ -1399,7 +1399,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     def getCachedTableOptions(
         qualifiedTableName: QualifiedTableName): Map[String, String] = {
       catalog.getCachedTable(qualifiedTableName) match {
-        case LogicalRelation(fsRelation: HadoopFsRelation, _, _, _, _) => fsRelation.options
+        case LogicalRelation(fsRelation: HadoopFsRelation, _, _, _, _, _) =>
+          fsRelation.options
       }
     }
 
@@ -1501,7 +1502,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         case cmd: InsertIntoHadoopFsRelationCommand => cmd.options
       }.getOrElse(fail("target InsertIntoHadoopFsRelationCommand not found"))
       val sourceOptions = qe.analyzed.collect {
-        case LogicalRelation(fsRelation: HadoopFsRelation, _, _, _, _) => fsRelation.options
+        case LogicalRelation(fsRelation: HadoopFsRelation, _, _, _, _, _) =>
+          fsRelation.options
       }.find(_.get("sep").contains(";")).getOrElse(fail("source relation with sep=; not found"))
       assert(targetOptions.get("sep").contains("|"), "target write option")
       assert(sourceOptions("sep") === ";", "source read option")

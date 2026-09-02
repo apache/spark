@@ -282,7 +282,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       // 2. Return a new LogicalRelation with the updated HadoopFsRelation
       // This ensures the relation reflects any changes in data source options.
       // Otherwise, leave the cached table relation as is
-      case r @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, _, _)
+      case r @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, _, _, _)
         if !readFileSourceTableCacheIgnoreOptions &&
           (new CaseInsensitiveStringMap(fsRelation.options.asJava) !=
           new CaseInsensitiveStringMap(dsOptions.asJava)) =>
