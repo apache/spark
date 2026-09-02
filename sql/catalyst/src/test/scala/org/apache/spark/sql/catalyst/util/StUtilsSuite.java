@@ -249,6 +249,27 @@ class STUtilsSuite {
     assertArrayEquals(testGeographyBytes, geographyVal.getBytes());
   }
 
+  @Test
+  void testStGeomFromWKBWithOutOfBoundsRange() {
+    // A range that escapes the backing array must surface as WKB_PARSE_ERROR, the same as any
+    // other malformed WKB, rather than a raw IndexOutOfBoundsException from ByteBuffer.wrap that
+    // fromWkb's WkbParseException handler would never see. Covers negative offset, offset past
+    // the end, and a length that runs past the end.
+    int[][] badRanges = {
+      {-1, testWkb.length},                 // negative offset
+      {testWkb.length + 1, testWkb.length}, // offset past the end
+      {1, testWkb.length}                   // offset + length past the end
+    };
+    for (int[] range : badRanges) {
+      int offset = range[0];
+      int length = range[1];
+      SparkIllegalArgumentException exception = assertThrows(SparkIllegalArgumentException.class,
+        () -> STUtils.stGeomFromWKB(testWkb, offset, length, testGeometrySrid),
+        "offset=" + offset + ", length=" + length + " should raise WKB_PARSE_ERROR");
+      assertEquals("WKB_PARSE_ERROR", exception.getCondition());
+    }
+  }
+
   // ST_Srid
   @Test
   void testStSridGeography() {

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import org.apache.parquet.bytes.DirectByteBufferAllocator
 import org.apache.parquet.column.values.Utils
 import org.apache.parquet.column.values.deltastrings.DeltaByteArrayWriter
+import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.io.api.Binary
 
 import org.apache.spark.sql.catalyst.util.STUtils
@@ -130,6 +131,38 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
     }
   }
 
+  test("corrupt first value with a non-zero prefix fails fast") {
+    // A legal DELTA_BYTE_ARRAY first-page first value always has an empty prefix. A corrupt page
+    // whose first value carries a non-zero prefixLength references prefix bytes that were never
+    // decoded (prevLen == 0). prevBuf is pre-zeroed and reused, so without a guard the decoder
+    // would silently assemble zero bytes as the shared prefix and return wrong data. The reader
+    // must instead fail fast. A short (<= 64 byte) prefix is used so the value fits prevBuf's
+    // initial capacity, isolating the guard from the grow-branch bounds check.
+    val shared = "abcdefghij" // 10-byte prefix
+    val vals = Array(shared + "1", shared + "2")
+
+    // Corrupt the writer so its first value deltas off `shared`, yielding prefixLength = 10.
+    corruptWriter(writer, shared)
+    Utils.writeData(writer, vals)
+    val bytes = writer.getBytes
+
+    // readBinary path.
+    val readReader = new VectorizedDeltaByteArrayReader()
+    val readVec: WritableColumnVector = new OnHeapColumnVector(vals.length, StringType)
+    readReader.initFromPage(vals.length, bytes.toInputStream)
+    val readEx = intercept[ParquetDecodingException] {
+      readReader.readBinary(vals.length, readVec, 0)
+    }
+    assert(readEx.getMessage.contains("Prefix length"))
+
+    // skipBinary path.
+    val skipReader = new VectorizedDeltaByteArrayReader()
+    skipReader.initFromPage(vals.length, bytes.toInputStream)
+    intercept[ParquetDecodingException] {
+      skipReader.skipBinary(vals.length)
+    }
+  }
+
   private def corruptWriter(writer: DeltaByteArrayWriter, data: String): Unit = {
     corruptWriter(writer, Binary.fromString(data).getBytesUnsafe())
   }
@@ -227,6 +260,25 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
     readGeoInto(secondReader, secondPageVals.length, vec, isGeometry)
     for (i <- secondPageVals.indices) {
       assert(secondPageVals(i) sameElements extractGeoWkb(vec, i, isGeometry, srid))
+    }
+  }
+
+  testGeo("corrupt first geo value with a non-zero prefix fails fast") { geoType =>
+    // The geo path shares the reusable prevBuf protocol, so a corrupt first value carrying a
+    // non-zero prefixLength must fail fast rather than silently assembling zero prefix bytes.
+    val isGeometry = geoType.isInstanceOf[GeometryType]
+    val vals = sharedPrefixPolygons(2)
+
+    // Corrupt the writer so its first value deltas off an unrelated polygon that shares the
+    // long WKB prefix, yielding a non-zero prefixLength against a reader whose prevLen is 0.
+    corruptWriter(writer, sharedPrefixPolygons(1, base = 50).head)
+    writeBinaryData(writer, vals)
+
+    val corruptReader = new VectorizedDeltaByteArrayReader()
+    val vec: WritableColumnVector = new OnHeapColumnVector(vals.length, geoType)
+    corruptReader.initFromPage(vals.length, writer.getBytes.toInputStream)
+    intercept[ParquetDecodingException] {
+      readGeoInto(corruptReader, vals.length, vec, isGeometry)
     }
   }
 

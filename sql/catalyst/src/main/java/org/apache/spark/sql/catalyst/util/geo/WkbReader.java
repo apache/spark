@@ -249,6 +249,16 @@ public class WkbReader {
       throw new WkbParseException("Unexpected end of WKB buffer", 0, currentWkb);
     }
 
+    // Validate that [offset, offset + length) lies within currentWkb before wrapping.
+    // Without this, a bad offset/length would escape as a raw IndexOutOfBoundsException
+    // from ByteBuffer.wrap, which fromWkb's WkbParseException catch would not translate
+    // into WKB_PARSE_ERROR like every other malformed-WKB case. The subtraction avoids
+    // overflow: offset is already known to be >= 0.
+    if (offset < 0 || length > currentWkb.length - offset) {
+      throw new WkbParseException("WKB range [" + offset + ", " + ((long) offset + length)
+        + ") is out of bounds for buffer of length " + currentWkb.length, offset, currentWkb);
+    }
+
     // Create a buffer over just the [offset, offset + length) sub-range. Positions
     // reported in errors stay absolute so they index correctly into currentWkb.
     buffer = ByteBuffer.wrap(currentWkb, offset, length);

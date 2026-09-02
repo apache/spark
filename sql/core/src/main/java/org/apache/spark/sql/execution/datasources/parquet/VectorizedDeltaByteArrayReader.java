@@ -22,6 +22,7 @@ import static org.apache.spark.sql.types.DataTypes.IntegerType;
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.column.values.RequiresPreviousReader;
 import org.apache.parquet.column.values.ValuesReader;
+import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.io.api.Binary;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
@@ -86,6 +87,12 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
       int suffixLength = suffixReader.getSuffixLength(currentRow);
       int length = prefixLength + suffixLength;
 
+      // The prefix is shared with the previously decoded value, so it can be at most as long
+      // as that value. A larger prefixLength means the file is corrupt (e.g. PARQUET-246 on the
+      // first value of the first page). prevBuf is pre-zeroed and reused, so without this guard
+      // such input would silently assemble stale/zero prefix bytes instead of failing.
+      checkPrefixLength(prefixLength);
+
       // Grow prevBuf if needed, preserving the prefix bytes already in place.
       if (length > prevBuf.length) {
         byte[] newBuf = new byte[Math.max(length, prevBuf.length * 2)];
@@ -131,6 +138,9 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
       int prefixLength = prefixLengthVector.getInt(currentRow);
       int suffixLength = suffixReader.getSuffixLength(currentRow);
       int length = prefixLength + suffixLength;
+
+      // See readValues: guard against a prefix longer than the previous value (corrupt input).
+      checkPrefixLength(prefixLength);
 
       // Grow prevBuf if needed, preserving the prefix bytes already in place.
       if (length > prevBuf.length) {
@@ -186,6 +196,9 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
       int suffixLength = suffixReader.getSuffixLength(currentRow);
       int length = prefixLength + suffixLength;
 
+      // See readValues: guard against a prefix longer than the previous value (corrupt input).
+      checkPrefixLength(prefixLength);
+
       // Grow prevBuf if needed, preserving the prefix bytes already in place.
       if (length > prevBuf.length) {
         byte[] newBuf = new byte[Math.max(length, prevBuf.length * 2)];
@@ -197,6 +210,21 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
       suffixReader.getSuffixInto(currentRow, prevBuf, prefixLength);
       prevLen = length;
       currentRow++;
+    }
+  }
+
+  /**
+   * Guards against a corrupt page whose {@code prefixLength} exceeds the length of the previously
+   * decoded value ({@code prevLen}). Legal writers never emit this, but because {@code prevBuf} is
+   * pre-zeroed and reused across values, an unchecked prefix would silently pull stale or zero
+   * bytes into the assembled value instead of failing. Throwing here keeps corrupt input a
+   * fail-fast error, matching the pre-buffer-reuse behavior (an NPE on the old {@code previous}).
+   */
+  private void checkPrefixLength(int prefixLength) {
+    if (prefixLength > prevLen) {
+      throw new ParquetDecodingException(
+          "Prefix length " + prefixLength + " is larger than the previous value length "
+              + prevLen + "; the DELTA_BYTE_ARRAY page is corrupt");
     }
   }
 
