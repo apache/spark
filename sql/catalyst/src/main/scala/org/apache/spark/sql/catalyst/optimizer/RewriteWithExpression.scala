@@ -164,9 +164,10 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       case ref: CommonExpressionRef => safeIds.contains(ref.id)
       // Any other leaf varies per row (attribute) or reads a clock.
       case _: LeafExpression => false
-      // A TIME -> TIMESTAMP cast stabilized by ComputeCurrentTime is a pure builder StaticInvoke;
-      // accept it here before the blanket NonSQLExpression rejection below.
-      case _ if ComputeCurrentTime.isStabilizedTimeToTimestamp(e) =>
+      // ComputeCurrentTime stabilizes a TIME -> TIMESTAMP cast into a DateTimeUtils.makeTimestamp*
+      // builder, which depends only on its arguments (none read a clock). Accept it here, ahead
+      // of the blanket NonSQLExpression rejection below, when every argument is a literal tree.
+      case _ if ComputeCurrentTime.isMakeTimestampBuilder(e) =>
         e.children.forall(isLiteralTree)
       // Arbitrary Java methods and UDFs can be foldable without being pure.
       case _: NonSQLExpression | _: UserDefinedExpression => false

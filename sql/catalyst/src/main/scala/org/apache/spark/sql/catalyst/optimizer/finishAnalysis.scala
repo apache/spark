@@ -240,8 +240,11 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
       })
   }
 
-  /** Whether `e` is a `DateTimeUtils.makeTimestamp*` builder that `expressionTransform` emits. */
-  private[optimizer] def isStabilizedTimeToTimestamp(e: Expression): Boolean = e match {
+  /**
+   * Whether `e` is a `DateTimeUtils.makeTimestamp*` builder `StaticInvoke`, the shape
+   * `expressionTransform` emits when stabilizing a TIME -> TIMESTAMP cast.
+   */
+  private[optimizer] def isMakeTimestampBuilder(e: Expression): Boolean = e match {
     case si: StaticInvoke if si.staticObject == classOf[DateTimeUtils.type] =>
       si.functionName.startsWith("makeTimestamp")
     case _ => false

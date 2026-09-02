@@ -300,7 +300,19 @@ class RewriteWithExpressionSuite extends PlanTest {
     val rewritten = finishAnalysisAndInline(expr, Instant.now())
     assert(!rewritten.exists(_.isInstanceOf[With]))
     val EqualTo(left, right) = rewritten: @unchecked
-    assert(ComputeCurrentTime.isStabilizedTimeToTimestamp(left))
+    assert(ComputeCurrentTime.isMakeTimestampBuilder(left))
+    assert(left == right)
+  }
+
+  test("applyForExpression inlines a stabilized TIME -> TIMESTAMP_LTZ cast") {
+    // The LTZ target reaches isMakeTimestampBuilder through the same gate as the NTZ case above.
+    val expr = With(Cast(Literal(0L, TimeType(6)), TimestampType, Some("UTC"))) {
+      case Seq(ref) => EqualTo(ref, ref)
+    }
+    val rewritten = finishAnalysisAndInline(expr, Instant.now())
+    assert(!rewritten.exists(_.isInstanceOf[With]))
+    val EqualTo(left, right) = rewritten: @unchecked
+    assert(ComputeCurrentTime.isMakeTimestampBuilder(left))
     assert(left == right)
   }
 
