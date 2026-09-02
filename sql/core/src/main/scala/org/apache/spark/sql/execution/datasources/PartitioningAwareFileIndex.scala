@@ -194,7 +194,7 @@ abstract class PartitioningAwareFileIndex(
     }
 
     if (partitionPruningPredicates.nonEmpty) {
-      val predicate = partitionPruningPredicates.reduce(expressions.And)
+      val predicate = partitionPruningPredicates.reduce(expressions.And.apply)
 
       val boundPredicate = Predicate.createInterpreted(predicate.transform {
         case a: AttributeReference =>

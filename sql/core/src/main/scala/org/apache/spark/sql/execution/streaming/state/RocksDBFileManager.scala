@@ -800,7 +800,7 @@ class RocksDBFileManager(
     // Delete orphan checksum files
     val checksumFiles = allFiles
       .filter(ChecksumCheckpointFileManager.isChecksumFile)
-      .map(ChecksumFile)
+      .map(ChecksumFile.apply)
 
     // Do this only if we see checksum files in the initial dir listing
     // To avoid checking for orphan checksum files, if there is no checksum files

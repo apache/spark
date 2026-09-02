@@ -60,7 +60,7 @@ private[joins] object StreamedSideJoinCondition extends PredicateHelper {
       val conjuncts = splitConjunctivePredicates(condition.get)
       val (streamedOnly, rest) = conjuncts.partition(p =>
         ExprUtils.canEvaluateUnconditionally(p) && p.references.subsetOf(streamedPlan.outputSet))
-      (streamedOnly.reduceOption(And), rest.reduceOption(And))
+      (streamedOnly.reduceOption(And.apply), rest.reduceOption(And.apply))
     } else {
       (None, condition)
     }

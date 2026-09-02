@@ -92,7 +92,7 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
           if (filteredPredicates.isEmpty) {
             Seq(Literal.TrueLiteral)
           } else {
-            preds :+ filteredPredicates.reduce(And)
+            preds :+ filteredPredicates.reduce(And.apply)
           }
         }
         val newAttributes = attrs ++
@@ -144,10 +144,10 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
             // used as-is: re-pushing the combined predicate is redundant but always
             // semantics-preserving, since the disjunction of the reference predicates is
             // valid for every row of the CTE definition.
-            removePushedDownFilter(child, prevPreds.reduce(Or))
+            removePushedDownFilter(child, prevPreds.reduce(Or.apply))
           case _ => child
         }
-        val newCombinedPred = newPreds.reduce(Or)
+        val newCombinedPred = newPreds.reduce(Or.apply)
         val newChild = if (needsPruning(basePlan, newAttrSet)) {
           Project(newAttrSet.toSeq, basePlan)
         } else {

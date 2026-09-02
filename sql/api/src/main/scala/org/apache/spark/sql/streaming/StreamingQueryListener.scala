@@ -181,7 +181,7 @@ object StreamingQueryListener extends Serializable {
         ("runId" -> JString(runId.toString)) ~
         ("name" -> JString(name)) ~
         ("timestamp" -> JString(timestamp)) ~
-        ("jobTags" -> JArray(jobTags.toList.map(JString)))
+        ("jobTags" -> JArray(jobTags.toList.map(JString.apply)))
     }
   }
 

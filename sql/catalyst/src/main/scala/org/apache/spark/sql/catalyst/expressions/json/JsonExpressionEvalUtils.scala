@@ -62,7 +62,7 @@ object JsonPathParser extends RegexParsers {
   // parse `[*]` and `[123]` subscripts
   def subscript: Parser[List[PathInstruction]] =
     for {
-      operand <- '[' ~> ('*' ^^^ Wildcard | long ^^ Index) <~ ']'
+      operand <- '[' ~> ('*' ^^^ Wildcard | long ^^ Index.apply) <~ ']'
     } yield {
       Subscript :: operand :: Nil
     }
