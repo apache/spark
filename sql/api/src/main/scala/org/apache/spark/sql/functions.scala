@@ -89,7 +89,7 @@ object functions {
 // scalastyle:on
 
   // Function groups are defined by the @group tags above each function and the corresponding
-  // @groupname declarations. Section headings in this implementation file are navigation aids.
+  // @groupname declarations.
 
   /**
    * Returns a [[Column]] based on the given column name.
@@ -174,10 +174,6 @@ object functions {
     }
   }
 
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Sort functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
   /**
    * Returns a sort expression based on ascending order of the column.
    * {{{
@@ -247,10 +243,6 @@ object functions {
    * @since 2.1.0
    */
   def desc_nulls_last(columnName: String): Column = Column(columnName).desc_nulls_last
-
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Aggregate functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
    * @group agg_funcs
@@ -3876,10 +3868,6 @@ object functions {
    */
   def bit_xor(e: Column): Column = Column.fn("bit_xor", e)
 
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Window functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
   /**
    * Window function: computes the differences between consecutive cumulative counter values in a
    * time series, thereby converting the counter from the cumulative to the delta format.
@@ -4289,10 +4277,6 @@ object functions {
    *   Returns a column that evaluates to an integer.
    */
   def row_number(): Column = Column.fn("row_number")
-
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Non-aggregate functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
    * Creates a new array column. The input columns must all have the same data type.
@@ -4978,10 +4962,6 @@ object functions {
    * @since 1.5.0
    */
   def expr(expr: String): Column = Column(internal.SqlExpression(expr))
-
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Math Functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
    * Computes the absolute value of a numeric value.
@@ -6642,10 +6622,6 @@ object functions {
   def width_bucket(v: Column, min: Column, max: Column, numBucket: Column): Column =
     Column.fn("width_bucket", v, min, max, numBucket)
 
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Misc functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
   /**
    * Returns the current catalog.
    *
@@ -7619,10 +7595,6 @@ object functions {
    *   Returns a column that evaluates to a binary.
    */
   def bitmap_xor_agg(col: Column): Column = Column.fn("bitmap_xor_agg", col)
-
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // String functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
    * Computes the numeric value of the first character of the string column, and returns the
@@ -9703,10 +9675,6 @@ object functions {
    */
   def quote(str: Column): Column = Column.fn("quote", str)
 
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Datasketch functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
   /**
    * Returns the estimated number of unique values given the binary representation of a
    * Datasketches HllSketch.
@@ -11706,10 +11674,6 @@ object functions {
   def kll_sketch_get_rank_double(sketch: Column, quantile: Column): Column =
     Column.fn("kll_sketch_get_rank_double", sketch, quantile)
 
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // DateTime functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
   /**
    * Returns the date that is `numMonths` after `startDate`.
    *
@@ -13647,10 +13611,6 @@ object functions {
    */
   def dayname(timeExp: Column): Column =
     Column.fn("dayname", timeExp)
-
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Collection functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
    * Returns true if the array contains `value`, false if not. Returns null if the array or
@@ -17743,10 +17703,6 @@ object functions {
    */
   def bucket(numBuckets: Int, e: Column): Column = partitioning.bucket(numBuckets, e)
 
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Predicates functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
   /**
    * Returns `col2` if `col1` is null, or `col1` otherwise.
    *
@@ -17900,10 +17856,6 @@ object functions {
 
    */
 
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // ST geospatial functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
   /**
    * Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
    *
@@ -18041,10 +17993,6 @@ object functions {
    */
   def st_srid(geo: Column): Column =
     Column.fn("st_srid", geo)
-
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Scala UDF functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
    * Obtains a `UserDefinedFunction` that wraps the given `Aggregator` so that it may be used with
@@ -18388,10 +18336,6 @@ object functions {
       implicitly[TypeTag[A10]])
   }
 
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Java UDF functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
   /**
    * Defines a Java UDF0 instance as user-defined function (UDF). The caller must specify the
    * output data type, and there is no automatic input type coercion. By default the returned UDF
@@ -18648,8 +18592,6 @@ object functions {
   def wrap_udt(column: Column, udt: Column): Column = {
     Column.internalFn("wrap_udt", column, udt)
   }
-
-  // ---------------------- Vector Functions ----------------------
 
   /**
    * Returns the cosine similarity between two float vectors.
