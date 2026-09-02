@@ -403,7 +403,9 @@ object FunctionRegistry {
   // then create a `RuntimeReplaceable` expression to call the Java method with `Invoke` or
   // `StaticInvoke` expression. By doing so we don't need to implement codegen for new functions
   // anymore. See `AesEncrypt`/`AesDecrypt` as an example.
-  val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] = Map(
+  private type FunctionRegistryEntry = (String, (ExpressionInfo, FunctionBuilder))
+
+  private def nonAggregateExpressions: Seq[FunctionRegistryEntry] = Seq(
     // misc non-aggregate functions
     expression[Abs]("abs"),
     expression[Coalesce]("coalesce"),
@@ -513,8 +515,10 @@ object FunctionRegistry {
     expression[TryAesDecrypt]("try_aes_decrypt"),
     expression[TryReflect]("try_reflect"),
     expression[TryUrlDecode]("try_url_decode"),
-    expression[TryMakeInterval]("try_make_interval"),
+    expression[TryMakeInterval]("try_make_interval")
+  )
 
+  private def aggregateAndVectorExpressions: Seq[FunctionRegistryEntry] = Seq(
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
     expression[Average]("avg"),
@@ -600,8 +604,10 @@ object FunctionRegistry {
     expression[VectorNorm]("vector_norm"),
     expression[VectorNormalize]("vector_normalize"),
     expression[VectorAvg]("vector_avg"),
-    expression[VectorSum]("vector_sum"),
+    expression[VectorSum]("vector_sum")
+  )
 
+  private def stringAndUrlExpressions: Seq[FunctionRegistryEntry] = Seq(
     // string functions
     expression[Ascii]("ascii"),
     expression[Chr]("char", true),
@@ -698,8 +704,10 @@ object FunctionRegistry {
     expression[UrlEncode]("url_encode"),
     expression[UrlDecode]("url_decode"),
     expression[ParseUrl]("parse_url"),
-    expression[TryParseUrl]("try_parse_url"),
+    expression[TryParseUrl]("try_parse_url")
+  )
 
+  private def datetimeExpressions: Seq[FunctionRegistryEntry] = Seq(
     // datetime functions
     expression[AddMonths]("add_months"),
     expression[CurrentDate]("current_date"),
@@ -787,8 +795,10 @@ object FunctionRegistry {
     expression[UnixMicros]("unix_micros"),
     expression[UnixNanos]("unix_nanos"),
     expression[ConvertTimezone]("convert_timezone"),
-    expressionBuilder("time_bucket", TimeBucketExpressionBuilder),
+    expressionBuilder("time_bucket", TimeBucketExpressionBuilder)
+  )
 
+  private def collectionAndMiscExpressions: Seq[FunctionRegistryEntry] = Seq(
     // collection functions
     expression[CreateArray]("array"),
     expression[ArrayContains]("array_contains"),
@@ -920,8 +930,10 @@ object FunctionRegistry {
     expression[KllSketchGetQuantileDouble]("kll_sketch_get_quantile_double"),
     expression[KllSketchGetRankBigint]("kll_sketch_get_rank_bigint"),
     expression[KllSketchGetRankFloat]("kll_sketch_get_rank_float"),
-    expression[KllSketchGetRankDouble]("kll_sketch_get_rank_double"),
+    expression[KllSketchGetRankDouble]("kll_sketch_get_rank_double")
+  )
 
+  private def operatorAndOtherExpressions: Seq[FunctionRegistryEntry] = Seq(
     // grouping sets
     expression[Grouping]("grouping"),
     expression[GroupingID]("grouping_id"),
@@ -1059,6 +1071,14 @@ object FunctionRegistry {
     expression[ToProtobuf]("to_protobuf")
   )
 
+  val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] =
+    (nonAggregateExpressions ++
+      aggregateAndVectorExpressions ++
+      stringAndUrlExpressions ++
+      datetimeExpressions ++
+      collectionAndMiscExpressions ++
+      operatorAndOtherExpressions).toMap
+
   // BuiltinRegistryMixin normalizes any name to the builtin 3-part key (system.builtin.name).
   val builtin: SimpleFunctionRegistry = {
     val fr = new SimpleFunctionRegistry with BuiltinRegistryMixin[Expression]
@@ -1113,32 +1133,36 @@ object FunctionRegistry {
     internal.registerFunction(FunctionIdentifier(name), info, newBuilder)
   }
 
-  registerInternalExpression[Product]("product")
-  registerInternalExpression[BloomFilterAggregate]("bloom_filter_agg")
-  registerInternalExpression[CollectTopK]("collect_top_k")
-  registerInternalExpression[TimestampAdd]("timestampadd")
-  registerInternalExpression[TimestampDiff]("timestampdiff")
-  registerInternalExpression[Bucket]("bucket")
-  registerInternalExpression[Years]("years")
-  registerInternalExpression[Months]("months")
-  registerInternalExpression[Days]("days")
-  registerInternalExpression[Hours]("hours")
-  registerInternalExpression[UnwrapUDT]("unwrap_udt")
-  registerInternalExpression[WrapUDT]("wrap_udt")
-  registerInternalExpression[MonotonicallyIncreasingID]("distributed_id", setAlias = true)
-  registerInternalExpression[DistributedSequenceID]("distributed_sequence_id")
-  registerInternalExpression[PandasProduct]("pandas_product")
-  registerInternalExpression[PandasStddev]("pandas_stddev")
-  registerInternalExpression[PandasVariance]("pandas_var")
-  registerInternalExpression[PandasSkewness]("pandas_skew")
-  registerInternalExpression[PandasKurtosis]("pandas_kurt")
-  registerInternalExpression[PandasCovar]("pandas_covar")
-  registerInternalExpression[PandasMode]("pandas_mode")
-  registerInternalExpression[EWM]("ewm")
-  registerInternalExpression[NullIndex]("null_index")
-  registerInternalExpression[CastTimestampNTZToLong]("timestamp_ntz_to_long")
-  registerInternalExpression[ArrayBinarySearch]("array_binary_search")
-  registerInternalExpression[VectorPosExplode]("vector_posexplode")
+  private def registerInternalExpressions(): Unit = {
+    registerInternalExpression[Product]("product")
+    registerInternalExpression[BloomFilterAggregate]("bloom_filter_agg")
+    registerInternalExpression[CollectTopK]("collect_top_k")
+    registerInternalExpression[TimestampAdd]("timestampadd")
+    registerInternalExpression[TimestampDiff]("timestampdiff")
+    registerInternalExpression[Bucket]("bucket")
+    registerInternalExpression[Years]("years")
+    registerInternalExpression[Months]("months")
+    registerInternalExpression[Days]("days")
+    registerInternalExpression[Hours]("hours")
+    registerInternalExpression[UnwrapUDT]("unwrap_udt")
+    registerInternalExpression[WrapUDT]("wrap_udt")
+    registerInternalExpression[MonotonicallyIncreasingID]("distributed_id", setAlias = true)
+    registerInternalExpression[DistributedSequenceID]("distributed_sequence_id")
+    registerInternalExpression[PandasProduct]("pandas_product")
+    registerInternalExpression[PandasStddev]("pandas_stddev")
+    registerInternalExpression[PandasVariance]("pandas_var")
+    registerInternalExpression[PandasSkewness]("pandas_skew")
+    registerInternalExpression[PandasKurtosis]("pandas_kurt")
+    registerInternalExpression[PandasCovar]("pandas_covar")
+    registerInternalExpression[PandasMode]("pandas_mode")
+    registerInternalExpression[EWM]("ewm")
+    registerInternalExpression[NullIndex]("null_index")
+    registerInternalExpression[CastTimestampNTZToLong]("timestamp_ntz_to_long")
+    registerInternalExpression[ArrayBinarySearch]("array_binary_search")
+    registerInternalExpression[VectorPosExplode]("vector_posexplode")
+  }
+
+  registerInternalExpressions()
 
   private def makeExprInfoForVirtualOperator(name: String, usage: String): ExpressionInfo = {
     new ExpressionInfo(
