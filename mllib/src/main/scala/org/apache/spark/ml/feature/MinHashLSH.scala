@@ -57,7 +57,7 @@ class MinHashLSHModel private[ml](
   private[ml] def this() = this("", Array.empty)
 
   /** @group param */
-  @Since("4.0.0")
+  @Since("5.0.0")
   override val handleInvalid: Param[String] = new Param[String](
     this,
     "handleInvalid",
@@ -83,7 +83,7 @@ class MinHashLSHModel private[ml](
   override def setOutputCol(value: String): this.type = super.set(outputCol, value)
 
   /** @group setParam */
-  @Since("4.0.0")
+  @Since("5.0.0")
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
   @Since("2.1.0")
@@ -206,7 +206,7 @@ class MinHashLSH(override val uid: String)
   override def setNumHashTables(value: Int): this.type = super.setNumHashTables(value)
 
   /** @group param */
-  @Since("4.0.0")
+  @Since("5.0.0")
   override val handleInvalid: Param[String] = new Param[String](
     this,
     "handleInvalid",
@@ -215,7 +215,7 @@ class MinHashLSH(override val uid: String)
     ParamValidators.inArray(Array("error", "skip", "keep")))
 
   /** @group setParam */
-  @Since("4.0.0")
+  @Since("5.0.0")
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
   @Since("2.1.0")
