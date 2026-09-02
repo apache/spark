@@ -524,7 +524,7 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
   }
 
   Seq(LeftSemi, LeftAnti).foreach { jt =>
-    test(s"SPARK-34081: ordinary $jt pushdown does not require broadcast eligibility") {
+    test(s"SPARK-34081: ordinary $jt only pushes down when broadcast-eligible") {
       Seq(-1, 100000).foreach { threshold =>
         withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
           val originalQuery = testRelation
@@ -532,10 +532,14 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
             .join(testRelation1, joinType = jt, condition = Some($"b" <=> $"d"))
 
           val optimized = Optimize.execute(originalQuery.analyze)
-          val correctAnswer = testRelation
-            .join(testRelation1, joinType = jt, condition = Some($"b" <=> $"d"))
-            .groupBy($"b")($"b")
-            .analyze
+          val correctAnswer = if (threshold > 0) {
+            testRelation
+              .join(testRelation1, joinType = jt, condition = Some($"b" <=> $"d"))
+              .groupBy($"b")($"b")
+              .analyze
+          } else {
+            originalQuery.analyze
+          }
 
           comparePlans(optimized, correctAnswer)
         }

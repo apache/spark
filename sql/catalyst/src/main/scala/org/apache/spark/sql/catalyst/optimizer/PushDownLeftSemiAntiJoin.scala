@@ -82,7 +82,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
           NullAwareAntiJoinPlanning.decide(pushedJoin, conf) ==
             NullAwareAntiJoinPlanning.BroadcastHash
       } else {
-        (_: Join) => true
+        (_: Join) => canPlanAsBroadcastHashJoin(join, conf)
       }
       pushDownJoin(
         join,
