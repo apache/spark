@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   caseSensitiveResolution,
   Resolver
 }
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.common.DatasetType
@@ -34,10 +35,13 @@ import org.apache.spark.sql.pipelines.graph.{
   GraphErrors,
   ResolvedFlow
 }
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
+import org.apache.spark.sql.types.{
+  ArrayType, DataType, MapType, Metadata, MetadataBuilder,
+  StructField, StructType
+}
 
 
-object SchemaInferenceUtils {
+object SchemaInferenceUtils extends Logging {
 
   def resolverFor(caseSensitive: Boolean): Resolver = {
     if (caseSensitive) {
@@ -295,15 +299,44 @@ object SchemaInferenceUtils {
     columnsAdded ++ columnsDeleted ++ columnsUpdated
   }
 
-  /** Diffs the type, nullability, and comment of one field present in both schemas. */
+  /**
+   * Diffs the type, nullability, and comment of one field present in both schemas. Other
+   * StructField.metadata entries (defaults, generated-column expressions, connector-specific
+   * metadata) are not diffed: pipeline schema synchronization does not support propagating
+   * them, and Spark's own ResolveSchemaEvolution likewise ignores them.
+   */
   private def diffField(
       currentField: StructField,
       targetField: StructField,
       pathToField: Seq[String]): Seq[TableChange] = {
+    warnOnFieldMetadataDrift(currentField, targetField, pathToField)
     diffDataTypes(currentField.dataType, targetField.dataType, pathToField) ++
       diffNullability(currentField.nullable, targetField.nullable, pathToField) ++
       diffComment(currentField.getComment(), targetField.getComment(), pathToField)
   }
+
+  /**
+   * Logs a warning when two fields' metadata bags differ beyond the "comment" key
+   * (which is already handled by [[diffComment]]). Pipeline schema synchronization does not
+   * support propagating other metadata entries (defaults, generated-column expressions,
+   * connector-specific metadata), so these differences are left for the user to reconcile.
+   */
+  private def warnOnFieldMetadataDrift(
+      currentField: StructField,
+      targetField: StructField,
+      pathToField: Seq[String]): Unit = {
+    val current = stripMetadataComment(currentField.metadata)
+    val target = stripMetadataComment(targetField.metadata)
+    if (current != target) {
+      logWarning(
+        s"Field ${pathToField.mkString(".")} has metadata changes that pipeline schema " +
+          s"synchronization does not propagate and will be ignored. " +
+          s"Current: ${current.json}, Target: ${target.json}")
+    }
+  }
+
+  private def stripMetadataComment(m: Metadata): Metadata =
+    new MetadataBuilder().withMetadata(m).remove("comment").build()
 
   private def diffNullability(
       currentNullable: Boolean,
