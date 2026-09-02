@@ -23,7 +23,7 @@ import java.nio.file.{Files, Paths}
 import java.util.Date
 import java.util.concurrent.ThreadLocalRandom
 
-import org.apache.commons.lang3.tuple.ImmutablePair
+import org.apache.commons.lang3.mutable.MutableInt
 import org.apache.curator.test.TestingServer
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -144,7 +144,7 @@ class PersistenceEngineSuite extends SparkFunSuite {
       try {
         // A class outside the java/scala/spark allowlist must be refused on read instead
         // of instantiated: read() drops the znode and returns nothing.
-        engine.persist("test_filtered", ImmutablePair.of("unexpected", "data"))
+        engine.persist("test_filtered", new MutableInt(1))
         assert(engine.read[AnyRef]("test_filtered").isEmpty)
 
         // Allowlisted JDK/Scala/Spark types still round-trip.
