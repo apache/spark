@@ -63,8 +63,11 @@ private[sql] object PythonWorkerEnvironment {
    * `PYTHONUNBUFFERED` and `PYTHON_UDF_BATCH_SIZE` among them, which a session may still set
    * harmlessly. `PYTHONPATH` is a third case rather than a fourth reserved name:
    * `PythonWorkerFactory` folds the session's value into the path it computes instead of discarding
-   * it, and puts Spark's own entries first, so a session can add to the worker's import path but
-   * cannot displace `pyspark` on it.
+   * it, so a session adds to the worker's import path. It is left settable because a session
+   * already chooses the code its own worker runs, not because Spark's entries are guaranteed to
+   * come first -- `PythonUtils.sparkPythonPath` is empty when `SPARK_HOME` is unset and Spark's
+   * classes did not come from a jar, and `mergePythonPaths` drops empty entries, which can leave
+   * the session's path first.
    *
    * These are the ones write order does not protect, because Spark sets them only when a condition
    * holds and a session's value survives when it does not. Two of them would desynchronize the JVM
@@ -229,11 +232,12 @@ private[sql] object PythonWorkerEnvironment {
    * Whether a Python function with this evaluation type receives the session's environment.
    *
    * Scoped to the regular scalar Python UDF, which reaches a worker under three evaluation types
-   * and is one thing to the user in all of them: `spark.sql.execution.pythonUDF.arrow.enabled`
-   * decides between the batched pair, and a UDF written inside the lambda of a higher-order
-   * function such as `transform` is lifted to the element-wise type by
-   * `ExtractPythonUDFFromLambda`. All three are enabled by default, so omitting any of them would
-   * leave the feature inert for an ordinary UDF.
+   * and is one thing to the user in all of them. All three are supported rather than all three
+   * being active at once: `spark.sql.execution.pythonUDF.arrow.enabled` selects one of the batched
+   * pair, which are alternatives, and the element-wise type appears only after
+   * `ExtractPythonUDFFromLambda` lifts a UDF out of the lambda of a higher-order function such as
+   * `transform`. Each is reachable without changing a default, so omitting any one would leave the
+   * feature inert for some ordinary UDF.
    *
    * The pandas and Arrow families have their own element-wise types and stay out of scope, as do
    * UDTFs and the streaming paths, until those runners are tested.

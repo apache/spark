@@ -841,18 +841,22 @@ Apart from these, the following properties are also available, and may be useful
     Where Spark sets a variable unconditionally, such as <code>PYTHONUNBUFFERED</code> or
     <code>PYTHON_UDF_BATCH_SIZE</code>, a session may still set it and Spark's value wins.
     <code>PYTHONPATH</code> is the one name that is neither reserved nor simply overridden: Spark
-    merges the session's value into the path it computes for the worker, with its own entries first,
-    so a session can add to the worker's import path but cannot displace <code>pyspark</code> on it.
+    merges the session's value into the path it computes for the worker, so a session adds to the
+    worker's import path. The relative order is not guaranteed -- Spark contributes no entries of
+    its own when <code>SPARK_HOME</code> is unset and its classes did not come from a jar, which can
+    leave the session's path first -- so do not rely on a session entry being shadowed by Spark's.
     <br /><br />
     Each variable is a separate configuration, so setting several is not atomic: a client that sets
     a batch may have some applied and then one rejected, leaving the earlier ones in place. Read the
     configurations back to confirm what the session holds.
     <br /><br />
-    On Spark Connect a variable whose name matches <code>spark.redaction.regex</code> -- which by
-    default covers names containing <code>secret</code>, <code>password</code>, <code>token</code>
-    or <code>access key</code> -- cannot be read back through <code>spark.conf.get</code>, because
-    the Spark Connect configuration RPC withholds values matching that pattern on every read. The
-    variable still reaches the worker. Classic Spark returns the value.
+    On Spark Connect a variable cannot be read back through <code>spark.conf.get</code> when
+    <em>either</em> its name or its value matches <code>spark.redaction.regex</code> -- which by
+    default covers <code>secret</code>, <code>password</code>, <code>token</code> and
+    <code>access key</code> -- because the Spark Connect configuration RPC withholds such entries on
+    every read. So a variable named <code>MY_TOKEN</code> is hidden, and so is one whose value
+    merely contains <code>password</code>. The variable still reaches the worker. Classic Spark
+    returns the value.
     <br /><br />
     A variable name must match <code>[A-Za-z_][A-Za-z0-9_]*</code>, and a value must not contain a
     NUL character, which a process environment cannot carry. The number of variables and the total

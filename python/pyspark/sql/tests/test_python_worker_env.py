@@ -165,21 +165,19 @@ class PythonWorkerEnvMixin:
         finally:
             self._unset_env("PYTHON_WORKER_FACTORY_SOCK_DIR")
 
-    def test_pythonpath_is_merged_rather_than_replaced(self):
+    def test_pythonpath_reaches_the_worker_import_path(self):
         # PYTHONPATH is neither reserved nor overridden: PythonWorkerFactory folds the session's
-        # value into the path it computes. So the session's entry is visible to the worker, and
-        # Spark's own entries survive alongside it -- the UDF running at all proves pyspark stayed
-        # importable, which is the property that makes leaving the name settable safe.
+        # value into the path it computes, so the entry reaches the worker rather than being
+        # dropped. That is the whole guarantee. The relative order is deliberately not asserted:
+        # `sparkPythonPath` is empty when SPARK_HOME is unset and Spark's classes did not come from
+        # a jar, and `mergePythonPaths` drops empty entries, so the session's path can legitimately
+        # come first. Leaving the name settable rests on the session already choosing the code its
+        # own worker runs, not on Spark's entries winning.
         marker = "/tmp/spark-58752-extra-modules"
         self._set_env("PYTHONPATH", marker)
         try:
             entries = self._read_in_worker("PYTHONPATH").split(os.pathsep)
             self.assertIn(marker, entries)
-            # Spark's entries come first when the harness supplies any. Guarded because a worker
-            # whose pyspark comes from site-packages needs none, leaving the marker alone on the
-            # path -- which is why "cannot displace pyspark" rests on the UDF having run, not here.
-            if len(entries) > 1:
-                self.assertNotEqual(entries[0], marker)
         finally:
             self._unset_env("PYTHONPATH")
 

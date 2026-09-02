@@ -5111,7 +5111,7 @@
       },
       "RESERVED_PYTHON_WORKER_ENV_VAR_NAME" : {
         "message" : [
-          "The environment variable name <name>, set under <prefix>, is reserved for Spark. Names beginning with <reservedPrefixes>, and the name <reservedNames>, are set by Spark for its own Python workers and cannot be set by a session."
+          "The environment variable name <name>, set under <prefix>, is reserved for Spark. Names beginning with <reservedPrefixes>, and the names <reservedNames>, are set by Spark for its own Python workers and cannot be set by a session."
         ]
       }
     },

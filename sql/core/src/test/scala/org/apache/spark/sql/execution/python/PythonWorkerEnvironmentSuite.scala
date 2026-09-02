@@ -234,8 +234,13 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-58752: a name over the length limit is rejected") {
+  test("SPARK-58752: a name over the length limit is rejected, and exactly the limit passes") {
     withLimit(StaticSQLConf.PYTHON_WORKER_ENV_MAX_NAME_LENGTH, 4) {
+      // Exactly at the limit, so the comparison has to be `>` rather than `>=`.
+      withSQLConf(key("ABCD") -> "x") {
+        assert(
+          PythonWorkerEnvironment.readValidated(spark.sessionState.conf) === Map("ABCD" -> "x"))
+      }
       withSQLConf(key("TOOLONG") -> "x") {
         val ex = intercept[SparkException] {
           PythonWorkerEnvironment.readValidated(spark.sessionState.conf)
@@ -279,6 +284,24 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
     withLimit(StaticSQLConf.PYTHON_WORKER_ENV_MAX_TOTAL_SIZE_BYTES, 128L) {
       assert(value.length < 128, "character count must stay under the limit")
       withSQLConf(key("BIG") -> value) {
+        val ex = intercept[SparkException] {
+          PythonWorkerEnvironment.readValidated(spark.sessionState.conf)
+        }
+        assert(ex.getCondition === "INVALID_SPARK_CONFIG.PYTHON_WORKER_ENV_TOO_LARGE")
+      }
+    }
+  }
+
+  test("SPARK-58752: a total size over the limit is rejected, and exactly the limit passes") {
+    withLimit(StaticSQLConf.PYTHON_WORKER_ENV_MAX_TOTAL_SIZE_BYTES, 128L) {
+      // The size counted is the sum of the UTF-8 lengths of every name and value, so a one-byte
+      // name with a 127-byte value sits exactly on the limit and must be accepted.
+      withSQLConf(key("N") -> ("x" * 127)) {
+        assert(
+          PythonWorkerEnvironment.readValidated(spark.sessionState.conf) ===
+            Map("N" -> ("x" * 127)))
+      }
+      withSQLConf(key("N") -> ("x" * 128)) {
         val ex = intercept[SparkException] {
           PythonWorkerEnvironment.readValidated(spark.sessionState.conf)
         }
@@ -425,10 +448,11 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-58752: PYTHONPATH is accepted, because Spark merges it rather than replacing it") {
     // The only name Spark neither reserves nor overwrites: `PythonWorkerFactory` folds the
-    // session's value into the path it computes, its own entries first. Accepting the name is
-    // therefore deliberate, not an oversight in the reserved list. This pins only that validation
-    // lets the name through; the merge itself needs a running worker, so the end-to-end
-    // `test_pythonpath_is_merged_rather_than_replaced` covers it.
+    // session's value into the path it computes. Accepting the name is deliberate, not an oversight
+    // in the reserved list -- a session already chooses the code its own worker runs. Spark's own
+    // entries are not guaranteed to come first, so nothing here asserts an order. This pins only
+    // that validation lets the name through; the merge needs a running worker, so the end-to-end
+    // `test_pythonpath_reaches_the_worker_import_path` covers that.
     withSQLConf(key("PYTHONPATH") -> "/tmp/extra-modules") {
       assert(
         PythonWorkerEnvironment.readValidated(spark.sessionState.conf) ===
