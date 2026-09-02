@@ -26,9 +26,10 @@ import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
  * (materializing) shuffle on simple batch queries (SPARK-57399).
  *
  * Fair-comparison constraints, read before trusting any number:
- *   - Runs on `local[N]` with N = physical cores, and only queries whose pipelined
- *     whole-group slot demand is <= N, so the concurrently-scheduled pipelined stages do NOT
- *     oversubscribe the cores. A demand > cores run would measure thread thrash, not the
+ *   - Runs on `local[N]` with N the core count the shape is sized for (the machine's, or the
+ *     -Dspark.pipelinedBenchmark.cores override), and the workload shapes are derived so every
+ *     query's pipelined whole-group slot demand is <= N -- so the concurrently-scheduled pipelined
+ *     stages do NOT oversubscribe the cores. A demand > N run would measure thread thrash, not the
  *     transport, and is intentionally avoided here.
  *   - Pipelined overlaps map+reduce stages (uses more concurrent slots) vs the baseline's
  *     sequential map-then-reduce; with demand <= cores neither is slot-limited, so the delta
@@ -41,7 +42,10 @@ import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
  *   2. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt
  *      "sql/Test/runMain
  *      org.apache.spark.sql.execution.exchange.PipelinedShuffleBenchmark"
- *      Results will be written to "benchmarks/PipelinedShuffleBenchmark-results.txt".
+ *      Results will be written to
+ *      "sql/core/benchmarks/PipelinedShuffleBenchmark-jdk<version>-results.txt".
+ *      Add -Dspark.pipelinedBenchmark.cores=4 to size the shape as the benchmark workflow's
+ *      runner does.
  * }}}
  */
 object PipelinedShuffleBenchmark extends SqlBasedBenchmark {
@@ -54,14 +58,30 @@ object PipelinedShuffleBenchmark extends SqlBasedBenchmark {
       .getOrCreate()
   }
 
-  private val cores = Runtime.getRuntime.availableProcessors()
+  // Cores the shape is sized for. Defaults to the machine, but can be pinned with
+  // -Dspark.pipelinedBenchmark.cores=N to reproduce the checked-in results (generated at the 4
+  // cores the benchmark workflow's runner provides) on a larger machine.
+  private val cores =
+    sys.props.get("spark.pipelinedBenchmark.cores").map(_.toInt)
+      .getOrElse(Runtime.getRuntime.availableProcessors())
   private val numRows = 20000000L  // 20M: large enough that transport cost dominates startup
-  // Derive input partitions from the machine so the whole-group slot demand
-  // (inputParts + 8 shuffle + 1 final) stays within `cores` -- otherwise the pipelined runs do
-  // not just get slower, they fail gang admission (CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT) and
-  // the run dies. Needs cores >= 11 for the minimum shape (inputParts = 2); runBenchmarkSuite
-  // skips below that. Capped at 6 so a big machine still measures the small-fan-in shape.
-  private val inputParts = math.min(6, cores - 9)
+
+  // A pipelined group gang-schedules every member stage at once, so the whole-group slot demand
+  // must fit the machine or the run does not just get slower -- it fails admission with
+  // CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT. The demand is the FINAL stage's partition count plus
+  // the MAP-side width of every distinct pipelined shuffle in the job (see
+  // DAGScheduler.pipelinedJobConcurrentTaskDemand), so it depends on the workload's shape, not
+  // just on one exchange: the widest shape below is a two-exchange chain
+  // (groupBy(k).count+orderBy(k)), whose second exchange takes the first's reduce side as its map
+  // side, giving
+  //     inputParts + shufflePartitions (groupBy map) + shufflePartitions (orderBy map) + 1
+  // Size both knobs off that worst case so EVERY workload in this file is admissible, and derive
+  // them from the machine so the standard benchmark workflow (ubuntu-latest, 4 cores) can
+  // regenerate this file: on 4 cores the shape is 1 + 1 + 1 + 1 = 4. A bigger machine gets a wider
+  // shape, capped so the numbers stay about the transport rather than about thread count.
+  private val shufflePartitions = math.max(1, math.min(8, (cores - 2) / 3))
+  private val inputParts =
+    math.max(1, math.min(6, cores - 2 * shufflePartitions - 1))
 
   private val channelManagerClass =
     "org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager"
@@ -153,11 +173,11 @@ object PipelinedShuffleBenchmark extends SqlBasedBenchmark {
         "repartition(k)+count",
         numRows,
         output = output)
-      addModeCase(b1, "regular", buildTransportSession("regular", 8))(
+      addModeCase(b1, "regular", buildTransportSession("regular", shufflePartitions))(
         repartitionWorkload)
-      addModeCase(b1, "streaming", buildTransportSession("streaming", 8))(
+      addModeCase(b1, "streaming", buildTransportSession("streaming", shufflePartitions))(
         repartitionWorkload)
-      addModeCase(b1, "channel", buildTransportSession("channel", 8))(
+      addModeCase(b1, "channel", buildTransportSession("channel", shufflePartitions))(
         repartitionWorkload)
       b1.run()
 
@@ -172,11 +192,11 @@ object PipelinedShuffleBenchmark extends SqlBasedBenchmark {
         "groupBy(k).count",
         numRows,
         output = output)
-      addModeCase(b2, "regular", buildTransportSession("regular", 8))(
+      addModeCase(b2, "regular", buildTransportSession("regular", shufflePartitions))(
         groupByWorkload)
-      addModeCase(b2, "streaming", buildTransportSession("streaming", 8))(
+      addModeCase(b2, "streaming", buildTransportSession("streaming", shufflePartitions))(
         groupByWorkload)
-      addModeCase(b2, "channel", buildTransportSession("channel", 8))(
+      addModeCase(b2, "channel", buildTransportSession("channel", shufflePartitions))(
         groupByWorkload)
       b2.run()
 
@@ -195,11 +215,11 @@ object PipelinedShuffleBenchmark extends SqlBasedBenchmark {
         "join 10M x 10M on unique k+count",
         10000000L,
         output = output)
-      addModeCase(b3, "regular", buildTransportSession("regular", 8))(
+      addModeCase(b3, "regular", buildTransportSession("regular", shufflePartitions))(
         joinWorkload)
-      addModeCase(b3, "streaming", buildTransportSession("streaming", 8))(
+      addModeCase(b3, "streaming", buildTransportSession("streaming", shufflePartitions))(
         joinWorkload)
-      addModeCase(b3, "channel", buildTransportSession("channel", 8))(
+      addModeCase(b3, "channel", buildTransportSession("channel", shufflePartitions))(
         joinWorkload)
       b3.run()
 
@@ -219,11 +239,11 @@ object PipelinedShuffleBenchmark extends SqlBasedBenchmark {
         "prototype 1M uniq",
         100000000L,
         output = output)
-      addModeCase(b4, "regular", buildTransportSession("regular", 8))(
+      addModeCase(b4, "regular", buildTransportSession("regular", shufflePartitions))(
         prototypeWorkload)
-      addModeCase(b4, "streaming", buildTransportSession("streaming", 8))(
+      addModeCase(b4, "streaming", buildTransportSession("streaming", shufflePartitions))(
         prototypeWorkload)
-      addModeCase(b4, "channel", buildTransportSession("channel", 8))(
+      addModeCase(b4, "channel", buildTransportSession("channel", shufflePartitions))(
         prototypeWorkload)
       b4.run()
     }
@@ -243,10 +263,10 @@ object PipelinedShuffleBenchmark extends SqlBasedBenchmark {
         numRows,
         output = output)
       addModeCase(b1, "regular", buildSession(
-        pipelined = false, 8, s"local[$cores]", aqe = false))(
+        pipelined = false, shufflePartitions, s"local[$cores]", aqe = false))(
         repartitionWorkload)
       addModeCase(b1, "pipelined", buildSession(
-        pipelined = true, 8, s"local[$cores]", aqe = false))(
+        pipelined = true, shufflePartitions, s"local[$cores]", aqe = false))(
         repartitionWorkload)
       b1.run()
 
@@ -262,10 +282,10 @@ object PipelinedShuffleBenchmark extends SqlBasedBenchmark {
         numRows,
         output = output)
       addModeCase(b2, "regular", buildSession(
-        pipelined = false, 8, s"local[$cores]", aqe = false))(
+        pipelined = false, shufflePartitions, s"local[$cores]", aqe = false))(
         groupByWorkload)
       addModeCase(b2, "pipelined", buildSession(
-        pipelined = true, 8, s"local[$cores]", aqe = false))(
+        pipelined = true, shufflePartitions, s"local[$cores]", aqe = false))(
         groupByWorkload)
       b2.run()
 
@@ -281,10 +301,10 @@ object PipelinedShuffleBenchmark extends SqlBasedBenchmark {
         numRows,
         output = output)
       addModeCase(b3, "regular", buildSession(
-        pipelined = false, 8, s"local[$cores]", aqe = false))(
+        pipelined = false, shufflePartitions, s"local[$cores]", aqe = false))(
         repartitionByRangeWorkload)
       addModeCase(b3, "pipelined", buildSession(
-        pipelined = true, 8, s"local[$cores]", aqe = false))(
+        pipelined = true, shufflePartitions, s"local[$cores]", aqe = false))(
         repartitionByRangeWorkload)
       b3.run()
 
@@ -301,10 +321,10 @@ object PipelinedShuffleBenchmark extends SqlBasedBenchmark {
         numRows,
         output = output)
       addModeCase(b4, "regular", buildSession(
-        pipelined = false, 4, s"local[$cores]", aqe = false))(
+        pipelined = false, shufflePartitions, s"local[$cores]", aqe = false))(
         groupByOrderByWorkload)
       addModeCase(b4, "pipelined", buildSession(
-        pipelined = true, 4, s"local[$cores]", aqe = false))(
+        pipelined = true, shufflePartitions, s"local[$cores]", aqe = false))(
         groupByOrderByWorkload)
       b4.run()
 
@@ -325,10 +345,10 @@ object PipelinedShuffleBenchmark extends SqlBasedBenchmark {
         100000000L,
         output = output)
       addModeCase(b5, "regular", buildSession(
-        pipelined = false, 8, s"local[$cores]", aqe = false))(
+        pipelined = false, shufflePartitions, s"local[$cores]", aqe = false))(
         prototypeWorkload)
       addModeCase(b5, "pipelined", buildSession(
-        pipelined = true, 8, s"local[$cores]", aqe = false))(
+        pipelined = true, shufflePartitions, s"local[$cores]", aqe = false))(
         prototypeWorkload)
       b5.run()
     }
@@ -348,10 +368,10 @@ object PipelinedShuffleBenchmark extends SqlBasedBenchmark {
         numRows,
         output = output)
       addModeCase(b1, "regular", buildSession(
-        pipelined = false, 8, s"local[$cores]", aqe = true))(
+        pipelined = false, shufflePartitions, s"local[$cores]", aqe = true))(
         repartitionWorkload)
       addModeCase(b1, "pipelined", buildSession(
-        pipelined = true, 8, s"local[$cores]", aqe = true))(
+        pipelined = true, shufflePartitions, s"local[$cores]", aqe = true))(
         repartitionWorkload)
       b1.run()
 
@@ -367,10 +387,10 @@ object PipelinedShuffleBenchmark extends SqlBasedBenchmark {
         numRows,
         output = output)
       addModeCase(b2, "regular", buildSession(
-        pipelined = false, 8, s"local[$cores]", aqe = true))(
+        pipelined = false, shufflePartitions, s"local[$cores]", aqe = true))(
         groupByWorkload)
       addModeCase(b2, "pipelined", buildSession(
-        pipelined = true, 8, s"local[$cores]", aqe = true))(
+        pipelined = true, shufflePartitions, s"local[$cores]", aqe = true))(
         groupByWorkload)
       b2.run()
 
@@ -387,10 +407,10 @@ object PipelinedShuffleBenchmark extends SqlBasedBenchmark {
         numRows,
         output = output)
       addModeCase(b3, "regular", buildSession(
-        pipelined = false, 4, s"local[$cores]", aqe = true))(
+        pipelined = false, shufflePartitions, s"local[$cores]", aqe = true))(
         groupByOrderByWorkload)
       addModeCase(b3, "pipelined", buildSession(
-        pipelined = true, 4, s"local[$cores]", aqe = true))(
+        pipelined = true, shufflePartitions, s"local[$cores]", aqe = true))(
         groupByOrderByWorkload)
       b3.run()
 
@@ -411,53 +431,23 @@ object PipelinedShuffleBenchmark extends SqlBasedBenchmark {
         100000000L,
         output = output)
       addModeCase(b4, "regular", buildSession(
-        pipelined = false, 8, s"local[$cores]", aqe = true))(
+        pipelined = false, shufflePartitions, s"local[$cores]", aqe = true))(
         prototypeWorkload)
       addModeCase(b4, "pipelined", buildSession(
-        pipelined = true, 8, s"local[$cores]", aqe = true))(
+        pipelined = true, shufflePartitions, s"local[$cores]", aqe = true))(
         prototypeWorkload)
       b4.run()
     }
   }
 
-  private def oversubscribeComparison(): Unit = {
-    runBenchmark("Prototype 32 maps, oversubscribed") {
-      // prototype 32 maps
-      val prototypeWorkload: SparkSession => Unit = { spark =>
-        import org.apache.spark.sql.functions.{col, lit, repeat, sum}
-        spark.range(0L, 100000000L, 100L, 32)
-          .select(
-            col("id"),
-            col("id").cast("string").as("id2"),
-            (col("id") + 1).as("id3"),
-            repeat((col("id") + 1).cast("string"), 100000).as("id4"))
-          .repartition(col("id")).agg(sum(lit(1L))).collect()
-      }
-
-      val b1 = new Benchmark(
-        "prototype 32 maps",
-        100000000L,
-        output = output)
-      addModeCase(b1, "regular", buildSession(
-        pipelined = false, 8, "local[48]", aqe = false))(
-        prototypeWorkload)
-      addModeCase(b1, "pipelined", buildSession(
-        pipelined = true, 8, "local[48]", aqe = false))(
-        prototypeWorkload)
-      b1.run()
-    }
-  }
-
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    // The pipelined groups gang-schedule inputParts + 8 + 1 stages; below 11 cores even the
-    // minimum shape (inputParts = 2) exceeds the machine and fails gang admission rather than
-    // producing a slower number. Skip loudly so the run does not just die with an
-    // insufficient-slot error, and so checked-in results are only ever generated where the fair
-    // comparison actually holds. (oversubscribeComparison intentionally over-subscribes, but on
-    // its own local[48]; it is skipped here too to keep the file all-or-nothing per machine.)
-    if (cores < 11) {
+    // The minimum shape (all knobs at 1) demands 1 + 1 + 1 + 1 = 4 slots for the widest workload,
+    // so 4 cores suffice -- which is what the standard benchmark workflow provides. Below that the
+    // gang cannot fit and the run would die with an insufficient-slot error rather than produce a
+    // slower number, so skip loudly instead.
+    if (cores < 4) {
       // scalastyle:off println
-      println(s"[skip] PipelinedShuffleBenchmark needs >= 11 cores for the gang to fit; " +
+      println(s"[skip] PipelinedShuffleBenchmark needs >= 4 cores for the gang to fit; " +
         s"this machine has $cores. Skipping.")
       // scalastyle:on println
       return
@@ -465,6 +455,5 @@ object PipelinedShuffleBenchmark extends SqlBasedBenchmark {
     transportComparison()
     aqeOffComparison()
     aqeOnComparison()
-    oversubscribeComparison()
   }
 }

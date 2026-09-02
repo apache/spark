@@ -21,7 +21,7 @@ import java.util.concurrent.{Executors, TimeUnit}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.exchange.{PipelinedShuffleTestSession, ShuffleExchangeExec}
 
 /**
  * End-to-end coverage of the pipelined channel path UNDER AQE: AQEEnablePipelinedShuffle
@@ -31,33 +31,11 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
  * the materialized-prefix relaxation. Self-manages its SparkSession (shuffle manager is a
  * start-up config).
  */
-class AQEPipelinedShuffleSuite extends SparkFunSuite with AdaptiveSparkPlanHelper {
+class AQEPipelinedShuffleSuite extends SparkFunSuite
+  with AdaptiveSparkPlanHelper with PipelinedShuffleTestSession {
 
-  private def withAqePipelinedSession(body: SparkSession => Unit): Unit = {
-    // Stop and clear any session an earlier sql/core suite left in this JVM, or getOrCreate()
-    // would return it and silently ignore this harness's .config() (see PipelinedShuffleSqlSuite).
-    SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession).foreach(_.stop())
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
-    val spark = SparkSession.builder()
-      // High cap purely for gang admission headroom; correctness harness, not perf.
-      .master("local[16]")
-      .appName("aqe-pipelined-shuffle")
-      .config("spark.shuffle.manager.incremental",
-        "org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager")
-      .config("spark.sql.adaptive.enabled", "true")
-      .config("spark.sql.shuffle.localPipelined.enabled", "true")
-      .config("spark.speculation", "false")
-      .config("spark.sql.shuffle.partitions", "4")
-      .getOrCreate()
-    try {
-      body(spark)
-    } finally {
-      spark.stop()
-      SparkSession.clearActiveSession()
-      SparkSession.clearDefaultSession()
-    }
-  }
+  private def withAqePipelinedSession(body: SparkSession => Unit): Unit =
+    withPipelinedSession("aqe-pipelined-shuffle", aqe = true)(body)
 
   private def pipelinedExchanges(plan: org.apache.spark.sql.execution.SparkPlan) =
     collect(plan) { case s: ShuffleExchangeExec if s.pipelined => s }

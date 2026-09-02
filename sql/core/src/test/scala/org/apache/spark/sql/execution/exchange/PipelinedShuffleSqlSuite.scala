@@ -30,39 +30,11 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
  * concurrent-stage scheduler on a single executor. Self-manages its SparkSession because the
  * shuffle manager and AQE-off gate are start-up configs.
  */
-class PipelinedShuffleSqlSuite extends SparkFunSuite with AdaptiveSparkPlanHelper {
+class PipelinedShuffleSqlSuite extends SparkFunSuite
+  with AdaptiveSparkPlanHelper with PipelinedShuffleTestSession {
 
-  private def withPipelinedSession(body: SparkSession => Unit): Unit = {
-    // sql/core suites share a JVM. If an earlier suite left an active/default SparkSession behind,
-    // getOrCreate() below would return THAT session and silently ignore every .config() here
-    // (spark.shuffle.manager.incremental, spark.sql.shuffle.localPipelined.enabled), so no exchange
-    // would be flipped and the assertions would fail pointing nowhere near the cause. Stop and
-    // clear any pre-existing session first so this harness gets a fresh one with its own configs.
-    SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession).foreach(_.stop())
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
-    val spark = SparkSession.builder()
-      // High task-concurrency cap so the pipelined group's whole-group slot demand (the sum
-      // of every concurrent stage's partitions) is admitted. This is a correctness harness,
-      // not a perf one: on a smaller physical machine these logical slots oversubscribe the
-      // cores, which is fine for verifying results but meaningless for timing.
-      .master("local[16]")
-      .appName("pipelined-shuffle-sql")
-      .config("spark.shuffle.manager.incremental",
-        "org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager")
-      .config("spark.sql.adaptive.enabled", "false")   // rule only sees exchanges with AQE off
-      .config("spark.sql.shuffle.localPipelined.enabled", "true")
-      .config("spark.speculation", "false")
-      .config("spark.sql.shuffle.partitions", "4")
-      .getOrCreate()
-    try {
-      body(spark)
-    } finally {
-      spark.stop()
-      SparkSession.clearActiveSession()
-      SparkSession.clearDefaultSession()
-    }
-  }
+  private def withPipelinedSession(body: SparkSession => Unit): Unit =
+    withPipelinedSession("pipelined-shuffle-sql", aqe = false)(body)
 
   test("batch repartition($k) runs end-to-end through the pipelined channel shuffle") {
     withPipelinedSession { spark =>
@@ -315,6 +287,80 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite with AdaptiveSparkPlanHelpe
       // 142.86) and key 6 has 142.
       assert(df.collect().length === 6)
       assert(df2.collect().length === 6)
+    }
+  }
+
+  test("a reader RDD reports the reduce partition its index reads, not the index itself") {
+    // The scheduler derives a pipelined producer's live reduce-partition set from the result
+    // partitions a partial read runs, so it must know how a reader partition index maps to a REDUCE
+    // index. Equal partition counts do not imply identity (a skew-split plus a coalesce has the
+    // same
+    // count and a different mapping), and a wrong answer here is not a hang but SILENTLY dropped
+    // records. So the mapping is asked of the reader RDD. This pins the three spec shapes.
+    withPipelinedSession { spark =>
+      import org.apache.spark.sql.execution.{CoalescedPartitionSpec, PartialReducerPartitionSpec,
+        ShuffledRowRDD}
+      import spark.implicits._
+      val df = spark.range(0, 1000, 1, 2).withColumn("k", ($"id" % 4)).repartition($"k")
+      val exchange = collect(df.queryExecution.executedPlan) {
+        case s: ShuffleExchangeExec => s
+      }.head
+      val dep = exchange.shuffleDependency
+
+      // width-1 coalesced spec: names exactly one reducer, in spec order (NOT the partition index).
+      val widthOne = new ShuffledRowRDD(dep, exchange.metrics,
+        Array(CoalescedPartitionSpec(3, 4), CoalescedPartitionSpec(1, 2)))
+      assert(widthOne.reducePartitionIndex(0) === Some(3),
+        "partition 0 reads reducer 3 here, so the mapping must not return the index")
+      assert(widthOne.reducePartitionIndex(1) === Some(1))
+
+      // a coalesced RANGE covers several reducers: no single reduce id -> uncomputable.
+      val ranged = new ShuffledRowRDD(dep, exchange.metrics,
+        Array(CoalescedPartitionSpec(0, 2), CoalescedPartitionSpec(2, 4)))
+      assert(ranged.reducePartitionIndex(0).isEmpty,
+        "a multi-reducer range has no single reduce partition")
+
+      // a skew-split spec names its reducer explicitly.
+      val split = new ShuffledRowRDD(dep, exchange.metrics,
+        Array(PartialReducerPartitionSpec(2, 0, 1, 0L)))
+      assert(split.reducePartitionIndex(0) === Some(2))
+
+      // out-of-range index is uncomputable rather than an exception.
+      assert(widthOne.reducePartitionIndex(99).isEmpty)
+    }
+  }
+
+  test("a streaming query is left untouched in a feature-on session") {
+    // IncrementalExecution.preparations inherits QueryExecution's list, so this batch-only rule
+    // would otherwise run on streaming plans and flip every micro-batch exchange (state-store
+    // shuffles, the static side of a stream-static join) to pipelined -- before
+    // MarkPipelinedShuffleForRealTimeMode gets to make that decision, and against what it
+    // deliberately does for the static side (leaving it regular so the gang does not demand slots
+    // for stages that must finish first). The streaming engine owns that marking.
+    withPipelinedSession { spark =>
+      import spark.implicits._
+      import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+      implicit val ctx = spark.sqlContext
+      val input = MemoryStream[Int]
+      val agg = input.toDF().selectExpr("value % 10 AS k").groupBy($"k").count()
+      val q = agg.writeStream.format("memory").queryName("pipelined_stream_probe")
+        .outputMode("complete").start()
+      try {
+        input.addData(1 to 200: _*)
+        q.processAllAvailable()
+        val plan = q.asInstanceOf[
+            org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper]
+          .streamingQuery.lastExecution.executedPlan
+        val flipped = collect(plan) { case s: ShuffleExchangeExec if s.pipelined => s }
+        val all = collect(plan) { case s: ShuffleExchangeExec => s }
+        assert(all.nonEmpty,
+          s"precondition: the streaming plan should contain a state-store shuffle; plan:\n$plan")
+        assert(flipped.isEmpty,
+          s"a streaming plan must not be rewritten by the batch rule; plan:\n$plan")
+      } finally {
+        q.stop()
+        spark.sql("DROP VIEW IF EXISTS pipelined_stream_probe")
+      }
     }
   }
 

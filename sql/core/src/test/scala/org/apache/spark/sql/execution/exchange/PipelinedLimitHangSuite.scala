@@ -45,30 +45,11 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
  * Each test builds and stops its OWN SparkSession (withSession), so they do not share process
  * state and one test's timeout/cancel cannot affect the other.
  */
-class PipelinedLimitHangSuite extends SparkFunSuite with AdaptiveSparkPlanHelper {
+class PipelinedLimitHangSuite extends SparkFunSuite
+  with AdaptiveSparkPlanHelper with PipelinedShuffleTestSession {
 
-  private def withSession(aqe: Boolean)(body: SparkSession => Unit): Unit = {
-    // Stop and clear any session an earlier sql/core suite left in this JVM, or getOrCreate()
-    // would return it and silently ignore this harness's .config() (see PipelinedShuffleSqlSuite).
-    SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession).foreach(_.stop())
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
-    val spark = SparkSession.builder()
-      .master("local[16]")
-      .appName("pipelined-limit-hang")
-      .config("spark.shuffle.manager.incremental",
-        "org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager")
-      .config("spark.sql.adaptive.enabled", aqe.toString)
-      .config("spark.sql.shuffle.localPipelined.enabled", "true")
-      .config("spark.speculation", "false")
-      .config("spark.sql.shuffle.partitions", "4")
-      .getOrCreate()
-    try body(spark) finally {
-      spark.stop()
-      SparkSession.clearActiveSession()
-      SparkSession.clearDefaultSession()
-    }
-  }
+  private def withSession(aqe: Boolean)(body: SparkSession => Unit): Unit =
+    withPipelinedSession("pipelined-limit-hang", aqe)(body)
 
   /**
    * Runs `query(spark)` on a background thread under a deadline, returning true iff it both
