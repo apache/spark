@@ -937,9 +937,9 @@ class SetPathSuite extends SharedSparkSession {
 
   test("path-driven COUNT(*) rewrite gate: temp count shadowing builtin under SET PATH " +
       "(session-first) suppresses the * -> 1 rewrite") {
-    // `Analyzer.matchesFunctionName` consults
-    // `FunctionResolution.isSessionBeforeBuiltinInPath` to decide whether COUNT(*) is the
-    // builtin (eligible for the COUNT(*) -> COUNT(1) shortcut) or a user-defined override.
+    // `Analyzer.matchesFunctionName` consults `FunctionResolution.functionNameResolvesToBuiltin`
+    // to decide whether COUNT(*) is the builtin (eligible for the COUNT(*) -> COUNT(1) shortcut)
+    // or a user-defined override.
     // Default `sessionFunctionResolutionOrder` is "second", so creating a temp count while
     // the default PATH is in effect passes the security check. Once SET PATH puts
     // `system.session` before `system.builtin`, the rewrite must be suppressed and the
@@ -951,11 +951,11 @@ class SetPathSuite extends SharedSparkSession {
         // the builtin count and returns the row count of the input (1).
         checkAnswer(sql("SELECT count(*) FROM VALUES (1) AS t(a)"), Row(1))
 
-        // Put session before builtin via SET PATH. The rewrite gate now reports
-        // `isSessionBeforeBuiltinInPath = true` AND a temp count exists, so the
-        // analyzer must NOT collapse `count(*)` to `count(1)`. The `*` then expands
-        // against the table's single column to `count(a)`, which resolves through
-        // the temp under the live path: 1 + 100 = 101.
+        // Put session before builtin via SET PATH. The rewrite gate now reports that
+        // unqualified `count` resolves to a temp routine before the builtin, so the analyzer
+        // must NOT collapse `count(*)` to `count(1)`. The `*` then expands against the table's
+        // single column to `count(a)`, which resolves through the temp under the live path:
+        // 1 + 100 = 101.
         sql("SET PATH = system.session, system.builtin")
         checkAnswer(sql("SELECT count(*) FROM VALUES (1) AS t(a)"), Row(101))
       } finally {
@@ -983,11 +983,26 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
+  test("path-driven COUNT(*) rewrite gate: builtin.count respects persistentCatalogFirst") {
+    withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
+      withDatabase("builtin") {
+        sql("CREATE DATABASE builtin")
+        sql("CREATE FUNCTION builtin.count(x INT) RETURNS INT RETURN x + 100")
+        try {
+          checkAnswer(sql("SELECT builtin.count(*) FROM VALUES (1) AS t(a)"), Row(101))
+          checkAnswer(sql("SELECT system.builtin.count(*) FROM VALUES (1) AS t(a)"), Row(1))
+        } finally {
+          sql("DROP FUNCTION IF EXISTS builtin.count")
+        }
+      }
+    }
+  }
+
   test("path-driven COUNT(*) rewrite gate: single-pass resolver suppresses the rewrite " +
       "under SET PATH (session-first)") {
     // The single-pass resolver mirrors the fixed-point gate via
-    // `FunctionResolverUtils.isUnqualifiedCountShadowedByTemp`, which is wired into
-    // `isNonDistinctCount` and consulted by `handleStarInArguments`.
+    // `FunctionResolution.functionNameResolvesToBuiltin`, which is consulted by
+    // `handleStarInArguments`.
     //
     // Setup (`CREATE TEMPORARY FUNCTION`, `SET PATH`) and execution (Dataset collect via
     // checkAnswer, which inserts a `DeserializeToObject` node the single-pass analyzer
@@ -1002,9 +1017,8 @@ class SetPathSuite extends SharedSparkSession {
       try {
         val countStarSql = "SELECT count(*) FROM VALUES (1) AS t(a)"
 
-        // PATH builtin-first: the single-pass gate reports
-        // `isUnqualifiedCountShadowedByTemp = false`, the shortcut fires, and the analyzed
-        // output is the BIGINT builtin count.
+        // PATH builtin-first: the single-pass gate reports that the name resolves to the builtin,
+        // the shortcut fires, and analysis produces the BIGINT builtin count.
         withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
           val tpe = spark.sql(countStarSql).queryExecution.analyzed.schema.head.dataType
           assert(tpe == LongType,
@@ -1013,15 +1027,27 @@ class SetPathSuite extends SharedSparkSession {
 
         sql("SET PATH = system.session, system.builtin")
 
-        // PATH session-first: the gate reports true, the rewrite is suppressed, and the
-        // star expands against `a` and resolves through the temp SQL `count`. The
-        // single-pass analyzer does not support SQL functions, so it signals the fallback
-        // via `ExplicitlyUnsupportedResolverFeature` -- reaching this branch confirms the
-        // rewrite was suppressed (otherwise the builtin count would have resolved cleanly).
+        // PATH session-first: the gate reports that the name does not resolve to the builtin, so
+        // the rewrite is suppressed and the star expands against `a`, then resolves through the
+        // temp SQL `count`. The single-pass analyzer does not support SQL functions, so it signals
+        // the fallback via `ExplicitlyUnsupportedResolverFeature` -- reaching this branch confirms
+        // the rewrite was suppressed (otherwise the builtin count would have resolved cleanly).
         withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
           intercept[ExplicitlyUnsupportedResolverFeature] {
             spark.sql(countStarSql).queryExecution.analyzed
           }
+          val qualifiedCountStarSql = "SELECT builtin.count(*) FROM VALUES (1) AS t(a)"
+          val qualifiedTpe = spark.sql(qualifiedCountStarSql)
+            .queryExecution.analyzed.schema.head.dataType
+          assert(qualifiedTpe == LongType,
+            s"Expected BIGINT (qualified builtin count rewrite); got: $qualifiedTpe")
+
+          val systemQualifiedCountStarSql =
+            "SELECT system.builtin.count(*) FROM VALUES (1) AS t(a)"
+          val systemQualifiedTpe = spark.sql(systemQualifiedCountStarSql)
+            .queryExecution.analyzed.schema.head.dataType
+          assert(systemQualifiedTpe == LongType,
+            s"Expected BIGINT (qualified builtin count rewrite); got: $systemQualifiedTpe")
         }
       } finally {
         sql("SET PATH = DEFAULT_PATH")
