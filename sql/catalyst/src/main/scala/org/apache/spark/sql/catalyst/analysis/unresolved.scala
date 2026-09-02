@@ -760,8 +760,18 @@ case class UnresolvedStarExceptOrReplace(
                   col.toAttribute -> nestedExcept.tail
               }.get
           }
-          Alias(CreateStruct(
-            filterColumns(extractedFields.toImmutableArraySeq, newExcepts)), col.name)()
+          val newStruct = CreateStruct(
+            filterColumns(extractedFields.toImmutableArraySeq, newExcepts))
+          // Dropping a nested field must not change the nullness of the enclosing struct.
+          // CreateStruct is never nullable, so a NULL struct would otherwise be rebuilt as a
+          // non-NULL struct whose remaining fields are NULL. Guard it the same way UpdateFields
+          // does for DropField.
+          val newCol = if (col.nullable) {
+            If(IsNull(col), Literal(null, newStruct.dataType), newStruct)
+          } else {
+            newStruct
+          }
+          Alias(newCol, col.name)()
         // if there are multiple nestedExcepts but one is empty we must have overlapping except
         // columns. throw an error.
         case (_, Some(nestedExcepts)) if nestedExcepts.size > 1 =>
