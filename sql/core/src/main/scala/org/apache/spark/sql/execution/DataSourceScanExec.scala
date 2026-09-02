@@ -716,6 +716,9 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
  * @param tableIdentifier Identifier for the table in the metastore.
  * @param disableBucketedScan Disable bucketed scan based on physical query plan, see rule
  *                            [[DisableUnnecessaryBucketedScan]] for details.
+ * @param charVarcharStandardSemantics Analyzed CHAR/VARCHAR scan mode. Compared by
+ *                                    sameResult so preserve-only and standard scans are
+ *                                    not reused. None means unbound (native ORC types).
  */
 case class FileSourceScanExec(
     @transient override val relation: HadoopFsRelation,
@@ -728,7 +731,8 @@ case class FileSourceScanExec(
     override val dataFilters: Seq[Expression],
     override val tableIdentifier: Option[TableIdentifier],
     override val disableBucketedScan: Boolean = false,
-    override val markedForSingleTaskExecution: Boolean = false)
+    override val markedForSingleTaskExecution: Boolean = false,
+    charVarcharStandardSemantics: Option[Boolean] = None)
   extends FileSourceScanLike {
 
   // Note that some vals referring the file-based relation are lazy intentionally
@@ -755,8 +759,7 @@ case class FileSourceScanExec(
       (FileFormat.OPTION_RETURNING_BATCH -> supportsColumnar.toString)
     val hadoopConf = getHadoopConf(relation.sparkSession, relation.options)
     val readFile: (PartitionedFile) => Iterator[InternalRow] = relation.fileFormat match {
-      case format: OrcFileFormat
-          if getTagValue(ApplyCharTypePadding.standardSemanticsTag).isDefined =>
+      case format: OrcFileFormat if charVarcharStandardSemantics.isDefined =>
         format.buildReaderWithPartitionValues(
           sparkSession = relation.sparkSession,
           dataSchema = relation.dataSchema,
@@ -765,8 +768,7 @@ case class FileSourceScanExec(
           filters = pushedDownFilters,
           options = options,
           hadoopConf = hadoopConf,
-          charVarcharStandardSemantics =
-            getTagValue(ApplyCharTypePadding.standardSemanticsTag).get)
+          charVarcharStandardSemantics = charVarcharStandardSemantics.get)
       case format =>
         format.buildReaderWithPartitionValues(
           sparkSession = relation.sparkSession,
@@ -987,7 +989,8 @@ case class FileSourceScanExec(
       QueryPlan.normalizePredicates(dataFilters, output),
       None,
       disableBucketedScan,
-      markedForSingleTaskExecution)
+      markedForSingleTaskExecution,
+      charVarcharStandardSemantics)
   }
 
   override def getStream: Option[SparkDataStream] = stream
