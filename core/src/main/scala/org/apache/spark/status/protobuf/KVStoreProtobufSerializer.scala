@@ -23,9 +23,12 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.deploy.history.FsHistoryProviderMetadata
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_NAME
+import org.apache.spark.status.AppStatusStoreMetadata
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
+import org.apache.spark.util.kvstore.{LevelDB, RocksDB}
 
 private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
   override def serialize(o: Object): Array[Byte] =
@@ -56,13 +59,21 @@ private[spark] object KVStoreProtobufSerializer extends Logging {
 
   private[this] val missedClasses = ConcurrentHashMap.newKeySet[Class[_]]()
 
+  // KVStore bookkeeping values fall back to the JSON SerDe by design: they are tiny,
+  // written at most once per store open, and gain nothing from Protobuf. Skip warning.
+  private[this] val jsonByDesignClasses: Set[Class[_]] = Set(
+    classOf[AppStatusStoreMetadata],
+    classOf[FsHistoryProviderMetadata],
+    classOf[LevelDB.TypeAliases],
+    classOf[RocksDB.TypeAliases])
+
   private[protobuf] def resetMissedClassesForTesting(): Unit = missedClasses.clear()
 
   def getSerializer(klass: Class[_]): Option[ProtobufSerDe[Any]] = {
     val serializer = serializerMap.get(klass)
-    if (serializer.isEmpty && missedClasses.add(klass)) {
+    if (serializer.isEmpty && !jsonByDesignClasses.contains(klass) && missedClasses.add(klass)) {
       logWarning(log"No Protobuf SerDe found for class ${MDC(CLASS_NAME, klass.getName)}, " +
-        log"falling back to use the JSON SerDe.")
+        log"falling back to the JSON SerDe.")
     }
     serializer
   }

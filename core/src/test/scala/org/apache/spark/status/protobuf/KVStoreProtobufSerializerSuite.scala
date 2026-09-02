@@ -52,6 +52,16 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(warnings.head.contains("No Protobuf SerDe found for class"))
   }
 
+  test("SPARK-59169: no warning for KVStore bookkeeping classes without ProtobufSerDe") {
+    KVStoreProtobufSerializer.resetMissedClassesForTesting()
+    val appender = new LogAppender("KVStoreProtobufSerializer by-design fallback")
+    withLogAppender(appender, loggerNames = Seq(classOf[KVStoreProtobufSerializer].getName)) {
+      serializer.serialize(AppStatusStoreMetadata(1L))
+    }
+    val warnings = appender.loggingEvents.filter(_.getLevel == Level.WARN)
+    assert(warnings.isEmpty)
+  }
+
   test("All the string fields must be optional to avoid NPE") {
     val protoFile = getWorkspaceFilePath(
       "core", "src", "main", "protobuf", "org", "apache", "spark", "status", "protobuf",
