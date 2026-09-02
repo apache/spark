@@ -113,6 +113,13 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
       checker: (DataFrame, Seq[Row]) => Unit,
       expected: Seq[Row]): Unit
 
+  /**
+   * Returns the source `Filter`s pushed down to the Parquet scan for `query`. This hides the
+   * V1/V2 difference in where pushdown happens (V1: physical planning via
+   * `DataSourceStrategy.selectFilters`; V2: optimizer, read back from `ParquetScan.pushedFilters`).
+   */
+  protected def getPushedDownFilters(query: DataFrame): Seq[sources.Filter]
+
   private def checkFilterPredicate
       (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: Seq[Row])
       (implicit df: DataFrame): Unit = {
@@ -1779,6 +1786,52 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
+  test("filter pushdown - leading-literal LIKE derives a StartsWith prefix filter") {
+    import testImplicits._
+    // A multi-wildcard pattern with a leading literal (e.g. 'ab%cd%') is not rewritten to a
+    // single StartsWith/EndsWith/Contains, but LikeSimplification also derives the necessary
+    // condition StartsWith(<leading literal>), which pushes down and prunes row groups whose
+    // min/max cannot contain the prefix. The digit-string data below has no value starting with
+    // the alphabetic prefix, so canDrop() removes every row group.
+    Seq(
+      "value like 'ab%cd%'",   // leading literal 'ab'
+      "value like 'ab%cd%ef'", // leading literal 'ab', trailing literal 'ef'
+      "value like 'a_b%'"      // leading literal 'a' before an '_' wildcard
+    ).foreach { filter =>
+      testStringPredicate(
+        spark.range(1024).map(_.toString).toDF(),
+        filter,
+        shouldFilterOut = true,
+        enableDictionary = false)
+    }
+  }
+
+  test("SPARK-59185: leading-literal LIKE pushes StringStartsWith and keeps the residual LIKE") {
+    import testImplicits._
+    withSQLConf(
+      SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED.key -> "true",
+      // Keep pushed filters clean (constraint inference would add IsNotNull), as other tests do.
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName) {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        // "abXcdY" matches ab%cd%; "abZZZ" hits the 'ab' prefix but fails the rest; "zzz" has no
+        // prefix. Written as one file so the residual, not row-group pruning, does the rejection.
+        Seq("abXcdY", "abZZZ", "zzz").toDF("value").write.parquet(path)
+        val query = spark.read.parquet(path).where("value like 'ab%cd%'")
+
+        // (a) The derived leading-literal condition reaches Parquet as a StringStartsWith filter.
+        val pushed = getPushedDownFilters(query)
+        assert(pushed.contains(sources.StringStartsWith("value", "ab")),
+          s"expected StringStartsWith('value', 'ab') among pushed filters, got: $pushed")
+
+        // (b) The residual LIKE still filters: StartsWith('ab') is only a necessary condition, so a
+        // prefix hit that fails the rest of the pattern ("abZZZ") must be rejected -- a bug that
+        // dropped the residual LIKE and kept only StartsWith would wrongly return it.
+        checkAnswer(query, Row("abXcdY"))
+      }
+    }
+  }
+
   test("SPARK-17091: Convert IN predicate to Parquet filter push-down") {
     val schema = StructType(Seq(
       StructField("a", IntegerType, nullable = false)
@@ -2937,6 +2990,19 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
       }
     }
   }
+
+  override protected def getPushedDownFilters(query: DataFrame): Seq[sources.Filter] = {
+    var maybeRelation: Option[HadoopFsRelation] = None
+    val analyzedPredicate = query.queryExecution.optimizedPlan.collect {
+      case PhysicalOperation(_, filters,
+          LogicalRelationWithTable(relation: HadoopFsRelation, _)) =>
+        maybeRelation = Some(relation)
+        filters
+    }.flatten
+    maybeRelation
+      .map(DataSourceStrategy.selectFilters(_, analyzedPredicate)._2)
+      .getOrElse(Seq.empty)
+  }
 }
 
 @ExtendedSQLTest
@@ -2998,6 +3064,13 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
         case _ => assert(false, "Can not match ParquetTable in the query.")
       }
     }
+  }
+
+  override protected def getPushedDownFilters(query: DataFrame): Seq[sources.Filter] = {
+    query.queryExecution.optimizedPlan.collectFirst {
+      case PhysicalOperation(_, _, ExtractV2Scan(scan: ParquetScan)) =>
+        scan.pushedFilters.toImmutableArraySeq
+    }.getOrElse(Seq.empty)
   }
 
   test("SPARK-36889: Respect disabling of filters pushdown for DSv2 by explain") {

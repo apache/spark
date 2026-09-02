@@ -320,7 +320,12 @@ class Filter(ABC):
     | `a like 'abc%'`     | `StringStartsWith(("a",), "abc")`          |
     | `a like '%abc'`     | `StringEndsWith(("a",), "abc")`            |
     | `a like '%abc%'`    | `StringContains(("a",), "abc")`            |
+    | `a like 'c%c%'`     | `StringStartsWith(("a",), "c")`            |
     +---------------------+--------------------------------------------+
+
+    For a `LIKE` pattern with a leading literal that is not one of the simple forms above
+    (e.g. `a like 'c%c%'`), the leading literal is pushed as a `StringStartsWith` prefix
+    filter while the `LIKE` itself is retained and evaluated by Spark.
 
     Unsupported filters
     - `a = b`
@@ -328,7 +333,6 @@ class Filter(ABC):
     - `a % 2 = 1`
     - `a[0] = 1`
     - `a < 0 or a > 1`
-    - `a like 'c%c%'`
     - `a ilike 'hi'`
     - `a = 'hi' collate zh`
     """

@@ -1086,7 +1086,6 @@ class BasePythonDataSourceTestsMixin:
         self._check_filters("int", "(0 < x and x < 1) or x = 2", [])
         self._check_filters("int", "x % 5 = 1", [])
         self._check_filters("array<int>", "x[0] = 1", [])
-        self._check_filters("string", "x like 'a%a%'", [])
         self._check_filters("string", "x ilike 'a'", [])
         self._check_filters("string", "x = 'a' collate zh", [])
 
@@ -1129,6 +1128,10 @@ class BasePythonDataSourceTestsMixin:
         self._check_filters(
             "string", "x like 'a%b'", [StringStartsWith(("x",), "a"), StringEndsWith(("x",), "b")]
         )
+        # A leading-literal multi-wildcard pattern is not fully simplified, but its leading
+        # literal is derived as a StringStartsWith prefix filter; the LIKE stays as the exact
+        # (non-pushed) residual.
+        self._check_filters("string", "x like 'a%a%'", [StringStartsWith(("x",), "a")])
         self._check_filters("int", "x in (1, 2)", [In(("x",), [1, 2])])
 
     def test_filter_nested_column(self):
