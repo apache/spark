@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit._
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
+import scala.reflect.ClassTag
 
 import org.apache.spark.{InterruptibleIterator, SparkException, TaskContext}
 import org.apache.spark.internal.LogKeys
@@ -1234,42 +1235,34 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   // decides which output columns to materialize.
   override def usedInputs: AttributeSet = AttributeSet.empty
 
-  protected override def doExecute(): RDD[InternalRow] = {
-    outputPartitioning match {
-      case _: UnknownPartitioning | _: KeyedPartitioning =>
-        // An `UnknownPartitioning` union simply concatenates its children. A
-        // `KeyedPartitioning` union does the same: its merged partition keys describe the
-        // concatenated layout (one key per physical partition), and a downstream
-        // `GroupPartitionsExec` regroups partitions that share a key. This differs from an
-        // index-co-locatable partitioning (e.g. `HashPartitioning`), where a partitioning-aware
-        // union RDD interleaves same-index partitions across children.
-        sparkContext.union(children.map(_.execute()))
-      case _ =>
-        // This union has a known, index-co-locatable partitioning, i.e., its children have the
-        // same partitioning in semantics so this union can choose not to change the partitioning
-        // by using a custom partitioning aware union RDD.
-        val nonEmptyRdds = children.map(_.execute()).filter(!_.partitions.isEmpty)
-        new SQLPartitioningAwareUnionRDD(
-          sparkContext, nonEmptyRdds, outputPartitioning.numPartitions)
-    }
+  // Shared by both execution paths so they cannot report one partitioning and build another. The
+  // split lived only in `doExecute` before, which is how `doExecuteColumnar` came to concatenate
+  // while this node advertised its children's `HashPartitioning`.
+  private def unionRDDs[T: ClassTag](rdds: Seq[RDD[T]]): RDD[T] = outputPartitioning match {
+    case _: UnknownPartitioning | _: KeyedPartitioning =>
+      // An `UnknownPartitioning` union simply concatenates its children. A
+      // `KeyedPartitioning` union does the same: its merged partition keys describe the
+      // concatenated layout (one key per physical partition), and a downstream
+      // `GroupPartitionsExec` regroups partitions that share a key. This differs from an
+      // index-co-locatable partitioning (e.g. `HashPartitioning`), where a partitioning-aware
+      // union RDD interleaves same-index partitions across children.
+      sparkContext.union(rdds)
+    case partitioning =>
+      // This union has a known, index-co-locatable partitioning, i.e., its children have the
+      // same partitioning in semantics so this union can choose not to change the partitioning
+      // by using a custom partitioning aware union RDD.
+      new SQLPartitioningAwareUnionRDD(
+        sparkContext, rdds.filter(!_.partitions.isEmpty), partitioning.numPartitions)
   }
+
+  protected override def doExecute(): RDD[InternalRow] = unionRDDs(children.map(_.execute()))
 
   override def supportsColumnar: Boolean = children.forall(_.supportsColumnar)
 
   override def supportsRowBased: Boolean = children.forall(_.supportsRowBased)
 
-  protected override def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    // Same split as `doExecute`: a union that reports an index-co-locatable partitioning has to
-    // interleave same-index partitions, or a parent that skipped an exchange on that report reads
-    // a concatenation instead.
-    outputPartitioning match {
-      case _: UnknownPartitioning | _: KeyedPartitioning =>
-        sparkContext.union(children.map(_.executeColumnar()))
-      case partitioning =>
-        val nonEmptyRdds = children.map(_.executeColumnar()).filter(!_.partitions.isEmpty)
-        new SQLPartitioningAwareUnionRDD(sparkContext, nonEmptyRdds, partitioning.numPartitions)
-    }
-  }
+  protected override def doExecuteColumnar(): RDD[ColumnarBatch] =
+    unionRDDs(children.map(_.executeColumnar()))
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): UnionExec =
     copy(children = newChildren)
