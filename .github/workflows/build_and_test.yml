@@ -1545,9 +1545,10 @@ jobs:
             -t oidc-e2e-test \
             build
           # The job class (OidcS3ReadWriteJob) lives in this module's jar, which is not
-          # part of the assembly. Bake it into /opt/spark/jars so it is on the driver
-          # classpath (a local:// application resource is copied to work-dir, which is
-          # not on the classpath -- see SPARK-43540).
+          # part of the assembly and is not copied into the image by docker-image-tool.sh
+          # (it only copies examples/jars). SparkSubmit already puts a local:// primary
+          # resource on the driver classpath, so this is not a classpath gap -- the jar
+          # simply has to be present in the container, so bake it into /opt/spark/jars.
           JOB_JAR=$(ls connector/credential-aws-integration-tests/target/scala-*/spark-credential-aws-integration-tests_*.jar | grep -v -- '-tests.jar' | head -1)
           JOB_JAR_NAME=$(basename "$JOB_JAR")
           BUILD_CTX=$(mktemp -d)

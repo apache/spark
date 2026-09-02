@@ -166,6 +166,15 @@ resolve_moto_host() {
 build_spark_image() {
   if [[ "${SKIP_BUILD}" == "true" ]]; then
     log "Skipping build (--skip-build)."
+    # The build path tags the runnable image (with the job jar baked in) as
+    # "<repo>/spark:<tag>-job". When skipping the build, derive the same name from
+    # --image-tag so the tests use the job-jar image rather than falling back to the
+    # plain "<repo>/spark:<tag>" (which lacks the job classes and fails with
+    # ClassNotFoundException). An explicit --spark-image still wins.
+    if [[ -z "${SPARK_IMAGE}" && -n "${IMAGE_TAG}" ]]; then
+      SPARK_IMAGE="${IMAGE_REPO}/spark:${IMAGE_TAG}-job"
+      log "Using pre-built job image: ${SPARK_IMAGE}"
+    fi
     return
   fi
 
@@ -194,9 +203,13 @@ build_spark_image() {
     -t "${IMAGE_TAG}" \
     build
 
-  # Bake the job jar (OidcS3ReadWriteJob) into /opt/spark/jars so it is on the driver
-  # classpath. A local:// application resource is copied to work-dir, which is not on
-  # the classpath (SPARK-43540), so the job must be baked into the image instead.
+  # Bake the job jar (OidcS3ReadWriteJob) into the image so its classes are available to
+  # the driver. SparkSubmit already puts a local:// primary resource on the driver
+  # classpath (and into spark.jars for executors), so the reason for baking it in is not
+  # a classpath gap -- it is that docker-image-tool.sh only copies examples/jars into the
+  # image, so this module's jar would otherwise be absent from the container entirely.
+  # We install it under /opt/spark/jars (already on the classpath) to keep the local://
+  # reference simple.
   local job_jar
   job_jar=$(ls connector/credential-aws-integration-tests/target/scala-*/spark-credential-aws-integration-tests_*.jar \
     | grep -v -- '-tests.jar' | head -1)

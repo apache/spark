@@ -25,6 +25,7 @@ import java.util.{Base64, UUID}
 import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model._
+import io.fabric8.kubernetes.api.model.rbac.{PolicyRuleBuilder, RoleBindingBuilder, RoleBuilder}
 import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientBuilder}
 import org.scalatest.Tag
 import org.scalatest.concurrent.Eventually
@@ -57,7 +58,6 @@ import org.apache.spark.util.Utils
  * }}}
  *
  * System properties (all have defaults; override via Maven `-D` flags or pom.xml properties):
- *  - spark.kubernetes.test.master     - Kubernetes API server URL
  *  - spark.kubernetes.test.imageRepo  - Docker image repository
  *  - spark.kubernetes.test.imageTag   - Docker image tag
  *  - spark.oidc.test.stsEndpoint      - moto STS endpoint as seen from pods (host gateway IP)
@@ -79,8 +79,6 @@ class OidcCredentialE2ESuite
   // Configuration read from system properties (injected by pom.xml)
   // -------------------------------------------------------------------------
 
-  private val k8sMaster: String =
-    prop("spark.kubernetes.test.master", "")
   private val imageRepo: String =
     prop("spark.kubernetes.test.imageRepo", "docker.io/kubespark")
   private val imageTag: String =
@@ -137,11 +135,11 @@ class OidcCredentialE2ESuite
    * Reads a system property, treating an unset property, an empty string, and the
    * literal string "null" as "not configured" (returning `default`). The last two
    * cases matter because pom.xml declares several of these properties with empty
-   * default values (e.g. `<spark.kubernetes.test.master></spark.kubernetes.test.master>`).
+   * default values (e.g. `<spark.kubernetes.test.namespace></spark.kubernetes.test.namespace>`).
    * When Maven's scalatest plugin forwards an empty property it arrives in the JVM as
-   * the string "null", not "", so a plain getOrElse would use "null" verbatim and
-   * produce nonsense like `--master null`. sbt does not set these properties at all,
-   * so this normalization keeps Maven and sbt behaviour identical.
+   * the string "null", not "", so a plain getOrElse would use "null" verbatim. sbt does
+   * not set these properties at all, so this normalization keeps Maven and sbt behaviour
+   * identical.
    */
   private def prop(key: String, default: String): String = {
     sys.props.get(key) match {
@@ -172,7 +170,16 @@ class OidcCredentialE2ESuite
       // delete) does not skip the others (closing the S3 and Kubernetes clients).
       if (createdNamespace) {
         Utils.tryLogNonFatalError {
-          kubernetesClient.namespaces().withName(namespace).delete()
+          val namespaces = kubernetesClient.namespaces()
+          namespaces.withName(namespace).delete()
+          // Wait for the namespace to be fully gone; otherwise an immediate re-run with
+          // a fixed -Dspark.kubernetes.test.namespace could find it still Terminating,
+          // treat it as pre-existing, and fail on submit.
+          val deadline = System.currentTimeMillis() + DELETE_TIMEOUT_MS
+          while (namespaces.withName(namespace).get() != null &&
+              System.currentTimeMillis() < deadline) {
+            Thread.sleep(INTERVAL.value.toMillis)
+          }
         }
       }
       Utils.tryLogNonFatalError(Option(s3Client).foreach(_.close()))
@@ -260,23 +267,18 @@ class OidcCredentialE2ESuite
       mainClass = ROTATION_JOB_MAIN_CLASS,
       appArgs = Array(s"$outputPrefix/", iterations.toString, sleepMillis.toString))
 
-    // Launch the (non-blocking) submit.
-    SparkAppLauncher.launch(
-      appArguments, conf, TIMEOUT.value.toSeconds.toInt, resolveSparkHomeDir())
-
     try {
+      // Launch the (non-blocking) submit. Inside the try so a launch failure still runs
+      // the finally (driver pod + temp pod-template cleanup).
+      SparkAppLauncher.launch(
+        appArguments, conf, TIMEOUT.value.toSeconds.toInt, resolveSparkHomeDir())
+
       // Wait until the driver has acquired the initial credentials and the job has
       // produced output on both sides of the rotation. Rotate after an early iteration
-      // so that several iterations still remain after the rotation.
-      Eventually.eventually(Timeout(Span(3, Minutes)), INTERVAL) {
-        assert(driverPodPhase(driverPodName) != "Failed",
-          s"Driver pod $driverPodName failed before rotation.")
-        val log = driverLog(driverPodName)
-        assert(log.contains("Credential acquisition successful"),
-          "Driver has not acquired initial credentials yet.")
-        assert(log.contains("Iteration 1:"),
-          "Job has not progressed enough to rotate the token safely.")
-      }
+      // so that several iterations still remain after the rotation. Fails fast if the
+      // driver pod enters the terminal Failed phase.
+      awaitDriverLogContains(driverPodName, Timeout(Span(3, Minutes)),
+        "Credential acquisition successful", "Iteration 1:")
 
       // Rotate the token: overwrite /oidc/token in the running driver pod with a token
       // carrying a DIFFERENT principal.
@@ -286,14 +288,10 @@ class OidcCredentialE2ESuite
 
       // Authoritative check that the rotated token was actually consumed: the driver's
       // renewal loop logs the principal it just loaded. Seeing the rotated principal
-      // proves the new token file was re-read and exchanged (not a no-op).
-      Eventually.eventually(Timeout(Span(2, Minutes)), INTERVAL) {
-        assert(driverPodPhase(driverPodName) != "Failed",
-          s"Driver pod $driverPodName failed after rotation.")
-        val log = driverLog(driverPodName)
-        assert(log.contains(s"Loaded identity token for principal $rotatedSubject"),
-          "Driver did not re-read the rotated token (rotated principal not seen in log).")
-      }
+      // proves the new token file was re-read and exchanged (not a no-op). Fails fast on
+      // a terminal Failed phase.
+      awaitDriverLogContains(driverPodName, Timeout(Span(2, Minutes)),
+        s"Loaded identity token for principal $rotatedSubject")
 
       // Wait for the job to finish successfully (fail fast on a terminal Failed phase).
       awaitDriverSucceeded(driverPodName, VERIFY_TIMEOUT)
@@ -367,27 +365,15 @@ class OidcCredentialE2ESuite
         appArguments, conf, TIMEOUT.value.toSeconds.toInt, resolveSparkHomeDir())
 
       // Wait until the warm-up stage completed and the driver has acquired credentials.
-      Eventually.eventually(Timeout(Span(3, Minutes)), INTERVAL) {
-        assert(driverPodPhase(driverPodName) != "Failed",
-          s"Driver pod $driverPodName failed during warm-up.")
-        val log = driverLog(driverPodName)
-        assert(log.contains("Credential acquisition successful"),
-          "Driver has not acquired credentials yet.")
-        assert(log.contains("Warm-up stage complete"),
-          "Warm-up stage has not completed yet.")
-      }
+      // Fails fast if the driver pod enters the terminal Failed phase.
+      awaitDriverLogContains(driverPodName, Timeout(Span(3, Minutes)),
+        "Credential acquisition successful", "Warm-up stage complete")
 
       // After the idle period, the wide stage forces executors to be (re-)requested.
-      // Wait for the job to report success. Using eventually here tolerates the timing
+      // Wait for the job to report success. The generous timeout tolerates the timing
       // variability of dynamic allocation scaling executors down and back up on a
-      // resource-constrained CI runner.
-      Eventually.eventually(TIMEOUT, INTERVAL) {
-        assert(driverPodPhase(driverPodName) != "Failed",
-          s"Driver pod $driverPodName failed before completing.")
-        val log = driverLog(driverPodName)
-        assert(log.contains(OidcLateExecutorJob.SUCCESS_MARKER),
-          "Job did not reach its success marker (wide stage may not have completed).")
-      }
+      // resource-constrained CI runner; a terminal Failed phase still fails fast.
+      awaitDriverLogContains(driverPodName, TIMEOUT, OidcLateExecutorJob.SUCCESS_MARKER)
 
       // Confirm the driver pod finished successfully (fail fast on terminal Failed).
       awaitDriverSucceeded(driverPodName, VERIFY_TIMEOUT)
@@ -428,8 +414,11 @@ class OidcCredentialE2ESuite
   // -------------------------------------------------------------------------
 
   private def baseSparkConf(): SparkAppConf = {
-    val masterUrl = if (k8sMaster.nonEmpty) k8sMaster
-    else s"k8s://${kubernetesClient.getMasterUrl}"
+    // Derive the master from the fabric8 client (which follows the active kubeconfig)
+    // rather than a separate, un-normalized property. This keeps spark-submit and the
+    // fabric8 client (used here for pod/namespace/exec operations) pointed at the same
+    // cluster, and avoids feeding SparkSubmit a raw "https://..." that it would reject.
+    val masterUrl = s"k8s://${kubernetesClient.getMasterUrl}"
 
     new SparkAppConf()
       .set("spark.master", masterUrl)
@@ -480,16 +469,33 @@ class OidcCredentialE2ESuite
           resolveSparkHomeDir())
       } catch {
         case e: Throwable =>
-          // spark-submit runs with waitAppCompletion=true, so a non-zero exit means
-          // the driver failed. Dump the driver pod's status, events and logs to make
-          // the root cause visible instead of leaving only a bare exit code.
+          // A non-zero spark-submit exit means submission itself failed. Note that a
+          // zero exit does NOT imply the driver succeeded: with waitAppCompletion=true
+          // the submission client returns 0 once the driver reaches any terminal phase,
+          // including Failed (LoggingPodStatusWatcherImpl.hasCompleted is true for both
+          // Succeeded and Failed). The driver-phase and success-marker checks below are
+          // what actually assert success. Dump diagnostics either way.
           dumpDriverDiagnostics(driverPodName)
           throw e
       }
 
-      // The submit above blocks until the driver completes successfully, so the
-      // output should already be in moto. Poll briefly to absorb any eventual
-      // consistency, and dump diagnostics if it never shows up.
+      // spark-submit's exit code does not distinguish Succeeded from Failed, so assert
+      // the driver reached Succeeded (fails fast on Failed) and that the job logged its
+      // success marker before verifying S3 output.
+      try {
+        awaitDriverSucceeded(driverPodName, VERIFY_TIMEOUT)
+        assert(driverLog(driverPodName).contains(OidcS3ReadWriteJob.SUCCESS_MARKER),
+          s"Driver pod $driverPodName succeeded but did not log the success marker " +
+            s"'${OidcS3ReadWriteJob.SUCCESS_MARKER}'.")
+      } catch {
+        case e: Throwable =>
+          dumpDriverDiagnostics(driverPodName)
+          throw e
+      }
+
+      // The driver has completed successfully, so the output should already be in moto.
+      // Poll briefly to absorb any eventual consistency, and dump diagnostics if it
+      // never shows up.
       try {
         Eventually.eventually(VERIFY_TIMEOUT, INTERVAL) {
           val objects = s3Client.listObjectsV2(
@@ -537,7 +543,48 @@ class OidcCredentialE2ESuite
    */
   private def deleteDriverPod(driverPodName: String): Unit = {
     Utils.tryLogNonFatalError {
-      kubernetesClient.pods().inNamespace(namespace).withName(driverPodName).delete()
+      val pods = kubernetesClient.pods().inNamespace(namespace)
+      pods.withName(driverPodName).delete()
+      // Wait for the pod to actually disappear (delete() only requests deletion). This
+      // keeps a still-terminating driver/executors from contending with the next test.
+      val deadline = System.currentTimeMillis() + DELETE_TIMEOUT_MS
+      while (pods.withName(driverPodName).get() != null &&
+          System.currentTimeMillis() < deadline) {
+        Thread.sleep(INTERVAL.value.toMillis)
+      }
+    }
+  }
+
+  /**
+   * Waits until the driver log contains all of the given markers, failing fast if the
+   * driver pod reaches the terminal "Failed" phase in the meantime, and failing on
+   * timeout otherwise.
+   *
+   * This is used instead of ScalaTest's `eventually { assert(phase != "Failed"); ... }`
+   * because `eventually` retries on ANY exception it catches -- including the
+   * `assert(phase != "Failed")` failure -- so a dead pod would not fail fast; the block
+   * would just keep retrying until the timeout expired. A hand-rolled poll loop that
+   * throws (via `fail`) on the terminal phase gives the intended fail-fast behavior.
+   */
+  private def awaitDriverLogContains(
+      driverPodName: String, timeout: Timeout, markers: String*): Unit = {
+    val deadline = System.currentTimeMillis() + timeout.value.toMillis
+    var found = false
+    while (!found) {
+      val phase = driverPodPhase(driverPodName)
+      if (phase == "Failed") {
+        fail(s"Driver pod $driverPodName reached terminal phase Failed while waiting " +
+          s"for: ${markers.mkString(", ")}.")
+      }
+      val log = driverLog(driverPodName)
+      if (markers.forall(log.contains)) {
+        found = true
+      } else if (System.currentTimeMillis() > deadline) {
+        fail(s"Timed out waiting for driver log of $driverPodName to contain: " +
+          s"${markers.filterNot(log.contains).mkString(", ")} (last phase: $phase).")
+      } else {
+        Thread.sleep(INTERVAL.value.toMillis)
+      }
     }
   }
 
@@ -764,12 +811,65 @@ class OidcCredentialE2ESuite
           .build()).create()
       createdNamespace = true
     }
+    // Grant RBAC regardless of whether we created the namespace, so the suite also works
+    // when pointed at a pre-existing namespace on an RBAC-enabled cluster.
+    ensureDriverRbac()
+  }
+
+  /**
+   * Grants the driver's ServiceAccount permission to manage executor pods within the
+   * test namespace, via a namespaced Role + RoleBinding (mirroring the "pods: *" rule in
+   * resource-managers/kubernetes/integration-tests/dev/spark-rbac.yaml). Without this,
+   * on an RBAC-enabled cluster the default SA cannot create executor pods and the tests
+   * time out. Scoping this to the test namespace (rather than relying on a cluster-wide
+   * grant) also makes the suite self-sufficient when run locally.
+   *
+   * Idempotent: re-running against a namespace that already carries these objects
+   * (e.g. a fixed, pre-existing namespace) is tolerated -- an already-exists conflict is
+   * ignored.
+   */
+  private def ensureDriverRbac(): Unit = {
+    val roleName = "oidc-e2e-driver-role"
+    val role = new RoleBuilder()
+      .withNewMetadata().withName(roleName).withNamespace(namespace).endMetadata()
+      .withRules(new PolicyRuleBuilder()
+        .withApiGroups("")
+        .withResources("pods", "services", "configmaps", "persistentvolumeclaims")
+        .withVerbs("*")
+        .build())
+      .build()
+    createIgnoringConflict {
+      kubernetesClient.rbac().roles().inNamespace(namespace).resource(role).create()
+    }
+
+    val roleBinding = new RoleBindingBuilder()
+      .withNewMetadata().withName("oidc-e2e-driver-role-binding")
+      .withNamespace(namespace).endMetadata()
+      .withNewRoleRef("rbac.authorization.k8s.io", "Role", roleName)
+      .addNewSubject()
+        .withKind("ServiceAccount").withName(serviceAccountName).withNamespace(namespace)
+        .endSubject()
+      .build()
+    createIgnoringConflict {
+      kubernetesClient.rbac().roleBindings().inNamespace(namespace).resource(roleBinding)
+        .create()
+    }
+  }
+
+  /** Runs a create() call, ignoring a 409 Conflict (resource already exists). */
+  private def createIgnoringConflict(create: => Any): Unit = {
+    try {
+      create
+    } catch {
+      case e: io.fabric8.kubernetes.client.KubernetesClientException if e.getCode == 409 =>
+        logInfo(s"RBAC object already exists; reusing it: ${e.getMessage}")
+    }
   }
 
   /**
    * Ensures the S3 bucket used by the tests exists in moto. RBAC for the driver's
-   * ServiceAccount is granted separately by the CI workflow / dev-run script (via a
-   * ClusterRoleBinding), not here.
+   * ServiceAccount is granted by [[ensureDriverRbac]] when this suite creates the
+   * namespace.
    */
   private def ensureMotoResources(): Unit = {
     // Create S3 bucket in moto if it does not exist
@@ -798,6 +898,9 @@ private[integrationtest] object OidcCredentialE2ESuite {
   // should already be present; only a short poll is needed for eventual consistency.
   val VERIFY_TIMEOUT: Timeout = Timeout(Span(2, Minutes))
   val INTERVAL: Interval = Interval(Span(10, Seconds))
+
+  /** How long to wait for a namespace/pod deletion to complete before giving up. */
+  val DELETE_TIMEOUT_MS: Long = 60000L
 
   /** ScalaTest tag to mark tests that require a running Kubernetes cluster and moto. */
   object oidcE2eTag extends Tag("org.apache.spark.security.aws.integrationtest.OidcE2ETest")

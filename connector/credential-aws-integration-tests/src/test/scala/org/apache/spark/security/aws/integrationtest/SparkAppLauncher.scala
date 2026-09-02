@@ -30,10 +30,11 @@ import org.apache.spark.util.Utils
 /**
  * Minimal spark-submit driver used by the OIDC E2E tests.
  *
- * These helpers are intentionally self-contained (rather than depending on the
- * `spark-kubernetes-integration-tests` test-jar) so that this module resolves
- * cleanly under both Maven and sbt. They mirror the small set of helpers of the
- * same name in `resource-managers/kubernetes/integration-tests`.
+ * These helpers are intentionally self-contained rather than depending on the
+ * `spark-kubernetes-integration-tests` test-jar. Depending on it would force every
+ * build of this module to also activate `-Pkubernetes-integration-tests`, so the small
+ * set of helpers is duplicated here instead. They mirror the equivalents of the same
+ * name in `resource-managers/kubernetes/integration-tests`.
  */
 private[integrationtest] class SparkAppConf {
 

@@ -131,7 +131,6 @@ build/sbt \
 | Property | Default | Description |
 |---|---|---|
 | `spark.kubernetes.test.deployMode` | `minikube` | Kubernetes backend. |
-| `spark.kubernetes.test.master` | (auto) | Kubernetes API server URL. |
 | `spark.kubernetes.test.imageRepo` | `docker.io/kubespark` | Docker image repository. |
 | `spark.kubernetes.test.imageTag` | `N/A` | Docker image tag. |
 | `spark.kubernetes.test.namespace` | (auto-generated) | Kubernetes namespace for the tests. |

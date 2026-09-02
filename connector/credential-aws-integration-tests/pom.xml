@@ -36,7 +36,6 @@
     <spark.kubernetes.test.deployMode>minikube</spark.kubernetes.test.deployMode>
     <spark.kubernetes.test.imageRepo>docker.io/kubespark</spark.kubernetes.test.imageRepo>
     <spark.kubernetes.test.imageTag>N/A</spark.kubernetes.test.imageTag>
-    <spark.kubernetes.test.master></spark.kubernetes.test.master>
     <spark.kubernetes.test.namespace></spark.kubernetes.test.namespace>
     <spark.kubernetes.test.serviceAccountName></spark.kubernetes.test.serviceAccountName>
 
@@ -177,7 +176,6 @@
             <spark.test.home>${spark.test.home}</spark.test.home>
             <!-- Kubernetes cluster -->
             <spark.kubernetes.test.deployMode>${spark.kubernetes.test.deployMode}</spark.kubernetes.test.deployMode>
-            <spark.kubernetes.test.master>${spark.kubernetes.test.master}</spark.kubernetes.test.master>
             <spark.kubernetes.test.namespace>${spark.kubernetes.test.namespace}</spark.kubernetes.test.namespace>
             <spark.kubernetes.test.serviceAccountName>${spark.kubernetes.test.serviceAccountName}</spark.kubernetes.test.serviceAccountName>
             <spark.kubernetes.test.imageRepo>${spark.kubernetes.test.imageRepo}</spark.kubernetes.test.imageRepo>
