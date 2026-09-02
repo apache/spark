@@ -2229,20 +2229,23 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def bucketingColumnCannotBePartOfPartitionColumnsError(
       bucketCol: String, normalizedPartCols: Seq[String]): Throwable = {
+    // These names are already resolved against the table schema, so each is quoted as a single
+    // part. The `String` overload of `toSQLId` would parse them instead.
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1166",
+      errorClass = "BUCKET_COLUMN_IN_PARTITION_COLUMNS",
       messageParameters = Map(
-        "bucketCol" -> bucketCol,
-        "normalizedPartCols" -> normalizedPartCols.mkString(", ")))
+        "bucketColumn" -> toSQLId(Seq(bucketCol)),
+        "partitionColumns" -> normalizedPartCols.map(c => toSQLId(Seq(c))).mkString(", ")))
   }
 
   def bucketSortingColumnCannotBePartOfPartitionColumnsError(
-    sortCol: String, normalizedPartCols: Seq[String]): Throwable = {
+      sortCol: String, normalizedPartCols: Seq[String]): Throwable = {
+    // Quoted as single parts, as in bucketingColumnCannotBePartOfPartitionColumnsError above.
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1167",
+      errorClass = "BUCKET_SORT_COLUMN_IN_PARTITION_COLUMNS",
       messageParameters = Map(
-        "sortCol" -> sortCol,
-        "normalizedPartCols" -> normalizedPartCols.mkString(", ")))
+        "sortColumn" -> toSQLId(Seq(sortCol)),
+        "partitionColumns" -> normalizedPartCols.map(c => toSQLId(Seq(c))).mkString(", ")))
   }
 
   def invalidBucketColumnDataTypeError(dataType: DataType): Throwable = {
@@ -4652,6 +4655,46 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(),
       cause = Some(cause)
     )
+  }
+
+  def cannotResolveDataSourceRuntimeFilterAttributeError(
+      attribute: Array[String],
+      method: String,
+      scanClass: String,
+      relationOutput: StructType,
+      cause: AnalysisException): AnalysisException = {
+    invalidDataSourceRuntimeFilterAttributeError(
+      attribute, method, scanClass, relationOutput, "CANNOT_RESOLVE", Some(cause))
+  }
+
+  def nestedDataSourceFullyPushedRuntimeFilterAttributeError(
+      attribute: Array[String],
+      scanClass: String,
+      relationOutput: StructType): AnalysisException = {
+    invalidDataSourceRuntimeFilterAttributeError(
+      attribute,
+      "fullyPushedFilterAttributes()",
+      scanClass,
+      relationOutput,
+      "NOT_TOP_LEVEL",
+      None)
+  }
+
+  private def invalidDataSourceRuntimeFilterAttributeError(
+      attribute: Array[String],
+      method: String,
+      scanClass: String,
+      relationOutput: StructType,
+      errorSubClass: String,
+      cause: Option[AnalysisException]): AnalysisException = {
+    new AnalysisException(
+      errorClass = s"DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE.$errorSubClass",
+      messageParameters = Map(
+        "attribute" -> toSQLId(attribute.toImmutableArraySeq),
+        "method" -> method,
+        "scanClass" -> scanClass,
+        "relationOutput" -> toSQLType(relationOutput)),
+      cause = cause)
   }
 
   def foundMultipleXMLDataSourceError(provider: String,

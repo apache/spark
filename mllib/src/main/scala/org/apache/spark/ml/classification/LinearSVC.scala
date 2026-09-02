@@ -29,7 +29,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{COUNT, RANGE}
-import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.optim.aggregator._
@@ -43,7 +42,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.{get => fget, _}
 import org.apache.spark.storage.StorageLevel
 
 /** Params for linear SVM Classifier. */
@@ -390,8 +389,8 @@ class LinearSVCModel private[classification] (
 
   override protected def raw2predictionColumn(rawPrediction: Column): Column = {
     val localThreshold = getThreshold
-    val rawScore = MLFunctions.vector_get(rawPrediction, lit(1))
-    when(!isnan(rawScore) && rawScore > localThreshold, 1.0).otherwise(0.0)
+    val rawScore = fget(unwrap_udt(rawPrediction).getField("values"), lit(1))
+    when(rawScore > localThreshold && !isnan(rawScore), 1.0).otherwise(0.0)
   }
 
   override protected def predictionColumn(features: Column): Column = {

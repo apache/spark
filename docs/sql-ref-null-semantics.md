@@ -273,6 +273,15 @@ SELECT count(age) FROM person;
 |         5|
 +----------+
 
+-- `count(DISTINCT age)` also skips `NULL`. This is different from GROUP BY / SELECT DISTINCT,
+-- which put all nulls in one bucket.
+SELECT count(DISTINCT age) FROM person;
++-------------------+
+|count(DISTINCT age)|
++-------------------+
+|                  3|
++-------------------+
+
 -- `count(*)` on an empty input set returns 0. This is unlike the other
 -- aggregate functions, such as `max`, which return `NULL`.
 SELECT count(*) FROM person where 1 = 0;
@@ -384,6 +393,8 @@ As discussed in the previous section [comparison operator](sql-ref-null-semantic
 two `NULL` values are not equal. However, for the purpose of grouping and distinct processing, the two or more
 values with `NULL data`are grouped together into the same bucket. This behaviour is conformant with SQL
 standard and with other enterprise database management systems.
+
+`COUNT(DISTINCT expr)` ignores `NULL` values. Only distinct non-null values are counted.
 
 **Examples**
 
