@@ -139,6 +139,12 @@ public enum TableCapability {
    * obtaining a fresh {@link org.apache.spark.sql.connector.read.ScanBuilder} with the same options
    * and re-applying the same pushed filters and pruned columns yields an equivalent scan.
    * <p>
+   * Determinism alone is not enough: widening the set of pruned columns, with the options and
+   * pushed filters held constant, must not change which rows the scan returns nor the values it
+   * returns for the columns already asked for. It may at most surface a read error. A source whose
+   * parser decides what counts as a malformed record from the set of columns it was asked for does
+   * not meet this, and neither does one that resolves a column by its position in the projection.
+   * <p>
    * Given that contract, Spark builds the merged scan itself: it prunes a fresh ScanBuilder to the
    * union of both read schemas, re-pushes the (possibly OR-widened) filters, and builds. The merged
    * scan reads the union of the two scans' columns and a superset of their rows; each original

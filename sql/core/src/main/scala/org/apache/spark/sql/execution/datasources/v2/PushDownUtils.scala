@@ -313,7 +313,7 @@ object PushDownUtils extends Logging {
 
           val inputMap = k.partitionKeys.groupBy(identity).view.mapValues(_.size)
           val comparableKeyWrapperFactory = InternalRowComparableWrapper
-            .getInternalRowComparableWrapperFactory(k.expressionDataTypes)
+            .getInternalRowComparableWrapperFactory(k.keyDataTypes)
           val filteredMap = newPartitions.groupBy(
             p => comparableKeyWrapperFactory(p.asInstanceOf[HasPartitionKey].partitionKey())
           )

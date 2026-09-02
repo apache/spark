@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.join.Symmetri
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.{count, expr}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{StreamingQuery, StreamTest, Trigger}
+import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, StreamTest, Trigger}
 import org.apache.spark.util.Utils
 
 class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
@@ -661,6 +661,14 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         query.stop()
     }
   }
+
+  test("SPARK-58973: coordinatorRef returns None when coordinator is not registered") {
+    // In non-streaming mode, the StateStoreCoordinator endpoint may never have been registered.
+    // coordinatorRef should return None instead of throwing.
+    StateStore.stop()
+    assert(StateStoreProvider.coordinatorRef.isEmpty,
+      "coordinatorRef should return None when the coordinator endpoint is not registered")
+  }
 }
 
 class StateStoreCoordinatorStreamingSuite extends StreamTest {
@@ -947,6 +955,34 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
           )
         }
       }
+    }
+  }
+
+  test("SPARK-58973: reading state store succeeds when coordinator is not initialized") {
+    withTempDir { tempDir =>
+      val checkpointDir = tempDir.getAbsolutePath
+      val inputData = MemoryStream[Int]
+      val aggregated = inputData.toDF()
+        .groupBy("value")
+        .count()
+
+      testStream(aggregated, OutputMode.Update())(
+        StartStream(checkpointLocation = checkpointDir),
+        AddData(inputData, 1, 2, 3, 1, 2),
+        CheckLastBatch((1, 2), (2, 2), (3, 1)),
+        StopStream
+      )
+
+      // Stop the coordinator to simulate a fresh session where
+      // StreamingQueryManager was never initialized.
+      spark.sessionState.streamingQueryManager.stateStoreCoordinator.stop()
+      StateStore.stop()
+
+      // Reading the state store should succeed even without the coordinator.
+      val stateDF = spark.read
+        .format("statestore")
+        .load(checkpointDir)
+      assert(stateDF.collect().nonEmpty)
     }
   }
 }

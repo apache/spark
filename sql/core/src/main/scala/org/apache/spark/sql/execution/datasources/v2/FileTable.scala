@@ -37,6 +37,18 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
 
+/**
+ * A [[Table]] backed by files.
+ *
+ * A subclass opts in to the `SCAN_MERGING` capability by overriding [[supportsScanMerging]], which
+ * holds it to this: with the scan options and the pushed filters held constant, widening the set of
+ * columns pruned on its builder must not change which rows the scan returns, nor the values it
+ * returns for the columns it was already asked for. It may at most surface a read error. A format
+ * whose parser decides what counts as a malformed record from the set of columns it was asked for
+ * does not meet that, and neither does one that resolves a column by its position in the
+ * projection. The capability is also withheld from a table whose reads are not strict, see
+ * `hasStrictFileReads`.
+ */
 abstract class FileTable(
     sparkSession: SparkSession,
     options: CaseInsensitiveStringMap,
@@ -111,7 +123,31 @@ abstract class FileTable(
 
   override def properties: util.Map[String, String] = options.asCaseSensitiveMap
 
-  override def capabilities: java.util.Set[TableCapability] = FileTable.CAPABILITIES
+  override def capabilities: java.util.Set[TableCapability] =
+    if (supportsScanMerging && hasStrictFileReads) {
+      FileTable.CAPABILITIES_WITH_SCAN_MERGING
+    } else {
+      FileTable.CAPABILITIES
+    }
+
+  /**
+   * Whether this table meets the `SCAN_MERGING` contract described on this class. Defaults to
+   * false: a format that does not merge only misses an optimization, while a format that merges
+   * when its parser is projection-sensitive returns wrong rows.
+   */
+  protected def supportsScanMerging: Boolean = false
+
+  /**
+   * Whether a read of this table is strict. Under `ignoreCorruptFiles`, a read failure in a column
+   * that only the other scan projects is swallowed and the remaining rows of that file are dropped,
+   * so the merged scan would not read a superset of either input's rows. `ignoreMissingFiles` drops
+   * the same rows whatever is projected, and counts here because one predicate,
+   * `FileSourceOptions.hasStrictFileReads`, answers for both flags on this side and on the physical
+   * side. Evaluated per call rather than cached, so a table built before either configuration was
+   * set still answers for the read that is running.
+   */
+  private def hasStrictFileReads: Boolean =
+    new FileSourceOptions(options.asCaseSensitiveMap.asScala.toMap).hasStrictFileReads
 
   /**
    * When possible, this method should return the schema of the given `files`.  When the format
@@ -182,4 +218,10 @@ abstract class FileTable(
 
 object FileTable {
   private val CAPABILITIES = util.EnumSet.of(BATCH_READ, BATCH_WRITE)
+
+  // For the formats that override supportsScanMerging. `fileIndex` is a lazy val, so every scan
+  // built from one table lists the same files, and `newScanBuilder` returns a fresh builder over
+  // `mergedOptions(options)`.
+  private val CAPABILITIES_WITH_SCAN_MERGING =
+    util.EnumSet.of(BATCH_READ, BATCH_WRITE, SCAN_MERGING)
 }

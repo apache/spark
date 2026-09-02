@@ -58,7 +58,6 @@ class NumPyCompatTestsMixin:
         "conjugate",
         "isnat",
         "matmul",
-        "frexp",
         # Values are close enough but tests failed.
         "log",  # flaky
         "log10",  # flaky
@@ -313,6 +312,27 @@ class NumPyCompatTestsMixin:
 
             self.assert_eq(np.fmod(psdf.x1, psdf.x2), np.fmod(pdf.x1, pdf.x2), almost=True)
 
+        # Integral operands above 2**53, where casting an operand to double would drop its low
+        # bits: fmod(9007199254740993, 2) is 1, not 0. Compared exactly, since almost=True would
+        # accept an off-by-one at these magnitudes.
+        pdf = pd.DataFrame(
+            {
+                "x1": [9007199254740993, 9007199254740995, -9007199254740993, 4611686018427387905],
+                "x2": [2, 4, 2, 1000000000],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(np.fmod(psdf.x1, psdf.x2), np.fmod(pdf.x1, pdf.x2).astype("float64"))
+
+        # almost=True treats -0.0 and 0.0 as equal, so check the sign of zero explicitly:
+        # an integral remainder is never negative zero, unlike a double one.
+        pdf = pd.DataFrame({"x1": [-64, -2, 0, 64], "x2": [2, 2, 3, 2]})
+        psdf = ps.from_pandas(pdf)
+
+        result = np.fmod(psdf.x1, psdf.x2)
+        expected = np.fmod(pdf.x1, pdf.x2)
+        self.assert_eq(np.signbit(result.to_pandas()), np.signbit(expected))
+
     def test_np_modf(self):
         # np.modf(x) returns a tuple (fractional part, integral part).
         for pdf in (
@@ -354,6 +374,13 @@ class NumPyCompatTestsMixin:
         self.assert_eq(np.signbit(ps_fractional.to_pandas()), np.signbit(pd_fractional))
         self.assert_eq(np.signbit(ps_integral.to_pandas()), np.signbit(pd_integral))
 
+        # A DataFrame with no columns has no per-column result to inspect, so the number of
+        # outputs comes from the ufunc; pandas returns one empty DataFrame per output here too.
+        ps_fractional, ps_integral = np.modf(psdf[[]])
+        pd_fractional, pd_integral = np.modf(pdf[[]])
+        self.assert_eq(ps_fractional, pd_fractional)
+        self.assert_eq(ps_integral, pd_integral)
+
         # Index input: np.modf returns a tuple of Index objects.
         pidx = pd.Index([-3.5, -2.0, -0.5, 0.0, 2.7])
         psidx = ps.from_pandas(pidx)
@@ -362,8 +389,74 @@ class NumPyCompatTestsMixin:
         self.assert_eq(ps_fractional, pd_fractional, almost=True)
         self.assert_eq(ps_integral, pd_integral, almost=True)
 
+    def test_np_frexp(self):
+        # np.frexp(x) returns a tuple (mantissa, exponent), where x == mantissa * 2**exponent.
+        for pdf in (
+            pd.DataFrame({"a": [-64, -3, -1, 0, 1, 3, 64]}),
+            pd.DataFrame(
+                {"a": [-np.inf, -64.0, -1.5, -0.5, -0.0, 0.0, 0.5, 1.5, 64.0, np.inf, np.nan]}
+            ),
+            pd.DataFrame({"a": pd.array([1, -2, None], dtype="Int64")}),
+        ):
+            psdf = ps.from_pandas(pdf)
+            ps_mantissa, ps_exponent = np.frexp(psdf.a)
+            pd_mantissa, pd_exponent = np.frexp(pdf.a)
+            self.assert_eq(ps_mantissa, pd_mantissa, almost=True)
+            self.assert_eq(ps_exponent, pd_exponent, almost=True)
+
+        # Values next to a power of two, where the logarithm behind the exponent needs its
+        # correction, and both ends of the double range. Compared exactly, not with almost=True.
+        pdf = pd.DataFrame(
+            {
+                "a": [
+                    np.nextafter(2.0, 0.0),
+                    2.0,
+                    np.nextafter(2.0, np.inf),
+                    np.nextafter(-2.0, 0.0),
+                    np.finfo(np.float64).max,
+                    np.finfo(np.float64).tiny,
+                    np.nextafter(0.0, 1.0),  # the smallest subnormal
+                ]
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        ps_mantissa, ps_exponent = np.frexp(psdf.a)
+        pd_mantissa, pd_exponent = np.frexp(pdf.a)
+        self.assert_eq(ps_mantissa, pd_mantissa)
+        self.assert_eq(ps_exponent, pd_exponent)
+
+        # almost=True treats -0.0 and 0.0 as equal, so check the sign of zero explicitly:
+        # the mantissa of a zero is that zero, and of +-inf that infinity.
+        pdf = pd.DataFrame({"a": [-2.0, -0.5, -0.0, 0.0, 0.5, 2.0, -np.inf, np.inf]})
+        psdf = ps.from_pandas(pdf)
+        ps_mantissa, _ = np.frexp(psdf.a)
+        pd_mantissa, _ = np.frexp(pdf.a)
+        self.assert_eq(np.signbit(ps_mantissa.to_pandas()), np.signbit(pd_mantissa))
+
+        # DataFrame input: np.frexp returns a tuple of DataFrames, one per output.
+        pdf = pd.DataFrame(
+            {
+                "a": [-3.5, -1.0, -0.5, 0.0, 6.0],
+                "b": [1.5, -0.0, np.inf, -np.inf, np.nan],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        ps_mantissa, ps_exponent = np.frexp(psdf)
+        pd_mantissa, pd_exponent = np.frexp(pdf)
+        self.assert_eq(ps_mantissa, pd_mantissa, almost=True)
+        self.assert_eq(ps_exponent, pd_exponent, almost=True)
+        self.assert_eq(np.signbit(ps_mantissa.to_pandas()), np.signbit(pd_mantissa))
+
+        # Index input: np.frexp returns a tuple of Index objects.
+        pidx = pd.Index([-3.5, -1.0, -0.5, 0.0, 6.0])
+        psidx = ps.from_pandas(pidx)
+        ps_mantissa, ps_exponent = np.frexp(psidx)
+        pd_mantissa, pd_exponent = np.frexp(pidx)
+        self.assert_eq(ps_mantissa, pd_mantissa, almost=True)
+        self.assert_eq(ps_exponent, pd_exponent, almost=True)
+
     def test_floor_divide_func(self):
-        from pyspark.pandas.numpy_compat import _floor_divide_func
+        from pyspark.pandas.utils import _floor_divide_func
 
         def floor_divided(pdf):
             psdf = ps.from_pandas(pdf)

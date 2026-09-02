@@ -50,4 +50,8 @@ case class TextTable(
     dataType.isInstanceOf[StringType]
 
   override def formatName: String = "Text"
+
+  // The schema is a single `value` column, and every line -- or every file under `wholetext` --
+  // becomes a row, so there is no parse step whose outcome a wider column set could change.
+  override protected def supportsScanMerging: Boolean = true
 }
