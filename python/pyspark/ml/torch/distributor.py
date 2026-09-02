@@ -485,14 +485,21 @@ class TorchDistributor(Distributor):
                 decoded = line.decode("utf-8")
                 tail.append(decoded)
                 if redirect_to_stdout:
-                    if (
-                        log_streaming_client
-                        and not log_streaming_client.failed
-                        and (
-                            log_streaming_client.sock.getsockname()[0]
-                            == log_streaming_client.sock.getpeername()[0]
-                        )
-                    ):
+                    same_node = False
+                    if log_streaming_client and not log_streaming_client.failed:
+                        try:
+                            same_node = (
+                                log_streaming_client.sock.getsockname()[0]
+                                == log_streaming_client.sock.getpeername()[0]
+                            )
+                        except OSError:
+                            # The log-streaming socket is best effort and can be
+                            # dropped (e.g. a cloud-provider idle-timeout) while
+                            # torch/NCCL initializes. getpeername() then raises
+                            # OSError; a barrier task must not die over log
+                            # redirection, so fall back to writing to stdout.
+                            same_node = False
+                    if same_node:
                         # If log_streaming_client and log_stream_server are in the same
                         # node (typical case is spark local mode),
                         # server side will redirect the log to STDOUT,
