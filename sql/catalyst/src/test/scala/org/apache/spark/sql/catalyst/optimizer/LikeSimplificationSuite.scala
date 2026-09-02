@@ -310,6 +310,57 @@ class LikeSimplificationSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery), originalQuery)
   }
 
+  test("derive StartsWith prefix guard for leading-literal LIKE 'a%b%'") {
+    val originalQuery = testRelation.where($"a" like "a%b%")
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .where(StartsWith($"a", "a") && ($"a" like "a%b%"))
+      .analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("derive StartsWith prefix guard with a multi-char prefix and multiple wildcards") {
+    val originalQuery = testRelation.where($"a" like "ab%cd%ef")
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .where(StartsWith($"a", "ab") && ($"a" like "ab%cd%ef"))
+      .analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("derive StartsWith prefix guard when the pattern uses '_' wildcards") {
+    val originalQuery = testRelation.where($"a" like "a_b%")
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .where(StartsWith($"a", "a") && ($"a" like "a_b%"))
+      .analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("no StartsWith prefix guard when the pattern has no leading literal") {
+    val originalQuery = testRelation.where($"a" like "%b%c%").analyze
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
+
+  test("no StartsWith prefix guard when the pattern contains the escape char") {
+    val originalQuery = testRelation.where($"a" like "a\\%b%").analyze
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
+
+  test("no StartsWith prefix guard for non-binary collation") {
+    val relation = LocalRelation(AttributeReference("a", StringType("UTF8_LCASE"))())
+    val lcase = StringType("UTF8_LCASE")
+    val originalQuery =
+      relation.where(Like(relation.output.head, Literal.create("a%b%", lcase), '\\')).analyze
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
+
+  test("prefix guard derivation is idempotent") {
+    val originalQuery = testRelation.where($"a" like "a%b%").analyze
+    val once = Optimize.execute(originalQuery)
+    comparePlans(Optimize.execute(once), once)
+  }
+
   // scalastyle:off nonascii
   test("LikeSimplification with emojis") {
     val originalQuery =
