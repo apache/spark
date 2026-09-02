@@ -14,18 +14,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Callable, Tuple, Union, no_type_check
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, no_type_check
 
 import numpy as np
 
 from pyspark.loose_version import LooseVersion
 from pyspark.pandas._typing import SeriesOrIndex
 from pyspark.pandas.base import IndexOpsMixin
+from pyspark.pandas.typedef.typehints import as_spark_type
 from pyspark.pandas.utils import _floor_divide_func
 from pyspark.sql import Column
 from pyspark.sql import functions as F
 from pyspark.sql.pandas.functions import pandas_udf
-from pyspark.sql.types import BooleanType, DoubleType
+from pyspark.sql.types import (
+    BooleanType,
+    DataType,
+    DoubleType,
+    FloatType,
+    IntegralType,
+    NumericType,
+)
 
 unary_np_spark_mappings = {
     "abs": F.abs,
@@ -358,6 +366,73 @@ multi_output_np_spark_mappings = {
 }
 
 
+# NumPy accepts a boolean wherever it accepts an integer.
+_INTEGRAL_INPUT_TYPES = (BooleanType, IntegralType)
+# Some ufuncs reject a decimal column, so the float types are spelled out rather than using
+# NumericType, which includes DecimalType.
+_NUMERIC_INPUT_TYPES = (BooleanType, IntegralType, FloatType, DoubleType)
+# For the ufuncs that accept a decimal column too.
+_NUMERIC_OR_DECIMAL_INPUT_TYPES = (BooleanType, NumericType)
+
+
+# The operand types NumPy accepts, one tuple of Spark types per operand. Without this Spark
+# casts the operand instead: np.fmod on a string column answered 1.0. An entry absent here is
+# not checked, either because NumPy restricts nothing or because the mapping is unreachable.
+_np_spark_accepted_types: Dict[str, Tuple[Tuple[type, ...], ...]] = {
+    "arccosh": (_NUMERIC_INPUT_TYPES,),
+    "arcsinh": (_NUMERIC_INPUT_TYPES,),
+    "arctanh": (_NUMERIC_INPUT_TYPES,),
+    "copysign": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
+    "cosh": (_NUMERIC_INPUT_TYPES,),
+    "deg2rad": (_NUMERIC_INPUT_TYPES,),
+    "exp2": (_NUMERIC_INPUT_TYPES,),
+    "fabs": (_NUMERIC_INPUT_TYPES,),
+    "float_power": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
+    "fmod": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
+    "frexp": (_NUMERIC_INPUT_TYPES,),
+    "heaviside": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
+    "invert": (_INTEGRAL_INPUT_TYPES,),
+    # np.ldexp builds x * 2**exp and takes the exponent from an integer loop only.
+    "ldexp": (_NUMERIC_INPUT_TYPES, _INTEGRAL_INPUT_TYPES),
+    "left_shift": (_INTEGRAL_INPUT_TYPES, _INTEGRAL_INPUT_TYPES),
+    "log2": (_NUMERIC_INPUT_TYPES,),
+    "logaddexp": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
+    "logaddexp2": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
+    "modf": (_NUMERIC_INPUT_TYPES,),
+    "rad2deg": (_NUMERIC_INPUT_TYPES,),
+    "reciprocal": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
+    "right_shift": (_INTEGRAL_INPUT_TYPES, _INTEGRAL_INPUT_TYPES),
+    "rint": (_NUMERIC_INPUT_TYPES,),
+    "sinh": (_NUMERIC_INPUT_TYPES,),
+    "square": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
+    "tanh": (_NUMERIC_INPUT_TYPES,),
+    "trunc": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
+}
+
+
+def _check_operand_types(op_name: str, inputs: Tuple[Any, ...]) -> None:
+    accepted_per_operand = _np_spark_accepted_types.get(op_name)
+    if accepted_per_operand is None:
+        return
+
+    data_types: List[Optional[DataType]] = []
+    for inp in inputs:
+        if isinstance(inp, IndexOpsMixin):
+            data_types.append(inp.spark.data_type)
+        else:
+            # A scalar has no Spark type; an unmappable one gives None and goes unchecked.
+            data_types.append(as_spark_type(type(inp), raise_error=False))
+    for data_type, accepted in zip(data_types, accepted_per_operand):
+        if data_type is not None and not isinstance(data_type, accepted):
+            raise TypeError(
+                "ufunc '%s' is not supported for the input types (%s)."
+                % (
+                    op_name,
+                    ", ".join("unknown" if dt is None else dt.simpleString() for dt in data_types),
+                )
+            )
+
+
 # Copied from pandas.
 # See also https://docs.scipy.org/doc/numpy/reference/arrays.classes.html#standard-array-subclasses
 def maybe_dispatch_ufunc_to_dunder_op(
@@ -432,6 +507,10 @@ def maybe_dispatch_ufunc_to_spark_func(
     from pyspark.pandas.base import column_op
 
     op_name = ufunc.__name__
+
+    # Check before building the expression, so the error comes from the ufunc call itself.
+    if method == "__call__" and kwargs.get("out") is None:
+        _check_operand_types(op_name, inputs)
 
     if (
         method == "__call__"

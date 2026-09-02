@@ -108,6 +108,109 @@ class NumPyCompatTestsMixin:
         with self.assertRaisesRegex(ValueError, "cannot join with no overlapping index names"):
             np.left_shift(psdf1, psdf2)
 
+    @property
+    def operand_type_pdf(self):
+        return pd.DataFrame(
+            {
+                "integer": [7, 8],
+                "double": [7.5, 8.5],
+                "decimal": [Decimal("7.5"), Decimal("8.5")],
+                "string": ["7", "8"],
+                "timestamp": pd.to_datetime(["2020-01-01", "2020-01-02"]),
+                # All nulls, which Spark types as void.
+                "null": [None, None],
+            }
+        )
+
+    def test_np_unsupported_operand_types(self):
+        # Not at module scope: importing numpy_compat builds its pandas_udf entries, which
+        # bind the Column class of whichever session mode is active.
+        from pyspark.pandas.numpy_compat import (
+            _np_spark_accepted_types,
+            binary_np_spark_mappings,
+            multi_output_np_spark_mappings,
+            unary_np_spark_mappings,
+        )
+
+        psdf = ps.from_pandas(self.operand_type_pdf)
+
+        # No ufunc accepts a string or a void column, so one loop covers the whole table.
+        for op_name, accepted_per_operand in _np_spark_accepted_types.items():
+            with self.subTest(name=op_name):
+                self.assertTrue(
+                    op_name in unary_np_spark_mappings
+                    or op_name in binary_np_spark_mappings
+                    or op_name in multi_output_np_spark_mappings,
+                    "%s has no mapping entry" % op_name,
+                )
+                for column, unsupported in (("string", "string"), ("null", "void")):
+                    with self.assertRaisesRegex(
+                        TypeError,
+                        "ufunc '%s' is not supported for the input types .*%s"
+                        % (op_name, unsupported),
+                    ):
+                        getattr(np, op_name)(*[psdf[column]] * len(accepted_per_operand))
+
+    def test_np_unsupported_operand_types_by_ufunc(self):
+        # The types only some ufuncs reject, and which operand carries the rejected one.
+        psdf = ps.from_pandas(self.operand_type_pdf)
+
+        for np_func, columns, unsupported in (
+            (np.cosh, ["timestamp"], "timestamp"),
+            (np.fmod, ["decimal", "decimal"], "decimal"),
+            # np.invert and the shifts have integer loops only.
+            (np.invert, ["double"], "double"),
+            # The rejected operand is the second one here, the first one below.
+            (np.left_shift, ["integer", "double"], "double"),
+            (np.copysign, ["double", "string"], "string"),
+            (np.logaddexp, ["timestamp", "double"], "timestamp"),
+            # np.ldexp takes its exponent from an integer loop.
+            (np.ldexp, ["double", "double"], "double"),
+        ):
+            with self.subTest(np_func=np_func.__name__, unsupported=unsupported):
+                with self.assertRaisesRegex(
+                    TypeError,
+                    "ufunc '%s' is not supported for the input types .*%s"
+                    % (np_func.__name__, unsupported),
+                ):
+                    np_func(*[psdf[column] for column in columns])
+
+        # An Index reaches the same dispatch as a Series.
+        with self.assertRaisesRegex(TypeError, "ufunc 'cosh' is not supported"):
+            np.cosh(ps.Index(["7", "8"]))
+
+    def test_np_unsupported_scalar_operand_types(self):
+        # A scalar operand is typed from its Python type, not from a Spark column.
+        psdf = ps.from_pandas(self.operand_type_pdf)
+
+        for np_func, args, unsupported in (
+            (np.fmod, (psdf["integer"], "8"), "string"),
+            (np.ldexp, (psdf["double"], 2.5), "double"),
+            (np.left_shift, (psdf["integer"], 1.5), "double"),
+        ):
+            with self.subTest(np_func=np_func.__name__, unsupported=unsupported):
+                with self.assertRaisesRegex(
+                    TypeError,
+                    "ufunc '%s' is not supported for the input types .*%s"
+                    % (np_func.__name__, unsupported),
+                ):
+                    np_func(*args)
+
+    def test_np_supported_operand_types(self):
+        pdf = self.operand_type_pdf
+        psdf = ps.from_pandas(pdf)
+
+        # The accepted cases the rest of this file does not reach: a decimal column, a scalar
+        # operand, and a ufunc with no table entry.
+        self.assert_eq(np.square(psdf["decimal"]), np.square(pdf["decimal"]), almost=True)
+        self.assert_eq(np.trunc(psdf["decimal"]), np.trunc(pdf["decimal"]), almost=True)
+        self.assert_eq(np.ldexp(psdf["double"], 2), np.ldexp(pdf["double"], 2), almost=True)
+        self.assert_eq(np.fmod(psdf["integer"], 2), np.fmod(pdf["integer"], 2), almost=True)
+        self.assert_eq(np.left_shift(psdf["integer"], 1), np.left_shift(pdf["integer"], 1))
+        self.assert_eq(
+            np.fmax(psdf["string"], psdf["string"]), np.fmax(pdf["string"], pdf["string"])
+        )
+
     def test_np_math_functions(self):
         for np_func, values in (
             (np.arccosh, [-np.inf, -1.0, 0.0, 1.0, 2.0, 64.0, np.inf, np.nan]),
