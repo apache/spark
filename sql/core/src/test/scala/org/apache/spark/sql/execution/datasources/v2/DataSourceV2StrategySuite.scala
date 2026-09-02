@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.EnumSet
+import java.util.{EnumSet, OptionalLong}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{Row, SQLContext}
@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, F
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.join.{JoinType => V2JoinType}
-import org.apache.spark.sql.connector.read.{Batch, InputPartition, LocalScan, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownTopN, SupportsPushDownVariantExtractions, V1Scan, VariantExtraction}
+import org.apache.spark.sql.connector.read.{Batch, InputPartition, LocalScan, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, Statistics, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTopN, SupportsPushDownVariantExtractions, SupportsReportStatistics, V1Scan, VariantExtraction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
@@ -1211,6 +1211,53 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       s"ambiguous inferred filter must be ignored:\n$ambiguousPlan")
   }
 
+  test("inferred filters reject bound column references after pruning") {
+    val schema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("value", LongType, nullable = false)))
+    val inferred = EqualTo(BoundReference(99, LongType, nullable = false), Literal(0L))
+    val relation = DataSourceV2Relation.create(
+      new InMemoryCatalystFilterTable(schema, inferred),
+      None,
+      None,
+      CaseInsensitiveStringMap.empty)
+    val id = relation.output.find(_.name == "id").get
+    val pushedPlan = V2ScanRelationPushDown(
+      Project(Seq(id), Filter(EqualTo(id, Literal(1L)), relation)))
+    val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+
+    assert(scan.output.map(_.name) == Seq("id"), s"expected value to be pruned:\n$pushedPlan")
+    assert(scan.inferredFilters.isEmpty,
+      s"bound inferred filter must be ignored after pruning:\n$pushedPlan")
+  }
+
+  test("inferred filters exclude expressions unsupported in Filter") {
+    val schema = StructType(Seq(StructField("id", LongType, nullable = false)))
+    val id = AttributeReference("id", LongType, nullable = false)()
+    val windowSpec = WindowSpecDefinition(
+      Nil,
+      Seq(id.asc),
+      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))
+    val invalidInferredFilters = Seq(
+      GreaterThan(Count(id).toAggregateExpression(), Literal(0L)),
+      GreaterThan(WindowExpression(RowNumber(), windowSpec), Literal(0)),
+      IsNotNull(Explode(CreateArray(Seq(id)))))
+
+    invalidInferredFilters.foreach { inferred =>
+      val relation = DataSourceV2Relation.create(
+        new InMemoryCatalystFilterTable(schema, inferred),
+        None,
+        None,
+        CaseInsensitiveStringMap.empty)
+      val pushedPlan = V2ScanRelationPushDown(
+        Filter(EqualTo(relation.output.head, Literal(1L)), relation))
+      val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+
+      assert(scan.inferredFilters.isEmpty,
+        s"inferred filter unsupported in Filter must be ignored: $inferred\n$pushedPlan")
+    }
+  }
+
   test("Boolean simplification preserves executable inferred filters") {
     val schema = StructType(Seq(
       StructField("a", BooleanType, nullable = false),
@@ -1246,7 +1293,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
   test("inferred filters are evaluated for V1 scans") {
     checkInferredEvaluatedForScan { tableSchema =>
-      new V1Scan {
+      new V1Scan with SupportsSparkFilterEstimation {
         override def readSchema(): StructType = tableSchema
 
         override def toV1TableScan[T <: BaseRelation with TableScan](
@@ -1265,7 +1312,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
   test("inferred filters are evaluated for local scans") {
     checkInferredEvaluatedForScan { tableSchema =>
-      new LocalScan {
+      new LocalScan with SupportsSparkFilterEstimation {
         override def readSchema(): StructType = tableSchema
 
         override def rows(): Array[InternalRow] = Array.empty
@@ -1462,6 +1509,15 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
+  private trait SupportsSparkFilterEstimation extends SupportsReportStatistics {
+    override def estimateStatistics(): Statistics = new Statistics {
+      override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+      override def numRows(): OptionalLong = OptionalLong.empty()
+    }
+
+    override def reflectsFullyPushedDownFilters(): Boolean = false
+  }
+
   private class InMemoryCatalystFilterTable(
       tableSchema: StructType,
       inferredFilter: Expression,
@@ -1482,14 +1538,22 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       tableSchema: StructType,
       inferredFilter: Expression,
       scanFactory: Option[StructType => Scan])
-    extends ScanBuilder with SupportsPushDownCatalystFilters {
+    extends ScanBuilder
+    with SupportsPushDownCatalystFilters
+    with SupportsPushDownRequiredColumns {
 
-    override def build(): Scan = scanFactory.map(_(tableSchema)).getOrElse {
-      new Scan {
-        override def readSchema(): StructType = tableSchema
+    private var requiredSchema = tableSchema
+
+    override def build(): Scan = scanFactory.map(_(requiredSchema)).getOrElse {
+      new Scan with SupportsSparkFilterEstimation {
+        override def readSchema(): StructType = requiredSchema
 
         override def toBatch: Batch = emptyBatch
       }
+    }
+
+    override def pruneColumns(requiredSchema: StructType): Unit = {
+      this.requiredSchema = requiredSchema
     }
 
     override def pushFilters(filters: Seq[Expression]): Seq[Expression] = filters
@@ -1536,7 +1600,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     var joinPushed: Boolean = false
     private var scanSchema: StructType = tableSchema
 
-    override def build(): Scan = new Scan {
+    override def build(): Scan = new Scan with SupportsSparkFilterEstimation {
       override def readSchema(): StructType = scanSchema
 
       override def toBatch: Batch = emptyBatch

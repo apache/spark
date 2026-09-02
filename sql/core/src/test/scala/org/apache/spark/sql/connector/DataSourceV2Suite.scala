@@ -1696,6 +1696,50 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         query.queryExecution.executedPlan)
   }
 
+  test("inferred filters respect scan statistics ownership") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      val exactStatsQuery = spark.read
+        .format(classOf[CatalystFilterDataSourceV2].getName)
+        .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
+          CatalystFilterScanBuilder.NEGATE_I_TO_J)
+        // Exact statistics report the seven filtered rows, so Spark must not adjust them again.
+        .option(CatalystFilterScanBuilder.REFLECTS_FULLY_PUSHED_DOWN_FILTERS, "true")
+        .option(CatalystFilterScanBuilder.REPORTED_ROW_COUNT, "7")
+        .load()
+        .filter($"i" > 2)
+      checkAnswer(exactStatsQuery, (3 until 10).map(i => Row(i, -i)))
+      val exactStatsPlan = exactStatsQuery.queryExecution.optimizedPlan
+      val exactStatsScan = getScanRelation(exactStatsQuery)
+      assert(exactStatsScan.stats.rowCount.contains(BigInt(7)))
+      assert(exactStatsScan.inferredFilters.exists(containsFilter(_, "j < -2")),
+        "the valid inferred filter should remain scan metadata")
+      assert(exactStatsPlan.stats.rowCount.contains(BigInt(7)),
+        s"exact scan statistics must not be filtered again:\n$exactStatsPlan")
+      assert(!exactStatsPlan.exists {
+        case filter: LogicalFilter => containsFilter(filter.condition, "j < -2")
+        case _ => false
+      }, s"inferred filter must not adjust exact scan statistics:\n$exactStatsPlan")
+
+      val preFilterStatsQuery = spark.read
+        .format(classOf[CatalystFilterDataSourceV2].getName)
+        .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
+          CatalystFilterScanBuilder.NEGATE_I_TO_J)
+        // Pre-filter statistics report all ten input rows, so Spark should adjust them.
+        .option(CatalystFilterScanBuilder.REFLECTS_FULLY_PUSHED_DOWN_FILTERS, "false")
+        .option(CatalystFilterScanBuilder.REPORTED_ROW_COUNT, "10")
+        .load()
+        .filter($"i" > 2)
+      checkAnswer(preFilterStatsQuery, (3 until 10).map(i => Row(i, -i)))
+      val preFilterStatsPlan = preFilterStatsQuery.queryExecution.optimizedPlan
+      val preFilterStatsScan = getScanRelation(preFilterStatsQuery)
+      assert(preFilterStatsScan.stats.rowCount.contains(BigInt(10)))
+      assert(preFilterStatsPlan.exists {
+        case filter: LogicalFilter => containsFilter(filter.condition, "j < -2")
+        case _ => false
+      }, s"inferred filter should adjust pre-filter scan statistics:\n$preFilterStatsPlan")
+    }
+  }
+
   test("inferred filters do not retain pruned columns during execution") {
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
       val query = spark.read
@@ -1721,6 +1765,34 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         case filter: FilterExec => filter.condition.references.exists(_.name == "j")
         case _ => false
       }, s"the physical plan should not filter on pruned column j:\n" +
+        query.queryExecution.executedPlan)
+    }
+  }
+
+  test("inferred filters do not retain pruned nested fields during execution") {
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      val query = spark.read
+        .format(classOf[NestedCatalystFilterDataSourceV2].getName)
+        .load()
+        .filter($"i" > 2)
+        .select($"s.b")
+
+      checkAnswer(query, (3 until 10).map(i => Row(-i)))
+      val scan = getScanRelation(query)
+      val structType = scan.output.head.dataType.asInstanceOf[StructType]
+      assert(structType.fieldNames.toSeq == Seq("b"),
+        s"the inferred-filter field s.a should be pruned:\n${query.queryExecution.optimizedPlan}")
+      assert(scan.inferredFilters.isEmpty,
+        s"the inferred filter on s.a should be dropped:\n${query.queryExecution.optimizedPlan}")
+      assert(!query.queryExecution.optimizedPlan.exists {
+        case filter: LogicalFilter => containsFilter(filter.condition, "s.a > 2")
+        case _ => false
+      }, s"the logical plan should not filter on pruned field s.a:\n" +
+        query.queryExecution.optimizedPlan)
+      assert(!query.queryExecution.executedPlan.exists {
+        case filter: FilterExec => containsFilter(filter.condition, "s.a > 2")
+        case _ => false
+      }, s"the physical plan should not filter on pruned field s.a:\n" +
         query.queryExecution.executedPlan)
     }
   }
@@ -2252,10 +2324,17 @@ class CatalystFilterLimitScanBuilder(options: CaseInsensitiveStringMap)
 }
 
 class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends SimpleScanBuilder
-  with SupportsPushDownCatalystFilters with SupportsPushDownRequiredColumns {
+  with SupportsPushDownCatalystFilters
+  with SupportsPushDownRequiredColumns
+  with SupportsReportStatistics {
 
   private var pushedCatalystFilters = Seq.empty[CatalystExpression]
   private val deriveInferred = CatalystFilterScanBuilder.derivation(options)
+  private val statsReflectFullyPushedDownFilters =
+    Option(options.get(CatalystFilterScanBuilder.REFLECTS_FULLY_PUSHED_DOWN_FILTERS))
+      .exists(_.toBoolean)
+  private val reportedRowCount =
+    Option(options.get(CatalystFilterScanBuilder.REPORTED_ROW_COUNT)).map(_.toLong)
   private var requiredSchema = TestingV2Source.schema
 
   override def readSchema(): StructType = requiredSchema
@@ -2277,9 +2356,17 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
 
   override def pushedFilters: Array[Predicate] = Array.empty
 
+  override def estimateStatistics(): Statistics = new Statistics {
+    override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+    override def numRows(): OptionalLong = reportedRowCount
+      .map(rowCount => OptionalLong.of(rowCount))
+      .getOrElse(OptionalLong.empty())
+  }
+
+  override def reflectsFullyPushedDownFilters(): Boolean = statsReflectFullyPushedDownFilters
+
   override def planInputPartitions(): Array[InputPartition] = {
-    // This test source enforces inferred filters while pruning; Spark currently also evaluates
-    // them after the scan.
+    // This source enforces inferred filters and asks Spark to add them for stats adjustment.
     val enforcedFilters = pushedCatalystFilters ++ inferredFilters
     enforcedFilters.reduceLeftOption(CatalystAnd) match {
       case Some(filter) =>
@@ -2310,6 +2397,8 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
 
 object CatalystFilterScanBuilder {
   val INFERRED_DERIVATION: String = "inferredDerivation"
+  val REFLECTS_FULLY_PUSHED_DOWN_FILTERS: String = "reflectsFullyPushedDownFilters"
+  val REPORTED_ROW_COUNT: String = "reportedRowCount"
   val NEGATE_I_TO_J: String = "negate-i-to-j"
   val CONSTANT_J_LT_100: String = "constant-j-lt-100"
 
@@ -2656,6 +2745,23 @@ class NestedSchemaDataSourceV2 extends TableProvider {
   }
 }
 
+class NestedCatalystFilterDataSourceV2 extends NestedSchemaDataSourceV2 {
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    new Table with SupportsRead {
+      override def name(): String = "nested-catalyst-filter-test"
+      override def schema(): StructType = NestedSchemaDataSourceV2.schema
+      override def capabilities(): util.Set[TableCapability] =
+        util.EnumSet.of(TableCapability.BATCH_READ)
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+        new NestedCatalystFilterScanBuilder()
+    }
+  }
+}
+
 object NestedSchemaDataSourceV2 {
   val schema: StructType = StructType(Seq(
     StructField("s", StructType(Seq(
@@ -2693,6 +2799,61 @@ class NestedSchemaScanBuilder extends ScanBuilder
   override def build(): Scan = this
 
   override def toBatch: Batch = new NestedSchemaBatch(filters, requiredSchema)
+}
+
+class NestedCatalystFilterScanBuilder extends ScanBuilder
+  with Scan
+  with Batch
+  with SupportsPushDownCatalystFilters
+  with SupportsPushDownRequiredColumns
+  with SupportsReportStatistics {
+
+  private var requiredSchema = NestedSchemaDataSourceV2.schema
+  private var pushedCatalystFilters = Seq.empty[CatalystExpression]
+
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    this.requiredSchema = requiredSchema
+  }
+
+  override def readSchema(): StructType = requiredSchema
+
+  override def pushFilters(filters: Seq[CatalystExpression]): Seq[CatalystExpression] = {
+    pushedCatalystFilters = filters
+    Nil
+  }
+
+  override def pushedFilters: Array[Predicate] = Array.empty
+
+  override def inferredFilters: Seq[CatalystExpression] = pushedCatalystFilters.collect {
+    case CatalystGreaterThan(a: AttributeReference, CatalystLiteral(n: Int, _))
+        if a.name == "i" =>
+      CatalystGreaterThan(AttributeReference("s.a", IntegerType)(), CatalystLiteral(n))
+  }
+
+  override def build(): Scan = this
+
+  override def toBatch: Batch = this
+
+  override def estimateStatistics(): Statistics = new Statistics {
+    override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+    override def numRows(): OptionalLong = OptionalLong.of(10L)
+  }
+
+  override def reflectsFullyPushedDownFilters(): Boolean = false
+
+  override def planInputPartitions(): Array[InputPartition] = {
+    val lowerBound = pushedCatalystFilters.collectFirst {
+      case CatalystGreaterThan(a: AttributeReference, CatalystLiteral(n: Int, _))
+          if a.name == "i" => n
+    }
+    lowerBound match {
+      case Some(n) => Array(RangeInputPartition(n + 1, 10))
+      case None => Array(RangeInputPartition(0, 10))
+    }
+  }
+
+  override def createReaderFactory(): PartitionReaderFactory =
+    new NestedSchemaReaderFactory(requiredSchema)
 }
 
 class NestedSchemaBatch(

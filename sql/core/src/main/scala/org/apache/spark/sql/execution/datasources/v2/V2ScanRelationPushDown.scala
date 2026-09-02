@@ -24,11 +24,12 @@ import scala.collection.mutable
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, COLUMN_NAMES, GROUP_BY_EXPRS, JOIN_CONDITION, JOIN_TYPE, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, ExpressionSet, ExprId, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, BoundReference, Cast, Expression, ExpressionSet, ExprId, IntegerLiteral, LateralColumnAliasReference, Literal, NamedExpression, OuterReference, OuterScopeReference, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.{CollapseGroupedSumOfCount, CollapseProject}
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LocalRelation, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.PlanHelper
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.EXTERNAL_UDF
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -1053,7 +1054,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         // (column pruning + deterministic filters) may be fused. See hasBlockingPushdown.
         mergeableScan = !hasBlockingPushdown(sHolder))
 
-      val finalFilters = remappedInferredFilters ++ normalizedFilters.map(projectionFunc)
+      val inferredAdjustmentFilters =
+        if (shouldAddSparkPostPushdownAdjustmentFilters(wrappedScan)) {
+          remappedInferredFilters
+        } else {
+          Nil
+        }
+      val finalFilters = inferredAdjustmentFilters ++ normalizedFilters.map(projectionFunc)
       // bottom-most filters are put in the left of the list.
       val withFilter = finalFilters.foldLeft[LogicalPlan](scanRelation)((plan, cond) => {
         Filter(cond, plan)
@@ -1269,20 +1276,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     pushedFilters.reduceLeftOption(And) match {
       case None => plan
       case Some(pushedCondition) =>
-        def shouldAddPushedFilter(scanRelation: DataSourceV2ScanRelation): Boolean = {
-          scanRelation.scan match {
-            case s: SupportsReportStatistics => !s.reflectsFullyPushedDownFilters()
-            case _ => false
-          }
-        }
-
         def addToScan(plan: LogicalPlan): LogicalPlan = plan match {
           case Filter(condition, scanRelation: DataSourceV2ScanRelation)
-              if shouldAddPushedFilter(scanRelation) =>
+              if shouldAddSparkPostPushdownAdjustmentFilters(scanRelation.scan) =>
             Filter(And(condition, pushedCondition), scanRelation)
           case Filter(condition, child) =>
             Filter(condition, addToScan(child))
-          case scanRelation: DataSourceV2ScanRelation if shouldAddPushedFilter(scanRelation) =>
+          case scanRelation: DataSourceV2ScanRelation
+              if shouldAddSparkPostPushdownAdjustmentFilters(scanRelation.scan) =>
             Filter(pushedCondition, scanRelation)
           case other => other
         }
@@ -1291,58 +1292,75 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  private def shouldAddSparkPostPushdownAdjustmentFilters(scan: Scan): Boolean = scan match {
+    case s: SupportsReportStatistics => !s.reflectsFullyPushedDownFilters()
+    case _ => false
+  }
+
   private def getInferredFilters(sHolder: ScanBuilderHolder): Seq[Expression] = {
     sHolder.builder match {
       case r: SupportsPushDownCatalystFilters =>
-        val inferredFilters = r.inferredFilters.filter { filter =>
-          filter.deterministic &&
-            !SubqueryExpression.hasSubquery(filter) &&
-            !filter.containsPattern(EXTERNAL_UDF) &&
-            !filter.exists(_.isInstanceOf[UserDefinedExpression])
-        }
-        val validFilters = rebindFilters(inferredFilters, sHolder.output).filter { filter =>
-          val valid = filter.resolved && filter.dataType == BooleanType &&
-            filter.checkInputDataTypes().isSuccess
-          if (!valid) {
-            logWarning(s"Ignoring invalid inferred filter reported by the data source: $filter")
-          }
-          valid
-        }.flatMap(splitConjunctivePredicates)
+        val validFilters = r.inferredFilters
+          .flatMap(rebindInferredFilter(_, sHolder.output))
+          .filter(validateInferredFilter(_, sHolder.output))
+          .flatMap(splitConjunctivePredicates)
         ExpressionSet(validFilters).toSeq
       case _ =>
         Nil
     }
   }
 
-  private def rebindFilters(
-      filters: Seq[Expression],
-      output: Seq[AttributeReference]): Seq[Expression] = {
+  private def validateInferredFilter(
+      filter: Expression,
+      output: Seq[AttributeReference]): Boolean = {
+    val hasInvalidColumnReference = filter.exists {
+      case _: AttributeReference => false
+      case _: Attribute | _: BoundReference | _: LateralColumnAliasReference |
+          _: OuterReference | _: OuterScopeReference => true
+      case _ => false
+    }
+    val hasValidStructure = filter.deterministic &&
+      !SubqueryExpression.hasSubquery(filter) &&
+      !filter.containsPattern(EXTERNAL_UDF) &&
+      !filter.exists(_.isInstanceOf[UserDefinedExpression]) &&
+      !hasInvalidColumnReference
+    val filterPlan = Filter(filter, LocalRelation(output))
+    val valid = hasValidStructure && filter.resolved && filter.dataType == BooleanType &&
+      filter.checkInputDataTypes().isSuccess &&
+      PlanHelper.specialExpressionsInUnsupportedOperator(filterPlan).isEmpty
+    if (!valid) {
+      logWarning(s"Ignoring invalid inferred filter reported by the data source: $filter")
+    }
+    valid
+  }
+
+  private def rebindInferredFilter(
+      filter: Expression,
+      output: Seq[AttributeReference]): Option[Expression] = {
     val outputPlan = LocalRelation(output)
-    filters.flatMap { filter =>
-      var unresolvedAttribute: Option[String] = None
-      try {
-        val rebound = filter.transformUp {
-          case attr: AttributeReference =>
-            outputPlan.resolveQuoted(attr.name, conf.resolver) match {
-              case Some(Alias(child, _)) => child
-              case Some(resolved) => resolved.toAttribute
-              case None =>
-                unresolvedAttribute = Some(attr.name)
-                attr
-            }
-        }
-        unresolvedAttribute match {
-          case Some(name) =>
-            logWarning(
-              s"Ignoring inferred filter with an unknown data source column '$name': $filter")
-            None
-          case None => Some(rebound)
-        }
-      } catch {
-        case e: AnalysisException =>
-          logWarning(s"Ignoring inferred filter that cannot be resolved: $filter", e)
-          None
+    var unresolvedAttribute: Option[String] = None
+    try {
+      val rebound = filter.transformUp {
+        case attr: AttributeReference =>
+          outputPlan.resolveQuoted(attr.name, conf.resolver) match {
+            case Some(Alias(child, _)) => child
+            case Some(resolved) => resolved.toAttribute
+            case None =>
+              unresolvedAttribute = Some(attr.name)
+              attr
+          }
       }
+      unresolvedAttribute match {
+        case Some(name) =>
+          logWarning(
+            s"Ignoring inferred filter with an unknown data source column '$name': $filter")
+          None
+        case None => Some(rebound)
+      }
+    } catch {
+      case e: AnalysisException =>
+        logWarning(s"Ignoring inferred filter that cannot be resolved: $filter", e)
+        None
     }
   }
 

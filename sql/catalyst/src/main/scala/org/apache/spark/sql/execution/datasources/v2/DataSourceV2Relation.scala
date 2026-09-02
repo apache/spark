@@ -171,9 +171,10 @@ case class DataSourceV2Relation(
  *                      scan's filters when fusing two scans via a Spark-side scan merge
  *                      (`TableCapability.SCAN_MERGING`).
  * @param inferredFilters Source-guaranteed Catalyst expressions inferred from pushed query
- *                        filters. Spark adds matching logical Filters for optimizer statistics.
- *                        They are not kept when a join, aggregate, or variant extraction is
- *                        pushed, and do not duplicate `pushedFilters`.
+ *                        filters. Spark may add matching logical Filters for optimizer statistics
+ *                        when the scan requests Spark-side adjustment. They are not kept when a
+ *                        join, aggregate, or variant extraction is pushed, and do not duplicate
+ *                        `pushedFilters`.
  * @param mergeableScan whether this scan may be fused with an equivalent scan by a Spark-side scan
  *                      merge (see `TableCapability.SCAN_MERGING`).
  *                      Default false (not mergeable): only the plain column-pruning + filter
