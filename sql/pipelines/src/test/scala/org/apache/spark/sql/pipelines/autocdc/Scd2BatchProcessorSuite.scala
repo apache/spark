@@ -278,6 +278,18 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Scd2BatchProcessor.endAtColName,
       AutoCdcReservedNames.cdcMetadataColName
     ))
+
+    val cdcMetadataSchema =
+      result.schema(AutoCdcReservedNames.cdcMetadataColName).dataType.asInstanceOf[StructType]
+    assert(
+      cdcMetadataSchema.fieldNames.sameElements(
+        Array(Scd2BatchProcessor.recordStartAtFieldName, Scd2BatchProcessor.versionMapFieldName)
+      )
+    )
+
+    val versionMapField = cdcMetadataSchema(Scd2BatchProcessor.versionMapFieldName)
+    assert(versionMapField.dataType == MapType(StringType, BooleanType, valueContainsNull = false))
+    assert(versionMapField.nullable)
   }
 
   test("preprocessMicrobatch returns an empty DataFrame with the full preprocessed schema") {

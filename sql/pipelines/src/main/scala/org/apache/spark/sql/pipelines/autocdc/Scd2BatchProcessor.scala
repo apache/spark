@@ -1604,9 +1604,14 @@ object Scd2BatchProcessor {
         // decomposition tails, which are temporarily and synthetically constructed during
         // reconciliation, have a null record start at.
         StructField(recordStartAtFieldName, sequencingType, nullable = true),
-        // null  = no authorship info (row predates ignore-null, or is synthetic).
-        // empty = no null-valued leaves to record (all columns were non-null).
-        // non-empty = keys are null-valued leaf column paths with authored/declined flags.
+        // The version map representing null-authorship for the row. If the version map is null for
+        // a row, that row was ingested with ignore-null off, and all columns are considered
+        // explicitly authored (null or not). If the version map is non-null, the row was ingested
+        // with ignore-null on, and contents of the map comply with the contract defined in
+        // [[Scd2VersionMap]].
+        //
+        // Tombstones and decomposition tails also always hold null version maps because column
+        // authorship is not applicable - they are delete markers.
         StructField(versionMapFieldName, Scd2VersionMap.mapType, nullable = true)
       )
     )
