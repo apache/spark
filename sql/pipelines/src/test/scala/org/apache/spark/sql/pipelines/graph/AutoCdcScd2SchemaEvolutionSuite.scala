@@ -23,9 +23,16 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, ScdType, UnqualifiedColumnName}
+import org.apache.spark.sql.pipelines.autocdc.{
+  AutoCdcReservedNames,
+  ColumnSelection,
+  Scd2BatchProcessor,
+  ScdType,
+  UnqualifiedColumnName
+}
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.LongType
 
 /**
  * Tests covering SCD Type 2 AutoCDC's interaction with non-key schema evolution across pipeline
@@ -65,6 +72,46 @@ class AutoCdcScd2SchemaEvolutionSuite
 
   /** The SCD2 target's `_cdc_metadata` struct value for a given recordStartAt. */
   private def scd2Meta(recordStartAt: Long): Row = Row(recordStartAt, null)
+
+  test("legacy SCD2 CDC metadata schema evolves to include the version map") {
+    val targetName = s"$catalog.$namespace.target"
+    val cdcMetadataCol = AutoCdcReservedNames.cdcMetadataColName
+    val recordStartAt = Scd2BatchProcessor.recordStartAtFieldName
+    spark.sql(
+      s"CREATE TABLE $targetName " +
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, " +
+      s"${Scd2BatchProcessor.startAtColName} BIGINT, " +
+      s"${Scd2BatchProcessor.endAtColName} BIGINT, " +
+      s"$cdcMetadataCol STRUCT<$recordStartAt:BIGINT> NOT NULL)"
+    )
+    spark.sql(
+      s"INSERT INTO $targetName SELECT 1, 'alice', CAST(1 AS BIGINT), " +
+      s"CAST(1 AS BIGINT), CAST(NULL AS BIGINT), " +
+      s"named_struct('$recordStartAt', CAST(1 AS BIGINT))"
+    )
+
+    val stream = MemoryStream[(Int, String, Long)]
+    stream.addData((2, "bob", 2L))
+    runPipeline(singleAutoCdcFlowPipeline(
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream.toDF().toDF("id", "name", "version"),
+      keys = Seq("id"),
+      sequencing = functions.col("version"),
+      scdType = ScdType.Type2))
+
+    val target = spark.table(targetName)
+    assert(
+      target.schema(cdcMetadataCol).dataType ===
+        Scd2BatchProcessor.cdcMetadataColSchema(LongType).asNullable)
+    checkAnswer(
+      target,
+      Seq(
+        Row(1, "alice", 1L, 1L, null, scd2Meta(1L)),
+        Row(2, "bob", 2L, 2L, null, scd2Meta(2L))
+      )
+    )
+  }
 
   test("a nullable non-key column merges correctly with mixed NULL and non-NULL values") {
     spark.sql(

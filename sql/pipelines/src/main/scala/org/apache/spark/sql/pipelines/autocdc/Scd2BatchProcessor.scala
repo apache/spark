@@ -194,7 +194,7 @@ case class Scd2BatchProcessor(
       colName = AutoCdcReservedNames.cdcMetadataColName,
       col = Scd2BatchProcessor.constructCdcMetadataCol(
         recordStartAt = changeArgs.sequencing,
-        // TODO (SC-XXXXX): actually populate version map according to ignore-null selection and
+        // TODO (SPARK-59183): actually populate version map according to ignore-null selection and
         // actual authorship in microbatch.
         versionMap = F.lit(null),
         sequencingType = resolvedSequencingType
