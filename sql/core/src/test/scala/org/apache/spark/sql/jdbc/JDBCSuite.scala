@@ -32,6 +32,7 @@ import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkSQLException}
+import org.apache.spark.executor.InputMetrics
 import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, Row}
 import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -1637,50 +1638,79 @@ class JDBCSuite extends SharedSparkSession {
   test("SPARK-58876: Oracle DATE and TIMESTAMP map to TimestampNTZType by default") {
     val oracleDialect = JdbcDialects.get("jdbc:oracle")
     // Oracle DATE and TIMESTAMP are zoneless and arrive as JDBC Types.TIMESTAMP (bare typeName,
-    // precision in scale), so by default they map to TimestampNTZType, independent of
-    // the preferTimestampNTZ read option.
+    // precision in scale), so by default they map to TimestampNTZType, independent of the
+    // preferTimestampNTZ read option, and are marked so the read conversion is wall-clock.
     Seq("DATE", "TIMESTAMP").foreach { typeName =>
-      assert(oracleDialect.getCatalystType(java.sql.Types.TIMESTAMP, typeName, 0, null) ===
+      val md = new MetadataBuilder()
+      assert(oracleDialect.getCatalystType(java.sql.Types.TIMESTAMP, typeName, 0, md) ===
         Some(TimestampNTZType), s"typeName=$typeName")
+      assert(md.build().contains(JdbcUtils.TIMESTAMP_NTZ_WALL_CLOCK), s"typeName=$typeName")
     }
     // The legacy flag restores the pre-4.4 behavior: defer to the shared default mapping, which
-    // yields TimestampType (or TimestampNTZType only when preferTimestampNTZ is set).
+    // yields TimestampType (or TimestampNTZType only when preferTimestampNTZ is set), and sets no
+    // wall-clock marker, so the read falls back to the base UTC-rebased conversion.
     withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
-      assert(oracleDialect.getCatalystType(java.sql.Types.TIMESTAMP, "TIMESTAMP", 0, null) === None)
+      val md = new MetadataBuilder()
+      assert(oracleDialect.getCatalystType(java.sql.Types.TIMESTAMP, "TIMESTAMP", 0, md) === None)
+      assert(!md.build().contains(JdbcUtils.TIMESTAMP_NTZ_WALL_CLOCK))
     }
   }
 
-  test("SPARK-58876: Oracle NTZ read preserves the wall-clock value across time zones") {
-    val oracleDialect = JdbcDialects.get("jdbc:oracle")
-    // The driver decodes an Oracle DATE/TIMESTAMP into a java.sql.Timestamp using the JVM zone;
-    // convertJavaTimestampToTimestampNTZ must read those same fields back with no zone shift.
-    val expected = LocalDateTime.of(1991, 11, 9, 0, 0, 0)
-    Seq("UTC", "America/Los_Angeles", "Asia/Kolkata").foreach { tz =>
-      DateTimeTestUtils.withDefaultTimeZone(java.time.ZoneId.of(tz)) {
-        assert(oracleDialect.convertJavaTimestampToTimestampNTZ(
-          Timestamp.valueOf("1991-11-09 00:00:00")) === expected, s"tz=$tz")
+  test("SPARK-58876: Oracle marks NTZ columns for wall-clock writes, legacy-gated, even wrapped") {
+    val custom = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
+      override def getCatalystType(
+          sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
+    }
+    val dialects = Seq[JdbcDialect](
+      OracleDialect(),
+      new AggregatedDialect(List(custom, OracleDialect())),
+      new AggregatedDialect(List(OracleDialect(), custom)))
+    dialects.foreach { dialect =>
+      val ntzMd = new MetadataBuilder()
+      dialect.updateExtraColumnMetaForWrite(TimestampNTZType, ntzMd)
+      assert(ntzMd.build().contains(JdbcUtils.TIMESTAMP_NTZ_WALL_CLOCK), s"dialect=$dialect")
+
+      val tsMd = new MetadataBuilder()
+      dialect.updateExtraColumnMetaForWrite(TimestampType, tsMd)
+      assert(!tsMd.build().contains(JdbcUtils.TIMESTAMP_NTZ_WALL_CLOCK), s"dialect=$dialect")
+
+      withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
+        val legacyMd = new MetadataBuilder()
+        dialect.updateExtraColumnMetaForWrite(TimestampNTZType, legacyMd)
+        assert(!legacyMd.build().contains(JdbcUtils.TIMESTAMP_NTZ_WALL_CLOCK), s"dialect=$dialect")
       }
     }
   }
 
-  test("SPARK-58876: Oracle NTZ conversions are gated by the legacy flag") {
-    val oracleDialect = JdbcDialects.get("jdbc:oracle")
-    // Under a non-UTC JVM zone the two conversions diverge: by default they read the wall-clock
-    // fields the driver decoded, while the legacy flag defers to the base UTC-rebased conversion.
-    // This restores the pre-4.4 value (not just the type) when a column still maps to NTZ via
-    // preferTimestampNTZ, so the flag is a full behavior restore as documented.
-    DateTimeTestUtils.withDefaultTimeZone(java.time.ZoneId.of("America/Los_Angeles")) {
-      val ts = Timestamp.valueOf("1991-11-09 00:00:00")
-      val ldt = LocalDateTime.of(1991, 11, 9, 0, 0, 0)
-      assert(oracleDialect.convertJavaTimestampToTimestampNTZ(ts) === ts.toLocalDateTime)
-      assert(oracleDialect.convertTimestampNTZToJavaTimestamp(ldt) === Timestamp.valueOf(ldt))
-      withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
-        assert(oracleDialect.convertJavaTimestampToTimestampNTZ(ts) ===
-          DateTimeUtils.microsToLocalDateTime(DateTimeUtils.fromJavaTimestampNoRebase(ts)))
-        assert(oracleDialect.convertTimestampNTZToJavaTimestamp(ldt) ===
-          DateTimeUtils.toJavaTimestampNoRebase(DateTimeUtils.localDateTimeToMicros(ldt)))
-        // The flag genuinely changes the value, not only the type.
-        assert(oracleDialect.convertJavaTimestampToTimestampNTZ(ts) !== ts.toLocalDateTime)
+  test("SPARK-58876: a marked NTZ column reads wall-clock regardless of the resolved dialect") {
+    // makeGetter honors the wall-clock marker, so the read is wall-clock even when JdbcDialects.get
+    // returns an AggregatedDialect (a second Oracle-compatible dialect was registered). A custom
+    // dialect registers at the head, so the built-in OracleDialect that stamps the marker is tail.
+    val custom = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
+      override def getCatalystType(
+          sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
+    }
+    val schema = new StructType().add("t", TimestampNTZType, nullable = true,
+      new MetadataBuilder().putBoolean(JdbcUtils.TIMESTAMP_NTZ_WALL_CLOCK, value = true).build())
+    val dialects = Seq[JdbcDialect](
+      OracleDialect(),                                        // non-aggregated
+      new AggregatedDialect(List(custom, OracleDialect())),   // Oracle at tail (uros-b's scenario)
+      new AggregatedDialect(List(OracleDialect(), custom)))   // Oracle at head
+    Seq("UTC", "America/Los_Angeles", "Asia/Kolkata").foreach { tz =>
+      DateTimeTestUtils.withDefaultTimeZone(java.time.ZoneId.of(tz)) {
+        val ts = Timestamp.valueOf("1991-11-09 00:00:00")
+        val expected = DateTimeUtils.localDateTimeToMicros(ts.toLocalDateTime)
+        dialects.foreach { dialect =>
+          val rs = mock(classOf[ResultSet])
+          when(rs.next()).thenReturn(true, false)
+          when(rs.getTimestamp(1)).thenReturn(ts)
+          val rows = JdbcUtils.resultSetToSparkInternalRows(
+            rs, dialect, schema, new InputMetrics).toArray
+          assert(rows.length === 1)
+          assert(rows.head.getLong(0) === expected, s"dialect=$dialect tz=$tz")
+        }
       }
     }
   }

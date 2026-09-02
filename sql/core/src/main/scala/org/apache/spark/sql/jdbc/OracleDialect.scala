@@ -27,7 +27,7 @@ import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.connector.expressions.{Expression, Extract, Literal}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.jdbc.OracleDialect._
 import org.apache.spark.sql.types._
 
@@ -186,22 +186,23 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
           typeName.toUpperCase(Locale.ROOT).matches("DATE|TIMESTAMP") =>
         // Oracle DATE and TIMESTAMP are zoneless and both surface as Types.TIMESTAMP with typeName
         // DATE/TIMESTAMP, so NTZ is faithful; WITH [LOCAL] TIME ZONE hit TIMESTAMP_TZ/LTZ above.
+        // Snapshot the (non-legacy) wall-clock decision so a later flag flip can't desync the read.
+        if (md != null) md.putBoolean(JdbcUtils.TIMESTAMP_NTZ_WALL_CLOCK, value = true)
+        // TODO: map sub-microsecond TIMESTAMP(7-9) to TimestampNTZNanosType when the nanosecond
+        // timestamp preview is enabled, instead of truncating to microsecond TimestampNTZType.
         Some(TimestampNTZType)
       case _ => None
     }
   }
 
-  // Preserve the zoneless wall-clock: the driver decoded the Timestamp in the JVM zone, and
-  // toLocalDateTime reads those same fields back rather than rebasing through UTC (mirrors
-  // PostgresDialect). The legacy flag defers to the base conversion, restoring the pre-4.4 value.
-  override def convertJavaTimestampToTimestampNTZ(t: Timestamp): LocalDateTime = {
-    if (conf.legacyOracleTimestampNTZMappingEnabled) super.convertJavaTimestampToTimestampNTZ(t)
-    else t.toLocalDateTime
-  }
-
-  override def convertTimestampNTZToJavaTimestamp(ldt: LocalDateTime): Timestamp = {
-    if (conf.legacyOracleTimestampNTZMappingEnabled) super.convertTimestampNTZToJavaTimestamp(ldt)
-    else Timestamp.valueOf(ldt)
+  // Mark an NTZ column bound for Oracle so makeSetter writes zoneless wall-clock, matching the read
+  // mapping. Legacy flag: skip the mark, restoring the pre-4.4 UTC-rebased write.
+  override def updateExtraColumnMetaForWrite(dt: DataType, metadata: MetadataBuilder): Unit = {
+    dt match {
+      case TimestampNTZType if !conf.legacyOracleTimestampNTZMappingEnabled =>
+        metadata.putBoolean(JdbcUtils.TIMESTAMP_NTZ_WALL_CLOCK, value = true)
+      case _ =>
+    }
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {

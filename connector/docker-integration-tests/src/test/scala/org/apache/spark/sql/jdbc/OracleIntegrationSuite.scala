@@ -25,6 +25,7 @@ import java.util.{Properties, TimeZone}
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.datasources.LogicalRelationWithTable
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCRelation}
@@ -695,37 +696,21 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
       .collect().map(_.getLong(0)).toSet
   }
 
-  test("WHERE on NTZ DATE column: equality (DATE has no time component)") {
-    assert(filteredIds("D = TIMESTAMP_NTZ'2018-07-08 00:00:00'") === Set(3L))
-  }
-
-  test("WHERE on NTZ DATE column: range excludes the equal lower bound") {
-    // ids 1,2 have D = 2018-07-06 00:00:00 (equal, not greater); ids 3,4 are strictly after.
-    assert(filteredIds("D > TIMESTAMP_NTZ'2018-07-06 00:00:00'") === Set(3L, 4L))
-  }
-
-  test("WHERE on NTZ TIMESTAMP column: equality") {
-    assert(filteredIds("T = TIMESTAMP_NTZ'2018-07-06 08:10:08'") === Set(2L))
-  }
-
-  test("WHERE on NTZ TIMESTAMP column: range") {
-    assert(filteredIds(
-      "T > TIMESTAMP_NTZ'2018-07-06 06:00:00' AND T < TIMESTAMP_NTZ'2018-07-09 00:00:00'")
-      === Set(2L, 3L))
-  }
-
-  test("WHERE on NTZ DATE column: pushdown off (Spark-side eval) matches pushdown on") {
-    val where = "D > TIMESTAMP_NTZ'2018-07-06 00:00:00'"
-    val off = filteredIds(where, pushDown = false)
-    assert(off === Set(3L, 4L))
-    assert(off === filteredIds(where, pushDown = true))
-  }
-
-  test("WHERE on NTZ TIMESTAMP column: pushdown off (Spark-side eval) matches pushdown on") {
-    val where = "T > TIMESTAMP_NTZ'2018-07-06 06:00:00'"
-    val off = filteredIds(where, pushDown = false)
-    assert(off === Set(2L, 3L, 4L))
-    assert(off === filteredIds(where, pushDown = true))
+  test("WHERE on NTZ columns filters correctly, with pushdown on and off") {
+    // (predicate, matching ids). DATE has no time component. Each case is checked with pushdown on
+    // (pushed to Oracle) and off (Spark-side eval on the materialized LocalDateTime); both agree.
+    val cases = Seq(
+      "D = TIMESTAMP_NTZ'2018-07-08 00:00:00'" -> Set(3L),
+      // ids 1,2 have D = 2018-07-06 00:00:00 (equal, not greater); ids 3,4 are strictly after.
+      "D > TIMESTAMP_NTZ'2018-07-06 00:00:00'" -> Set(3L, 4L),
+      "T = TIMESTAMP_NTZ'2018-07-06 08:10:08'" -> Set(2L),
+      "T > TIMESTAMP_NTZ'2018-07-06 06:00:00' AND T < TIMESTAMP_NTZ'2018-07-09 00:00:00'" ->
+        Set(2L, 3L),
+      "T > TIMESTAMP_NTZ'2018-07-06 06:00:00'" -> Set(2L, 3L, 4L))
+    cases.foreach { case (where, expected) =>
+      assert(filteredIds(where, pushDown = true) === expected, s"pushdown on: $where")
+      assert(filteredIds(where, pushDown = false) === expected, s"pushdown off: $where")
+    }
   }
 
   test("Predicates on NTZ-mapped Oracle columns are pushed down to Oracle") {
@@ -768,6 +753,27 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
         assert(dfRead.schema.fields.head.dataType === TimestampNTZType)
         assert(dfRead.collect().head.get(0) === ldt)
       }
+    }
+  }
+
+  test("legacy flag writes TimestampNTZ using the base conversion") {
+    // Legacy write uses the base conversion, so in a non-UTC zone the default wall-clock reader
+    // sees base(ldt).toLocalDateTime, not ldt (a wall-clock write would round-trip to ldt here).
+    val ldt = LocalDateTime.of(1996, 1, 1, 1, 23, 45, 123456000)
+    val schema = StructType(Seq(StructField("T", TimestampNTZType)))
+    withDefaultTimeZone(LA) {
+      withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
+        spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(ldt))), schema)
+          .write.format("jdbc").mode(SaveMode.Overwrite)
+          .option("url", jdbcUrl).option("dbtable", "ntz_legacy_write").save()
+      }
+      val expected = DateTimeUtils.toJavaTimestampNoRebase(
+        DateTimeUtils.localDateTimeToMicros(ldt)).toLocalDateTime
+      assert(expected != ldt) // guard: LA must shift base vs wall-clock for this to discriminate
+      val df = spark.read.format("jdbc")
+        .option("url", jdbcUrl).option("dbtable", "ntz_legacy_write").load()
+      assert(df.schema.fields.head.dataType === TimestampNTZType)
+      assert(df.collect().head.get(0) === expected)
     }
   }
 
