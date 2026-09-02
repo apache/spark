@@ -242,17 +242,6 @@ class DecisionTreeClassificationModel private[ml] (
     }
   }
 
-  override protected def probability2predictionColumn(probability: Column): Column = {
-    if (isDefined(thresholds)) {
-      val localThresholds = getThresholds.clone()
-      udf((probability: Vector) =>
-        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
-      ).apply(probability)
-    } else {
-      udf((probability: Vector) => probability.argmax.toDouble).apply(probability)
-    }
-  }
-
   override protected def predictionColumn(features: Column): Column = {
     val localRootNode = rootNode
     udf((features: Vector) => localRootNode.predictImpl(features).prediction).apply(features)
