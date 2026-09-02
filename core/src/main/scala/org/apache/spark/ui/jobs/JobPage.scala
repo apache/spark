@@ -341,19 +341,23 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     val activeStagesTable =
       new StageTableBase(store, request, activeStages.toSeq, "active", "activeStage",
         parent.basePath, basePath, parent.isFairScheduler,
-        killEnabled = parent.killEnabled, isFailedStage = false)
+        killEnabled = parent.killEnabled, isFailedStage = false,
+        killViaGetEnabled = parent.killViaGetEnabled, csrfToken = parent.csrfToken)
     val pendingOrSkippedStagesTable =
       new StageTableBase(store, request, pendingOrSkippedStages.toSeq, pendingOrSkippedTableId,
         "pendingStage", parent.basePath, basePath, parent.isFairScheduler,
-        killEnabled = false, isFailedStage = false)
+        killEnabled = false, isFailedStage = false,
+        killViaGetEnabled = parent.killViaGetEnabled, csrfToken = parent.csrfToken)
     val completedStagesTable =
       new StageTableBase(store, request, completedStages.toSeq, "completed", "completedStage",
         parent.basePath, basePath, parent.isFairScheduler,
-        killEnabled = false, isFailedStage = false)
+        killEnabled = false, isFailedStage = false,
+        killViaGetEnabled = parent.killViaGetEnabled, csrfToken = parent.csrfToken)
     val failedStagesTable =
       new StageTableBase(store, request, failedStages.toSeq, "failed", "failedStage",
         parent.basePath, basePath, parent.isFairScheduler,
-        killEnabled = false, isFailedStage = true)
+        killEnabled = false, isFailedStage = true,
+        killViaGetEnabled = parent.killViaGetEnabled, csrfToken = parent.csrfToken)
 
     val shouldShowActiveStages = activeStages.nonEmpty
     val shouldShowPendingStages = !isComplete && pendingOrSkippedStages.nonEmpty

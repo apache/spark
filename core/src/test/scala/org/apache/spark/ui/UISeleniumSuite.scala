@@ -24,6 +24,7 @@ import scala.io.Source
 import scala.xml.Node
 
 import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
+import org.eclipse.jetty.client.{HttpClient, StringRequestContent}
 import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
 import org.htmlunit.DefaultCssErrorHandler
 import org.htmlunit.cssparser.parser.CSSParseException
@@ -593,28 +594,149 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
     }
   }
 
-  test("kill stage POST/GET response is correct") {
-    withSpark(newSparkContext(killEnabled = true)) { sc =>
+  // The state-changing endpoints require the per-UI token rendered into the kill links
+  // (or the hidden form field in POST-only mode); scrape it the way a scripted client
+  // would.
+  private def scrapeCsrfToken(sc: SparkContext): String = {
+    val html = Utils.tryWithResource(
+      Source.fromURL(sc.ui.get.webUrl.stripSuffix("/") + "/jobs/"))(_.mkString)
+    """(?:csrfToken=|name="csrfToken" value=")([0-9a-f]+)""".r
+      .findFirstMatchIn(html)
+      .map(_.group(1))
+      .getOrElse(fail("no CSRF token found on the jobs page"))
+  }
+
+  test("kill stage requires the CSRF token, rejecting prefetch and HEAD requests") {
+    // GET mode is off by default outside YARN, and this test is about the token rather than
+    // the default, so ask for GET explicitly.
+    withSpark(newSparkContext(killEnabled = true,
+      additionalConfs = Map(UI_KILL_VIA_GET_ENABLED.key -> "true"))) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
-      eventually(timeout(5.seconds), interval(50.milliseconds)) {
-        val url = new URI(
-          sc.ui.get.webUrl.stripSuffix("/") + "/stages/stage/kill/?id=0").toURL
-        // SPARK-6846: should be POST only but YARN AM doesn't proxy POST
-        TestUtils.httpResponseCode(url, "GET") should be (200)
-        TestUtils.httpResponseCode(url, "POST") should be (200)
+      // java.net.HttpURLConnection silently drops some headers, so use Jetty's client
+      // for requests that must carry specific prefetch headers.
+      val client = new HttpClient()
+      client.start()
+      try {
+        eventually(timeout(5.seconds), interval(50.milliseconds)) {
+          val base = sc.ui.get.webUrl.stripSuffix("/")
+          val token = scrapeCsrfToken(sc)
+          val noToken = new URI(base + "/stages/stage/kill/?id=0").toURL
+          val withToken = new URI(
+            base + s"/stages/stage/kill/?id=0&csrfToken=$token").toURL
+          // Forged or scripted requests without the token, or with a wrong one, fail.
+          TestUtils.httpResponseCode(noToken, "GET") should be (403)
+          TestUtils.httpResponseCode(
+            new URI(base + "/stages/stage/kill/?id=0&csrfToken=bogus").toURL,
+            "GET") should be (403)
+          // A deliberate click from the UI carries the token and goes through.
+          TestUtils.httpResponseCode(withToken, "GET") should be (200)
+          TestUtils.httpResponseCode(withToken, "POST") should be (200)
+          // HEAD must be safe (RFC 9110), so it is refused rather than delegated to doGet.
+          TestUtils.httpResponseCode(withToken, "HEAD") should be (405)
+          // ...but HEAD still works on unguarded redirect handlers ("/" -> "/jobs/").
+          TestUtils.httpResponseCode(new URI(base + "/").toURL, "HEAD") should be (200)
+          // Browser link prefetchers identify themselves; a valid token must not
+          // save them, since the token rides in the link they prefetch.
+          client.newRequest(withToken.toURI).headers(
+            _.add("Sec-Purpose", "prefetch")).send().getStatus should be (403)
+          client.newRequest(withToken.toURI).headers(
+            _.add("Purpose", "prefetch")).send().getStatus should be (403)
+          client.newRequest(withToken.toURI).headers(
+            _.add("X-Moz", "prefetch")).send().getStatus should be (403)
+        }
+      } finally {
+        client.stop()
       }
     }
   }
 
-  test("kill job POST/GET response is correct") {
+  test("kill job requires the CSRF token") {
+    withSpark(newSparkContext(killEnabled = true,
+      additionalConfs = Map(UI_KILL_VIA_GET_ENABLED.key -> "true"))) { sc =>
+      sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
+        val base = sc.ui.get.webUrl.stripSuffix("/")
+        val token = scrapeCsrfToken(sc)
+        TestUtils.httpResponseCode(
+          new URI(base + "/jobs/job/kill/?id=0").toURL, "GET") should be (403)
+        TestUtils.httpResponseCode(
+          new URI(base + s"/jobs/job/kill/?id=0&csrfToken=$token").toURL,
+          "GET") should be (200)
+        TestUtils.httpResponseCode(
+          new URI(base + s"/jobs/job/kill/?id=0&csrfToken=$token").toURL,
+          "POST") should be (200)
+      }
+    }
+  }
+
+  test("kill stage is POST-only when spark.ui.killViaGetEnabled is disabled") {
+    withSpark(newSparkContext(killEnabled = true,
+      additionalConfs = Map(UI_KILL_VIA_GET_ENABLED.key -> "false"))) { sc =>
+      sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
+      val client = new HttpClient()
+      client.start()
+      try {
+        eventually(timeout(5.seconds), interval(50.milliseconds)) {
+          val base = sc.ui.get.webUrl.stripSuffix("/")
+          val token = scrapeCsrfToken(sc)
+          val withToken = new URI(
+            base + s"/stages/stage/kill/?id=0&csrfToken=$token").toURL
+          TestUtils.httpResponseCode(withToken, "HEAD") should be (405)
+          TestUtils.httpResponseCode(withToken, "GET") should be (405)
+          TestUtils.httpResponseCode(withToken, "POST") should be (200)
+          // The browser path in this mode: the form posts id and token in the body.
+          client.POST(new URI(base + "/stages/stage/kill/")).body(
+            new StringRequestContent("application/x-www-form-urlencoded",
+              s"id=0&csrfToken=$token")).send().getStatus should be (200)
+        }
+      } finally {
+        client.stop()
+      }
+    }
+  }
+
+  test("hold and resume endpoints require the CSRF token") {
     withSpark(newSparkContext(killEnabled = true)) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
       eventually(timeout(5.seconds), interval(50.milliseconds)) {
-        val url = new URI(
-          sc.ui.get.webUrl.stripSuffix("/") + "/jobs/job/kill/?id=0").toURL
-        // SPARK-6846: should be POST only but YARN AM doesn't proxy POST
-        TestUtils.httpResponseCode(url, "GET") should be (200)
-        TestUtils.httpResponseCode(url, "POST") should be (200)
+        val base = sc.ui.get.webUrl.stripSuffix("/")
+        val token = scrapeCsrfToken(sc)
+        // holdEnabled is off in this context, so the actions themselves no-op; what
+        // is exercised here is the guard wiring on the endpoints.
+        Seq("hold", "resume").foreach { action =>
+          TestUtils.httpResponseCode(
+            new URI(base + s"/jobs/$action/").toURL, "GET") should be (403)
+          TestUtils.httpResponseCode(
+            new URI(base + s"/jobs/$action/?csrfToken=$token").toURL,
+            "GET") should be (200)
+        }
+      }
+    }
+  }
+
+  test("kill link rendering follows spark.ui.killViaGetEnabled") {
+    withSpark(newSparkContext(killEnabled = true,
+      additionalConfs = Map(UI_KILL_VIA_GET_ENABLED.key -> "true"))) { sc =>
+      sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
+        val html = Utils.tryWithResource(
+          Source.fromURL(sc.ui.get.webUrl.stripSuffix("/") + "/jobs/"))(_.mkString)
+        // GET mode: a link carrying the token, which also works through proxies that
+        // block POST. ("&amp;" is the XML-escaped "&" in the rendered href.)
+        html should include regex ("/jobs/job/kill/\\?id=\\d+&amp;csrfToken=[0-9a-f]+")
+        html should not include ("""action="/jobs/job/kill/"""")
+      }
+    }
+    // No explicit setting and spark.master is local, so the default resolves to POST-only.
+    withSpark(newSparkContext(killEnabled = true)) { sc =>
+      sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
+        val html = Utils.tryWithResource(
+          Source.fromURL(sc.ui.get.webUrl.stripSuffix("/") + "/jobs/"))(_.mkString)
+        // POST-only mode: the kill control is a form posting the job id and token.
+        html should not include ("/jobs/job/kill/?id=")
+        html should include ("""action="/jobs/job/kill/"""")
+        html should include ("""name="csrfToken"""")
       }
     }
   }
