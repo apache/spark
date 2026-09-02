@@ -215,6 +215,27 @@ class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
     assert(descriptionCommentChange.newComment() === "Product description")
   }
 
+  test("determineColumnChanges - tightening nullability emits the change") {
+    // diffSchemas faithfully emits an UpdateColumnNullability when a column goes from
+    // nullable to non-nullable. Whether the catalog *accepts* this is a separate concern:
+    // Delta rejects tightening nullability on existing columns because existing data may
+    // contain nulls. The diff layer's job is to report the change; enforcement is downstream.
+    val currentSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType, nullable = true)
+    val targetSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType, nullable = false)
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(changes.length === 1)
+    val nc = changes.head
+      .asInstanceOf[TableChange.UpdateColumnNullability]
+    assert(nc.fieldNames() === Array("value"))
+    assert(nc.nullable() === false)
+  }
+
   test("determineColumnChanges - complex changes") {
     val currentSchema = new StructType()
       .add("id", IntegerType, nullable = false)
@@ -395,15 +416,15 @@ class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
     assert(merged === new StructType().add("s", expectedStruct))
 
     // Unlike the case-insensitive test above (where the merge is a no-op and no changes are
-    // derived), evolution here must rewrite the top-level `s` column. `diffSchemas` compares nested
-    // types wholesale, so the growth of a nested field surfaces as a single UpdateColumnType on `s`
-    // carrying the full new struct -- not as an add of `s.Value`.
+    // derived), evolution here must grow the `s` struct. The growth surfaces as an add of the
+    // nested leaf `s.Value`, which is the portable shape; retyping `s` with the whole new struct
+    // would be rejected by `CheckAnalysis`, which fails ALTER COLUMN ... TYPE on a struct.
     val changes = SchemaInferenceUtils.diffSchemas(currentSchema, merged)
     assert(changes.length === 1)
-    val typeChange = changes.collect { case tc: TableChange.UpdateColumnType => tc }
-    assert(typeChange.length === 1)
-    assert(typeChange.head.fieldNames() === Array("s"))
-    assert(typeChange.head.newDataType() === expectedStruct)
+    val addChange = changes.collect { case ac: TableChange.AddColumn => ac }
+    assert(addChange.length === 1)
+    assert(addChange.head.fieldNames() === Array("s", "Value"))
+    assert(addChange.head.dataType() === StringType)
   }
 
   test("mergeSchemas - a nested case-only field whose type also changes fails to merge, and " +
@@ -438,20 +459,383 @@ class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
     }
 
     // Diffing the two schemas directly (rather than diffing against their merge, which fails
-    // above) reports a TYPE change on the enclosing `s` column -- not a field-name mismatch, i.e.
-    // not an add of `s.Value` plus a delete of `s.value`. `diffSchemas` keys column identity only
-    // at the top level and compares nested types wholesale, so the case difference inside the
-    // struct never surfaces as an add/delete pair.
+    // above) reports a drop-then-add of the nested leaf, since `diffSchemas` keys column identity
+    // on the exact name at every level. This is the nested analog of the top-level rule pinned by
+    // "a case-only difference is a drop-then-add, not a match", and it is only reachable on the
+    // non-merging paths, where the declared schema is used as-is.
     {
       val changes = SchemaInferenceUtils.diffSchemas(currentSchema, dataSchema)
-      assert(changes.length === 1, s"changes=$changes")
-      val typeChange = changes.collect { case tc: TableChange.UpdateColumnType => tc }
-      assert(typeChange.length === 1, s"changes=$changes")
-      assert(typeChange.head.fieldNames() === Array("s"))
-      assert(typeChange.head.newDataType() === new StructType().add("Value", LongType))
-      assert(!changes.exists(_.isInstanceOf[TableChange.AddColumn]))
-      assert(!changes.exists(_.isInstanceOf[TableChange.DeleteColumn]))
+      assert(changes.length === 2, s"changes=$changes")
+      val added = changes.collect { case ac: TableChange.AddColumn => ac }
+      assert(added.length === 1, s"changes=$changes")
+      assert(added.head.fieldNames() === Array("s", "Value"))
+      assert(added.head.dataType() === LongType)
+      val deleted = changes.collect { case dc: TableChange.DeleteColumn => dc }
+      assert(deleted.length === 1, s"changes=$changes")
+      assert(deleted.head.fieldNames() === Array("s", "value"))
+      assert(!changes.exists(_.isInstanceOf[TableChange.UpdateColumnType]))
     }
+  }
+
+  // =============================================================================================
+  // Nested diffing
+  //
+  // `diffSchemas` recurses into structs, array elements, and map keys/values so that a change
+  // inside a complex type is emitted at the leaf that actually changed. The alternative -- an
+  // UpdateColumnType on the enclosing column carrying the whole new complex type -- is rejected by
+  // `CheckAnalysis`, which fails ALTER COLUMN ... TYPE when the new type is a struct, map, or
+  // array. Pipelines only ever got away with it by calling `catalog.alterTable` directly and
+  // testing against an in-memory catalog that applies it regardless.
+  // =============================================================================================
+
+  /** Added columns as path -> (type, nullable, comment). */
+  private def addsOf(
+      changes: Seq[TableChange]): Map[Seq[String], (DataType, Boolean, String)] =
+    changes.collect {
+      case ac: TableChange.AddColumn =>
+        ac.fieldNames().toSeq -> ((ac.dataType(), ac.isNullable(), ac.comment()))
+    }.toMap
+
+  private def deletesOf(changes: Seq[TableChange]): Set[Seq[String]] =
+    changes.collect {
+      case dc: TableChange.DeleteColumn => dc.fieldNames().toSeq
+    }.toSet
+
+  private def typeUpdatesOf(
+      changes: Seq[TableChange]): Map[Seq[String], DataType] =
+    changes.collect {
+      case tc: TableChange.UpdateColumnType =>
+        tc.fieldNames().toSeq -> tc.newDataType()
+    }.toMap
+
+  private def nullabilityUpdatesOf(
+      changes: Seq[TableChange]): Map[Seq[String], Boolean] =
+    changes.collect {
+      case nc: TableChange.UpdateColumnNullability =>
+        nc.fieldNames().toSeq -> nc.nullable()
+    }.toMap
+
+  private def commentUpdatesOf(
+      changes: Seq[TableChange]): Map[Seq[String], String] =
+    changes.collect {
+      case cc: TableChange.UpdateColumnComment =>
+        cc.fieldNames().toSeq -> cc.newComment()
+    }.toMap
+
+  test("diffSchemas - a leaf added to a struct is a nested add, " +
+    "not a retype of the parent") {
+    val currentSchema = new StructType()
+      .add("id", IntegerType)
+      .add(
+        "point",
+        new StructType().add("x", DoubleType).add("y", DoubleType))
+    val targetSchema = new StructType()
+      .add("id", IntegerType)
+      .add(
+        "point",
+        new StructType()
+          .add("x", DoubleType)
+          .add("y", DoubleType)
+          .add("z", DoubleType))
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(changes.length === 1, s"changes=$changes")
+    assert(
+      addsOf(changes) ===
+        Map(Seq("point", "z") -> ((DoubleType, true, null))))
+  }
+
+  test("diffSchemas - a leaf added to a deeply nested struct " +
+    "carries the full path") {
+    val inner = new StructType().add("c", IntegerType)
+    val currentSchema =
+      new StructType().add("a", new StructType().add("b", inner))
+    val targetSchema = new StructType()
+      .add("a", new StructType().add("b", inner.add("d", StringType)))
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(addsOf(changes).keySet === Set(Seq("a", "b", "d")))
+  }
+
+  test("diffSchemas - an added nested leaf keeps its declared " +
+    "nullability and comment") {
+    val currentSchema = new StructType()
+      .add("s", new StructType().add("a", IntegerType))
+    val targetSchema = new StructType().add(
+      "s",
+      new StructType()
+        .add("a", IntegerType)
+        .add("b", StringType, nullable = false, "a comment"))
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(
+      addsOf(changes) ===
+        Map(Seq("s", "b") -> ((StringType, false, "a comment"))))
+  }
+
+  test("diffSchemas - a leaf removed from a struct is a nested delete") {
+    val currentSchema = new StructType()
+      .add(
+        "s",
+        new StructType().add("a", IntegerType).add("b", StringType))
+    val targetSchema = new StructType()
+      .add("s", new StructType().add("a", IntegerType))
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(changes.length === 1, s"changes=$changes")
+    assert(deletesOf(changes) === Set(Seq("s", "b")))
+  }
+
+  test("diffSchemas - a leaf type change inside a struct " +
+    "is a nested type update") {
+    val currentSchema = new StructType()
+      .add("s", new StructType().add("a", IntegerType))
+    val targetSchema = new StructType()
+      .add("s", new StructType().add("a", LongType))
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(changes.length === 1, s"changes=$changes")
+    assert(typeUpdatesOf(changes) === Map(Seq("s", "a") -> LongType))
+  }
+
+  test("diffSchemas - nested leaf nullability and comment changes " +
+    "are emitted at the leaf") {
+    val currentSchema = new StructType()
+      .add(
+        "s",
+        new StructType().add("a", IntegerType, nullable = true, "old"))
+    val targetSchema = new StructType()
+      .add(
+        "s",
+        new StructType().add("a", IntegerType, nullable = false, "new"))
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(changes.length === 2, s"changes=$changes")
+    assert(
+      nullabilityUpdatesOf(changes) === Map(Seq("s", "a") -> false))
+    assert(commentUpdatesOf(changes) === Map(Seq("s", "a") -> "new"))
+  }
+
+  test("diffSchemas - a field added to a struct inside an array " +
+    "uses the element path") {
+    val currentSchema = new StructType()
+      .add(
+        "points",
+        ArrayType(new StructType().add("x", DoubleType)))
+    val targetSchema = new StructType().add(
+      "points",
+      ArrayType(
+        new StructType()
+          .add("x", DoubleType)
+          .add("y", DoubleType)))
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(
+      addsOf(changes).keySet ===
+        Set(Seq("points", "element", "y")))
+  }
+
+  test("diffSchemas - a field added to a struct inside a map value " +
+    "uses the value path") {
+    val currentSchema = new StructType().add(
+      "points",
+      MapType(StringType, new StructType().add("x", DoubleType)))
+    val targetSchema = new StructType().add(
+      "points",
+      MapType(
+        StringType,
+        new StructType()
+          .add("x", DoubleType)
+          .add("y", DoubleType)))
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(
+      addsOf(changes).keySet ===
+        Set(Seq("points", "value", "y")))
+  }
+
+  test("diffSchemas - a field added to a struct inside a map key " +
+    "uses the key path") {
+    val currentSchema = new StructType().add(
+      "points",
+      MapType(new StructType().add("x", DoubleType), LongType))
+    val targetSchema = new StructType().add(
+      "points",
+      MapType(
+        new StructType()
+          .add("x", DoubleType)
+          .add("y", DoubleType),
+        LongType))
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(
+      addsOf(changes).keySet ===
+        Set(Seq("points", "key", "y")))
+  }
+
+  test("diffSchemas - an element type change inside an array " +
+    "uses the element path") {
+    val currentSchema =
+      new StructType().add("vals", ArrayType(IntegerType))
+    val targetSchema =
+      new StructType().add("vals", ArrayType(LongType))
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(
+      typeUpdatesOf(changes) ===
+        Map(Seq("vals", "element") -> LongType))
+  }
+
+  test("diffSchemas - a map value type change uses the value path") {
+    val currentSchema = new StructType()
+      .add("m", MapType(StringType, IntegerType))
+    val targetSchema = new StructType()
+      .add("m", MapType(StringType, LongType))
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(
+      typeUpdatesOf(changes) ===
+        Map(Seq("m", "value") -> LongType))
+  }
+
+  test("diffSchemas - an array containsNull change is a " +
+    "nullability update on the element") {
+    val currentSchema = new StructType()
+      .add("vals", ArrayType(IntegerType, containsNull = false))
+    val targetSchema = new StructType()
+      .add("vals", ArrayType(IntegerType, containsNull = true))
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(changes.length === 1, s"changes=$changes")
+    assert(
+      nullabilityUpdatesOf(changes) ===
+        Map(Seq("vals", "element") -> true))
+  }
+
+  test("diffSchemas - a map valueContainsNull change is a " +
+    "nullability update on the value") {
+    val currentSchema = new StructType().add(
+      "m", MapType(StringType, IntegerType, valueContainsNull = false))
+    val targetSchema = new StructType().add(
+      "m", MapType(StringType, IntegerType, valueContainsNull = true))
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(changes.length === 1, s"changes=$changes")
+    assert(
+      nullabilityUpdatesOf(changes) ===
+        Map(Seq("m", "value") -> true))
+  }
+
+  test("diffSchemas - a wholly new struct column stays " +
+    "a single top-level add") {
+    val newStruct =
+      new StructType().add("x", DoubleType).add("y", DoubleType)
+    val currentSchema = new StructType().add("id", IntegerType)
+    val targetSchema = new StructType()
+      .add("id", IntegerType)
+      .add("point", newStruct)
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(changes.length === 1, s"changes=$changes")
+    assert(
+      addsOf(changes) ===
+        Map(Seq("point") -> ((newStruct, true, null))))
+  }
+
+  test("diffSchemas - a whole struct column removed stays " +
+    "a single top-level delete") {
+    val currentSchema = new StructType()
+      .add("id", IntegerType)
+      .add("point", new StructType().add("x", DoubleType))
+    val targetSchema = new StructType().add("id", IntegerType)
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(changes.length === 1, s"changes=$changes")
+    assert(deletesOf(changes) === Set(Seq("point")))
+  }
+
+  test("diffSchemas - a struct replaced by an atomic type is a " +
+    "type update on the column") {
+    val currentSchema = new StructType()
+      .add("s", new StructType().add("a", IntegerType))
+    val targetSchema = new StructType().add("s", StringType)
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(changes.length === 1, s"changes=$changes")
+    assert(typeUpdatesOf(changes) === Map(Seq("s") -> StringType))
+  }
+
+  test("diffSchemas - identical nested schemas produce no changes") {
+    val schema = new StructType()
+      .add(
+        "s",
+        new StructType().add("a", IntegerType).add("b", StringType))
+      .add(
+        "arr",
+        ArrayType(new StructType().add("x", DoubleType)))
+      .add(
+        "m",
+        MapType(StringType, new StructType().add("y", DoubleType)))
+
+    assert(
+      SchemaInferenceUtils.diffSchemas(schema, schema).isEmpty)
+  }
+
+  test("diffSchemas - independent nested changes are all " +
+    "emitted at their own leaves") {
+    val currentSchema = new StructType()
+      .add(
+        "s",
+        new StructType()
+          .add("a", IntegerType)
+          .add("gone", StringType))
+      .add(
+        "arr",
+        ArrayType(new StructType().add("x", DoubleType)))
+      .add("top", IntegerType)
+    val targetSchema = new StructType()
+      .add(
+        "s",
+        new StructType()
+          .add("a", IntegerType)
+          .add("added", StringType))
+      .add(
+        "arr",
+        ArrayType(
+          new StructType()
+            .add("x", DoubleType)
+            .add("z", DoubleType)))
+      .add("top", IntegerType)
+      .add("brand_new", BooleanType)
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(
+      addsOf(changes).keySet === Set(
+        Seq("s", "added"),
+        Seq("arr", "element", "z"),
+        Seq("brand_new")),
+      s"changes=$changes")
+    assert(
+      deletesOf(changes) === Set(Seq("s", "gone")),
+      s"changes=$changes")
+    assert(typeUpdatesOf(changes).isEmpty, s"changes=$changes")
   }
 
   test("inferSchemaFromFlows folds a case-only column to the same spelling regardless of flow " +

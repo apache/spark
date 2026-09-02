@@ -34,7 +34,7 @@ import org.apache.spark.sql.pipelines.graph.{
   GraphErrors,
   ResolvedFlow
 }
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 
 
 object SchemaInferenceUtils {
@@ -207,19 +207,19 @@ object SchemaInferenceUtils {
   }
 
   /**
-   * Determines the column changes needed to transform the current schema into the target schema.
-   *
-   * This function compares the current schema with the target schema and produces a sequence of
-   * TableChange objects representing:
-   * 1. New columns that need to be added
-   * 2. Existing columns that need type updates
+   * Produces the [[TableChange]] sequence needed to transform `currentSchema` into
+   * `targetSchema`: additions, type updates, deletions, nullability and comment changes.
+   * Recurses into structs, arrays, and maps so changes are emitted at the leaf level.
+   * Similar to [[org.apache.spark.sql.catalyst.analysis.ResolveSchemaEvolution]], but
+   * produces a full bidirectional sync (deletes, nullability, and comment changes) rather
+   * than additive-only evolution.
    *
    * Column identity is keyed on the exact field name, not on a case-normalized one. On the
    * incremental streaming-table path, `targetSchema` is the merge of the current and desired
    * schemas, and [[SchemaMergingUtils.mergeSchemas]] has already folded an incoming
-   * case-only-differing field onto the persisted one. On the non-merging paths (materialized views
-   * and any full refresh), `targetSchema` is the run's declared schema as-is, so exact-name keying
-   * keeps a case-only rename visible as an explicit drop-then-add.
+   * case-only-differing field onto the persisted one. On the non-merging paths (materialized
+   * views and any full refresh), `targetSchema` is the run's declared schema as-is, so
+   * exact-name keying keeps a case-only rename visible as an explicit drop-then-add.
    * Exact keying also avoids silently collapsing two genuinely distinct declared columns that
    * differ only in case (`value` and `Value`) into an arbitrary one of the two.
    *
@@ -227,59 +227,131 @@ object SchemaInferenceUtils {
    * @param targetSchema The target schema that we want the table to have
    * @return A sequence of TableChange objects representing the necessary changes
    */
-  def diffSchemas(currentSchema: StructType, targetSchema: StructType): Seq[TableChange] = {
-    val changes = scala.collection.mutable.ArrayBuffer.empty[TableChange]
+  def diffSchemas(currentSchema: StructType, targetSchema: StructType): Seq[TableChange] =
+    diffStructs(
+      currentStruct = currentSchema,
+      targetStruct = targetSchema,
+      // Root call: path is empty because current and target are the top-level schemas.
+      pathToStruct = Seq.empty
+    )
 
-    // Helper function to get a map of field name to field
-    def getFieldMap(schema: StructType): Map[String, StructField] = {
-      schema.fields.map(field => field.name -> field).toMap
-    }
+  /**
+   * Diffs two structs field-by-field, matching fields by exact name.
+   *
+   * @param currentStruct The struct as it exists in the current schema.
+   * @param targetStruct The struct as it should look in the target schema.
+   * @param pathToStruct Path segments from the top-level schema to this
+   *                     struct, if this is a nested struct. Empty for the
+   *                     root call.
+   */
+  private def diffStructs(
+      currentStruct: StructType,
+      targetStruct: StructType,
+      pathToStruct: Seq[String]): Seq[TableChange] = {
+    val topLevelFieldsInCurrent = currentStruct.fields.map(field => field.name -> field).toMap
+    val topLevelFieldsInTarget = targetStruct.fields.map(field => field.name -> field).toMap
 
-    val currentFields = getFieldMap(currentSchema)
-    val targetFields = getFieldMap(targetSchema)
-
-    // Find columns to add (in target but not in current)
-    val columnsToAdd = targetFields.keySet.diff(currentFields.keySet)
-    columnsToAdd.foreach { columnName =>
-      val field = targetFields(columnName)
-      changes += TableChange.addColumn(
-        Array(columnName),
-        field.dataType,
-        field.nullable,
-        field.getComment().orNull
+    // Fields present in target but not in current are columns that need to be added.
+    val columnsAdded = topLevelFieldsInTarget.values.toSeq
+      .filterNot(fieldInTarget =>
+        topLevelFieldsInCurrent.contains(fieldInTarget.name)
       )
-    }
-
-    // Find columns to delete (in current but not in target)
-    val columnsToDelete = currentFields.keySet.diff(targetFields.keySet)
-    columnsToDelete.foreach { columnName =>
-      changes += TableChange.deleteColumn(Array(columnName), false)
-    }
-
-    // Find columns with type changes (in both but with different types)
-    val commonColumns = currentFields.keySet.intersect(targetFields.keySet)
-    commonColumns.foreach { columnName =>
-      val currentField = currentFields(columnName)
-      val targetField = targetFields(columnName)
-
-      // If data types are different, add a type update change
-      if (currentField.dataType != targetField.dataType) {
-        changes += TableChange.updateColumnType(Array(columnName), targetField.dataType)
+      .map { fieldInTarget =>
+        TableChange.addColumn(
+          fieldNames = (pathToStruct :+ fieldInTarget.name).toArray,
+          dataType = fieldInTarget.dataType,
+          isNullable = fieldInTarget.nullable,
+          comment = fieldInTarget.getComment().orNull
+        )
       }
 
-      // If nullability is different, add a nullability update change
-      if (currentField.nullable != targetField.nullable) {
-        changes += TableChange.updateColumnNullability(Array(columnName), targetField.nullable)
-      }
+    // Fields present in current but not in target are columns that need to be removed.
+    val columnsDeleted = topLevelFieldsInCurrent.values.toSeq
+      .filterNot(fieldInCurrent =>
+        topLevelFieldsInTarget.contains(fieldInCurrent.name)
+      )
+      .map(fieldInCurrent =>
+        TableChange
+          .deleteColumn(
+            fieldNames = (pathToStruct :+ fieldInCurrent.name).toArray,
+            ifExists = false
+          )
+      )
 
-      // If comments are different, add a comment update change
-      val currentComment = currentField.getComment().orNull
-      val targetComment = targetField.getComment().orNull
-      if (currentComment != targetComment) {
-        changes += TableChange.updateColumnComment(Array(columnName), targetComment)
-      }
+    // Fields in both current and target but vary in metadata or nested sub-fields represent
+    // columns that need to be updated.
+    val columnsUpdated = topLevelFieldsInCurrent.values.toSeq.flatMap {
+      fieldInCurrent =>
+        topLevelFieldsInTarget.get(fieldInCurrent.name).toSeq.flatMap {
+          fieldInTarget =>
+            diffField(
+              currentField = fieldInCurrent,
+              targetField = fieldInTarget,
+              pathToField = pathToStruct :+ fieldInCurrent.name
+            )
+        }
     }
 
-    changes.toSeq
+    columnsAdded ++ columnsDeleted ++ columnsUpdated
+  }
+
+  /** Diffs the type, nullability, and comment of one field present in both schemas. */
+  private def diffField(
+      currentField: StructField,
+      targetField: StructField,
+      pathToField: Seq[String]): Seq[TableChange] = {
+    diffDataTypes(currentField.dataType, targetField.dataType, pathToField) ++
+      diffNullability(currentField.nullable, targetField.nullable, pathToField) ++
+      diffComment(currentField.getComment(), targetField.getComment(), pathToField)
+  }
+
+  private def diffNullability(
+      currentNullable: Boolean,
+      targetNullable: Boolean,
+      pathToField: Seq[String]
+  ): Option[TableChange] = {
+    Option.when(currentNullable != targetNullable)(
+      TableChange.updateColumnNullability(pathToField.toArray, targetNullable)
+    )
+  }
+
+  private def diffComment(
+      currentComment: Option[String],
+      targetComment: Option[String],
+      pathToField: Seq[String]
+  ): Option[TableChange] = {
+    Option.when(currentComment != targetComment)(
+      TableChange.updateColumnComment(pathToField.toArray, targetComment.orNull)
+    )
+  }
+
+  /** Diffs two data types at `path`, descending through matching complex types. */
+  private def diffDataTypes(
+      currentType: DataType,
+      targetType: DataType,
+      pathToField: Seq[String]
+  ): Seq[TableChange] = (currentType, targetType) match {
+    case (currentStruct: StructType, targetStruct: StructType) =>
+      diffStructs(currentStruct, targetStruct, pathToField)
+
+    case (currentArray: ArrayType, targetArray: ArrayType) =>
+      val elementPath = pathToField :+ "element"
+
+      diffDataTypes(currentArray.elementType, targetArray.elementType, elementPath) ++
+        diffNullability(currentArray.containsNull, targetArray.containsNull, elementPath)
+
+    case (currentMap: MapType, targetMap: MapType) =>
+      val valuePath = pathToField :+ "value"
+      val keyPath = pathToField :+ "key"
+
+      diffDataTypes(currentMap.keyType, targetMap.keyType, keyPath) ++
+        diffDataTypes(currentMap.valueType, targetMap.valueType, valuePath) ++
+        diffNullability(currentMap.valueContainsNull, targetMap.valueContainsNull, valuePath)
+
+    case _ if currentType == targetType =>
+      Seq.empty
+
+    case _ =>
+      Seq(TableChange.updateColumnType(pathToField.toArray, targetType))
   }
 }
