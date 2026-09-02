@@ -131,9 +131,13 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
   }
 
   private def corruptWriter(writer: DeltaByteArrayWriter, data: String): Unit = {
+    corruptWriter(writer, Binary.fromString(data).getBytesUnsafe())
+  }
+
+  private def corruptWriter(writer: DeltaByteArrayWriter, data: Array[Byte]): Unit = {
     val previous = writer.getClass.getDeclaredField("previous")
     previous.setAccessible(true)
-    previous.set(writer, Binary.fromString(data).getBytesUnsafe())
+    previous.set(writer, data)
   }
 
   test("test lengths") {
@@ -177,6 +181,98 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
       geoType)
   }
 
+  testGeo("geo interleaves skipBinary with readGeoData (null/skipped rows)") { geoType =>
+    // A geometry column with null or skipped rows alternates skipBinary (used for the
+    // skipped rows) with readGeometry/readGeography on the same reader. Both paths now
+    // share the reusable prevBuf, so the shared prefix carried across a skipped value must
+    // still be honored by the following read. The values also exceed prevBuf's initial
+    // 64-byte capacity, exercising the grow-and-preserve branch under interleaving.
+    assertGeoReadWriteWithSkip(writer, reader, sharedPrefixPolygons(6), geoType)
+  }
+
+  testGeo("geo setPreviousReader recovers a long value across pages (PARQUET-246)") { geoType =>
+    // PARQUET-246 on the geo path: the first value of the second page is a delta from the
+    // previous page's last value. The recovered value exceeds the 64-byte prevBuf capacity,
+    // exercising the grow + deep-copy in setPreviousReader before readGeoData reuses it.
+    val (isGeometry, srid) = geoType match {
+      case geom: GeometryType => (true, geom.srid)
+      case geog: GeographyType => (false, geog.srid)
+    }
+    val firstPageVals = sharedPrefixPolygons(2)
+    val secondPageVals = sharedPrefixPolygons(2, base = 100)
+
+    val firstWriter =
+      new DeltaByteArrayWriter(64 * 1024, 64 * 1024, new DirectByteBufferAllocator)
+    writeBinaryData(firstWriter, firstPageVals)
+
+    // Corrupt the second writer so its first value deltas off the first page's last value
+    // (simulating the DeltaByteArrayWriter.reset() bug).
+    val secondWriter =
+      new DeltaByteArrayWriter(64 * 1024, 64 * 1024, new DirectByteBufferAllocator)
+    corruptWriter(secondWriter, firstPageVals.last)
+    writeBinaryData(secondWriter, secondPageVals)
+
+    val firstReader = new VectorizedDeltaByteArrayReader()
+    var vec: WritableColumnVector = new OnHeapColumnVector(firstPageVals.length, geoType)
+    firstReader.initFromPage(firstPageVals.length, firstWriter.getBytes.toInputStream)
+    readGeoInto(firstReader, firstPageVals.length, vec, isGeometry)
+    for (i <- firstPageVals.indices) {
+      assert(firstPageVals(i) sameElements extractGeoWkb(vec, i, isGeometry, srid))
+    }
+
+    val secondReader = new VectorizedDeltaByteArrayReader()
+    vec = new OnHeapColumnVector(secondPageVals.length, geoType)
+    secondReader.initFromPage(secondPageVals.length, secondWriter.getBytes.toInputStream)
+    secondReader.setPreviousReader(firstReader)
+    readGeoInto(secondReader, secondPageVals.length, vec, isGeometry)
+    for (i <- secondPageVals.indices) {
+      assert(secondPageVals(i) sameElements extractGeoWkb(vec, i, isGeometry, srid))
+    }
+  }
+
+  /**
+   * Generates `count` polygons that share a long (> 64 byte) WKB prefix, differing only in a
+   * single trailing coordinate. Exercises the prevBuf grow-and-preserve path where the shared
+   * prefix must survive both reads and skips.
+   */
+  private def sharedPrefixPolygons(count: Int, base: Int = 0): Array[Array[Byte]] = {
+    val head = (0 until 12).map(i => (i.toDouble, i.toDouble))
+    (0 until count).map { k =>
+      // Vary one interior coordinate near the end; keep coords within geography bounds
+      // (lon in [-180, 180], lat in [-90, 90]) so the same data is valid for all geo types.
+      val ring = head.dropRight(1) ++ Seq((100.0, 40.0 + (base + k) * 0.01), head.head)
+      makePolygonWkb(ring: _*)
+    }.toArray
+  }
+
+  private def readGeoInto(
+      reader: VectorizedDeltaByteArrayReader,
+      total: Int,
+      vec: WritableColumnVector,
+      isGeometry: Boolean): Unit = {
+    if (isGeometry) {
+      reader.readGeometry(total, vec, 0)
+    } else {
+      reader.readGeography(total, vec, 0)
+    }
+  }
+
+  private def extractGeoWkb(
+      vec: WritableColumnVector,
+      i: Int,
+      isGeometry: Boolean,
+      srid: Int): Array[Byte] = {
+    if (isGeometry) {
+      val geom = vec.getBinaryView(i)
+      assert(srid === STUtils.stGeomSrid(geom))
+      STUtils.stGeomAsBinary(geom)
+    } else {
+      val geog = vec.getBinaryView(i)
+      assert(srid === STUtils.stGeogSrid(geog))
+      STUtils.stGeogAsBinary(geog)
+    }
+  }
+
   private def assertGeoReadWrite(
       writer: DeltaByteArrayWriter,
       reader: VectorizedDeltaByteArrayReader,
@@ -194,23 +290,49 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
     writableColumnVector = new OnHeapColumnVector(length, dataType)
 
     reader.initFromPage(length, writer.getBytes.toInputStream)
-    if (isGeometry) {
-      reader.readGeometry(length, writableColumnVector, 0)
-    } else {
-      reader.readGeography(length, writableColumnVector, 0)
-    }
+    readGeoInto(reader, length, writableColumnVector, isGeometry)
 
     for (i <- 0 until length) {
-      val actualWkb = if (isGeometry) {
-        val geom = writableColumnVector.getBinaryView(i)
-        assert(srid === STUtils.stGeomSrid(geom))
-        STUtils.stGeomAsBinary(geom)
+      assert(wkbValues(i) sameElements
+        extractGeoWkb(writableColumnVector, i, isGeometry, srid))
+    }
+  }
+
+  /**
+   * Reads even-indexed geo values and skips odd-indexed ones, validating that a value which
+   * shares its prefix with a skipped predecessor is still decoded correctly. This mimics a geo
+   * column with interleaved null/skipped rows. An even count keeps the read/skip pattern from
+   * running past the last value.
+   */
+  private def assertGeoReadWriteWithSkip(
+      writer: DeltaByteArrayWriter,
+      reader: VectorizedDeltaByteArrayReader,
+      wkbValues: Array[Array[Byte]],
+      dataType: DataType): Unit = {
+
+    val (isGeometry, srid) = dataType match {
+      case geom: GeometryType => (true, geom.srid)
+      case geog: GeographyType => (false, geog.srid)
+    }
+
+    val length = wkbValues.length
+    writeBinaryData(writer, wkbValues)
+    writableColumnVector = new OnHeapColumnVector(length, dataType)
+    reader.initFromPage(length, writer.getBytes.toInputStream)
+
+    var i = 0
+    while (i < length) {
+      if (isGeometry) {
+        reader.readGeometry(1, writableColumnVector, i)
       } else {
-        val geog = writableColumnVector.getBinaryView(i)
-        assert(srid === STUtils.stGeogSrid(geog))
-        STUtils.stGeogAsBinary(geog)
+        reader.readGeography(1, writableColumnVector, i)
       }
-      assert(wkbValues(i) sameElements actualWkb)
+      assert(wkbValues(i) sameElements
+        extractGeoWkb(writableColumnVector, i, isGeometry, srid))
+      if (i + 1 < length) {
+        reader.skipBinary(1)
+      }
+      i += 2
     }
   }
 

@@ -102,19 +102,10 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
     currentRow += total;
   }
 
-  public ByteBuffer getBytes(int rowId) {
-    int length = lengthsVector.getInt(rowId);
-    try {
-      return in.slice(length);
-    } catch (EOFException e) {
-      throw new ParquetDecodingException("Failed to read " + length + " bytes");
-    }
-  }
-
   /**
    * Returns the suffix length for the given row and reads the suffix bytes directly into
    * {@code dest} at {@code destOffset}, avoiding the intermediate {@link ByteBuffer}
-   * allocation that {@link #getBytes(int)} performs.
+   * allocation that a slice-based read would perform.
    */
   public int getSuffixInto(int rowId, byte[] dest, int destOffset) {
     int length = lengthsVector.getInt(rowId);

@@ -171,6 +171,16 @@ public final class STUtils {
     return toPhysVal(Geography.fromWkb(wkb, srid));
   }
 
+  // Parses a sub-range [offset, offset + length) of the WKB buffer, avoiding an
+  // exact-size copy when the caller reuses a larger backing buffer.
+  public static BinaryView stGeogFromWKB(byte[] wkb, int offset, int length, int srid) {
+    // We only allow setting the SRID to geographic values.
+    if(!GeographyType.isSridSupported(srid)) {
+      throw QueryExecutionErrors.stInvalidSridValueError(srid);
+    }
+    return toPhysVal(Geography.fromWkb(wkb, offset, length, srid));
+  }
+
   // ST_GeomFromWKB
   public static BinaryView stGeomFromWKB(byte[] wkb) {
     return toPhysVal(Geometry.fromWkb(wkb));
@@ -182,6 +192,16 @@ public final class STUtils {
       throw QueryExecutionErrors.stInvalidSridValueError(srid);
     }
     return toPhysVal(Geometry.fromWkb(wkb, srid));
+  }
+
+  // Parses a sub-range [offset, offset + length) of the WKB buffer, avoiding an
+  // exact-size copy when the caller reuses a larger backing buffer.
+  public static BinaryView stGeomFromWKB(byte[] wkb, int offset, int length, int srid) {
+    // We only allow setting the SRID to valid values.
+    if(!GeometryType.isSridSupported(srid)) {
+      throw QueryExecutionErrors.stInvalidSridValueError(srid);
+    }
+    return toPhysVal(Geometry.fromWkb(wkb, offset, length, srid));
   }
 
   // ST_SetSrid

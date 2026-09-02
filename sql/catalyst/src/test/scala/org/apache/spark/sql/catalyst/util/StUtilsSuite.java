@@ -216,6 +216,39 @@ class STUtilsSuite {
     }
   }
 
+  // ST_GeomFromWKB / ST_GeogFromWKB with an offset/length sub-range. These exercise the
+  // overloads used by the vectorized DELTA_BYTE_ARRAY decoder, which assembles each WKB value
+  // into a reusable buffer that may be longer than the value itself. The parse must read only
+  // [offset, offset + length) and ignore any surrounding bytes.
+  @Test
+  void testStGeomFromWKBWithOffsetAndLength() {
+    // Embed testWkb in a larger buffer with leading and trailing filler bytes.
+    int offset = 3;
+    byte[] padded = new byte[offset + testWkb.length + 5];
+    java.util.Arrays.fill(padded, (byte) 0x7F);
+    System.arraycopy(testWkb, 0, padded, offset, testWkb.length);
+
+    BinaryView geometryVal =
+      STUtils.stGeomFromWKB(padded, offset, testWkb.length, testGeometrySrid);
+    assertNotNull(geometryVal);
+    // The parsed physical value must equal the one parsed from the exact-size WKB: the
+    // surrounding filler bytes must not ride along.
+    assertArrayEquals(testGeometryBytes, geometryVal.getBytes());
+  }
+
+  @Test
+  void testStGeogFromWKBWithOffsetAndLength() {
+    int offset = 4;
+    byte[] padded = new byte[offset + testWkb.length + 7];
+    java.util.Arrays.fill(padded, (byte) 0x7F);
+    System.arraycopy(testWkb, 0, padded, offset, testWkb.length);
+
+    BinaryView geographyVal =
+      STUtils.stGeogFromWKB(padded, offset, testWkb.length, testGeographySrid);
+    assertNotNull(geographyVal);
+    assertArrayEquals(testGeographyBytes, geographyVal.getBytes());
+  }
+
   // ST_Srid
   @Test
   void testStSridGeography() {

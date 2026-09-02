@@ -132,25 +132,29 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
       int suffixLength = suffixReader.getSuffixLength(currentRow);
       int length = prefixLength + suffixLength;
 
-      byte[] wkb = new byte[length];
-      if (prefixLength > 0) {
-        System.arraycopy(prevBuf, 0, wkb, 0, prefixLength);
+      // Grow prevBuf if needed, preserving the prefix bytes already in place.
+      if (length > prevBuf.length) {
+        byte[] newBuf = new byte[Math.max(length, prevBuf.length * 2)];
+        System.arraycopy(prevBuf, 0, newBuf, 0, prefixLength);
+        prevBuf = newBuf;
       }
-      suffixReader.getSuffixInto(currentRow, wkb, prefixLength);
+      // The prefix bytes (prevBuf[0..prefixLength-1]) are already in place from the
+      // previous iteration. Read the suffix directly after them so the full WKB value
+      // occupies prevBuf[0..length-1]. This shares the reusable-buffer protocol with
+      // readValues/skipBinary, so interleaving skip and read stays consistent.
+      suffixReader.getSuffixInto(currentRow, prevBuf, prefixLength);
+      prevLen = length;
 
-      // Converts WKB into a physical representation of geometry/geography.
-      byte[] physicalValue = converter.convert(wkb, srid);
+      // Convert only the [0, length) sub-range of prevBuf. The offset/length overload
+      // ensures stale trailing bytes (when prevBuf capacity exceeds length) do not ride
+      // along, and avoids allocating an exact-size copy of the WKB per value.
+      byte[] physicalValue = converter.convert(prevBuf, 0, length, srid);
 
       WritableColumnVector arrayData = c.arrayData();
       int offset = arrayData.getElementsAppended();
       arrayData.appendBytes(physicalValue.length, physicalValue, 0);
 
       c.putArray(rowId + i, offset, physicalValue.length);
-
-      // Take ownership of wkb as prevBuf -- it is freshly allocated and
-      // exactly the right size for the next value's prefix.
-      prevBuf = wkb;
-      prevLen = length;
 
       currentRow++;
     }
