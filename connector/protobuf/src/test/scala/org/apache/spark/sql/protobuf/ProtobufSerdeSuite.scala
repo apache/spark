@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.protobuf
 
+import com.google.protobuf.{DynamicMessage, StringValue}
 import com.google.protobuf.Descriptors.Descriptor
-import com.google.protobuf.DynamicMessage
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters}
@@ -40,6 +40,9 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
 
   private val testFileDescFile = protobufDescriptorFile("serde_suite.desc")
   private val testFileDesc = CommonProtobufUtils.readDescriptorFileContent(testFileDescFile)
+
+  private val functionsDescFile = protobufDescriptorFile("functions_suite.desc")
+  private val functionsDesc = CommonProtobufUtils.readDescriptorFileContent(functionsDescFile)
 
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SerdeSuiteProtos$"
 
@@ -69,19 +72,53 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
     }
   }
 
-  test("SPARK-59112: serialize CHAR/VARCHAR fields as Protobuf strings") {
-    val descriptor =
+  test("SPARK-59112: serialize CHAR/VARCHAR with Protobuf string-family converters") {
+    val stringDescriptor =
       ProtobufUtils.buildDescriptor("SimpleMessageJavaTypes", Some(testFileDesc)).descriptor
+    val enumDescriptor =
+      ProtobufUtils.buildDescriptor("SimpleMessageEnum", Some(functionsDesc)).descriptor
+    val wrapperDescriptor =
+      ProtobufUtils.buildDescriptor("WellKnownWrapperTypes", Some(functionsDesc)).descriptor
 
     Seq(CharType(3), VarcharType(3)).foreach { stringType =>
-      val serializer = new ProtobufSerializer(
+      val stringSerializer = new ProtobufSerializer(
         new StructType().add("string_value", stringType),
-        descriptor,
+        stringDescriptor,
         nullable = false)
-      val message = serializer.serialize(InternalRow(UTF8String.fromString("abc")))
+      val stringMessage = stringSerializer.serialize(InternalRow(UTF8String.fromString("abc")))
         .asInstanceOf[DynamicMessage]
+      assert(
+        stringMessage.getField(stringDescriptor.findFieldByName("string_value")) === "abc")
 
-      assert(message.getField(descriptor.findFieldByName("string_value")) === "abc")
+      val enumSerializer = new ProtobufSerializer(
+        new StructType().add("basic_enum", stringType),
+        enumDescriptor,
+        nullable = false)
+      val enumMessage = enumSerializer.serialize(InternalRow(UTF8String.fromString("FIRST")))
+        .asInstanceOf[DynamicMessage]
+      assert(
+        enumMessage.getField(enumDescriptor.findFieldByName("basic_enum")).toString === "FIRST")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          enumSerializer.serialize(InternalRow(UTF8String.fromString("INVALID_VALUE")))
+        },
+        condition = "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE",
+        parameters = Map(
+          "sqlColumn" -> "`basic_enum`",
+          "protobufColumn" -> "field 'basic_enum'",
+          "data" -> "INVALID_VALUE",
+          "enumString" -> "\"NOTHING\", \"FIRST\", \"SECOND\""))
+
+      val wrapperSerializer = new ProtobufSerializer(
+        new StructType().add("string_val", stringType),
+        wrapperDescriptor,
+        nullable = false)
+      val wrapperMessage = wrapperSerializer.serialize(InternalRow(UTF8String.fromString("abc")))
+        .asInstanceOf[DynamicMessage]
+      assert(
+        wrapperMessage.getField(wrapperDescriptor.findFieldByName("string_val")) ===
+          StringValue.of("abc"))
     }
   }
 

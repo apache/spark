@@ -349,6 +349,32 @@ class CollationSQLRegexpSuite
     }
   }
 
+  test("SPARK-59112: quantified ILIKE preserves null CHAR/VARCHAR patterns") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq("CHAR(3)", "VARCHAR(3)").foreach { dataType =>
+        checkAnswer(
+          sql(s"SELECT 'foo' ILIKE ANY (CAST(NULL AS $dataType), 'f%')"),
+          Row(true))
+        checkAnswer(
+          sql(s"SELECT 'foo' ILIKE ALL ('f%', CAST(NULL AS $dataType))"),
+          Row(null))
+      }
+    }
+  }
+
+  test("SPARK-59112: explicit binary quantified patterns use balanced trees") {
+    val patterns = Seq.fill(2048)("'z%' COLLATE UTF8_BINARY").mkString(", ")
+    Seq("LIKE", "ILIKE").foreach { operator =>
+      Seq("ANY", "SOME", "ALL").foreach { quantifier =>
+        Seq("" -> false, "NOT " -> true).foreach { case (not, expected) =>
+          checkAnswer(
+            sql(s"SELECT 'foo' $not$operator $quantifier ($patterns)"),
+            Row(expected))
+        }
+      }
+    }
+  }
+
   test("Support RLike string expression with collation") {
     // Supported collations
     case class RLikeTestCase[R](l: String, r: String, c: String, result: R)
