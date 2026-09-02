@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, GetArrayItem, GetArrayStructFields, GetMapValue, GetStructField, MapKeys, MapValues, Size}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, GetArrayItem, GetArrayStructFields, GetMapValue, GetStructField, MapKeys, MapValues, Size}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -47,8 +47,11 @@ object RewriteSizeOfArrayStruct extends Rule[LogicalPlan] {
     if (!SQLConf.get.nestedSchemaPruningEnabled) {
       plan
     } else {
+      // Only base (leaf) columns benefit: nested schema pruning happens at the scan, so rewriting
+      // `size` over an array produced by another operator (e.g. an aggregate) would be pure churn.
+      val baseAttrs = AttributeSet(plan.collectLeaves().flatMap(_.output))
       plan.transformAllExpressions {
-        case s @ Size(child, _) if canRewrite(child) =>
+        case s @ Size(child, _) if canRewrite(child, baseAttrs) =>
           val array = child.dataType.asInstanceOf[ArrayType]
           val struct = array.elementType.asInstanceOf[StructType]
           // Pick the smallest field by default size, mirroring [[GenerateOptimization]]. Extracting
@@ -64,29 +67,30 @@ object RewriteSizeOfArrayStruct extends Rule[LogicalPlan] {
 
   /**
    * We only rewrite when the child is an array of a struct with more than one field (with a single
-   * field there is nothing to prune) that is rooted at a column reference (so nested column pruning
-   * can actually prune it), and is not already a field extraction on an array of structs (which
+   * field there is nothing to prune), is rooted at a base (leaf) column so nested column pruning
+   * can actually prune it, and is not already a field extraction on an array of structs (which
    * keeps this rule idempotent).
    */
-  private def canRewrite(child: Expression): Boolean = {
-    !child.isInstanceOf[GetArrayStructFields] && isColumnReference(child) && (child.dataType match {
-      case ArrayType(st: StructType, _) => st.length > 1
-      case _ => false
-    })
+  private def canRewrite(child: Expression, baseAttrs: AttributeSet): Boolean = {
+    !child.isInstanceOf[GetArrayStructFields] &&
+      rootAttribute(child).exists(baseAttrs.contains) && (child.dataType match {
+        case ArrayType(st: StructType, _) => st.length > 1
+        case _ => false
+      })
   }
 
   /**
-   * Returns true if the expression is built solely from a base column reference and value
-   * extractors, i.e. it reads from a scan column that nested column pruning can prune.
+   * Returns the base attribute if the expression is built solely from an attribute and value
+   * extractors, i.e. it reads from a column that nested column pruning can prune; otherwise None.
    */
-  private def isColumnReference(e: Expression): Boolean = e match {
-    case _: AttributeReference => true
-    case g: GetStructField => isColumnReference(g.child)
-    case g: GetArrayStructFields => isColumnReference(g.child)
-    case g: GetArrayItem => isColumnReference(g.child)
-    case g: GetMapValue => isColumnReference(g.child)
-    case m: MapValues => isColumnReference(m.child)
-    case m: MapKeys => isColumnReference(m.child)
-    case _ => false
+  private def rootAttribute(e: Expression): Option[Attribute] = e match {
+    case a: AttributeReference => Some(a)
+    case g: GetStructField => rootAttribute(g.child)
+    case g: GetArrayStructFields => rootAttribute(g.child)
+    case g: GetArrayItem => rootAttribute(g.child)
+    case g: GetMapValue => rootAttribute(g.child)
+    case m: MapValues => rootAttribute(m.child)
+    case m: MapKeys => rootAttribute(m.child)
+    case _ => None
   }
 }
