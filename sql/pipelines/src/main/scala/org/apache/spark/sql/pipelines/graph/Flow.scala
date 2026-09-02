@@ -402,6 +402,7 @@ class AutoCdcMergeFlow(
           F.lit(null).cast(sequencingType).as(Scd2BatchProcessor.endAtColName)
         val emptyCdcMetadataCol: Column = Scd2BatchProcessor.constructCdcMetadataCol(
           recordStartAt = F.lit(null),
+          versionMap = F.lit(null),
           sequencingType = sequencingType
         ).as(AutoCdcReservedNames.cdcMetadataColName)
 
