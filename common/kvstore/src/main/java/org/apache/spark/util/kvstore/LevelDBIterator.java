@@ -147,6 +147,9 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
       } else {
         byte[] key = ti.buildKey(false, ti.naturalIndex().keyPrefix(null), next);
         ret = db.get(key, type);
+        if (ret == null) {
+          throw new NoSuchElementException();
+        }
       }
       next = null;
       return ret;

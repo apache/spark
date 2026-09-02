@@ -98,12 +98,8 @@ public class LevelDB implements KVStore {
       db().put(STORE_VERSION_KEY, serializer.serialize(STORE_VERSION));
     }
 
-    Map<String, byte[]> aliases;
-    try {
-      aliases = get(TYPE_ALIASES_KEY, TypeAliases.class).aliases;
-    } catch (NoSuchElementException e) {
-      aliases = new HashMap<>();
-    }
+    TypeAliases aliasesValue = get(TYPE_ALIASES_KEY, TypeAliases.class);
+    Map<String, byte[]> aliases = aliasesValue != null ? aliasesValue.aliases : new HashMap<>();
     typeAliases = new ConcurrentHashMap<>(aliases);
 
     iteratorTracker = new ConcurrentLinkedQueue<>();
@@ -111,11 +107,7 @@ public class LevelDB implements KVStore {
 
   @Override
   public <T> T getMetadata(Class<T> klass) throws Exception {
-    try {
-      return get(METADATA_KEY, klass);
-    } catch (NoSuchElementException nsee) {
-      return null;
-    }
+    return get(METADATA_KEY, klass);
   }
 
   @Override
@@ -127,10 +119,15 @@ public class LevelDB implements KVStore {
     }
   }
 
+  /**
+   * Returns the value for the given key, or {@code null} if the key is not present. Callers
+   * that need to signal missing keys must check for {@code null} themselves, so that a missing
+   * key does not pay the cost of throwing and filling in an exception stack trace.
+   */
   <T> T get(byte[] key, Class<T> klass) throws Exception {
     byte[] data = db().get(key);
     if (data == null) {
-      throw new NoSuchElementException(new String(key, UTF_8));
+      return null;
     }
     return serializer.deserialize(data, klass);
   }
@@ -144,7 +141,11 @@ public class LevelDB implements KVStore {
   public <T> T read(Class<T> klass, Object naturalKey) throws Exception {
     JavaUtils.checkArgument(naturalKey != null, "Null keys are not allowed.");
     byte[] key = getTypeInfo(klass).naturalIndex().start(null, naturalKey);
-    return get(key, klass);
+    T value = get(key, klass);
+    if (value == null) {
+      throw new NoSuchElementException(new String(key, UTF_8));
+    }
+    return value;
   }
 
   @Override
@@ -207,12 +208,7 @@ public class LevelDB implements KVStore {
       Class<?> klass,
       LevelDBTypeInfo.Index naturalIndex,
       Collection<LevelDBTypeInfo.Index> indices) throws Exception {
-    Object existing;
-    try {
-      existing = get(naturalIndex.entityKey(null, value), klass);
-    } catch (NoSuchElementException e) {
-      existing = null;
-    }
+    Object existing = get(naturalIndex.entityKey(null, value), klass);
 
     PrefixCache cache = new PrefixCache(value);
     byte[] naturalKey = naturalIndex.toKey(naturalIndex.getValue(value));

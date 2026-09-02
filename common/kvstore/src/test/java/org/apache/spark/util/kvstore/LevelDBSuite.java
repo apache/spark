@@ -99,6 +99,20 @@ public class LevelDBSuite {
   }
 
   @Test
+  public void testGetMissingKeyReturnsNull() throws Exception {
+    // get() returns null instead of throwing for a missing key, so the write path does not
+    // pay the cost of building an exception when the entry does not exist yet; read() still
+    // surfaces a missing key as NoSuchElementException.
+    byte[] missingKey = db.getTypeInfo(CustomType1.class).naturalIndex().start(null, "missing");
+    assertNull(db.get(missingKey, CustomType1.class));
+
+    CustomType1 t = createCustomType1(1);
+    db.write(t);
+    byte[] presentKey = db.getTypeInfo(CustomType1.class).naturalIndex().start(null, t.key);
+    assertEquals(t, db.get(presentKey, CustomType1.class));
+  }
+
+  @Test
   public void testMultipleObjectWriteReadDelete() throws Exception {
     CustomType1 t1 = createCustomType1(1);
     CustomType1 t2 = createCustomType1(2);
