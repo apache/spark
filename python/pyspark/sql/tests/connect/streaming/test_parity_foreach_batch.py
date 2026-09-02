@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 import unittest
 
 from pyspark.sql.tests.streaming.test_streaming_foreach_batch import StreamingTestsForeachBatchMixin
@@ -33,6 +34,11 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
     def test_streaming_foreach_batch_graceful_stop(self):
         super().test_streaming_foreach_batch_graceful_stop()
 
+    @unittest.skipIf(
+        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1",
+        "SPARK-44462: a newer server runs foreachBatch on the cloned session, so batch_updates "
+        "is not visible from the client session.",
+    )
     def test_nested_dataframes(self):
         def curried_function(df):
             def inner(batch_df, batch_id):
