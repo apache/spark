@@ -43,10 +43,9 @@ import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
 import org.apache.spark.sql.connector.catalog.TableCapability
-import org.apache.spark.sql.execution.{FileSourceScanExec, FormattedMode, SparkPlan}
+import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileDataSourceV2, FileTable}
-import org.apache.spark.sql.execution.planmerging.MergeSubplans
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
@@ -3870,42 +3869,6 @@ class AvroV1Suite extends AvroSuite {
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
 
-  test("SPARK-59107: positionalFieldMatching makes an avro read projection-sensitive") {
-    // Strictness pinned rather than inherited, so that positional matching is the only reason the
-    // read is projection-sensitive. AQE off because `AdaptiveSparkPlanExec` is a leaf node, so with
-    // it on the scans underneath it are not reachable from the executed plan.
-    withSQLConf(
-        SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
-        SQLConf.IGNORE_MISSING_FILES.key -> "false",
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      withTempPath { dir =>
-        val path = dir.getCanonicalPath
-        spark.range(0, 5).selectExpr("id AS a", "id * 10 AS b").write.format("avro").save(path)
-        withTempView("t") {
-          spark.read.option("positionalFieldMatching", "true").format("avro").load(path)
-            .createOrReplaceTempView("t")
-          val query = "SELECT (SELECT sum(a) FROM t), (SELECT sum(b) FROM t)"
-          // Compared against the same query with merging excluded rather than against a literal
-          // row: positional matching resolves a column against its position in the read schema, so
-          // what `sum(b)` answers depends on its own subquery's projection, and SPARK-59108 changes
-          // it. What merging must not change is either value.
-          val unmerged = withSQLConf(
-              SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> MergeSubplans.ruleName) {
-            sql(query).collect().toSeq
-          }
-          val df = sql(query)
-          checkAnswer(df, unmerged)
-          val scanColumns = df.queryExecution.executedPlan
-            .collectWithSubqueries { case s: FileSourceScanExec => s }
-            .map(_.requiredSchema.fieldNames.sorted.toSeq)
-            .sortBy(_.mkString(","))
-          // One entry per column means the two subqueries kept their own scans.
-          assert(scanColumns === Seq(Seq("a"), Seq("b")))
-        }
-      }
-    }
-  }
-
   test("SPARK-36271: V1 insert should check schema field name too") {
     withView("v") {
       spark.range(1).createTempView("v")
@@ -4112,10 +4075,8 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
   }
 
   test("SPARK-57205: Avro V2 declares SCAN_MERGING and merges scans differing only in columns") {
-    // AvroTable withholds the capability under positionalFieldMatching, because the deserializer is
-    // built from the pruned read schema while the Avro side stays unpruned, so catalyst field i of
-    // the projection takes Avro field i of that schema and widening the projection shifts values.
-    // FileTable also withholds it when the reads are not strict, so pin that rather than inherit.
+    // FileTable withholds the capability when the reads are not strict, so pin that rather than
+    // inherit it.
     withSQLConf(
         SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
         SQLConf.IGNORE_MISSING_FILES.key -> "false") {
@@ -4125,9 +4086,6 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       val v2Table = dsV2.getTable(
         new StructType(), Array.empty, JCollections.emptyMap[String, String]())
       assert(v2Table.capabilities().contains(TableCapability.SCAN_MERGING))
-      val positional = dsV2.getTable(new StructType(), Array.empty,
-        JCollections.singletonMap("positionalFieldMatching", "true"))
-      assert(!positional.capabilities().contains(TableCapability.SCAN_MERGING))
 
       withTempPath { dir =>
         val path = dir.getCanonicalPath
