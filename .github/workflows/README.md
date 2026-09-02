@@ -6,7 +6,7 @@ There are several considerations to keep in mind when making changes to the buil
 
 ## Resource usage limits
 
-The Apache Software Foundation (ASF) imposes [resource usage limits][limit] on GitHub Actions, including on the number of concurrent running jobs as well as on the total number of [run minutes used][usage] per month. When we hit these limits it can cause jobs to queue up, bringing development to a crawl.
+The Apache Software Foundation (ASF) imposes [resource usage limits][limit] on GitHub Actions, including on the number of concurrent running jobs as well as on the total number of [run minutes used][usage] per week and rolling five-day window. When we hit these limits it can cause jobs to queue up, bringing development to a crawl.
 
 [limit]: https://infra.apache.org/github-actions-policy.html
 [usage]: https://github.com/apache/spark/actions/metrics/usage
@@ -28,13 +28,13 @@ The [`pull_request` workflow trigger][prt] provides key benefits that make worki
 2. GitHub provides a stable merge reference.
 3. PR metadata is readily available via `github.event.pull_request`.
 
-Without these benefits, some GitHub Actions patterns become more difficult or impossible to implement.
+Without these benefits, some GitHub Actions patterns become more difficult or impossible to implement. We've implemented our own custom checkout pattern via the [`checkout-and-sync`](../actions/checkout-and-sync/) composite action.
 
 If in the future GitHub somehow allows workflows to run `on: pull_request` while counting those jobs against the forks' limits instead of ours, that would help eliminate various distortions of our build caused by the move away from `on: pull_request`. We would get the best functionality from GitHub Actions without hitting job run limits.
 
 ## Composite actions
 
-If you find yourself repeating the same set of instructions across multiple jobs, extract them into a reusable [composite action].
+If you find yourself repeating the same set of instructions across multiple jobs, extract them into a reusable [composite action] under [`actions/`](../actions/).
 
 [composite action]: https://docs.github.com/en/actions/tutorials/create-actions/create-a-composite-action
 
