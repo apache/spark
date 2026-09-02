@@ -22,7 +22,13 @@ import scala.util.Success
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.connector.catalog.{
+  CatalogV2Util,
+  Identifier,
+  InMemoryTableCatalog,
+  TableChange,
+  TableInfo
+}
 import org.apache.spark.sql.pipelines.graph.{
   FlowFunction,
   FlowFunctionResult,
@@ -35,6 +41,7 @@ import org.apache.spark.sql.pipelines.graph.{
 }
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
   import TableChangeExtractors._
@@ -680,6 +687,37 @@ class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
       deletesOf(changes) === Set(Seq("s", "gone")),
       s"changes=$changes")
     assert(typeUpdatesOf(changes).isEmpty, s"changes=$changes")
+  }
+
+  test("diffSchemas - DSv2 catalog respects emitted nested changes") {
+    val currentNestedStruct =
+      new StructType().add("x", DoubleType, nullable = false, "old comment")
+    val currentSchema = new StructType()
+      .add("struct", currentNestedStruct)
+      .add("array", ArrayType(currentNestedStruct))
+      .add("map", MapType(currentNestedStruct, currentNestedStruct))
+
+    val targetNestedStruct =
+      new StructType()
+        .add("x", DoubleType, nullable = true, "new comment")
+        .add("y", DoubleType)
+    // Add `y`, make `x` nullable, and update its comment in every nested struct.
+    val targetSchema = new StructType()
+      .add("struct", targetNestedStruct)
+      .add("array", ArrayType(targetNestedStruct))
+      .add("map", MapType(targetNestedStruct, targetNestedStruct))
+
+    val catalog = new InMemoryTableCatalog
+    catalog.initialize("test", CaseInsensitiveStringMap.empty())
+    val ident = Identifier.of(Array.empty, "t")
+    catalog.createTable(ident, new TableInfo.Builder().withSchema(currentSchema).build())
+
+    val changes = SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    val updated = catalog.alterTable(ident, changes: _*)
+
+    assert(
+      CatalogV2Util.clearIds(updated.columns()) ===
+        CatalogV2Util.structTypeToV2Columns(targetSchema, keepIds = false))
   }
 
   test("inferSchemaFromFlows folds a case-only column to the same spelling regardless of flow " +

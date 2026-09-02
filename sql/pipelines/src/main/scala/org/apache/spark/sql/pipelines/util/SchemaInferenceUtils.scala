@@ -258,10 +258,10 @@ object SchemaInferenceUtils {
       )
       .map { fieldInTarget =>
         TableChange.addColumn(
-          fieldNames = (pathToStruct :+ fieldInTarget.name).toArray,
-          dataType = fieldInTarget.dataType,
-          isNullable = fieldInTarget.nullable,
-          comment = fieldInTarget.getComment().orNull
+          (pathToStruct :+ fieldInTarget.name).toArray,
+          fieldInTarget.dataType,
+          fieldInTarget.nullable,
+          fieldInTarget.getComment().orNull
         )
       }
 
@@ -273,8 +273,8 @@ object SchemaInferenceUtils {
       .map(fieldInCurrent =>
         TableChange
           .deleteColumn(
-            fieldNames = (pathToStruct :+ fieldInCurrent.name).toArray,
-            ifExists = false
+            (pathToStruct :+ fieldInCurrent.name).toArray,
+            false
           )
       )
 
