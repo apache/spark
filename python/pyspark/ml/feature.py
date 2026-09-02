@@ -2588,15 +2588,7 @@ class MinHashLSH(
         handleInvalid: str = "error",
     ):
         """
-        __init__(
-            self,
-            \\*,
-            inputCol=None,
-            outputCol=None,
-            seed=None,
-            numHashTables=1,
-            handleInvalid="error",
-        )
+        __init__(self, \\*, inputCol=None, outputCol=None, seed=None, numHashTables=1, handleInvalid="error")
         """
         super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinHashLSH", self.uid)
@@ -2616,15 +2608,7 @@ class MinHashLSH(
         handleInvalid: str = "error",
     ) -> "MinHashLSH":
         """
-        setParams(
-            self,
-            \\*,
-            inputCol=None,
-            outputCol=None,
-            seed=None,
-            numHashTables=1,
-            handleInvalid="error",
-        )
+        setParams(self, \\*, inputCol=None, outputCol=None, seed=None, numHashTables=1, handleInvalid="error")
         Sets params for this MinHashLSH.
         """
         kwargs = self._input_kwargs
