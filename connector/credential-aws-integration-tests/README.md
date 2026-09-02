@@ -24,7 +24,7 @@ AWS services (S3 and STS) locally.  It runs as a lightweight HTTP server alongsi
   ```
 - **Python 3** with moto installed:
   ```
-  pip install "moto[server,s3,sts]>=5.0.0"
+  pip install "moto[server,s3,sts]>=5.0.0,<6.0.0"
   ```
 - **Docker** available (for building the Spark image into Minikube's daemon).
 
@@ -50,7 +50,6 @@ This script:
 
 | Option | Default | Description |
 |---|---|---|
-| `--spark-tgz <path>` | (none) | Pre-built Spark distribution tgz. When omitted, tests run against the current source tree. |
 | `--image-tag <tag>` | (generated) | Use a pre-built Spark image with this tag. |
 | `--image-repo <repo>` | `docker.io/kubespark` | Docker image repository. |
 | `--spark-image <image>` | (derived) | Full image name (overrides `--image-repo` + `--image-tag`). |
@@ -62,7 +61,6 @@ This script:
 | `--s3-bucket <bucket>` | `oidc-e2e-test-bucket` | S3 bucket name created in moto. |
 | `--token-file <path>` | `/var/run/secrets/kubernetes.io/serviceaccount/token` | OIDC token file path inside the driver pod. |
 | `--skip-build` | false | Skip building Spark and the Docker image. |
-| `--java-version <ver>` | `17` | Java version for the build. |
 | `--hadoop-profile <prof>` | `hadoop-3` | Hadoop Maven profile. |
 
 ## Running with a Pre-built Image

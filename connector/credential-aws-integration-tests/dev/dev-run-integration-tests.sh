@@ -20,7 +20,7 @@
 #
 # Prerequisites:
 #   - Minikube running  (minikube start --cpus 4 --memory 6144)
-#   - Python 3 + moto installed  (pip install "moto[server,s3,sts]>=5.0.0")
+#   - Python 3 + moto installed  (pip install "moto[server,s3,sts]>=5.0.0,<6.0.0")
 #   - Docker available and pointing at Minikube's daemon (eval $(minikube docker-env))
 #
 # Usage (run from anywhere; the script resolves the repository root from its own
@@ -28,8 +28,6 @@
 #   connector/credential-aws-integration-tests/dev/dev-run-integration-tests.sh [options]
 #
 # Options:
-#   --spark-tgz <path>        Path to a pre-built Spark tgz distribution.
-#                             When omitted, tests run against the current source tree.
 #   --image-tag <tag>         Use a pre-built Spark image with this tag instead of building one.
 #   --image-repo <repo>       Docker image repository (default: docker.io/kubespark).
 #   --spark-image <image>     Full image name (overrides --image-repo + --image-tag).
@@ -43,7 +41,6 @@
 #   --token-file <path>       Path to the OIDC token file inside the driver pod
 #                             (default: /var/run/secrets/kubernetes.io/serviceaccount/token).
 #   --skip-build              Skip rebuilding Spark and the Docker image.
-#   --java-version <ver>      Java version to build with (default: 17).
 #   --hadoop-profile <prof>   Hadoop Maven profile (default: hadoop-3).
 
 set -e
@@ -57,7 +54,6 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 IMAGE_REPO="docker.io/kubespark"
 IMAGE_TAG=""
 SPARK_IMAGE=""
-SPARK_TGZ=""
 DEPLOY_MODE="minikube"
 NAMESPACE=""
 SERVICE_ACCOUNT="default"
@@ -66,7 +62,6 @@ ROLE_ARN="arn:aws:iam::123456789012:role/oidc-e2e-test-role"
 S3_BUCKET="oidc-e2e-test-bucket"
 TOKEN_FILE="/var/run/secrets/kubernetes.io/serviceaccount/token"
 SKIP_BUILD=false
-JAVA_VERSION="17"
 HADOOP_PROFILE="hadoop-3"
 
 MOTO_PID=""
@@ -76,7 +71,6 @@ MOTO_PID=""
 # ---------------------------------------------------------------------------
 while (( "$#" )); do
   case "$1" in
-    --spark-tgz)       SPARK_TGZ="$2";        shift 2 ;;
     --image-tag)       IMAGE_TAG="$2";         shift 2 ;;
     --image-repo)      IMAGE_REPO="$2";        shift 2 ;;
     --spark-image)     SPARK_IMAGE="$2";       shift 2 ;;
@@ -88,7 +82,6 @@ while (( "$#" )); do
     --s3-bucket)       S3_BUCKET="$2";         shift 2 ;;
     --token-file)      TOKEN_FILE="$2";        shift 2 ;;
     --skip-build)      SKIP_BUILD=true;        shift   ;;
-    --java-version)    JAVA_VERSION="$2";      shift 2 ;;
     --hadoop-profile)  HADOOP_PROFILE="$2";    shift 2 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
@@ -111,12 +104,12 @@ check_prereqs() {
   log "Checking prerequisites..."
 
   if ! command -v python3 &>/dev/null; then
-    echo "ERROR: python3 not found. Install Python 3 and run: pip install 'moto[server,s3,sts]>=5.0.0'" >&2
+    echo "ERROR: python3 not found. Install Python 3 and run: pip install 'moto[server,s3,sts]>=5.0.0,<6.0.0'" >&2
     exit 1
   fi
 
   if ! python3 -c "import moto" &>/dev/null; then
-    echo "ERROR: moto not found. Run: pip install 'moto[server,s3,sts]>=5.0.0'" >&2
+    echo "ERROR: moto not found. Run: pip install 'moto[server,s3,sts]>=5.0.0,<6.0.0'" >&2
     exit 1
   fi
 
@@ -259,9 +252,6 @@ run_tests() {
   fi
   if [[ -n "${SERVICE_ACCOUNT}" ]]; then
     mvn_args+=("-Dspark.kubernetes.test.serviceAccountName=${SERVICE_ACCOUNT}")
-  fi
-  if [[ -n "${SPARK_TGZ}" ]]; then
-    mvn_args+=("-Dspark.kubernetes.test.sparkTgz=${SPARK_TGZ}")
   fi
 
   build/mvn "${mvn_args[@]}"

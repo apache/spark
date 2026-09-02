@@ -116,6 +116,10 @@ jobs:
           if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
             yarn=`./dev/is-changed.py -m yarn`
             kubernetes=`./dev/is-changed.py -m kubernetes`
+            # The OIDC E2E job covers connector/credential-aws end to end on K8s, so it
+            # must run when either the Kubernetes support or the credential-aws module
+            # (including its integration-tests module, mapped to credential-aws) changes.
+            oidc_e2e=`./dev/is-changed.py -m kubernetes,credential-aws`
             sparkr=`./dev/is-changed.py -m sparkr`
             tpcds=`./dev/is-changed.py -m sql`
             docker=`./dev/is-changed.py -m docker-integration-tests`
@@ -156,6 +160,7 @@ jobs:
             pandas=false
             yarn=false
             kubernetes=false
+            oidc_e2e=false
             sparkr=false
             tpcds=false
             docker=false
@@ -182,7 +187,7 @@ jobs:
               \"docs\" : \"$docs\",
               \"yarn\" : \"$yarn\",
               \"k8s-integration-tests\" : \"$kubernetes\",
-              \"oidc-e2e\" : \"$kubernetes\",
+              \"oidc-e2e\" : \"$oidc_e2e\",
               \"buf\" : \"$buf\",
               \"ui\" : \"$ui\",
               \"transpile\": \"$transpile\",
@@ -1511,7 +1516,7 @@ jobs:
           # moto a clean, self-consistent dependency set.
           python3 -m venv "${RUNNER_TEMP}/moto-venv"
           "${RUNNER_TEMP}/moto-venv/bin/pip" install --upgrade pip
-          "${RUNNER_TEMP}/moto-venv/bin/pip" install "moto[server,s3,sts]>=5.0.0"
+          "${RUNNER_TEMP}/moto-venv/bin/pip" install "moto[server,s3,sts]>=5.0.0,<6.0.0"
           echo "MOTO_PYTHON=${RUNNER_TEMP}/moto-venv/bin/python" >> $GITHUB_ENV
       - name: Start Minikube
         uses: medyagh/setup-minikube@e9e035a86bbc3caea26a450bd4dbf9d0c453682e # v0.0.21

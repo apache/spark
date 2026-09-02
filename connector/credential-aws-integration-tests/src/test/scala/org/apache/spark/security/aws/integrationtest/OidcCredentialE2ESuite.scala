@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientBuilder}
-import org.scalatest.{BeforeAndAfterAll, Tag}
+import org.scalatest.Tag
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 import org.scalatest.matchers.should.Matchers
@@ -37,7 +37,7 @@ import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.Logging
+import org.apache.spark.util.Utils
 
 /**
  * End-to-end integration test for OIDC credential propagation with the AWS reference provider.
@@ -70,10 +70,8 @@ import org.apache.spark.internal.Logging
  */
 class OidcCredentialE2ESuite
     extends SparkFunSuite
-    with BeforeAndAfterAll
     with Matchers
-    with Eventually
-    with Logging {
+    with Eventually {
 
   import OidcCredentialE2ESuite._
 
@@ -170,11 +168,15 @@ class OidcCredentialE2ESuite
 
   override def afterAll(): Unit = {
     try {
+      // Wrap each teardown step independently so a failure in one (e.g. the namespace
+      // delete) does not skip the others (closing the S3 and Kubernetes clients).
       if (createdNamespace) {
-        kubernetesClient.namespaces().withName(namespace).delete()
+        Utils.tryLogNonFatalError {
+          kubernetesClient.namespaces().withName(namespace).delete()
+        }
       }
-      Option(s3Client).foreach(_.close())
-      Option(kubernetesClient).foreach(_.close())
+      Utils.tryLogNonFatalError(Option(s3Client).foreach(_.close()))
+      Utils.tryLogNonFatalError(Option(kubernetesClient).foreach(_.close()))
     } finally {
       super.afterAll()
     }
@@ -197,7 +199,8 @@ class OidcCredentialE2ESuite
    */
   test("OIDC credential propagation: basic S3 read/write on Minikube", oidcE2eTag) {
     val outputPath = s"s3a://$s3Bucket/e2e-basic-${UUID.randomUUID().toString.take(8)}/"
-    val conf = baseSparkConf(outputPath)
+    // A fixed executor count (this test does not use dynamic allocation).
+    val conf = baseSparkConf().set("spark.executor.instances", "1")
 
     runOidcJobAndVerify(conf, outputPath)
   }
@@ -239,8 +242,10 @@ class OidcCredentialE2ESuite
     val initialToken = makeUnsignedJwt(initialSubject, ttlSeconds = 600)
     val podTemplatePath = writeDriverPodTemplate(initialToken)
 
-    val conf = baseSparkConf(s"$outputPrefix/")
+    val conf = baseSparkConf()
       .set("spark.kubernetes.driver.pod.name", driverPodName)
+      // A fixed executor count (this test does not use dynamic allocation).
+      .set("spark.executor.instances", "1")
       .set("spark.kubernetes.driver.podTemplateFile", podTemplatePath.toString)
       // The identity token now comes from the init-container-populated emptyDir.
       .set("spark.security.oidc.identityToken.file", "/oidc/token")
@@ -309,6 +314,7 @@ class OidcCredentialE2ESuite
         dumpDriverDiagnostics(driverPodName)
         throw e
     } finally {
+      deleteDriverPod(driverPodName)
       Files.deleteIfExists(podTemplatePath)
     }
   }
@@ -335,7 +341,7 @@ class OidcCredentialE2ESuite
     val driverPodName =
       s"oidc-late-${UUID.randomUUID().toString.replaceAll("-", "").take(16)}-driver"
 
-    val conf = baseSparkConf(s"$outputPrefix/")
+    val conf = baseSparkConf()
       .set("spark.kubernetes.driver.pod.name", driverPodName)
       // Dynamic allocation with shuffle tracking (no external shuffle service on K8s).
       .set("spark.dynamicAllocation.enabled", "true")
@@ -412,6 +418,8 @@ class OidcCredentialE2ESuite
       case e: Throwable =>
         dumpDriverDiagnostics(driverPodName)
         throw e
+    } finally {
+      deleteDriverPod(driverPodName)
     }
   }
 
@@ -419,7 +427,7 @@ class OidcCredentialE2ESuite
   // Helpers
   // -------------------------------------------------------------------------
 
-  private def baseSparkConf(outputPath: String): SparkAppConf = {
+  private def baseSparkConf(): SparkAppConf = {
     val masterUrl = if (k8sMaster.nonEmpty) k8sMaster
     else s"k8s://${kubernetesClient.getMasterUrl}"
 
@@ -428,7 +436,6 @@ class OidcCredentialE2ESuite
       .set("spark.kubernetes.namespace", namespace)
       .set("spark.kubernetes.container.image", sparkImage)
       .set("spark.kubernetes.authenticate.driver.serviceAccountName", serviceAccountName)
-      .set("spark.executor.instances", "1")
       .set("spark.executor.cores", "1")
       .set("spark.kubernetes.driver.request.cores", "0.2")
       .set("spark.kubernetes.executor.request.cores", "0.2")
@@ -452,8 +459,6 @@ class OidcCredentialE2ESuite
       // relying on defaulting behaviour and makes the test intent clear.
       .set("spark.hadoop.fs.s3a.aws.credentials.provider",
         "org.apache.spark.security.aws.SparkOidcAwsCredentialsProvider")
-      // OidcS3ReadWriteJob parameters
-      .set("spark.oidc.test.outputPath", outputPath)
   }
 
   private def runOidcJobAndVerify(conf: SparkAppConf, outputPath: String): Unit = {
@@ -467,36 +472,40 @@ class OidcCredentialE2ESuite
       appArgs = Array(outputPath))
 
     try {
-      SparkAppLauncher.launch(
-        appArguments,
-        conf,
-        TIMEOUT.value.toSeconds.toInt,
-        resolveSparkHomeDir())
-    } catch {
-      case e: Throwable =>
-        // spark-submit runs with waitAppCompletion=true, so a non-zero exit means
-        // the driver failed. Dump the driver pod's status, events and logs to make
-        // the root cause visible instead of leaving only a bare exit code.
-        dumpDriverDiagnostics(driverPodName)
-        throw e
-    }
-
-    // The submit above blocks until the driver completes successfully, so the
-    // output should already be in moto. Poll briefly to absorb any eventual
-    // consistency, and dump diagnostics if it never shows up.
-    try {
-      Eventually.eventually(VERIFY_TIMEOUT, INTERVAL) {
-        val objects = s3Client.listObjectsV2(
-          ListObjectsV2Request.builder()
-            .bucket(s3Bucket)
-            .prefix(outputPath.stripPrefix(s"s3a://$s3Bucket/"))
-            .build())
-        objects.contents().asScala should not be empty
+      try {
+        SparkAppLauncher.launch(
+          appArguments,
+          conf,
+          TIMEOUT.value.toSeconds.toInt,
+          resolveSparkHomeDir())
+      } catch {
+        case e: Throwable =>
+          // spark-submit runs with waitAppCompletion=true, so a non-zero exit means
+          // the driver failed. Dump the driver pod's status, events and logs to make
+          // the root cause visible instead of leaving only a bare exit code.
+          dumpDriverDiagnostics(driverPodName)
+          throw e
       }
-    } catch {
-      case e: Throwable =>
-        dumpDriverDiagnostics(driverPodName)
-        throw e
+
+      // The submit above blocks until the driver completes successfully, so the
+      // output should already be in moto. Poll briefly to absorb any eventual
+      // consistency, and dump diagnostics if it never shows up.
+      try {
+        Eventually.eventually(VERIFY_TIMEOUT, INTERVAL) {
+          val objects = s3Client.listObjectsV2(
+            ListObjectsV2Request.builder()
+              .bucket(s3Bucket)
+              .prefix(outputPath.stripPrefix(s"s3a://$s3Bucket/"))
+              .build())
+          objects.contents().asScala should not be empty
+        }
+      } catch {
+        case e: Throwable =>
+          dumpDriverDiagnostics(driverPodName)
+          throw e
+      }
+    } finally {
+      deleteDriverPod(driverPodName)
     }
   }
 
@@ -516,6 +525,19 @@ class OidcCredentialE2ESuite
     } catch {
       case t: Throwable =>
         logInfo(s"Failed to collect driver diagnostics for $driverPodName: ${t.getMessage}")
+    }
+  }
+
+  /**
+   * Best-effort deletion of the driver pod after a test. The suite runs several tests
+   * in the same namespace with `waitAppCompletion=false`, so a driver (and its
+   * executors, which Spark deletes via owner references when the driver goes away) left
+   * running from one test would compete for the limited CPU/memory of the CI Minikube
+   * and could destabilize the next test. Called from each test's `finally`.
+   */
+  private def deleteDriverPod(driverPodName: String): Unit = {
+    Utils.tryLogNonFatalError {
+      kubernetesClient.pods().inNamespace(namespace).withName(driverPodName).delete()
     }
   }
 
@@ -616,6 +638,10 @@ class OidcCredentialE2ESuite
    * required because the rotation test later overwrites /oidc/token from inside the
    * driver container (uid 185): if the init container wrote the file as root, the driver
    * would get "Permission denied" and the rotation would silently fail.
+   *
+   * The init container reuses the Spark image (which already ships `sh`, `printf` and
+   * `chmod`) rather than pulling a separate `busybox` image at test time, avoiding an
+   * external Docker Hub dependency (and its rate limits / network flakiness) during CI.
    */
   private def writeDriverPodTemplate(initialToken: String): java.nio.file.Path = {
     val tmp = Files.createTempFile("oidc-driver-pod-template-", ".yaml")
@@ -631,7 +657,7 @@ class OidcCredentialE2ESuite
          |    emptyDir: {}
          |  initContainers:
          |  - name: init-oidc-token
-         |    image: busybox:1.36
+         |    image: $sparkImage
          |    securityContext:
          |      runAsUser: 185
          |      runAsGroup: 0
@@ -694,12 +720,12 @@ class OidcCredentialE2ESuite
   }
 
   private def resolveSparkHomeDir(): java.nio.file.Path = {
-    // Mirror kubernetes-integration-tests: pick the first candidate directory that
-    // actually contains bin/spark-submit. spark.test.home is set to the Spark source
-    // root by SparkBuild for all test projects; unpackSparkDir is used when an
-    // unpacked distribution is provided; user.dir is the last-resort fallback.
+    // Pick the first candidate directory that actually contains bin/spark-submit.
+    // spark.test.home is set to the Spark source root by SparkBuild (sbt) and via the
+    // pom's systemProperties (Maven) for this module; user.dir is the last-resort
+    // fallback. (Unlike kubernetes-integration-tests, this module does not unpack a
+    // distribution, so there is no unpackSparkDir to consult.)
     val candidates = Seq(
-      sys.props.get("spark.kubernetes.test.unpackSparkDir"),
       sys.props.get("spark.test.home"),
       sys.props.get("user.dir"))
       .flatten
@@ -711,8 +737,7 @@ class OidcCredentialE2ESuite
     }.getOrElse {
       throw new IllegalStateException(
         s"Could not find bin/spark-submit under any of: ${candidates.mkString(", ")}. " +
-          "Set -Dspark.test.home or -Dspark.kubernetes.test.unpackSparkDir to a Spark home " +
-          "that contains bin/spark-submit.")
+          "Set -Dspark.test.home to a Spark home that contains bin/spark-submit.")
     }
     Paths.get(resolved)
   }
