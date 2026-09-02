@@ -4815,7 +4815,7 @@ class AdaptiveQueryExecSuite
         """.stripMargin
       )
       assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
-      assert(findTopLevelUnion(adaptivePlan).size == 0)
+      assert(findTopLevelUnion(adaptivePlan).isEmpty)
     }
 
     withSQLConf(

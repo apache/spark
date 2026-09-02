@@ -4445,7 +4445,7 @@ class Analyzer(
               throw QueryCompilationErrors.aggregateInQualifyNotAllowedError(a)
           }
           // Ensure at least one window function in SELECT or QUALIFY condition.
-          if (windowExpressionToAliasMap.size() == 0 && !hasWindowInPlan(child)) {
+          if (windowExpressionToAliasMap.isEmpty && !hasWindowInPlan(child)) {
             throw QueryCompilationErrors.qualifyRequiresWindowFunctionError()
           }
           if (windowExpressionToAliasMap.size() > 0) {
