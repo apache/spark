@@ -79,27 +79,21 @@ case class GroupPartitionsExec(
         // single-side-transform reducers; for the both-sides-reduce shape no single transform
         // describes the keys (see `KeyedShuffleSpec.reducersBothWays`).
         val partitionKeys = grouping.partitions.map(_._1)
-        // Only a collection whose KPs are all unknown-keyed genuinely holds unknown keys; a
-        // mixed one comes from a `ShuffledJoin` `InnerLike` arm and its marker is spurious
-        // (see `KeyedPartitioning.mayContainUnknownPartitionKeys`).
-        val kps = p.collect { case k: KeyedPartitioning => k }
-        val mayContainUnknownKeys = kps.nonEmpty && kps.forall(_.mayContainUnknownPartitionKeys)
-        // The output declares reduced keys (when `reducers` is defined) or keys projected to
-        // `joinKeyPositions` -- either coarsens the declared set, which an unknown-keyed claim
-        // cannot survive. Drop the keyed partitioning entirely: the regrouping rewrote the
-        // layout, so there is no child claim to fall back to. No planner path reaches this with
-        // the built-in transforms: `createShuffleSpec` refuses a narrowing projection of an
-        // unknown-keyed partitioning one hop earlier, so `joinKeyPositions` can only arrive
-        // un-narrowed, and `areKeysCompatible` pairs an unknown-keyed spec only with a
-        // same-function partner, which the built-in transforms give no reducer. The `reducers`
-        // term therefore guards third-party `ReducibleFunction`s whose reducer is defined
-        // against themselves; `GroupPartitionsExecSuite` exercises the branch directly.
-        val narrowsDeclaredKeys = kps.headOption.exists { kp =>
-          joinKeyPositions.exists(_.length < kp.expressions.length)
+        // Members carry a uniform marker (mixed collections are cleared at construction by
+        // `ShuffledJoin`), so any member answers for all of them.
+        val mayContainUnknownKeys = p.exists {
+          case k: KeyedPartitioning => k.mayContainUnknownPartitionKeys
+          case _ => false
         }
-        if (mayContainUnknownKeys && (reducers.isDefined || narrowsDeclaredKeys)) {
-          // Report the physical output partition count (one per group, padding included) so a
-          // parent's `PartitioningCollection` stays uniform in numPartitions.
+        // A reduction coarsens the declared set, which a marked claim cannot survive (see
+        // `KeyedPartitioning.mayContainUnknownPartitionKeys`), and the regrouping rewrites the
+        // layout, so no child claim remains to fall back to: give up the keyed partitioning at
+        // the physical output count (one per group, padding included) that a parent's
+        // `PartitioningCollection` requires for uniformity. No planner path with built-in
+        // transforms reaches this (see the gates in `createShuffleSpec` and
+        // `areKeysCompatible`); the branch guards third-party `ReducibleFunction`s with a
+        // self-reducer and is pinned directly in `GroupPartitionsExecSuite`.
+        if (mayContainUnknownKeys && reducers.isDefined) {
           return UnknownPartitioning(grouping.partitions.size)
         }
         p.transform {

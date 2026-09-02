@@ -22,11 +22,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyedPartitioning, KeyedShuffleSpec, KeyReducer, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
-import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer}
+import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer, Reducer}
 import org.apache.spark.sql.execution.{DummySparkPlan, LeafExecNode, SafeForKWayMerge}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{DataType, IntegerType}
 
 class GroupPartitionsExecSuite extends SharedSparkSession {
 
@@ -223,22 +223,44 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(gpe.outputOrdering === Nil)
   }
 
+  test("SPARK-59050: grouping without reducers keeps the child's marker") {
+    // Without a reduction the layout is regrouped, not rewritten: the output keys match the
+    // child's declared set verbatim, so the marker (and the honesty of "may contain") must
+    // ride the transform rather than be dropped or invented.
+    val child = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(1)))
+        .copy(mayContainUnknownPartitionKeys = true))
+    val out = GroupPartitionsExec(child)
+      .outputPartitioning.asInstanceOf[KeyedPartitioning]
+    assert(out.mayContainUnknownPartitionKeys, "the marker must survive plain grouping")
+  }
+
   test("SPARK-59050: unknown-keyed child with reducers gives up the keyed claim at the real " +
     "count") {
-    // No planner path reaches the give-up branch with the built-in transforms --
+    // No planner path reaches the give-up branch with the built-in transforms:
     // `createShuffleSpec` refuses a narrowing projection of an unknown-keyed partitioning one
     // hop earlier, and `areKeysCompatible` pairs it only with same-function partners that have
-    // no reducer (see `GroupPartitionsExec.outputPartitioning`) -- so pin the contract
-    // directly: the node must report `UnknownPartitioning` with its physical grouped count.
-    // Reporting zero partitions is what threw once a parent join built a
-    // `PartitioningCollection` over both sides.
-    val partitionKeys = Seq(row(1), row(2), row(1))
+    // no reducer (see `GroupPartitionsExec.outputPartitioning`). Pin the contract directly: the
+    // node must report `UnknownPartitioning` with its physical grouped count. Reporting zero
+    // partitions is what threw once a parent join built a `PartitioningCollection` over both
+    // sides.
+    // The reducer must be real: `Some(Seq(None))` keeps `reducers.isDefined` true but leaves
+    // every key unchanged, testing none of the collapse that motivates the branch. Keys
+    // [1, 2, 3] reduced mod 2 give [1, 0, 1]: the node emits 2 grouped partitions where the
+    // child had 3, and the give-up count has to be that physical 2.
+    val mod2 = new Reducer[Int, Int] {
+      override def reduce(v: Int): Int = v % 2
+      override def resultType(): DataType = IntegerType
+      override def displayName(): String = "mod2"
+    }
+    val reducer = KeyReducer(mod2, TransformExpression(BucketFunction, Seq(exprA), Some(2)))
+    val partitionKeys = Seq(row(1), row(2), row(3))
     val child = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA), partitionKeys)
         .copy(mayContainUnknownPartitionKeys = true))
-    val gpe = GroupPartitionsExec(child, reducers = Some(Seq(None)))
+    val gpe = GroupPartitionsExec(child, reducers = Some(Seq(Some(reducer))))
 
-    assert(gpe.groupedPartitions.size === 2, "expected coalescing into 2 groups")
+    assert(gpe.groupedPartitions.size === 2, "mod 2 collapses keys 1 and 3")
     gpe.outputPartitioning match {
       case u: UnknownPartitioning =>
         assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
@@ -246,7 +268,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
         fail(s"expected the unknown-keyed claim to be dropped on reduction, got $other")
     }
     // A parent join merges the two sides' partitionings into a collection: a count of 0 fails
-    // the uniform-numPartitions requirement, the round-2 planning throw reproduced -- this call
+    // the uniform-numPartitions requirement, the planning throw reproduced; this call
     // throwing fails the test.
     val partner = KeyedPartitioning(Seq(exprB), Seq(row(1), row(2)))
     PartitioningCollection.fromPartitionings(Seq(gpe.outputPartitioning, partner))

@@ -131,11 +131,9 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
 
     if (projectablePositions.isEmpty) return LazyList.empty
 
-    // Only an input collection whose KPs are all unknown-keyed genuinely holds unknown keys --
-    // a mixed one comes from a `ShuffledJoin` `InnerLike` arm and its marker is spurious (see
-    // `KeyedPartitioning.mayContainUnknownPartitionKeys`; `kps` is non-empty by the early
-    // return above).
-    val mayContainUnknownPartitionKeys = kps.forall(_.mayContainUnknownPartitionKeys)
+    // Collection members carry a uniform marker (mixed collections are cleared at
+    // construction by `ShuffledJoin`), so the head represents them all.
+    val mayContainUnknownPartitionKeys = kps.head.mayContainUnknownPartitionKeys
 
     // Dropping a key position coarsens the declared set, which an unknown-keyed claim cannot
     // survive.
@@ -143,13 +141,11 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
       return LazyList.empty
     }
 
-    // All input KPs share the same partitionKeys and isCollapsed flag by invariant, so the first
-    // one projects the keys and both flags for every combination below. Only the expressions
-    // differ. The marker is re-stamped rather than carried by `project`: `project` would inherit
-    // the head KP's own value, and the scoped answer above turns a spurious one off.
-    val projected = kps.head
-      .project(projectablePositions)
-      .copy(mayContainUnknownPartitionKeys = mayContainUnknownPartitionKeys)
+    // All input KPs share the same partitionKeys and flags by invariant, so the first one
+    // projects the keys for every combination below; only the expressions differ. The marker
+    // rides the copies unchanged: the guard above turned away the one shape that could not, a
+    // narrowing projection of a marked collection.
+    val projected = kps.head.project(projectablePositions)
 
     // Cross-product the per-position alternatives to produce all concrete KPs.
     // Note: generateCartesianProduct expects thunks () => Seq[T], but wrapping LazyLists in thunks
