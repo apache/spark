@@ -555,6 +555,8 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     // Remove the listener, length should be 1.
     spark.streams.removeListener(listener)
     assert(spark.streams.listListeners().length == 0)
+    // Wait for the executionThread to complete. See SPARK-58000.
+    Thread.sleep(5000)
   }
 
   test("listener events") {
