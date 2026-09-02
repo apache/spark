@@ -2025,6 +2025,55 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
     }
   }
 
+  test("SPARK-59141: columnar union interleaves partitions to honor outputPartitioning") {
+    withSQLConf(
+        // Keep the bucketed scans co-located instead of collapsing them to a plain scan.
+        SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "false",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTable("t1", "t2") {
+        // Bucketed parquet scans are batch-readable, so `FileSourceScanExec` is columnar-only
+        // (`supportsColumnar` true, `supportsRowBased` false). A union of two of them is therefore
+        // columnar-only too, which forces the columnar execution path (`doExecuteColumnar`).
+        spark.range(0, 20, 1, 1).selectExpr("id % 5 AS k")
+          .write.bucketBy(4, "k").saveAsTable("t1")
+        spark.range(20, 40, 1, 1).selectExpr("id % 5 AS k")
+          .write.bucketBy(4, "k").saveAsTable("t2")
+
+        val sqlText =
+          "SELECT k, count(*) c FROM (SELECT k FROM t1 UNION ALL SELECT k FROM t2) GROUP BY k"
+        val union = sql(sqlText)
+        val plan = union.queryExecution.executedPlan
+
+        val unionExec = plan.collect { case u: UnionExec => u }
+        assert(unionExec.size == 1)
+        // The union must run columnar (row path unavailable), so it uses `doExecuteColumnar`.
+        assert(unionExec.head.supportsColumnar && !unionExec.head.supportsRowBased,
+          s"expected a columnar-only union but got\n$plan")
+        // Both children are bucketed by `k` into 4 buckets, so the union reports
+        // HashPartitioning(k, 4), which is index-co-locatable.
+        assert(unionExec.head.outputPartitioning.isInstanceOf[HashPartitioning],
+          s"expected a HashPartitioning pass-through but got " +
+            s"${unionExec.head.outputPartitioning}\n$plan")
+        // The aggregate reuses that partitioning, so there is no exchange to re-shuffle the rows;
+        // correctness then depends entirely on the union actually co-locating same-key partitions.
+        assert(plan.collect { case s: ShuffleExchangeExec => s }.isEmpty,
+          s"group-by should reuse the union partitioning (no shuffle) but got\n$plan")
+
+        // Oracle: the same query with union output partitioning disabled inserts a correct shuffle
+        // before the aggregate.
+        val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+          sql(sqlText).collect()
+        }
+        // Without the fix, `doExecuteColumnar` concatenates the children instead of interleaving
+        // same-index partitions, so each key is counted once per table and the shuffle-free
+        // aggregate returns ten rows (each key twice) instead of five.
+        checkAnswer(union, correctResult)
+        checkAnswer(union,
+          Row(0, 8) :: Row(1, 8) :: Row(2, 8) :: Row(3, 8) :: Row(4, 8) :: Nil)
+      }
+    }
+  }
+
   test("SPARK-51262: exceptAll after dropDuplicates with subset should not throw") {
     // Data where dropDuplicates(subset) produces deterministic results - to avoid test flakiness.
     val df1 = spark.createDataFrame(Seq(
