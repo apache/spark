@@ -35,7 +35,9 @@ import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
   private def parse(json: String): Variant =
-    VariantBuilder.parseJson(json, /* allowDuplicateKeys = */ false)
+    VariantBuilder.parseJson(
+      json,
+      /* allowDuplicateKeys = */ false)
 
   private def canon(v: Variant): Variant = VariantBuilder.canonicalize(v)
 
