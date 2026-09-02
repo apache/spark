@@ -58,8 +58,10 @@ private[spark] object Deploy {
         "the ZOOKEEPER recovery mode). The default allows only JDK, Scala and Spark " +
         "classes, which covers everything the master persists (ApplicationInfo, " +
         "DriverInfo, WorkerInfo and their fields); znodes containing anything else are " +
-        "treated as corrupt and dropped during recovery. Set to '*' to disable filtering.")
-      .version("4.4.0")
+        "treated as corrupt and dropped during recovery. Set to '*' to disable filtering. " +
+        "Introduced in 4.3.0; also available in 3.5.10, 4.0.5, 4.1.4 and 4.2.1; and in " +
+        "all versions after 4.3.0.")
+      .version("4.3.0")
       .stringConf
       .createWithDefault("java.**;scala.**;org.apache.spark.**;!*")
 
