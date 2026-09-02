@@ -165,10 +165,7 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     val originalQuery = testRelation
       .groupBy($"b")($"b", sum($"c"))
       .join(testRelation1, joinType = LeftSemi, condition = None)
-    val correctAnswer = testRelation
-      .join(testRelation1, joinType = LeftSemi, condition = None)
-      .groupBy($"b")($"b", sum($"c"))
-      .analyze
+    val correctAnswer = originalQuery.analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
   }
