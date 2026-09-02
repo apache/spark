@@ -447,6 +447,35 @@ class DistributionSuite extends SparkFunSuite {
     assert(interned.partitionKeys eq kpX.partitionKeys)
   }
 
+  test("SPARK-59050: fromPartitionings normalizes the unknown-keys marker by OR") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+    val marked = KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(2)))
+      .copy(mayContainUnknownPartitionKeys = true)
+    val plain = KeyedPartitioning(Seq(y), Seq(InternalRow(1), InternalRow(2)))
+    val combined = PartitioningCollection.fromPartitionings(Seq(marked, plain))
+    // The conservative direction: an unmarked member must never excuse marked data, because
+    // the OR'd-on marker only costs a shuffle while the AND'd-off one could cost correctness.
+    val members = combined.partitionings.map(_.asInstanceOf[KeyedPartitioning])
+    assert(members.forall(_.mayContainUnknownPartitionKeys), members.toString)
+    assert(members.last.partitionKeys eq members.head.partitionKeys)
+  }
+
+  test("SPARK-59050: PartitioningCollection requires members to agree on the marker") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+    val keys = Seq(InternalRow(1), InternalRow(2))
+    val base = KeyedPartitioning(Seq(x), keys)
+    val marked = base.copy(mayContainUnknownPartitionKeys = true)
+    // Same keys reference, arity and isCollapsed, only the marker disagrees: it has to reach
+    // the marker require rather than the reference check ahead of it.
+    val disagree = marked.copy(expressions = Seq(y), mayContainUnknownPartitionKeys = false)
+    val err = intercept[IllegalArgumentException] {
+      PartitioningCollection(Seq(marked, disagree))
+    }
+    assert(err.getMessage.contains("agree on mayContainUnknownPartitionKeys"))
+  }
+
   test("SPARK-56877: PartitioningCollection enforces the invariant through nesting") {
     val x = AttributeReference("x", IntegerType)()
     val y = AttributeReference("y", IntegerType)()

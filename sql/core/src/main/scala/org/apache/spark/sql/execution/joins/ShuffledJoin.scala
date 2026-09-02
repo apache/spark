@@ -95,15 +95,20 @@ trait ShuffledJoin extends JoinCodegenSupport {
    */
   private def clearUnknownPartitionKeys(
       partitionings: Seq[Partitioning]): Seq[Partitioning] = {
-    val members = partitionings.flatMap(PartitioningCollection.flatten)
+    // Only a marked member among an unmarked one needs the rebuild. On the common all-unmarked
+    // path, even a no-op `copy` is not free: `transform`'s `fastEquals` would fall through to
+    // comparing every partition key.
+    val marked = partitionings.view.flatMap(PartitioningCollection.flatten)
       .collect { case k: KeyedPartitioning => k }
-    if (members.isEmpty || members.forall(_.mayContainUnknownPartitionKeys)) {
+    if (!marked.exists(_.mayContainUnknownPartitionKeys) ||
+        marked.forall(_.mayContainUnknownPartitionKeys)) {
       partitionings
     } else {
       partitionings.map {
         case e: Expression =>
           e.transform {
-            case k: KeyedPartitioning => k.copy(mayContainUnknownPartitionKeys = false)
+            case k: KeyedPartitioning if k.mayContainUnknownPartitionKeys =>
+              k.copy(mayContainUnknownPartitionKeys = false)
           }.asInstanceOf[Partitioning]
         case p => p
       }
