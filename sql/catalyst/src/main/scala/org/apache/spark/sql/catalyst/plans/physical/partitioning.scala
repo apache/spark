@@ -605,6 +605,14 @@ case class KeyedPartitioning(
    * field can be named differently on the two sides. With no key at all the expressions are all
    * there is, and there is no row to read or to place.
    *
+   * The two cases can meet, and then the fallback is not truthful. A marked partitioning can end up
+   * with no key, for instance when `v2BucketingPartitionFilterEnabled` intersects two sides that
+   * hold disjoint keys, and it then reports the un-reduced transform's type while the other leg of
+   * the same pairing reports the reducer's. `EnsureRequirements`' reduced-types check compares the
+   * two and fails a query whose result is empty. The same query fails on a `ClassCastException`
+   * without this marker, so nothing regresses. SPARK-59176 tracks the fix, which needs the
+   * reducer's result type recorded where the key is missing.
+   *
    * `ShuffleExchangeExec` is the one reader that stays on `expressionDataTypes`. It evaluates the
    * expressions to place the other child's rows, and it runs on executors, where this value is not
    * available. `expressionsDescribeKeys` is what keeps that site sound.

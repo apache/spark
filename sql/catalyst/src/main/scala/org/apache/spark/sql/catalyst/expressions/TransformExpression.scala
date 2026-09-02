@@ -177,30 +177,21 @@ case class TransformExpression(
     copy(children = newChildren)
 
   /**
-   * Builds the scalar function call this transform stands for, with the bucket count prepended as
-   * a literal argument. `None` when the bound function is not a [[ScalarFunction]], and also when a
+   * The scalar function call this transform stands for, with the bucket count prepended as a
+   * literal argument. `None` when the bound function is not a [[ScalarFunction]], and also when a
    * join reduced this expression's keys, since then the call no longer computes them. Evaluating it
    * to place a row would send the row to a partition it does not belong to. That second arm is a
    * local gate. No caller reaches it today, because every consumer of a reduced partitioning
    * refuses it first, and the write path never sees one.
-   *
-   * A fresh expression per call. The result can be stateful ([[ApplyFunctionExpression]]), so a
-   * caller that puts it in a plan must not share one instance across two positions.
    */
-  def resolveFunctionCall(): Option[Expression] = function match {
+  lazy val resolvedFunction: Option[Expression] = function match {
     case scalarFunc: ScalarFunction[_] if reducedWith.isEmpty =>
       val arguments = numBucketsOpt.fold(children)(n => Literal(n) +: children)
       Some(V2ExpressionUtils.resolveScalarFunction(scalarFunc, arguments))
     case _ => None
   }
 
-  /**
-   * Memoised for `eval`, which runs per row. Safe to reuse only because it stays inside this
-   * expression, unlike the call `resolveFunctionCall` hands to a caller that plans with it.
-   */
-  private lazy val evaluableFunctionCall: Option[Expression] = resolveFunctionCall()
-
-  override def eval(input: InternalRow): Any = evaluableFunctionCall match {
+  override def eval(input: InternalRow): Any = resolvedFunction match {
     case Some(fn) => fn.eval(input)
     case None => throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
   }

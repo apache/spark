@@ -95,7 +95,7 @@ object DistributionAndOrderingUtils {
   }
 
   private def resolveTransformExpression(expr: Expression): Expression = expr.transform {
-    case t: TransformExpression => t.resolveFunctionCall().getOrElse(t)
+    case t: TransformExpression => t.resolvedFunction.getOrElse(t)
   }
 
   private def typeCoercionRules: List[Rule[LogicalPlan]] = if (conf.ansiEnabled) {
