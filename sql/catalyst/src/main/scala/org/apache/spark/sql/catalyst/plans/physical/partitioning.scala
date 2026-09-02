@@ -602,8 +602,11 @@ case class CoalescedNullAwareHashPartitioning(
  *                                 where another leg may declare exactly the key that leg holds
  *                                 out-of-set); (2) a marked member beside an unmarked sibling is
  *                                 spurious, and `ShuffledJoin`'s `InnerLike` arm, the only site
- *                                 that mixes them, clears it at construction, so members are
- *                                 uniformly marked or unmarked everywhere downstream.
+ *                                 that mixes them, clears it at construction;
+ *                                 `PartitioningCollection` additionally normalizes the marker by
+ *                                 OR in `fromPartitionings` and requires agreement in its
+ *                                 constructor, so members are uniformly marked or unmarked
+ *                                 everywhere and consumers may read one member.
  */
 case class KeyedPartitioning(
     expressions: Seq[Expression],
@@ -1069,11 +1072,13 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
  * Outer Join operators.
  *
  * [[KeyedPartitioning]]s within a `PartitioningCollection` describe the same physical partitioning.
- * The constructor therefore requires all of them to share the same `partitionKeys` reference and
- * `isCollapsed` flag, and to have matching expression arity. Only their `expressions` differ.
+ * The constructor therefore requires all of them to share the same `partitionKeys` reference,
+ * `isCollapsed` flag and `mayContainUnknownPartitionKeys` marker, and to have matching
+ * expression arity. Only their `expressions` differ.
  *
  * Use [[PartitioningCollection.fromPartitionings]] to build one from independently-computed
- * partitionings, such as a join's `outputPartitioning`. Its inputs need not agree on `isCollapsed`.
+ * partitionings, such as a join's `outputPartitioning`. Its inputs need not agree on `isCollapsed`
+ * or on the unknown-keys marker.
  * Each member carries the history of the child it came from, so one side can have collapsed its
  * keys in a projection while the other reports what its source declared. `fromPartitionings` ORs
  * the flags, including across nested collections, which is right because the members name one
@@ -1129,6 +1134,10 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
               "partitionKeys reference")
           require(rep.isCollapsed == first.isCollapsed,
             "All KeyedPartitionings in a PartitioningCollection must agree on isCollapsed")
+          require(
+            rep.mayContainUnknownPartitionKeys == first.mayContainUnknownPartitionKeys,
+            "All KeyedPartitionings in a PartitioningCollection must agree on " +
+              "mayContainUnknownPartitionKeys")
         }
       }
     }
@@ -1185,14 +1194,16 @@ object PartitioningCollection {
    * Note: this can't be implemented with `TreeNode.transform`.
    */
   def fromPartitionings(partitionings: Seq[Partitioning]): PartitioningCollection = {
-    // See the class doc for why the flag is normalized by OR rather than required to agree. One
-    // representative per member is enough, because every collection agrees on the flag internally
-    // by this same construction, and only a member that disagrees is rebuilt.
+    // See the class doc for why the flags are normalized by OR rather than required to agree. One
+    // representative per member is enough, because every collection agrees on the flags
+    // internally by this same construction, and only a member that disagrees is rebuilt.
     val anyCollapsed = partitionings.exists(representativeOf(_).exists(_.isCollapsed))
+    val anyUnknownKeys =
+      partitionings.exists(representativeOf(_).exists(_.mayContainUnknownPartitionKeys))
 
     var canonicalKeys: Seq[InternalRowComparableWrapper] = null
     // A partitioning with no `KeyedPartitioning` in it has nothing to normalize, and one that
-    // already agrees on both the keys and the flag is returned as it is. That is what keeps
+    // already agrees on the keys and both flags is returned as it is. That is what keeps
     // repeated `outputPartitioning` computations over deeply nested collections (e.g. chains of
     // same-key joins) O(1) per level.
     def intern(p: Partitioning): Partitioning = representativeOf(p) match {
@@ -1200,14 +1211,16 @@ object PartitioningCollection {
       case Some(representative) =>
         if (canonicalKeys == null) canonicalKeys = representative.partitionKeys
         if ((representative.partitionKeys eq canonicalKeys) &&
-            representative.isCollapsed == anyCollapsed) {
+            representative.isCollapsed == anyCollapsed &&
+            representative.mayContainUnknownPartitionKeys == anyUnknownKeys) {
           p
         } else {
           require(representative.partitionKeys == canonicalKeys,
             "All KeyedPartitionings in a PartitioningCollection must have equal partitionKeys")
           p match {
             case keyed: KeyedPartitioning =>
-              keyed.copy(partitionKeys = canonicalKeys, isCollapsed = anyCollapsed)
+              keyed.copy(partitionKeys = canonicalKeys, isCollapsed = anyCollapsed,
+                mayContainUnknownPartitionKeys = anyUnknownKeys)
             case pc: PartitioningCollection =>
               new PartitioningCollection(pc.partitionings.map(intern))
           }

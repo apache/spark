@@ -5946,7 +5946,6 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-
   /**
    * Asserts that the plan's shuffles (in tree order) are all `KeyedPartitioning`s carrying the
    * given `mayContainUnknownPartitionKeys` flags (a `KeyedPartitioning` produced by
@@ -6257,12 +6256,12 @@ class KeyGroupedPartitioningSuite
   }
 
   test("SPARK-59050: SPJ: union of an unknown-keyed leg drops the merged keyed partitioning") {
-    // The union's merged keys concatenate every leg's keys, a superset of each
-    // leg's declared set. When a leg's partitioning may contain unknown partition keys, another
-    // leg can declare exactly the key the unknown-keyed leg holds out-of-set, so the merged
-    // claim would promise co-location the unknown-keyed leg cannot honor. The union must drop
-    // the keyed partitioning entirely (with multiple legs the merged set is always larger than
-    // any single leg's, so there is no sound way to keep it).
+    // The union's merged keys concatenate every leg's keys, a superset, possibly equal, of each
+    // leg's declared set. When a leg may contain unknown partition keys, another leg can declare
+    // exactly the key that leg holds out-of-set, so the merged claim would promise co-location
+    // the marked leg cannot honor. Legs that declare the same key set would in fact tolerate
+    // keeping the marker (its out-of-set row rides its own leg's partition into that partition's
+    // group); this check does not try to tell that case from the rest, and refuses.
     createTable("a", columns, Array(identity("id")))
     createTable("s", columns, Array(identity("id")))
     createTable("u", columns, Array(identity("id")))
@@ -6799,5 +6798,3 @@ class KeyGroupedPartitioningCatalystRuntimeFilterSuite
     catalog.clearTables()
   }
 }
-
-
