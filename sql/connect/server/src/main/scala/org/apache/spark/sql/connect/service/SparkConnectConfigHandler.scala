@@ -28,7 +28,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SECRET_REDACTION_PATTERN
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.python.PythonWorkerEnvironment
 import org.apache.spark.sql.internal.SQLConf
 
 class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigResponse])
@@ -56,7 +55,7 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
     // Make sure we're using the current running session.
     val builder = r.getOperation.getOpTypeCase match {
       case proto.ConfigRequest.Operation.OpTypeCase.SET =>
-        handleSet(r.getOperation.getSet, s.conf, s.sessionState.conf)
+        handleSet(r.getOperation.getSet, s.conf)
       case proto.ConfigRequest.Operation.OpTypeCase.GET =>
         handleGet(r.getOperation.getGet, s.conf, redactionPattern)
       case proto.ConfigRequest.Operation.OpTypeCase.GET_WITH_DEFAULT =>
@@ -81,25 +80,18 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
 
   private def handleSet(
       operation: proto.ConfigRequest.Set,
-      conf: RuntimeConfig,
-      sqlConf: SQLConf): proto.ConfigResponse.Builder = {
+      conf: RuntimeConfig): proto.ConfigResponse.Builder = {
     val silent = operation.hasSilent && operation.getSilent
     val builder = proto.ConfigResponse.newBuilder()
     operation.getPairsList.asScala.iterator.foreach { pair =>
       val (key, value) = SparkConnectConfigHandler.toKeyValue(pair)
       try {
-        // Refuse a write that would leave the session's Python worker environment invalid, before
-        // it is stored. Inside the try so a `silent` request reports it as a warning, like any
-        // other rejected write. Check and write under the monitor that guards the session
-        // configurations, so a concurrent write cannot land in between and leave an environment
-        // neither writer validated. That monitor is `settings` itself, a
-        // `Collections.synchronizedMap` whose every `put` locks the wrapper, so holding it here
-        // excludes the read in `getAllConfs` and the writes in `setConfString` and
-        // `setConf(props)` alike.
-        sqlConf.settings.synchronized {
-          PythonWorkerEnvironment.validateConfigChange(conf, key, value)
-          conf.set(key, value.orNull)
-        }
+        // `RuntimeConfig.set` refuses a write that would leave the session's Python worker
+        // environment invalid, and does the check and the write as one unit. The server writes
+        // through a classic `RuntimeConfig`, so that covers this path with no work here; the call
+        // stays inside the try so a `silent` request reports the refusal as a warning, like any
+        // other rejected write.
+        conf.set(key, value.orNull)
         getWarning(key).foreach(builder.addWarnings)
       } catch {
         case e: Throwable =>

@@ -208,9 +208,14 @@ private[sql] object PythonWorkerEnvironment {
    * would produce is validated before the write happens, so an invalid environment never enters
    * the session at all and the failure points at the call that caused it.
    *
-   * Only the Spark Connect config RPC can call this; SQL `SET` and the application-level
-   * configurations merged into a new session reach the session configurations without any such
-   * interception, which is why [[validate]] at worker launch remains the authoritative check.
+   * Called from `RuntimeConfig.set`, which is the write path every user-facing way of setting a
+   * configuration reaches: a classic `spark.conf.set` goes straight there, the Spark Connect config
+   * RPC writes through a classic `RuntimeConfig` on the server, and SQL `SET` reaches it through
+   * `SetCommand`. So one call site covers both front ends and all three surfaces.
+   *
+   * What still bypasses it is a write straight to `SQLConf` -- `SparkSession.builder`'s
+   * configurations are merged into a session that way, and internal code can call `setConfString`
+   * directly -- which is why [[validate]] at worker launch remains the authoritative check.
    *
    * Removing a variable is deliberately not validated: a removal can only shrink the environment,
    * and it is how a session recovers from one of those unchecked paths leaving it invalid.

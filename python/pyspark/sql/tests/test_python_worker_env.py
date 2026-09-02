@@ -138,33 +138,6 @@ class PythonWorkerEnvMixin:
         finally:
             self._unset_env("PYTHONUNBUFFERED")
 
-    def test_conditionally_set_variable_is_reserved(self):
-        # Spark sets PYTHON_UNIX_DOMAIN_ENABLED only on the Unix-domain-socket path, and the
-        # worker reads it to choose its transport, so write order cannot protect it and the name
-        # is refused.
-        # SQL `SET` is intercepted on neither front end, so the write lands and the rejection comes
-        # at worker launch. Kept outside assertRaises so the assertion is about the launch, and
-        # unset in a finally so a failure cannot leak the name into the rest of the shared session.
-        self.spark.sql("SET {}PYTHON_UNIX_DOMAIN_ENABLED=True".format(PREFIX)).collect()
-        try:
-            with self.assertRaises(Exception) as context:
-                self._read_in_worker("ANY")
-            self.assertIn("RESERVED_PYTHON_WORKER_ENV_VAR_NAME", str(context.exception))
-        finally:
-            self._unset_env("PYTHON_UNIX_DOMAIN_ENABLED")
-
-    def test_worker_factory_name_is_reserved_by_prefix(self):
-        # PYTHON_WORKER_FACTORY_SOCK_DIR is set only on the daemon's Unix-domain-socket branch.
-        # The reserved list enumerated three names in this family and missed it, so the prefix is
-        # reserved instead; this covers the name the enumeration let through.
-        self.spark.sql("SET {}PYTHON_WORKER_FACTORY_SOCK_DIR=/tmp".format(PREFIX)).collect()
-        try:
-            with self.assertRaises(Exception) as context:
-                self._read_in_worker("ANY")
-            self.assertIn("RESERVED_PYTHON_WORKER_ENV_VAR_NAME", str(context.exception))
-        finally:
-            self._unset_env("PYTHON_WORKER_FACTORY_SOCK_DIR")
-
     def test_pythonpath_reaches_the_worker_import_path(self):
         # PYTHONPATH is neither reserved nor overridden: PythonWorkerFactory folds the session's
         # value into the path it computes, so the entry reaches the worker rather than being
@@ -180,6 +153,41 @@ class PythonWorkerEnvMixin:
             self.assertIn(marker, entries)
         finally:
             self._unset_env("PYTHONPATH")
+
+    def test_reserved_name_is_refused(self):
+        # Spark sets SPARK_PIPELINED_UDF only when pipelined execution is on, and the worker reads
+        # it to choose its wire protocol, so a session must not be able to set it at all. One name
+        # is enough end to end: `PythonWorkerEnvironmentSuite` iterates every reserved prefix and
+        # name, including the conditional PYTHON_* ones and PYTHON_WORKER_FACTORY_SOCK_DIR.
+        with self.assertRaises(Exception) as context:
+            self.spark.conf.set(PREFIX + "SPARK_PIPELINED_UDF", "1")
+        self.assertIn("RESERVED_PYTHON_WORKER_ENV_VAR_NAME", str(context.exception))
+        self.assertIsNone(self.spark.conf.get(PREFIX + "SPARK_PIPELINED_UDF", None))
+
+    def test_sql_set_is_refused_too(self):
+        # SQL `SET` reaches `RuntimeConfig.set` through `SetCommand`, so it goes through the same
+        # check as `spark.conf.set` rather than storing the value for a later query to trip over.
+        with self.assertRaises(Exception) as context:
+            self.spark.sql("SET {}1INVALID=x".format(PREFIX)).collect()
+        message = str(context.exception)
+        self.assertIn("1INVALID", message)
+        # A rejection names the variable but must never quote its value.
+        self.assertNotIn("is not valid: x", message)
+        self.assertIsNone(self.spark.conf.get(PREFIX + "1INVALID", None))
+
+    def test_oversized_environment_is_refused(self):
+        # Exceeds the default 128 KiB spark.sql.pythonWorkerEnv.maxTotalSizeBytes. The limits are
+        # static configs, so a shared session cannot lower one for a test; going over the default is
+        # what lets this run end to end. The Scala suite covers the other limits by overriding them
+        # on the SparkConf directly.
+        big = "x" * (200 * 1024)
+        with self.assertRaises(Exception) as context:
+            self.spark.conf.set(PREFIX + "BIG", big)
+        message = str(context.exception)
+        self.assertIn("PYTHON_WORKER_ENV_TOO_LARGE", message)
+        # The rejection reports sizes, never the offending value.
+        self.assertNotIn("xxxxxxxxxx", message)
+        self.assertIsNone(self.spark.conf.get(PREFIX + "BIG", None))
 
     # -- families that are not covered yet ------------------------------------
 
@@ -204,47 +212,29 @@ class PythonWorkerEnvMixin:
 
     # -- rejection ------------------------------------------------------------
 
-    def test_invalid_name_set_through_sql_fails_the_query(self):
-        # SQL `SET` writes the session configuration without passing through any write-time check,
-        # so the check performed when a worker is launched is what stops an environment installed
-        # this way from reaching one.
-        self.spark.sql("SET {}1INVALID=x".format(PREFIX)).collect()
-        try:
-            self.assertEqual(self.spark.conf.get(PREFIX + "1INVALID"), "x")
-            with self.assertRaises(Exception) as context:
-                self._read_in_worker("ANY")
-            message = str(context.exception)
-            self.assertIn("1INVALID", message)
-            # A rejection names the variable but must never quote its value.
-            self.assertNotIn("is not valid: x", message)
-        finally:
-            self._unset_env("1INVALID")
-
-    def test_oversized_environment_fails_the_query(self):
-        # Exceeds the default 128 KiB spark.sql.pythonWorkerEnv.maxTotalSizeBytes. The limits are
-        # static configs, so a shared session cannot lower one for a test; going over the default is
-        # what lets this run end to end. The Scala suite covers the other limits by overriding them
-        # on the SparkConf directly.
-        self.spark.sql("SET {}BIG={}".format(PREFIX, "x" * (200 * 1024))).collect()
-        try:
-            with self.assertRaises(Exception) as context:
-                self._read_in_worker("BIG")
-            message = str(context.exception)
-            self.assertIn("PYTHON_WORKER_ENV_TOO_LARGE", message)
-            # The rejection reports sizes, never the offending value.
-            self.assertNotIn("xxxxxxxxxx", message)
-        finally:
-            self._unset_env("BIG")
-
-    def test_reserved_name_is_rejected(self):
-        # Spark sets SPARK_PIPELINED_UDF only when pipelined execution is on, and the worker reads
-        # it to choose its wire protocol, so a session must not be able to set it at all.
+    def test_invalid_name_fails_the_set(self):
+        # `spark.conf.set` goes through `RuntimeConfig.set` on both front ends -- the Spark Connect
+        # server writes through a classic `RuntimeConfig` too -- so an invalid variable is refused
+        # at the call rather than at a later query.
         with self.assertRaises(Exception) as context:
-            self.spark.sql("SET {}SPARK_PIPELINED_UDF=1".format(PREFIX)).collect()
-            self._read_in_worker("ANY")
+            self.spark.conf.set(PREFIX + "1INVALID", "x")
         message = str(context.exception)
-        self.assertIn("RESERVED_PYTHON_WORKER_ENV_VAR_NAME", message)
-        self._unset_env("SPARK_PIPELINED_UDF")
+        # Assert on the message text rather than the condition name, which a client is not required
+        # to surface in the string form of the exception.
+        self.assertIn("is not valid", message)
+        self.assertIn("1INVALID", message)
+        # The write was refused, so nothing was stored to break later queries.
+        self.assertIsNone(self.spark.conf.get(PREFIX + "1INVALID", None))
+
+    def test_value_containing_nul_fails_the_set(self):
+        with self.assertRaises(Exception) as context:
+            self.spark.conf.set(PREFIX + "WITH_NUL", "abc" + NUL + "def")
+        message = str(context.exception)
+        self.assertIn("NUL character", message)
+        self.assertIn("WITH_NUL", message)
+        # A value can be a secret, so it must not appear in the failure.
+        self.assertNotIn("abc", message)
+        self.assertIsNone(self.spark.conf.get(PREFIX + "WITH_NUL", None))
 
     def test_env_var_reaches_a_udf_inside_a_higher_order_function(self):
         # A UDF written inside a lambda is lifted to the element-wise eval type, which is enabled by
@@ -280,13 +270,6 @@ class PythonWorkerEnvTests(PythonWorkerEnvMixin, ReusedSQLTestCase):
     # A Spark Connect client has no SparkContext and the server builds the function with an empty
     # map, so there is no inherited value there to fall back to or to override.
 
-    def test_session_value_overrides_executor_env(self):
-        self._set_env("SHARED", "from_session")
-        try:
-            self.assertEqual(self._read_in_worker("SHARED"), "from_session")
-        finally:
-            self._unset_env("SHARED")
-
     def test_unset_reveals_the_inherited_value(self):
         self._set_env("SHARED", "from_session")
         try:
@@ -295,20 +278,22 @@ class PythonWorkerEnvTests(PythonWorkerEnvMixin, ReusedSQLTestCase):
             self._unset_env("SHARED")
         self.assertEqual(self._read_in_worker("SHARED"), "from_application")
 
-    def test_invalid_name_is_stored_on_a_classic_session(self):
-        # A classic session has no interception point on a configuration write, so the value is
-        # stored and only the query that would install it fails. Spark Connect refuses the write
-        # itself; its parity suite asserts that instead.
-        self.spark.conf.set(PREFIX + "1INVALID", "x")
+    def test_an_environment_stored_by_a_bypass_path_fails_at_worker_launch(self):
+        # `RuntimeConfig.set` now refuses an invalid variable, and SQL `SET` reaches it too, so the
+        # only way left into a bad session state is a write straight to `SQLConf` -- which is what
+        # the configurations merged into a new session by `SparkSession.builder` do. Reached here
+        # through the JVM, so this is classic-only, and it is the end-to-end proof that the check
+        # performed when a worker is launched is still what makes an invalid environment unusable.
+        jconf = self.spark._jsparkSession.sessionState().conf()
+        jconf.setConfString(PREFIX + "1INVALID", "x")
         try:
             self.assertEqual(self.spark.conf.get(PREFIX + "1INVALID"), "x")
-            # A task-side failure surfaces through py4j on classic, so assert on the message
-            # rather than on a particular exception class.
             with self.assertRaises(Exception) as context:
                 self._read_in_worker("ANY")
             self.assertIn("1INVALID", str(context.exception))
         finally:
             self._unset_env("1INVALID")
+
 
 
 if __name__ == "__main__":

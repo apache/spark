@@ -311,6 +311,60 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
   }
 
   // ---------------------------------------------------------------------------
+  // Write-time rejection at the shared `RuntimeConfig` boundary
+  // ---------------------------------------------------------------------------
+
+  test("SPARK-58752: a classic conf write is refused before it is stored") {
+    // `RuntimeConfig.set` is the write path both front ends share, so an invalid variable fails at
+    // the call instead of at the first query that would launch a worker. Nothing is stored, so the
+    // session is not left carrying an environment its queries cannot use.
+    val ex = intercept[SparkException] {
+      spark.conf.set(key("1INVALID"), "x")
+    }
+    assert(ex.getCondition === "INVALID_SPARK_CONFIG.INVALID_PYTHON_WORKER_ENV_VAR_NAME")
+    assert(spark.conf.getOption(key("1INVALID")).isEmpty)
+  }
+
+  test("SPARK-58752: a classic conf write is validated against the whole environment") {
+    // The count limit is a property of the environment, not of the entry being written, so the
+    // check has to read what the session already holds rather than only the incoming pair.
+    withLimit(StaticSQLConf.PYTHON_WORKER_ENV_MAX_VARIABLES, 1) {
+      spark.conf.set(key("FIRST"), "1")
+      try {
+        val ex = intercept[SparkException] {
+          spark.conf.set(key("SECOND"), "2")
+        }
+        assert(ex.getCondition === "INVALID_SPARK_CONFIG.PYTHON_WORKER_ENV_TOO_MANY_VARIABLES")
+        assert(spark.conf.getOption(key("SECOND")).isEmpty)
+      } finally {
+        spark.conf.unset(key("FIRST"))
+      }
+    }
+  }
+
+  test("SPARK-58752: a write outside the prefix is not validated as an environment") {
+    // The check is scoped to the prefix so an ordinary configuration write neither validates an
+    // environment nor takes the monitor. A name that would be rejected under the prefix is fine
+    // here, because it is not an environment variable name at all.
+    val plainKey = "spark.sql.pythonWorkerEnvNotAPrefixMatch"
+    spark.conf.set(plainKey, "1INVALID")
+    try {
+      assert(spark.conf.get(plainKey) === "1INVALID")
+    } finally {
+      spark.conf.unset(plainKey)
+    }
+  }
+
+  test("SPARK-58752: removing a variable is not validated") {
+    // A removal can only shrink the environment, and it is how a session recovers from an invalid
+    // one left behind by a write straight to `SQLConf`, which is how `SparkSession.builder` merges
+    // its configurations and is the one path this boundary does not see.
+    spark.sessionState.conf.setConfString(key("1INVALID"), "x")
+    spark.conf.unset(key("1INVALID"))
+    assert(spark.conf.getOption(key("1INVALID")).isEmpty)
+  }
+
+  // ---------------------------------------------------------------------------
   // Merging and precedence
   // ---------------------------------------------------------------------------
 

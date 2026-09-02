@@ -860,12 +860,12 @@ Apart from these, the following properties are also available, and may be useful
     <br /><br />
     A variable name must match <code>[A-Za-z_][A-Za-z0-9_]*</code>, and a value must not contain a
     NUL character, which a process environment cannot carry. The number of variables and the total
-    size of the environment are also bounded. A Spark Connect client setting one through the
-    configuration API, which is what <code>spark.conf.set</code> uses there, fails immediately if
-    the result would be invalid and stores nothing. Setting one any other way -- SQL
-    <code>SET</code>, or <code>spark.conf.set</code> on a classic session -- does not pass through
-    that check, so the value is stored and instead fails the queries that would install it in a
-    worker.
+    size of the environment are also bounded. Setting one fails immediately and stores nothing if
+    the result would be invalid -- through <code>spark.conf.set</code> or SQL <code>SET</code>, on
+    both classic Spark and Spark Connect. A configuration passed to
+    <code>SparkSession.builder</code> and merged into the session does not pass through that check,
+    so such a value is stored and instead fails the queries that would install it in a worker; unset
+    it to recover.
     <br /><br />
     Values are not redacted from the worker environment, so a session that puts a secret here is
     responsible for keeping the Python code it runs from disclosing it.
