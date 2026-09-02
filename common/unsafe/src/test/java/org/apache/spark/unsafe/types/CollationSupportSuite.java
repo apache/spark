@@ -2737,6 +2737,91 @@ public class CollationSupportSuite {
     assertSubstringIndex("a🙃b🙃c", "d", -1, UTF8_LCASE, "a🙃b🙃c");
     assertSubstringIndex("a🙃b🙃c", "d", -1, UNICODE, "a🙃b🙃c");
     assertSubstringIndex("a🙃b🙃c", "d", -1, UNICODE_CI, "a🙃b🙃c");
+    // SPARK-58441: negative count with adjacent delimiter occurrences over characters that map
+    // to multiple collation elements: the ICU path previously used StringSearch.previous(),
+    // which skips such occurrences and returned the wrong suffix. UTF8_BINARY does not go
+    // through the ICU path, so it pins each expectation independently of the code under test.
+    assertSubstringIndex("ééa", "é", -2, UTF8_BINARY, "éa");
+    assertSubstringIndex("ééa", "é", -2, UNICODE, "éa");
+    assertSubstringIndex("ééa", "é", -2, UNICODE_CI, "éa");
+    // Same, with a delimiter spanning more than one such character, so that the suffix depends
+    // on the matched length and not just on the match position.
+    assertSubstringIndex("aéééba", "éé", -2, UTF8_BINARY, "éba");
+    assertSubstringIndex("aéééba", "éé", -2, UNICODE, "éba");
+    // Positive count with the first delimiter occurrence at position 0 and a delimiter
+    // starting with a surrogate pair: the stuck-iterator workaround previously used 0 as the
+    // "no match yet" sentinel and double-counted the first occurrence.
+    assertSubstringIndex("😀a😀b", "😀", 2, UTF8_BINARY, "😀a");
+    assertSubstringIndex("😀a😀b", "😀", 2, UNICODE, "😀a");
+    assertSubstringIndex("😀😀😀", "😀😀", 2, UTF8_BINARY, "😀");
+    assertSubstringIndex("😀😀😀", "😀😀", 2, UNICODE, "😀");
+    // Targets long enough to exercise the backward search's trailing window. The window starts
+    // at 64 UTF-16 code units and grows by 4x, and the ring buffer that retains the last `count`
+    // match positions starts at 16 entries, so every case above resolves in the first window
+    // with an unresized buffer. The three below do not.
+    // Only delimiter occurrence is 300 code units before the end: the anchor is the end of the
+    // target, so there is no stretch beyond it for a pass to re-walk and the growth stays
+    // geometric until the window reaches the start.
+    assertSubstringIndex("z" + "x".repeat(300), "z", -1, UNICODE, "x".repeat(300));
+    // The 20th occurrence from the end lies outside the first window, and 20 exceeds the ring
+    // buffer's initial capacity: the window grows once and the buffer is resized and wraps.
+    assertSubstringIndex(("a" + "x".repeat(9)).repeat(30), "a", -20, UNICODE,
+      "x".repeat(9) + ("a" + "x".repeat(9)).repeat(19));
+    // The first window already holds far more than 20 occurrences, so only the ring buffer is
+    // resized, and it wraps several times.
+    assertSubstringIndex("a".repeat(100), "a", -20, UNICODE, "a".repeat(19));
+    // The window starts at an arbitrary UTF-16 offset, which the all-ASCII targets above cannot
+    // tell apart from a code point boundary. Each pair below differs by one trailing code unit,
+    // so one member starts the window on a base character and the other in the middle of the
+    // following combining sequence ("e" + combining acute) or surrogate pair; both must give
+    // the same answer.
+    assertSubstringIndex("z" + "e\u0301".repeat(200), "z", -1, UNICODE,
+      "e\u0301".repeat(200));
+    assertSubstringIndex("z" + "e\u0301".repeat(200) + "x", "z", -1, UNICODE,
+      "e\u0301".repeat(200) + "x");
+    assertSubstringIndex("z" + "😀".repeat(200), "z", -1, UNICODE, "😀".repeat(200));
+    assertSubstringIndex("z" + "😀".repeat(200) + "x", "z", -1, UNICODE, "😀".repeat(200) + "x");
+    // The 32nd occurrence from the end is the one the window boundary falls inside, so the
+    // answer is only right if widening the window recovers an occurrence the previous window
+    // started in the middle of. UTF8_BINARY does not use the windowed search and pins the
+    // expectation independently.
+    assertSubstringIndex("e\u0301".repeat(100) + "x", "e\u0301", -32, UTF8_BINARY,
+      "e\u0301".repeat(31) + "x");
+    assertSubstringIndex("e\u0301".repeat(100) + "x", "e\u0301", -32, UNICODE,
+      "e\u0301".repeat(31) + "x");
+    // The windowed cases above all run under UNICODE, where the delimiter matches literally.
+    // Repeat them under the collations that make the match set itself collation-dependent,
+    // which is the property this fix turns on: case folding under UNICODE_CI and accent folding
+    // under UNICODE_CI_AI, over targets long enough to need a second window. UNICODE_AI is not
+    // used here: substring_index declares StringTypeNonCSAICollation, which rejects a collation
+    // that is accent-insensitive but case-sensitive, so no such call can reach this code.
+    assertSubstringIndex(("A" + "x".repeat(9)).repeat(30), "a", -20, UNICODE_CI,
+      "x".repeat(9) + ("A" + "x".repeat(9)).repeat(19));
+    assertSubstringIndex(("\u00e1" + "x".repeat(9)).repeat(30), "a", -20, "UNICODE_CI_AI",
+      "x".repeat(9) + ("\u00e1" + "x".repeat(9)).repeat(19));
+    // Case folding across a window boundary that falls inside a combining sequence: the
+    // delimiter is the uppercase base plus the same combining mark.
+    assertSubstringIndex("e\u0301".repeat(100) + "x", "E\u0301", -32, UNICODE_CI,
+      "e\u0301".repeat(31) + "x");
+    // Collations whose delimiter is a contraction, i.e. a single collation unit spanning more
+    // than one code point. A start index inside such a unit is snapped back to its beginning, so
+    // the iterator only makes progress if it is advanced past the whole unit. Czech "ch" occurs
+    // at the same positions under UTF8_BINARY, which pins the expectations independently.
+    assertSubstringIndex("chch", "ch", 2, UTF8_BINARY, "ch");
+    assertSubstringIndex("chch", "ch", 2, "cs", "ch");
+    assertSubstringIndex("chch", "ch", -1, UTF8_BINARY, "");
+    assertSubstringIndex("chch", "ch", -1, "cs", "");
+    assertSubstringIndex("achbchcch", "ch", -2, UTF8_BINARY, "cch");
+    assertSubstringIndex("achbchcch", "ch", -2, "cs", "cch");
+    // Same, over a target long enough that the trailing window starts partway into it rather
+    // than at its beginning, so the contraction is crossed by a pass that did not walk the
+    // target from index 0.
+    assertSubstringIndex("ch".repeat(60), "ch", -3, UTF8_BINARY, "chch");
+    assertSubstringIndex("ch".repeat(60), "ch", -3, "cs", "chch");
+    // Danish "aa" is a contraction whose occurrences differ from the byte-wise ones: "aaaa"
+    // holds a delimiter at code points 0 and 2, but not at 1, which is inside the first one.
+    assertSubstringIndex("aaaa", "aa", 2, "da", "aa");
+    assertSubstringIndex("aaaa", "aa", -1, "da", "");
   }
 
   /**
@@ -4340,6 +4425,158 @@ public class CollationSupportSuite {
     assertStringInstrWithOccurrence("aaaa", "aa", -2, 1, UNICODE, 3);
     assertStringInstrWithOccurrence("aaaa", "aa", -1, 3, UNICODE, 1);
     assertStringInstrWithOccurrence("aaaa", "aa", -2, 3, UNICODE, 1);
+    // SPARK-58441: backward search over characters that map to multiple collation elements: the
+    // ICU path previously used StringSearch.previous(), which skips or misaligns such matches.
+    // UTF8_BINARY does not go through the ICU path, so it pins each expectation independently
+    // of the code under test.
+    assertStringInstrWithOccurrence("bbébébé", "bé", -3, 1, UTF8_BINARY, 4);
+    assertStringInstrWithOccurrence("bbébébé", "bé", -3, 1, UNICODE, 4);
+    assertStringInstrWithOccurrence("bbébébé", "bé", -3, 2, UTF8_BINARY, 2);
+    assertStringInstrWithOccurrence("bbébébé", "bé", -3, 2, UNICODE, 2);
+    // A match that starts exactly at the backward anchor still counts.
+    assertStringInstrWithOccurrence("babaéa", "aé", -3, 1, UTF8_BINARY, 4);
+    assertStringInstrWithOccurrence("babaéa", "aé", -3, 1, UNICODE, 4);
+    assertStringInstrWithOccurrence("ééé", "é", -1, 2, UTF8_BINARY, 2);
+    assertStringInstrWithOccurrence("ééé", "é", -1, 2, UNICODE_CI, 2);
+    // A backward start one position before the beginning of the string matches nothing. The ICU
+    // path used to accept such a start and report a match, unlike every other collation, so the
+    // UTF8_BINARY expectation below is the reference the ICU ones are now aligned with.
+    assertStringInstrWithOccurrence("é", "é", -2, 1, UTF8_BINARY, 0);
+    assertStringInstrWithOccurrence("é", "é", -2, 1, UNICODE, 0);
+    // A match at position 0 of a pattern starting with a surrogate pair: the stuck-iterator
+    // workaround previously used 0 as the "no match yet" sentinel and double-counted it.
+    assertStringInstrWithOccurrence("😀a😀b", "😀", 1, 2, UTF8_BINARY, 3);
+    assertStringInstrWithOccurrence("😀a😀b", "😀", 1, 2, UNICODE, 3);
+    assertStringInstrWithOccurrence("😀abc", "😀", 1, 2, UTF8_BINARY, 0);
+    assertStringInstrWithOccurrence("😀abc", "😀", 1, 2, UNICODE, 0);
+    // Overlapping matches of a pattern starting with a surrogate pair.
+    assertStringInstrWithOccurrence("😀😀😀", "😀😀", 1, 2, UTF8_BINARY, 2);
+    assertStringInstrWithOccurrence("😀😀😀", "😀😀", 1, 2, UNICODE, 2);
+    // Targets long enough to exercise the backward search's trailing window. The window starts
+    // at 64 UTF-16 code units and grows by 4x, and the ring buffer that retains the last
+    // `occurrence` match positions starts at 16 entries, so every case above resolves in the
+    // first window with an unresized buffer. The three below do not.
+    // Only match is 300 code units before the end: the anchor is one code point from the end,
+    // so the stretch past it is never longer than the window and the growth stays geometric
+    // until it reaches the start.
+    assertStringInstrWithOccurrence("z" + "x".repeat(300), "z", -1, 1, UNICODE, 1);
+    // The 20th match from the end lies outside the first window, and 20 exceeds the ring
+    // buffer's initial capacity: the window grows once and the buffer is resized and wraps.
+    assertStringInstrWithOccurrence(("a" + "x".repeat(9)).repeat(30), "a", -1, 20, UNICODE, 101);
+    // The first window already holds far more than 20 matches, so only the ring buffer is
+    // resized, and it wraps several times.
+    assertStringInstrWithOccurrence("a".repeat(100), "a", -1, 20, UNICODE, 81);
+    // The window starts at an arbitrary UTF-16 offset, which the all-ASCII targets above cannot
+    // tell apart from a code point boundary. Each pair below differs by one trailing code unit,
+    // so one member starts the window on a base character and the other in the middle of the
+    // following combining sequence ("e" + combining acute) or surrogate pair; both must give
+    // the same answer.
+    assertStringInstrWithOccurrence("z" + "e\u0301".repeat(200), "z", -1, 1, UNICODE, 1);
+    assertStringInstrWithOccurrence("z" + "e\u0301".repeat(200) + "x", "z", -1, 1, UNICODE, 1);
+    assertStringInstrWithOccurrence("z" + "😀".repeat(200) + "x", "z", -1, 1,
+      UNICODE, 1);
+    assertStringInstrWithOccurrence("z" + "😀".repeat(200) + "xx", "z", -1, 1,
+      UNICODE, 1);
+    // The 32nd match from the end is the one the window boundary falls inside, so the answer is
+    // only right if widening the window recovers a match the previous window started in the
+    // middle of. UTF8_BINARY does not use the windowed search and pins the expectation
+    // independently.
+    assertStringInstrWithOccurrence("e\u0301".repeat(100) + "xx", "e\u0301", -1, 32,
+      UTF8_BINARY, 137);
+    assertStringInstrWithOccurrence("e\u0301".repeat(100) + "xx", "e\u0301", -1, 32,
+      UNICODE, 137);
+    // The windowed cases above all run under UNICODE, where the pattern matches literally.
+    // Repeat them under the collations that make the match set itself collation-dependent,
+    // which is the property this fix turns on: case folding under UNICODE_CI and accent folding
+    // under UNICODE_CI_AI, over targets long enough to need a second window. UNICODE_AI is not
+    // used here: instr declares StringTypeNonCSAICollation, which rejects a collation that is
+    // accent-insensitive but case-sensitive, so no such call can reach this code.
+    assertStringInstrWithOccurrence(("A" + "x".repeat(9)).repeat(30), "a", -1, 20,
+      UNICODE_CI, 101);
+    assertStringInstrWithOccurrence(("\u00e1" + "x".repeat(9)).repeat(30), "a", -1, 20,
+      "UNICODE_CI_AI", 101);
+    // A window boundary that falls inside a combining sequence, where the pattern matches only
+    // because of the collation: the uppercase base plus the same mark under UNICODE_CI, and the
+    // bare base under UNICODE_CI_AI, which matches the whole sequence.
+    assertStringInstrWithOccurrence("e\u0301".repeat(100) + "xx", "E\u0301", -1, 32,
+      UNICODE_CI, 137);
+    assertStringInstrWithOccurrence("e\u0301".repeat(100) + "xx", "e", -1, 32,
+      "UNICODE_CI_AI", 137);
+    // A backward start away from the end of the target, with a match after the anchor. The pass
+    // stops at the anchor instead of running off the end, so the stretch past the anchor never
+    // dominates and the window grows geometrically. Both cases below need two growth steps
+    // (64 -> 256 -> 1024) and resolve inside a window that has not reached the start of the
+    // target. UTF8_BINARY does not use the windowed search and pins the expectation
+    // independently.
+    String twoSteps = "x".repeat(2000) + "z" + "x".repeat(700) + "z";
+    assertStringInstrWithOccurrence(twoSteps, "z", -2, 1, UTF8_BINARY, 2001);
+    assertStringInstrWithOccurrence(twoSteps, "z", -2, 1, UNICODE, 2001);
+    // Same, with an occurrence that makes the ring buffer wrap while the window is still
+    // growing: the third window holds five matches and retains only the last three.
+    String twoStepsWrap =
+      "x".repeat(1000) + ("z" + "x".repeat(99)).repeat(5) + "y".repeat(500) + "z";
+    assertStringInstrWithOccurrence(twoStepsWrap, "z", -2, 3, UTF8_BINARY, 1201);
+    assertStringInstrWithOccurrence(twoStepsWrap, "z", -2, 3, UNICODE, 1201);
+    // A backward start whose anchor sits mid-target with no match past it, so every pass runs on
+    // to the end of the target and re-walks the same trailing stretch. Here that stretch is half
+    // the target, so by the second pass the repetition has cost a full pass on its own and the
+    // window widens straight to the start instead of taking another geometric step. Only instr
+    // reaches this: substring_index anchors at the end of the target, leaving no stretch to
+    // re-walk. UTF8_BINARY does not use the windowed search and pins the expectation.
+    String tailRewalk = "z" + "x".repeat(4095);
+    assertStringInstrWithOccurrence(tailRewalk, "z", -2048, 1, UTF8_BINARY, 1);
+    assertStringInstrWithOccurrence(tailRewalk, "z", -2048, 1, UNICODE, 1);
+    // Same shape with the match a little later, so the answer is not the first code point of the
+    // target and a window that widened too far would still have to place it correctly.
+    String tailRewalkLate = "x".repeat(40) + "z" + "x".repeat(4055);
+    assertStringInstrWithOccurrence(tailRewalkLate, "z", -2048, 1, UTF8_BINARY, 41);
+    assertStringInstrWithOccurrence(tailRewalkLate, "z", -2048, 1, UNICODE, 41);
+    // Collations whose pattern is a contraction, i.e. a single collation unit spanning more than
+    // one code point. A start index inside such a unit is snapped back to its beginning, so the
+    // iterator only makes progress if it is advanced past the whole unit. Czech "ch" occurs at
+    // the same positions under UTF8_BINARY, which pins the expectations independently.
+    assertStringInstrWithOccurrence("chch", "ch", 1, 2, UTF8_BINARY, 3);
+    assertStringInstrWithOccurrence("chch", "ch", 1, 2, "cs", 3);
+    assertStringInstrWithOccurrence("chch", "ch", -1, 1, UTF8_BINARY, 3);
+    assertStringInstrWithOccurrence("chch", "ch", -1, 1, "cs", 3);
+    assertStringInstrWithOccurrence("achbchcch", "ch", -1, 2, UTF8_BINARY, 5);
+    assertStringInstrWithOccurrence("achbchcch", "ch", -1, 2, "cs", 5);
+    // Same, over a target long enough that the trailing window starts partway into it. The first
+    // window starts at code unit 55, which is inside the contraction beginning at 54, so ICU
+    // snaps it back to 54 and the pass enumerates 33 matches. Occurrences 32 and 33 are answered
+    // by that pass -- 33 is the match at the snapped-back boundary, the earliest one the pass can
+    // see -- and occurrence 40 is answered only after the window widens to the start of the
+    // target.
+    assertStringInstrWithOccurrence("ch".repeat(60), "ch", -1, 32, UTF8_BINARY, 57);
+    assertStringInstrWithOccurrence("ch".repeat(60), "ch", -1, 32, "cs", 57);
+    assertStringInstrWithOccurrence("ch".repeat(60), "ch", -1, 33, UTF8_BINARY, 55);
+    assertStringInstrWithOccurrence("ch".repeat(60), "ch", -1, 33, "cs", 55);
+    assertStringInstrWithOccurrence("ch".repeat(60), "ch", -1, 40, UTF8_BINARY, 41);
+    assertStringInstrWithOccurrence("ch".repeat(60), "ch", -1, 40, "cs", 41);
+    // A positive start that falls inside a contraction. ICU snaps the search index back to the
+    // beginning of the unit, so the first match it reports begins before the requested start;
+    // such a match is out of range and must not be counted. UTF8_BINARY pins the expectations.
+    assertStringInstrWithOccurrence("achch", "ch", 3, 1, UTF8_BINARY, 4);
+    assertStringInstrWithOccurrence("achch", "ch", 3, 1, "cs", 4);
+    assertStringInstrWithOccurrence("achch", "ch", 3, 2, UTF8_BINARY, 0);
+    assertStringInstrWithOccurrence("achch", "ch", 3, 2, "cs", 0);
+    assertStringInstrWithOccurrence("chchch", "ch", 2, 1, UTF8_BINARY, 3);
+    assertStringInstrWithOccurrence("chchch", "ch", 2, 1, "cs", 3);
+    assertStringInstrWithOccurrence("chchch", "ch", 2, 2, UTF8_BINARY, 5);
+    assertStringInstrWithOccurrence("chchch", "ch", 2, 2, "cs", 5);
+    assertStringInstrWithOccurrence("chchch", "ch", 4, 1, UTF8_BINARY, 5);
+    assertStringInstrWithOccurrence("chchch", "ch", 4, 1, "cs", 5);
+    assertStringInstrWithOccurrence("chchch", "ch", 6, 1, UTF8_BINARY, 0);
+    assertStringInstrWithOccurrence("chchch", "ch", 6, 1, "cs", 0);
+    // Danish "aa" is a contraction whose occurrences differ from the byte-wise ones: "aaaa"
+    // holds a match at code points 0 and 2, but not at 1, which is inside the first one.
+    assertStringInstrWithOccurrence("aaaa", "aa", 1, 2, "da", 3);
+    assertStringInstrWithOccurrence("aaaa", "aa", -1, 1, "da", 3);
+    // Same, with a positive start inside the first contraction. UTF8_BINARY cannot pin this one:
+    // "xaaaa" holds a match at code points 1 and 3 under "da", but at 1, 2 and 3 byte-wise. A
+    // start of 3 excludes the match at 1 under either.
+    assertStringInstrWithOccurrence("xaaaa", "aa", 3, 1, "da", 4);
+    assertStringInstrWithOccurrence("xaaaa", "aa", 3, 2, "da", 0);
   }
 
 }
