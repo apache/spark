@@ -56,6 +56,8 @@ private[spark] object KVStoreProtobufSerializer extends Logging {
 
   private[this] val missedClasses = ConcurrentHashMap.newKeySet[Class[_]]()
 
+  private[protobuf] def resetMissedClassesForTesting(): Unit = missedClasses.clear()
+
   def getSerializer(klass: Class[_]): Option[ProtobufSerDe[Any]] = {
     val serializer = serializerMap.get(klass)
     if (serializer.isEmpty && missedClasses.add(klass)) {

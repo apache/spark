@@ -38,6 +38,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   private val serializer = new KVStoreProtobufSerializer()
 
   test("SPARK-59169: log a warning once per class when no ProtobufSerDe is found") {
+    KVStoreProtobufSerializer.resetMissedClassesForTesting()
     val appender = new LogAppender("KVStoreProtobufSerializer fallback warning")
     withLogAppender(appender, loggerNames = Seq(classOf[KVStoreProtobufSerializer].getName)) {
       serializer.serialize(FallbackTestData("a"))
