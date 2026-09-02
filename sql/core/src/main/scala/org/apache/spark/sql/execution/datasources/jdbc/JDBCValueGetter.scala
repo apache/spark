@@ -189,13 +189,13 @@ private[jdbc] object JDBCValueGetter {
     }
   }
 
-  // Column marked as wall-clock NTZ at schema resolution: read the timestamp's fields directly
-  // without a zone rebase, independent of the dialect (which may be an AggregatedDialect).
+  // Column marked as wall-clock NTZ: read the LocalDateTime directly via getObject, with no
+  // java.sql.Timestamp / JVM-zone bridge (dialect-independent, survives AggregatedDialect).
   case object TimestampNTZWallClockGetter extends JDBCValueGetter {
     def apply(rs: ResultSet, row: InternalRow, pos: Int): Unit = {
-      val t = rs.getTimestamp(pos + 1)
-      if (t != null) {
-        row.setLong(pos, localDateTimeToMicros(t.toLocalDateTime))
+      val localDateTime = rs.getObject(pos + 1, classOf[java.time.LocalDateTime])
+      if (localDateTime != null) {
+        row.setLong(pos, localDateTimeToMicros(localDateTime))
       } else {
         row.update(pos, null)
       }

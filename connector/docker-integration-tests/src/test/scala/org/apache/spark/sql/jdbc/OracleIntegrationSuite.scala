@@ -777,6 +777,22 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
     }
   }
 
+  test("TimestampNTZ preserves a wall-clock value in the JVM DST gap via getObject/setObject") {
+    // 2024-03-10 02:30 does not exist in America/Los_Angeles (spring-forward gap); routing NTZ
+    // through java.sql.Timestamp would shift it an hour, getObject(LocalDateTime) keeps it exact.
+    val gap = LocalDateTime.of(2024, 3, 10, 2, 30, 0)
+    val schema = StructType(Seq(StructField("T", TimestampNTZType)))
+    withDefaultTimeZone(LA) {
+      spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(gap))), schema)
+        .write.format("jdbc").mode(SaveMode.Overwrite)
+        .option("url", jdbcUrl).option("dbtable", "ntz_dst_gap").save()
+      val df = spark.read.format("jdbc")
+        .option("url", jdbcUrl).option("dbtable", "ntz_dst_gap").load()
+      assert(df.schema.fields.head.dataType === TimestampNTZType)
+      assert(df.collect().head.get(0) === gap)
+    }
+  }
+
   test("SPARK-47761: Reading ANSI INTERVAL Types") {
     val df: String => DataFrame = query => spark.read.format("jdbc")
       .option("url", jdbcUrl)

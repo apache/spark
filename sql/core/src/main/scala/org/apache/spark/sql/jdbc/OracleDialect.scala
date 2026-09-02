@@ -187,7 +187,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
         // Oracle DATE and TIMESTAMP are zoneless and both surface as Types.TIMESTAMP with typeName
         // DATE/TIMESTAMP, so NTZ is faithful; WITH [LOCAL] TIME ZONE hit TIMESTAMP_TZ/LTZ above.
         // Snapshot the (non-legacy) wall-clock decision so a later flag flip can't desync the read.
-        if (md != null) md.putBoolean(JdbcUtils.TIMESTAMP_NTZ_WALL_CLOCK, value = true)
+        if (md != null) md.putBoolean(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK, value = true)
         // TODO: map sub-microsecond TIMESTAMP(7-9) to TimestampNTZNanosType when the nanosecond
         // timestamp preview is enabled, instead of truncating to microsecond TimestampNTZType.
         Some(TimestampNTZType)
@@ -200,7 +200,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   override def updateExtraColumnMetaForWrite(dt: DataType, metadata: MetadataBuilder): Unit = {
     dt match {
       case TimestampNTZType if !conf.legacyOracleTimestampNTZMappingEnabled =>
-        metadata.putBoolean(JdbcUtils.TIMESTAMP_NTZ_WALL_CLOCK, value = true)
+        metadata.putBoolean(JdbcUtils.WRITE_TIMESTAMP_NTZ_WALL_CLOCK, value = true)
       case _ =>
     }
   }

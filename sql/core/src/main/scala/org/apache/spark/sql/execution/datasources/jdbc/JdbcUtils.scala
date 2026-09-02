@@ -55,10 +55,13 @@ import org.apache.spark.util.ArrayImplicits._
  */
 object JdbcUtils extends Logging with SQLConfHelper {
 
-  // Marker a dialect stamps on an NTZ column that must read/write as wall-clock, regardless of the
-  // dialect, so the value can't desync from the resolved type if a session flag flips between
-  // DataFrame definition and execution.
-  private[sql] val TIMESTAMP_NTZ_WALL_CLOCK = "timestamp_ntz_wall_clock"
+  // Markers a dialect stamps on an NTZ column that must read (resp. write) as wall-clock regardless
+  // of dialect, so the value can't desync from the resolved type if a session flag flips. Read and
+  // write use distinct keys: the read marker rides on the resolved schema and must not be
+  // honored on a later write to a different dialect (it would force wall-clock over that dialect's
+  // own conversion); the write marker is re-derived per write by the target dialect.
+  private[sql] val READ_TIMESTAMP_NTZ_WALL_CLOCK = "read_timestamp_ntz_wall_clock"
+  private[sql] val WRITE_TIMESTAMP_NTZ_WALL_CLOCK = "write_timestamp_ntz_wall_clock"
 
   /**
    * Returns true if the table already exists in the JDBC database.
@@ -476,7 +479,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case TimestampType => JDBCValueGetter.TimestampGetter(dialect)
     case TimestampNTZType if metadata.contains("logical_time_type") =>
       JDBCValueGetter.LogicalTimeNTZGetter(dialect)
-    case TimestampNTZType if metadata.contains(TIMESTAMP_NTZ_WALL_CLOCK) =>
+    case TimestampNTZType if metadata.contains(READ_TIMESTAMP_NTZ_WALL_CLOCK) =>
       JDBCValueGetter.TimestampNTZWallClockGetter
     case TimestampNTZType => JDBCValueGetter.TimestampNTZGetter(dialect)
     case t: TimestampNTZNanosType => JDBCValueGetter.TimestampNTZNanosGetter(t.precision)
@@ -547,10 +550,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
           stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
       }
 
-    case TimestampNTZType if metadata.contains(TIMESTAMP_NTZ_WALL_CLOCK) =>
+    case TimestampNTZType if metadata.contains(WRITE_TIMESTAMP_NTZ_WALL_CLOCK) =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
-        stmt.setTimestamp(pos + 1,
-          java.sql.Timestamp.valueOf(row.getAs[java.time.LocalDateTime](pos)))
+        stmt.setObject(pos + 1, row.getAs[java.time.LocalDateTime](pos))
     case TimestampNTZType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setTimestamp(pos + 1,

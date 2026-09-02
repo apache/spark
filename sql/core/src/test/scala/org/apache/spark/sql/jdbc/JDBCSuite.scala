@@ -1644,7 +1644,7 @@ class JDBCSuite extends SharedSparkSession {
       val md = new MetadataBuilder()
       assert(oracleDialect.getCatalystType(java.sql.Types.TIMESTAMP, typeName, 0, md) ===
         Some(TimestampNTZType), s"typeName=$typeName")
-      assert(md.build().contains(JdbcUtils.TIMESTAMP_NTZ_WALL_CLOCK), s"typeName=$typeName")
+      assert(md.build().contains(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK), s"typeName=$typeName")
     }
     // The legacy flag restores the pre-4.4 behavior: defer to the shared default mapping, which
     // yields TimestampType (or TimestampNTZType only when preferTimestampNTZ is set), and sets no
@@ -1652,7 +1652,7 @@ class JDBCSuite extends SharedSparkSession {
     withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
       val md = new MetadataBuilder()
       assert(oracleDialect.getCatalystType(java.sql.Types.TIMESTAMP, "TIMESTAMP", 0, md) === None)
-      assert(!md.build().contains(JdbcUtils.TIMESTAMP_NTZ_WALL_CLOCK))
+      assert(!md.build().contains(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK))
     }
   }
 
@@ -1669,49 +1669,72 @@ class JDBCSuite extends SharedSparkSession {
     dialects.foreach { dialect =>
       val ntzMd = new MetadataBuilder()
       dialect.updateExtraColumnMetaForWrite(TimestampNTZType, ntzMd)
-      assert(ntzMd.build().contains(JdbcUtils.TIMESTAMP_NTZ_WALL_CLOCK), s"dialect=$dialect")
+      assert(ntzMd.build().contains(JdbcUtils.WRITE_TIMESTAMP_NTZ_WALL_CLOCK), s"dialect=$dialect")
 
       val tsMd = new MetadataBuilder()
       dialect.updateExtraColumnMetaForWrite(TimestampType, tsMd)
-      assert(!tsMd.build().contains(JdbcUtils.TIMESTAMP_NTZ_WALL_CLOCK), s"dialect=$dialect")
+      assert(!tsMd.build().contains(JdbcUtils.WRITE_TIMESTAMP_NTZ_WALL_CLOCK), s"dialect=$dialect")
 
       withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
         val legacyMd = new MetadataBuilder()
         dialect.updateExtraColumnMetaForWrite(TimestampNTZType, legacyMd)
-        assert(!legacyMd.build().contains(JdbcUtils.TIMESTAMP_NTZ_WALL_CLOCK), s"dialect=$dialect")
+        assert(!legacyMd.build().contains(JdbcUtils.WRITE_TIMESTAMP_NTZ_WALL_CLOCK),
+          s"dialect=$dialect")
+      }
+    }
+  }
+
+  test("SPARK-58876: Oracle stamps the wall-clock read marker via getCatalystType, even wrapped") {
+    val custom = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
+      override def getCatalystType(
+          sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
+    }
+    val dialects = Seq[JdbcDialect](
+      OracleDialect(),
+      new AggregatedDialect(List(custom, OracleDialect())),
+      new AggregatedDialect(List(OracleDialect(), custom)))
+    dialects.foreach { dialect =>
+      val md = new MetadataBuilder()
+      assert(dialect.getCatalystType(java.sql.Types.TIMESTAMP, "TIMESTAMP", 0, md) ===
+        Some(TimestampNTZType), s"dialect=$dialect")
+      assert(md.build().contains(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK), s"dialect=$dialect")
+
+      withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
+        val legacyMd = new MetadataBuilder()
+        assert(dialect.getCatalystType(java.sql.Types.TIMESTAMP, "TIMESTAMP", 0, legacyMd) === None,
+          s"dialect=$dialect")
+        assert(!legacyMd.build().contains(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK),
+          s"dialect=$dialect")
       }
     }
   }
 
   test("SPARK-58876: a marked NTZ column reads wall-clock regardless of the resolved dialect") {
-    // makeGetter honors the wall-clock marker, so the read is wall-clock even when JdbcDialects.get
-    // returns an AggregatedDialect (a second Oracle-compatible dialect was registered). A custom
-    // dialect registers at the head, so the built-in OracleDialect that stamps the marker is tail.
     val custom = new JdbcDialect {
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
       override def getCatalystType(
           sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
     }
     val schema = new StructType().add("t", TimestampNTZType, nullable = true,
-      new MetadataBuilder().putBoolean(JdbcUtils.TIMESTAMP_NTZ_WALL_CLOCK, value = true).build())
+      new MetadataBuilder().putBoolean(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK, value = true)
+        .build())
+    // A custom dialect registers at the head, so the built-in OracleDialect the marker relies on
+    // is at the tail in the first AggregatedDialect (uros-b's scenario); the second reverses it.
     val dialects = Seq[JdbcDialect](
-      OracleDialect(),                                        // non-aggregated
-      new AggregatedDialect(List(custom, OracleDialect())),   // Oracle at tail (uros-b's scenario)
-      new AggregatedDialect(List(OracleDialect(), custom)))   // Oracle at head
-    Seq("UTC", "America/Los_Angeles", "Asia/Kolkata").foreach { tz =>
-      DateTimeTestUtils.withDefaultTimeZone(java.time.ZoneId.of(tz)) {
-        val ts = Timestamp.valueOf("1991-11-09 00:00:00")
-        val expected = DateTimeUtils.localDateTimeToMicros(ts.toLocalDateTime)
-        dialects.foreach { dialect =>
-          val rs = mock(classOf[ResultSet])
-          when(rs.next()).thenReturn(true, false)
-          when(rs.getTimestamp(1)).thenReturn(ts)
-          val rows = JdbcUtils.resultSetToSparkInternalRows(
-            rs, dialect, schema, new InputMetrics).toArray
-          assert(rows.length === 1)
-          assert(rows.head.getLong(0) === expected, s"dialect=$dialect tz=$tz")
-        }
-      }
+      OracleDialect(),
+      new AggregatedDialect(List(custom, OracleDialect())),
+      new AggregatedDialect(List(OracleDialect(), custom)))
+    val ldt = LocalDateTime.of(1991, 11, 9, 0, 0, 0)
+    val expected = DateTimeUtils.localDateTimeToMicros(ldt)
+    dialects.foreach { dialect =>
+      val rs = mock(classOf[ResultSet])
+      when(rs.next()).thenReturn(true, false)
+      when(rs.getObject(1, classOf[java.time.LocalDateTime])).thenReturn(ldt)
+      val rows = JdbcUtils.resultSetToSparkInternalRows(
+        rs, dialect, schema, new InputMetrics).toArray
+      assert(rows.length === 1)
+      assert(rows.head.getLong(0) === expected, s"dialect=$dialect")
     }
   }
 
