@@ -2297,6 +2297,46 @@ class TypesTestsMixin:
             with self.assertRaises(Exception):
                 df.collect()
 
+    def test_timestamp_nanos_type_python_udf_input(self):
+        # SPARK-57462: a Python UDF that takes a nanosecond column as an *argument* exercises the
+        # JVM -> Python direction of EvaluatePython.toJava (the TimestampNanosVal -> epochMicros
+        # arm) through the UDF-input caller, which the collect-based tests above do not reach.
+        # useArrow=False forces the classic Py4J path; the value round-trips at microsecond
+        # resolution (datetime.datetime is microsecond-precision).
+        from pyspark.sql.functions import udf
+
+        with self.sql_conf({"spark.sql.timestampNanosTypes.enabled": True}):
+            value = datetime.datetime(2021, 6, 7, 8, 9, 10, 123456)
+            df = self.spark.createDataFrame(
+                [(value,)], StructType([StructField("ts", TimestampNTZNanosType(9))])
+            )
+            identity_udf = udf(lambda x: x, returnType=TimestampNTZNanosType(9), useArrow=False)
+            row = df.select(identity_udf("ts").alias("out")).first()
+            self.assertEqual(value, row.out)
+
+    def test_timestamp_nanos_type_map_key_python_udf_input(self):
+        # SPARK-57462: feeding a map with nanosecond keys into a Python UDF reaches the map-key
+        # rejection branch in EvaluatePython.toJava (the "Python UDF input path" its own comment
+        # cites). The collect-based collision test does not reach it -- collect() trips the earlier
+        # Python-side guard in classic/dataframe.py first. The UDF returns a non-map type so the
+        # result collect does not re-trip that Python-side guard; the failure must come from the
+        # nanosecond-map-key input conversion.
+        from pyspark.sql.functions import udf
+
+        with self.sql_conf({"spark.sql.timestampNanosTypes.enabled": True}):
+            df = self.spark.sql(
+                "SELECT map("
+                "CAST('2020-01-01 00:00:00.123456700' AS TIMESTAMP_NTZ(9)), 1, "
+                "CAST('2020-01-01 00:00:00.123456800' AS TIMESTAMP_NTZ(9)), 2) AS m"
+            )
+            size_udf = udf(
+                lambda m: 0 if m is None else len(m),
+                returnType=IntegerType(),
+                useArrow=False,
+            )
+            with self.assertRaises(Exception):
+                df.select(size_udf("m").alias("n")).collect()
+
     def test_yearmonth_interval_type_constructor(self):
         self.assertEqual(YearMonthIntervalType().simpleString(), "interval year to month")
         self.assertEqual(

@@ -42,6 +42,14 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_timestamp_nanos_type_map_key_collision(self):
         super().test_timestamp_nanos_type_map_key_collision()
 
+    @unittest.skip("SPARK-57462: nanosecond timestamp types are pending Connect/Arrow support.")
+    def test_timestamp_nanos_type_python_udf_input(self):
+        super().test_timestamp_nanos_type_python_udf_input()
+
+    @unittest.skip("SPARK-57462: nanosecond timestamp types are pending Connect/Arrow support.")
+    def test_timestamp_nanos_type_map_key_python_udf_input(self):
+        super().test_timestamp_nanos_type_map_key_python_udf_input()
+
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_apply_schema(self):
         super().test_apply_schema()
