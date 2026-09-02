@@ -1111,6 +1111,8 @@ object FunctionRegistry {
     expression[ToProtobuf]("to_protobuf")
   )
 
+  // Keep expression groups in separate methods to limit the bytecode size of the static
+  // initializer and leave enough headroom for coverage instrumentation.
   val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] = Seq(
     miscNonAggregateExpressions,
     mathExpressions,
