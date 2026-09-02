@@ -22,6 +22,8 @@ import java.util.Date
 import scala.collection.mutable
 import scala.io.Source
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.metrics.ExecutorMetricType
@@ -34,6 +36,20 @@ import org.apache.spark.util.Utils.tryWithResource
 
 class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   private val serializer = new KVStoreProtobufSerializer()
+
+  test("SPARK-59169: log a warning once per class when no ProtobufSerDe is found") {
+    val appender = new LogAppender("KVStoreProtobufSerializer fallback warning")
+    withLogAppender(appender, loggerNames = Seq(classOf[KVStoreProtobufSerializer].getName)) {
+      serializer.serialize(FallbackTestData("a"))
+      serializer.serialize(FallbackTestData("b"))
+    }
+    val warnings = appender.loggingEvents
+      .filter(_.getLevel == Level.WARN)
+      .map(_.getMessage.getFormattedMessage)
+      .filter(_.contains(classOf[FallbackTestData].getName))
+    assert(warnings.size === 1)
+    assert(warnings.head.contains("No Protobuf SerDe found for class"))
+  }
 
   test("All the string fields must be optional to avoid NPE") {
     val protoFile = getWorkspaceFilePath(
@@ -1703,3 +1719,5 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     }
   }
 }
+
+private[protobuf] case class FallbackTestData(value: String)
