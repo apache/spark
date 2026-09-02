@@ -217,9 +217,9 @@ object SchemaInferenceUtils {
    * Column identity is keyed on the exact field name, not on a case-normalized one. On the
    * incremental streaming-table path, `targetSchema` is the merge of the current and desired
    * schemas, and [[SchemaMergingUtils.mergeSchemas]] has already folded an incoming
-   * case-only-differing field onto the persisted one. On the non-merging paths (materialized
-   * views and any full refresh), `targetSchema` is the run's declared schema as-is, so
-   * exact-name keying keeps a case-only rename visible as an explicit drop-then-add.
+   * case-only-differing field onto the persisted one. On the non-merging paths (materialized views
+   * and any full refresh), `targetSchema` is the run's declared schema as-is, so exact-name keying
+   * keeps a case-only rename visible as an explicit drop-then-add.
    * Exact keying also avoids silently collapsing two genuinely distinct declared columns that
    * differ only in case (`value` and `Value`) into an arbitrary one of the two.
    *
