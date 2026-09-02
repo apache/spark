@@ -32,7 +32,10 @@ from pyspark.sql.types import (
     DoubleType,
     FloatType,
     IntegralType,
+    NullType,
     NumericType,
+    TimestampNTZType,
+    TimestampType,
 )
 
 unary_np_spark_mappings = {
@@ -373,38 +376,76 @@ _INTEGRAL_INPUT_TYPES = (BooleanType, IntegralType)
 _NUMERIC_INPUT_TYPES = (BooleanType, IntegralType, FloatType, DoubleType)
 # For the ufuncs that accept a decimal column too.
 _NUMERIC_OR_DECIMAL_INPUT_TYPES = (BooleanType, NumericType)
+# np.isnan and its neighbours have a datetime64 loop, which reports NaT.
+_NUMERIC_OR_TIMESTAMP_INPUT_TYPES = _NUMERIC_INPUT_TYPES + (TimestampType, TimestampNTZType)
+# np.sign is the one ufunc with no boolean loop, and NumericType excludes BooleanType.
+_SIGN_INPUT_TYPES = (NumericType,)
+# pandas reads an all-null column as False for the two-operand bitwise operators.
+_BITWISE_INPUT_TYPES = _INTEGRAL_INPUT_TYPES + (NullType,)
 
 
 # The operand types NumPy accepts, one tuple of Spark types per operand. Without this Spark
-# casts the operand instead: np.fmod on a string column answered 1.0. An entry absent here is
-# not checked, either because NumPy restricts nothing or because the mapping is unreachable.
+# casts the operand instead: np.fmod on a string column answered 1.0. A ufunc is absent when its
+# accepted types cannot be listed per operand (np.fmax takes any pair it can compare), when it is
+# still a pandas_udf, where NumPy runs per value, or when the entry is unreachable.
 _np_spark_accepted_types: Dict[str, Tuple[Tuple[type, ...], ...]] = {
+    "absolute": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
+    "arccos": (_NUMERIC_INPUT_TYPES,),
     "arccosh": (_NUMERIC_INPUT_TYPES,),
+    "arcsin": (_NUMERIC_INPUT_TYPES,),
     "arcsinh": (_NUMERIC_INPUT_TYPES,),
+    "arctan": (_NUMERIC_INPUT_TYPES,),
+    "arctan2": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
     "arctanh": (_NUMERIC_INPUT_TYPES,),
+    "bitwise_and": (_BITWISE_INPUT_TYPES, _BITWISE_INPUT_TYPES),
+    "bitwise_or": (_BITWISE_INPUT_TYPES, _BITWISE_INPUT_TYPES),
+    "bitwise_xor": (_BITWISE_INPUT_TYPES, _BITWISE_INPUT_TYPES),
+    "cbrt": (_NUMERIC_INPUT_TYPES,),
+    "ceil": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
     "copysign": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
+    "cos": (_NUMERIC_INPUT_TYPES,),
     "cosh": (_NUMERIC_INPUT_TYPES,),
     "deg2rad": (_NUMERIC_INPUT_TYPES,),
+    "degrees": (_NUMERIC_INPUT_TYPES,),
+    "exp": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
     "exp2": (_NUMERIC_INPUT_TYPES,),
+    "expm1": (_NUMERIC_INPUT_TYPES,),
     "fabs": (_NUMERIC_INPUT_TYPES,),
     "float_power": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
+    "floor": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
     "fmod": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
     "frexp": (_NUMERIC_INPUT_TYPES,),
     "heaviside": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
+    "hypot": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
     "invert": (_INTEGRAL_INPUT_TYPES,),
+    "isfinite": (_NUMERIC_OR_TIMESTAMP_INPUT_TYPES,),
+    "isinf": (_NUMERIC_OR_TIMESTAMP_INPUT_TYPES,),
+    "isnan": (_NUMERIC_OR_TIMESTAMP_INPUT_TYPES,),
     # np.ldexp builds x * 2**exp and takes the exponent from an integer loop only.
     "ldexp": (_NUMERIC_INPUT_TYPES, _INTEGRAL_INPUT_TYPES),
     "left_shift": (_INTEGRAL_INPUT_TYPES, _INTEGRAL_INPUT_TYPES),
+    "log": (_NUMERIC_INPUT_TYPES,),
+    "log10": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
+    "log1p": (_NUMERIC_INPUT_TYPES,),
     "log2": (_NUMERIC_INPUT_TYPES,),
     "logaddexp": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
     "logaddexp2": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
+    "logical_xor": (_NUMERIC_OR_TIMESTAMP_INPUT_TYPES, _NUMERIC_OR_TIMESTAMP_INPUT_TYPES),
     "modf": (_NUMERIC_INPUT_TYPES,),
+    "negative": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
+    "positive": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
     "rad2deg": (_NUMERIC_INPUT_TYPES,),
+    "radians": (_NUMERIC_INPUT_TYPES,),
     "reciprocal": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
     "right_shift": (_INTEGRAL_INPUT_TYPES, _INTEGRAL_INPUT_TYPES),
     "rint": (_NUMERIC_INPUT_TYPES,),
+    "sign": (_SIGN_INPUT_TYPES,),
+    "signbit": (_NUMERIC_INPUT_TYPES,),
+    "sin": (_NUMERIC_INPUT_TYPES,),
     "sinh": (_NUMERIC_INPUT_TYPES,),
+    "sqrt": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
     "square": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
+    "tan": (_NUMERIC_INPUT_TYPES,),
     "tanh": (_NUMERIC_INPUT_TYPES,),
     "trunc": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
 }

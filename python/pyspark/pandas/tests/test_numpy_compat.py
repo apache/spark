@@ -117,6 +117,7 @@ class NumPyCompatTestsMixin:
                 "decimal": [Decimal("7.5"), Decimal("8.5")],
                 "string": ["7", "8"],
                 "timestamp": pd.to_datetime(["2020-01-01", "2020-01-02"]),
+                "boolean": [True, False],
                 # All nulls, which Spark types as void.
                 "null": [None, None],
             }
@@ -134,7 +135,7 @@ class NumPyCompatTestsMixin:
 
         psdf = ps.from_pandas(self.operand_type_pdf)
 
-        # No ufunc accepts a string or a void column, so one loop covers the whole table.
+        # No ufunc accepts a string column, so one loop covers the whole table.
         for op_name, accepted_per_operand in _np_spark_accepted_types.items():
             with self.subTest(name=op_name):
                 self.assertTrue(
@@ -143,13 +144,11 @@ class NumPyCompatTestsMixin:
                     or op_name in multi_output_np_spark_mappings,
                     "%s has no mapping entry" % op_name,
                 )
-                for column, unsupported in (("string", "string"), ("null", "void")):
-                    with self.assertRaisesRegex(
-                        TypeError,
-                        "ufunc '%s' is not supported for the input types .*%s"
-                        % (op_name, unsupported),
-                    ):
-                        getattr(np, op_name)(*[psdf[column]] * len(accepted_per_operand))
+                with self.assertRaisesRegex(
+                    TypeError,
+                    "ufunc '%s' is not supported for the input types .*string" % op_name,
+                ):
+                    getattr(np, op_name)(*[psdf["string"]] * len(accepted_per_operand))
 
     def test_np_unsupported_operand_types_by_ufunc(self):
         # The types only some ufuncs reject, and which operand carries the rejected one.
@@ -157,6 +156,7 @@ class NumPyCompatTestsMixin:
 
         for np_func, columns, unsupported in (
             (np.cosh, ["timestamp"], "timestamp"),
+            (np.cosh, ["null"], "void"),
             (np.fmod, ["decimal", "decimal"], "decimal"),
             # np.invert and the shifts have integer loops only.
             (np.invert, ["double"], "double"),
@@ -166,6 +166,8 @@ class NumPyCompatTestsMixin:
             (np.logaddexp, ["timestamp", "double"], "timestamp"),
             # np.ldexp takes its exponent from an integer loop.
             (np.ldexp, ["double", "double"], "double"),
+            # np.sign is the only ufunc here with no boolean loop.
+            (np.sign, ["boolean"], "boolean"),
         ):
             with self.subTest(np_func=np_func.__name__, unsupported=unsupported):
                 with self.assertRaisesRegex(
@@ -204,6 +206,12 @@ class NumPyCompatTestsMixin:
         # operand, and a ufunc with no table entry.
         self.assert_eq(np.square(psdf["decimal"]), np.square(pdf["decimal"]), almost=True)
         self.assert_eq(np.trunc(psdf["decimal"]), np.trunc(pdf["decimal"]), almost=True)
+        self.assert_eq(np.sqrt(psdf["decimal"]), np.sqrt(pdf["decimal"]), almost=True)
+        self.assert_eq(np.absolute(psdf["decimal"]), np.absolute(pdf["decimal"]), almost=True)
+        self.assert_eq(np.sign(psdf["decimal"]), np.sign(pdf["decimal"]), almost=True)
+        # pandas reads an all-null column as False for the bitwise operators, so the check must
+        # not reject void. The values still differ from pandas, which is a pre-existing gap.
+        self.assertIsNotNone(np.bitwise_and(psdf["null"], psdf["null"]))
         self.assert_eq(np.ldexp(psdf["double"], 2), np.ldexp(pdf["double"], 2), almost=True)
         self.assert_eq(np.fmod(psdf["integer"], 2), np.fmod(pdf["integer"], 2), almost=True)
         self.assert_eq(np.left_shift(psdf["integer"], 1), np.left_shift(pdf["integer"], 1))
