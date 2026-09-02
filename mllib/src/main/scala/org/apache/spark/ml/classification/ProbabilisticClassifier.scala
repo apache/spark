@@ -351,65 +351,6 @@ abstract class ProbabilisticClassificationModel[
   }
 }
 
-private[classification] trait ProbabilisticClassificationModelTransform[
-    FeaturesType,
-    M <: ProbabilisticClassificationModel[FeaturesType, M]]
-  extends ProbabilisticClassificationModel[FeaturesType, M] {
-
-  protected def predictRawFunction: FeaturesType => Vector
-
-  protected def raw2probabilityFunction: Vector => Vector
-
-  protected def predictionFunction: FeaturesType => Double
-
-  override protected def predictRawColumn(features: Column): Column = {
-    val localPredictRaw = predictRawFunction
-    udf { value: Any => localPredictRaw(value.asInstanceOf[FeaturesType]) }.apply(features)
-  }
-
-  override protected def raw2probabilityColumn(rawPrediction: Column): Column = {
-    val localRaw2probability = raw2probabilityFunction
-    udf((rawPrediction: Vector) => localRaw2probability(rawPrediction)).apply(rawPrediction)
-  }
-
-  override protected def predictProbabilityColumn(features: Column): Column = {
-    val localPredictRaw = predictRawFunction
-    val localRaw2probability = raw2probabilityFunction
-    udf((value: Any) => {
-      localRaw2probability(localPredictRaw(value.asInstanceOf[FeaturesType]))
-    }).apply(features)
-  }
-
-  override protected def raw2predictionColumn(rawPrediction: Column): Column = {
-    if (isDefined(thresholds)) {
-      val localRaw2probability = raw2probabilityFunction
-      val localThresholds = getThresholds.clone()
-      udf((rawPrediction: Vector) => {
-        val probability = localRaw2probability(rawPrediction)
-        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
-      }).apply(rawPrediction)
-    } else {
-      udf((rawPrediction: Vector) => rawPrediction.argmax.toDouble).apply(rawPrediction)
-    }
-  }
-
-  override protected def probability2predictionColumn(probability: Column): Column = {
-    if (isDefined(thresholds)) {
-      val localThresholds = getThresholds.clone()
-      udf((probability: Vector) =>
-        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
-      ).apply(probability)
-    } else {
-      udf((probability: Vector) => probability.argmax.toDouble).apply(probability)
-    }
-  }
-
-  override protected def predictionColumn(features: Column): Column = {
-    val localPredict = predictionFunction
-    udf { value: Any => localPredict(value.asInstanceOf[FeaturesType]) }.apply(features)
-  }
-}
-
 private[ml] object ProbabilisticClassificationModel {
 
   def probability2prediction(probability: Vector, thresholds: Array[Double]): Double = {
