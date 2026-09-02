@@ -87,7 +87,8 @@ case class OrcScan(
         pushedAggregate.isEmpty && o.pushedAggregate.isEmpty
       }
       super.equals(o) && dataSchema == o.dataSchema && options == o.options &&
-        equivalentFilters(pushedFilters, o.pushedFilters) && pushedDownAggEqual
+        equivalentFilters(pushedFilters, o.pushedFilters) && pushedDownAggEqual &&
+        charVarcharStandardSemantics == o.charVarcharStandardSemantics
     case _ => false
   }
 

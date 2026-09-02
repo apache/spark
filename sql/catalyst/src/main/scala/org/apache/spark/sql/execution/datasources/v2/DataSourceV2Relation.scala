@@ -116,7 +116,10 @@ case class DataSourceV2Relation(
     catalog: Option[CatalogPlugin],
     identifier: Option[Identifier],
     options: CaseInsensitiveStringMap,
-    timeTravelSpec: Option[TimeTravelSpec] = None)
+    timeTravelSpec: Option[TimeTravelSpec] = None,
+    // Bound at analysis so sameResult / cache reuse distinguish preserve-only vs standard
+    // CHAR/VARCHAR scans. None means the relation was not analyzed under first-class types.
+    charVarcharStandardSemantics: Option[Boolean] = None)
   extends DataSourceV2RelationBase(table, output, catalog, identifier, options, timeTravelSpec)
   with ExposesMetadataColumns {
 
@@ -422,7 +425,7 @@ object ExtractV2Table {
 object ExtractV2CatalogAndIdentifier {
   def unapply(relation: DataSourceV2Relation): Option[(TableCatalog, Identifier)] = {
     relation match {
-      case DataSourceV2Relation(_, _, Some(catalog), Some(identifier), _, _) =>
+      case DataSourceV2Relation(_, _, Some(catalog), Some(identifier), _, _, _) =>
         Some((catalog.asTableCatalog, identifier))
       case _ =>
         None

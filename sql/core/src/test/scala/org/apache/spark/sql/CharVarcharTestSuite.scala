@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, InMemoryPartitionTableCatalog}
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.functions
@@ -1945,6 +1946,48 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
                       s"ORC view $sourceVersion vectorized=$vectorizedReaderEnabled: ") {
                     checkAnswer(sql(s"SELECT * FROM $view"), Row("abcd"))
                   }
+                }
+              }
+            }
+
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              Seq("abcdef").toDF("v").write.mode("overwrite").orc(path)
+              val table = "orc_scan_cache_reuse"
+              withTable(table) {
+                sql(s"CREATE TABLE $table (v VARCHAR(4)) USING orc LOCATION '$path'")
+                val preservePlan = withSQLConf(
+                    SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                    SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+                    SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+                  spark.table(table).queryExecution.sparkPlan
+                }
+                val standardPlan = spark.table(table).queryExecution.sparkPlan
+                withClue(
+                    s"ORC sameResult $sourceVersion " +
+                      s"vectorized=$vectorizedReaderEnabled: ") {
+                  assert(!preservePlan.sameResult(standardPlan))
+                }
+                withSQLConf(
+                    SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                    SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+                    SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+                  sql(s"CACHE TABLE $table")
+                  checkAnswer(sql(s"SELECT * FROM $table"), Row("abcd"))
+                }
+                withClue(
+                    s"ORC cache $sourceVersion vectorized=$vectorizedReaderEnabled: ") {
+                  val df = sql(s"SELECT * FROM $table")
+                  assert(
+                    !df.queryExecution.sparkPlan.exists(
+                      _.isInstanceOf[InMemoryTableScanExec]),
+                    "preserve-only cache must not satisfy a standard-semantics scan")
+                  checkError(
+                    exception = intercept[SparkRuntimeException] {
+                      df.collect()
+                    },
+                    condition = "EXCEED_LIMIT_LENGTH",
+                    parameters = Map("limit" -> "4"))
                 }
               }
             }

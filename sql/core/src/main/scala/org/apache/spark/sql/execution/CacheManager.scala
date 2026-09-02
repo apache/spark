@@ -258,14 +258,14 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       case LogicalRelationWithTable(_, Some(catalogTable)) =>
         isSameName(name, catalogTable.identifier.nameParts, resolver)
 
-      case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, timeTravelSpec) =>
+      case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, timeTravelSpec, _) =>
         val nameInCache = v2Ident.toQualifiedNameParts(catalog)
         isSameName(name, nameInCache, resolver) && (includeTimeTravel || timeTravelSpec.isEmpty)
 
       case v: View =>
         isSameName(name, v.desc.identifier.nameParts, resolver)
 
-      case HiveTableRelation(catalogTable, _, _, _, _) =>
+      case HiveTableRelation(catalogTable, _, _, _, _, _) =>
         isSameName(name, catalogTable.identifier.nameParts, resolver)
 
       case _ => false

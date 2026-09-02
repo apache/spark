@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.analysis.ApplyCharTypePaddingHelper
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -40,9 +39,6 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object ApplyCharTypePadding extends Rule[LogicalPlan] {
 
-  private[sql] val standardSemanticsTag =
-    TreeNodeTag[Boolean]("__char_varchar_standard_semantics")
-
   private val readSidePaddingOverrideWarned = new AtomicBoolean(false)
 
   private def warnReadSidePaddingOverride(): Unit = {
@@ -57,11 +53,23 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val standardSemantics = conf.charVarcharStandardSemantics
 
-    def bindStandardSemantics[T <: LogicalPlan](relation: T): T = {
-      if (relation.getTagValue(standardSemanticsTag).isEmpty) {
-        relation.setTagValue(standardSemanticsTag, standardSemantics)
-      }
-      relation
+    // Bind into case-class state, not a TreeNodeTag: tags are dropped by canonicalization
+    // so cache lookup and scan reuse would treat preserve-only and standard scans as the
+    // same plan. Keep an already-bound value (views, catalog-cached relations) unchanged.
+    def bindStandardSemantics(p: LogicalPlan): LogicalPlan = p match {
+      case relation: LogicalRelation if relation.charVarcharStandardSemantics.isEmpty =>
+        val bound = relation.copy(charVarcharStandardSemantics = Some(standardSemantics))
+        bound.copyTagsFrom(relation)
+        bound
+      case relation: DataSourceV2Relation if relation.charVarcharStandardSemantics.isEmpty =>
+        val bound = relation.copy(charVarcharStandardSemantics = Some(standardSemantics))
+        bound.copyTagsFrom(relation)
+        bound
+      case relation: HiveTableRelation if relation.charVarcharStandardSemantics.isEmpty =>
+        val bound = relation.copy(charVarcharStandardSemantics = Some(standardSemantics))
+        bound.copyTagsFrom(relation)
+        bound
+      case _ => p
     }
 
     val boundPlan = if (conf.charVarcharFirstClassTypes) {
