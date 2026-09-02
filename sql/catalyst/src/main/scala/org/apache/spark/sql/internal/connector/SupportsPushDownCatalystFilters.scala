@@ -39,17 +39,17 @@ trait SupportsPushDownCatalystFilters extends ScanBuilder {
    * Each inferred filter must be implied by those query filters and satisfied by every row
    * returned by the scan.
    *
-   * Spark adds inferred filters whose columns remain in the scan output to the logical Filter for
-   * optimizer statistics. This is the same best-effort adjustment used for fully pushed filters
-   * when `SupportsReportStatistics.reflectsFullyPushedDownFilters` returns `false`: columns are not
-   * retained solely for these filters, and filters that reference pruned columns are dropped.
+   * When `SupportsReportStatistics.reflectsFullyPushedDownFilters` returns `false`, Spark adds
+   * inferred filters whose columns remain in the scan output to the logical Filter for optimizer
+   * statistics. As with fully pushed filters, columns are not retained solely for this adjustment,
+   * and filters that reference pruned columns are dropped.
    *
    * Spark discards inferred filters if a join, aggregate, or variant extraction replaces the scan
    * output.
    *
-   * Inferred filters must be deterministic, contain no subqueries or user-defined expressions,
-   * resolve to well-typed Boolean expressions, and not duplicate fully pushed filters. Spark
-   * ignores invalid inferred filters.
+   * Inferred filters must be deterministic, contain no subqueries, user-defined expressions,
+   * aggregate expressions, window expressions, or generators, resolve to well-typed Boolean
+   * expressions, and not duplicate fully pushed filters. Spark ignores invalid inferred filters.
    *
    * Column references must be represented by `AttributeReference`. A nested column is represented
    * by a dotted name, with path parts containing dots quoted using Spark SQL identifier syntax.
