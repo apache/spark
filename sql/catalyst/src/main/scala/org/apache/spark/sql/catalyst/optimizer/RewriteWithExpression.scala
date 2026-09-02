@@ -60,7 +60,13 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         val agg = Aggregate(groupingExpressions, groupingExpressions ++ aggExprs, child)
         val rewrittenAgg = applyInternal(agg)
         val proj = Project(resExprs, rewrittenAgg)
-        applyInternal(proj)
+        val rewrittenProj = applyInternal(proj)
+        // A `With` in a conditional branch is left in the plan, so the guard above stays true for
+        // it on every iteration of this fixed-point batch, and restructuring unconditionally would
+        // add one `Project` per iteration. Hand back the original operator when neither rewrite
+        // changed anything: `mapExpressions` and `withNewChildren` preserve reference equality when
+        // they rewrite nothing, which is what makes this detectable.
+        if ((rewrittenAgg eq agg) && (rewrittenProj eq proj)) p else rewrittenProj
       case p if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
         applyInternal(p)
     }
@@ -68,15 +74,9 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
 
   private def applyInternal(p: LogicalPlan): LogicalPlan = {
     val inputPlans = p.children
-    val commonExprIdSet = p.expressions
-      .flatMap(_.collect { case r: CommonExpressionRef => r.id })
-      .groupBy(identity)
-      .transform((_, v) => v.size)
-      .filter(_._2 > 1)
-      .keySet
     val commonExprsPerChild = Array.fill(inputPlans.length)(mutable.ListBuffer.empty[(Alias, Long)])
     var newPlan: LogicalPlan = p.mapExpressions { expr =>
-      rewriteWithExprAndInputPlans(expr, inputPlans, commonExprsPerChild, commonExprIdSet)
+      rewriteWithExprAndInputPlans(expr, inputPlans, commonExprsPerChild)
     }
     val newChildren = inputPlans.zip(commonExprsPerChild).map { case (inputPlan, commonExprs) =>
       if (commonExprs.isEmpty) {
@@ -98,11 +98,95 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
     }
   }
 
+  /**
+   * Whether substituting this definition into its references is as good as evaluating it once.
+   * True when it is referenced once, since substituting then evaluates it once either way, or when
+   * it is cheap enough to evaluate repeatedly and deterministic, so the repeated evaluations agree.
+   *
+   * `CollapseProject.isCheap` answers what one evaluation costs, not whether a second one is
+   * allowed: it admits a `PythonUDF`, which may be nondeterministic. Determinism is checked here
+   * rather than read into the cost test, so that a reader of either call site can see which of the
+   * two questions is being asked. A `PythonUDF` is still in the expression tree when this runs --
+   * `SparkOptimizer` extracts them in a batch after the one holding this rule -- so that case is
+   * reachable in a real plan rather than only in a rule test.
+   */
+  private def canSubstitute(
+      child: Expression,
+      id: CommonExpressionId,
+      multiplyReferenced: Set[CommonExpressionId]): Boolean = {
+    !multiplyReferenced.contains(id) || (CollapseProject.isCheap(child) && child.deterministic)
+  }
+
+  /**
+   * The ids the given `With` reads more than once, counted from the node in hand.
+   *
+   * Counting once for the whole plan would be stale by the time a nested `With` is classified.
+   * Substituting a definition duplicates whatever it holds, including a reference belonging to an
+   * enclosing `With`, and `inlineDefsThatGainNothing` works bottom-up: with
+   * `spark.sql.optimizer.avoidCollapseUDFWithExpensiveExpr` off, `CollapseProject.isCheap` calls a
+   * `PythonUDF` cheap whatever its children are, so an inner definition holding one outer
+   * reference is substituted at both of its own references and that reference is read twice from
+   * then on.
+   * A count taken before that says once, and a nondeterministic outer definition is inlined into
+   * both -- two values where there has to be one, which is the bug this rule's branch path exists
+   * to avoid.
+   */
+  private def multiplyReferencedIds(child: Expression, defs: Seq[Expression]) = {
+    val counts = mutable.HashMap.empty[CommonExpressionId, Int]
+    child.foreach {
+      case r: CommonExpressionRef => counts(r.id) = counts.getOrElse(r.id, 0) + 1
+      case _ =>
+    }
+    // A reference found inside a definition counts as more than one read whatever its multiplicity
+    // there, because substituting that definition duplicates it at every reference the definition
+    // has, and that is decided in this same pass. Over-counting only withholds inlining, which is
+    // always semantically valid.
+    defs.foreach(_.foreach {
+      case r: CommonExpressionRef => counts(r.id) = counts.getOrElse(r.id, 0) + 2
+      case _ =>
+    })
+    counts.filter(_._2 > 1).keys.toSet
+  }
+
+  /**
+   * `w` with every definition that gains nothing from being memoized inlined into its references:
+   * one cheap enough to evaluate twice, and one that is referenced once anyway. This is the test
+   * the main rewrite already applies before it hoists a definition into a project.
+   *
+   * Inlining matters beyond the per-entry bookkeeping it saves. A `With` is not foldable, so it
+   * hides whatever it wraps from `ConstantFolding`, `PushFoldableIntoBranches`,
+   * `SimplifyConditionals` and `ReplaceNullWithFalseInPredicate`, all of which run in later
+   * batches. Dropping the `With` once nothing is left to memoize keeps
+   * `CASE WHEN c THEN nullif(1, 1) END` folding as it did before this rule learned to leave one
+   * behind.
+   */
+  private def inlineDefsThatGainNothing(w: With): Expression = {
+    val multiplyReferenced = multiplyReferencedIds(w.child, w.defs)
+    val (toInline, toKeep) = w.defs.partition { d =>
+      canSubstitute(d.child, d.id, multiplyReferenced)
+    }
+    if (toInline.isEmpty) {
+      w
+    } else {
+      val refToExpr = toInline.map(d => d.id -> d.child).toMap
+      val newChild = w.child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
+        // A ref of a definition kept here, or of an enclosing `With`, is left for its owner.
+        case ref: CommonExpressionRef if refToExpr.contains(ref.id) => refToExpr(ref.id)
+      }
+      // `copy` rather than `withNewChildren`, which requires the child count to be unchanged. The
+      // references of the kept definitions are carried over as they are. Discarding `w` here does
+      // not make them unshared -- the same `With` reached from two parent positions is rewritten
+      // once per position, and each copy keeps these reference objects -- which is safe because
+      // `With.eval` binds on entry and restores on exit, so whichever copy is evaluating owns them
+      // for the duration of its child.
+      if (toKeep.isEmpty) newChild else w.copy(child = newChild, defs = toKeep)
+    }
+  }
+
   private def rewriteWithExprAndInputPlans(
       e: Expression,
       inputPlans: Seq[LogicalPlan],
       commonExprsPerChild: Array[mutable.ListBuffer[(Alias, Long)]],
-      commonExprIdSet: Set[CommonExpressionId],
       isNestedWith: Boolean = false): Expression = {
     if (!e.containsPattern(WITH_EXPRESSION)) return e
     e match {
@@ -110,10 +194,11 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       case w: With if !isNestedWith =>
         // Rewrite nested With expressions first
         val child = rewriteWithExprAndInputPlans(
-          w.child, inputPlans, commonExprsPerChild, commonExprIdSet, isNestedWith = true)
+          w.child, inputPlans, commonExprsPerChild, isNestedWith = true)
         val defs = w.defs.map(rewriteWithExprAndInputPlans(
-          _, inputPlans, commonExprsPerChild, commonExprIdSet, isNestedWith = true))
+          _, inputPlans, commonExprsPerChild, isNestedWith = true))
         val refToExpr = mutable.HashMap.empty[CommonExpressionId, Expression]
+        val multiplyReferenced = multiplyReferencedIds(child, defs)
 
         defs.zipWithIndex.foreach { case (CommonExpressionDef(child, id), index) =>
           if (id.canonicalized) {
@@ -121,7 +206,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
               "Cannot rewrite canonicalized Common expression definitions")
           }
 
-          if (CollapseProject.isCheap(child) || !commonExprIdSet.contains(id)) {
+          if (canSubstitute(child, id, multiplyReferenced)) {
             refToExpr(id) = child
           } else {
             val childPlanIndex = inputPlans.indexWhere(
@@ -179,22 +264,19 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       case c: ConditionalExpression =>
         val newAlwaysEvaluatedInputs = c.alwaysEvaluatedInputs.map(
           rewriteWithExprAndInputPlans(
-            _, inputPlans, commonExprsPerChild, commonExprIdSet, isNestedWith))
+            _, inputPlans, commonExprsPerChild, isNestedWith))
         val newExpr = c.withNewAlwaysEvaluatedInputs(newAlwaysEvaluatedInputs)
-        // Use transformUp to handle nested With.
+        // A `With` in a conditional branch cannot go into a project, which is always evaluated
+        // while the branch may not be. It stays where it is and memoizes its definition per entry
+        // instead, but only the definitions that gain something from it. Use transformUp to handle
+        // nested With.
         newExpr.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
-          case With(child, defs) =>
-            // For With in the conditional branches, they may not be evaluated at all and we can't
-            // pull the common expressions into a project which will always be evaluated. Inline it.
-            val refToExpr = defs.map(d => d.id -> d.child).toMap
-            child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
-              case ref: CommonExpressionRef => refToExpr(ref.id)
-            }
+          case w: With => inlineDefsThatGainNothing(w)
         }
 
       case other => other.mapChildren(
         rewriteWithExprAndInputPlans(
-          _, inputPlans, commonExprsPerChild, commonExprIdSet, isNestedWith)
+          _, inputPlans, commonExprsPerChild, isNestedWith)
       )
     }
   }

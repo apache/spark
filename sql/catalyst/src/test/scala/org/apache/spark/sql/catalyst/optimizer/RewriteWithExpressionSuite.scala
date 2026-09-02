@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TempResolvedColumn
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.IntegerType
 
 class RewriteWithExpressionSuite extends PlanTest {
 
@@ -226,15 +230,177 @@ class RewriteWithExpressionSuite extends PlanTest {
     )
   }
 
+  test("SPARK-58902: a With left in a conditional branch of an aggregate still converges") {
+    val Seq(a, b) = testRelation.output
+    // Not cheap and referenced twice, so it stays a memoizing `With` rather than being inlined.
+    val inBranch = With(a + b) { case Seq(ref) => ref * ref }
+    val plan = testRelation.groupBy(a)(max(Coalesce(Seq(a, inBranch))).as("col"))
+    // The `PhysicalAggregation` arm restructures the aggregate into a `Project` above it, and its
+    // guard is "the expressions contain a `With`", which a surviving one keeps true on every
+    // iteration of this fixed-point batch. Without the eq check in the rule this raises
+    // `Max iterations (5) reached for batch Rewrite With expression`, one `Project` per iteration.
+    val rewritten = Optimizer.execute(plan)
+    // Idempotent: running the batch again changes nothing.
+    comparePlans(Optimizer.execute(rewritten), rewritten)
+    assert(rewritten.collect { case p: Project => p }.size <= 1,
+      s"the rule stacked a Project per iteration:\n$rewritten")
+  }
+
+  test("SPARK-58902: a cheap or single-reference definition in a branch is still inlined") {
+    val Seq(a, b) = testRelation.output
+    // A bare attribute is cheap, so inlining it costs nothing.
+    val cheap = With(a) { case Seq(ref) => ref * ref }
+    comparePlans(
+      Optimizer.execute(testRelation.select(Coalesce(Seq(b, cheap)).as("col"))),
+      testRelation.select(Coalesce(Seq(b, a * a)).as("col")))
+
+    // Referenced once, so memoizing it would save nothing.
+    val singleRef = With(a + b) { case Seq(ref) => ref * Literal(2) }
+    comparePlans(
+      Optimizer.execute(testRelation.select(Coalesce(Seq(b, singleRef)).as("col"))),
+      testRelation.select(Coalesce(Seq(b, (a + b) * Literal(2))).as("col")))
+
+    // Expensive and referenced twice: this is the one worth a `With`.
+    val kept = With(a + b) { case Seq(ref) => ref * ref }
+    val keptPlan = testRelation.select(Coalesce(Seq(b, kept)).as("col"))
+    comparePlans(Optimizer.execute(keptPlan), keptPlan)
+  }
+
+  test("SPARK-58902: an inner substitution that duplicates an outer reference is counted") {
+    val Seq(a, b) = testRelation.output
+    def udf(e: Expression, deterministic: Boolean): PythonUDF =
+      PythonUDF("udf", null, IntegerType, Seq(e), PythonEvalType.SQL_BATCHED_UDF, deterministic)
+
+    // With this conf off, `CollapseProject.isCheap` calls any `PythonUDF` cheap whatever its
+    // children are, which is what lets an inner definition carrying an outer reference be
+    // substituted at both of its references. Counting the outer reference before that happens says
+    // once, and the branch path runs bottom-up, so a plan-wide count taken up front would inline
+    // the nondeterministic outer definition into both copies -- two draws where there must be one.
+    withSQLConf(SQLConf.AVOID_COLLAPSE_UDF_WITH_EXPENSIVE_EXPR.key -> "false") {
+      val outerDef = CommonExpressionDef(udf(a, deterministic = false))
+      val outerRef = new CommonExpressionRef(outerDef)
+      val innerDef = CommonExpressionDef(udf(outerRef, deterministic = true))
+      val innerRef = new CommonExpressionRef(innerDef)
+      val inner = With(Add(innerRef, innerRef), Seq(innerDef))
+      val outer = With(inner, Seq(outerDef))
+      val rewritten = Optimizer.execute(testRelation.select(Coalesce(Seq(b, outer)).as("col")))
+
+      val nondet = rewritten.expressions.flatMap(_.collect {
+        case u: PythonUDF if !u.udfDeterministic => u
+      })
+      assert(nondet.length == 1, s"the nondeterministic definition was inlined twice:\n$rewritten")
+      // It stayed memoized: the surviving `With` still defines it, and both reads go through a
+      // reference to it.
+      val withs = rewritten.expressions.flatMap(_.collect { case w: With => w })
+      assert(withs.length == 1, s"expected one surviving With:\n$rewritten")
+      assert(withs.head.defs.map(_.child) == nondet, s"the wrong definition survived:\n$rewritten")
+      assert(withs.head.child.collect { case r: CommonExpressionRef => r }.length == 2,
+        s"expected two references to the surviving definition:\n$rewritten")
+    }
+  }
+
+  test("SPARK-58902: a reference inside a sibling definition keeps that definition memoized") {
+    val Seq(a, b) = testRelation.output
+    def udf(e: Expression, deterministic: Boolean): PythonUDF =
+      PythonUDF("udf", null, IntegerType, Seq(e), PythonEvalType.SQL_BATCHED_UDF, deterministic)
+
+    // The reference to the first definition sits inside the second one, once. Substituting the
+    // second definition at both of its references would duplicate it, so counting it as read once
+    // would inline the nondeterministic first definition into both copies. Nothing builds this
+    // shape -- the helper puts references only in `child` -- but the rewrite is what would have to
+    // survive it, and it cannot fall back on evaluation failing.
+    withSQLConf(SQLConf.AVOID_COLLAPSE_UDF_WITH_EXPENSIVE_EXPR.key -> "false") {
+      val firstDef = CommonExpressionDef(udf(a, deterministic = false))
+      val firstRef = new CommonExpressionRef(firstDef)
+      val secondDef = CommonExpressionDef(udf(firstRef, deterministic = true))
+      val secondRef = new CommonExpressionRef(secondDef)
+      val w = With(Add(secondRef, secondRef), Seq(firstDef, secondDef))
+      val rewritten = Optimizer.execute(testRelation.select(Coalesce(Seq(b, w)).as("col")))
+
+      val nondet = rewritten.expressions.flatMap(_.collect {
+        case u: PythonUDF if !u.udfDeterministic => u
+      })
+      assert(nondet.length == 1,
+        s"the nondeterministic definition was inlined more than once:\n$rewritten")
+    }
+  }
+
+  test("SPARK-58902: a branch-local With keeps only the definitions worth memoizing") {
+    val Seq(a, b) = testRelation.output
+    // Two definitions in one `With`, one of each kind, so the rule has to rebuild the `With` around
+    // what is left rather than inline all of them or keep all of them. The other branch-local tests
+    // each use a single definition, which only exercises those two ends.
+    val expr = With(a, a + b) { case Seq(cheap, expensive) =>
+      Add(cheap * cheap, expensive * expensive)
+    }
+    val plan = testRelation.select(Coalesce(Seq(b, expr)).as("col"))
+    val rewritten = Optimizer.execute(plan)
+
+    val withs = rewritten.expressions.flatMap(_.collect { case w: With => w })
+    assert(withs.length == 1, s"expected one surviving With:\n$rewritten")
+    val kept = withs.head
+    assert(kept.defs.map(_.child) == Seq(a + b), s"the wrong definition was kept:\n$rewritten")
+    // The inlined definition's id is gone from the tree, not left as a reference nobody binds.
+    val keptIds = kept.defs.map(_.id).toSet
+    val refIds = rewritten.expressions.flatMap(_.collect { case r: CommonExpressionRef => r.id })
+    assert(refIds.nonEmpty && refIds.forall(keptIds.contains),
+      s"a reference to an inlined definition survived:\n$rewritten")
+    // The cheap definition was substituted at both of its references, not just the first.
+    assert(kept.child.collectFirst { case Add(l, _, _) => l }.contains(a * a),
+      s"the cheap definition was not inlined at every reference:\n$rewritten")
+    // The rebuilt `With` binds the references it carried over from the one it replaced, which is
+    // what the value proves: a = 2 inlined twice, a + b = 5 memoized and squared.
+    val bound = BindReferences.bindReference(
+      rewritten.expressions.head.children.head.asInstanceOf[Coalesce].children.last,
+      testRelation.output)
+    assert(bound.eval(InternalRow(2, 3)) == 2 * 2 + 5 * 5)
+    // Running the batch again changes nothing: the rebuilt `With` is a fixed point.
+    comparePlans(Optimizer.execute(rewritten), rewritten)
+  }
+
+  test("SPARK-58902: a cheap definition is only inlined if it is also deterministic") {
+    val Seq(a, b) = testRelation.output
+    def udf(e: Expression, deterministic: Boolean): PythonUDF =
+      PythonUDF("udf", null, IntegerType, Seq(e), PythonEvalType.SQL_BATCHED_UDF, deterministic)
+
+    // `CollapseProject.isCheap` admits a `PythonUDF` whose arguments are cheap, but it answers what
+    // one evaluation costs, not whether a second one would agree with the first. A nondeterministic
+    // one referenced twice has to stay memoized.
+    val nondet = With(udf(a, deterministic = false)) { case Seq(ref) => ref * ref }
+    val nondetPlan = testRelation.select(Coalesce(Seq(b, nondet)).as("col"))
+    comparePlans(Optimizer.execute(nondetPlan), nondetPlan)
+
+    // The deterministic one is inlined, as cheapness alone would have it.
+    val det = With(udf(a, deterministic = true)) { case Seq(ref) => ref * ref }
+    comparePlans(
+      Optimizer.execute(testRelation.select(Coalesce(Seq(b, det)).as("col"))),
+      testRelation.select(
+        Coalesce(Seq(b, udf(a, deterministic = true) * udf(a, deterministic = true))).as("col")))
+
+    // The same conjunct governs the main rewrite path, which has no `Coalesce` above it: there the
+    // definition is hoisted into a child `Project` instead of being substituted. Nothing in this
+    // batch sends it back -- `PlanHelper.specialExpressionsInUnsupportedOperator` collects only
+    // window, aggregate and generator expressions, so the `fakeProj` check does not force the
+    // substitution. What keeps `CollapseProject` from copying the alias back into its two consumers
+    // is that it requires a deterministic producer, which this suite's batch does not exercise.
+    val nondetMainPath = With(udf(a, deterministic = false)) { case Seq(ref) => ref * ref }
+    comparePlans(
+      Optimizer.execute(testRelation.select(nondetMainPath.as("col"))),
+      testRelation
+        .select((testRelation.output :+ udf(a, deterministic = false).as("_common_expr_0")): _*)
+        .select(($"_common_expr_0" * $"_common_expr_0").as("col"))
+        .analyze)
+  }
+
   test("WITH expression inside conditional expression") {
     val a = testRelation.output.head
-    val expr = Coalesce(Seq(a, With(a + a) { case Seq(ref) =>
-      ref * ref
-    }))
-    val inlinedExpr = Coalesce(Seq(a, (a + a) * (a + a)))
+    val inBranch = With(a + a) { case Seq(ref) => ref * ref }
+    val expr = Coalesce(Seq(a, inBranch))
     val plan = testRelation.select(expr.as("col"))
-    // With in the conditional branches is always inlined.
-    comparePlans(Optimizer.execute(plan), testRelation.select(inlinedExpr.as("col")))
+    // A `With` in a conditional branch is left where it is: it cannot go into a project, which is
+    // always evaluated, and it memoizes its definition per row itself, so the definition is still
+    // evaluated once rather than once per reference.
+    comparePlans(Optimizer.execute(plan), testRelation.select(expr.as("col")))
 
     val expr2 = Coalesce(Seq(With(a + a) { case Seq(ref) =>
       ref * ref
