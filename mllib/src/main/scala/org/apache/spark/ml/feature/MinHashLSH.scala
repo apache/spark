@@ -61,8 +61,8 @@ class MinHashLSHModel private[ml](
   override val handleInvalid: Param[String] = new Param[String](
     this,
     "handleInvalid",
-    "how to handle invalid entries. Options are skip (which will filter out rows with bad values), " +
-      "error (which will throw an error), or keep (returns empty vector array).",
+    "how to handle invalid entries. Options are skip (which will filter out " +
+      "rows with bad values), error (which will throw an error), or keep (returns empty vector array).",
     ParamValidators.inArray(Array("error", "skip", "keep")))
 
   setDefault(handleInvalid, "error")
@@ -210,8 +210,8 @@ class MinHashLSH(override val uid: String)
   override val handleInvalid: Param[String] = new Param[String](
     this,
     "handleInvalid",
-    "how to handle invalid entries. Options are skip (which will filter out rows with bad values), " +
-      "error (which will throw an error), or keep (returns empty vector array).",
+    "how to handle invalid entries. Options are skip (which will filter out " +
+      "rows with bad values), error (which will throw an error), or keep (returns empty vector array).",
     ParamValidators.inArray(Array("error", "skip", "keep")))
 
   /** @group setParam */
