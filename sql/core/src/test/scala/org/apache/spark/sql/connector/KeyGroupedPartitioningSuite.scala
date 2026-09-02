@@ -24,6 +24,7 @@ import org.apache.spark.rdd.SortedMergeCoalescedRDD
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, ExprId, Literal, TransformExpression}
+import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryCatalystRuntimeFilterCatalog, InMemoryTableCatalog}
@@ -5777,12 +5778,11 @@ class KeyGroupedPartitioningSuite
     // semantics call for. items is partitioned by (id, name) with *unique* ids, so projecting
     // `name` away drops a key position but loses no distinct key, so nothing collapsed. purchases
     // reports no partitioning, so with v2BucketingShuffleEnabled its side is shuffled using the
-    // projected partitioning as the template -- still true under SPARK-59050, which only marks the
-    // shuffled output as possibly holding unknown keys. The join's right-outer arm then exposes
-    // only that marked shuffled side, and the union with t3 drops the keyed merge outright (see
-    // `KeyedPartitioning.mayContainUnknownPartitionKeys`), so the final aggregate re-shuffles
-    // instead of grouping the union's partitions. What stays exercised for 58316: the template
-    // carries no collapse and needs no opt-in either way.
+    // projected partitioning as the template, still true under SPARK-59050: the shuffled output
+    // carries the unknown-keys marker, the join's right-outer arm exposes it, and the union drops
+    // the keyed merge, so the final aggregate re-shuffles instead of grouping the union's
+    // partitions. What stays exercised for 58316: the template carries no collapse and needs no
+    // opt-in either way.
     createTable(items, itemsColumns, Array(identity("id"), identity("name")))
     sql(s"INSERT INTO testcat.ns.$items VALUES " +
       s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
@@ -5821,8 +5821,8 @@ class KeyGroupedPartitioningSuite
         checkAnswer(df, Seq(Row(1L, 2L), Row(2L, 2L), Row(3L, 1L)))
         val plan = df.queryExecution.executedPlan
 
-        // The template the shuffled side is laid out on carries no collapse -- the point this
-        // test was written for, and independent of the opt-in.
+        // The template the shuffled side is laid out on carries no collapse, the point this
+        // test was written for, independent of the opt-in.
         val keyed = collectAllShuffles(plan).map(_.outputPartitioning).collect {
           case kp: physical.KeyedPartitioning => kp
         }
@@ -5955,7 +5955,7 @@ class KeyGroupedPartitioningSuite
   private def assertShuffleMayContainUnknownPartitionKeys(
       plan: SparkPlan,
       expected: Seq[Boolean]): Unit = {
-    val shuffles = collect(plan) { case s: ShuffleExchangeExec => s }
+    val shuffles = collectAllShuffles(plan)
     assert(shuffles.size === expected.size,
       s"expected ${expected.size} shuffles, got ${shuffles.size}:\n$plan")
     shuffles.zip(expected).foreach { case (shuffle, hasUnknown) =>
@@ -6065,7 +6065,7 @@ class KeyGroupedPartitioningSuite
         assertShuffleMayContainUnknownPartitionKeys(df.queryExecution.executedPlan,
           Seq(true, true))
         // The downstream join must not storage-partition on the first join's unknown-keyed
-        // layout -- FULL OUTER keeps it safe only because the join output exposes
+        // layout; FULL OUTER keeps it safe only because the join output exposes
         // UnknownPartitioning.
         assert(collectGroupPartitions(df.queryExecution.executedPlan).isEmpty,
           s"downstream join must not storage-partition on an unknown-keyed layout, got: " +
@@ -6130,7 +6130,7 @@ class KeyGroupedPartitioningSuite
   test("SPARK-59050: SPJ: one-side shuffle with out-of-set keys loses matches in a following " +
       "SPJ join (bucket)") {
     // Same hazard as the identity variant, but the keyed sides are partitioned by bucket(4, id):
-    // a covers buckets {0, 1, 2} (ids 0, 1, 2), while t holds id 3 -- bucket 3 -- which a does
+    // a covers buckets {0, 1, 2} (ids 0, 1, 2), while t holds id 3 (bucket 3), which a does
     // not, so the one-side shuffle misplaces t's bucket-3 row while still declaring a's layout.
     // `id` is LONG because `BucketFunction` binds its value argument to LongType.
     val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
@@ -6207,7 +6207,7 @@ class KeyGroupedPartitioningSuite
   test("SPARK-59050: SPJ: project dropping a key position drops the unknown-keyed claim") {
     // The first join's output is keyed on (id, k) and may contain unknown keys (t's rows are all
     // out-of-set: a holds k=x, t holds k=z). The Project below the second join drops the k
-    // position, so the declared key set coarsens from {(1, x) ... (4, x)} to {1, 2, 3, 4} -- and
+    // position, so the declared key set coarsens from {(1, x) ... (4, x)} to {1, 2, 3, 4}, and
     // an out-of-set (id, k) can then land inside the projected declared set. The keyed claim must
     // be dropped entirely, otherwise the second join trusts the coarsened layout and silently
     // loses the misplaced rows' matches.
@@ -6257,7 +6257,7 @@ class KeyGroupedPartitioningSuite
   }
 
   test("SPARK-59050: SPJ: union of an unknown-keyed leg drops the merged keyed partitioning") {
-    // The union's merged keys are the concatenation of every leg's keys -- a superset of each
+    // The union's merged keys concatenate every leg's keys, a superset of each
     // leg's declared set. When a leg's partitioning may contain unknown partition keys, another
     // leg can declare exactly the key the unknown-keyed leg holds out-of-set, so the merged
     // claim would promise co-location the unknown-keyed leg cannot honor. The union must drop
@@ -6305,7 +6305,7 @@ class KeyGroupedPartitioningSuite
 
     // Overlapping second leg: s declares exactly the key {3} that the unknown-keyed leg holds
     // out-of-set, so the union's merged keys {1, 2, 3} equal u's keys and the second join would
-    // storage-partition with no exchange -- silently losing t's id=3 match.
+    // storage-partition with no exchange, silently losing t's id=3 match.
     sql("DROP TABLE IF EXISTS testcat.ns.s")
     sql("DROP TABLE IF EXISTS testcat.ns.u")
     createTable("s", columns, Array(identity("id")))
@@ -6390,12 +6390,11 @@ class KeyGroupedPartitioningSuite
   }
 
   test("SPARK-59050: SPJ: spurious marker of an inner join keeps the reduced SPJ") {
-    // The inner join's PartitioningCollection holds the keyed side's own (unmarked) KP next to
-    // the re-shuffled side's unknown-keyed one. The marker is spurious -- the inner join
-    // dropped every out-of-set row -- so a following reduced storage-partitioned join (bucket(4)
-    // reduced onto bucket(2)) must still work. Reading the marker off the collection with
-    // `exists` used to make the GroupPartitionsExec give up with a zero-partition
-    // UnknownPartitioning, which threw at planning when a parent asked for the partitioning.
+    // The spurious marker on the inner join's collection is cleared at construction (see
+    // `ShuffledJoin`), so a following reduced storage-partitioned join (bucket(4) onto
+    // bucket(2)) must still work. Reading the marker with `exists` used to make the
+    // GroupPartitionsExec give up with a zero-partition UnknownPartitioning, which threw at
+    // planning when a parent asked for the partitioning.
     val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
     createTable("a", cols, Array(bucket(4, "id")))
     createTable("u", cols, Array(bucket(2, "id")))
@@ -6428,10 +6427,8 @@ class KeyGroupedPartitioningSuite
 
   test("SPARK-59050: SPJ: inner join with in-set rows keeps the sound SPJ downstream") {
     // Same shape as the one-side-shuffle repro, but the inner join's second side holds only
-    // in-set rows: the join's PartitioningCollection carries the keyed side's own (unmarked) KP
-    // next to the re-shuffled side's unknown-keyed one, and the join has already dropped every
-    // out-of-set row, so the marker is spurious and the following storage-partitioned join must
-    // not pay a shuffle for it.
+    // in-set rows: the marker is spurious and cleared at construction (see `ShuffledJoin`), so
+    // the following storage-partitioned join must not pay a shuffle for it.
     val cols = Array(
       Column.create("id", IntegerType),
       Column.create("k", StringType),
@@ -6468,61 +6465,93 @@ class KeyGroupedPartitioningSuite
   }
 
   test("SPARK-59050: SPJ: inner join clears the spurious marker on both member orders") {
-    // The inner join's output collection pairs the re-shuffled side's unknown-keyed KP with
-    // the keyed side's own unmarked KP. The join already dropped every out-of-set row, so the
-    // marker is spurious and must be cleared when the collection is built -- the downstream join
-    // matches the join key against the unknown-keyed member's expressions (the re-shuffled side
-    // is the join key's attribute origin), so a sibling-order preference in
-    // `createKeyedShuffleSpec` could not rescue the SPJ here. Both join orders must plan the
-    // single first-join shuffle.
-    val cols = Array(
-      Column.create("id", IntegerType),
-      Column.create("k", StringType),
-      Column.create("data", StringType))
-    createTable("a", cols, Array(identity("id"), identity("k")))
-    createTable("u", cols, Array(identity("id")))
-    sql("INSERT INTO testcat.ns.a VALUES " +
-      "(1, 'x', 'a1'), (2, 'x', 'a2'), (3, 'x', 'a3'), (4, 'x', 'a4')")
-    sql("INSERT INTO testcat.ns.u VALUES " +
-      "(1, NULL, 'u1'), (2, NULL, 'u2'), (3, NULL, 'u3'), (4, NULL, 'u4')")
+    // `t`'s id=3 can match nothing on `a` (keys {1, 2}), so the inner join's marker is spurious
+    // and cleared at construction (see `ShuffledJoin`). If it survived, the subset gate in
+    // `areKeysCompatible` would refuse `u`'s wider key set and cost a shuffle no sibling order
+    // can rescue. Both join orders must plan master's shape: the single first-join shuffle
+    // plus a `GroupPartitionsExec` on each side of the storage-partitioned second join.
+    createTable("a", columns, Array(identity("id")))
+    createTable("u", columns, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.a VALUES (1, 'a1', NULL), (2, 'a2', NULL)")
+    sql("INSERT INTO testcat.ns.u VALUES (1, 'u1', NULL), (2, 'u2', NULL), (3, 'u3', NULL)")
 
     withTable("t") {
-      sql("CREATE TABLE t (id INT, k STRING, data STRING) USING parquet")
-      sql("INSERT INTO t VALUES (1, 'x', 't1'), (2, 'x', 't2'), (3, 'x', 't3'), (4, 'x', 't4')")
-      val expected = Seq(Row(1, "x", "u1"), Row(2, "x", "u2"), Row(3, "x", "u3"), Row(4, "x", "u4"))
+      sql("CREATE TABLE t (id INT, data STRING) USING parquet")
+      sql("INSERT INTO t VALUES (1, 't1'), (2, 't2'), (3, 't3')")
 
-      // `t` first: the collection lists the unknown-keyed member before its unmarked sibling;
-      // `a` first: the mirror order (the negative control pinning order-insensitivity).
+      // `t` first puts the marked member ahead of its unmarked sibling in the collection;
+      // `a` first is the mirror order.
       for (side <- Seq("t", "a")) {
         val query = if (side == "t") {
           """
-            |SELECT t.id, a.k, u.data
-            |FROM t JOIN testcat.ns.a a ON a.id = t.id AND a.k = t.k
+            |SELECT t.id, u.data
+            |FROM t JOIN testcat.ns.a a ON a.id = t.id
             |JOIN testcat.ns.u u ON t.id = u.id
             |""".stripMargin
         } else {
           """
-            |SELECT a.id, a.k, u.data
-            |FROM testcat.ns.a a JOIN t ON a.id = t.id AND a.k = t.k
+            |SELECT a.id, u.data
+            |FROM testcat.ns.a a JOIN t ON a.id = t.id
             |JOIN testcat.ns.u u ON a.id = u.id
             |""".stripMargin
         }
         withSQLConf(
             SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
-            SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+            "spark.sql.autoBroadcastJoinThreshold" -> "-1",
             SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
           val df = sql(query)
-          checkAnswer(df, expected)
+          checkAnswer(df, Seq(Row(1, "u1"), Row(2, "u2")))
           assertShuffleMayContainUnknownPartitionKeys(df.queryExecution.executedPlan, Seq(true))
+          assert(collectGroupPartitions(df.queryExecution.executedPlan).nonEmpty,
+            s"side=$side: the second join should storage-partition, got: " +
+              df.queryExecution.executedPlan)
         }
       }
     }
   }
 
+  test("SPARK-59050: SPJ: inner join marker clearing reaches nested collections") {
+    // `ShuffledJoin`'s `InnerLike` arm passes each child's partitioning into the joined
+    // collection as reported, so the next inner join can find marked members nested inside a
+    // collection inherited from an all-marked inner join below. That nesting cannot be planned
+    // through SQL (an inner join's own clearing already flattens what SQL puts in it), so the
+    // nodes are hand-built here through the same exchange-leaf idiom used above.
+    val attrA = AttributeReference("a", IntegerType)()
+    val attrB = AttributeReference("b", IntegerType)()
+    val keys = Seq(InternalRow(1), InternalRow(2))
+    def markedKP(e: AttributeReference): KeyedPartitioning =
+      KeyedPartitioning(Seq(e), keys).copy(mayContainUnknownPartitionKeys = true)
+    def markedExchange(e: AttributeReference): ShuffleExchangeExec =
+      ShuffleExchangeExec(markedKP(e), new LocalTableScanExec(Seq(e), Nil, None, false))
+    def plainExchange(e: AttributeReference): ShuffleExchangeExec =
+      ShuffleExchangeExec(KeyedPartitioning(Seq(e), keys),
+        new LocalTableScanExec(Seq(e), Nil, None, false))
+    // The first join: two marked children, no unmarked sibling -> its collection stays marked.
+    val inner1 = SortMergeJoinExec(attrA :: Nil, attrA :: Nil, Inner, None,
+      markedExchange(attrA), markedExchange(attrA))
+    // The second join nests that collection next to an unmarked sibling -> the clearing must
+    // reach inside it.
+    val inner2 = SortMergeJoinExec(attrA :: Nil, attrB :: Nil, Inner, None,
+      inner1, plainExchange(attrB))
+    val cleared = physical.PartitioningCollection.flatten(inner2.outputPartitioning)
+      .collect { case k: KeyedPartitioning => k }
+    assert(cleared.size == 3, cleared.toString)
+    assert(cleared.forall(!_.mayContainUnknownPartitionKeys),
+      s"the unmarked sibling must clear every marked member: $cleared")
+    // And a marked sibling of an all-marked nested collection excuses nothing: all stay marked.
+    val inner3 = SortMergeJoinExec(attrA :: Nil, attrB :: Nil, Inner, None,
+      markedExchange(attrA), inner1)
+    val kept = physical.PartitioningCollection.flatten(inner3.outputPartitioning)
+      .collect { case k: KeyedPartitioning => k }
+    assert(kept.size == 3, kept.toString)
+    assert(kept.forall(_.mayContainUnknownPartitionKeys),
+      s"an all-marked chain must keep its markers: $kept")
+  }
+
   test("SPARK-59050: SPJ: inner join drops out-of-set rows before the cleared marker is trusted") {
     // Data-level companion to the spurious-marker tests: `t` here genuinely holds an out-of-set
     // row (5, 'z') that a's declared keys cannot match. The inner join drops it, so every row
-    // reaching the cleared-marker layout carries a declared key -- the downstream storage-
+    // reaching the cleared-marker layout carries a declared key; the downstream storage-
     // partitioned join must then return exactly the matched rows: ids 1..4, and NOT id=5 even
     // though u holds it. If the marker were cleared for a shape that keeps out-of-set rows,
     // this query would silently lose or misplace matches.
@@ -6571,9 +6600,10 @@ class KeyGroupedPartitioningSuite
   test("SPARK-59050: SPJ: genuine unknown keys survive an inner join on a key subset") {
     // Adversarial shape against the spurious-marker clearing: the RIGHT OUTER output `r` is a
     // single unknown-keyed KP carrying a GENUINE unknown row (1, 'zz'); it inner-joins `x`
-    // (a keyed table declaring the same key set) on a strict subset of the key columns; `u`
-    // above matches on the full (id, k). The (1,'zz','xa','uz') match must survive: clearing
-    // markers only applies to mixed collections where every row already carries a declared key,
+    // (a keyed table declaring the same key set) on a strict subset of the key columns; the
+    // join to `u` below matches on the full (id, k). The (1,'zz','xa','uz') match must survive:
+    // clearing markers only applies to mixed collections where every row already carries a
+    // declared key,
     // and here the planner re-shuffles `r`'s side onto u's layout (the (id)-only claim cannot
     // pair with the (id,k) spec), routing (1,'zz') by its full tuple into its own partition.
     val cols = Array(
@@ -6611,6 +6641,129 @@ class KeyGroupedPartitioningSuite
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
         val df = sql(query)
         checkAnswer(df, expected)
+        // Pin the total exchange count so later silent shuffles surface: the marked (id, k)
+        // side refuses to pair on the subset key, cascading one-side shuffles around it.
+        val plan = df.queryExecution.executedPlan
+        val shuffles = collectAllShuffles(plan)
+        assert(shuffles.size == 4, s"expected 4 exchanges, got ${shuffles.size}:\n$plan")
+      }
+    }
+  }
+
+  test("SPARK-59050: SPJ: a window keyed on a subset of an unknown-keyed layout must shuffle") {
+    // The right-outer join preserves pt's out-of-set row (1, 9): the surviving layout declares
+    // (id, k) pairs (1, 0)..(4, 0) only. A window keyed on `id` alone must not run
+    // partition-locally on it: the declared (1, 0) row and the hash-placed (1, 9) row can
+    // sit in different partitions, splitting the count for id=1 into two groups of 1.
+    // `keysSatisfy` refuses the subset relaxation for an unknown-keyed layout.
+    val cols = Array(
+      Column.create("id", IntegerType),
+      Column.create("k", IntegerType),
+      Column.create("data", StringType))
+    createTable("pa", cols, Array(identity("id"), identity("k")))
+    sql("INSERT INTO testcat.ns.pa VALUES " +
+      "(1, 0, 'a1'), (2, 0, 'a2'), (3, 0, 'a3'), (4, 0, 'a4')")
+    withTable("pt") {
+      sql("CREATE TABLE pt (id INT, k INT, data STRING) USING parquet")
+      sql("INSERT INTO pt VALUES " +
+        "(1, 0, 't1'), (2, 0, 't2'), (3, 0, 't3'), (4, 0, 't4'), (1, 9, 'u1')")
+      val query =
+        """
+          |SELECT id, k, COUNT(*) OVER (PARTITION BY id) FROM (
+          |  SELECT /*+ MERGE */ pt.id AS id, pt.k AS k FROM testcat.ns.pa pa
+          |  RIGHT OUTER JOIN pt ON pa.id = pt.id AND pa.k = pt.k) r
+          |""".stripMargin
+      // AQE off pins the plan shape; AQE on replans the same query over stage outputs and must
+      // still return correct counts (the marker survives `ShuffleQueryStageExec`).
+      for (adaptive <- Seq(false, true)) {
+        withSQLConf(
+            SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+            "spark.sql.autoBroadcastJoinThreshold" -> "-1",
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+          val df = sql(query)
+          checkAnswer(df, Seq(Row(1, 0, 2), Row(2, 0, 1), Row(3, 0, 1), Row(4, 0, 1),
+            Row(1, 9, 2)))
+          if (!adaptive) {
+            // Two shuffles: the first join's one-side shuffle plus the window's exchange.
+            val plan = df.queryExecution.executedPlan
+            val shuffles = collectAllShuffles(plan)
+            assert(shuffles.size == 2, s"the window must pay an exchange, got:\n$plan")
+            assert(shuffles.exists(!_.outputPartitioning.isInstanceOf[KeyedPartitioning]),
+              s"expected a non-keyed (window) exchange, got:\n$plan")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59050: SPJ: a window keyed on the full key of an unknown-keyed layout does not " +
+    "shuffle") {
+    // Positive control for the marked branch of `keysSatisfy`: whole declared keys co-locate, so
+    // a window keyed on the COMPLETE partition key of a marked layout still runs
+    // partition-locally. A gate that over-rejects (e.g. also refusing full-key clustering) keeps
+    // every wrong-results test green and only silently adds shuffles; this test would not.
+    val cols = Array(
+      Column.create("id", IntegerType),
+      Column.create("k", IntegerType),
+      Column.create("data", StringType))
+    createTable("qa", cols, Array(identity("id"), identity("k")))
+    sql("INSERT INTO testcat.ns.qa VALUES (1, 0, 'a1'), (2, 0, 'a2'), (3, 0, 'a3')")
+    withTable("qt") {
+      sql("CREATE TABLE qt (id INT, k INT, data STRING) USING parquet")
+      sql("INSERT INTO qt VALUES (1, 0, 't1'), (2, 0, 't2'), (3, 0, 't3'), (1, 9, 'u1')")
+      val query =
+        """
+          |SELECT id, k, COUNT(*) OVER (PARTITION BY id, k) FROM (
+          |  SELECT /*+ MERGE */ qt.id AS id, qt.k AS k FROM testcat.ns.qa qa
+          |  RIGHT OUTER JOIN qt ON qa.id = qt.id AND qa.k = qt.k) r
+          |""".stripMargin
+      withSQLConf(
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          "spark.sql.autoBroadcastJoinThreshold" -> "-1",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = sql(query)
+        checkAnswer(df, Seq(Row(1, 0, 1), Row(2, 0, 1), Row(3, 0, 1), Row(1, 9, 1)))
+        val plan = df.queryExecution.executedPlan
+        val shuffles = collectAllShuffles(plan)
+        // Only the first join's one-side shuffle; the window rides the marked layout.
+        assert(shuffles.size == 1, s"the full-key window must not shuffle, got:\n$plan")
+      }
+    }
+  }
+
+  test("SPARK-59050: SPJ: a global ORDER BY over an unknown-keyed layout must " +
+    "range-partition") {
+    // The right-outer join preserves obt's out-of-set id=4, which the KeyGroupedPartitioner
+    // hash-placed into the partition declaring id=1; without a range exchange the global sort
+    // degrades to per-partition sorting and emits [1, 4, 2]. `keysSatisfy` rejects the ordering
+    // claim of a marked layout with more than one partition.
+    createTable("oba", columns, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.oba VALUES (1, 'x', NULL), (2, 'x', NULL)")
+    withTable("obt") {
+      sql("CREATE TABLE obt (id INT, data STRING) USING parquet")
+      sql("INSERT INTO obt VALUES (1, 'p1'), (2, 'p2'), (4, 'p4')")
+      val query =
+        """
+          |SELECT /*+ MERGE */ obt.id FROM testcat.ns.oba ba RIGHT OUTER JOIN obt
+          |ON ba.id = obt.id
+          |ORDER BY id
+          |""".stripMargin
+      withSQLConf(
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true",
+          "spark.sql.autoBroadcastJoinThreshold" -> "-1",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = sql(query)
+        // compare `collect` directly: checkAnswer would sort both sides and hide the order.
+        val ordered = df.collect().map(_.getInt(0)).toSeq
+        assert(ordered == Seq(1, 2, 4), s"global order broken: $ordered")
+        val plan = df.queryExecution.executedPlan
+        val shuffles = collectAllShuffles(plan)
+        // Two exchanges: the first join's one-side shuffle plus the range partitioning.
+        assert(shuffles.size == 2, s"expected 2 exchanges, got ${shuffles.size}:\n$plan")
+        assert(shuffles.exists(_.outputPartitioning.isInstanceOf[physical.RangePartitioning]),
+          s"a range exchange must precede the global sort, got:\n$plan")
       }
     }
   }
@@ -6646,3 +6799,5 @@ class KeyGroupedPartitioningCatalystRuntimeFilterSuite
     catalog.clearTables()
   }
 }
+
+

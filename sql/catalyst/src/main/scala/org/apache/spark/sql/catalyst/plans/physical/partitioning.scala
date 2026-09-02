@@ -584,19 +584,26 @@ case class CoalescedNullAwareHashPartitioning(
  *                    what it gates and how it travels.
  * @param mayContainUnknownPartitionKeys Whether the data may contain rows whose partition key is
  *                                 not among the declared `partitionKeys`. `KeyGroupedPartitioner`
- *                                 routes such rows to arbitrary partitions when a side is
+ *                                 routes such rows by a deterministic hash when a side is
  *                                 re-shuffled onto this partitioning (see
- *                                 `KeyedShuffleSpec.createPartitioning`), so only the declared
- *                                 keys are guaranteed to be co-located;
- *                                 `KeyedShuffleSpec.areKeysCompatible` reflects this. Two carry
- *                                 rules: the claim survives only a node that keeps the declared
- *                                 key set verbatim -- a node that coarsens it (key-dropping
- *                                 projection, union merge, reducer, join-key projection) must
- *                                 drop the keyed partitioning, as an out-of-set key can coarsen
- *                                 into the smaller set; and it is spurious on a
- *                                 `PartitioningCollection` member next to an unmarked sibling --
- *                                 only `ShuffledJoin`'s `InnerLike` arm merges one in, and its
- *                                 join filtered the unknown rows.
+ *                                 `KeyedShuffleSpec.createPartitioning`), so co-location holds
+ *                                 for whole keys only: two marked partitionings declaring the
+ *                                 same keys in the same order still pair (equal undeclared keys
+ *                                 hash to the same partition), but a row of an undeclared key
+ *                                 sits in the partition of some other declared key, away from
+ *                                 rows sharing a subset of its columns. `satisfies` and
+ *                                 `KeyedShuffleSpec.areKeysCompatible` therefore accept a marked
+ *                                 partitioning only for full-key clustering, never for a subset
+ *                                 of its partition columns and never for a global ordering
+ *                                 across several partitions. Two carry rules: (1) a node that
+ *                                 changes the declared key set must drop the keyed partitioning,
+ *                                 whether it coarsens it (key-dropping projection, reducer,
+ *                                 join-key projection) or expands it over a marked leg (a union,
+ *                                 where another leg may declare exactly the key that leg holds
+ *                                 out-of-set); (2) a marked member beside an unmarked sibling is
+ *                                 spurious, and `ShuffledJoin`'s `InnerLike` arm, the only site
+ *                                 that mixes them, clears it at construction, so members are
+ *                                 uniformly marked or unmarked everywhere downstream.
  */
 case class KeyedPartitioning(
     expressions: Seq[Expression],
@@ -764,7 +771,11 @@ case class KeyedPartitioning(
           // We'll need to find leaf attributes from the partition expressions first.
           val attributes = AttributeSet.fromAttributeSets(expressions.map(_.references))
 
-          if (SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys) {
+          if (mayContainUnknownPartitionKeys) {
+            // Whole keys co-locate, subsets do not (see the `@param`): a window or aggregate
+            // keyed on a strict subset of the partition columns must still shuffle.
+            attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          } else if (SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys) {
             // The operation keys may be a subset of the partition keys, so one partition expression
             // covering one of them is enough. Partitions can then still hold rows that share an
             // operation key. What makes the distribution true is the projection onto the covering
@@ -785,7 +796,10 @@ case class KeyedPartitioning(
         // keys. This is the local gate. A reduced position always carries a transform and an
         // `ORDER BY` cannot name one, so the match below already refuses every case a query can
         // reach. Do not read the first clause as redundant.
-        expressionsDescribeKeys && o.areAllClusterKeysMatched(expressions)
+        // An out-of-set key can break the ascending sequence of the declared keys, so a marked
+        // layout keeps a global ordering claim only for a single partition (see the `@param`).
+        expressionsDescribeKeys && o.areAllClusterKeysMatched(expressions) &&
+          (!mayContainUnknownPartitionKeys || numPartitions == 1)
 
       case _ =>
         false
@@ -815,10 +829,10 @@ case class KeyedPartitioning(
     val result = KeyedShuffleSpec(this, distribution)
     if (SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys) {
       val joinKeyPositions = result.keyPositions.map(_.nonEmpty).zipWithIndex.filter(_._1).map(_._2)
-      // The projection coarsens the declared key set, which an unknown-keyed claim cannot
-      // survive (see `mayContainUnknownPartitionKeys`). Return the unprojected spec instead: it
-      // disagrees on arity with every other spec, so co-location is refused and the child falls
-      // back to the ordinary shuffle path.
+      // The projection coarsens the declared set, which a marked claim cannot survive (see the
+      // `@param`). Return the unprojected spec: its extra expressions map to no clustering key,
+      // so `areKeysCompatible` refuses it as a partner and `canCreatePartitioning` refuses it as
+      // a shuffle template, and the child falls back to the ordinary shuffle.
       if (mayContainUnknownPartitionKeys && joinKeyPositions.length < expressions.length) {
         return result
       }
@@ -1644,10 +1658,9 @@ case class KeyedShuffleSpec(
     } && expressions.zip(otherExpressions).forall {
       case (l, r) => isExpressionCompatible(l, r)
     } && {
-      // An unknown-keyed side (see `KeyedPartitioning.mayContainUnknownPartitionKeys`) guarantees
-      // co-location only for its declared keys, and `KeyGroupedPartitioner`'s out-of-set routing
-      // is a deterministic hash -- so it can pair only with a side whose keys are a subset of the
-      // declared keys.
+      // An unknown-keyed side co-locates only its declared keys, and the out-of-set routing is
+      // a deterministic hash, so it can pair only with a side whose keys are a subset of those
+      // declared keys (see `KeyedPartitioning.mayContainUnknownPartitionKeys`).
       //
       // The key comparison below must also happen in a single domain: `isExpressionCompatible`
       // admits an `AttributeReference` against a `TransformExpression` (and two different-but-
@@ -1818,9 +1831,8 @@ case class KeyedShuffleSpec(
       // clause as redundant.
       partitioning.isGrouped &&
       // Every partition expression must map to a clustering key, otherwise `createPartitioning`
-      // cannot rewrite it into the clustering key. This also keeps the unprojected spec returned
-      // by `createShuffleSpec` for an unknown-keyed narrowed projection -- whose extra partition
-      // expressions map to no clustering key -- from being chosen as the best spec.
+      // cannot rewrite it. This also keeps the unprojected spec returned by `createShuffleSpec`
+      // for a marked narrowing projection from being chosen as the best spec.
       keyPositions.forall(_.nonEmpty) &&
       partitioning.expressions.forall { e =>
         e.isInstanceOf[AttributeReference] || e.isInstanceOf[TransformExpression]
@@ -1843,15 +1855,10 @@ case class KeyedShuffleSpec(
     // grouping of the shared key set carries the collapsed side's risk.
     //
     // The child re-shuffled onto this layout may hold keys outside the declared set, so every
-    // partitioning produced here carries the unknown-keys marker too (see
-    // `KeyedPartitioning.mayContainUnknownPartitionKeys`). `createPartitioning` is only reached
-    // from `EnsureRequirements`' shuffle loop to re-shuffle a join child onto the best spec's
-    // layout, and the re-shuffled child's keys are never provably a subset of the declared keys:
-    // a non-keyed (v1) child's keys are unknown to the planner, and a keyed child with an
-    // incompatible partitioning is re-evaluated in this spec's key space, which the planner
-    // cannot bound. Marking every such partitioning is therefore
-    // sound (conservative only when the two sides happen to share a transform and the re-shuffled
-    // keys are a known subset).
+    // partitioning produced here carries the marker (see the `@param`). Only the shuffle loop
+    // reaches this call, and it carries no same-domain subset proof, so marking is sound; it is
+    // conservative where the child's keys are in fact a known subset (identity key [1] inside
+    // declared [1, 2]), a precision this path does not attempt.
     partitioning.copy(expressions = newExpressions, mayContainUnknownPartitionKeys = true)
   }
 }
