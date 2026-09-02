@@ -740,6 +740,35 @@ class ProjectedOrderingAndPartitioningSuite
     assert(e.getMessage.contains("partitionKeys"))
   }
 
+  test("SPARK-59121: a projection drops the reduced key marker with its own position") {
+    // KP([bucket(32, id) reduced together with bucket(24, id), years(ts)], keys2d). The marker
+    // rides on the expression, so a projection that keeps the reduced position keeps it, and one
+    // that drops that position leaves a partitioning whose expressions describe their keys again.
+    val id = AttributeReference("id", IntegerType)()
+    val ts = AttributeReference("ts", IntegerType)()
+    val reducedExpr = TransformExpression(BucketFunction, Seq(id), Some(32))
+      .reducedTogetherWith(TransformExpression(BucketFunction, Seq(id), Some(24)))
+    val yearsExpr = TransformExpression(YearsFunction, Seq(ts))
+    val keys2d = Seq(InternalRow(0, 2020), InternalRow(1, 2021))
+    val child = DummyLeafExecWithPartitioning(
+      output = Seq(id, ts),
+      partitioning = KeyedPartitioning(Seq(reducedExpr, yearsExpr), keys2d))
+
+    ProjectExec(Seq(id), child).outputPartitioning match {
+      case kp: KeyedPartitioning =>
+        assert(kp.expressions === Seq(reducedExpr), "the reduced position survives, marked")
+        assert(!kp.expressionsDescribeKeys)
+      case other => fail(s"Expected KeyedPartitioning, got $other")
+    }
+
+    ProjectExec(Seq(ts), child).outputPartitioning match {
+      case kp: KeyedPartitioning =>
+        assert(kp.expressions === Seq(yearsExpr), "only the unreduced position survives")
+        assert(kp.expressionsDescribeKeys, "no reduced position is left to refuse")
+      case other => fail(s"Expected KeyedPartitioning, got $other")
+    }
+  }
+
   test("SPARK-58138: BIN BY preserves a child partitioning on a pass-through column") {
     val tsStart = AttributeReference("ts_start", TimestampType)()
     val tsEnd = AttributeReference("ts_end", TimestampType)()
