@@ -132,6 +132,10 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  private def normalizeRenderedExpressionIds(rendered: String): String = {
+    rendered.replaceAll("#[0-9]+", "#x")
+  }
+
   private def callCount(expression: Expression): Int = {
     expression.collect { case _: ExternalUserDefinedFunction => 1 }.size
   }
@@ -242,16 +246,18 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
     }
 
     assert(function.sql == "safeRendering(input)")
-    Seq(
-      function.toString,
-      loggedCondition,
-      logicalPlan.treeString,
-      physicalPlan.treeString).foreach { display =>
-      // Plan rendering includes expression IDs on attributes, unlike Expression.sql.
-      assert(display.contains("safeRendering(input"))
-      assert(!display.contains(sensitiveValue))
-      assert(!display.contains("environment_variables"))
-    }
+    assert(normalizeRenderedExpressionIds(function.toString) ==
+      "safeRendering(input#x)#x")
+    assert(normalizeRenderedExpressionIds(loggedCondition) ==
+      "(safeRendering(input#x)#x = 1)")
+    assert(normalizeRenderedExpressionIds(logicalPlan.treeString) ==
+      """ExecuteExternalUDF safeRendering(input#x)#x, externalUDF#x: int
+        |+- LocalRelation <empty>, [input#x]
+        |""".stripMargin)
+    assert(normalizeRenderedExpressionIds(physicalPlan.treeString) ==
+      """ExecuteExternalUDF safeRendering(input#x)#x, externalUDF#x: int
+        |+- LocalTableScan <empty>, [input#x]
+        |""".stripMargin)
   }
 
   test("external UDF input types are validated during analysis") {
@@ -318,20 +324,21 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
     val sensitiveValue = "sensitive-lambda-value"
     val spec = workerSpec("lambda", Map("UDF_SECRET" -> sensitiveValue))
     val lambdaVariable = NamedLambdaVariable("x", IntegerType, nullable = false)
+    val function = udf("lambda", spec, Seq(lambdaVariable))
     val transform = ArrayTransform(
       CreateArray(Seq(input)),
       LambdaFunction(
-        udf("lambda", spec, Seq(lambdaVariable)),
+        function,
         Seq(lambdaVariable)))
     val plan = Project(Seq(Alias(transform, "result")()), relation)
 
     val exception = intercept[AnalysisException] {
       spark.sessionState.analyzer.executeAndCheck(plan, new QueryPlanningTracker)
     }
-    checkErrorMatchPVals(
+    checkError(
       exception = exception,
       condition = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_EXTERNAL_UDF",
-      parameters = Map("funcName" -> "\"lambda\\(lambda x#[0-9]+\\)\""))
+      parameters = Map("funcName" -> ("\"" + function.sql + "\"")))
     assert(!exception.getMessage.contains(sensitiveValue))
   }
 
@@ -620,6 +627,12 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
         spark.sessionState.optimizer.execute(plan)
       }
     }
-    assert(exception.getMessage.startsWith("Detected implicit cartesian product"))
+    checkError(
+      exception = exception,
+      condition = "_LEGACY_ERROR_TEMP_1211",
+      parameters = Map(
+        "joinType" -> Inner.sql,
+        "leftPlan" -> "Range (0, 10, step=1, splits=Some(1))",
+        "rightPlan" -> "Range (0, 10, step=1, splits=Some(1))"))
   }
 }
