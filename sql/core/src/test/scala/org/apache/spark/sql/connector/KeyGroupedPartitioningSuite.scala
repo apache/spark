@@ -651,6 +651,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
         "JOIN testcat.ns.t2 ON t1.id = t2.id")
 
     withSQLConf(
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
         SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
       checkAnswer(df, Seq(
