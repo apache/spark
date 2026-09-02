@@ -446,46 +446,49 @@ case class KeyedPartitioning(
    * The types the `partitionKeys` rows were built with. Anything reading those rows should take its
    * types from here. It is a driver-side value, since `partitionKeys` is `@transient`.
    *
-   * They are the `expressionDataTypes` unless a reducer has rewritten the keys. With
-   * `v2BucketingAllowCompatibleTransforms` a storage-partitioned join reduces one or both sides'
-   * keys onto a common key space, while the partitioning keeps reporting the expressions it was
-   * built from. Joining an `identity(ts)`-partitioned table to a `years(ts)`-partitioned one leaves
-   * `IntegerType` year values under a `TimestampType`-declared expression. With no key at all the
-   * expressions are all there is, and there is no row to read or to place.
+   * They differ from the `expressionDataTypes` in two cases. A join that reduced both sides' keys
+   * onto a key space no transform names leaves a marked expression whose type can be anything, see
+   * `expressionsDescribeKeys`. A one-side reduce keeps them equal, because the expression the
+   * partitioning then reports is the target transform and `EnsureRequirements` refuses a reducer
+   * whose result type disagrees with it. `KeyedShuffleSpec.createPartitioning` is the other case.
+   * It puts the other child's expressions over these keys with no reducer in sight, so a struct
+   * field can be named differently on the two sides. With no key at all the expressions are all
+   * there is, and there is no row to read or to place.
+   *
+   * The two cases can meet, and then the fallback is not truthful. A marked partitioning can end up
+   * with no key, for instance when `v2BucketingPartitionFilterEnabled` intersects two sides that
+   * hold disjoint keys, and it then reports the un-reduced transform's type while the other leg of
+   * the same pairing reports the reducer's. `EnsureRequirements`' reduced-types check compares the
+   * two and fails a query whose result is empty. The same query fails on a `ClassCastException`
+   * without this marker, so nothing regresses. SPARK-59176 tracks the fix, which needs the
+   * reducer's result type recorded where the key is missing.
    *
    * `ShuffleExchangeExec` is the one reader that stays on `expressionDataTypes`. It evaluates the
    * expressions to place the other child's rows, and it runs on executors, where this value is not
-   * available. `expressionsDescribeKeyShape` is what keeps that site sound.
+   * available. `expressionsDescribeKeys` is what keeps that site sound.
    *
-   * Only the first key's types are read, and nothing enforces that the rest match. Reduced keys
-   * also break three readers in ways no choice of types can fix, and SPARK-59121 covers all three:
-   *
-   *  - `EnsureRequirements`' `OrderedDistribution` arm orders these rows by the partition
-   *    attributes.
-   *  - the `UnionExec` key merge concatenates several children's keys.
-   *  - `KeyedShuffleSpec.reducers` binds its reducer to the partition expression, then reads a
-   *    stored key with it.
+   * Only the first key's types are read, and nothing enforces that the rest match.
    */
   @transient lazy val keyDataTypes: Seq[DataType] =
     partitionKeys.headOption.map(_.dataTypes).getOrElse(expressionDataTypes)
-
-  /**
-   * Whether the `partitionKeys` rows still read the same at `expressionDataTypes`, which is what
-   * `ShuffleExchangeExec` declares them at.
-   *
-   * Shapes rather than plain equality, the test `HashJoin` applies to its join key types.
-   * `KeyedShuffleSpec.createPartitioning` puts the other child's expressions over these keys, so a
-   * struct field name can differ here with no reducer involved.
-   */
-  @transient lazy val expressionsDescribeKeyShape: Boolean =
-    keyDataTypes.corresponds(expressionDataTypes)(
-      DataType.equalsStructurally(_, _, ignoreNullability = true))
 
   /** Driver-side, like the `keyDataTypes` it comes from. */
   @transient lazy val keyRowOrdering =
     RowOrdering.createNaturalAscendingOrdering(keyDataTypes)
 
   @transient lazy val keyOrdering = keyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
+
+  /**
+   * Whether the partition expressions still describe the `partitionKeys`, i.e. whether evaluating
+   * them on a row produces the key the row belongs under.
+   *
+   * They stop describing the keys when a join reduces both sides onto a common key space. The keys
+   * become `r1(f1(x))` = `r2(f2(x))`, which is a third space no transform names, so the reduce
+   * marks the expressions instead (`TransformExpression.reducedWith`). Reducing one side only keeps
+   * them truthful, because the other side's transform describes the reduced keys exactly and
+   * `KeyedShuffleSpec.reducersBothWays` reports that one.
+   */
+  def expressionsDescribeKeys: Boolean = !expressions.exists(TransformExpression.hasReducedKeys)
 
   def toGrouped: KeyedPartitioning = {
     val groupedPartitionKeys = partitionKeys.distinct.sorted(keyOrdering)
@@ -558,7 +561,12 @@ case class KeyedPartitioning(
         }
 
       case o @ OrderedDistribution(_) if SQLConf.get.v2BucketingAllowSorting =>
-        o.areAllClusterKeysMatched(expressions)
+        // `EnsureRequirements` orders the key rows by the attributes the expressions are over, and
+        // nothing makes a reducer order-preserving, so that ordering says nothing about reduced
+        // keys. This is the local gate. A reduced position always carries a transform and an
+        // `ORDER BY` cannot name one, so the match below already refuses every case a query can
+        // reach. Do not read the first clause as redundant.
+        expressionsDescribeKeys && o.areAllClusterKeysMatched(expressions)
 
       case _ =>
         false
@@ -1005,10 +1013,15 @@ case class CoalescedHashShuffleSpec(
  * When a key-grouped partitioning is reduced onto another partitioning's key space, the original
  * partition expressions no longer describe the reduced keys (their data type and their value are
  * those of the target key space). This pair carries both the reducer and the expression the
- * reduced keys correspond to, so the output partitioning can report a type-correct expression.
+ * reduced keys correspond to, so the output partitioning can report an expression that either
+ * describes the keys or says that it does not.
  *
  * @param reducer reducer that maps this side's partition key values onto the other side's key space
- * @param reducedExpression expression whose data type matches the reduced keys. Stored as-is from
+ * @param reducedExpression the expression the reduced keys correspond to. When only this side
+ *                          reduces, that is the other side's transform and its data type matches
+ *                          the reduced keys. When both sides reduce, no transform describes the
+ *                          keys, and this is this side's own expression marked with the pairing
+ *                          that reduced it (`TransformExpression.reducedWith`). Stored as-is from
  *                          the expression pair that produced the reducer; the only structural
  *                          consumer, `GroupPartitionsExec`, re-targets it at each reported
  *                          `KeyedPartitioning`'s own key attribute in `outputPartitioning` and
@@ -1112,24 +1125,40 @@ case class KeyedShuffleSpec(
     }
   }
 
-  private def isExpressionCompatible(left: Expression, right: Expression): Boolean =
-    (left, right) match {
-      case (_: LeafExpression, _: LeafExpression) => true
-      case (left: TransformExpression, right: TransformExpression) =>
-        if (SQLConf.get.v2BucketingPushPartValuesEnabled &&
-          !SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
-          SQLConf.get.v2BucketingAllowCompatibleTransforms) {
-          left.isCompatible(right)
-        } else {
-          left.isSameFunction(right)
-        }
-      case (_: AttributeReference, _: TransformExpression) |
-           (_: TransformExpression, _: AttributeReference) =>
-        SQLConf.get.v2BucketingPushPartValuesEnabled &&
-          !SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
-          SQLConf.get.v2BucketingAllowCompatibleTransforms
-      case _ => false
+  private def isExpressionCompatible(left: Expression, right: Expression): Boolean = {
+    if (TransformExpression.hasReducedKeys(left) || TransformExpression.hasReducedKeys(right)) {
+      // Reduced keys are in a key space that neither transform names, so comparing the transforms
+      // says nothing about whether the two sides are laid out the same way. The pair that was
+      // reduced together is laid out the same way, since its two sides came out of one reduce onto
+      // one key space. Anything else has to shuffle. That includes a pair that reduced onto the
+      // same space through a different pairing, which nothing here can tell apart, and an identity
+      // side, which holds raw values.
+      (left, right) match {
+        case (l: TransformExpression, r: TransformExpression) => l.hasSameReducedKeys(r)
+        case _ => false
+      }
+    } else {
+      (left, right) match {
+        case (_: LeafExpression, _: LeafExpression) => true
+        case (left: TransformExpression, right: TransformExpression) =>
+          if (canReduceKeys) left.isCompatible(right) else left.isSameFunction(right)
+        case (_: AttributeReference, _: TransformExpression) |
+             (_: TransformExpression, _: AttributeReference) => canReduceKeys
+        case _ => false
+      }
     }
+  }
+
+  /**
+   * Whether a join may reduce one or both sides' partition keys onto a common key space, which is
+   * what lets two different transforms be compatible in the first place.
+   */
+  private def canReduceKeys: Boolean = {
+    val conf = SQLConf.get
+    conf.v2BucketingPushPartValuesEnabled &&
+      !conf.v2BucketingPartiallyClusteredDistributionEnabled &&
+      conf.v2BucketingAllowCompatibleTransforms
+  }
 
   /**
    * Compute the reducers for both sides of a join between this shuffle spec and `other`, in a
@@ -1153,6 +1182,14 @@ case class KeyedShuffleSpec(
       : (Option[Seq[Option[KeyReducer]]], Option[Seq[Option[KeyReducer]]]) = {
     val results: Seq[(Option[KeyReducer], Option[KeyReducer])] =
       partitioning.expressions.zip(other.partitioning.expressions).map {
+      // Keys an earlier join already reduced live in a key space that neither expression
+      // describes, so a reducer derived from those expressions would be applied to values it was
+      // not built for. `areKeysCompatible` admits only the pair that was reduced together, and
+      // that pair is already in one key space, so there is nothing left to reduce.
+      case (e1, e2)
+          if TransformExpression.hasReducedKeys(e1) || TransformExpression.hasReducedKeys(e2) =>
+        (None, None)
+
       case (e1: TransformExpression, e2: TransformExpression) =>
         val thisReducer = e1.reducers(e2)
         val otherReducer = e2.reducers(e1)
@@ -1169,10 +1206,10 @@ case class KeyedShuffleSpec(
             KeyReducer(reducer, e2)
           } else {
             // Both sides reduce: the reduced keys are r1(f1(x)) = r2(f2(x)), which no single
-            // transform describes. Keep reporting the original expression; its type can differ
-            // from the reduced keys, which a downstream shuffle or grouping can then fail on with
-            // a ClassCastException. Known gap, tracked in SPARK-59121.
-            KeyReducer(reducer, e1)
+            // transform describes. Report `e1` and mark it with the pairing that produced that key
+            // space, so that whatever needs the keys' values or their type refuses it, while the
+            // partitionings that share the space are still recognised.
+            KeyReducer(reducer, e1.reducedTogetherWith(e2))
           }
         }
 
@@ -1182,7 +1219,7 @@ case class KeyedShuffleSpec(
             KeyReducer(reducer, e1)
           } else {
             // Both sides reduce; symmetric to the both-sides case above.
-            KeyReducer(reducer, e2)
+            KeyReducer(reducer, e2.reducedTogetherWith(e1))
           }
         }
 
@@ -1216,12 +1253,9 @@ case class KeyedShuffleSpec(
       partitioning.expressions.forall { e =>
         e.isInstanceOf[AttributeReference] || e.isInstanceOf[TransformExpression]
       } &&
-      // A reducer leaves keys that the expressions no longer describe, and `ShuffleExchangeExec`
-      // would then compare the two at different types as it builds the shuffle's key map. Matching
-      // shapes are only a proxy for that. `bucket(12)` and `bucket(8)` reducing onto `bucket(4)`
-      // keep the type, pass here, and still misroute rows. SPARK-59045 and SPARK-59121 add the real
-      // test.
-      partitioning.expressionsDescribeKeyShape
+      // Shuffling another child onto these keys evaluates the partition expressions per row to
+      // decide where each row goes, and reduced keys are not what those expressions compute.
+      partitioning.expressionsDescribeKeys
 
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
     assert(clustering.size == distribution.clustering.size,
