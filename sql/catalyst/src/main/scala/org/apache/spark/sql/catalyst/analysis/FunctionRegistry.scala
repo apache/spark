@@ -405,7 +405,7 @@ object FunctionRegistry {
   // anymore. See `AesEncrypt`/`AesDecrypt` as an example.
   private type FunctionRegistryEntry = (String, (ExpressionInfo, FunctionBuilder))
 
-  private def nonAggregateExpressions: Seq[FunctionRegistryEntry] = Seq(
+  private def miscNonAggregateExpressions: Seq[FunctionRegistryEntry] = Seq(
     // misc non-aggregate functions
     expression[Abs]("abs"),
     expression[Coalesce]("coalesce"),
@@ -434,8 +434,10 @@ object FunctionRegistry {
     expression[Stack]("stack"),
     expression[Uniform]("uniform"),
     expression[ZeroIfNull]("zeroifnull"),
-    CaseWhen.registryEntry,
+    CaseWhen.registryEntry
+  )
 
+  private def mathExpressions: Seq[FunctionRegistryEntry] = Seq(
     // math functions
     expression[Acos]("acos"),
     expression[Acosh]("acosh"),
@@ -497,8 +499,10 @@ object FunctionRegistry {
     expression[Multiply]("*"),
     expression[Divide]("/"),
     expression[IntegralDivide]("div"),
-    expression[Remainder]("%"),
+    expression[Remainder]("%")
+  )
 
+  private def tryExpressions: Seq[FunctionRegistryEntry] = Seq(
     // "try_*" function which always return Null instead of runtime error.
     expression[TryAdd]("try_add"),
     expression[TryDivide]("try_divide"),
@@ -518,7 +522,7 @@ object FunctionRegistry {
     expression[TryMakeInterval]("try_make_interval")
   )
 
-  private def aggregateAndVectorExpressions: Seq[FunctionRegistryEntry] = Seq(
+  private def aggregateExpressions: Seq[FunctionRegistryEntry] = Seq(
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
     expression[Average]("avg"),
@@ -595,8 +599,10 @@ object FunctionRegistry {
     expressionBuilder("tuple_sketch_agg_double", TupleSketchAggDoubleExpressionBuilder),
     expressionBuilder("tuple_sketch_agg_integer", TupleSketchAggIntegerExpressionBuilder),
     expressionBuilder("tuple_union_agg_double", TupleUnionAggDoubleExpressionBuilder),
-    expressionBuilder("tuple_union_agg_integer", TupleUnionAggIntegerExpressionBuilder),
+    expressionBuilder("tuple_union_agg_integer", TupleUnionAggIntegerExpressionBuilder)
+  )
 
+  private def vectorExpressions: Seq[FunctionRegistryEntry] = Seq(
     // vector functions
     expression[VectorCosineSimilarity]("vector_cosine_similarity"),
     expression[VectorInnerProduct]("vector_inner_product"),
@@ -607,7 +613,7 @@ object FunctionRegistry {
     expression[VectorSum]("vector_sum")
   )
 
-  private def stringAndUrlExpressions: Seq[FunctionRegistryEntry] = Seq(
+  private def stringExpressions: Seq[FunctionRegistryEntry] = Seq(
     // string functions
     expression[Ascii]("ascii"),
     expression[Chr]("char", true),
@@ -698,8 +704,10 @@ object FunctionRegistry {
     expression[ValidateUTF8]("validate_utf8"),
     expression[TryValidateUTF8]("try_validate_utf8"),
     expression[Quote]("quote"),
-    expression[Normalize]("normalize"),
+    expression[Normalize]("normalize")
+  )
 
+  private def urlExpressions: Seq[FunctionRegistryEntry] = Seq(
     // url functions
     expression[UrlEncode]("url_encode"),
     expression[UrlDecode]("url_decode"),
@@ -798,7 +806,7 @@ object FunctionRegistry {
     expressionBuilder("time_bucket", TimeBucketExpressionBuilder)
   )
 
-  private def collectionAndMiscExpressions: Seq[FunctionRegistryEntry] = Seq(
+  private def collectionExpressions: Seq[FunctionRegistryEntry] = Seq(
     // collection functions
     expression[CreateArray]("array"),
     expression[ArrayContains]("array_contains"),
@@ -853,8 +861,10 @@ object FunctionRegistry {
     expression[ZipWith]("zip_with"),
     expression[Get]("get"),
 
-    CreateStruct.registryEntry,
+    CreateStruct.registryEntry
+  )
 
+  private def miscExpressions: Seq[FunctionRegistryEntry] = Seq(
     // misc functions
     expression[AssertTrue]("assert_true"),
     expressionBuilder("raise_error", RaiseErrorExpressionBuilder),
@@ -888,8 +898,10 @@ object FunctionRegistry {
     expression[SparkVersion]("version"),
     expression[TypeOf]("typeof"),
     expression[EqualNull]("equal_null"),
-    expression[Measure]("measure"),
+    expression[Measure]("measure")
+  )
 
+  private def dataSketchExpressions: Seq[FunctionRegistryEntry] = Seq(
     // datasketch functions
     expression[HllSketchEstimate]("hll_sketch_estimate"),
     expression[HllUnion]("hll_union"),
@@ -933,11 +945,13 @@ object FunctionRegistry {
     expression[KllSketchGetRankDouble]("kll_sketch_get_rank_double")
   )
 
-  private def operatorAndOtherExpressions: Seq[FunctionRegistryEntry] = Seq(
+  private def groupingExpressions: Seq[FunctionRegistryEntry] = Seq(
     // grouping sets
     expression[Grouping]("grouping"),
-    expression[GroupingID]("grouping_id"),
+    expression[GroupingID]("grouping_id")
+  )
 
+  private def windowExpressions: Seq[FunctionRegistryEntry] = Seq(
     // window functions
     expression[Lead]("lead"),
     expression[Lag]("lag"),
@@ -948,15 +962,19 @@ object FunctionRegistry {
     expression[Rank]("rank"),
     expression[DenseRank]("dense_rank"),
     expression[PercentRank]("percent_rank"),
-    expressionBuilder("counter_diff", CounterDiffExpressionBuilder),
+    expressionBuilder("counter_diff", CounterDiffExpressionBuilder)
+  )
 
+  private def predicateExpressions: Seq[FunctionRegistryEntry] = Seq(
     // predicates
     expression[Between]("between"),
     expression[And]("and"),
     expression[In]("in"),
     expression[Not]("not"),
-    expression[Or]("or"),
+    expression[Or]("or")
+  )
 
+  private def comparisonExpressions: Seq[FunctionRegistryEntry] = Seq(
     // comparison operators
     expression[EqualNullSafe]("<=>"),
     expression[EqualTo]("="),
@@ -965,8 +983,10 @@ object FunctionRegistry {
     expression[GreaterThanOrEqual](">="),
     expression[LessThan]("<"),
     expression[LessThanOrEqual]("<="),
-    expression[Not]("!"),
+    expression[Not]("!")
+  )
 
+  private def bitwiseExpressions: Seq[FunctionRegistryEntry] = Seq(
     // bitwise
     expression[BitwiseAnd]("&"),
     expression[BitwiseNot]("~"),
@@ -980,8 +1000,10 @@ object FunctionRegistry {
     expression[BitOrAgg]("bit_or"),
     expression[BitXorAgg]("bit_xor"),
     expression[BitwiseGet]("bit_get"),
-    expression[BitwiseGet]("getbit", true),
+    expression[BitwiseGet]("getbit", true)
+  )
 
+  private def bitmapExpressions: Seq[FunctionRegistryEntry] = Seq(
     // bitmap functions and aggregates
     expression[BitmapBucketNumber]("bitmap_bucket_number"),
     expression[BitmapBitPosition]("bitmap_bit_position"),
@@ -993,16 +1015,20 @@ object FunctionRegistry {
     expression[BitmapXor]("bitmap_xor"),
     expression[BitmapOrAgg]("bitmap_or_agg"),
     expression[BitmapAndAgg]("bitmap_and_agg"),
-    expression[BitmapXorAgg]("bitmap_xor_agg"),
+    expression[BitmapXorAgg]("bitmap_xor_agg")
+  )
 
+  private def jsonExpressions: Seq[FunctionRegistryEntry] = Seq(
     // json
     expression[StructsToJson]("to_json"),
     expression[JsonToStructs]("from_json"),
     expression[SchemaOfJson]("schema_of_json"),
     expression[LengthOfJsonArray]("json_array_length"),
     expression[JsonObjectKeys]("json_object_keys"),
-    expression[JsonTypeof]("json_typeof"),
+    expression[JsonTypeof]("json_typeof")
+  )
 
+  private def variantExpressions: Seq[FunctionRegistryEntry] = Seq(
     // Variant
     expressionBuilder("parse_json", ParseJsonExpressionBuilder),
     expressionBuilder("try_parse_json", TryParseJsonExpressionBuilder),
@@ -1022,15 +1048,19 @@ object FunctionRegistry {
     expressionBuilder("try_variant_set", TryVariantSetExpressionBuilder),
     expressionBuilder("variant_array_append", VariantArrayAppendExpressionBuilder),
     expressionBuilder("try_variant_array_append", TryVariantArrayAppendExpressionBuilder),
-    expressionBuilder("variant_strip_nulls", VariantStripNullsExpressionBuilder),
+    expressionBuilder("variant_strip_nulls", VariantStripNullsExpressionBuilder)
+  )
 
+  private def spatialExpressions: Seq[FunctionRegistryEntry] = Seq(
     // Spatial
     expression[ST_AsBinary]("st_asbinary"),
     expression[ST_GeogFromWKB]("st_geogfromwkb"),
     expression[ST_GeomFromWKB]("st_geomfromwkb"),
     expression[ST_Srid]("st_srid"),
-    expression[ST_SetSrid]("st_setsrid"),
+    expression[ST_SetSrid]("st_setsrid")
+  )
 
+  private def castExpressions: Seq[FunctionRegistryEntry] = Seq(
     // cast
     expression[Cast]("cast"),
     // Cast aliases (SPARK-16730)
@@ -1046,38 +1076,68 @@ object FunctionRegistry {
     castAlias("timestamp", TimestampType),
     castAlias("time", TimeType()),
     castAlias("binary", BinaryType),
-    castAlias("string", StringType),
+    castAlias("string", StringType)
+  )
 
+  private def maskExpressions: Seq[FunctionRegistryEntry] = Seq(
     // mask functions
-    expressionBuilder("mask", MaskExpressionBuilder),
+    expressionBuilder("mask", MaskExpressionBuilder)
+  )
 
+  private def csvExpressions: Seq[FunctionRegistryEntry] = Seq(
     // csv
     expression[CsvToStructs]("from_csv"),
     expression[SchemaOfCsv]("schema_of_csv"),
-    expression[StructsToCsv]("to_csv"),
+    expression[StructsToCsv]("to_csv")
+  )
 
+  private def xmlExpressions: Seq[FunctionRegistryEntry] = Seq(
     // Xml
     expression[XmlToStructs]("from_xml"),
     expression[SchemaOfXml]("schema_of_xml"),
-    expression[StructsToXml]("to_xml"),
+    expression[StructsToXml]("to_xml")
+  )
 
+  private def avroExpressions: Seq[FunctionRegistryEntry] = Seq(
     // Avro
     expression[FromAvro]("from_avro"),
     expression[ToAvro]("to_avro"),
-    expression[SchemaOfAvro]("schema_of_avro"),
+    expression[SchemaOfAvro]("schema_of_avro")
+  )
 
+  private def protobufExpressions: Seq[FunctionRegistryEntry] = Seq(
     // Protobuf
     expression[FromProtobuf]("from_protobuf"),
     expression[ToProtobuf]("to_protobuf")
   )
 
-  val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] =
-    (nonAggregateExpressions ++
-      aggregateAndVectorExpressions ++
-      stringAndUrlExpressions ++
-      datetimeExpressions ++
-      collectionAndMiscExpressions ++
-      operatorAndOtherExpressions).toMap
+  val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] = Seq(
+    miscNonAggregateExpressions,
+    mathExpressions,
+    tryExpressions,
+    aggregateExpressions,
+    vectorExpressions,
+    stringExpressions,
+    urlExpressions,
+    datetimeExpressions,
+    collectionExpressions,
+    miscExpressions,
+    dataSketchExpressions,
+    groupingExpressions,
+    windowExpressions,
+    predicateExpressions,
+    comparisonExpressions,
+    bitwiseExpressions,
+    bitmapExpressions,
+    jsonExpressions,
+    variantExpressions,
+    spatialExpressions,
+    castExpressions,
+    maskExpressions,
+    csvExpressions,
+    xmlExpressions,
+    avroExpressions,
+    protobufExpressions).flatten.toMap
 
   // BuiltinRegistryMixin normalizes any name to the builtin 3-part key (system.builtin.name).
   val builtin: SimpleFunctionRegistry = {
