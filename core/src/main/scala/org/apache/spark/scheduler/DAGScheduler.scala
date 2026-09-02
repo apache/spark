@@ -763,7 +763,7 @@ private[spark] class DAGScheduler(
       // reader/writer never consult it) but would contradict this invariant and the one
       // PipelinedShuffleRoutingSuite pins. When the manager DOES want a tracker but none exists,
       // that is a real misconfiguration (a consumer would find no writer locations), so fail loud.
-      if (!SparkEnv.get.pipelinedShuffleManager.usesStreamingShuffleOutputTracker) {
+      if (!sc.env.pipelinedShuffleManager.usesStreamingShuffleOutputTracker) {
         None
       } else {
         sc.env.streamingShuffleOutputTracker match {
