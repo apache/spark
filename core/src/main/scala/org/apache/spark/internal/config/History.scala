@@ -170,8 +170,10 @@ private[spark] object History {
       .doc("Maximum length of a single event log line during replay. Lines longer than " +
         "this are skipped with a warning instead of being read into memory, bounding the " +
         "memory replay can use when an event log is corrupt or unexpectedly large. Setting " +
-        "this to 0 or a negative value disables the limit.")
-      .version("4.1.4")
+        "this to 0 or a negative value disables the limit. " +
+        "Introduced in 4.3.0; also available in 3.5.10, 4.0.5, 4.1.4 and 4.2.1; and in " +
+        "all versions after 4.3.0.")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("512m")
