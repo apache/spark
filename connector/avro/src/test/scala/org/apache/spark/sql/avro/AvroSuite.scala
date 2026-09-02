@@ -1758,7 +1758,8 @@ abstract class AvroSuite
       checkAnswer(df.select("z", "x"), rows.map(r => Row(r.get(2), r.get(0))))
       checkAnswer(df.select("y", "z"), rows.map(r => Row(r.get(1), r.get(2))))
       checkAnswer(df.selectExpr("sum(z)"), Row(100000L))
-      // With pushdown on the filter runs inside the deserializer, with it off above the scan.
+      // With pushdown on, the filter runs inside the deserializer; with it off, it runs above the
+      // scan.
       // Either way a wrong pairing drops rows rather than only returning wrong values for them.
       Seq("true", "false").foreach { pushDown =>
         withSQLConf(SQLConf.AVRO_FILTER_PUSHDOWN_ENABLED.key -> pushDown) {

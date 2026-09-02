@@ -48,10 +48,10 @@ import org.apache.spark.unsafe.types.UTF8String
  *
  * @param dataSchema The schema `rootCatalystType` was projected from, for a read that prunes
  *                   columns. A positional field match pairs a Catalyst field with the Avro field
- *                   at the same position, and the position that means is the one in the full
- *                   schema rather than in the projection: without this, reading only the third
- *                   column would take the first Avro field. `None` when the Catalyst type is not
- *                   a projection; unused when field matching is by name.
+ *                   at the same position, and that position is the one in the full schema rather
+ *                   than in the projection: without this, reading only the third column would take
+ *                   the first Avro field. `None` when the Catalyst type is not a projection;
+ *                   unused when field matching is by name.
  */
 private[sql] class AvroDeserializer(
     rootAvroType: Schema,
