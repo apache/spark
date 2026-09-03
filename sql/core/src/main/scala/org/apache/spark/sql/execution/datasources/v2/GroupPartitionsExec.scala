@@ -88,7 +88,7 @@ case class GroupPartitionsExec(
         // transforms reaches this (see the gates in `createShuffleSpec` and
         // `areKeysCompatible`); the branch guards third-party `ReducibleFunction`s with a
         // self-reducer and is pinned directly in `GroupPartitionsExecSuite`.
-        if (reducers.isDefined && PartitioningCollection.mayContainUnknownPartitionKeys(p)) {
+        if (reducers.isDefined && PartitioningCollection.keyedMarkerOf(p).contains(true)) {
           return UnknownPartitioning(grouping.partitions.size)
         }
         p.transform {

@@ -131,8 +131,8 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
 
     if (projectablePositions.isEmpty) return LazyList.empty
 
-    // Collection members carry a uniform marker (mixed collections are cleared at
-    // construction by `ShuffledJoin`), so the head represents them all.
+    // `PartitioningCollection` requires its members to agree on the marker, so the head
+    // represents them all.
     val mayContainUnknownPartitionKeys = kps.head.mayContainUnknownPartitionKeys
 
     // Dropping a key position coarsens the declared set, which an unknown-keyed claim cannot
