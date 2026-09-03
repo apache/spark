@@ -98,7 +98,7 @@ public class LevelDB implements KVStore {
       db().put(STORE_VERSION_KEY, serializer.serialize(STORE_VERSION));
     }
 
-    TypeAliases aliasesValue = get(TYPE_ALIASES_KEY, TypeAliases.class);
+    TypeAliases aliasesValue = getOrNull(TYPE_ALIASES_KEY, TypeAliases.class);
     Map<String, byte[]> aliases = aliasesValue != null ? aliasesValue.aliases : new HashMap<>();
     typeAliases = new ConcurrentHashMap<>(aliases);
 
@@ -107,7 +107,7 @@ public class LevelDB implements KVStore {
 
   @Override
   public <T> T getMetadata(Class<T> klass) throws Exception {
-    return get(METADATA_KEY, klass);
+    return getOrNull(METADATA_KEY, klass);
   }
 
   @Override
@@ -119,17 +119,23 @@ public class LevelDB implements KVStore {
     }
   }
 
-  /**
-   * Returns the value for the given key, or {@code null} if the key is not present. Callers
-   * that need to signal missing keys must check for {@code null} themselves, so that a missing
-   * key does not pay the cost of throwing and filling in an exception stack trace.
-   */
   <T> T get(byte[] key, Class<T> klass) throws Exception {
-    byte[] data = db().get(key);
-    if (data == null) {
-      return null;
+    T value = getOrNull(key, klass);
+    if (value == null) {
+      throw new NoSuchElementException(new String(key, UTF_8));
     }
-    return serializer.deserialize(data, klass);
+    return value;
+  }
+
+  /**
+   * Returns the value for the given key, or {@code null} if the key is not present, so that
+   * callers where a missing key is expected do not pay the cost of throwing and filling in an
+   * exception stack trace.
+   */
+  @VisibleForTesting
+  <T> T getOrNull(byte[] key, Class<T> klass) throws Exception {
+    byte[] data = db().get(key);
+    return data != null ? serializer.deserialize(data, klass) : null;
   }
 
   private void put(byte[] key, Object value) throws Exception {
@@ -141,11 +147,7 @@ public class LevelDB implements KVStore {
   public <T> T read(Class<T> klass, Object naturalKey) throws Exception {
     JavaUtils.checkArgument(naturalKey != null, "Null keys are not allowed.");
     byte[] key = getTypeInfo(klass).naturalIndex().start(null, naturalKey);
-    T value = get(key, klass);
-    if (value == null) {
-      throw new NoSuchElementException(new String(key, UTF_8));
-    }
-    return value;
+    return get(key, klass);
   }
 
   @Override
@@ -208,7 +210,7 @@ public class LevelDB implements KVStore {
       Class<?> klass,
       LevelDBTypeInfo.Index naturalIndex,
       Collection<LevelDBTypeInfo.Index> indices) throws Exception {
-    Object existing = get(naturalIndex.entityKey(null, value), klass);
+    Object existing = getOrNull(naturalIndex.entityKey(null, value), klass);
 
     PrefixCache cache = new PrefixCache(value);
     byte[] naturalKey = naturalIndex.toKey(naturalIndex.getValue(value));
@@ -236,8 +238,6 @@ public class LevelDB implements KVStore {
           db().write(batch);
         }
       }
-    } catch (NoSuchElementException nse) {
-      // Ignore.
     }
   }
 

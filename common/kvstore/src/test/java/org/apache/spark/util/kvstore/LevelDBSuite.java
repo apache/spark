@@ -99,35 +99,34 @@ public class LevelDBSuite {
   }
 
   @Test
-  public void testGetMissingKeyReturnsNull() throws Exception {
-    // get() returns null instead of throwing for a missing key, so the write path does not
-    // pay the cost of building an exception when the entry does not exist yet; read() still
-    // surfaces a missing key as NoSuchElementException.
+  public void testGetOrNullMissingKey() throws Exception {
+    // getOrNull() returns null for a missing key so expected misses (e.g. the write path
+    // looking up an existing entry) skip the cost of building an exception, while get()
+    // still surfaces a missing key as NoSuchElementException.
     byte[] missingKey = db.getTypeInfo(CustomType1.class).naturalIndex().start(null, "missing");
-    assertNull(db.get(missingKey, CustomType1.class));
+    assertNull(db.getOrNull(missingKey, CustomType1.class));
+    assertThrows(NoSuchElementException.class, () -> db.get(missingKey, CustomType1.class));
 
     CustomType1 t = createCustomType1(1);
     db.write(t);
     byte[] presentKey = db.getTypeInfo(CustomType1.class).naturalIndex().start(null, t.key);
-    assertEquals(t, db.get(presentKey, CustomType1.class));
+    assertEquals(t, db.getOrNull(presentKey, CustomType1.class));
   }
 
   @Test
-  public void testNextAfterEntityDelete() throws Exception {
-    CustomType1 t = createCustomType1(1);
-    db.write(t);
+  public void testDeleteEdgeCases() throws Exception {
+    // Never-written type: type info is created on the fly, lookup misses, nothing happens.
+    db.delete(CustomType1.class, "missing");
+    assertEquals(0L, db.count(CustomType1.class));
 
-    // Entries of a non-copy secondary index hold only the natural key, and next() resolves
-    // the entity with a live db.get() lookup.
-    try (KVStoreIterator<CustomType1> it =
-        db.view(CustomType1.class).index("id").closeableIterator()) {
-      assertTrue(it.hasNext());
-      // Delete the entity after hasNext() buffered its index entry: the iterator still
-      // sees the entry, but the live lookup in next() misses the key.
-      db.delete(t.getClass(), t.key);
-      NoSuchElementException e = assertThrows(NoSuchElementException.class, it::next);
-      assertTrue(e.getMessage().contains(t.key));
-    }
+    // Never-written key of a written type.
+    db.write(createCustomType1(1));
+    db.delete(CustomType1.class, "missing");
+    assertEquals(1L, db.count(CustomType1.class));
+
+    // Mismatched key type: the encoded lookup key misses, nothing is removed.
+    db.delete(CustomType1.class, 42);
+    assertEquals(1L, db.count(CustomType1.class));
   }
 
   @Test

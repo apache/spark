@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.lang.ref.Cleaner;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
-import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.rocksdb.RocksIterator;
@@ -134,9 +133,6 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
       } else {
         byte[] key = ti.buildKey(false, ti.naturalIndex().keyPrefix(null), next);
         ret = db.get(key, type);
-        if (ret == null) {
-          throw new NoSuchElementException(new String(key, UTF_8));
-        }
       }
       next = null;
       return ret;
