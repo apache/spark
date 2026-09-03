@@ -20,9 +20,10 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.SparkFunSuite
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CollationAwareMurmur3Hash, Expression, Literal, Pmod}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, CollationAwareMurmur3Hash, Expression, Literal, Pmod, SortOrder}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 class DistributionSuite extends SparkFunSuite with SQLHelper {
@@ -454,21 +455,14 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     // two partitions can (the e2e `ORDER BY` repro measures that). Positive control: an
     // always-false gate would shuffle these plans for nothing.
     val a = AttributeReference("a", IntegerType)()
-    val ordered = OrderedDistribution(
-      Seq(org.apache.spark.sql.catalyst.expressions.SortOrder(a,
-        org.apache.spark.sql.catalyst.expressions.Ascending)))
-    val markedOne = KeyedPartitioning(Seq(a), Seq(org.apache.spark.sql.catalyst.InternalRow(1)))
+    val ordered = OrderedDistribution(Seq(SortOrder(a, Ascending)))
+    val markedOne = KeyedPartitioning(Seq(a), Seq(InternalRow(1)))
       .copy(mayContainUnknownPartitionKeys = true)
-    val markedTwo = KeyedPartitioning(Seq(a),
-      Seq(org.apache.spark.sql.catalyst.InternalRow(1),
-        org.apache.spark.sql.catalyst.InternalRow(2)))
+    val markedTwo = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2)))
       .copy(mayContainUnknownPartitionKeys = true)
-    withSQLConf(
-        org.apache.spark.sql.internal.SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
-      assert(markedOne.satisfies(ordered),
-        "a marked layout with a single partition is trivially globally ordered")
-      assert(!markedTwo.satisfies(ordered),
-        "the multi-partition case stays refused, pairing the positive above")
+    withSQLConf(SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
+      checkSatisfied(markedOne, ordered, true)
+      checkSatisfied(markedTwo, ordered, false)
     }
   }
 

@@ -89,22 +89,23 @@ trait ShuffledJoin extends JoinCodegenSupport {
 
   /**
    * Clears the `mayContainUnknownPartitionKeys` marker of every `KeyedPartitioning` in
-   * `partitionings` when marked and unmarked members meet. Only `ShuffledJoin`'s `InnerLike` arm
-   * can mix the two; see the call site for the argument. The subsequent interning in
-   * `fromPartitionings` does not change any markers.
+   * `partitionings` when marked and unmarked keyed inputs meet; within a collection the
+   * constructor makes that unrepresentable. Only `ShuffledJoin`'s `InnerLike` arm can mix
+   * inputs this way; see the call site for the argument.
    */
   private def clearUnknownPartitionKeys(
       partitionings: Seq[Partitioning]): Seq[Partitioning] = {
-    // Marker uniformity is a constructor invariant, so one cached representative answers per
-    // input instead of re-flattening a left-deep join chain. The all-unmarked path must reach no
-    // `copy`: `transform`'s `fastEquals` would compare every partition key.
-    val markers = partitionings.map(PartitioningCollection.mayContainUnknownPartitionKeys)
-    if (markers.forall(_ == markers.head)) {
+    // One cached keyed member answers per input instead of re-flattening a left-deep join
+    // chain, and keyless inputs drop out of the `flatMap` rather than reading as unmarked. The
+    // all-unmarked path must reach no `copy`: `transform`'s `fastEquals` would compare every
+    // partition key.
+    val markers = partitionings.flatMap(PartitioningCollection.keyedMarkerOf)
+    if (markers.isEmpty || markers.forall(_ == markers.head)) {
       partitionings
     } else {
       partitionings.map {
         case partitioning: Partitioning with Expression
-            if PartitioningCollection.mayContainUnknownPartitionKeys(partitioning) =>
+            if PartitioningCollection.keyedMarkerOf(partitioning).contains(true) =>
           partitioning.transform {
             case k: KeyedPartitioning if k.mayContainUnknownPartitionKeys =>
               k.copy(mayContainUnknownPartitionKeys = false)

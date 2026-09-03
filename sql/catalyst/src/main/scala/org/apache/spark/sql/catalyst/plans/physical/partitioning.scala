@@ -602,12 +602,14 @@ case class CoalescedNullAwareHashPartitioning(
  *                                 join-key projection) or expands it over a marked leg (a union,
  *                                 where another leg may declare exactly the key that leg holds
  *                                 out-of-set); (2) a marked member beside an unmarked sibling is
- *                                 spurious, and `ShuffledJoin`'s `InnerLike` arm, the only site
- *                                 that mixes them, clears it at construction;
- *                                 `PartitioningCollection` additionally normalizes the marker by
- *                                 OR in `fromPartitionings` and requires agreement in its
- *                                 constructor, so members are uniformly marked or unmarked
- *                                 everywhere and consumers may read one member.
+ *                                 agreement is enforced by `PartitioningCollection`: the
+ *                                 constructor requires it and `fromPartitionings` normalizes by
+ *                                 OR, so members are uniformly marked or unmarked and consumers
+ *                                 may read one member. `ShuffledJoin`'s `InnerLike` arm, the
+ *                                 only site that meets a marked input with an unmarked one,
+ *                                 clears the markers first -- precision, so the OR spreads a
+ *                                 spurious marker onto the accurate side instead of a genuine
+ *                                 one.
  */
 case class KeyedPartitioning(
     expressions: Seq[Expression],
@@ -1187,13 +1189,13 @@ object PartitioningCollection {
   }
 
   /**
-   * Whether `p` or any nested [[KeyedPartitioning]] may contain unknown partition keys, read
-   * from its first keyed member, the same one `checkKeyedPartitioningInvariant` compares
-   * against. Keyless inputs answer false: `EnsureRequirements` normalizes a shuffled join's
-   * children onto one template, so they never meet a keyed sibling here.
+   * The uniform `mayContainUnknownPartitionKeys` marker of `p`'s keyed members, read from its
+   * first keyed member, the same one `checkKeyedPartitioningInvariant` compares against.
+   * `None` when `p` holds no [[KeyedPartitioning]] at all, distinct from the `Some(false)` of
+   * an unmarked keyed one: there is no claim there to answer about.
    */
-  private[sql] def mayContainUnknownPartitionKeys(p: Partitioning): Boolean =
-    representativeOf(p).exists(_.mayContainUnknownPartitionKeys)
+  private[sql] def keyedMarkerOf(p: Partitioning): Option[Boolean] =
+    representativeOf(p).map(_.mayContainUnknownPartitionKeys)
 
   /**
    * Builds a [[PartitioningCollection]], unifying the `partitionKeys` reference across all
