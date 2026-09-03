@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelat
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, NamedExpression, SortOrder, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LocalRelation, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION, DATA_SOURCE_V2_SCAN_RELATION, TreePattern}
@@ -208,12 +208,13 @@ case class DataSourceV2ScanRelation(
   lazy val runtimeFilterAttrs: AttributeSet = {
     checkRuntimeFilteringInterfaces()
     resolvedFullyPushedRuntimeFilterAttrs
-    val filterAttrs = scan match {
-      case s: SupportsRuntimeV2Filtering => s.filterAttributes
-      case s: SupportsRuntimeCatalystFiltering => s.filterAttributes()
-      case _ => Array.empty[NamedReference]
-    }
-    resolveFilterAttrs(filterAttrs, "filterAttributes()")
+    resolveFilterAttrs(declaredRuntimeFilterAttrs, "filterAttributes()")
+  }
+
+  private lazy val declaredRuntimeFilterAttrs: Array[NamedReference] = scan match {
+    case s: SupportsRuntimeV2Filtering => s.filterAttributes
+    case s: SupportsRuntimeCatalystFiltering => s.filterAttributes()
+    case _ => Array.empty
   }
 
   private lazy val declaredFullyPushedRuntimeFilterAttrs: Array[NamedReference] = scan match {
@@ -245,20 +246,8 @@ case class DataSourceV2ScanRelation(
   private def resolveFilterAttrs(
       filterAttrs: Array[NamedReference],
       method: String): AttributeSet = {
-    val resolvedAttrs = filterAttrs.map { ref =>
-      try {
-        V2ExpressionUtils.resolveRef[NamedExpression](ref, this)
-      } catch {
-        case e: AnalysisException =>
-          throw QueryCompilationErrors.cannotResolveDataSourceRuntimeFilterAttributeError(
-            attribute = ref.fieldNames,
-            method = method,
-            scanClass = scan.getClass.getName,
-            relationOutput = fromAttributes(output),
-            cause = e)
-      }
-    }
-    AttributeSet(resolvedAttrs)
+    DataSourceV2ScanRelation.resolveRuntimeFilterAttrs(
+      filterAttrs, method, scan.getClass.getName, output)
   }
 
   override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_SCAN_RELATION)
@@ -326,6 +315,17 @@ case class DataSourceV2ScanRelation(
         scanClass = scan.getClass.getName,
         relationOutput = fromAttributes(output))
     }
+    declaredFullyPushedRuntimeFilterAttrs.find { fullyPushedRef =>
+      !declaredRuntimeFilterAttrs.exists { filterRef =>
+        fullyPushedRef.fieldNames.length == filterRef.fieldNames.length &&
+          fullyPushedRef.fieldNames.lazyZip(filterRef.fieldNames).forall(conf.resolver)
+      }
+    }.foreach { ref =>
+      throw QueryCompilationErrors.fullyPushedDataSourceRuntimeFilterAttributeNotFilterableError(
+        attribute = ref.fieldNames,
+        scanClass = scan.getClass.getName,
+        relationOutput = fromAttributes(output))
+    }
   }
 
   override def doCanonicalize(): DataSourceV2ScanRelation = {
@@ -344,6 +344,30 @@ case class DataSourceV2ScanRelation(
       // normalized against the relation's full output rather than `output`.
       pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, relation.output))
     )
+  }
+}
+
+object DataSourceV2ScanRelation {
+  private[sql] def resolveRuntimeFilterAttrs(
+      filterAttrs: Array[NamedReference],
+      method: String,
+      scanClass: String,
+      output: Seq[AttributeReference]): AttributeSet = {
+    val plan = LocalRelation(output)
+    val resolvedAttrs = filterAttrs.map { ref =>
+      try {
+        V2ExpressionUtils.resolveRef[NamedExpression](ref, plan)
+      } catch {
+        case e: AnalysisException =>
+          throw QueryCompilationErrors.cannotResolveDataSourceRuntimeFilterAttributeError(
+            attribute = ref.fieldNames,
+            method = method,
+            scanClass = scanClass,
+            relationOutput = fromAttributes(output),
+            cause = e)
+      }
+    }
+    AttributeSet(resolvedAttrs)
   }
 }
 

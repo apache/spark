@@ -29,7 +29,7 @@ import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, Cast, EvalMode, Expression => CatalystExpression, GenericInternalRow, GetStructField, JoinedRow, Literal, MetadataStructFieldWithLogicalName, Predicate => CatalystPredicate}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Cast, EvalMode, Expression => CatalystExpression, GenericInternalRow, GetStructField, JoinedRow, Literal, MetadataStructFieldWithLogicalName, Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
@@ -229,6 +229,10 @@ abstract class InMemoryBaseTable(
       case Some(_) => ref.fieldNames()
       case None => throw new IllegalArgumentException(s"${ref.describe()} does not exist.")
     }
+  }
+
+  protected def identityPartitionReferences: Array[NamedReference] = {
+    partitioning.collect { case IdentityTransform(ref) => ref }
   }
 
   private val UTC = ZoneId.of("UTC")
@@ -717,11 +721,10 @@ abstract class InMemoryBaseTable(
 
   /**
    * Reference implementation of [[SupportsRuntimeCatalystFiltering.filter]] for the in-memory
-   * fixtures: records what was pushed, and for expressions referencing only partition columns
-   * binds them against the partition key and drops partitions that do not match. Binding and
-   * interpreting rather than pattern matching a fixed set of operators is what lets the fixture
-   * honor an arbitrary pushed expression, the same way `PartitionPredicateImpl` does. Mixing
-   * classes supply their own `filterAttributes()`.
+   * fixtures: records what was pushed, and binds expressions referencing only identity partition
+   * columns against the partition key to drop partitions that do not match. Interpreting the
+   * bound expression lets the fixture honor arbitrary pushed expressions. Mixing classes supply
+   * their own `filterAttributes()`.
    */
   trait CatalystRuntimeFilteringScan extends SupportsRuntimeCatalystFiltering {
     self: BatchScanBaseClass =>
@@ -737,18 +740,15 @@ abstract class InMemoryBaseTable(
       filterCalls += 1
       val partAttrs = partitionAttributes
       if (partAttrs.isEmpty) return
-      val partAttrRefs = partAttrs.map(_._2)
 
       expressions.foreach { expr =>
         // Top down, so `s.part` is rewritten before its `s` child is considered.
         val remapped = expr.transformDown {
           case e => partitionAttrFor(e, partAttrs).getOrElse(e)
         }
-        // Only evaluate expressions whose refs are all partition columns, so we can bind
-        // against the partition key InternalRow (same approach as PartitionPredicateImpl).
-        if (remapped.references.forall(r => partAttrRefs.exists(_.exprId == r.exprId))) {
-          val bound = BindReferences.bindReference(remapped, partAttrRefs)
-          val pred = CatalystPredicate.createInterpreted(bound)
+        // Evaluate expressions only when every reference maps to an identity partition-key slot.
+        if (remapped.references.isEmpty) {
+          val pred = CatalystPredicate.createInterpreted(remapped)
           self.data = self.data.filter { p =>
             try {
               pred.eval(p.asInstanceOf[BufferedRows].partitionKey())
@@ -772,37 +772,33 @@ abstract class InMemoryBaseTable(
     def filterCallCount: Int = filterCalls
 
     /**
-     * The `AttributeReference`s standing for the partition key InternalRow fields, in its field
-     * order, each paired with the name-part sequence of its partition column. The parts are kept
-     * unflattened so a quoted top-level column `a.b` (parts `Seq("a.b")`) stays distinct from a
-     * nested column `a`.`b` (parts `Seq("a", "b")`). Example:
-     *   - `PARTITIONED BY (part, s.nested)` -> `(Seq("part"), AttributeReference(part))`, then
-     *     `(Seq("s", "nested"), AttributeReference(s.nested))`
+     * Identity partition columns paired with their bound partition-key slots.
+     *
+     * Only identity transforms expose a source path because their partition-key slot retains the
+     * source value. Name parts stay separate so a quoted top-level column `a.b` remains distinct
+     * from a nested column `a`.`b`.
      */
-    private def partitionAttributes: Seq[(Seq[String], AttributeReference)] = {
-      partitioning.flatMap(_.references()).flatMap { ref =>
-        val path = ref.fieldNames.toImmutableArraySeq
-        val resolver = SQLConf.get.resolver
-        readSchema.findNestedField(path, resolver = resolver)
-          .orElse(tableSchema.findNestedField(path, resolver = resolver)).map {
-          case (_, f) =>
-            path -> AttributeReference(ref.fieldNames.mkString("."), f.dataType, f.nullable)()
-        }
+    private def partitionAttributes: Seq[(Seq[String], BoundReference)] = {
+      partitioning.zipWithIndex.flatMap {
+        case (IdentityTransform(ref), ordinal) =>
+          val path = ref.fieldNames.toImmutableArraySeq
+          val resolver = SQLConf.get.resolver
+          readSchema.findNestedField(path, resolver = resolver)
+            .orElse(tableSchema.findNestedField(path, resolver = resolver)).map {
+            case (_, f) => path -> BoundReference(ordinal, f.dataType, f.nullable)
+          }
+        case _ => None
       }.toSeq
     }
 
     /**
-     * The partition key `AttributeReference` that `e` reads, or None if `e` reads no partition
-     * column. The path `e` reads is compared to each partition column's name parts component-wise
-     * with the resolver, so a quoted top-level column `a.b` cannot collide with a nested column
-     * `a`.`b`. Examples, under `PARTITIONED BY (part, s.nested)` where `nested` is field 0 of `s`:
-     *   - `AttributeReference(part)` -> `AttributeReference(part)`
-     *   - `GetStructField(AttributeReference(s), 0)` -> `AttributeReference(s.nested)`
-     *   - `AttributeReference(s)` -> None if `s` itself is not a partition column, only `s.nested`
+     * The partition-key slot that `e` reads, or None if `e` reads no identity partition column.
+     * The path `e` reads is compared to each partition column's name parts component-wise with the
+     * resolver, so a quoted top-level column `a.b` cannot collide with a nested column `a`.`b`.
      */
     private def partitionAttrFor(
         e: CatalystExpression,
-        partAttrs: Seq[(Seq[String], AttributeReference)]): Option[AttributeReference] = {
+        partAttrs: Seq[(Seq[String], BoundReference)]): Option[BoundReference] = {
       val resolver = SQLConf.get.resolver
       partitionKeyPath(e).flatMap { path =>
         partAttrs.collectFirst {
@@ -841,14 +837,14 @@ abstract class InMemoryBaseTable(
     var pushedFilters: Array[Filter] = Array.empty
 
     override def filterAttributes(): Array[NamedReference] = {
-      partitioning.flatMap(_.references)
+      identityPartitionReferences
         .filter(ref => readSchema.findNestedField(
           ref.fieldNames.toImmutableArraySeq, resolver = SQLConf.get.resolver).isDefined)
     }
 
     override def filter(filters: Array[Filter]): Unit = {
-      if (partitioning.length == 1 && partitioning.head.references().length == 1) {
-        val ref = partitioning.head.references().head
+      if (partitioning.length == 1 && identityPartitionReferences.length == 1) {
+        val ref = identityPartitionReferences.head
         filters.foreach {
           case In(attrName, values) if attrName == ref.toString =>
             val matchingKeys = values.map { value =>

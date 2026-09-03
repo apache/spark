@@ -63,7 +63,8 @@ public interface SupportsRuntimeV2Filtering extends Scan {
    * The provided expressions must be interpreted as a set of predicates that are ANDed together.
    * Implementations may use the predicates to prune initially planned {@link InputPartition}s.
    * <p>
-   * Spark tracks runtime-filter eligibility by root attribute. If {@link #filterAttributes()}
+   * Spark currently tracks runtime-filter eligibility by root attribute. If
+   * {@link #filterAttributes()}
    * returns a nested reference, this method may receive a predicate on another nested field under
    * the same root. Implementations must inspect each predicate and use only predicates they can
    * apply.

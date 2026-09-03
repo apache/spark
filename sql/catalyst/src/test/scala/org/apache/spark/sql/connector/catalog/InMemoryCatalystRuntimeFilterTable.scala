@@ -98,6 +98,13 @@ class InMemoryCatalystRuntimeFilterTable(
           ref.fieldNames.toImmutableArraySeq, resolver = SQLConf.get.resolver).isDefined)
     }
 
+    /** Identity partition columns that are present in the scan read schema. */
+    private def identityPartitionAttrs: Array[NamedReference] = {
+      identityPartitionReferences.distinct
+        .filter(ref => readSchema.findNestedField(
+          ref.fieldNames.toImmutableArraySeq, resolver = SQLConf.get.resolver).isDefined)
+    }
+
     override def filterAttributes(): Array[NamedReference] = {
       partitionAttrs.filter { ref =>
         restrictedFilterAttrs.forall(_.contains(ref.fieldNames.mkString(".")))
@@ -107,7 +114,9 @@ class InMemoryCatalystRuntimeFilterTable(
     // Not intersected with `filterAttributes()`, so a table can declare a fully pushed attribute
     // that is not a filter attribute, a combination the interface forbids.
     override def fullyPushedFilterAttributes(): Array[NamedReference] = {
-      partitionAttrs.filter(ref => fullyPushedFilterAttrs.contains(ref.fieldNames.mkString(".")))
+      identityPartitionAttrs.filter { ref =>
+        fullyPushedFilterAttrs.contains(ref.fieldNames.mkString("."))
+      }
     }
   }
 }

@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, Literal, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, Literal, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
 import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, Partitioning}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -212,8 +212,11 @@ object PushDownUtils extends Logging {
         // filters whose translation was not already accepted in the first pass.  (See SPARK-55596)
         // Only candidates whose referenced columns are declared in filterAttributes() are eligible.
         val partPredicatesPushed = filterableScan.supportsIterativePushdown() && {
-          val filterAttrs = V2ExpressionUtils.resolveAttributeRefs(
-            filterableScan.filterAttributes(), output)
+          val filterAttrs = DataSourceV2ScanRelation.resolveRuntimeFilterAttrs(
+            filterableScan.filterAttributes(),
+            "filterAttributes()",
+            filterableScan.getClass.getName,
+            output)
           val pushed = filterableScan.pushedPredicates().toSet
           val candidates = runtimeFilters.filter { f =>
             !filtersToTranslated.get(f).exists(pushed.contains) &&
