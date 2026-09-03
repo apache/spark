@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Exists, Expression, IsNotNull, Literal, MetadataAttribute, MonotonicallyIncreasingID, OuterReference, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Exists, Expression, IsNotNull, Literal, MetadataAttribute, MonotonicallyIncreasingID, Or, OuterReference, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti, LeftOuter, RightOuter}
@@ -174,16 +174,22 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       readRelation, joinPlan, matchedActions, notMatchedActions,
       notMatchedBySourceActions, metadataAttrs, checkCardinality)
 
-    // predicates of the ON condition can be used to filter the target table (planning & runtime)
-    // only if there is no NOT MATCHED BY SOURCE clause
-    val (pushableCond, groupFilterCond) = if (notMatchedBySourceActions.isEmpty) {
-      if (groupFilterEnabled) {
-        (cond, Some(toGroupFilterCondition(relation, source, cond)))
-      } else {
-        (cond, None)
-      }
+    // predicates of the ON condition can be used to filter the target table only together with
+    // predicates of all NOT MATCHED BY SOURCE clauses, target rows that satisfy none of them
+    // match no action and are simply carried over, so such rows don't have to be read
+    // an unconditional NOT MATCHED BY SOURCE clause matches any target row and disables this
+    val pushableCond = if (notMatchedBySourceActions.exists(_.condition.isEmpty)) {
+      TrueLiteral
     } else {
-      (TrueLiteral, None)
+      (cond +: notMatchedBySourceActions.flatMap(_.condition)).reduce(Or)
+    }
+
+    // predicates of the ON condition can be used to filter the target table at runtime
+    // only if there is no NOT MATCHED BY SOURCE clause
+    val groupFilterCond = if (notMatchedBySourceActions.isEmpty && groupFilterEnabled) {
+      Some(toGroupFilterCondition(relation, source, cond))
+    } else {
+      None
     }
 
     // build a plan to replace read groups in the table
