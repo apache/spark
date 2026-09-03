@@ -565,7 +565,20 @@ case class EnsureRequirements(
         val (rightReducedDataTypes, rightReducedKeys) = rightReducers.fold(
           (rightPartitioning.keyDataTypes, rightPartitioning.partitionKeys)
         )(rightPartitioning.reduceKeys)
-        val reducedDataTypes = if (leftReducedDataTypes == rightReducedDataTypes) {
+        // The reduced types are the types of the key rows the merge below sees. A side with no key
+        // still answers for them while its expressions describe the keys it would have had, and
+        // `keyDataTypes` falls back to exactly those types. After a reduce the expressions no
+        // longer describe them, so the fallback is a type no key of that partitioning would hold,
+        // and comparing it against a real answer fails a co-partitioned query (SPARK-59176). Only
+        // such a side is left out. An empty one that is not marked stays in, which is what keeps
+        // the comparison checking a reducer's result type against the paired transform.
+        val leftTypesDescribeKeys =
+          leftReducedKeys.nonEmpty || leftPartitioning.expressionsDescribeKeys
+        val rightTypesDescribeKeys =
+          rightReducedKeys.nonEmpty || rightPartitioning.expressionsDescribeKeys
+        val reducedDataTypes = if (!leftTypesDescribeKeys) {
+          rightReducedDataTypes
+        } else if (!rightTypesDescribeKeys || leftReducedDataTypes == rightReducedDataTypes) {
           leftReducedDataTypes
         } else {
           throw QueryExecutionErrors.storagePartitionJoinIncompatibleReducedTypesError(
