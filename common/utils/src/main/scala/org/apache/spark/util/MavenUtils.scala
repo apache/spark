@@ -34,13 +34,38 @@ import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkBuildInfo, SparkException}
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.util.ArrayImplicits._
 
 /** Provides utility functions to be used inside SparkSubmit. */
 private[spark] object MavenUtils extends Logging {
   val JAR_IVY_SETTING_PATH_KEY: String = "spark.jars.ivySettings"
+
+  /** System property Ivy reads to determine the HTTP User-Agent. */
+  private[util] val USER_AGENT_PROPERTY = "http.agent"
+
+  /**
+   * User-Agent identifying Spark to remote artifact repositories, in the form
+   * `product RWS comment` per RFC 9110 Section 10.1.5, e.g.
+   * `Apache-Spark/4.0.0 (Apache-Ivy/2.5.3)`. Repository operators use this to attribute traffic
+   * and to identify the tool and version behind it.
+   */
+  private[util] lazy val sparkUserAgent: String =
+    s"Apache-Spark/${SparkBuildInfo.spark_version} (Apache-Ivy/${Ivy.getIvyVersion})"
+
+  /**
+   * Set the `http.agent` system property so Ivy identifies itself as Spark when fetching from
+   * remote repositories. Set once and left in place: Ivy's HttpClient-backed handler captures the
+   * User-Agent when its singleton is class-initialized, so restoring the previous value afterwards
+   * would have no effect on requests and would race with concurrent resolution. An explicitly
+   * configured value always wins, so an operator can still override with `-Dhttp.agent=...`.
+   */
+  private def setUserAgentIfAbsent(): Unit = {
+    if (System.getProperty(USER_AGENT_PROPERTY) == null) {
+      System.setProperty(USER_AGENT_PROPERTY, sparkUserAgent)
+    }
+  }
 
   // Exposed for testing
   // var printStream = SparkSubmit.printStream
@@ -277,6 +302,7 @@ private[spark] object MavenUtils extends Logging {
       remoteRepos: Option[String],
       ivyPath: Option[String],
       useLocalM2AsCache: Boolean = true)(implicit printStream: PrintStream): IvySettings = {
+    setUserAgentIfAbsent()
     val ivySettings: IvySettings = new IvySettings
     processIvyPathArg(ivySettings, ivyPath)
 
@@ -310,6 +336,7 @@ private[spark] object MavenUtils extends Logging {
    */
   def loadIvySettings(settingsFile: String, remoteRepos: Option[String], ivyPath: Option[String])(
       implicit printStream: PrintStream): IvySettings = {
+    setUserAgentIfAbsent()
     val uri = new URI(settingsFile)
     val file = Option(uri.getScheme).getOrElse("file") match {
       case "file" => new File(uri.getPath)
