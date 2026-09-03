@@ -212,6 +212,23 @@ abstract class DataSourceV2SQLSuite
     }
   }
 
+  test("filter on transformed partition source remains post-scan") {
+    val table = s"${catalogAndNamespace}transformed_source_filter"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (id INT, part DATE) USING $v2Format " +
+        "PARTITIONED BY (days(part))")
+      sql(s"INSERT INTO $table VALUES " +
+        "(1, DATE '2026-08-01'), (2, DATE '2026-08-02')")
+
+      val df = sql(s"SELECT * FROM $table WHERE part IN (DATE '2026-08-01')")
+      checkAnswer(df, Row(1, java.sql.Date.valueOf("2026-08-01")))
+
+      val scan = collect(df.queryExecution.executedPlan) { case b: BatchScanExec => b }.head
+      assert(scan.partitions.size === 2)
+      assert(scan.filteredPartitions.flatten.size === 2)
+    }
+  }
+
   private def checkExplain(query: String, relationPattern: Regex): Unit = {
     val explain = spark.sql(s"EXPLAIN EXTENDED $query").head().getString(0)
     val relations = explain.split("\n").filter(_.contains("RelationV2"))
