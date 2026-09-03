@@ -1002,7 +1002,6 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   // AutoCdcMergeFlow ignore-null validation tests
   // ===========================================================================================
 
-  private val expectedFlowName = testIdentifier.unquotedString
 
   // ---------- key and reserved-prefix checks ----------
 
@@ -1019,7 +1018,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       condition = "AUTOCDC_IGNORE_NULL_SELECTION_CONTAINS_KEY_COLUMN",
       sqlState = "22023",
       parameters = Map(
-        "flowName" -> expectedFlowName,
+        "flowName" -> testIdentifier.unquotedString,
         "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
         "columnName" -> "id",
         "keyColumnNames" -> "id"
@@ -1040,7 +1039,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       condition = "AUTOCDC_IGNORE_NULL_SELECTION_CONTAINS_KEY_COLUMN",
       sqlState = "22023",
       parameters = Map(
-        "flowName" -> expectedFlowName,
+        "flowName" -> testIdentifier.unquotedString,
         "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
         "columnName" -> "id",
         "keyColumnNames" -> "id"
@@ -1063,7 +1062,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       condition = "AUTOCDC_IGNORE_NULL_CANNOT_SELECT_RESERVED_COLUMN",
       sqlState = "42710",
       parameters = Map(
-        "flowName" -> expectedFlowName,
+        "flowName" -> testIdentifier.unquotedString,
         "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
         "columnName" -> s"${AutoCdcReservedNames.prefix}foo",
         "reservedColumnNamePrefix" -> AutoCdcReservedNames.prefix
@@ -1114,7 +1113,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       condition = "AUTOCDC_IGNORE_NULL_COLUMN_NOT_IN_OUTPUT_COLUMNS",
       sqlState = "42703",
       parameters = Map(
-        "flowName" -> expectedFlowName,
+        "flowName" -> testIdentifier.unquotedString,
         "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
         "columnName" -> "name"
       )
@@ -1139,7 +1138,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       condition = "AUTOCDC_IGNORE_NULL_COLUMN_NOT_IN_OUTPUT_COLUMNS",
       sqlState = "42703",
       parameters = Map(
-        "flowName" -> expectedFlowName,
+        "flowName" -> testIdentifier.unquotedString,
         "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
         "columnName" -> "name"
       )
@@ -1159,7 +1158,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       condition = "AUTOCDC_IGNORE_NULL_COLUMN_NOT_IN_OUTPUT_COLUMNS",
       sqlState = "42703",
       parameters = Map(
-        "flowName" -> expectedFlowName,
+        "flowName" -> testIdentifier.unquotedString,
         "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
         "columnName" -> "nonexistent"
       )
@@ -1192,7 +1191,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       condition = "AUTOCDC_IGNORE_NULL_COLUMN_NOT_IN_OUTPUT_COLUMNS",
       sqlState = "42703",
       parameters = Map(
-        "flowName" -> expectedFlowName,
+        "flowName" -> testIdentifier.unquotedString,
         "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
         "columnName" -> colName
       )
@@ -1213,7 +1212,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
         condition = "AUTOCDC_IGNORE_NULL_SELECTION_CONTAINS_KEY_COLUMN",
         sqlState = "22023",
         parameters = Map(
-          "flowName" -> expectedFlowName,
+          "flowName" -> testIdentifier.unquotedString,
           "caseSensitivity" -> CaseSensitivityLabels.CaseSensitive,
           "columnName" -> "id",
           "keyColumnNames" -> "id"
