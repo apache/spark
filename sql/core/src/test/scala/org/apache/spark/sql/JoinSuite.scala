@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, JoinSelectionHelper}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, Join, JoinHint, NO_BROADCAST_AND_REPLICATION}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, Join, JoinHint, NO_BROADCAST_AND_REPLICATION, Union}
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
@@ -1837,6 +1837,20 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     } finally {
       cached.unpersist()
     }
+  }
+
+  test("SPARK-53618: full outer join with a false condition is rewritten to a union") {
+    val df = sql(
+      """
+        |SELECT t1.id AS a, t2.id AS b
+        |FROM range(0, 2) t1 FULL OUTER JOIN range(10, 12) t2 ON 1 = 0
+        |""".stripMargin)
+
+    val optimized = df.queryExecution.optimizedPlan
+    assert(!optimized.exists(_.isInstanceOf[Join]))
+    assert(optimized.exists(_.isInstanceOf[Union]))
+
+    checkAnswer(df, Row(0, null) :: Row(1, null) :: Row(null, 10) :: Row(null, 11) :: Nil)
   }
 }
 
