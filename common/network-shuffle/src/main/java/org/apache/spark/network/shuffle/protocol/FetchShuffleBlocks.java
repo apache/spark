@@ -132,6 +132,12 @@ public class FetchShuffleBlocks extends AbstractFetchShuffleBlocks {
     int shuffleId = buf.readInt();
     long[] mapIds = Encoders.LongArrays.decode(buf);
     int reduceIdsSize = buf.readInt();
+    // The divisor 4 is the minimum on-wire size of one element, since each reduce-id group
+    // is prefixed with its own 4-byte length.
+    if (reduceIdsSize < 0 || reduceIdsSize > buf.readableBytes() / 4) {
+      throw new IndexOutOfBoundsException(
+        "reduceIds size: " + reduceIdsSize + ", readableBytes: " + buf.readableBytes());
+    }
     int[][] reduceIds = new int[reduceIdsSize][];
     for (int i = 0; i < reduceIdsSize; i++) {
       reduceIds[i] = Encoders.IntArrays.decode(buf);

@@ -131,6 +131,12 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
     int shuffleMergeId = buf.readInt();
     int[] reduceIds = Encoders.IntArrays.decode(buf);
     int chunkIdsLen = buf.readInt();
+    // The divisor 4 is the minimum on-wire size of one element, since each chunk-id group
+    // is prefixed with its own 4-byte length.
+    if (chunkIdsLen < 0 || chunkIdsLen > buf.readableBytes() / 4) {
+      throw new IndexOutOfBoundsException(
+        "chunkIds length: " + chunkIdsLen + ", readableBytes: " + buf.readableBytes());
+    }
     int[][] chunkIds = new int[chunkIdsLen][];
     for (int i = 0; i < chunkIdsLen; i++) {
       chunkIds[i] = Encoders.IntArrays.decode(buf);
