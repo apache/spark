@@ -3532,6 +3532,17 @@
     </profile>
 
     <profile>
+      <id>oidc-e2e</id>
+      <modules>
+        <!-- The integration-tests module depends on the credential-aws module, so
+             include it here too. This lets -Poidc-e2e be used on its own (without also
+             passing -Pcredential-aws) without failing dependency resolution. -->
+        <module>connector/credential-aws</module>
+        <module>connector/credential-aws-integration-tests</module>
+      </modules>
+    </profile>
+
+    <profile>
       <id>test-java-home</id>
       <activation>
         <property><name>env.JAVA_HOME</name></property>

@@ -493,6 +493,7 @@ credential_aws = Module(
     dependencies=[tags, core],
     source_file_regexes=[
         "connector/credential-aws/",
+        "connector/credential-aws-integration-tests/",
     ],
     build_profile_flags=[
         "-Pcredential-aws",
