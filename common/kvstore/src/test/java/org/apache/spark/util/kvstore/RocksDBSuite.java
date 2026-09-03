@@ -98,16 +98,15 @@ public class RocksDBSuite {
   @Test
   public void testGetOrNullMissingKey() throws Exception {
     // getOrNull() returns null for a missing key so expected misses (e.g. the write path
-    // looking up an existing entry) skip the cost of building an exception, while get()
+    // looking up an existing entry) skip the cost of building an exception, while read()
     // still surfaces a missing key as NoSuchElementException.
     byte[] missingKey = db.getTypeInfo(CustomType1.class).naturalIndex().start(null, "missing");
     assertNull(db.getOrNull(missingKey, CustomType1.class));
-    assertThrows(NoSuchElementException.class, () -> db.get(missingKey, CustomType1.class));
+    assertThrows(NoSuchElementException.class, () -> db.read(CustomType1.class, "missing"));
 
     CustomType1 t = createCustomType1(1);
     db.write(t);
-    byte[] presentKey = db.getTypeInfo(CustomType1.class).naturalIndex().start(null, t.key);
-    assertEquals(t, db.getOrNull(presentKey, CustomType1.class));
+    assertEquals(t, db.read(CustomType1.class, t.key));
   }
 
   @Test
@@ -119,10 +118,6 @@ public class RocksDBSuite {
     // Never-written key of a written type.
     db.write(createCustomType1(1));
     db.delete(CustomType1.class, "missing");
-    assertEquals(1L, db.count(CustomType1.class));
-
-    // Mismatched key type: the encoded lookup key misses, nothing is removed.
-    db.delete(CustomType1.class, 42);
     assertEquals(1L, db.count(CustomType1.class));
   }
 

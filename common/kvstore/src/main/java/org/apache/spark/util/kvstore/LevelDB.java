@@ -132,7 +132,6 @@ public class LevelDB implements KVStore {
    * callers where a missing key is expected do not pay the cost of throwing and filling in an
    * exception stack trace.
    */
-  @VisibleForTesting
   <T> T getOrNull(byte[] key, Class<T> klass) throws Exception {
     byte[] data = db().get(key);
     return data != null ? serializer.deserialize(data, klass) : null;
@@ -227,9 +226,8 @@ public class LevelDB implements KVStore {
       LevelDBTypeInfo ti = getTypeInfo(type);
       byte[] key = ti.naturalIndex().start(null, naturalKey);
       synchronized (ti) {
-        byte[] data = db().get(key);
-        if (data != null) {
-          Object existing = serializer.deserialize(data, type);
+        Object existing = getOrNull(key, type);
+        if (existing != null) {
           PrefixCache cache = new PrefixCache(existing);
           byte[] keyBytes = ti.naturalIndex().toKey(ti.naturalIndex().getValue(existing));
           for (LevelDBTypeInfo.Index idx : ti.indices()) {
