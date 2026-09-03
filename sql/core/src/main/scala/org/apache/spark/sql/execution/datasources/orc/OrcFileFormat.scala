@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.SessionStateHelper
 import org.apache.spark.sql.internal.SQLConf
@@ -146,6 +147,12 @@ class OrcFileFormat
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
+    // The analyzed CHAR/VARCHAR scan mode, if any, is bridged in via an engine-private Hadoop
+    // entry by FileFormat's mode-aware overload. Reading it here (rather than taking it as a
+    // parameter) keeps this public override's signature stable, so a subclass that delegates to
+    // `super` retains the bound mode. Absent an entry, keep native constrained ORC types.
+    val charVarcharStandardSemantics =
+      FileFormat.charVarcharScanMode(hadoopConf).contains(CharVarcharScanMode.SparkStandard)
     buildReaderWithPartitionValues(
       sparkSession,
       dataSchema,
@@ -154,7 +161,7 @@ class OrcFileFormat
       filters,
       options,
       hadoopConf,
-      charVarcharStandardSemantics = false)
+      charVarcharStandardSemantics = charVarcharStandardSemantics)
   }
 
   private[sql] def buildReaderWithPartitionValues(
