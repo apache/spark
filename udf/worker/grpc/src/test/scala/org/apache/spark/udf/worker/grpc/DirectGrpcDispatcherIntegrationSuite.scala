@@ -18,6 +18,7 @@ package org.apache.spark.udf.worker.grpc
 
 import java.io.File
 import java.nio.file.Paths
+import java.util.concurrent.{Callable, TimeUnit}
 
 import com.google.protobuf.ByteString
 import org.scalatest.BeforeAndAfterEach
@@ -117,6 +118,22 @@ class DirectGrpcDispatcherIntegrationSuite
       case channel: GrpcWorkerChannel => channel
       case other => fail(s"Expected GrpcWorkerChannel, got ${other.getClass.getSimpleName}")
     }
+
+  test("event-loop threads are named daemons and terminate on shutdown") {
+    val eventLoopGroup = UnixDomainSocketTransport.detect().newEventLoopGroup()
+    try {
+      val eventLoopThread = eventLoopGroup.next().submit(new Callable[Thread] {
+        override def call(): Thread = Thread.currentThread()
+      }).get(10, TimeUnit.SECONDS)
+
+      assert(eventLoopThread.isDaemon)
+      assert(eventLoopThread.getName.startsWith(
+        UnixDomainSocketTransport.EVENT_LOOP_THREAD_NAME_PREFIX))
+    } finally {
+      UnixDomainSocketTransport.shutdown(eventLoopGroup, 5000L)
+    }
+    assert(eventLoopGroup.terminationFuture().isDone)
+  }
 
   test("spawns a gRPC worker and round-trips a response above gRPC's default limit") {
     dispatcher = new DirectGrpcDispatcher(workerSpec())

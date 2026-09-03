@@ -21,7 +21,7 @@ import java.io.File
 import org.apache.spark.udf.worker.{Cancel, DataRequest, DataResponse, Finish, FinishResponse,
   Init, InitResponse, UDFProtoCommunicationPattern, UDFWorkerSpecification, WorkerConnectionSpec}
 import org.apache.spark.udf.worker.core.direct.{DirectWorkerDispatcher, DirectWorkerException,
-  DirectWorkerTimeoutException, UnixDomainSocketEndpointDirectory}
+  DirectWorkerProcess, DirectWorkerTimeoutException, UnixDomainSocketEndpointDirectory}
 import org.apache.spark.udf.worker.core.direct.DirectWorkerDispatcher.READY_POLL_INTERVAL_MS
 
 /**
@@ -152,10 +152,8 @@ class TestDirectWorkerDispatcher(
   protected def newConnection(address: String): WorkerConnection =
     new SocketFileConnection(address)
 
-  override protected def newSession(
-      workerHandle: WorkerHandle,
-      connection: WorkerConnection): WorkerSession =
-    new NoOpWorkerSession(workerHandle, logger)
+  override protected def newSession(worker: DirectWorkerProcess): WorkerSession =
+    new NoOpWorkerSession(worker, logger)
 
   private def throwWorkerExitedBeforeSocket(
       process: Process,

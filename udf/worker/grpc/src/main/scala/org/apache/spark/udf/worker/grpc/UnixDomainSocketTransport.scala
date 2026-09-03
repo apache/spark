@@ -20,6 +20,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import io.netty.channel.{Channel, EventLoopGroup, MultiThreadIoEventLoopGroup, ServerChannel}
+import io.netty.util.concurrent.DefaultThreadFactory
 
 /**
  * Selects the Netty native transport that supports Unix domain sockets on the
@@ -50,6 +51,8 @@ private[grpc] sealed trait UnixDomainSocketTransport {
 
 private[grpc] object UnixDomainSocketTransport {
 
+  private[grpc] val EVENT_LOOP_THREAD_NAME_PREFIX = "spark-udf-worker-grpc"
+
   /** Linux epoll. */
   private case object EpollTransport extends UnixDomainSocketTransport {
     override val channelType: Class[_ <: Channel] =
@@ -57,7 +60,10 @@ private[grpc] object UnixDomainSocketTransport {
     override val serverChannelType: Class[_ <: ServerChannel] =
       classOf[io.netty.channel.epoll.EpollServerDomainSocketChannel]
     override def newEventLoopGroup(): EventLoopGroup =
-      new MultiThreadIoEventLoopGroup(1, io.netty.channel.epoll.EpollIoHandler.newFactory())
+      new MultiThreadIoEventLoopGroup(
+        1,
+        new DefaultThreadFactory(EVENT_LOOP_THREAD_NAME_PREFIX, true),
+        io.netty.channel.epoll.EpollIoHandler.newFactory())
     override val name: String = "epoll"
   }
 
@@ -68,7 +74,10 @@ private[grpc] object UnixDomainSocketTransport {
     override val serverChannelType: Class[_ <: ServerChannel] =
       classOf[io.netty.channel.kqueue.KQueueServerDomainSocketChannel]
     override def newEventLoopGroup(): EventLoopGroup =
-      new MultiThreadIoEventLoopGroup(1, io.netty.channel.kqueue.KQueueIoHandler.newFactory())
+      new MultiThreadIoEventLoopGroup(
+        1,
+        new DefaultThreadFactory(EVENT_LOOP_THREAD_NAME_PREFIX, true),
+        io.netty.channel.kqueue.KQueueIoHandler.newFactory())
     override val name: String = "kqueue"
   }
 

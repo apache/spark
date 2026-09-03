@@ -27,10 +27,9 @@ import io.grpc.ConnectivityState
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.udf.worker.{UDFProtoCommunicationPattern, UDFWorkerSpecification,
   WorkerConnectionSpec}
-import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerHandle, WorkerLogger,
-  WorkerSession}
+import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerLogger, WorkerSession}
 import org.apache.spark.udf.worker.core.direct.{DirectWorkerDispatcher, DirectWorkerException,
-  DirectWorkerTimeoutException, UnixDomainSocketEndpointDirectory}
+  DirectWorkerProcess, DirectWorkerTimeoutException, UnixDomainSocketEndpointDirectory}
 import org.apache.spark.udf.worker.core.direct.DirectWorkerDispatcher.READY_POLL_INTERVAL_MS
 
 /**
@@ -156,12 +155,10 @@ class DirectGrpcDispatcher(
   protected def newConnection(address: String): WorkerConnection =
     new GrpcWorkerChannel(address, logger)
 
-  override protected def newSession(
-      workerHandle: WorkerHandle,
-      connection: WorkerConnection): WorkerSession =
-    connection match {
+  override protected def newSession(worker: DirectWorkerProcess): WorkerSession =
+    worker.connection match {
       case g: GrpcWorkerChannel =>
-        new GrpcWorkerSession(workerHandle, g.channel, logger)
+        new GrpcWorkerSession(worker, g.channel, logger)
       case other =>
         throw new IllegalStateException(
           s"DirectGrpcDispatcher.newConnection should have produced a " +
