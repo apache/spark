@@ -39,7 +39,7 @@ import org.apache.spark.SparkUnsupportedOperationException;
  * This is used to pass options to v2 implementations to ensure consistent case insensitivity.
  * <p>
  * Methods that return keys in this map, like {@link #entrySet()} and {@link #keySet()}, return
- * keys converted to lower case. This map is read-only and doesn't allow null key.
+ * keys converted to lower case. This map is read-only and does not allow null keys.
  *
  * @since 3.0.0
  */
