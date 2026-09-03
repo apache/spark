@@ -223,31 +223,56 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(gpe.outputOrdering === Nil)
   }
 
-  test("SPARK-59050: grouping without reducers keeps the child's marker") {
-    // Without a reduction the layout is regrouped, not rewritten: the output keys match the
-    // child's declared set verbatim, so the marker (and the honesty of "may contain") must
-    // ride the transform rather than be dropped or invented.
+  test("SPARK-59050: identity grouping without reducers keeps the child's marker") {
+    // An identity grouping (output partition i holds exactly input partition i) keeps the
+    // unknown-key hash-routing relationship intact, so the marker rides the transform.
     val child = DummySparkPlan(
-      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(1)))
+      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2)))
         .copy(mayContainUnknownPartitionKeys = true))
     val out = GroupPartitionsExec(child)
       .outputPartitioning.asInstanceOf[KeyedPartitioning]
-    assert(out.mayContainUnknownPartitionKeys, "the marker must survive plain grouping")
+    assert(out.mayContainUnknownPartitionKeys, "the marker must survive identity grouping")
+  }
+
+  test("SPARK-59050: non-identity grouping without reducers drops the unknown-keyed claim") {
+    // A regrouping that reorders or coalesces the partitions moves the rows an unknown-key claim
+    // pins to hash(key) % numPartitions, so the claim cannot survive; clearing only the marker
+    // would misreport the undeclared rows that remain.
+    // Coalesce: keys [1, 2, 1] merge the two key-1 partitions.
+    val coalesced = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(1)))
+        .copy(mayContainUnknownPartitionKeys = true))
+    GroupPartitionsExec(coalesced).outputPartitioning match {
+      case u: UnknownPartitioning =>
+        assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
+      case other =>
+        fail(s"expected the unknown-keyed claim to be dropped on coalesce, got $other")
+    }
+    // Reorder: keys [2, 1] sort to [1, 2], swapping partitions 0 and 1.
+    val reordered = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(2), row(1)))
+        .copy(mayContainUnknownPartitionKeys = true))
+    GroupPartitionsExec(reordered).outputPartitioning match {
+      case u: UnknownPartitioning =>
+        assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
+      case other =>
+        fail(s"expected the unknown-keyed claim to be dropped on reorder, got $other")
+    }
   }
 
   test("SPARK-59050: unknown-keyed child with reducers gives up the keyed claim at the real " +
     "count") {
-    // No planner path reaches the give-up branch with the built-in transforms:
-    // `createShuffleSpec` refuses a narrowing projection of an unknown-keyed partitioning one
-    // hop earlier, and `areKeysCompatible` pairs it only with same-function partners that have
-    // no reducer (see `GroupPartitionsExec.outputPartitioning`). Pin the contract directly: the
-    // node must report `UnknownPartitioning` with its physical grouped count. Reporting zero
-    // partitions is what threw once a parent join built a `PartitioningCollection` over both
-    // sides.
-    // The reducer must be real: `Some(Seq(None))` keeps `reducers.isDefined` true but leaves
-    // every key unchanged, testing none of the collapse that motivates the branch. Keys
-    // [1, 2, 3] reduced mod 2 give [1, 0, 1]: the node emits 2 grouped partitions where the
-    // child had 3, and the give-up count has to be that physical 2.
+    // The reducer instance of the give-up: a reduction regroups by the reduced keys, a
+    // non-identity grouping, so the unknown-keyed claim is dropped at the physical grouped
+    // count. The node must report `UnknownPartitioning` with its physical grouped count;
+    // reporting zero partitions is what threw once a parent join built a
+    // `PartitioningCollection` over both sides. (`areKeysCompatible` pairs a marked layout
+    // only with same-function partners that need no reducer, so no planner path applies a
+    // reducer to a marked layout; this pins the contract directly.)
+    // The reducer must be real: `Some(Seq(None))` leaves every key unchanged, an identity
+    // grouping that keeps the claim, testing none of the collapse that motivates the give-up.
+    // Keys [1, 2, 3] reduced mod 2 give [1, 0, 1]: the node emits 2 grouped partitions where
+    // the child had 3, and the give-up count has to be that physical 2.
     val mod2 = new Reducer[Int, Int] {
       override def reduce(v: Int): Int = v % 2
       override def resultType(): DataType = IntegerType

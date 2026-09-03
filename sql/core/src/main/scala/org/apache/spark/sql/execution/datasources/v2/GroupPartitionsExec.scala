@@ -78,19 +78,19 @@ case class GroupPartitionsExec(
         // data types match the reduced partition keys for the identity-vs-transform and
         // single-side-transform reducers; for the both-sides-reduce shape no single transform
         // describes the keys (see `KeyedShuffleSpec.reducersBothWays`).
-        val partitionKeys = grouping.partitions.map(_._1)
-        // A reduction coarsens the declared set, which a marked claim cannot survive (see
-        // `KeyedPartitioning.mayContainUnknownPartitionKeys`), and the regrouping rewrites the
-        // layout, so no child claim remains to fall back to: give up the keyed partitioning at
-        // the physical output count (one per group, padding included) that a parent's
-        // `PartitioningCollection` requires for uniformity. The reducer check comes first, so
-        // the marker lookup runs only when a reduction is applied. No planner path with built-in
-        // transforms reaches this (see the gates in `createShuffleSpec` and
-        // `areKeysCompatible`); the branch guards third-party `ReducibleFunction`s with a
-        // self-reducer and is pinned directly in `GroupPartitionsExecSuite`.
-        if (reducers.isDefined && PartitioningCollection.keyedMarkerOf(p).contains(true)) {
+        //
+        // A marked claim pins undeclared rows to hash(key) % numPartitions (see
+        // `KeyedPartitioning.mayContainUnknownPartitionKeys`). Only an identity grouping keeps
+        // that relationship: any other grouping -- a reorder, a coalesce, a resize, or the
+        // collapse a reduction applies -- moves those rows. Clearing only the marker would
+        // misreport the undeclared rows that remain, so give up the keyed partitioning at the
+        // physical output count (one per group, padding included) that a parent's
+        // `PartitioningCollection` requires for uniformity. `identityGrouping` is a lazy val, so
+        // repeated `outputPartitioning` calls scan it at most once.
+        if (PartitioningCollection.keyedMarkerOf(p).contains(true) && !identityGrouping) {
           return UnknownPartitioning(grouping.partitions.size)
         }
+        val partitionKeys = grouping.partitions.map(_._1)
         p.transform {
           case k: KeyedPartitioning =>
             val projectedExpressions = joinKeyPositions.fold(k.expressions)(_.map(k.expressions))
@@ -231,6 +231,18 @@ case class GroupPartitionsExec(
     }
     PartitionGrouping(partitions, isGrouped, isCollapsed)
   }
+
+  /**
+   * Whether this node's grouping leaves every partition where it was, i.e. output partition i
+   * holds exactly input partition i. That is the only grouping that keeps a marked layout's
+   * undeclared rows at hash(key) % numPartitions. The `forall` stops at the first moved
+   * partition, so a reorder or coalesce is rejected without a full scan.
+   */
+  @transient private lazy val identityGrouping: Boolean =
+    grouping.partitions.zipWithIndex.forall {
+      case ((_, Seq(single)), outputIndex) => single == outputIndex
+      case _ => false
+    }
 
   @transient lazy val groupedPartitions: Seq[(InternalRowComparableWrapper, Seq[Int])] =
     grouping.partitions
