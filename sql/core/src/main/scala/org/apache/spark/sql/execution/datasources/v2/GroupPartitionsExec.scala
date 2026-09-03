@@ -96,7 +96,8 @@ case class GroupPartitionsExec(
               case None => projectedExpressions
             }
             KeyedPartitioning(
-              effectiveExpressions, partitionKeys, grouping.isGrouped, grouping.isCollapsed)
+              effectiveExpressions, partitionKeys, grouping.keyDataTypes, grouping.isGrouped,
+              grouping.isCollapsed)
         }.asInstanceOf[Partitioning]
       case o => o
     }
@@ -216,7 +217,7 @@ case class GroupPartitionsExec(
         group.tail.exists(childKeys(_) != first)
       }
     }
-    PartitionGrouping(partitions, isGrouped, isCollapsed)
+    PartitionGrouping(partitions, reducedDataTypes, isGrouped, isCollapsed)
   }
 
   @transient lazy val groupedPartitions: Seq[(InternalRowComparableWrapper, Seq[Int])] =
@@ -403,6 +404,7 @@ case class GroupPartitionsExec(
 /** What a [[GroupPartitionsExec]] computes once and reports from several members. */
 private case class PartitionGrouping(
     partitions: Seq[(InternalRowComparableWrapper, Seq[Int])],
+    keyDataTypes: Seq[DataType],
     isGrouped: Boolean,
     isCollapsed: Boolean)
 

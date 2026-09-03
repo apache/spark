@@ -1123,18 +1123,18 @@ class KeyGroupedPartitioningSuite
   test("SPARK-59176: a leg reduced onto no key at all still joins") {
     withReducedTsJoinLegs(bothRows, row2020, leg2YearsValues = Some(row2021)) {
       // The second leg's two sides hold disjoint years, so the partition filter intersects them to
-      // nothing and the leg reports a reduced partitioning with no key. The reduced types then have
-      // to come from the first leg. The marked expressions still name the un-reduced `days` and
-      // `years` transforms, whose types are not the `LongType` the reduced keys hold.
+      // nothing and the leg reports a reduced partitioning with no key. Its marked expressions name
+      // the un-reduced `days` and `years` transforms, whose types are not the `LongType` the
+      // reduced keys hold, so the leg has to report the reduced types rather than derive them.
       withSQLConf(
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-        // Both orders, since the side that has no key is the one to leave out of the comparison.
-        // And both join types, since the inner join intersects the two key sets to nothing and so
-        // has nothing to sort, while the full outer join keeps the other side's keys and sorts them
-        // by the reported types.
+        // Both orders, since either side of the join can be the one with no key. And both join
+        // types, since the inner join intersects the two key sets to nothing and so has nothing to
+        // sort, while the full outer join keeps the other side's keys and sorts them by the
+        // reported types.
         Seq("JOIN" -> Nil, "FULL OUTER JOIN" -> bothTimestamps).foreach {
           case (joinType, expected) =>
             Seq(false, true).foreach { leg2First =>
@@ -1149,7 +1149,7 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  test("SPARK-59176: an empty side whose expressions describe its keys keeps the reducer check") {
+  test("SPARK-59176: an empty side does not hide a reducer whose result type disagrees") {
     withFunction(UnboundDaysFunctionWithToYearsReducerWithDateResult) {
       createTable(items, itemsColumns, Array(days("arrive_time")))
       sql(s"INSERT INTO testcat.ns.$items VALUES " +
@@ -1162,10 +1162,9 @@ class KeyGroupedPartitioningSuite
       }
 
       // The inner join intersects two disjoint year key sets, so its leg reports a `years(time)`
-      // partitioning with no key. Nothing reduced it, so its expressions still describe the keys it
-      // would have had, and the reduced-types comparison must still run. This `days` function
-      // breaks the reducer contract, returning `DateType` where the target `years` transform is
-      // `IntegerType`, and that is what the comparison is there to catch.
+      // partitioning with no key. Having no key must not cost the reduced-types comparison its
+      // answer. This `days` function breaks the reducer contract, returning `DateType` where the
+      // target `years` transform is `IntegerType`, and that is what the comparison catches.
       withSQLConf(
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true",

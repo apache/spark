@@ -22,7 +22,6 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, DynamicPruning, DynamicPruningExpression, EqualTo, Expression, GetStructField, GreaterThan, Literal, RLike}
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
-import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.{
   Column,
   Identifier,
@@ -591,10 +590,8 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     val partAttr = AttributeReference("part", IntegerType)()
     val table = new InMemoryTable("t", Array(Column.create("part", IntegerType)),
       Array.empty[Transform], java.util.Collections.emptyMap[String, String])
-    val partitioning = KeyedPartitioning(
-      Seq(partAttr),
-      Seq(InternalRowComparableWrapper(InternalRow(1), Seq(partAttr))),
-      isGrouped = false, isCollapsed = false)
+    val partitioning =
+      KeyedPartitioning(Seq(partAttr), Seq(InternalRow(1))).copy(isGrouped = false)
 
     def replanAfterFiltering(afterFilter: Seq[InputPartition]): Unit = {
       val scan = new PartitioningBreakingScan(Seq(KeyedInputPartition(1)), afterFilter)

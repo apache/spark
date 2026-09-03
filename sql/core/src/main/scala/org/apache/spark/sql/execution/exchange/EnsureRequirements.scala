@@ -417,17 +417,17 @@ case class EnsureRequirements(
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, rightExpressions, rightKeys)
           .orElse(reorderJoinKeysRecursively(
             leftKeys, rightKeys, leftPartitioning, None))
-      case (Some(KeyedPartitioning(clustering, _, _, _)), _) =>
+      case (Some(kp: KeyedPartitioning), _) =>
         // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
         // attribute per partition expression.
-        val leafExprs = clustering.flatMap(_.references)
+        val leafExprs = kp.expressions.flatMap(_.references)
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, leftKeys)
             .orElse(reorderJoinKeysRecursively(
               leftKeys, rightKeys, None, rightPartitioning))
-      case (_, Some(KeyedPartitioning(clustering, _, _, _))) =>
+      case (_, Some(kp: KeyedPartitioning)) =>
         // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
         // attribute per partition expression.
-        val leafExprs = clustering.flatMap(_.references)
+        val leafExprs = kp.expressions.flatMap(_.references)
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, rightKeys)
             .orElse(reorderJoinKeysRecursively(
               leftKeys, rightKeys, leftPartitioning, None))
@@ -565,22 +565,7 @@ case class EnsureRequirements(
         val (rightReducedDataTypes, rightReducedKeys) = rightReducers.fold(
           (rightPartitioning.keyDataTypes, rightPartitioning.partitionKeys)
         )(rightPartitioning.reduceKeys)
-        // The reduced types are the types of the key rows the merge below sees. A side with no key
-        // still answers for them while its expressions describe the keys it would have had, and
-        // `keyDataTypes` falls back to exactly those types. After a reduce the expressions no
-        // longer describe them, so the fallback is a type no key of that partitioning would hold,
-        // and comparing it against a real answer fails a co-partitioned query (SPARK-59176). Only
-        // such a side is left out. An empty one that is not marked stays in, which is what keeps
-        // the comparison checking a reducer's result type against the paired transform.
-        val leftTypesDescribeKeys =
-          leftReducedKeys.nonEmpty || leftPartitioning.expressionsDescribeKeys
-        val rightTypesDescribeKeys =
-          rightReducedKeys.nonEmpty || rightPartitioning.expressionsDescribeKeys
-        val reducedDataTypes = if (!leftTypesDescribeKeys) {
-          rightReducedDataTypes
-        } else if (!rightTypesDescribeKeys || leftReducedDataTypes == rightReducedDataTypes) {
-          leftReducedDataTypes
-        } else {
+        if (leftReducedDataTypes != rightReducedDataTypes) {
           throw QueryExecutionErrors.storagePartitionJoinIncompatibleReducedTypesError(
             leftReducers = leftReducers,
             leftReducedDataTypes = leftReducedDataTypes,
@@ -588,7 +573,7 @@ case class EnsureRequirements(
             rightReducedDataTypes = rightReducedDataTypes)
         }
 
-        val reducedKeyOrdering = KeyedPartitioning.groupedKeyRowOrdering(reducedDataTypes)
+        val reducedKeyOrdering = KeyedPartitioning.groupedKeyRowOrdering(leftReducedDataTypes)
           .on((t: InternalRowComparableWrapper) => t.row)
 
         // merge values on both sides
