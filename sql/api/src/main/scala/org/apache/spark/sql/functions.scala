@@ -12021,6 +12021,11 @@ object functions {
    *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
+   *   - `spark.sql.session.timeZone`
    */
   def year(e: Column): Column = Column.fn("year", e)
 
@@ -12034,6 +12039,11 @@ object functions {
    *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
+   *   - `spark.sql.session.timeZone`
    */
   def quarter(e: Column): Column = Column.fn("quarter", e)
 
@@ -12047,6 +12057,11 @@ object functions {
    *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
+   *   - `spark.sql.session.timeZone`
    */
   def month(e: Column): Column = Column.fn("month", e)
 
@@ -12061,6 +12076,11 @@ object functions {
    *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 2.3.0
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
+   *   - `spark.sql.session.timeZone`
    */
   def dayofweek(e: Column): Column = Column.fn("dayofweek", e)
 
@@ -12074,6 +12094,11 @@ object functions {
    *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
+   *   - `spark.sql.session.timeZone`
    */
   def dayofmonth(e: Column): Column = Column.fn("dayofmonth", e)
 
@@ -12087,6 +12112,11 @@ object functions {
    *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 3.5.0
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
+   *   - `spark.sql.session.timeZone`
    */
   def day(e: Column): Column = Column.fn("day", e)
 
@@ -12100,6 +12130,11 @@ object functions {
    *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
+   *   - `spark.sql.session.timeZone`
    */
   def dayofyear(e: Column): Column = Column.fn("dayofyear", e)
 
@@ -12118,6 +12153,7 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    */
   def hour(e: Column): Column = Column.fn("hour", e)
@@ -12206,6 +12242,7 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    */
   def minute(e: Column): Column = Column.fn("minute", e)
@@ -12220,6 +12257,11 @@ object functions {
    * @since 3.5.0
    * @return
    *   Returns a column that evaluates to an integer.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
+   *   - `spark.sql.session.timeZone`
    */
   def weekday(e: Column): Column = Column.fn("weekday", e)
 
@@ -12372,6 +12414,7 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
    *   - `spark.sql.session.timeZone`
    */
   def second(e: Column): Column = Column.fn("second", e)
@@ -12390,6 +12433,11 @@ object functions {
    *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
+   *   - `spark.sql.session.timeZone`
    */
   def weekofyear(e: Column): Column = Column.fn("weekofyear", e)
 
@@ -13554,6 +13602,11 @@ object functions {
    * @since 4.0.0
    * @return
    *   Returns a column that evaluates to a string.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
+   *   - `spark.sql.session.timeZone`
    */
   def monthname(timeExp: Column): Column =
     Column.fn("monthname", timeExp)
@@ -13568,6 +13621,11 @@ object functions {
    * @since 4.0.0
    * @return
    *   Returns a column that evaluates to a string.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
+   *   - `spark.sql.session.timeZone`
    */
   def dayname(timeExp: Column): Column =
     Column.fn("dayname", timeExp)
@@ -15266,6 +15324,7 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
+   *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
   def variant_get(v: Column, path: String, targetType: String): Column =
@@ -15290,6 +15349,7 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
+   *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
   def variant_get(v: Column, path: Column, targetType: String): Column =
@@ -15313,6 +15373,7 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
+   *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
   def try_variant_get(v: Column, path: String, targetType: String): Column =
@@ -15337,6 +15398,7 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
+   *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
    */
   def try_variant_get(v: Column, path: Column, targetType: String): Column =
@@ -15862,6 +15924,10 @@ object functions {
    * @since 2.4.0
    * @return
    *   Returns a column that evaluates to an array.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.session.timeZone`
    */
   def sequence(start: Column, stop: Column, step: Column): Column =
     Column.fn("sequence", start, stop, step)
@@ -15880,6 +15946,10 @@ object functions {
    * @since 2.4.0
    * @return
    *   Returns a column that evaluates to an array.
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.session.timeZone`
    */
   def sequence(start: Column, stop: Column): Column = Column.fn("sequence", start, stop)
 

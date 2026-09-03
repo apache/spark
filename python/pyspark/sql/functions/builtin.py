@@ -10351,6 +10351,13 @@ def year(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.date_part`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the year from a string column representing dates
@@ -10443,6 +10450,13 @@ def quarter(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.extract`
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.date_part`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -10538,6 +10552,13 @@ def month(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.date_part`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the month from a string column representing dates
@@ -10627,6 +10648,13 @@ def dayofweek(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.dayofmonth`
     :meth:`pyspark.sql.functions.weekofyear`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the day of the week from a string column representing dates
@@ -10714,6 +10742,13 @@ def dayofmonth(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         day of the month for given date/timestamp as integer.
         Returns a column that evaluates to an integer.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -10810,6 +10845,13 @@ def day(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.date_part`
     :meth:`pyspark.sql.functions.weekday`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the day of the month from a string column representing dates
@@ -10898,6 +10940,13 @@ def dayofyear(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.dayofmonth`
     :meth:`pyspark.sql.functions.weekofyear`
     :meth:`pyspark.sql.functions.dayofweek`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -10999,6 +11048,7 @@ def hour(col: "ColumnOrName") -> Column:
     -----
     Affected by these public SQL configurations:
 
+    * ``spark.sql.ansi.enabled``
     * ``spark.sql.session.timeZone``
 
     Examples
@@ -11089,6 +11139,7 @@ def minute(col: "ColumnOrName") -> Column:
     -----
     Affected by these public SQL configurations:
 
+    * ``spark.sql.ansi.enabled``
     * ``spark.sql.session.timeZone``
 
     Examples
@@ -11179,6 +11230,7 @@ def second(col: "ColumnOrName") -> Column:
     -----
     Affected by these public SQL configurations:
 
+    * ``spark.sql.ansi.enabled``
     * ``spark.sql.session.timeZone``
 
     Examples
@@ -11258,6 +11310,13 @@ def weekofyear(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.dayofweek`
     :meth:`pyspark.sql.functions.dayofmonth`
     :meth:`pyspark.sql.functions.dayofyear`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -11345,6 +11404,13 @@ def weekday(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.dayofmonth`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the day of the week from a string column representing dates
@@ -11428,6 +11494,13 @@ def monthname(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.month`
     :meth:`pyspark.sql.functions.dayname`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the month name from a string column representing dates
@@ -11510,6 +11583,13 @@ def dayname(col: "ColumnOrName") -> Column:
     --------
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.monthname`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -23878,6 +23958,7 @@ def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) ->
     -----
     Affected by these public SQL configurations:
 
+    * ``spark.sql.session.timeZone``
     * ``spark.sql.timestampType``
 
     Examples
@@ -23935,6 +24016,7 @@ def try_variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str
     -----
     Affected by these public SQL configurations:
 
+    * ``spark.sql.session.timeZone``
     * ``spark.sql.timestampType``
 
     Examples
@@ -26200,6 +26282,12 @@ def sequence(
     :class:`~pyspark.sql.Column`
         A new column that contains an array of sequence values.
         Returns a column that evaluates to an array.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
