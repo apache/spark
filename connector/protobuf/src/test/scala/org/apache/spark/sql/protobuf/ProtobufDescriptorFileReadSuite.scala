@@ -24,8 +24,9 @@ import java.nio.file.Files
 import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.util.ProtobufDescriptorFileReader
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.protobuf.utils.{ProtobufUtils => ConnectorProtobufUtils}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -77,6 +78,43 @@ class ProtobufDescriptorFileReadSuite extends SharedSparkSession with ProtobufTe
       s"SELECT to_protobuf(value, '$messageName', '$fileUri', map()) IS NOT NULL AS r " +
       "FROM t_pb_struct").head().getBoolean(0)
     assert(r)
+  }
+
+  test("SPARK-59112: CHAR/VARCHAR descriptor paths use the three-argument overload") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val fileUri = new File(descPath).getCanonicalFile.toURI.toString
+      spark.range(1).selectExpr(
+        """named_struct(
+          |'id', 1L,
+          |'string_value', 'test_string',
+          |'int32_value', 32,
+          |'int64_value', 64L,
+          |'double_value', CAST(123.456 AS DOUBLE),
+          |'float_value', CAST(789.01 AS FLOAT),
+          |'bool_value', true,
+          |'bytes_value', CAST('sample_bytes' AS BINARY)
+          |) AS value""".stripMargin)
+        .createOrReplaceTempView("t_pb_struct")
+      spark.sql(
+        s"SELECT to_protobuf(value, '$messageName', '$fileUri', map()) AS protobuf_data " +
+          "FROM t_pb_struct")
+        .createOrReplaceTempView("t_pb_bytes")
+
+      val expected = Row(
+        1L, "test_string", 32, 64L, 123.456, 789.01F, true, "sample_bytes".getBytes)
+
+      Seq("CHAR", "VARCHAR").foreach { typeName =>
+        val descriptorPath = s"CAST('$fileUri' AS $typeName(${fileUri.length}))"
+        checkAnswer(
+          spark.sql(
+            s"SELECT from_protobuf(protobuf_data, '$messageName', $descriptorPath) AS decoded " +
+              "FROM t_pb_bytes"),
+          Seq(Row(expected)))
+        assert(spark.sql(
+          s"SELECT to_protobuf(value, '$messageName', $descriptorPath) IS NOT NULL " +
+            "FROM t_pb_struct").head().getBoolean(0))
+      }
+    }
   }
 
   test("missing descriptor file raises PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND") {

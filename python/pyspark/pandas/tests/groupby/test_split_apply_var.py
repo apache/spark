@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.groupby.test_split_apply import GroupbySplitApplyTestingFuncMixin
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class GroupbySplitApplyVarMixin(GroupbySplitApplyTestingFuncMixin):

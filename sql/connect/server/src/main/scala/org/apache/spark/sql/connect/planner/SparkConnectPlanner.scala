@@ -1027,7 +1027,7 @@ class SparkConnectPlanner(
         sortOrder: Seq[SortOrder]): UntypedKeyValueGroupedDataset = {
       val analyzed = session.sessionState.executePlan(logicalPlan).analyzed
 
-      assertPlan(groupingExprs.size() >= 1)
+      assertPlan(!groupingExprs.isEmpty)
       val dummyFunc = TypedScalaUdf(groupingExprs.get(0), None)
       val groupExprs = groupingExprs.asScala.toSeq.drop(1).map(expr => transformExpression(expr))
 
@@ -2670,7 +2670,7 @@ class SparkConnectPlanner(
           // This relies on the assumption that a KVGDS always requires the head to be a Typed UDF.
           // This is the case for datasets created via groupByKey,
           // and also via RelationalGroupedDS#as, as the first is a dummy UDF currently.
-          if rel.getGroupingExpressionsList.size() >= 1 &&
+          if !rel.getGroupingExpressionsList.isEmpty &&
             isTypedScalaUdfExpr(rel.getGroupingExpressionsList.get(0)) =>
         transformKeyValueGroupedAggregate(rel)
       case _ =>
@@ -3957,13 +3957,16 @@ class SparkConnectPlanner(
       name -> new TaskResourceRequest(res.getResourceName, res.getAmount)
     }.toMap
 
-    // Create ResourceProfile add add it to ResourceProfileManager
-    val profile = if (ereqs.isEmpty) {
+    // Create the ResourceProfile and register it, reusing an already-registered profile with
+    // equal resources if one exists so that equivalent profiles share a single id (and thus
+    // can reuse the same executors instead of triggering new allocations).
+    val newProfile = if (ereqs.isEmpty) {
       new TaskResourceProfile(treqs)
     } else {
       new ResourceProfile(ereqs, treqs)
     }
-    session.sparkContext.resourceProfileManager.addResourceProfile(profile)
+    val profile =
+      session.sparkContext.resourceProfileManager.getOrAddEquivalentProfile(newProfile)
 
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(

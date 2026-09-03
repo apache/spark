@@ -31,6 +31,16 @@ trait SparkCharVarcharUtils {
   }
 
   /**
+   * Logical type name for CHAR/VARCHAR, used when stamping `spark.sql.catalyst.type` on STRING
+   * storage (ORC/Avro). None for other types, including unbounded STRING.
+   */
+  def charVarcharTypeName(dt: DataType): Option[String] = dt match {
+    case c: CharType => Some(c.typeName)
+    case v: VarcharType => Some(v.typeName)
+    case _ => None
+  }
+
+  /**
    * Fail if the type contains CHAR/VARCHAR unless legacy-as-string or first-class CHAR/VARCHAR is
    * enabled (standard semantics or preserveCharVarcharTypeInfo).
    */

@@ -20,11 +20,13 @@
 
 import re
 import sys
-from subprocess import Popen, PIPE
+from subprocess import PIPE, Popen
 
 try:
-    from github import Github  # noqa: F401
-    from github import GithubException
+    from github import (
+        Github,  # noqa: F401
+        GithubException,
+    )
 except ImportError:
     print("This tool requires the PyGithub library")
     print("Install using 'pip install PyGithub'")

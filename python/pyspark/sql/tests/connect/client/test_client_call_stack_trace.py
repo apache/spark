@@ -20,7 +20,7 @@ import unittest
 from unittest.mock import patch
 
 import pyspark
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
 
 if should_test_connect:
     import pyspark.sql.connect.proto as pb2

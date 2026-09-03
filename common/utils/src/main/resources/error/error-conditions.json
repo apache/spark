@@ -495,6 +495,18 @@
     ],
     "sqlState" : "22001"
   },
+  "BUCKET_COLUMN_IN_PARTITION_COLUMNS" : {
+    "message" : [
+      "Bucketing column <bucketColumn> should not be part of partition columns <partitionColumns>."
+    ],
+    "sqlState" : "42713"
+  },
+  "BUCKET_SORT_COLUMN_IN_PARTITION_COLUMNS" : {
+    "message" : [
+      "Bucket sort column <sortColumn> should not be part of partition columns <partitionColumns>."
+    ],
+    "sqlState" : "42713"
+  },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
       "The method <methodName> can not be called on streaming Dataset/DataFrame."
@@ -1973,6 +1985,11 @@
           "The <inputName> value must to be a <requireType> literal of <validValues>, but got <inputValue>."
         ]
       },
+      "INVALID_JSON_FORMAT_JSON_INPUT" : {
+        "message" : [
+          "<functionName> FORMAT JSON requires a string argument containing JSON text, but the argument at position <position> has type <inputType>."
+        ]
+      },
       "INVALID_JSON_MAP_KEY_TYPE" : {
         "message" : [
           "Input schema <schema> can only contain STRING as a key type for a MAP."
@@ -1991,6 +2008,11 @@
       "INVALID_JSON_QUERY_WRAPPER_AND_QUOTES" : {
         "message" : [
           "<functionName> cannot combine an OMIT QUOTES clause with a WITH ARRAY WRAPPER clause. OMIT QUOTES applies only to an unwrapped result."
+        ]
+      },
+      "INVALID_JSON_RETURNING_TYPE" : {
+        "message" : [
+          "<functionName> RETURNING clause must be a STRING type, but got <returningType>."
         ]
       },
       "INVALID_JSON_SCALAR_RETURNING_TYPE" : {
@@ -2259,6 +2281,24 @@
       "Encountered error when saving to external data source."
     ],
     "sqlState" : "KD010"
+  },
+  "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE" : {
+    "message" : [
+      "The runtime filter attribute <attribute> reported by `<method>` in data source scan <scanClass> is invalid for the scan relation output <relationOutput>."
+    ],
+    "subClass" : {
+      "CANNOT_RESOLVE" : {
+        "message" : [
+          "The attribute cannot be resolved."
+        ]
+      },
+      "NOT_TOP_LEVEL" : {
+        "message" : [
+          "The attribute must be top-level, but it is a nested reference."
+        ]
+      }
+    },
+    "sqlState" : "KD000"
   },
   "DATA_SOURCE_METADATA_SCHEMA_NOT_IMPLEMENTED" : {
     "message" : [
@@ -4491,6 +4531,12 @@
     ],
     "sqlState" : "2203G"
   },
+  "INVALID_JSON_FORMAT_JSON_VALUE" : {
+    "message" : [
+      "<functionName> FORMAT JSON argument at position <position> must contain exactly one well-formed JSON value, but got <value>."
+    ],
+    "sqlState" : "22032"
+  },
   "INVALID_JSON_RECORD_TYPE" : {
     "message" : [
       "Detected an invalid type of a JSON record while inferring a common schema in the mode <failFastMode>. Expected a STRUCT type, but found <invalidType>."
@@ -5765,6 +5811,12 @@
       "LOAD DATA input path does not exist: <path>."
     ],
     "sqlState" : "42K03"
+  },
+  "LOCAL_BLOCK_DATA_NOT_FOUND" : {
+    "message" : [
+      "Block <blockId> had block metadata but its data was missing from both the memory and disk stores. The block has been removed, so a later read must fetch it from another replica or recompute it."
+    ],
+    "sqlState" : "58030"
   },
   "LOCAL_MUST_WITH_SCHEMA_FILE" : {
     "message" : [
@@ -7050,6 +7102,12 @@
     ],
     "sqlState" : "42K05"
   },
+  "SHUFFLE_BLOCK_MIGRATION_NOT_SUPPORTED" : {
+    "message" : [
+      "Shuffle block <blockId> cannot be migrated to the receiving executor: its shuffle block resolver <resolverClass> must implement MigratableResolver. See the cause for details."
+    ],
+    "sqlState" : "0A000"
+  },
   "SKETCH_INVALID_LG_NOM_ENTRIES" : {
     "message" : [
       "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
@@ -7906,6 +7964,14 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT" : {
+    "message" : [
+      "Streaming shuffle <shuffleId> writer <writerId> timed out after <timeoutMs> ms waiting for reader <readerId> to connect.",
+      "This can occur when the reader task is delayed because cluster resources are unavailable or when network connectivity prevents the reader from reaching the writer.",
+      "Check cluster resources and network connectivity. If the reader needs more time to start, increase 'spark.shuffle.streaming.writerConnectionTimeout', or set it to -1 to wait indefinitely."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STREAMING_STATEFUL_OPERATOR_MISSING_STATE_DIRECTORY" : {
     "message" : [
       "Cannot restart streaming query with stateful operators because the state directory is empty or missing.",
@@ -8264,6 +8330,12 @@
       "Unable to infer schema for <format>. It must be specified manually."
     ],
     "sqlState" : "42KD9"
+  },
+  "UNABLE_TO_REGISTER_WITH_EXTERNAL_SHUFFLE_SERVICE" : {
+    "message" : [
+      "Unable to register with the external shuffle service: <message>"
+    ],
+    "sqlState" : "58030"
   },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
@@ -10338,16 +10410,6 @@
       "It is not allowed to specify partitioning when the table schema is not defined."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1166" : {
-    "message" : [
-      "Bucketing column '<bucketCol>' should not be part of partition columns '<normalizedPartCols>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1167" : {
-    "message" : [
-      "Bucket sorting column '<sortCol>' should not be part of partition columns '<normalizedPartCols>'."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1169" : {
     "message" : [
       "Requested partitioning does not match the table <tableName>:",
@@ -11623,26 +11685,6 @@
   "_LEGACY_ERROR_TEMP_3028" : {
     "message" : [
       "<errorMsg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3033" : {
-    "message" : [
-      "Unable to register with external shuffle server due to : <message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3035" : {
-    "message" : [
-      "Unexpected shuffle block <blockId> with unsupported shuffle resolver <shuffleBlockResolver>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3036" : {
-    "message" : [
-      "Failure while trying to store block <blockId> on <blockManagerId>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3037" : {
-    "message" : [
-      "Block <blockId> was not found even though it's read-locked"
     ]
   },
   "_LEGACY_ERROR_TEMP_3052" : {

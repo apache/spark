@@ -15,11 +15,11 @@
 # limitations under the License.
 #
 
-from functools import total_ordering
 import itertools
 import os
 import re
 import sys
+from functools import total_ordering
 from pathlib import Path, PurePath
 
 all_modules = []
@@ -493,6 +493,7 @@ credential_aws = Module(
     dependencies=[tags, core],
     source_file_regexes=[
         "connector/credential-aws/",
+        "connector/credential-aws-integration-tests/",
     ],
     build_profile_flags=[
         "-Pcredential-aws",

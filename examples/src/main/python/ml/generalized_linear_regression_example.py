@@ -20,9 +20,10 @@ An example demonstrating generalized linear regression.
 Run with:
   bin/spark-submit examples/src/main/python/ml/generalized_linear_regression_example.py
 """
-from pyspark.sql import SparkSession
 # $example on$
 from pyspark.ml.regression import GeneralizedLinearRegression
+from pyspark.sql import SparkSession
+
 # $example off$
 
 if __name__ == "__main__":

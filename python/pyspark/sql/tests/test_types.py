@@ -22,69 +22,67 @@ import os
 import pickle
 import sys
 import unittest
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
-from pyspark.sql import Row
-from pyspark.sql import functions as F
 from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
-    SparkRuntimeException,
     ParseException,
+    PySparkNotImplementedError,
+    PySparkRuntimeError,
     PySparkTypeError,
     PySparkValueError,
-    PySparkRuntimeError,
-    PySparkNotImplementedError,
+    SparkRuntimeException,
 )
+from pyspark.sql import Row
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
-    DataType,
-    ByteType,
-    ShortType,
-    IntegerType,
-    FloatType,
-    DateType,
-    TimeType,
-    TimestampType,
-    TimestampNTZType,
-    DayTimeIntervalType,
-    YearMonthIntervalType,
-    CalendarIntervalType,
-    MapType,
-    StringType,
-    CharType,
-    Geography,
-    Geometry,
-    VarcharType,
-    StructType,
-    StructField,
     ArrayType,
-    DoubleType,
-    LongType,
-    DecimalType,
     BinaryType,
     BooleanType,
+    ByteType,
+    CalendarIntervalType,
+    CharType,
+    DataType,
+    DateType,
+    DayTimeIntervalType,
+    DecimalType,
+    DoubleType,
+    FloatType,
+    Geography,
     GeographyType,
+    Geometry,
     GeometryType,
+    IntegerType,
+    LongType,
+    MapType,
     NullType,
+    ShortType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampNTZType,
+    TimestampType,
+    TimeType,
     UserDefinedType,
+    VarcharType,
     VariantType,
     VariantVal,
-    _create_row,
-)
-from pyspark.sql.types import (
+    YearMonthIntervalType,
     _array_signed_int_typecode_ctype_mappings,
     _array_type_mappings,
     _array_unsigned_int_typecode_ctype_mappings,
+    _create_row,
     _infer_type,
     _make_type_verifier,
     _merge_type,
 )
 from pyspark.testing.objects import (
-    ExamplePointUDT,
-    PythonOnlyUDT,
     ExamplePoint,
-    PythonOnlyPoint,
+    ExamplePointUDT,
     MyObject,
+    PythonOnlyPoint,
+    PythonOnlyUDT,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import PySparkErrorTestUtils
@@ -540,7 +538,7 @@ class TypesTestsMixin:
         self.assertEqual(df.first(), Row(key=1, value="1"))
 
     def test_apply_schema(self):
-        from datetime import date, time, datetime, timedelta
+        from datetime import date, datetime, time, timedelta
 
         rdd = self.sc.parallelize(
             [
@@ -764,7 +762,7 @@ class TypesTestsMixin:
             assert schema == _parse_datatype_json_string(schema.json())
 
     def test_schema_with_collations_on_non_string_types(self):
-        from pyspark.sql.types import _parse_datatype_json_string, _COLLATIONS_METADATA_KEY
+        from pyspark.sql.types import _COLLATIONS_METADATA_KEY, _parse_datatype_json_string
 
         collations_on_int_col_json = f"""
         {{
@@ -910,7 +908,7 @@ class TypesTestsMixin:
         self.assertEqual(mapWithCollations, MapType.fromJson(map_json, collationsMap=collationsMap))
 
     def test_schema_with_bad_collations_provider(self):
-        from pyspark.sql.types import _parse_datatype_json_string, _COLLATIONS_METADATA_KEY
+        from pyspark.sql.types import _COLLATIONS_METADATA_KEY, _parse_datatype_json_string
 
         schema_json = f"""
         {{
@@ -933,7 +931,7 @@ class TypesTestsMixin:
         self.assertRaises(PySparkValueError, lambda: _parse_datatype_json_string(schema_json))
 
     def test_geography_json_serde(self):
-        from pyspark.sql.types import _parse_datatype_json_value, _parse_datatype_json_string
+        from pyspark.sql.types import _parse_datatype_json_string, _parse_datatype_json_value
 
         valid_test_cases = [
             ("geography", GeographyType(4326)),
@@ -981,7 +979,7 @@ class TypesTestsMixin:
                 _parse_datatype_json_value(json)
 
     def test_geometry_json_serde(self):
-        from pyspark.sql.types import _parse_datatype_json_value, _parse_datatype_json_string
+        from pyspark.sql.types import _parse_datatype_json_string, _parse_datatype_json_value
 
         valid_test_cases = [
             ("geometry", GeometryType(4326)),
@@ -1025,7 +1023,7 @@ class TypesTestsMixin:
                 _parse_datatype_json_value(json)
 
     def test_udt(self):
-        from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier
+        from pyspark.sql.types import _infer_type, _make_type_verifier, _parse_datatype_json_string
 
         def check_datatype(datatype):
             pickled = pickle.loads(pickle.dumps(datatype))
@@ -2506,8 +2504,9 @@ class TypesTestsMixin:
             self.spark.createDataFrame([VariantVal.parseJson("2")], "v variant")
 
     def test_variant_to_pandas(self):
-        import pandas as pd
         import json
+
+        import pandas as pd
 
         expected_values = [
             ("str", '"%s"' % ("0123456789" * 10), "0123456789" * 10),
