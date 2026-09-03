@@ -356,6 +356,12 @@ select 'null' IS JSON;
 select 'null' IS JSON SCALAR;
 select 'null' IS JSON VALUE;
 select 'null' IS JSON OBJECT;
+-- strict ANSI parsing: Hive-style leniency (single quotes) is rejected
+select '{''a'':1}' IS JSON;
+select '[''a'', ''b'']' IS JSON;
+-- trailing content after a well-formed value is rejected
+select '1 2' IS JSON;
+select '{} []' IS JSON;
 -- keywords usable as identifiers (non-reserved)
 select 1 AS OBJECT;
 select 1 AS SCALAR;

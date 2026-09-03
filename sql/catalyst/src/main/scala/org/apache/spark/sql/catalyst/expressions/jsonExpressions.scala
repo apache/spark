@@ -2105,9 +2105,10 @@ case class IsJson(child: Expression, shape: IsJsonShape = IsJsonShape.Any)
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
   override def dataType: DataType = BooleanType
-  // NULL input propagates as NULL (three-valued logic). Invalid JSON yields false, not NULL,
-  // because json_typeof returns NULL for both cases and the If(IsNull(child), ...) wrapper
-  // in replacement distinguishes them before the shape check runs.
+  // NULL input propagates as NULL (three-valued logic); a non-null operand always yields a
+  // definite true/false. StaticInvoke's null propagation gives us exactly this: it skips the
+  // call and returns NULL when the operand is NULL, and otherwise `JsonExpressionUtils.isJson`
+  // returns a non-null boolean.
   override def nullable: Boolean = true
 
   override def prettyName: String = "is_json"
@@ -2123,23 +2124,26 @@ case class IsJson(child: Expression, shape: IsJsonShape = IsJsonShape.Any)
     s"(${child.sql} IS JSON$shapeSql)"
   }
 
-  // json_typeof returns NULL for both null input and invalid JSON. The If(IsNull) wrapper
-  // propagates NULL input as NULL; for invalid JSON json_typeof also returns NULL but the
-  // child is not NULL, so shapeCheck evaluates to false via IsNotNull.
+  // Delegate to a single validation helper that reads the operand exactly once. Evaluating the
+  // child a single time is required for correctness with non-deterministic inputs (e.g.
+  // `IF(rand() < 0.5, NULL, '{}') IS JSON`): a plan that referenced `child` in more than one
+  // place could observe two different values and return a wrong result. The helper also uses a
+  // strict ANSI JSON parser rather than the Hive-compatible one, so inputs like `{'a':1}`
+  // (single quotes) are correctly rejected.
   override def replacement: Expression = {
-    val jsonType = JsonTypeof(child)
-    val shapeCheck: Expression = shape match {
-      case IsJsonShape.Any | IsJsonShape.Value =>
-        IsNotNull(jsonType)
-      case IsJsonShape.Object =>
-        And(IsNotNull(jsonType), EqualTo(jsonType, Literal("object")))
-      case IsJsonShape.Array =>
-        And(IsNotNull(jsonType), EqualTo(jsonType, Literal("array")))
-      case IsJsonShape.Scalar =>
-        And(IsNotNull(jsonType),
-          Not(In(jsonType, Seq(Literal("object"), Literal("array")))))
+    val shapeCode = shape match {
+      case IsJsonShape.Any | IsJsonShape.Value => JsonExpressionUtils.SHAPE_ANY
+      case IsJsonShape.Object => JsonExpressionUtils.SHAPE_OBJECT
+      case IsJsonShape.Array => JsonExpressionUtils.SHAPE_ARRAY
+      case IsJsonShape.Scalar => JsonExpressionUtils.SHAPE_SCALAR
     }
-    If(IsNull(child), Literal.create(null, BooleanType), shapeCheck)
+    StaticInvoke(
+      classOf[JsonExpressionUtils],
+      BooleanType,
+      "isJson",
+      Seq(child, Literal(shapeCode)),
+      Seq(inputTypes.head, IntegerType),
+      returnNullable = true)
   }
 
   override protected def withNewChildInternal(newChild: Expression): IsJson =

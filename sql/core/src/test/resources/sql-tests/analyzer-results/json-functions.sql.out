@@ -1731,9 +1731,6 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 select json_array(1, 'x', true)
 -- !query analysis
 Project [json_array(1, x, true, false, false, false, false, false, false, Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY(1, x, true)#x]
-select '{"a":1}' IS JSON
--- !query analysis
-Project [is_json({"a":1}, Any) AS ({"a":1} IS JSON)#x]
 +- OneRowRelation
 
 
@@ -1741,9 +1738,6 @@ Project [is_json({"a":1}, Any) AS ({"a":1} IS JSON)#x]
 select json_array(1, NULL, 3)
 -- !query analysis
 Project [json_array(1, null, 3, false, false, false, false, false, false, Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY(1, NULL, 3)#x]
-select '[1,2]' IS JSON
--- !query analysis
-Project [is_json([1,2], Any) AS ([1,2] IS JSON)#x]
 +- OneRowRelation
 
 
@@ -1751,9 +1745,6 @@ Project [is_json([1,2], Any) AS ([1,2] IS JSON)#x]
 select json_array(1, NULL, 3 NULL ON NULL)
 -- !query analysis
 Project [json_array(1, null, 3, false, false, false, false, false, false, Null, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY(1, NULL, 3 NULL ON NULL)#x]
-select '42' IS JSON
--- !query analysis
-Project [is_json(42, Any) AS (42 IS JSON)#x]
 +- OneRowRelation
 
 
@@ -1761,9 +1752,6 @@ Project [is_json(42, Any) AS (42 IS JSON)#x]
 select json_array()
 -- !query analysis
 Project [json_array(Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY()#x]
-select '"hello"' IS JSON
--- !query analysis
-Project [is_json("hello", Any) AS ("hello" IS JSON)#x]
 +- OneRowRelation
 
 
@@ -1777,9 +1765,6 @@ select json_array(CAST(1.50 AS DECIMAL(5,2)), DATE'2020-01-02')
 select json_array(json_array(1, 2), 3)
 -- !query analysis
 Project [json_array(json_array(1, 2, false, false, false, false, Absent, StringType, Some(America/Los_Angeles)), 3, true, false, false, false, Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY(JSON_ARRAY(1, 2), 3)#x]
-select 'not json' IS JSON
--- !query analysis
-Project [is_json(not json, Any) AS (not json IS JSON)#x]
 +- OneRowRelation
 
 
@@ -1787,9 +1772,6 @@ Project [is_json(not json, Any) AS (not json IS JSON)#x]
 select json_array('[1,2]')
 -- !query analysis
 Project [json_array([1,2], false, false, Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY([1,2])#x]
-select '' IS JSON
--- !query analysis
-Project [is_json(, Any) AS ( IS JSON)#x]
 +- OneRowRelation
 
 
@@ -1797,9 +1779,6 @@ Project [is_json(, Any) AS ( IS JSON)#x]
 select json_array('[1,2]' FORMAT JSON)
 -- !query analysis
 Project [json_array([1,2], true, true, Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY([1,2] FORMAT JSON)#x]
-select '{"a":1}' IS NOT JSON
--- !query analysis
-Project [NOT is_json({"a":1}, Any) AS (NOT ({"a":1} IS JSON))#x]
 +- OneRowRelation
 
 
@@ -1807,9 +1786,6 @@ Project [NOT is_json({"a":1}, Any) AS (NOT ({"a":1} IS JSON))#x]
 select json_array('{"a":1}' FORMAT JSON, 'x')
 -- !query analysis
 Project [json_array({"a":1}, x, true, false, true, false, Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY({"a":1} FORMAT JSON, x)#x]
-select 'bad' IS NOT JSON
--- !query analysis
-Project [NOT is_json(bad, Any) AS (NOT (bad IS JSON))#x]
 +- OneRowRelation
 
 
@@ -1840,9 +1816,6 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 select json_array('1,2' FORMAT JSON)
 -- !query analysis
 Project [json_array(1,2, true, true, Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY(1,2 FORMAT JSON)#x]
-select cast(null as string) IS JSON
--- !query analysis
-Project [is_json(cast(null as string), Any) AS (CAST(NULL AS STRING) IS JSON)#x]
 +- OneRowRelation
 
 
@@ -1850,9 +1823,6 @@ Project [is_json(cast(null as string), Any) AS (CAST(NULL AS STRING) IS JSON)#x]
 select json_array(NULL FORMAT JSON)
 -- !query analysis
 Project [json_array(null, true, true, Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY(NULL FORMAT JSON)#x]
-select cast(null as string) IS NOT JSON
--- !query analysis
-Project [NOT is_json(cast(null as string), Any) AS (NOT (CAST(NULL AS STRING) IS JSON))#x]
 +- OneRowRelation
 
 
@@ -1860,9 +1830,6 @@ Project [NOT is_json(cast(null as string), Any) AS (NOT (CAST(NULL AS STRING) IS
 select json_array(NULL FORMAT JSON NULL ON NULL)
 -- !query analysis
 Project [json_array(null, true, true, Null, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY(NULL FORMAT JSON NULL ON NULL)#x]
-select '{"a":1}' IS JSON OBJECT
--- !query analysis
-Project [is_json({"a":1}, Object) AS ({"a":1} IS JSON OBJECT)#x]
 +- OneRowRelation
 
 
@@ -1871,6 +1838,86 @@ select json_array(1 IS NULL, 2 > 1)
 -- !query analysis
 Project [json_array(isnull(1), (2 > 1), false, false, false, false, Absent, StringType, Some(America/Los_Angeles)) AS JSON_ARRAY((1 IS NULL), (2 > 1))#x]
 +- OneRowRelation
+
+
+-- !query
+select '{"a":1}' IS JSON
+-- !query analysis
+Project [is_json({"a":1}, Any) AS ({"a":1} IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select '[1,2]' IS JSON
+-- !query analysis
+Project [is_json([1,2], Any) AS ([1,2] IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select '42' IS JSON
+-- !query analysis
+Project [is_json(42, Any) AS (42 IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select '"hello"' IS JSON
+-- !query analysis
+Project [is_json("hello", Any) AS ("hello" IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select 'not json' IS JSON
+-- !query analysis
+Project [is_json(not json, Any) AS (not json IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select '' IS JSON
+-- !query analysis
+Project [is_json(, Any) AS ( IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select '{"a":1}' IS NOT JSON
+-- !query analysis
+Project [NOT is_json({"a":1}, Any) AS (NOT ({"a":1} IS JSON))#x]
++- OneRowRelation
+
+
+-- !query
+select 'bad' IS NOT JSON
+-- !query analysis
+Project [NOT is_json(bad, Any) AS (NOT (bad IS JSON))#x]
++- OneRowRelation
+
+
+-- !query
+select cast(null as string) IS JSON
+-- !query analysis
+Project [is_json(cast(null as string), Any) AS (CAST(NULL AS STRING) IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(null as string) IS NOT JSON
+-- !query analysis
+Project [NOT is_json(cast(null as string), Any) AS (NOT (CAST(NULL AS STRING) IS JSON))#x]
++- OneRowRelation
+
+
+-- !query
+select '{"a":1}' IS JSON OBJECT
+-- !query analysis
+Project [is_json({"a":1}, Object) AS ({"a":1} IS JSON OBJECT)#x]
++- OneRowRelation
+
+
+-- !query
 select '[1,2]' IS JSON OBJECT
 -- !query analysis
 Project [is_json([1,2], Object) AS ([1,2] IS JSON OBJECT)#x]
@@ -2035,6 +2082,34 @@ Project [is_json(null, Value) AS (null IS JSON VALUE)#x]
 select 'null' IS JSON OBJECT
 -- !query analysis
 Project [is_json(null, Object) AS (null IS JSON OBJECT)#x]
++- OneRowRelation
+
+
+-- !query
+select '{''a'':1}' IS JSON
+-- !query analysis
+Project [is_json({'a':1}, Any) AS ({'a':1} IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select '[''a'', ''b'']' IS JSON
+-- !query analysis
+Project [is_json(['a', 'b'], Any) AS (['a', 'b'] IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select '1 2' IS JSON
+-- !query analysis
+Project [is_json(1 2, Any) AS (1 2 IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select '{} []' IS JSON
+-- !query analysis
+Project [is_json({} [], Any) AS ({} [] IS JSON)#x]
 +- OneRowRelation
 
 

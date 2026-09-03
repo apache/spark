@@ -2123,6 +2123,9 @@ select json_array(1 IS NULL, 2 > 1)
 struct<JSON_ARRAY((1 IS NULL), (2 > 1)):string>
 -- !query output
 [false,true]
+
+
+-- !query
 select '{"a":1}' IS JSON
 -- !query schema
 struct<({"a":1} IS JSON):boolean>
@@ -2398,6 +2401,38 @@ true
 select 'null' IS JSON OBJECT
 -- !query schema
 struct<(null IS JSON OBJECT):boolean>
+-- !query output
+false
+
+
+-- !query
+select '{''a'':1}' IS JSON
+-- !query schema
+struct<({'a':1} IS JSON):boolean>
+-- !query output
+false
+
+
+-- !query
+select '[''a'', ''b'']' IS JSON
+-- !query schema
+struct<(['a', 'b'] IS JSON):boolean>
+-- !query output
+false
+
+
+-- !query
+select '1 2' IS JSON
+-- !query schema
+struct<(1 2 IS JSON):boolean>
+-- !query output
+false
+
+
+-- !query
+select '{} []' IS JSON
+-- !query schema
+struct<({} [] IS JSON):boolean>
 -- !query output
 false
 
