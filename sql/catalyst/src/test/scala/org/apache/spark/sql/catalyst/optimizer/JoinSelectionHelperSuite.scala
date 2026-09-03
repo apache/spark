@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, EqualTo, IsNull, Or}
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, PlanTest}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint, LeafNode, NO_BROADCAST_HASH, SHUFFLE_HASH, Statistics}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.internal.SQLConf
@@ -164,10 +164,15 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     val leftStatsAccessed = new AtomicBoolean(false)
     val uncachedLeft = TrackingStatsTestPlan(Seq($"uncachedLeft".int), leftStatsAccessed)
     val leftAntiJoin = Join(uncachedLeft, right, LeftAnti, None, JoinHint.NONE)
+    val rightStatsAccessed = new AtomicBoolean(false)
+    val uncachedRight = TrackingStatsTestPlan(Seq($"uncachedRight".int), rightStatsAccessed)
+    val rightOuterJoin = Join(right, uncachedRight, RightOuter, None, JoinHint.NONE)
 
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
       assert(getBroadcastNestedLoopJoinBuildSide(leftAntiJoin, SQLConf.get) === BuildRight)
       assert(!leftStatsAccessed.get())
+      assert(getBroadcastNestedLoopJoinBuildSide(rightOuterJoin, SQLConf.get) === BuildLeft)
+      assert(!rightStatsAccessed.get())
     }
   }
 

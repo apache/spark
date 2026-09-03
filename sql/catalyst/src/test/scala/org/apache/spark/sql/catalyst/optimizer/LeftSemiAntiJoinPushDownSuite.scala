@@ -161,7 +161,7 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     }
   }
 
-  test("Aggregate: ordinary LeftSemi join pushdown - empty join condition") {
+  test("Aggregate: ordinary LeftSemi join no pushdown - empty join condition") {
     val originalQuery = testRelation
       .groupBy($"b")($"b", sum($"c"))
       .join(testRelation1, joinType = LeftSemi, condition = None)

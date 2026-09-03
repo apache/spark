@@ -184,8 +184,8 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
               // For a left semi join, the non-pushable part of the condition is kept as a Filter
               // above the join.
               case LeftSemi => Filter(stayUp.reduce(And), newPlan)
-              // In case of left-anti join, the join is pushed down only when the entire join
-              // condition is eligible to be pushed down to preserve the semantics of left-anti
+              // In the case of a left anti join, the join is pushed down only when the entire join
+              // condition is eligible to be pushed down to preserve the semantics of the left anti
               // join.
               case _ => join
             }
