@@ -56,5 +56,8 @@ case class AvroTable(
   // Avro has no record-level parse verdict: a record is either decodable or the read fails, and
   // there is no mode that drops or rewrites a record based on the columns asked for. The `mode`
   // option in AvroOptions is read by from_avro and schema_of_avro, not by this scan.
+  // `positionalFieldMatching` resolves a column against its position in the data schema rather
+  // than in the projection (SPARK-59108), so widening the projection does not move a column's
+  // Avro field either.
   override protected def supportsScanMerging: Boolean = true
 }
