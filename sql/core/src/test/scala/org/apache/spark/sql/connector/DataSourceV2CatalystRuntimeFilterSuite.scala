@@ -100,7 +100,7 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
-  test("transformed partition source cannot be declared fully pushed") {
+  test("Catalyst runtime filtering fixture fully pushes only identity partition sources") {
     val tbl = s"$catalogName.tbl_transformed_fully_pushed"
     val dim = s"$catalogName.dim_transformed_fully_pushed"
     withTable(tbl, dim) {
@@ -145,6 +145,29 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
           "attribute" -> "`s`.`part`",
           "method" -> "fullyPushedFilterAttributes()",
           "scanClass" -> scanClass,
+          "relationOutput" -> "\"STRUCT<id: INT, s: STRUCT<part: INT, other: INT>>\""),
+        sqlState = "KD000")
+    }
+  }
+
+  test("fully pushed root attribute outside filterAttributes -> rejected") {
+    val tbl = s"$catalogName.tbl_fully_pushed_root"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id INT, s STRUCT<part: INT, other: INT>) USING $v2Source")
+      val scanRelation = sql(s"SELECT * FROM $tbl").queryExecution.optimizedPlan.collectFirst {
+        case r: DataSourceV2ScanRelation => r
+      }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
+      val scan = new FullyPushedRootAttributeScan
+      val e = intercept[AnalysisException] {
+        scanRelation.copy(scan = scan).runtimeFilterAttrs
+      }
+      checkError(
+        exception = e,
+        condition = "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE.NOT_IN_FILTER_ATTRIBUTES",
+        parameters = Map(
+          "attribute" -> "`s`",
+          "method" -> "fullyPushedFilterAttributes()",
+          "scanClass" -> scan.getClass.getName,
           "relationOutput" -> "\"STRUCT<id: INT, s: STRUCT<part: INT, other: INT>>\""),
         sqlState = "KD000")
     }
@@ -221,17 +244,13 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       val scanClass = classOf[MissingFullyPushedFilterAttributeScan].getName
       checkError(
         exception = e,
-        condition = "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE.CANNOT_RESOLVE",
+        condition = "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE.NOT_IN_FILTER_ATTRIBUTES",
         parameters = Map(
           "attribute" -> "`missing`",
           "method" -> "fullyPushedFilterAttributes()",
           "scanClass" -> scanClass,
           "relationOutput" -> "\"STRUCT<id: INT, part: INT>\""),
         sqlState = "KD000")
-      checkError(
-        exception = e.getCause.asInstanceOf[AnalysisException],
-        condition = "_LEGACY_ERROR_TEMP_1137",
-        parameters = Map("name" -> "missing", "outputStr" -> "id,part"))
     }
   }
 
@@ -440,27 +459,28 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
-  test("filter on column outside filterAttributes -> not pushed") {
+  test("fully pushed attribute outside filterAttributes -> rejected") {
     val tbl = s"$catalogName.tbl4"
-    val dim = s"$catalogName.dim4"
-    withTable(tbl, dim) {
+    withTable(tbl) {
       sql(s"CREATE TABLE $tbl (id INT, p1 INT, p2 INT) USING $v2Source " +
         "PARTITIONED BY (p1, p2) " +
-        "TBLPROPERTIES('filter-attributes' = 'p1')")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, $i, 10)")
+        "TBLPROPERTIES('filter-attributes' = 'p1', 'fully-pushed-filter-attributes' = 'p2')")
+      val df = sql(s"SELECT * FROM $tbl")
+      val scanClass = df.queryExecution.optimizedPlan.collectFirst {
+        case r: DataSourceV2ScanRelation => r.scan.getClass.getName
+      }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
+      val e = intercept[AnalysisException] {
+        df.queryExecution.executedPlan
       }
-      sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
-      sql(s"INSERT INTO $dim VALUES (10)")
-
-      // p2 is a partition column but is not declared filterable, so no runtime filter is derived.
-      val df = sql(s"SELECT * FROM $tbl WHERE p2 = (SELECT max(val) FROM $dim)")
-      checkAnswer(df, (0 until 5).map(i => Row(i, i, 10)))
-
-      assert(collectBatchScan(df).runtimeFilters.isEmpty,
-        "Expected no runtime filters for a column outside filterAttributes")
-      assertPushedCatalystPredicates(df, 0)
-      assertScalarSubqueryEvaluatedAfterScan(df, expected = true)
+      checkError(
+        exception = e,
+        condition = "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE.NOT_IN_FILTER_ATTRIBUTES",
+        parameters = Map(
+          "attribute" -> "`p2`",
+          "method" -> "fullyPushedFilterAttributes()",
+          "scanClass" -> scanClass,
+          "relationOutput" -> "\"STRUCT<id: INT, p1: INT, p2: INT>\""),
+        sqlState = "KD000")
     }
   }
 
@@ -710,6 +730,21 @@ private class MissingFullyPushedFilterAttributeScan extends SupportsRuntimeCatal
 
   override def fullyPushedFilterAttributes(): Array[NamedReference] =
     Array(FieldReference("missing"))
+
+  override def filter(expressions: Array[Expression]): Unit = {}
+}
+
+/** A scan declaring a root struct fully pushed without declaring it filterable. */
+private class FullyPushedRootAttributeScan extends SupportsRuntimeCatalystFiltering {
+
+  override def readSchema(): StructType =
+    StructType.fromDDL("id INT, s STRUCT<part: INT, other: INT>")
+
+  override def filterAttributes(): Array[NamedReference] =
+    Array(FieldReference(Seq("s", "part")))
+
+  override def fullyPushedFilterAttributes(): Array[NamedReference] =
+    Array(FieldReference("s"))
 
   override def filter(expressions: Array[Expression]): Unit = {}
 }

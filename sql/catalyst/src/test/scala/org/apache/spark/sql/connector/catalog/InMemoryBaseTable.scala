@@ -786,10 +786,9 @@ abstract class InMemoryBaseTable(
     }
 
     /**
-     * The partition-key slot that `e` reads, or None if `e` reads no identity partition
-     * column. The path `e` reads is compared to each partition column's name parts component-wise
-     * with the resolver, so a quoted top-level column `a.b` cannot collide with a nested column
-     * `a`.`b`.
+     * The partition-key slot that `e` reads, or None if `e` reads no identity partition column.
+     * The path `e` reads is compared to each partition column's name parts component-wise with the
+     * resolver, so a quoted top-level column `a.b` cannot collide with a nested column `a`.`b`.
      */
     private def partitionAttrFor(
         e: CatalystExpression,
@@ -838,25 +837,24 @@ abstract class InMemoryBaseTable(
     }
 
     override def filter(filters: Array[Filter]): Unit = {
-      partitioning match {
-        case Array(IdentityTransform(ref)) =>
-          filters.foreach {
-            case In(attrName, values) if attrName == ref.toString =>
-              val matchingKeys = values.map { value =>
-                if (value != null) value.toString else null
-              }.toSet
-              this.data = this.data.filter(partition => {
-                val rows = partition.asInstanceOf[BufferedRows]
-                rows.key match {
-                  // null partitions are represented as Seq(null)
-                  case Seq(null) => matchingKeys.contains(null)
-                  case _ => matchingKeys.contains(rows.keyString())
-                }
-              })
+      if (partitioning.length == 1 && identityPartitionReferences.length == 1) {
+        val ref = identityPartitionReferences.head
+        filters.foreach {
+          case In(attrName, values) if attrName == ref.toString =>
+            val matchingKeys = values.map { value =>
+              if (value != null) value.toString else null
+            }.toSet
+            this.data = this.data.filter(partition => {
+              val rows = partition.asInstanceOf[BufferedRows]
+              rows.key match {
+                // null partitions are represented as Seq(null)
+                case Seq(null) => matchingKeys.contains(null)
+                case _ => matchingKeys.contains(rows.keyString())
+              }
+            })
 
-            case _ => // skip
-          }
-        case _ =>
+          case _ => // skip
+        }
       }
     }
   }

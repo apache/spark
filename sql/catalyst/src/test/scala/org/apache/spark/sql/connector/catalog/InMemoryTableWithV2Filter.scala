@@ -73,39 +73,38 @@ class InMemoryTableWithV2Filter(
     }
 
     override def filter(filters: Array[Predicate]): Unit = {
-      partitioning match {
-        case Array(IdentityTransform(ref)) =>
-          filters.foreach {
-            case p : Predicate if p.name().equals("IN") =>
-              if (p.children().length > 1) {
-                val filterRef = p.children()(0).asInstanceOf[FieldReference].references.head
-                if (filterRef.toString.equals(ref.toString)) {
-                  val matchingKeys =
-                    p.children().drop(1).map(_.asInstanceOf[LiteralValue[_]].value.toString).toSet
+      if (partitioning.length == 1 && identityPartitionReferences.length == 1) {
+        val ref = identityPartitionReferences.head
+        filters.foreach {
+          case p : Predicate if p.name().equals("IN") =>
+            if (p.children().length > 1) {
+              val filterRef = p.children()(0).asInstanceOf[FieldReference].references.head
+              if (filterRef.toString.equals(ref.toString)) {
+                val matchingKeys =
+                  p.children().drop(1).map(_.asInstanceOf[LiteralValue[_]].value.toString).toSet
+                data = data.filter(partition => {
+                  val key = partition.asInstanceOf[BufferedRows].keyString()
+                  matchingKeys.contains(key)
+                })
+              }
+            }
+          case p : Predicate if p.name().equals("=") =>
+            if (p.children().length == 2) {
+              val filterRef = p.children()(0).asInstanceOf[FieldReference].references.head
+              if (filterRef.toString.equals(ref.toString)) {
+                val matchingKey = p.children()(1).asInstanceOf[LiteralValue[_]].value
+                if (matchingKey != null) {
                   data = data.filter(partition => {
                     val key = partition.asInstanceOf[BufferedRows].keyString()
-                    matchingKeys.contains(key)
+                    key == matchingKey.toString
                   })
+                } else {
+                  data = Seq.empty // NULL = anything is always false
                 }
               }
-            case p : Predicate if p.name().equals("=") =>
-              if (p.children().length == 2) {
-                val filterRef = p.children()(0).asInstanceOf[FieldReference].references.head
-                if (filterRef.toString.equals(ref.toString)) {
-                  val matchingKey = p.children()(1).asInstanceOf[LiteralValue[_]].value
-                  if (matchingKey != null) {
-                    data = data.filter(partition => {
-                      val key = partition.asInstanceOf[BufferedRows].keyString()
-                      key == matchingKey.toString
-                    })
-                  } else {
-                    data = Seq.empty // NULL = anything is always false
-                  }
-                }
-              }
-            case _ => // Ignore unsupported predicate types
-          }
-        case _ =>
+            }
+          case _ => // Ignore unsupported predicate types
+        }
       }
     }
   }
