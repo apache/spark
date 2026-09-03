@@ -186,8 +186,10 @@ abstract class InMemoryBaseTable(
   private val metadataColumnNames = metadataColumns.map(_.name).toSet
 
   // Metadata column renaming is supported -- see [[InMemoryScanBuilder.pruneColumns]] and
-  // [[BatchScanBaseClass.createReaderFactory]] for implementation details.
-  override val canRenameConflictingMetadataColumns: Boolean = true
+  // [[BatchScanBaseClass.createReaderFactory]] for implementation details. Set the property to
+  // false to act like a connector that suppresses such conflicts instead of renaming them.
+  override val canRenameConflictingMetadataColumns: Boolean =
+    properties.getOrDefault("rename-conflicting-metadata-columns", "true").toBoolean
 
   private val allowUnsupportedTransforms =
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
