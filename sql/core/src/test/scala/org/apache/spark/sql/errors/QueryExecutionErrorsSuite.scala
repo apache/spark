@@ -29,9 +29,9 @@ import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
+import org.junit.jupiter.api.Assertions.{assertEquals, assertNotNull, assertNull}
 import org.mockito.Mockito.{mock, spy, when}
 import org.scalatest.time.SpanSugar._
-import org.junit.jupiter.api.Assertions.{assertEquals, assertNotNull, assertNull}
 
 import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoder, KryoData, Row, SaveMode}
