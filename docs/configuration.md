@@ -826,10 +826,22 @@ Apart from these, the following properties are also available, and may be useful
     Where both set the same variable, this one wins. An environment variable that Spark sets for a
     Python worker itself takes precedence over both.
     <br /><br />
-    Currently applied to the regular scalar Python UDF: its Arrow-optimized form, its non-Arrow
-    form, and the element-wise form a UDF takes inside the lambda of a higher-order function such
-    as <code>transform</code>. Other Python function families -- pandas UDFs, Python UDTFs, and the
-    streaming and listener paths -- do not receive it yet.
+    Applied to every Python worker the session launches for a Python function it supplied: scalar
+    UDFs in each of their forms, including Arrow-optimized, non-Arrow, pandas, iterator and the
+    element-wise form a UDF takes inside the lambda of a higher-order function such as
+    <code>transform</code>; <code>mapInPandas</code> and <code>mapInArrow</code>; grouped-map,
+    cogrouped-map, grouped-aggregate and window functions; Python UDTFs, both row and Arrow;
+    <code>applyInPandasWithState</code> and <code>transformWithState</code>; Python data sources,
+    including the workers that plan them and read a streaming source; and the
+    <code>foreachBatch</code> worker.
+    <br /><br />
+    A Spark Connect streaming query listener added with <code>addListener</code> runs its callbacks
+    in the client process rather than in a worker Spark launches, so no session environment applies
+    to it; the client's own environment is what such a callback observes.
+    <br /><br />
+    A worker that outlives the query that launched it keeps the values it started with. The
+    streaming paths launch one worker per query rather than one per batch, so a change made while a
+    streaming query is running reaches that query's worker only when the query is restarted.
     <br /><br />
     Names Spark reserves for itself are rejected: any name beginning with <code>SPARK_</code>,
     <code>PYSPARK_</code> or <code>PYTHON_WORKER_FACTORY_</code>, together with

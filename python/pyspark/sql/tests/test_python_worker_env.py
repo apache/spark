@@ -191,9 +191,9 @@ class PythonWorkerEnvMixin:
 
     # -- families that are not covered yet ------------------------------------
 
-    def test_map_in_pandas_does_not_receive_the_environment(self):
-        # mapInPandas has its own runner and is not in scope for this change. Asserted rather than
-        # left untested so that widening the scope has to update this test deliberately.
+    # -- the vectorized and specialized families -------------------------------
+
+    def test_env_var_reaches_map_in_pandas(self):
         import pandas as pd
 
         self._set_env("MAP_SETTING", "mapped")
@@ -206,9 +206,224 @@ class PythonWorkerEnvMixin:
                     yield pd.DataFrame({"value": [os.environ.get("MAP_SETTING", "<unset>")]})
 
             result = self.spark.range(1).mapInPandas(func, "value string").collect()
-            self.assertEqual(result[0]["value"], "<unset>")
+            self.assertEqual(result[0]["value"], "mapped")
         finally:
             self._unset_env("MAP_SETTING")
+
+    def test_env_var_reaches_map_in_arrow(self):
+        import pyarrow as pa
+
+        self._set_env("MAP_SETTING", "mapped")
+        try:
+
+            def func(iterator):
+                import os
+
+                for _ in iterator:
+                    yield pa.RecordBatch.from_pydict(
+                        {"value": [os.environ.get("MAP_SETTING", "<unset>")]}
+                    )
+
+            result = self.spark.range(1).mapInArrow(func, "value string").collect()
+            self.assertEqual(result[0]["value"], "mapped")
+        finally:
+            self._unset_env("MAP_SETTING")
+
+    def test_env_var_reaches_scalar_pandas_udf(self):
+        import pandas as pd
+
+        from pyspark.sql.functions import pandas_udf
+
+        self._set_env("PANDAS_SETTING", "vectorized")
+        try:
+
+            @pandas_udf("string")
+            def read_env(values: pd.Series) -> pd.Series:
+                import os
+
+                return values.map(lambda _: os.environ.get("PANDAS_SETTING", "<unset>"))
+
+            result = self.spark.range(1).select(read_env("id").alias("value")).collect()
+            self.assertEqual(result[0]["value"], "vectorized")
+        finally:
+            self._unset_env("PANDAS_SETTING")
+
+    def test_env_var_reaches_scalar_pandas_iter_udf(self):
+        from typing import Iterator
+
+        import pandas as pd
+
+        from pyspark.sql.functions import pandas_udf
+
+        self._set_env("PANDAS_SETTING", "iterated")
+        try:
+
+            @pandas_udf("string")
+            def read_env(batches: Iterator[pd.Series]) -> Iterator[pd.Series]:
+                import os
+
+                value = os.environ.get("PANDAS_SETTING", "<unset>")
+                for batch in batches:
+                    yield batch.map(lambda _: value)
+
+            result = self.spark.range(1).select(read_env("id").alias("value")).collect()
+            self.assertEqual(result[0]["value"], "iterated")
+        finally:
+            self._unset_env("PANDAS_SETTING")
+
+    def test_env_var_reaches_apply_in_pandas(self):
+        import pandas as pd
+
+        self._set_env("GROUP_SETTING", "grouped")
+        try:
+
+            def func(pdf):
+                import os
+
+                return pd.DataFrame({"value": [os.environ.get("GROUP_SETTING", "<unset>")]})
+
+            result = self.spark.range(1).groupBy("id").applyInPandas(func, "value string").collect()
+            self.assertEqual(result[0]["value"], "grouped")
+        finally:
+            self._unset_env("GROUP_SETTING")
+
+    def test_env_var_reaches_cogrouped_apply_in_pandas(self):
+        # The cogrouped path has a runner of its own, so it is not covered by the grouped test.
+        import pandas as pd
+
+        self._set_env("COGROUP_SETTING", "cogrouped")
+        try:
+
+            def func(left, right):
+                import os
+
+                return pd.DataFrame({"value": [os.environ.get("COGROUP_SETTING", "<unset>")]})
+
+            left = self.spark.range(1)
+            right = self.spark.range(1)
+            result = (
+                left.groupBy("id")
+                .cogroup(right.groupBy("id"))
+                .applyInPandas(func, "value string")
+                .collect()
+            )
+            self.assertEqual(result[0]["value"], "cogrouped")
+        finally:
+            self._unset_env("COGROUP_SETTING")
+
+    def test_env_var_reaches_grouped_agg_pandas_udf(self):
+        import pandas as pd
+
+        from pyspark.sql.functions import pandas_udf
+
+        self._set_env("AGG_SETTING", "aggregated")
+        try:
+
+            @pandas_udf("string")
+            def read_env(values: pd.Series) -> str:
+                import os
+
+                return os.environ.get("AGG_SETTING", "<unset>")
+
+            result = self.spark.range(1).groupBy("id").agg(read_env("id").alias("value")).collect()
+            self.assertEqual(result[0]["value"], "aggregated")
+        finally:
+            self._unset_env("AGG_SETTING")
+
+    def test_env_var_reaches_window_agg_pandas_udf(self):
+        import pandas as pd
+
+        from pyspark.sql.functions import pandas_udf
+        from pyspark.sql.window import Window
+
+        self._set_env("WINDOW_SETTING", "windowed")
+        try:
+
+            @pandas_udf("string")
+            def read_env(values: pd.Series) -> str:
+                import os
+
+                return os.environ.get("WINDOW_SETTING", "<unset>")
+
+            window = Window.partitionBy("id").rowsBetween(
+                Window.unboundedPreceding, Window.unboundedFollowing
+            )
+            result = (
+                self.spark.range(1).select(read_env("id").over(window).alias("value")).collect()
+            )
+            self.assertEqual(result[0]["value"], "windowed")
+        finally:
+            self._unset_env("WINDOW_SETTING")
+
+    def test_env_var_reaches_python_udtf(self):
+        from pyspark.sql.functions import udtf
+
+        self._set_env("UDTF_SETTING", "tabular")
+        try:
+
+            @udtf(returnType="value string", useArrow=False)
+            class ReadEnv:
+                def eval(self):
+                    import os
+
+                    yield (os.environ.get("UDTF_SETTING", "<unset>"),)
+
+            self.assertEqual(ReadEnv().collect()[0]["value"], "tabular")
+        finally:
+            self._unset_env("UDTF_SETTING")
+
+    def test_env_var_reaches_arrow_python_udtf(self):
+        # The Arrow UDTF has a runner of its own, separate from the row UDTF's.
+        from pyspark.sql.functions import udtf
+
+        self._set_env("UDTF_SETTING", "tabular")
+        try:
+
+            @udtf(returnType="value string", useArrow=True)
+            class ReadEnv:
+                def eval(self):
+                    import os
+
+                    yield (os.environ.get("UDTF_SETTING", "<unset>"),)
+
+            self.assertEqual(ReadEnv().collect()[0]["value"], "tabular")
+        finally:
+            self._unset_env("UDTF_SETTING")
+
+    def test_env_var_reaches_a_data_source_planning_worker(self):
+        """A planning worker is a separate process from the ones that run a query's partitions.
+
+        The variable is read in `schema()`, which runs in that planning worker, and decides the
+        column name. Asserting on the resulting schema therefore fails if only the execution-side
+        workers received the environment.
+        """
+        from pyspark.sql.datasource import DataSource, DataSourceReader
+
+        self._set_env("PLANNING_SETTING", "planned")
+        try:
+
+            class EnvNamedReader(DataSourceReader):
+                def read(self, partition):
+                    yield ("row",)
+
+            class EnvNamedDataSource(DataSource):
+                @classmethod
+                def name(cls):
+                    return "env_named_source"
+
+                def schema(self):
+                    import os
+
+                    return "{} string".format(os.environ.get("PLANNING_SETTING", "unset"))
+
+                def reader(self, schema):
+                    return EnvNamedReader()
+
+            self.spark.dataSource.register(EnvNamedDataSource)
+            df = self.spark.read.format("env_named_source").load()
+            self.assertEqual(df.schema.fieldNames(), ["planned"])
+        finally:
+            self._unset_env("PLANNING_SETTING")
 
     # -- rejection ------------------------------------------------------------
 

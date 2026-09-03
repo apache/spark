@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.python.{PythonArrowInput, PythonArrowOutput, PythonUDFRunner}
+import org.apache.spark.sql.execution.python.{PythonArrowInput, PythonArrowOutput, PythonUDFRunner, PythonWorkerEnvironment}
 import org.apache.spark.sql.execution.python.streaming.ApplyInPandasWithStatePythonRunner.{COUNT_COLUMN_SCHEMA_FROM_PYTHON_WORKER, InType, OutType, OutTypeForState, STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER}
 import org.apache.spark.sql.execution.python.streaming.ApplyInPandasWithStateWriter.STATE_METADATA_SCHEMA
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl
@@ -71,6 +71,12 @@ class ApplyInPandasWithStatePythonRunner(
   with PythonArrowInput[InType]
   with PythonArrowOutput[OutType] {
   ArrowUtils.failDuplicatedFieldNames(inputSchema)
+
+  // Installed at worker launch, so a cached plan cannot pin an older environment. A streaming
+  // query launches one worker rather than one per batch, so its worker keeps the values the query
+  // started with.
+  override val envVars: java.util.Map[String, String] =
+    PythonWorkerEnvironment.mergeValidated(funcs.head._1.funcs.head.envVars, SQLConf.get)
 
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(

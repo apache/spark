@@ -34,7 +34,7 @@ import org.apache.spark.internal.config.Python.{PYTHON_UNIX_DOMAIN_SOCKET_DIR, P
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.python.{BasicPythonArrowOutput, PythonArrowInput, PythonUDFRunner}
+import org.apache.spark.sql.execution.python.{BasicPythonArrowOutput, PythonArrowInput, PythonUDFRunner, PythonWorkerEnvironment}
 import org.apache.spark.sql.execution.python.streaming.TransformWithStateInPySparkPythonRunner.{GroupedInType, InType}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{DriverStatefulProcessorHandleImpl, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.internal.SQLConf
@@ -237,6 +237,12 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
   with Logging {
   ArrowUtils.failDuplicatedFieldNames(schema)
 
+  // Installed at worker launch, so a cached plan cannot pin an older environment. A streaming
+  // query launches one worker rather than one per batch, so its worker keeps the values the query
+  // started with.
+  override val envVars: java.util.Map[String, String] =
+    PythonWorkerEnvironment.mergeValidated(funcs.head._1.funcs.head.envVars, SQLConf.get)
+
   protected val sqlConf = SQLConf.get
   protected val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch
   protected val arrowMaxBytesPerBatch = sqlConf.arrowMaxBytesPerBatch
@@ -304,7 +310,8 @@ class TransformWithStateInPySparkPythonPreInitRunner(
     workerModule: String,
     groupingKeySchema: StructType,
     processorHandleImpl: DriverStatefulProcessorHandleImpl)
-  extends StreamingPythonRunner(func, "", "", workerModule)
+  extends StreamingPythonRunner(
+    func, "", "", workerModule, PythonWorkerEnvironment.readValidated(SQLConf.get))
   with TransformWithStateInPySparkPythonRunnerUtils
   with Logging {
   protected val sqlConf = SQLConf.get

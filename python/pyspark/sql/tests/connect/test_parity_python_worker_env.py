@@ -36,6 +36,58 @@ class PythonWorkerEnvParityTests(PythonWorkerEnvMixin, ReusedConnectTestCase):
         finally:
             self.spark.conf.unset(PREFIX + "API_TOKEN")
 
+    def test_env_var_reaches_a_foreach_batch_worker(self):
+        """`foreachBatch` runs in a worker started by the server for the whole query.
+
+        The worker cannot return a value, so it records what it observed in a file. A file source
+        with `availableNow` keeps the query bounded rather than relying on wall-clock timing.
+        """
+        import os
+        import shutil
+        import tempfile
+
+        source_dir = tempfile.mkdtemp()
+        observed_dir = tempfile.mkdtemp()
+        self._set_env("BATCH_SETTING", "batched")
+        try:
+            with open(os.path.join(source_dir, "input.txt"), "w") as handle:
+                handle.write("a row\n")
+
+            def record(batch_df, batch_id):
+                import os
+
+                path = os.path.join(observed_dir, "observed-{}.txt".format(batch_id))
+                with open(path, "w") as out:
+                    out.write(os.environ.get("BATCH_SETTING", "<unset>"))
+
+            query = (
+                self.spark.readStream.format("text")
+                .load(source_dir)
+                .writeStream.foreachBatch(record)
+                .trigger(availableNow=True)
+                .start()
+            )
+            try:
+                query.awaitTermination(timeout=120)
+            finally:
+                query.stop()
+
+            observed = sorted(os.listdir(observed_dir))
+            self.assertNotEqual(observed, [], "foreachBatch never ran a batch")
+            with open(os.path.join(observed_dir, observed[0])) as handle:
+                self.assertEqual(handle.read(), "batched")
+        finally:
+            self._unset_env("BATCH_SETTING")
+            shutil.rmtree(source_dir, ignore_errors=True)
+            shutil.rmtree(observed_dir, ignore_errors=True)
+
+    # There is deliberately no streaming-listener test here. PySpark's `addListener` appends to a
+    # client-side `StreamingQueryListenerBus`: the server streams events back and the callback runs
+    # in the client process, not in a worker Spark launched, so no session environment applies to
+    # it. The server-side `PythonStreamingQueryListener` does launch a worker and does receive the
+    # environment, but it is reached only by the `add_listener` command that sends a pickled
+    # listener to the server, which PySpark no longer uses -- so it cannot be driven from here.
+
 
 if __name__ == "__main__":
     from pyspark.testing import main

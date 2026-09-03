@@ -23,6 +23,7 @@ import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, SimplePythonFunction}
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.expressions.PythonUDTF
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.internal.StaticSQLConf
@@ -124,6 +125,54 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
       jobArtifactUUID = None,
       sessionUUID = sessionUUID,
       inputColumnIndices = Array(0)).envVars.asScala.toMap
+  }
+
+  /**
+   * The environment the Arrow UDTF runner would hand to a worker. It declares its own `envVars`
+   * rather than inheriting one, so it needs its own test.
+   */
+  private def arrowUDTFRunnerEnv(
+      evalType: Int = PythonEvalType.SQL_ARROW_TABLE_UDF,
+      functionEnv: Map[String, String] = Map.empty,
+      sessionUUID: Option[String] = None): Map[String, String] = {
+    val udtf = PythonUDTF(
+      name = "udtf",
+      func = functionWith(functionEnv),
+      elementSchema = udfSchema,
+      pickledAnalyzeResult = None,
+      children = Seq.empty,
+      evalType = evalType,
+      udfDeterministic = true)
+    new ArrowPythonUDTFRunner(
+      udtf = udtf,
+      evalType = evalType,
+      argMetas = argMetas.head,
+      schema = udfSchema,
+      timeZoneId = "UTC",
+      largeVarTypes = false,
+      pythonRunnerConf = Map.empty,
+      pythonMetrics = Map.empty[String, SQLMetric],
+      jobArtifactUUID = None,
+      sessionUUID = sessionUUID).envVars.asScala.toMap
+  }
+
+  /** The environment the cogrouped-map runner would hand to a worker. */
+  private def coGroupedRunnerEnv(
+      evalType: Int = PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      functionEnv: Map[String, String] = Map.empty,
+      sessionUUID: Option[String] = None): Map[String, String] = {
+    new CoGroupedArrowPythonRunner(
+      funcs = chained(functionEnv),
+      evalType = evalType,
+      argOffsets = Array(Array(0)),
+      leftSchema = udfSchema,
+      rightSchema = udfSchema,
+      timeZoneId = "UTC",
+      largeVarTypes = false,
+      pythonRunnerConf = Map.empty,
+      pythonMetrics = Map.empty[String, SQLMetric],
+      jobArtifactUUID = None,
+      sessionUUID = sessionUUID).envVars.asScala.toMap
   }
 
   /** Overrides a cluster-level limit for the duration of `body`. */
@@ -414,12 +463,20 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
   // The evaluation types in scope
   // ---------------------------------------------------------------------------
 
-  test("SPARK-58752: appliesTo covers every form of the regular scalar Python UDF") {
+  test("SPARK-58752: every form of the regular scalar Python UDF installs the environment") {
     // A UDF inside a higher-order function's lambda is lifted to the element-wise type by
     // `ExtractPythonUDFFromLambda`, and that is on by default, so it is the same UDF to the user.
-    assert(PythonWorkerEnvironment.appliesTo(PythonEvalType.SQL_BATCHED_UDF))
-    assert(PythonWorkerEnvironment.appliesTo(PythonEvalType.SQL_ARROW_BATCHED_UDF))
-    assert(PythonWorkerEnvironment.appliesTo(PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF))
+    withSQLConf(key("FOO") -> "bar") {
+      Seq(PythonEvalType.SQL_BATCHED_UDF, PythonEvalType.SQL_ARROW_BATCHED_UDF).foreach {
+        evalType =>
+          assert(batchedRunnerEnv(evalType = evalType).get("FOO") === Some("bar"))
+      }
+      Seq(
+        PythonEvalType.SQL_ARROW_BATCHED_UDF,
+        PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF).foreach { evalType =>
+        assert(arrowRunnerEnv(evalType = evalType).get("FOO") === Some("bar"))
+      }
+    }
   }
 
   test("SPARK-58752: an element-wise scalar UDF runner installs the session environment") {
@@ -430,13 +487,19 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-58752: the pandas element-wise types stay out of scope") {
-    // Lifting a pandas or Arrow UDF produces its own element-wise type, which keeps that family's
-    // batching contract and is not covered here.
-    Seq(
-      PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF,
-      PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF).foreach { evalType =>
-      assert(!PythonWorkerEnvironment.appliesTo(evalType), s"evalType $evalType is not in scope")
+  test("SPARK-58752: the pandas and Arrow element-wise types install the environment") {
+    // Lifting a pandas or Arrow UDF out of a lambda produces that family's own element-wise type.
+    // These reach the same runner as their batched siblings, so they are covered with it.
+    withSQLConf(key("FOO") -> "bar") {
+      Seq(
+        PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF,
+        PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF).foreach { evalType =>
+        assert(
+          arrowRunnerEnv(evalType = evalType).get("FOO") === Some("bar"),
+          s"evalType $evalType did not install the environment")
+      }
     }
   }
 
@@ -534,21 +597,71 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-58752: appliesTo excludes the families this change does not cover") {
-    // Widening the scope has to come with a test on the widened path, so these are pinned here to
-    // make an accidental widening fail rather than ship silently.
-    Seq(
-      PythonEvalType.SQL_SCALAR_PANDAS_UDF,
-      PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-      PythonEvalType.SQL_TABLE_UDF,
-      PythonEvalType.SQL_ARROW_TABLE_UDF).foreach { evalType =>
-      assert(!PythonWorkerEnvironment.appliesTo(evalType), s"evalType $evalType is not in scope")
+  test("SPARK-58752: the vectorized and specialized families install the environment") {
+    // The scope is the set of runners that install the environment, not a list of evaluation
+    // types, so this walks the types each shared runner serves. A type added to one of these
+    // runners is covered by construction; a type given a new runner is not, and needs a case here
+    // alongside the merge in that runner.
+    withSQLConf(key("FOO") -> "bar") {
+      Seq(
+        PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+        PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
+        PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_MAP_ARROW_ITER_UDF).foreach { evalType =>
+        assert(
+          arrowRunnerEnv(evalType = evalType).get("FOO") === Some("bar"),
+          s"evalType $evalType did not install the environment")
+      }
+      // The row UDTF shares the non-Arrow scalar runner.
+      assert(
+        batchedRunnerEnv(evalType = PythonEvalType.SQL_TABLE_UDF).get("FOO") === Some("bar"))
     }
   }
 
   // ---------------------------------------------------------------------------
   // Installation by the runners
   // ---------------------------------------------------------------------------
+
+  test("SPARK-58752: the Arrow UDTF runner installs the session environment") {
+    withSQLConf(key("FOO") -> "bar") {
+      Seq(PythonEvalType.SQL_ARROW_TABLE_UDF, PythonEvalType.SQL_ARROW_UDTF).foreach { evalType =>
+        assert(arrowUDTFRunnerEnv(evalType = evalType).get("FOO") === Some("bar"))
+      }
+    }
+  }
+
+  test("SPARK-58752: the cogrouped-map runner installs the session environment") {
+    withSQLConf(key("FOO") -> "bar") {
+      Seq(
+        PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+        PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF).foreach { evalType =>
+        assert(coGroupedRunnerEnv(evalType = evalType).get("FOO") === Some("bar"))
+      }
+    }
+  }
+
+  test("SPARK-58752: a runner keeps the function's own variables alongside the session's") {
+    // The runners added here take the same merge as the scalar ones, so the precedence rule that
+    // `mergeToJavaMap` implements has to hold through each of them too.
+    withSQLConf(key("FROM_SESSION") -> "session", key("BOTH") -> "session") {
+      val functionEnv = Map("FROM_FUNCTION" -> "function", "BOTH" -> "function")
+      Seq(
+        arrowUDTFRunnerEnv(functionEnv = functionEnv),
+        coGroupedRunnerEnv(functionEnv = functionEnv)).foreach { env =>
+        assert(env.get("FROM_FUNCTION") === Some("function"))
+        assert(env.get("FROM_SESSION") === Some("session"))
+        assert(env.get("BOTH") === Some("session"))
+      }
+    }
+  }
 
   test("SPARK-58752: a non-Arrow scalar UDF runner installs the session environment") {
     withSQLConf(key("FOO") -> "bar") {
@@ -569,14 +682,17 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-58752: a runner outside the scope installs nothing") {
+  test("SPARK-58752: the evaluation type no longer decides whether a runner installs anything") {
+    // These three combinations installed nothing while the scope was an evaluation-type allowlist,
+    // even though the runner itself was already on the path. Keeping them asserted here records
+    // that the allowlist, not the runner, was what held them back.
     withSQLConf(key("FOO") -> "bar") {
-      // Same class as the scalar UDF runner, so only the evaluation type keeps UDTFs out.
-      assert(batchedRunnerEnv(evalType = PythonEvalType.SQL_TABLE_UDF).get("FOO").isEmpty)
-      // Same for the Arrow hierarchy, which the pandas and window paths share.
-      assert(arrowRunnerEnv(evalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF).get("FOO").isEmpty)
+      assert(batchedRunnerEnv(evalType = PythonEvalType.SQL_TABLE_UDF).get("FOO") === Some("bar"))
       assert(
-        columnarArrowRunnerEnv(evalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF).get("FOO").isEmpty)
+        arrowRunnerEnv(evalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF).get("FOO") === Some("bar"))
+      assert(
+        columnarArrowRunnerEnv(evalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF)
+          .get("FOO") === Some("bar"))
     }
   }
 
@@ -613,11 +729,19 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-58752: an invalid environment does not fail a runner outside the scope") {
+  test("SPARK-58752: an invalid environment now fails every runner, not only the scalar ones") {
+    // Validation is part of installing the environment, so widening which runners install it
+    // widens which ones an invalid environment can fail. A family that previously ignored such an
+    // environment now rejects it, which is the intended cost of covering it.
     withSQLConf(key("1INVALID") -> "x") {
-      // Validation is part of installing the environment, so a family that receives none is
-      // unaffected by an environment it will never see.
-      assert(batchedRunnerEnv(evalType = PythonEvalType.SQL_TABLE_UDF).isEmpty)
+      Seq(
+        () => batchedRunnerEnv(evalType = PythonEvalType.SQL_TABLE_UDF),
+        () => arrowRunnerEnv(evalType = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF),
+        () => arrowUDTFRunnerEnv(),
+        () => coGroupedRunnerEnv()).foreach { build =>
+        val ex = intercept[SparkException](build())
+        assert(ex.getCondition === "INVALID_SPARK_CONFIG.INVALID_PYTHON_WORKER_ENV_VAR_NAME")
+      }
     }
   }
 

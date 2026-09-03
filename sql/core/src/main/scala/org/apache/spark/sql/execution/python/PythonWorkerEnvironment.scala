@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.python
 import java.nio.charset.StandardCharsets
 
 import org.apache.spark.{SparkEnv, SparkException}
-import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
@@ -35,7 +34,20 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
  *
  * It is installed when a worker is launched rather than when a function is built, so a worker
  * receives the session's values as of the query that launched it and a cached plan cannot pin an
- * older set.
+ * older set. A worker that outlives the query that launched it keeps the values it started with:
+ * the streaming paths launch one worker per query rather than one per batch, so a change made
+ * while a streaming query is running reaches that query's worker only when it is restarted.
+ *
+ * Every Python worker a session launches for a Python function that session supplied receives the
+ * environment. That covers scalar UDFs in all serialization modes, grouped and cogrouped map,
+ * grouped-aggregate and window functions, `mapInPandas` and `mapInArrow`, UDTFs both row and
+ * Arrow, the stateful `applyInPandasWithState` and `transformWithState` paths, Python data sources
+ * including the planning and streaming-reader workers, and the `foreachBatch` worker. A Spark
+ * Connect listener added through `addListener` runs its callbacks in the client process rather
+ * than in a worker, so no environment applies to it; the server-side `PythonStreamingQueryListener`
+ * does launch a worker and does receive one. The scope is the set of runners that install it,
+ * not a list of evaluation types, so an evaluation type added to a runner already covered is
+ * covered with it.
  *
  * Names are case-sensitive, so `FOO` and `foo` are distinct variables. Windows process
  * environments are case-insensitive, so what a worker observes there is the platform's business.
@@ -107,7 +119,7 @@ private[sql] object PythonWorkerEnvironment {
   def read(conf: SQLConf): Map[String, String] = extract(conf.getAllConfs)
 
   /** The environment carried by `conf`, rejected if it is malformed or oversized. */
-  private[python] def readValidated(conf: SQLConf): Map[String, String] = {
+  private[sql] def readValidated(conf: SQLConf): Map[String, String] = {
     val variables = read(conf)
     validate(variables)
     variables
@@ -231,27 +243,6 @@ private[sql] object PythonWorkerEnvironment {
         validate(extract(conf.getAll) + (key.substring(confPrefix.length) -> newValue))
       }
     }
-  }
-
-  /**
-   * Whether a Python function with this evaluation type receives the session's environment.
-   *
-   * Scoped to the regular scalar Python UDF, which reaches a worker under three evaluation types
-   * and is one thing to the user in all of them. All three are supported rather than all three
-   * being active at once: `spark.sql.execution.pythonUDF.arrow.enabled` selects one of the batched
-   * pair, which are alternatives, and the element-wise type appears only after
-   * `ExtractPythonUDFFromLambda` lifts a UDF out of the lambda of a higher-order function such as
-   * `transform`. Each is reachable without changing a default, so omitting any one would leave the
-   * feature inert for some ordinary UDF.
-   *
-   * The pandas and Arrow families have their own element-wise types and stay out of scope, as do
-   * UDTFs and the streaming paths, until those runners are tested.
-   */
-  def appliesTo(evalType: Int): Boolean = evalType match {
-    case PythonEvalType.SQL_BATCHED_UDF | PythonEvalType.SQL_ARROW_BATCHED_UDF |
-        PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF =>
-      true
-    case _ => false
   }
 
   /**

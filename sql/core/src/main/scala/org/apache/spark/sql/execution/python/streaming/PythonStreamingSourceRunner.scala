@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.streaming.{Offset, ReadAllAvailable, ReadLimit}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.python.PythonStreamingSourceReadLimit
+import org.apache.spark.sql.execution.python.PythonWorkerEnvironment
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
@@ -79,7 +80,10 @@ class PythonStreamingSourceRunner(
   private val bufferSize: Int = conf.get(BUFFER_SIZE)
   private val authSocketTimeout = conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
 
-  private val envVars: java.util.Map[String, String] = func.envVars
+  // Installed at worker launch. This runner serves a streaming query, which launches one
+  // worker rather than one per batch, so its worker keeps the values the query started with.
+  private val envVars: java.util.Map[String, String] =
+    PythonWorkerEnvironment.mergeValidated(func.envVars, SQLConf.get)
   private val pythonExec: String = func.pythonExec
   private var pythonWorker: Option[PythonWorker] = None
   private var pythonWorkerFactory: Option[PythonWorkerFactory] = None
