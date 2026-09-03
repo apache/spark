@@ -493,7 +493,7 @@ class AnyTimestampNanoType(DatetimeType):
     Super class of the nanosecond-capable timestamp data types
     :class:`TimestampNTZNanosType` and :class:`TimestampLTZNanosType`.
 
-    .. versionadded:: 5.0.0
+    .. versionadded:: 4.4.0
     """
 
     MIN_PRECISION: int = 7
@@ -571,7 +571,7 @@ class TimestampNTZNanosType(AnyTimestampNanoType):
     Spark Connect data path -- is not yet supported and raises
     ``UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION``; it is planned as a follow-up.
 
-    .. versionadded:: 5.0.0
+    .. versionadded:: 4.4.0
     """
 
     _sqlTypeName = "timestamp_ntz"
@@ -604,7 +604,7 @@ class TimestampLTZNanosType(AnyTimestampNanoType):
     Carries the same microsecond-only Python boundary as :class:`TimestampNTZNanosType`; see the
     notes there.
 
-    .. versionadded:: 5.0.0
+    .. versionadded:: 4.4.0
     """
 
     _sqlTypeName = "timestamp_ltz"
