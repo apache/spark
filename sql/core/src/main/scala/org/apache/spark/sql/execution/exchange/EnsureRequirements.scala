@@ -660,12 +660,21 @@ case class EnsureRequirements(
                 log"distribution.")
               replicateRightSide = false
             } else {
-              // In partially clustered distribution, we should use un-grouped partition values
-              val (partiallyClusteredChild, partiallyClusteredSpec) = if (replicateLeftSide) {
-                (unwrappedRight, rightSpec)
-              } else {
-                (unwrappedLeft, leftSpec)
-              }
+              // In partially clustered distribution, we should use un-grouped partition values.
+              // The positions projecting them come from the innermost grouping when there is
+              // one: like in `applyGroupPartitions`, they were computed against the raw
+              // partition keys, while the spec's were computed against the node's already
+              // projected report on a re-run.
+              val (partiallyClusteredChild, partiallyClusteredPositions) =
+                if (replicateLeftSide) {
+                  (unwrappedRight,
+                    innermostGroupPartition(right).flatMap(_._1.joinKeyPositions)
+                      .orElse(rightSpec.joinKeyPositions))
+                } else {
+                  (unwrappedLeft,
+                    innermostGroupPartition(left).flatMap(_._1.joinKeyPositions)
+                      .orElse(leftSpec.joinKeyPositions))
+                }
               // The pre-alignment plan of the side that keeps its splits: its partitioning
               // still holds the original partition keys, one per input split.
               val originalPartitioning =
@@ -674,7 +683,7 @@ case class EnsureRequirements(
               // otherwise `createKeyedShuffleSpec()` would have returned `None`.
               val originalKeyedPartitioning =
                 originalPartitioning.collectFirst { case k: KeyedPartitioning => k }.get
-              val projectedOriginalPartitionKeys = partiallyClusteredSpec.joinKeyPositions
+              val projectedOriginalPartitionKeys = partiallyClusteredPositions
                 .fold(originalKeyedPartitioning.partitionKeys)(
                   originalKeyedPartitioning.projectKeys(_)._2)
 
@@ -741,11 +750,11 @@ case class EnsureRequirements(
    * different operator, and reusing it would move that operator's alignment. Instrumenting the
    * descent over `KeyGroupedPartitioningSuite`, the non-`SortExec` shapes hiding a node are
    * `Project > SortMergeJoin > Sort > GroupPartitions` and `Project > Filter > Window >
-   * WindowGroupLimit`, where refusing to descend is right every time. A global `SortExec` also
-   * stops the descent: it requires `OrderedDistribution`, which a `KeyedPartitioning` can
-   * satisfy (behind `spark.sql.sources.v2.bucketing.sorting.enabled`) through a
-   * `GroupPartitionsExec` built to emit the partition keys in sorted order, and reusing that
-   * node for a join would destroy the ordering it exists to provide.
+   * WindowGroupLimit > GroupPartitions`, where refusing to descend is right every time. A global
+   * `SortExec` also stops the descent: it requires `OrderedDistribution`, which a
+   * `KeyedPartitioning` can satisfy (behind `spark.sql.sources.v2.bucketing.sorting.enabled`)
+   * through a `GroupPartitionsExec` built to emit the partition keys in sorted order, and
+   * reusing that node for a join would destroy the ordering it exists to provide.
    */
   private def innermostGroupPartition(
       plan: SparkPlan): Option[(GroupPartitionsExec, SparkPlan => SparkPlan)] = plan match {
@@ -805,9 +814,8 @@ case class EnsureRequirements(
   /**
    * Applies or updates `GroupPartitionsExec` with the given parameters.
    *
-   * `GroupPartitionsExec` can be either the given plan node (child of the join inserted by
-   * `EnsureRequirement`) if the original child didn't satisfy the distribution requirement; or we
-   * can create a new one specifically for this join.
+   * Reuses the node this rule inserted over the join child in an earlier pass, per the descent
+   * of [[innermostGroupPartition]], and creates a new one when the child carries none.
    */
   private def applyGroupPartitions(
       plan: SparkPlan,

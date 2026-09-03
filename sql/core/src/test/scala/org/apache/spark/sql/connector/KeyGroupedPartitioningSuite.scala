@@ -3515,17 +3515,18 @@ class KeyGroupedPartitioningSuite
       "EnsureRequirements re-runs") {
     // The smaller side is replicated, chosen by plan statistics on the first pass. On the re-run
     // the statistics must be read from the pre-alignment plan again: reading them from the
-    // aligned layout skips the statistics branch and deterministically flips the choice. The
-    // flipped side then distributes where it used to replicate, and since the smaller side holds
-    // more splits for id = 1 than the larger one, its raw splits overflow the expected count
-    // (`padTo` never truncates) and the join sides end up with an unequal number of partitions.
+    // aligned layout skips the statistics branch and deterministically flips the choice. With
+    // rows on both sides of the multi-split key the flip already gives wrong results on master;
+    // with the smaller side holding five splits for id = 1, the flip also turns it into the
+    // distributing side against an expected count of one, which `padTo` overflows into an
+    // unequal number of partitions per join side.
     val spColumns = Array(Column.create("id", LongType), Column.create("data", StringType))
     createTable("sp_small", spColumns, Array(identity("id")))
     sql("INSERT INTO testcat.ns.sp_small VALUES " +
-        "(1, 'a1'), (1, 'a2'), (1, 'a3'), (1, 'a4'), (1, 'a5')")
+        "(1, 'a1'), (1, 'a2'), (1, 'a3'), (1, 'a4'), (1, 'a5'), (2, 'b')")
     createTable("sp_large", spColumns, Array(identity("id")))
     sql("INSERT INTO testcat.ns.sp_large VALUES " +
-        "(1, 'p'), (2, 'q1'), (2, 'q2'), (2, 'q3'), (2, 'q4'), (2, 'q5')")
+        "(1, 'p'), (2, 'q1'), (2, 'q2'), (2, 'q3'), (2, 'q4'), (2, 'q5'), (3, 'r')")
 
     createTable("np1", spColumns, Array.empty)
     sql("INSERT INTO testcat.ns.np1 VALUES (7, 'x')")
@@ -3544,7 +3545,7 @@ class KeyGroupedPartitioningSuite
           |SELECT c.id AS k
           |FROM testcat.ns.np1 c JOIN testcat.ns.np2 d ON c.id = d.id
           |""".stripMargin)
-      checkAnswer(df, Seq.fill(5)(Row(1L)) :+ Row(7L))
+      checkAnswer(df, Seq.fill(5)(Row(1L)) ++ Seq.fill(5)(Row(2L)) :+ Row(7L))
 
       assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
         "the storage-partitioned join must stay shuffle-free")
@@ -3559,15 +3560,15 @@ class KeyGroupedPartitioningSuite
     // partition key, so the first pass stores positions that project the raw partition keys down
     // to the join key. On the re-run the incoming positions are computed against the node's
     // already projected report and must not overwrite the stored ones: applied to the raw keys
-    // again they would project a second time and group by the wrong key, every expected key
-    // misses and all rows are silently dropped. The query must also select `extra`, or column
-    // pruning drops it from the scan output and the scan stops reporting its partitioning at
-    // all.
+    // again they would project a second time and group by the wrong key, and every expected key
+    // misses. The second split for id = 1 makes the test fail on master too, where the stacked
+    // re-grouping duplicates rows. The query must also select `extra`, or column pruning drops
+    // it from the scan output and the scan stops reporting its partitioning at all.
     createTable("multi_part",
       Array(Column.create("id", LongType), Column.create("extra", LongType),
         Column.create("data", StringType)),
       Array(identity("extra"), identity("id")))
-    sql("INSERT INTO testcat.ns.multi_part VALUES (1, 10, 'x'), (2, 20, 'y')")
+    sql("INSERT INTO testcat.ns.multi_part VALUES (1, 10, 'x'), (1, 11, 'x2'), (2, 20, 'y')")
     createTable("single_part",
       Array(Column.create("id", LongType), Column.create("data", StringType)),
       Array(identity("id")))
@@ -3592,7 +3593,7 @@ class KeyGroupedPartitioningSuite
           |SELECT c.id AS k, 0L AS e
           |FROM testcat.ns.np1 c JOIN testcat.ns.np2 d ON c.id = d.id
           |""".stripMargin)
-      checkAnswer(df, Seq(Row(1L, 10L), Row(2L, 20L), Row(7L, 0L)))
+      checkAnswer(df, Seq(Row(1L, 10L), Row(1L, 11L), Row(2L, 20L), Row(7L, 0L)))
 
       assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
         "the storage-partitioned join must stay shuffle-free")
