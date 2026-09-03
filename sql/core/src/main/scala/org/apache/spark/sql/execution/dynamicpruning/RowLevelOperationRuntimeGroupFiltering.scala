@@ -53,32 +53,32 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case GroupBasedRowLevelOperation(replaceData, _, Some(cond),
-        ExtractV2Scan(scan: SupportsRuntimeV2Filtering))
-        if canInjectGroupFilters(cond, scan.filterAttributes) =>
+        r @ ExtractV2Scan(scan: SupportsRuntimeV2Filtering))
+        if canInjectGroupFilters(cond, r) =>
       injectGroupFilters(replaceData, cond, scan, scan.filterAttributes)
 
     case GroupBasedRowLevelOperation(replaceData, _, Some(cond),
-        ExtractV2Scan(scan: SupportsRuntimeCatalystFiltering))
-        if canInjectGroupFilters(cond, scan.filterAttributes()) =>
+        r @ ExtractV2Scan(scan: SupportsRuntimeCatalystFiltering))
+        if canInjectGroupFilters(cond, r) =>
       injectGroupFilters(replaceData, cond, scan, scan.filterAttributes())
 
     case DeltaBasedRowLevelOperation(writeDelta, _, Some(cond),
-        ExtractV2Scan(scan: SupportsRuntimeV2Filtering))
-        if canInjectGroupFilters(cond, scan.filterAttributes) =>
+        r @ ExtractV2Scan(scan: SupportsRuntimeV2Filtering))
+        if canInjectGroupFilters(cond, r) =>
       injectGroupFilters(writeDelta, cond, scan, scan.filterAttributes)
 
     case DeltaBasedRowLevelOperation(writeDelta, _, Some(cond),
-        ExtractV2Scan(scan: SupportsRuntimeCatalystFiltering))
-        if canInjectGroupFilters(cond, scan.filterAttributes()) =>
+        r @ ExtractV2Scan(scan: SupportsRuntimeCatalystFiltering))
+        if canInjectGroupFilters(cond, r) =>
       injectGroupFilters(writeDelta, cond, scan, scan.filterAttributes())
   }
 
   private def canInjectGroupFilters(
       cond: Expression,
-      filterAttrs: Array[NamedReference]): Boolean = {
+      scanRelation: DataSourceV2ScanRelation): Boolean = {
     conf.runtimeRowLevelOperationGroupFilterEnabled &&
       cond != TrueLiteral &&
-      filterAttrs.nonEmpty
+      scanRelation.runtimeFilterAttrs.nonEmpty
   }
 
   private def injectGroupFilters(

@@ -311,7 +311,7 @@ class InMemoryRowLevelOperationTable private (
     with CatalystRuntimeFilteringScan {
 
     override def filterAttributes(): Array[NamedReference] = {
-      partitioning.flatMap(_.references())
+      identityPartitionReferences
         .filter(ref => readSchema.findNestedField(
           ref.fieldNames.toImmutableArraySeq, resolver = SQLConf.get.resolver).isDefined)
     }

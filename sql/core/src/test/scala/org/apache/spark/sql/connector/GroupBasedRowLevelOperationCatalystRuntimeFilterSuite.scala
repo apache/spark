@@ -40,7 +40,7 @@ class GroupBasedRowLevelOperationCatalystRuntimeFilterSuite
     }
     assertCatalystGroupFilter(
       executedPlan,
-      expectedFilterAttrs = Seq("dep"),
+      expectedFilterPaths = Seq(Seq("dep")),
       expectedFilter = GroupFilter(scanSchema = "salary INT, dep STRING", groups = Seq("hr")))
 
     checkAnswer(
@@ -66,10 +66,9 @@ class GroupBasedRowLevelOperationCatalystRuntimeFilterSuite
     }
     assertCatalystGroupFilter(
       executedPlan,
-      expectedFilterAttrs = Seq("dep.name"),
+      expectedFilterPaths = Seq(Seq("dep", "name")),
       expectedFilter = GroupFilter(
-        scanSchema = "salary INT, dep STRUCT<name: STRING>", groups = Seq("hr")),
-      expectedFilterPaths = Some(Seq(Seq("dep", "name"))))
+        scanSchema = "salary INT, dep STRUCT<name: STRING>", groups = Seq("hr")))
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
