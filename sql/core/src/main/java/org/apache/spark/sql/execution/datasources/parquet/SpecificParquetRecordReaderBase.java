@@ -87,6 +87,13 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
   protected ParquetRowGroupReader reader;
 
+  /**
+   * The opened input file and parquet footer. Stored so subclasses can read footer-derived metadata
+   * without re-opening the file. Set by both {@link #initialize} overloads.
+   */
+  protected HadoopInputFile inputFile;
+  protected ParquetMetadata fileFooter;
+
   protected Configuration configuration;
 
   @Override
@@ -110,11 +117,14 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
         .build();
     ParquetFileReader fileReader;
     if (inputFile.isDefined() && fileFooter.isDefined() && inputStream.isDefined()) {
+      this.inputFile = inputFile.get();
+      this.fileFooter = fileFooter.get();
       fileReader = new ParquetFileReader(
-          inputFile.get(), fileFooter.get(), options, inputStream.get());
+          this.inputFile, this.fileFooter, options, inputStream.get());
     } else {
-      fileReader = new ParquetFileReader(
-          HadoopInputFile.fromPath(file, configuration), options);
+      this.inputFile = HadoopInputFile.fromPath(file, configuration);
+      fileReader = new ParquetFileReader(this.inputFile, options);
+      this.fileFooter = fileReader.getFooter();
     }
     this.reader = new ParquetRowGroupReaderImpl(fileReader);
     this.fileSchema = fileReader.getFileMetaData().getSchema();
@@ -180,10 +190,11 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       .builder(configuration, file)
       .withRange(0, length)
       .build();
-    ParquetFileReader fileReader = ParquetFileReader.open(
-      HadoopInputFile.fromPath(file, configuration), options);
+    this.inputFile = HadoopInputFile.fromPath(file, configuration);
+    ParquetFileReader fileReader = ParquetFileReader.open(this.inputFile, options);
+    this.fileFooter = fileReader.getFooter();
     this.reader = new ParquetRowGroupReaderImpl(fileReader);
-    this.fileSchema = fileReader.getFooter().getFileMetaData().getSchema();
+    this.fileSchema = fileFooter.getFileMetaData().getSchema();
 
     if (columns == null) {
       this.requestedSchema = fileSchema;
@@ -278,6 +289,16 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
      * Reads the next row group from this reader. Returns null if there is no more row group.
      */
     PageReadStore readNextRowGroup() throws IOException;
+
+    /**
+     * Returns the underlying {@link ParquetFileReader}, or null if this reader does not wrap one
+     * (e.g. test implementations). Callers can use this to access lower-level APIs such as
+     * {@code setRequestedSchema}, {@code readRowGroup(int)} and
+     * {@code readFilteredRowGroup(int, RowRanges)} which are needed for late materialization.
+     */
+    default ParquetFileReader getUnderlyingReader() {
+      return null;
+    }
   }
 
   private static class ParquetRowGroupReaderImpl implements ParquetRowGroupReader {
@@ -290,6 +311,11 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     @Override
     public PageReadStore readNextRowGroup() throws IOException {
       return reader.readNextFilteredRowGroup();
+    }
+
+    @Override
+    public ParquetFileReader getUnderlyingReader() {
+      return reader;
     }
 
     @Override

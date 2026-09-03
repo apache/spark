@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{PLAN_EXPRESSION, SCALAR_
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetStorageFilter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DoubleType, FloatType, StructType}
 import org.apache.spark.util.ArrayImplicits._
@@ -151,6 +152,63 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
     }
   }
 
+  /**
+   * Splits `afterScanFilters` into bloom-filter conjuncts that can be pushed to the storage layer
+   * for late materialization (returned as the first element) and the remaining filters that stay as
+   * a post-scan FilterExec (returned as the second element).
+   *
+   * Eligibility (statically checked here so the runtime never silently loses the filter):
+   *  - The storage-filter pushdown SQL conf is on.
+   *  - The file format is exactly [[ParquetFileFormat]]. Subclasses are excluded on purpose: they
+   *    may customize reading by overriding `buildReaderWithPartitionValues`, and attaching storage
+   *    filters would route the scan through `ParquetFileFormat`'s own reader instead, silently
+   *    dropping whatever the subclass does.
+   *  - The vectorized reader is feasible for the schema the reader will actually see, i.e.
+   *    `partitionSchema ++ outputDataSchema` -- the same schema `ParquetFileFormat.buildReader`
+   *    derives `enableVectorizedReader` from.
+   *  - The conjunct is a top-level [[BloomFilterMightContain]] (not nested under OR/NOT).
+   *  - The conjunct is deterministic. `ParquetStorageFilter.test` evaluates the predicate without
+   *    calling `BasePredicate.initialize(partitionIndex)`, which `GeneratePredicate` emits for a
+   *    `Nondeterministic` expression, so a non-deterministic conjunct would fail at task time. No
+   *    such bloom exists today, because the only producer is `InjectRuntimeFilter` and a join key
+   *    is deterministic, but this gate should not depend on a distant rule.
+   *  - The bloom's value-side references are projected data columns whose type the reader's value
+   *    copier supports (see [[ParquetStorageFilter.isSupportedKeyType]]).
+   *
+   * If any condition fails, ALL bloom filters stay in the second element to preserve the existing
+   * fallback behavior.
+   */
+  private def extractStorageFilters(
+      afterScanFilters: ExpressionSet,
+      fsRelation: HadoopFsRelation,
+      readDataColumns: Seq[Attribute],
+      outputDataSchema: StructType): (Seq[Expression], ExpressionSet) = {
+    val sparkSession = fsRelation.sparkSession
+    val sqlConf = sparkSession.sessionState.conf
+    if (!sqlConf.parquetStorageFilterPushdownEnabled) return (Nil, afterScanFilters)
+    if (fsRelation.fileFormat.getClass != classOf[ParquetFileFormat]) {
+      return (Nil, afterScanFilters)
+    }
+    // Mirror the runtime check for vectorized read feasibility. Storage filters drive late
+    // materialization in the vectorized parquet reader; without it, the scan would silently
+    // ignore them.
+    val resultSchema = StructType(fsRelation.partitionSchema.fields ++ outputDataSchema.fields)
+    if (!fsRelation.fileFormat.supportBatch(sparkSession, resultSchema)) {
+      return (Nil, afterScanFilters)
+    }
+
+    val dataAttrs = AttributeSet(readDataColumns)
+    val (eligible, rest) = afterScanFilters.partition {
+      case bloom: BloomFilterMightContain =>
+        val refs = bloom.valueExpression.references
+        bloom.deterministic && refs.nonEmpty && refs.forall { a =>
+          dataAttrs.contains(a) && ParquetStorageFilter.isSupportedKeyType(a.dataType)
+        }
+      case _ => false
+    }
+    (eligible.toSeq, ExpressionSet(rest))
+  }
+
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case ScanOperation(projects, stayUpFilters, filters,
       l @ LogicalRelationWithTable(fsRelation: HadoopFsRelation, table)) =>
@@ -218,6 +276,10 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       logInfo(log"Post-Scan Filters: ${MDC(POST_SCAN_FILTERS,
         afterScanFilters.simpleString(maxToStringFields))}")
 
+      // `filterAttributes` is deliberately computed from `afterScanFilters` *before* storage-filter
+      // extraction (which happens further down, once `outputDataSchema` is known), so a column
+      // referenced only by an extracted bloom filter is still part of `requiredAttributes` and
+      // survives projection pruning -- the reader needs to read it to evaluate the filter.
       val filterAttributes = AttributeSet(afterScanFilters ++ stayUpFilters)
       val requiredExpressions: Seq[NamedExpression] = filterAttributes.toSeq ++ projects
       val requiredAttributes = AttributeSet(requiredExpressions)
@@ -295,6 +357,15 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
       val outputDataSchema = (readDataColumns ++ generatedMetadataColumns).toStructType
 
+      // Extract bloom-filter conjuncts that can be pushed to the storage layer for late
+      // materialization. Eligible bloom filters become `storageFilters` on the scan and are dropped
+      // from the post-scan Filter (the late-mat path produces exact output). Ineligible ones stay
+      // in `afterScanFilters` as the existing fallback. This runs here, rather than next to
+      // `afterScanFilters`, because eligibility depends on `outputDataSchema` -- the schema the
+      // reader will actually see, and hence what its vectorized-read feasibility is decided from.
+      val (storageFilters, remainingAfterScanFilters) = extractStorageFilters(
+        afterScanFilters, fsRelation, readDataColumns, outputDataSchema)
+
       // The output rows will be produced during file scan operation in three steps:
       //  (1) File format reader populates a `Row` with `readDataColumns` and
       //      `fileFormatReaderGeneratedMetadataColumns`
@@ -339,7 +410,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           rebindFileSourceMetadataAttributesInFilters(expandedDataFilters),
           table.map(_.identifier),
           markedForSingleTaskExecution =
-            l.getTagValue(MarkSingleTaskExecution.markTag).getOrElse(false))
+            l.getTagValue(MarkSingleTaskExecution.markTag).getOrElse(false),
+          storageFilters = storageFilters)
 
       // extra Project node: wrap flat metadata columns to a metadata struct
       val withMetadataProjections = metadataStructOpt.map { metadataStruct =>
@@ -359,7 +431,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       }.getOrElse(scan)
 
       // bottom-most filters are put in the left of the list.
-      val finalFilters = afterScanFilters.toSeq.reduceOption(expressions.And).toSeq ++ stayUpFilters
+      val finalFilters =
+        remainingAfterScanFilters.toSeq.reduceOption(expressions.And).toSeq ++ stayUpFilters
       val withFilter = finalFilters.foldLeft(withMetadataProjections)((plan, cond) => {
         execution.FilterExec(cond, plan)
       })
