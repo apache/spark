@@ -22,8 +22,6 @@ import java.util.ArrayDeque
 
 import scala.util.parsing.combinator.RegexParsers
 
-import org.apache.commons.text.StringEscapeUtils
-
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, GeneratorBuilder, TypeCheckResult}
@@ -2044,16 +2042,48 @@ object VariantExplode {
     }
   }
 
+  // Appends `key` to `parentPath`: dot notation for dot-safe keys, else the single-quoted bracket
+  // form `['...']` with `key` escaped by `escapeKey`.
   private def appendObjectPath(parentPath: String, key: String): String = {
-    if (key.nonEmpty && !key.contains('.') && !key.contains('[')) {
+    if (isDotSafeKey(key)) {
       s"$parentPath.$key"
-    } else if (!key.contains('"')) {
-      s"""$parentPath["$key"]"""
-    } else if (!key.contains('\'')) {
-      s"$parentPath['$key']"
     } else {
-      s"""$parentPath["${StringEscapeUtils.escapeJson(key)}"]"""
+      s"$parentPath['${escapeKey(key)}']"
     }
+  }
+
+  // Dot-safe keys are non-empty and identifier-like: an ASCII letter, `_`, or non-ASCII character
+  // first, then those or ASCII digits. All other keys use bracket notation.
+  private def isDotSafeKey(key: String): Boolean = {
+    def isStart(c: Char): Boolean =
+      (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c >= 0x80
+    def isPart(c: Char): Boolean = isStart(c) || (c >= '0' && c <= '9')
+    key.nonEmpty && isStart(key.charAt(0)) &&
+      (1 until key.length).forall(i => isPart(key.charAt(i)))
+  }
+
+  // Escapes `key` for the single-quoted `['...']` form (RFC 9535 section 2.7 normalized-name
+  // escaping): `\` and `'` are backslash-escaped, `\b \t \n \f \r` for those controls, other
+  // controls (U+0000..U+001F) become `\uXXXX`, and everything else (including `"`) stays literal.
+  private def escapeKey(key: String): String = {
+    val sb = new java.lang.StringBuilder(key.length)
+    var i = 0
+    while (i < key.length) {
+      val c = key.charAt(i)
+      c match {
+        case '\\' => sb.append("\\\\")
+        case '\'' => sb.append("\\'")
+        case '\b' => sb.append("\\b")
+        case '\t' => sb.append("\\t")
+        case '\n' => sb.append("\\n")
+        case '\f' => sb.append("\\f")
+        case '\r' => sb.append("\\r")
+        case _ if c < 0x20 => sb.append("\\u%04x".format(c.toInt))
+        case _ => sb.append(c)
+      }
+      i += 1
+    }
+    sb.toString
   }
 }
 
