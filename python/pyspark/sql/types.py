@@ -3041,29 +3041,36 @@ def _has_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
         return False
 
 
-def _has_timestamp_nanos_map_key(dt: DataType) -> bool:
-    """Return whether ``dt`` contains a map type whose key carries a nanosecond timestamp type.
+def _first_timestamp_nanos_map_key_type(dt: DataType) -> Optional["DataType"]:
+    """Return the key type of the first map (depth-first) whose key carries a nanosecond timestamp
+    type, or ``None`` if ``dt`` contains no such map.
 
     Such keys cannot be represented on the Python conversion path: a ``datetime.datetime`` key is
     microsecond-resolution, so two nanosecond keys can collapse to one map entry (SPARK-57462).
     Callers reject this schema shape up front rather than let an entry be silently dropped. Unlike
     a scalar / array / struct-field nanosecond value, which converts fine (truncated to micros),
-    only the map-key position is unsafe, so this is narrower than ``_has_type``.
+    only the map-key position is unsafe, so this is narrower than ``_has_type``. The returned key
+    type is reported in the error message, mirroring the JVM ``EvaluatePython.toJava`` twin, which
+    reports ``mt.keyType.sql``.
     """
     if isinstance(dt, MapType):
-        return (
-            _has_type(dt.keyType, AnyTimestampNanoType)
-            or _has_timestamp_nanos_map_key(dt.keyType)
-            or _has_timestamp_nanos_map_key(dt.valueType)
-        )
+        if _has_type(dt.keyType, AnyTimestampNanoType):
+            return dt.keyType
+        return _first_timestamp_nanos_map_key_type(
+            dt.keyType
+        ) or _first_timestamp_nanos_map_key_type(dt.valueType)
     elif isinstance(dt, ArrayType):
-        return _has_timestamp_nanos_map_key(dt.elementType)
+        return _first_timestamp_nanos_map_key_type(dt.elementType)
     elif isinstance(dt, StructType):
-        return any(_has_timestamp_nanos_map_key(f.dataType) for f in dt.fields)
+        for field in dt.fields:
+            found = _first_timestamp_nanos_map_key_type(field.dataType)
+            if found is not None:
+                return found
+        return None
     elif isinstance(dt, UserDefinedType):
-        return _has_timestamp_nanos_map_key(dt.sqlType())
+        return _first_timestamp_nanos_map_key_type(dt.sqlType())
     else:
-        return False
+        return None
 
 
 @overload

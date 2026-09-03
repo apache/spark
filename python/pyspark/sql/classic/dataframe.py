@@ -70,7 +70,7 @@ from pyspark.sql.table_arg import TableArg
 from pyspark.sql.types import (
     Row,
     StructType,
-    _has_timestamp_nanos_map_key,
+    _first_timestamp_nanos_map_key_type,
     _parse_datatype_json_string,
 )
 from pyspark.sql.utils import get_active_spark_context, to_java_array, to_scala_map
@@ -512,12 +512,13 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         # datetime.datetime on the Python side, dropping an entry. The value conversion runs in a
         # background serve thread, whose exception would surface to collect() as a normal EOF
         # (empty/partial result, not an error), so reject the schema up front here instead.
-        if _has_timestamp_nanos_map_key(self.schema):
+        key_type = _first_timestamp_nanos_map_key_type(self.schema)
+        if key_type is not None:
             from pyspark.errors import PySparkTypeError
 
             raise PySparkTypeError(
                 errorClass="TIMESTAMP_NANOS_PYTHON_MAP_KEY",
-                messageParameters={"type": self.schema.simpleString()},
+                messageParameters={"type": key_type.simpleString()},
             )
 
     def collect(self) -> List[Row]:
