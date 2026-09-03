@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
@@ -163,6 +164,47 @@ trait FileFormat {
         }
       }
     }
+  }
+
+  /**
+   * Like [[buildReaderWithPartitionValues]] but additionally accepts a sequence of storage filters:
+   * Catalyst expressions that the storage layer may evaluate to drive value-column IO pruning based
+   * on key-column evaluation (e.g., late materialization with a runtime bloom filter).
+   *
+   * The default implementation delegates to [[buildReaderWithPartitionValues]] and accepts no
+   * storage filter at all. File formats that support storage-filter pushdown (e.g., Parquet) should
+   * override this method.
+   *
+   * A non-empty `storageFilters` here is a planner bug, so the default body rejects it rather than
+   * dropping it. The planner removes an extracted conjunct from the post-scan `Filter`, so a reader
+   * that ignores it returns rows the filter rejects. Every other layer of the feature fails loudly
+   * for the same reason. Unreachable today, because `FileSourceStrategy.extractStorageFilters` only
+   * extracts for `ParquetFileFormat` itself, but that keeps the invariant one method away from the
+   * code that relies on it.
+   *
+   * Scalar subqueries inside `storageFilters` are expected to have been materialized before this
+   * method is called, so that the returned reader can be safely serialized to executors.
+   *
+   * `storageFilterMetrics` is an optional map of SQL metrics the reader can update during execution
+   * (e.g. number of row groups skipped). The scan is expected to expose these metrics via its
+   * `metrics` field so they show up in the SQL UI.
+   */
+  def buildReaderWithStorageFilters(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      storageFilters: Seq[Expression],
+      options: Map[String, String],
+      hadoopConf: Configuration,
+      storageFilterMetrics: Map[String, SQLMetric] = Map.empty
+    ): PartitionedFile => Iterator[InternalRow] = {
+    require(storageFilters.isEmpty,
+      s"${getClass.getSimpleName} does not support storage-filter pushdown, but was given " +
+        storageFilters.mkString("[", ", ", "]"))
+    buildReaderWithPartitionValues(
+      sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
   }
 
   /**
