@@ -1691,6 +1691,59 @@ class JDBCSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58876: only zoneless Oracle temporal types map to TimestampNTZType") {
+    val oracleDialect = OracleDialect()
+    // Zoneless DATE/TIMESTAMP map to NTZ (with the marker); the WITH [LOCAL] TIME ZONE variants
+    // (distinct sqlTypes) must not map to NTZ, and carry no marker.
+    val cases = Seq(
+      (java.sql.Types.TIMESTAMP, "TIMESTAMP", true),
+      (java.sql.Types.TIMESTAMP, "DATE", true),
+      (OracleDialect.TIMESTAMP_TZ, "TIMESTAMP WITH TIME ZONE", false),
+      (OracleDialect.TIMESTAMP_LTZ, "TIMESTAMP WITH LOCAL TIME ZONE", false))
+    cases.foreach { case (sqlType, typeName, isNTZ) =>
+      val md = new MetadataBuilder()
+      val hint = s"sqlType=$sqlType typeName=$typeName"
+      val resolved = oracleDialect.getCatalystType(sqlType, typeName, 0, md)
+      assert((resolved == Some(TimestampNTZType)) === isNTZ, hint)
+      assert(md.build().contains(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK) === isNTZ, hint)
+    }
+  }
+
+  test("SPARK-58876: Oracle NTZ mapping and the preferTimestampNTZ read option") {
+    // preferTimestampNTZ reaches the dialect only through getSchema's isTimestampNTZ argument, so
+    // resolve a mocked Oracle TIMESTAMP column via getSchema under each (prefer, flag) combination.
+    def resolve(preferTimestampNTZ: Boolean): StructField = {
+      val rsmd = mock(classOf[java.sql.ResultSetMetaData])
+      when(rsmd.getColumnCount).thenReturn(1)
+      when(rsmd.getColumnLabel(anyInt())).thenReturn("T")
+      when(rsmd.getColumnType(anyInt())).thenReturn(java.sql.Types.TIMESTAMP)
+      when(rsmd.getColumnTypeName(anyInt())).thenReturn("TIMESTAMP")
+      when(rsmd.getPrecision(anyInt())).thenReturn(0)
+      when(rsmd.getScale(anyInt())).thenReturn(0)
+      when(rsmd.isSigned(anyInt())).thenReturn(false)
+      when(rsmd.isNullable(anyInt())).thenReturn(java.sql.ResultSetMetaData.columnNullable)
+      val rs = mock(classOf[ResultSet])
+      when(rs.getMetaData).thenReturn(rsmd)
+      JdbcUtils.getSchema(mock(classOf[Connection]), rs, OracleDialect(),
+        isTimestampNTZ = preferTimestampNTZ).fields.head
+    }
+
+    // Non-legacy always maps to NTZ (with the read marker) regardless of preferTimestampNTZ; the
+    // legacy flag defers to the shared mapping, which honors preferTimestampNTZ; no marker.
+    for {
+      legacy <- Seq(true, false)
+      prefer <- Seq(true, false)
+    } {
+      withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> legacy.toString) {
+        val field = resolve(prefer)
+        val expectedType = if (legacy && !prefer) TimestampType else TimestampNTZType
+        val hint = s"legacy=$legacy prefer=$prefer"
+        assert(field.dataType === expectedType, hint)
+        assert(field.metadata.contains(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK) === !legacy, hint)
+      }
+    }
+  }
+
   test("SPARK-58876: a marked NTZ column reads wall-clock regardless of the resolved dialect") {
     val custom = new JdbcDialect {
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
@@ -1700,8 +1753,8 @@ class JDBCSuite extends SharedSparkSession {
     val schema = new StructType().add("t", TimestampNTZType, nullable = true,
       new MetadataBuilder().putBoolean(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK, value = true)
         .build())
-    // A custom dialect registers at the head, so the built-in OracleDialect the marker relies on
-    // is at the tail in the first AggregatedDialect (uros-b's scenario); the second reverses it.
+    // Bare Oracle, then AggregatedDialect with Oracle at the tail and at the head, so the getter
+    // selection is exercised regardless of Oracle's position among the members.
     val dialects = Seq[JdbcDialect](
       OracleDialect(),
       new AggregatedDialect(List(custom, OracleDialect())),
