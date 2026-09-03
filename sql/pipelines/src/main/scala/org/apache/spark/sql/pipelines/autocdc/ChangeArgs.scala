@@ -198,7 +198,10 @@ object ScdType {
  * @param ignoreNullSelection    Selects the columns whose nulls are treated as declined
  *                               authorship rather than authored nulls. None means ignore-null
  *                               is off completely. An empty include list is rejected; an empty
- *                               exclude list selects every eligible column.
+ *                               exclude list selects every eligible column. Eligible columns
+ *                               are those surviving the column selection that are neither keys
+ *                               nor columns whose names start with the reserved AutoCDC prefix.
+ *                               Naming a struct selects every leaf beneath it.
  */
 case class ChangeArgs(
     keys: Seq[UnqualifiedColumnName],

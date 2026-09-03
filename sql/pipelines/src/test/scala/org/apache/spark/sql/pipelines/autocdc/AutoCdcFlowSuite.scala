@@ -1175,4 +1175,69 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     )
     assert(flow.changeArgs.ignoreNullSelection.isDefined)
   }
+
+  gridTest("AutoCdcMergeFlow rejects SCD2 framework column in ignore-null selection")(
+    Seq(Scd2BatchProcessor.startAtColName, Scd2BatchProcessor.endAtColName)
+  ) { colName =>
+    checkError(
+      exception = intercept[AnalysisException] {
+        newAutoCdcMergeFlow(
+          sourceDf = threeColumnSourceDf(),
+          storedAsScdType = ScdType.Type2,
+          ignoreNullSelection = Some(
+            ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName(colName)))
+          )
+        )
+      },
+      condition = "AUTOCDC_IGNORE_NULL_COLUMN_NOT_IN_OUTPUT_COLUMNS",
+      sqlState = "42703",
+      parameters = Map(
+        "flowName" -> expectedFlowName,
+        "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
+        "columnName" -> colName
+      )
+    )
+  }
+
+  test("AutoCdcMergeFlow rejects ignore-null key case-sensitively") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          newAutoCdcMergeFlow(
+            sourceDf = threeColumnSourceDf(),
+            ignoreNullSelection = Some(
+              ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("id")))
+            )
+          )
+        },
+        condition = "AUTOCDC_IGNORE_NULL_SELECTION_CONTAINS_KEY_COLUMN",
+        sqlState = "22023",
+        parameters = Map(
+          "flowName" -> expectedFlowName,
+          "caseSensitivity" -> CaseSensitivityLabels.CaseSensitive,
+          "columnName" -> "id",
+          "keyColumnNames" -> "id"
+        )
+      )
+    }
+  }
+
+  test("AutoCdcMergeFlow accepts valid SCD2 ignore-null selection") {
+    val flow = newAutoCdcMergeFlow(
+      sourceDf = threeColumnSourceDf(),
+      storedAsScdType = ScdType.Type2,
+      ignoreNullSelection = Some(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name")))
+      )
+    )
+    assert(flow.changeArgs.ignoreNullSelection.isDefined)
+  }
+
+  test("AutoCdcMergeFlow accepts empty ignore-null exclude list") {
+    val flow = newAutoCdcMergeFlow(
+      sourceDf = threeColumnSourceDf(),
+      ignoreNullSelection = Some(ColumnSelection.ExcludeColumns(Seq.empty))
+    )
+    assert(flow.changeArgs.ignoreNullSelection.isDefined)
+  }
 }

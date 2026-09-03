@@ -247,7 +247,7 @@
   },
   "AUTOCDC_IGNORE_NULL_COLUMN_NOT_IN_OUTPUT_COLUMNS" : {
     "message" : [
-      "In AutoCDC flow <flowName>, the ignore-null selection names column `<columnName>` which is not present in the effective target schema (<caseSensitivity>). Only columns written to the target may appear in an ignore-null selection."
+      "In AutoCDC flow <flowName>, the ignore-null selection names column `<columnName>` which is not present in the flow's selected output columns (<caseSensitivity>). Only user-data columns surviving the column selection may appear in an ignore-null selection."
     ],
     "sqlState" : "42703"
   },
