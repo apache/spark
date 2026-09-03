@@ -24,11 +24,11 @@ from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Union
 import pyspark
 from pyspark.errors import PySparkNotImplementedError, PySparkRuntimeError, PySparkValueError
 from pyspark.sql.pandas.types import (
+    _create_converter_to_pandas,
     _dedup_names,
     _deduplicate_field_names,
-    _create_converter_to_pandas,
-    to_arrow_schema,
     from_arrow_schema,
+    to_arrow_schema,
 )
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import (
@@ -36,39 +36,39 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     ByteType,
-    ShortType,
+    DataType,
+    DateType,
+    DayTimeIntervalType,
+    DecimalType,
+    DoubleType,
+    FloatType,
+    Geography,
+    GeographyType,
+    Geometry,
+    GeometryType,
     IntegerType,
     LongType,
-    DataType,
-    FloatType,
-    DoubleType,
-    DecimalType,
-    GeographyType,
-    Geography,
-    GeometryType,
-    Geometry,
     MapType,
     NullType,
     Row,
+    ShortType,
     StringType,
     StructField,
     StructType,
-    DateType,
-    TimeType,
     TimestampNTZType,
     TimestampType,
-    DayTimeIntervalType,
-    YearMonthIntervalType,
+    TimeType,
     UserDefinedType,
     VariantType,
     VariantVal,
+    YearMonthIntervalType,
     _create_row,
     _has_type,
 )
 
 if TYPE_CHECKING:
-    import pyarrow as pa
     import pandas as pd
+    import pyarrow as pa
 
 
 class ArrowBatchTransformer:
@@ -359,11 +359,11 @@ class PandasToArrowConversion:
         -------
         pa.RecordBatch
         """
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         from pyspark.errors import PySparkTypeError, PySparkValueError
-        from pyspark.sql.pandas.types import to_arrow_type, _create_converter_from_pandas
+        from pyspark.sql.pandas.types import _create_converter_from_pandas, to_arrow_type
 
         # Handle empty schema (0 columns)
         # Use dummy column + select([]) to preserve row count (PyArrow limitation workaround)
@@ -1033,6 +1033,7 @@ class ArrowTableToRowsConversion:
         the minimum supported PyArrow version contains the fix.
         """
         import pyarrow as pa
+
         from pyspark.loose_version import LooseVersion
 
         if LooseVersion(pa.__version__) >= LooseVersion("25.0.1"):
@@ -1652,8 +1653,8 @@ class ArrowArrayConversion:
         doesn't need this conversion.
         """
         import pyarrow as pa
-        import pyarrow.types as types
         import pyarrow.compute as pc
+        import pyarrow.types as types
 
         def check_type_func(pa_type: pa.DataType) -> bool:
             # match timezone-aware TimestampType
@@ -1689,8 +1690,8 @@ class ArrowArrayConversion:
         2, coerce_temporal_nanoseconds: coerce timestamp time units to nanoseconds
         """
         import pyarrow as pa
-        import pyarrow.types as types
         import pyarrow.compute as pc
+        import pyarrow.types as types
 
         def check_type_func(pa_type: pa.DataType) -> bool:
             return types.is_timestamp(pa_type) and (pa_type.unit != "ns" or pa_type.tz is not None)
@@ -1834,8 +1835,8 @@ class ArrowArrayToPandasConversion:
         This method handles date type columns specially to avoid overflow issues with
         datetime64[ns] intermediate representations.
         """
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         assert isinstance(arr, (pa.Array, pa.ChunkedArray))
 
@@ -1930,8 +1931,8 @@ class ArrowArrayToPandasConversion:
         prefer_int_ext_dtype: bool = False,
         df_for_struct: bool = False,
     ) -> Union["pd.Series", "pd.DataFrame"]:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         assert isinstance(arr, (pa.Array, pa.ChunkedArray))
 

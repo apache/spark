@@ -1345,7 +1345,7 @@ package object config {
         "like YARN and event logs.")
       .version("2.1.2")
       .regexConf
-      .createWithDefault("(?i)secret|password|token|access[.]?key".r)
+      .createWithDefault("(?i)secret|password|token|access[.]?key|credential".r)
 
   private[spark] val STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.string.regex")
@@ -1934,6 +1934,18 @@ package object config {
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .longConf
       .createWithDefault(50)
+
+  private[spark] val STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT_MS =
+    ConfigBuilder("spark.shuffle.streaming.writerConnectionTimeout")
+      .doc("Maximum time a streaming shuffle writer waits for each reader to connect. " +
+        "Set to -1 to wait indefinitely.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(
+        timeoutMs => timeoutMs == -1 || timeoutMs > 0,
+        "The reader connection timeout must be positive or -1 to wait indefinitely.")
+      .createWithDefaultString("1h")
 
   private[spark] val STREAMING_SHUFFLE_WRITER_MAX_MEMORY =
     ConfigBuilder("spark.shuffle.streaming.writerMaxMemory")

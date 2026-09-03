@@ -53,17 +53,16 @@ which contains two batches of two objects:
 >>> sc.stop()
 """
 
-import sys
-import os
-from itertools import chain, product
-import marshal
-import struct
-import types
-import collections
-import zlib
-import itertools
-import pickle
 import codecs
+import collections
+import itertools
+import marshal
+import os
+import pickle
+import struct
+import sys
+import types
+import zlib
 
 pickle_protocol = pickle.HIGHEST_PROTOCOL
 
@@ -125,9 +124,6 @@ class Serializer:
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
     def __repr__(self):
         return "%s()" % self.__class__.__name__
 
@@ -172,13 +168,6 @@ class FramedSerializer(Serializer):
             raise EOFError
         return self.loads(obj)
 
-    def dumps(self, obj):
-        """
-        Serialize an object into a byte array.
-        When batching is used, this will be called with an array of objects.
-        """
-        raise NotImplementedError
-
     def loads(self, obj):
         """
         Deserialize an object from a byte array.
@@ -211,7 +200,7 @@ class BatchedSerializer(Serializer):
         self.serializer.dump_stream(self._batched(iterator), stream)
 
     def load_stream(self, stream):
-        return chain.from_iterable(self._load_stream_without_unbatching(stream))
+        return itertools.chain.from_iterable(self._load_stream_without_unbatching(stream))
 
     def _load_stream_without_unbatching(self, stream):
         return self.serializer.load_stream(stream)
@@ -290,10 +279,10 @@ class CartesianDeserializer(Serializer):
         val_batch_stream = self.val_ser._load_stream_without_unbatching(stream)
         for key_batch, val_batch in zip(key_batch_stream, val_batch_stream):
             # for correctness with repeated cartesian/zip this must be returned as one batch
-            yield product(key_batch, val_batch)
+            yield itertools.product(key_batch, val_batch)
 
     def load_stream(self, stream):
-        return chain.from_iterable(self._load_stream_without_unbatching(stream))
+        return itertools.chain.from_iterable(self._load_stream_without_unbatching(stream))
 
     def __repr__(self):
         return "CartesianDeserializer(%s, %s)" % (str(self.key_ser), str(self.val_ser))
@@ -327,7 +316,7 @@ class PairDeserializer(Serializer):
             yield zip(key_batch, val_batch)
 
     def load_stream(self, stream):
-        return chain.from_iterable(self._load_stream_without_unbatching(stream))
+        return itertools.chain.from_iterable(self._load_stream_without_unbatching(stream))
 
     def __repr__(self):
         return "PairDeserializer(%s, %s)" % (str(self.key_ser), str(self.val_ser))
@@ -478,41 +467,12 @@ class MarshalSerializer(FramedSerializer):
         return marshal.loads(obj)
 
 
-class AutoSerializer(FramedSerializer):
-    """
-    Choose marshal or pickle as serialization protocol automatically
-    """
-
-    def __init__(self):
-        FramedSerializer.__init__(self)
-        self._type = None
-
-    def dumps(self, obj):
-        if self._type is not None:
-            return b"P" + pickle.dumps(obj, -1)
-        try:
-            return b"M" + marshal.dumps(obj)
-        except Exception:
-            self._type = b"P"
-            return b"P" + pickle.dumps(obj, -1)
-
-    def loads(self, obj):
-        _type = obj[0]
-        if _type == b"M":
-            return marshal.loads(obj[1:])
-        elif _type == b"P":
-            return pickle.loads(obj[1:])
-        else:
-            raise ValueError("invalid serialization type: %s" % _type)
-
-
 class CompressedSerializer(FramedSerializer):
     """
     Compress the serialized data
     """
 
     def __init__(self, serializer):
-        FramedSerializer.__init__(self)
         assert isinstance(serializer, FramedSerializer), "serializer must be a FramedSerializer"
         self.serializer = serializer
 

@@ -44,6 +44,21 @@ object functions {
    */
   def array_to_vector(v: Column): Column = Column.internalFn("array_to_vector", v)
 
+  /**
+   * Creates a new row for each index-value pair in the given vector column. This expression is
+   * dedicated only for Spark ML. It always emits a marker row with index `-1 - vector.size` and
+   * value `Double.NaN` before each non-null vector.
+   * @param v: the column of MLlib sparse/dense vectors
+   * @param mode: `dense` emits all elements, and `sparse` emits nonzero elements
+   * @return the index and value columns of the vector elements
+   * @since 4.4.0
+   */
+  private[ml] def vector_posexplode(
+      v: Column,
+      mode: String = "sparse"): Column = {
+    Column.internalFn("vector_posexplode", sf.unwrap_udt(v), sf.lit(mode))
+  }
+
   private[ml] def array_binary_search(a: Column, v: Column): Column =
     Column.internalFn("array_binary_search", a, v)
 

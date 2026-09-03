@@ -15,8 +15,7 @@
 # limitations under the License.
 #
 from typing import (
-    cast,
-    overload,
+    TYPE_CHECKING,
     Any,
     Dict,
     Generic,
@@ -25,36 +24,38 @@ from typing import (
     Tuple,
     TypeVar,
     Union,
-    TYPE_CHECKING,
+    cast,
+    overload,
 )
 
 from pyspark import keyword_only, since
-from pyspark.ml.linalg import _convert_to_vector, DenseMatrix, DenseVector, Vector
-from pyspark.sql.dataframe import DataFrame
+from pyspark.ml.common import inherit_doc
+from pyspark.ml.linalg import DenseMatrix, DenseVector, Vector, _convert_to_vector
 from pyspark.ml.param.shared import (
+    HasFeaturesCol,
+    HasHandleInvalid,
+    HasInputCol,
+    HasInputCols,
+    HasLabelCol,
+    HasMaxIter,
+    HasNumFeatures,
+    HasOutputCol,
+    HasOutputCols,
+    HasRelativeError,
+    HasSeed,
+    HasStepSize,
     HasThreshold,
     HasThresholds,
-    HasInputCol,
-    HasOutputCol,
-    HasInputCols,
-    HasOutputCols,
-    HasHandleInvalid,
-    HasRelativeError,
-    HasFeaturesCol,
-    HasLabelCol,
-    HasSeed,
-    HasNumFeatures,
-    HasStepSize,
-    HasMaxIter,
-    TypeConverters,
     Param,
     Params,
+    TypeConverters,
 )
 from pyspark.ml.util import (
     JavaMLReadable,
     JavaMLWritable,
-    try_remote_attribute_relation,
+    RemoteModelRef,
     invoke_helper_attr,
+    try_remote_attribute_relation,
 )
 from pyspark.ml.wrapper import (
     JavaEstimator,
@@ -63,8 +64,7 @@ from pyspark.ml.wrapper import (
     JavaTransformer,
     _jvm,
 )
-from pyspark.ml.common import inherit_doc
-from pyspark.ml.util import RemoteModelRef
+from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import ArrayType, StringType
 from pyspark.sql.utils import is_remote
 

@@ -403,14 +403,24 @@ The following configurations are optional:
 <tr>
   <td>startingOffsets</td>
   <td>"earliest", "latest" (streaming only), or json string
-  """ {"topicA":{"0":23,"1":-1},"topicB":{"0":-2}} """
+  """ {"topicA":{"0":23,"1":-1},"topicB":{"0":-2}} """ or
+  """ {"topicA":"earliest","topicB":"latest"} """ or a mix of both forms
+  """ {"topicA":"earliest","topicB":{"0":23,"1":-1},"topicC":"latest"} """
   </td>
   <td>"latest" for streaming, "earliest" for batch</td>
   <td>streaming and batch</td>
   <td>The start point when a query is started, either "earliest" which is from the earliest offsets,
   "latest" which is just from the latest offsets, or a json string specifying a starting offset for
   each TopicPartition.  In the json, -2 as an offset can be used to refer to earliest, -1 to latest.
-  Note: For batch queries, latest (either implicitly or by using -1 in json) is not allowed.
+  A topic may also map to the string "earliest" or "latest" instead of an object, which applies that
+  offset to every partition of the topic without having to enumerate them; the two forms can be mixed
+  in the same json. Topic-level values are expanded against the partitions discovered when the offsets
+  are resolved, so they keep working when a topic is repartitioned. As with the per-partition form,
+  the json must account for every topic subscribed at the time the offsets are resolved, so with
+  <code>subscribePattern</code> the topics matched by the pattern have to be known then; topics
+  matched later on are discovered as new partitions and start at earliest, as usual.
+  Note: For batch queries, latest (either implicitly, by using -1 in json, or by binding a topic to
+  "latest") is not allowed.
   For streaming queries, this only applies when a new query is started, and that resuming will
   always pick up from where the query left off. Newly discovered partitions during a query will start at
   earliest.</td>
@@ -442,13 +452,16 @@ The following configurations are optional:
 <tr>
   <td>endingOffsets</td>
   <td>latest or json string
-  {"topicA":{"0":23,"1":-1},"topicB":{"0":-1}}
+  {"topicA":{"0":23,"1":-1},"topicB":{"0":-1}} or {"topicA":"latest","topicB":"latest"}
+  or a mix of both forms {"topicA":"latest","topicB":{"0":23,"1":-1}}
   </td>
   <td>latest</td>
   <td>batch query</td>
   <td>The end point when a batch query is ended, either "latest" which is just referred to the
   latest, or a json string specifying an ending offset for each TopicPartition.  In the json, -1
-  as an offset can be used to refer to latest, and -2 (earliest) as an offset is not allowed.</td>
+  as an offset can be used to refer to latest, and -2 (earliest) as an offset is not allowed.
+  As with <code>startingOffsets</code>, a topic may map to the string "latest" instead of an object to
+  apply that offset to every partition of the topic; binding a topic to "earliest" is not allowed.</td>
 </tr>
 <tr>
   <td>failOnDataLoss</td>

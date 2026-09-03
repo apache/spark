@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, DynamicPruningExpression, Expression, InSubquery, ListQuery, PredicateHelper, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, DynamicPruningExpression, Expression, InSubquery, ListQuery, NamedExpression, PredicateHelper, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.optimizer.RewritePredicateSubquery
 import org.apache.spark.sql.catalyst.planning.{DeltaBasedRowLevelOperation, GroupBasedRowLevelOperation}
@@ -97,8 +97,9 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
         val relation = r.relation.copy(table = originalTable)
         val matchingRowsPlan = buildMatchingRowsPlan(write, relation, cond)
         val filterAttrsSeq = filterAttrs.toImmutableArraySeq
-        val buildKeys = V2ExpressionUtils.resolveRefs[Attribute](filterAttrsSeq, matchingRowsPlan)
-        val pruningKeys = V2ExpressionUtils.resolveRefs[Attribute](filterAttrsSeq, r)
+        val buildKeys =
+          V2ExpressionUtils.resolveRefs[NamedExpression](filterAttrsSeq, matchingRowsPlan)
+        val pruningKeys = V2ExpressionUtils.resolveRefs[NamedExpression](filterAttrsSeq, r)
         Filter(buildDynamicPruningCond(matchingRowsPlan, buildKeys, pruningKeys), r)
     }
     // optimize subqueries to rewrite them as joins and trigger job planning
@@ -143,13 +144,19 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
 
   private def buildDynamicPruningCond(
       matchingRowsPlan: LogicalPlan,
-      buildKeys: Seq[Attribute],
-      pruningKeys: Seq[Attribute]): Expression = {
+      buildKeys: Seq[NamedExpression],
+      pruningKeys: Seq[NamedExpression]): Expression = {
     assert(buildKeys.nonEmpty && pruningKeys.nonEmpty)
 
-    val buildQuery = Aggregate(buildKeys, buildKeys, matchingRowsPlan)
+    def unalias(expr: NamedExpression): Expression = expr match {
+      case alias: Alias => alias.child
+      case other => other
+    }
+
+    val buildQuery = Aggregate(buildKeys.map(unalias), buildKeys, matchingRowsPlan)
     DynamicPruningExpression(
-      InSubquery(pruningKeys, ListQuery(buildQuery, numCols = buildQuery.output.length)))
+      InSubquery(pruningKeys.map(unalias),
+        ListQuery(buildQuery, numCols = buildQuery.output.length)))
   }
 
   private def buildTableToScanAttrMap(

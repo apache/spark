@@ -69,12 +69,12 @@ import unittest
 
 from pyspark.loose_version import LooseVersion
 from pyspark.testing.utils import (
-    have_pyarrow,
-    have_pandas,
     have_numpy,
-    pyarrow_requirement_message,
-    pandas_requirement_message,
+    have_pandas,
+    have_pyarrow,
     numpy_requirement_message,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
 )
 
 # Imported as a module, not `from ... import _PyArrowFromPandasTestBase`, so that the

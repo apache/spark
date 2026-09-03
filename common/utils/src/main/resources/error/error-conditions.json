@@ -495,6 +495,18 @@
     ],
     "sqlState" : "22001"
   },
+  "BUCKET_COLUMN_IN_PARTITION_COLUMNS" : {
+    "message" : [
+      "Bucketing column <bucketColumn> should not be part of partition columns <partitionColumns>."
+    ],
+    "sqlState" : "42713"
+  },
+  "BUCKET_SORT_COLUMN_IN_PARTITION_COLUMNS" : {
+    "message" : [
+      "Bucket sort column <sortColumn> should not be part of partition columns <partitionColumns>."
+    ],
+    "sqlState" : "42713"
+  },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
       "The method <methodName> can not be called on streaming Dataset/DataFrame."
@@ -1973,6 +1985,11 @@
           "The <inputName> value must to be a <requireType> literal of <validValues>, but got <inputValue>."
         ]
       },
+      "INVALID_JSON_FORMAT_JSON_INPUT" : {
+        "message" : [
+          "<functionName> FORMAT JSON requires a string argument containing JSON text, but the argument at position <position> has type <inputType>."
+        ]
+      },
       "INVALID_JSON_MAP_KEY_TYPE" : {
         "message" : [
           "Input schema <schema> can only contain STRING as a key type for a MAP."
@@ -1991,6 +2008,11 @@
       "INVALID_JSON_QUERY_WRAPPER_AND_QUOTES" : {
         "message" : [
           "<functionName> cannot combine an OMIT QUOTES clause with a WITH ARRAY WRAPPER clause. OMIT QUOTES applies only to an unwrapped result."
+        ]
+      },
+      "INVALID_JSON_RETURNING_TYPE" : {
+        "message" : [
+          "<functionName> RETURNING clause must be a STRING type, but got <returningType>."
         ]
       },
       "INVALID_JSON_SCALAR_RETURNING_TYPE" : {
@@ -2259,6 +2281,24 @@
       "Encountered error when saving to external data source."
     ],
     "sqlState" : "KD010"
+  },
+  "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE" : {
+    "message" : [
+      "The runtime filter attribute <attribute> reported by `<method>` in data source scan <scanClass> is invalid for the scan relation output <relationOutput>."
+    ],
+    "subClass" : {
+      "CANNOT_RESOLVE" : {
+        "message" : [
+          "The attribute cannot be resolved."
+        ]
+      },
+      "NOT_TOP_LEVEL" : {
+        "message" : [
+          "The attribute must be top-level, but it is a nested reference."
+        ]
+      }
+    },
+    "sqlState" : "KD000"
   },
   "DATA_SOURCE_METADATA_SCHEMA_NOT_IMPLEMENTED" : {
     "message" : [
@@ -4490,6 +4530,12 @@
       "Collations can only be applied to string types, but the JSON data type is <jsonType>."
     ],
     "sqlState" : "2203G"
+  },
+  "INVALID_JSON_FORMAT_JSON_VALUE" : {
+    "message" : [
+      "<functionName> FORMAT JSON argument at position <position> must contain exactly one well-formed JSON value, but got <value>."
+    ],
+    "sqlState" : "22032"
   },
   "INVALID_JSON_RECORD_TYPE" : {
     "message" : [
@@ -7943,6 +7989,14 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT" : {
+    "message" : [
+      "Streaming shuffle <shuffleId> writer <writerId> timed out after <timeoutMs> ms waiting for reader <readerId> to connect.",
+      "This can occur when the reader task is delayed because cluster resources are unavailable or when network connectivity prevents the reader from reaching the writer.",
+      "Check cluster resources and network connectivity. If the reader needs more time to start, increase 'spark.shuffle.streaming.writerConnectionTimeout', or set it to -1 to wait indefinitely."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STREAMING_STATEFUL_OPERATOR_MISSING_STATE_DIRECTORY" : {
     "message" : [
       "Cannot restart streaming query with stateful operators because the state directory is empty or missing.",
@@ -10379,16 +10433,6 @@
   "_LEGACY_ERROR_TEMP_1165" : {
     "message" : [
       "It is not allowed to specify partitioning when the table schema is not defined."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1166" : {
-    "message" : [
-      "Bucketing column '<bucketCol>' should not be part of partition columns '<normalizedPartCols>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1167" : {
-    "message" : [
-      "Bucket sorting column '<sortCol>' should not be part of partition columns '<normalizedPartCols>'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1169" : {

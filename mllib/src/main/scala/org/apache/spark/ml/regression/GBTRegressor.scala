@@ -22,7 +22,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{Logging, LogKeys}
-import org.apache.spark.ml.linalg.{BLAS, Vector}
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.GradientBoostedTrees
@@ -271,27 +271,26 @@ class GBTRegressionModel private[ml](
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
-    var predictionColNames = Seq.empty[String]
-    var predictionColumns = Seq.empty[Column]
+    if ($(predictionCol).nonEmpty || $(leafCol).nonEmpty) {
+      var predColNames = Seq.empty[String]
+      var predCols = Seq.empty[Column]
+      val bcModel = dataset.sparkSession.sparkContext.broadcast(this)
 
-    val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
+      if ($(predictionCol).nonEmpty) {
+        val predUDF = udf { features: Vector => bcModel.value.predict(features) }
+        predColNames :+= $(predictionCol)
+        predCols :+= predUDF(col($(featuresCol)))
+          .as($(predictionCol), outputSchema($(predictionCol)).metadata)
+      }
 
-    if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf { features: Vector => bcastModel.value.predict(features) }
-      predictionColNames :+= $(predictionCol)
-      predictionColumns :+= predictUDF(col($(featuresCol)))
-        .as($(featuresCol), outputSchema($(featuresCol)).metadata)
-    }
+      if ($(leafCol).nonEmpty) {
+        val leafUDF = udf { features: Vector => bcModel.value.predictLeaf(features) }
+        predColNames :+= $(leafCol)
+        predCols :+= leafUDF(col($(featuresCol)))
+          .as($(leafCol), outputSchema($(leafCol)).metadata)
+      }
 
-    if ($(leafCol).nonEmpty) {
-      val leafUDF = udf { features: Vector => bcastModel.value.predictLeaf(features) }
-      predictionColNames :+= $(leafCol)
-      predictionColumns :+= leafUDF(col($(featuresCol)))
-        .as($(leafCol), outputSchema($(leafCol)).metadata)
-    }
-
-    if (predictionColNames.nonEmpty) {
-      dataset.withColumns(predictionColNames, predictionColumns)
+      dataset.withColumns(predColNames, predCols)
     } else {
       this.logWarning(log"${MDC(LogKeys.UUID, uid)}: GBTRegressionModel.transform() " +
         log"does nothing because no output columns were set.")
@@ -302,8 +301,13 @@ class GBTRegressionModel private[ml](
   override def predict(features: Vector): Double = {
     // TODO: When we add a generic Boosting class, handle transform there?  SPARK-7129
     // Classifies by thresholding sum of weighted tree predictions
-    val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
-    BLAS.nativeBLAS.ddot(getNumTrees, treePredictions, 1, _treeWeights, 1)
+    var prediction = 0.0
+    var i = 0
+    while (i < _trees.length) {
+      prediction += _trees(i).rootNode.predictImpl(features).prediction * _treeWeights(i)
+      i += 1
+    }
+    prediction
   }
 
   @Since("1.4.0")

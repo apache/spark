@@ -1933,13 +1933,24 @@ object SchemaOfVariant {
         val field = v.getFieldAtIndex(i)
         fields(i) = StructField(field.key, schemaOf(field.value))
       }
-      // According to the variant spec, object fields must be sorted alphabetically. So we don't
-      // have to sort, but just need to validate they are sorted.
+      var utf8Sorted = true
+      var utf16Sorted = true
+      var previousKey = if (size > 0) fields(0).name else null
+      var previousKeyBytes = if (size > 0) VariantUtil.encodeKey(previousKey) else null
       for (i <- 1 until size) {
-        if (fields(i - 1).name >= fields(i).name) {
-          throw new SparkRuntimeException("MALFORMED_VARIANT", Map.empty)
-        }
+        val currentKey = fields(i).name
+        val currentKeyBytes = VariantUtil.encodeKey(currentKey)
+        utf8Sorted &&= VariantUtil.compareKeys(previousKeyBytes, currentKeyBytes) < 0
+        utf16Sorted &&= previousKey.compareTo(currentKey) < 0
+        previousKey = currentKey
+        previousKeyBytes = currentKeyBytes
       }
+      if (!utf8Sorted && !utf16Sorted) {
+        throw new SparkRuntimeException("MALFORMED_VARIANT", Map.empty)
+      }
+      // `mergeSchema` expects StructType fields in Java String order. Older Spark values already
+      // use that order, while spec-compliant values need to be reordered after validation.
+      java.util.Arrays.sort(fields, JsonInferSchema.structFieldComparator)
       StructType(fields)
     case Type.ARRAY =>
       var elementType: DataType = NullType

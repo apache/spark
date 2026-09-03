@@ -19,24 +19,26 @@
 A wrapper class for Spark DataFrame to behave like pandas DataFrame.
 """
 
-from collections import defaultdict, namedtuple
-from collections.abc import Mapping
-import re
-import warnings
+import datetime
 import inspect
 import json
-import types
-from functools import partial, reduce, wraps
+import re
 import sys
-from itertools import zip_longest, chain
+import types
+import warnings
+from collections import defaultdict, namedtuple
+from collections.abc import Mapping
+from functools import partial, reduce, wraps
+from itertools import chain, zip_longest
 from types import TracebackType
 from typing import (
+    IO,
+    TYPE_CHECKING,
     Any,
     Callable,
     ClassVar,
     Dict,
     Generic,
-    IO,
     Iterable,
     Iterator,
     List,
@@ -49,16 +51,14 @@ from typing import (
     Union,
     cast,
     no_type_check,
-    TYPE_CHECKING,
 )
-import datetime
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import (
     is_bool_dtype,
-    is_list_like,
     is_dict_like,
+    is_list_like,
     is_scalar,
 )
 from pandas.tseries.frequencies import DateOffset, to_offset  # type: ignore[attr-defined]
@@ -66,34 +66,15 @@ from pandas.tseries.frequencies import DateOffset, to_offset  # type: ignore[att
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
 
-from pandas.core.dtypes.common import infer_dtype_from_object  # type: ignore[attr-defined]
 from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
+from pandas.core.dtypes.common import infer_dtype_from_object  # type: ignore[attr-defined]
 from pandas.core.dtypes.inference import is_sequence  # type: ignore[attr-defined]
 
-from pyspark._globals import _NoValue, _NoValueType
-from pyspark.loose_version import LooseVersion
-from pyspark.errors import PySparkValueError
 from pyspark import StorageLevel
-from pyspark.sql import Column as PySparkColumn, DataFrame as PySparkDataFrame, functions as F
-from pyspark.sql.functions import pandas_udf
-from pyspark.sql.internal import InternalFunction as SF
-from pyspark.sql.types import (
-    ArrayType,
-    BooleanType,
-    DataType,
-    DoubleType,
-    NumericType,
-    Row,
-    StringType,
-    StructField,
-    StructType,
-    DecimalType,
-    TimestampType,
-    TimestampNTZType,
-    NullType,
-)
-from pyspark.sql.window import Window
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark._globals import _NoValue, _NoValueType
+from pyspark.errors import PySparkValueError
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas._typing import (
     Axis,
     DataFrameOrSeries,
@@ -104,15 +85,38 @@ from pyspark.pandas._typing import (
     T,
 )
 from pyspark.pandas.accessors import PandasOnSparkFrameMethods
-from pyspark.pandas.config import option_context, get_option
+from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.correlation import (
-    compute,
-    CORRELATION_VALUE_1_COLUMN,
-    CORRELATION_VALUE_2_COLUMN,
     CORRELATION_CORR_OUTPUT_COLUMN,
     CORRELATION_COUNT_OUTPUT_COLUMN,
+    CORRELATION_VALUE_1_COLUMN,
+    CORRELATION_VALUE_2_COLUMN,
+    compute,
 )
-from pyspark.pandas.spark.accessors import SparkFrameMethods, CachedSparkFrameMethods
+from pyspark.pandas.generic import Frame
+from pyspark.pandas.internal import (
+    HIDDEN_COLUMNS,
+    NATURAL_ORDER_COLUMN_NAME,
+    SPARK_DEFAULT_INDEX_NAME,
+    SPARK_DEFAULT_SERIES_NAME,
+    SPARK_INDEX_NAME_FORMAT,
+    SPARK_INDEX_NAME_PATTERN,
+    InternalField,
+    InternalFrame,
+)
+from pyspark.pandas.missing.frame import MissingPandasLikeDataFrame
+from pyspark.pandas.plot import PandasOnSparkPlotAccessor
+from pyspark.pandas.spark.accessors import CachedSparkFrameMethods, SparkFrameMethods
+from pyspark.pandas.typedef.typehints import (
+    DataFrameType,
+    ScalarType,
+    SeriesType,
+    as_spark_type,
+    create_tuple_for_frame_type,
+    infer_return_type,
+    pandas_on_spark_type,
+    spark_type_to_pandas_dtype,
+)
 from pyspark.pandas.utils import (
     align_diff_frames,
     ansi_mode_context,
@@ -123,6 +127,7 @@ from pyspark.pandas.utils import (
     is_name_like_tuple,
     is_name_like_value,
     is_testing,
+    log_advice,
     name_like_string,
     same_anchor,
     scol_for,
@@ -132,39 +137,35 @@ from pyspark.pandas.utils import (
     validate_how,
     validate_mode,
     verify_temp_column_name,
-    log_advice,
 )
-from pyspark.pandas.generic import Frame
-from pyspark.pandas.internal import (
-    InternalField,
-    InternalFrame,
-    HIDDEN_COLUMNS,
-    NATURAL_ORDER_COLUMN_NAME,
-    SPARK_INDEX_NAME_FORMAT,
-    SPARK_DEFAULT_INDEX_NAME,
-    SPARK_DEFAULT_SERIES_NAME,
-    SPARK_INDEX_NAME_PATTERN,
+from pyspark.sql import Column as PySparkColumn
+from pyspark.sql import DataFrame as PySparkDataFrame
+from pyspark.sql import functions as F
+from pyspark.sql.functions import pandas_udf
+from pyspark.sql.internal import InternalFunction as SF
+from pyspark.sql.types import (
+    ArrayType,
+    BooleanType,
+    DataType,
+    DecimalType,
+    DoubleType,
+    NullType,
+    NumericType,
+    Row,
+    StringType,
+    StructField,
+    StructType,
+    TimestampNTZType,
+    TimestampType,
 )
-from pyspark.pandas.missing.frame import MissingPandasLikeDataFrame
-from pyspark.pandas.typedef.typehints import (
-    as_spark_type,
-    infer_return_type,
-    pandas_on_spark_type,
-    spark_type_to_pandas_dtype,
-    DataFrameType,
-    SeriesType,
-    ScalarType,
-    create_tuple_for_frame_type,
-)
-from pyspark.pandas.plot import PandasOnSparkPlotAccessor
+from pyspark.sql.window import Window
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import OptionalPrimitiveType
-
     from pyspark.pandas.groupby import DataFrameGroupBy
-    from pyspark.pandas.resample import DataFrameResampler
     from pyspark.pandas.indexes import Index
+    from pyspark.pandas.resample import DataFrameResampler
     from pyspark.pandas.series import Series
+    from pyspark.sql._typing import OptionalPrimitiveType
 
 
 # These regular expression patterns are compiled and defined here to avoid compiling the same
@@ -2718,6 +2719,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # but PlanMetrics/PlanObservedMetrics objects from Spark Connect are not
         # JSON serializable. We filter these internal attrs only for affected versions.
         import pyarrow as pa
+
         from pyspark.loose_version import LooseVersion
 
         if LooseVersion(pa.__version__) >= LooseVersion("22.0.0"):
@@ -5029,6 +5031,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if axis == 0:
             return self._apply_series_op(lambda psser: psser._diff(periods), should_resolve=True)
         else:
+            if not isinstance(periods, int):
+                raise TypeError(
+                    "periods should be an int; however, got [%s]" % type(periods).__name__
+                )
             column_labels = self._internal.column_labels
             data_col_names = self._internal.data_spark_column_names
             new_columns: list[PySparkColumn] = []
@@ -14424,22 +14430,25 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             this = inputs[0]
             assert all(inp is this for inp in inputs if isinstance(inp, DataFrame))
             column_labels = this._internal.column_labels
-            outputs = [
-                ufunc(
+
+            def apply_ufunc(label: Label) -> Any:
+                return ufunc(
                     *[inp[label] if isinstance(inp, DataFrame) else inp for inp in inputs], **kwargs
                 )
-                for label in column_labels
-            ]
-            if outputs and isinstance(outputs[0], tuple):
+
+            # numpy declares the number of outputs on the ufunc itself, so a frame with no
+            # columns still returns the right number of DataFrames.
+            if getattr(ufunc, "nout", 1) > 1:
                 # A multi-output ufunc (for example np.modf) yields a two-element tuple per
                 # column; regroup into one DataFrame per output, matching numpy/pandas.
+                outputs = [apply_ufunc(label) for label in column_labels]
                 first_cols = [out[0].rename(label) for out, label in zip(outputs, column_labels)]
                 second_cols = [out[1].rename(label) for out, label in zip(outputs, column_labels)]
                 first_df: DataFrame = DataFrame(this._internal.with_new_columns(first_cols))
                 second_df: DataFrame = DataFrame(this._internal.with_new_columns(second_cols))
                 return first_df, second_df
             else:
-                applied = [out.rename(label) for out, label in zip(outputs, column_labels)]
+                applied = [apply_ufunc(label).rename(label) for label in column_labels]
                 internal = this._internal.with_new_columns(applied)
                 return DataFrame(internal)
 
@@ -14516,14 +14525,15 @@ class CachedDataFrame(DataFrame):
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import shutil
     import sys
     import tempfile
     import uuid
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.frame
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 
