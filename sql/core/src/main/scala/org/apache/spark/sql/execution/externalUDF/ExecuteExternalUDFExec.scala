@@ -31,9 +31,10 @@ import org.apache.spark.udf.worker.UDFWorkerSpecification
 
 /**
  * :: Experimental ::
- * Physical plan node that evaluates one scalar UDF in an external worker process.
+ * Physical plan node representing one scalar UDF evaluation. Worker execution is intentionally
+ * unimplemented until the scalar worker path is added.
  *
- * @param udf UDF expression evaluated by the worker session.
+ * @param udf UDF expression represented by this node.
  * @param resultAttr Output attribute for the UDF expression.
  * @param child Child plan providing input rows.
  */

@@ -396,19 +396,54 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
       _.exists(_.isInstanceOf[ExternalUserDefinedFunction])))
   }
 
+  test("a non-deterministic external UDF grouping key is evaluated before aggregate") {
+    val spec = workerSpec("non-deterministic-grouping")
+    val function = udf("non-deterministic-grouping", spec, Seq(input), deterministic = false)
+    val plan = Aggregate(
+      groupingExpressions = Seq(function),
+      aggregateExpressions = Seq(Alias(function, "result")()),
+      child = relation)
+
+    val analyzed = withSQLConf(SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key -> "true") {
+      spark.sessionState.analyzer.executeAndCheck(plan, new QueryPlanningTracker)
+    }
+    val analyzedAggregate = analyzed.collectFirst { case node: Aggregate => node }.getOrElse {
+      fail(s"Expected an Aggregate node, found:\n$analyzed")
+    }
+    assert(analyzedAggregate.groupingExpressions.forall(_.deterministic))
+
+    val extracted = extract(analyzed)
+    val aggregate = extracted.collectFirst { case node: Aggregate => node }.getOrElse {
+      fail(s"Expected an Aggregate node, found:\n$extracted")
+    }
+    val evaluation = singleEvalNode(aggregate.child)
+    assert(!evaluation.udf.deterministic)
+    assert(evaluation.child == relation)
+    assert(aggregate.groupingExpressions.forall(_.deterministic))
+    assert(!aggregate.expressions.exists(
+      _.exists(_.isInstanceOf[ExternalUserDefinedFunction])))
+  }
+
   test("an external UDF over a window expression is evaluated after window") {
     val spec = workerSpec("over-window")
     val windowSpec = WindowSpecDefinition(Seq.empty, Seq.empty, UnspecifiedFrame)
     val windowExpression = WindowExpression(new Lag(input), windowSpec)
     val plan = Window(
-      windowExpressions = Seq(Alias(udf("over-window", spec, Seq(windowExpression)), "result")()),
+      windowExpressions = Seq(Alias(
+        udf("over-window", spec, Seq(windowExpression, input)), "result")()),
       partitionSpec = Seq.empty,
       orderSpec = Seq.empty,
       child = relation)
 
     val extracted = extract(plan)
     val evaluation = singleEvalNode(extracted)
-    assert(evaluation.child.isInstanceOf[Window])
+    val window = evaluation.child match {
+      case node: Window => node
+      case other => fail(s"Expected a Window node, found:\n$other")
+    }
+    assert(window.output.map(_.exprId).distinct.size == window.output.size)
+    assert(evaluation.udf.children.size == 2)
+    assert(evaluation.udf.children.last.semanticEquals(input))
     assert(!evaluation.udf.exists(_.isInstanceOf[WindowExpression]))
     assert(evaluation.udf.references.subsetOf(evaluation.child.outputSet))
   }
@@ -456,6 +491,30 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
       case other => fail(s"Expected Join below ExecuteExternalUDF, found:\n$other")
     }
     assert(join.condition.isEmpty)
+    assert(filter.condition.semanticEquals(evaluation.resultAttr))
+  }
+
+  test("an external UDF is moved out of a mixed join condition") {
+    val spec = workerSpec("mixed-join")
+    val rightInput = AttributeReference("right", IntegerType, nullable = false)()
+    val right = LocalRelation(Seq(rightInput))
+    val equality = EqualTo(input, rightInput)
+    val function = udf("mixed-join", spec, Seq(input, rightInput), dataType = BooleanType)
+    val plan = Join(relation, right, Inner, Some(And(equality, function)), JoinHint.NONE)
+
+    val extracted = extract(plan)
+    val filter = extracted.collectFirst { case node: Filter => node }.getOrElse {
+      fail(s"Expected a Filter node, found:\n$extracted")
+    }
+    val evaluation = filter.child match {
+      case node: ExecuteExternalUDF => node
+      case other => fail(s"Expected ExecuteExternalUDF below Filter, found:\n$other")
+    }
+    val join = evaluation.child match {
+      case node: Join => node
+      case other => fail(s"Expected Join below ExecuteExternalUDF, found:\n$other")
+    }
+    assert(join.condition.exists(_.semanticEquals(equality)))
     assert(filter.condition.semanticEquals(evaluation.resultAttr))
   }
 

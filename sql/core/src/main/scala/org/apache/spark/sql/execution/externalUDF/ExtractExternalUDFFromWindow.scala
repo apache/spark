@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.externalUDF
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, ExprId,
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExprId,
   ExternalUserDefinedFunction, NamedExpression, WindowExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Window}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -54,10 +54,6 @@ private[sql] object ExtractExternalUDFFromWindow extends Rule[LogicalPlan] {
                 val alias = Alias(windowExpression, s"w_${windowProjectList.size}")()
                 windowProjectList += alias
                 alias.toAttribute
-              case attribute: Attribute if !windowProjectExprIds.contains(attribute.exprId) =>
-                windowProjectList += attribute
-                windowProjectExprIds += attribute.exprId
-                attribute
             }.asInstanceOf[NamedExpression]
           } else {
             if (!windowProjectExprIds.contains(expression.exprId)) {
