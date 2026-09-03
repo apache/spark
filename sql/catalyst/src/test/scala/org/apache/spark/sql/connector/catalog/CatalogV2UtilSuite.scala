@@ -200,15 +200,19 @@ class CatalogV2UtilSuite extends SparkFunSuite {
       mockEq(expected))
   }
 
-  test("getTableWithStateOptions protects a retained cache key from catalog mutation") {
+  test("getTableWithStateOptions rejects catalog mutation of a retained cache key") {
     val catalog = mock(classOf[TableCatalog])
     val ident = Identifier.of(Array("ns"), "table")
     val table = mock(classOf[Table])
     var catalogOptions: CaseInsensitiveStringMap = null
+    var mutationBlocked = false
     when(catalog.loadTable(any[Identifier], any[TableContext], any[CaseInsensitiveStringMap]))
       .thenAnswer((invocation: InvocationOnMock) => {
         catalogOptions = invocation.getArgument[CaseInsensitiveStringMap](2)
-        catalogOptions.entrySet().iterator().next().setValue("s2")
+        intercept[UnsupportedOperationException] {
+          catalogOptions.entrySet().iterator().next().setValue("s2")
+        }
+        mutationBlocked = true
         table
       })
     val stateOptions =
@@ -228,10 +232,34 @@ class CatalogV2UtilSuite extends SparkFunSuite {
       None,
       new CaseInsensitiveStringMap(java.util.Map.of("snapshot", "s2")))
 
-    assert(catalogOptions.get("snapshot") == "s2", "the catalog fixture did not mutate its map")
+    assert(mutationBlocked, "the catalog fixture did not attempt to mutate its map")
+    assert(catalogOptions.get("snapshot") == "s1")
     assert(catalogOptions.asCaseSensitiveMap().containsKey("SnApShOt"))
     assert(tableCache.get(sameStateKey).contains(table))
     assert(!tableCache.contains(differentStateKey))
+  }
+
+  test("getTableWithStateOptions preserves effective values for duplicate-case keys") {
+    val catalog = mock(classOf[TableCatalog])
+    val ident = Identifier.of(Array("ns"), "table")
+    val table = mock(classOf[Table])
+    var catalogOptions: CaseInsensitiveStringMap = null
+    when(catalog.loadTable(any[Identifier], any[TableContext], any[CaseInsensitiveStringMap]))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        catalogOptions = invocation.getArgument[CaseInsensitiveStringMap](2)
+        table
+      })
+    val options = new java.util.LinkedHashMap[String, String]()
+    options.put("snapshot", "lower-value")
+    options.put("SNAPSHOT", "upper-value")
+    val stateOptions = new CaseInsensitiveStringMap(options)
+
+    CatalogV2Util.getTableWithStateOptions(catalog, ident, stateOptions)
+
+    assert(stateOptions.asCaseSensitiveMap().size() == 2)
+    assert(stateOptions.get("snapshot") == "upper-value")
+    assert(catalogOptions.get("snapshot") == stateOptions.get("snapshot"))
+    assert(catalogOptions.asCaseSensitiveMap() == stateOptions.asCaseSensitiveMap())
   }
 
   test("getTable forwards no options when a catalog declares no table-state options") {

@@ -545,11 +545,7 @@ private[sql] object CatalogV2Util {
       case None => null
     }
     val context = new TableContext(timeTravel, parseWritePrivileges(writePrivilegesString))
-    // Callers may retain stateOptions as a cache key. CaseInsensitiveStringMap exposes mutable
-    // collection views, so do not let catalog code mutate the retained instance.
-    val catalogStateOptions =
-      new CaseInsensitiveStringMap(stateOptions.asCaseSensitiveMap())
-    catalog.asTableCatalog.loadTable(ident, context, catalogStateOptions)
+    catalog.asTableCatalog.loadTable(ident, context, stateOptions)
   }
 
   /**
