@@ -295,7 +295,6 @@ class PythonWorkerEnvTests(PythonWorkerEnvMixin, ReusedSQLTestCase):
             self._unset_env("1INVALID")
 
 
-
 if __name__ == "__main__":
     from pyspark.testing import main
 
