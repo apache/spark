@@ -617,33 +617,36 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
       val client = new HttpClient()
       client.start()
       try {
-        eventually(timeout(5.seconds), interval(50.milliseconds)) {
-          val base = sc.ui.get.webUrl.stripSuffix("/")
-          val token = scrapeCsrfToken(sc)
-          val noToken = new URI(base + "/stages/stage/kill/?id=0").toURL
-          val withToken = new URI(
-            base + s"/stages/stage/kill/?id=0&csrfToken=$token").toURL
-          // Forged or scripted requests without the token, or with a wrong one, fail.
-          TestUtils.httpResponseCode(noToken, "GET") should be (403)
-          TestUtils.httpResponseCode(
-            new URI(base + "/stages/stage/kill/?id=0&csrfToken=bogus").toURL,
-            "GET") should be (403)
-          // A deliberate click from the UI carries the token and goes through.
-          TestUtils.httpResponseCode(withToken, "GET") should be (200)
-          TestUtils.httpResponseCode(withToken, "POST") should be (200)
-          // HEAD must be safe (RFC 9110), so it is refused rather than delegated to doGet.
-          TestUtils.httpResponseCode(withToken, "HEAD") should be (405)
-          // ...but HEAD still works on unguarded redirect handlers ("/" -> "/jobs/").
-          TestUtils.httpResponseCode(new URI(base + "/").toURL, "HEAD") should be (200)
-          // Browser link prefetchers identify themselves; a valid token must not
-          // save them, since the token rides in the link they prefetch.
-          client.newRequest(withToken.toURI).headers(
-            _.add("Sec-Purpose", "prefetch")).send().getStatus should be (403)
-          client.newRequest(withToken.toURI).headers(
-            _.add("Purpose", "prefetch")).send().getStatus should be (403)
-          client.newRequest(withToken.toURI).headers(
-            _.add("X-Moz", "prefetch")).send().getStatus should be (403)
-        }
+        val base = sc.ui.get.webUrl.stripSuffix("/")
+        // Retry only until the kill link appears. Everything after this runs once: a request
+        // the endpoint accepts kills the job, and the link is then gone, so retrying the whole
+        // block could never succeed a second time -- it would fail in scrapeCsrfToken and
+        // report a missing token rather than whatever actually went wrong.
+        val token = eventually(timeout(5.seconds), interval(50.milliseconds))(scrapeCsrfToken(sc))
+        val noToken = new URI(base + "/stages/stage/kill/?id=0").toURL
+        val withToken = new URI(
+          base + s"/stages/stage/kill/?id=0&csrfToken=$token").toURL
+        // Forged or scripted requests without the token, or with a wrong one, fail.
+        TestUtils.httpResponseCode(noToken, "GET") should be (403)
+        TestUtils.httpResponseCode(
+          new URI(base + "/stages/stage/kill/?id=0&csrfToken=bogus").toURL,
+          "GET") should be (403)
+        // HEAD must be safe (RFC 9110), so it is refused rather than delegated to doGet.
+        TestUtils.httpResponseCode(withToken, "HEAD") should be (405)
+        // ...but HEAD still works on unguarded redirect handlers ("/" -> "/jobs/").
+        TestUtils.httpResponseCode(new URI(base + "/").toURL, "HEAD") should be (200)
+        // Browser link prefetchers identify themselves; a valid token must not
+        // save them, since the token rides in the link they prefetch.
+        client.newRequest(withToken.toURI).headers(
+          _.add("Sec-Purpose", "prefetch")).send().getStatus should be (403)
+        client.newRequest(withToken.toURI).headers(
+          _.add("Purpose", "prefetch")).send().getStatus should be (403)
+        client.newRequest(withToken.toURI).headers(
+          _.add("X-Moz", "prefetch")).send().getStatus should be (403)
+        // Last, because a deliberate click from the UI carries the token, goes through, and
+        // kills the stage.
+        TestUtils.httpResponseCode(withToken, "GET") should be (200)
+        TestUtils.httpResponseCode(withToken, "POST") should be (200)
       } finally {
         client.stop()
       }
@@ -654,18 +657,17 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
     withSpark(newSparkContext(killEnabled = true,
       additionalConfs = Map(UI_KILL_VIA_GET_ENABLED.key -> "true"))) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
-      eventually(timeout(5.seconds), interval(50.milliseconds)) {
-        val base = sc.ui.get.webUrl.stripSuffix("/")
-        val token = scrapeCsrfToken(sc)
-        TestUtils.httpResponseCode(
-          new URI(base + "/jobs/job/kill/?id=0").toURL, "GET") should be (403)
-        TestUtils.httpResponseCode(
-          new URI(base + s"/jobs/job/kill/?id=0&csrfToken=$token").toURL,
-          "GET") should be (200)
-        TestUtils.httpResponseCode(
-          new URI(base + s"/jobs/job/kill/?id=0&csrfToken=$token").toURL,
-          "POST") should be (200)
-      }
+      val base = sc.ui.get.webUrl.stripSuffix("/")
+      // Retry only until the kill link appears; the accepted requests below kill the job.
+      val token = eventually(timeout(5.seconds), interval(50.milliseconds))(scrapeCsrfToken(sc))
+      TestUtils.httpResponseCode(
+        new URI(base + "/jobs/job/kill/?id=0").toURL, "GET") should be (403)
+      TestUtils.httpResponseCode(
+        new URI(base + s"/jobs/job/kill/?id=0&csrfToken=$token").toURL,
+        "GET") should be (200)
+      TestUtils.httpResponseCode(
+        new URI(base + s"/jobs/job/kill/?id=0&csrfToken=$token").toURL,
+        "POST") should be (200)
     }
   }
 
