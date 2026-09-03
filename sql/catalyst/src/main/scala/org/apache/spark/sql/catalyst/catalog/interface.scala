@@ -1185,7 +1185,7 @@ case class HiveTableRelation(
     partitionCols: Seq[AttributeReference],
     tableStats: Option[Statistics] = None,
     @transient prunedPartitions: Option[Seq[CatalogTablePartition]] = None,
-    charVarcharStandardSemantics: Option[Boolean] = None)
+    charVarcharScanMode: Option[CharVarcharScanMode] = None)
   extends LeafNode with MultiInstanceRelation with NormalizeableRelation {
   assert(tableMeta.identifier.database.isDefined,
     "Table identifier " + tableMeta.identifier.quotedString + " is missing database name. " +

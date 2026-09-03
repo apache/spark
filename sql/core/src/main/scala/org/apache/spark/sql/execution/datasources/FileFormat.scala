@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.sources.Filter
@@ -166,6 +167,34 @@ trait FileFormat {
   }
 
   /**
+   * Same as [[buildReaderWithPartitionValues]] but also carries the analyzed CHAR/VARCHAR scan
+   * mode. [[FileSourceScanExec]] calls this overload whenever the relation has a bound mode,
+   * regardless of the concrete file format.
+   *
+   * The default implementation bridges the mode across the legacy seven-argument signature: it
+   * clones the per-call Hadoop configuration, writes an engine-private entry with the explicit
+   * mode, then invokes the seven-argument method virtually. A format that honors first-class
+   * CHAR/VARCHAR types (e.g. [[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat]])
+   * reads that entry in its seven-argument override, so existing subclasses keep their override
+   * and a call to `super` retains the bound mode. The Hadoop entry is only a transport across the
+   * legacy signature; the authoritative state remains the typed plan field and this parameter.
+   */
+  def buildReaderWithPartitionValues(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String],
+      hadoopConf: Configuration,
+      charVarcharScanMode: CharVarcharScanMode): PartitionedFile => Iterator[InternalRow] = {
+    val taggedConf = new Configuration(hadoopConf)
+    FileFormat.setCharVarcharScanMode(taggedConf, charVarcharScanMode)
+    buildReaderWithPartitionValues(
+      sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, taggedConf)
+  }
+
+  /**
    * Create a file metadata struct column containing fields supported by the given file format.
    */
   def createFileMetadataCol(): AttributeReference = {
@@ -265,6 +294,25 @@ object FileFormat {
    * by calling supportBatch.
    */
   val OPTION_RETURNING_BATCH = "returning_batch"
+
+  /**
+   * Engine-private Hadoop configuration entry that transports the analyzed CHAR/VARCHAR scan mode
+   * across the legacy [[FileFormat.buildReaderWithPartitionValues]] signature. It is written by the
+   * mode-aware overload and read by formats that honor first-class CHAR/VARCHAR types. This is not
+   * a public option; the authoritative state is the typed plan field and overload parameter.
+   */
+  val CHAR_VARCHAR_SCAN_MODE = "__spark_sql_char_varchar_scan_mode"
+
+  /** Writes the CHAR/VARCHAR scan mode into `conf` under [[CHAR_VARCHAR_SCAN_MODE]]. */
+  private[sql] def setCharVarcharScanMode(
+      conf: Configuration, mode: CharVarcharScanMode): Unit = {
+    conf.set(CHAR_VARCHAR_SCAN_MODE, mode.toString)
+  }
+
+  /** Reads the CHAR/VARCHAR scan mode from `conf`, or `None` if no mode was bridged in. */
+  private[sql] def charVarcharScanMode(conf: Configuration): Option[CharVarcharScanMode] = {
+    Option(conf.get(CHAR_VARCHAR_SCAN_MODE)).map(CharVarcharScanMode.fromName)
+  }
 
   /**
    * Schema of metadata struct that can be produced by every file format,

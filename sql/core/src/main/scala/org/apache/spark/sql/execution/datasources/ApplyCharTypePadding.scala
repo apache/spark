@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.ApplyCharTypePaddingHelper
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharScanMode, CharVarcharUtils}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 
@@ -52,21 +52,24 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val standardSemantics = conf.charVarcharStandardSemantics
+    val scanMode = CharVarcharScanMode(standardSemantics)
 
-    // Bind into case-class state, not a TreeNodeTag: tags are dropped by canonicalization
-    // so cache lookup and scan reuse would treat preserve-only and standard scans as the
-    // same plan. Keep an already-bound value (views, catalog-cached relations) unchanged.
+    // Bind into case-class state, not a TreeNodeTag: `TreeNode.makeCopy` calls `copyTagsFrom`,
+    // so a tag survives canonicalization, but it does not participate in structural plan
+    // equality / sameResult, so cache lookup and scan reuse would treat preserve-only and
+    // standard scans as the same plan. A case-class field does participate. Keep an
+    // already-bound value (views, catalog-cached relations) unchanged.
     def bindStandardSemantics(p: LogicalPlan): LogicalPlan = p match {
-      case relation: LogicalRelation if relation.charVarcharStandardSemantics.isEmpty =>
-        val bound = relation.copy(charVarcharStandardSemantics = Some(standardSemantics))
+      case relation: LogicalRelation if relation.charVarcharScanMode.isEmpty =>
+        val bound = relation.copy(charVarcharScanMode = Some(scanMode))
         bound.copyTagsFrom(relation)
         bound
-      case relation: DataSourceV2Relation if relation.charVarcharStandardSemantics.isEmpty =>
-        val bound = relation.copy(charVarcharStandardSemantics = Some(standardSemantics))
+      case relation: DataSourceV2Relation if relation.charVarcharScanMode.isEmpty =>
+        val bound = relation.copy(charVarcharScanMode = Some(scanMode))
         bound.copyTagsFrom(relation)
         bound
-      case relation: HiveTableRelation if relation.charVarcharStandardSemantics.isEmpty =>
-        val bound = relation.copy(charVarcharStandardSemantics = Some(standardSemantics))
+      case relation: HiveTableRelation if relation.charVarcharScanMode.isEmpty =>
+        val bound = relation.copy(charVarcharScanMode = Some(scanMode))
         bound.copyTagsFrom(relation)
         bound
       case _ => p

@@ -2451,22 +2451,59 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
 
   test("SPARK-58814: OrcFileFormat subclasses keep public reader dispatch") {
     import testImplicits._
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      Seq("ab").toDF("v").write.mode("overwrite").orc(path)
-      val formatName = classOf[TrackingOrcFileFormat].getName
-      val boundModes = Seq(
-        Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true"),
-        Seq(
-          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
-          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-          SQLConf.READ_SIDE_CHAR_PADDING.key -> "false"))
-      boundModes.foreach { extraConf =>
-        TrackingOrcFileFormat.publicReaderCalls = 0
-        withSQLConf(extraConf: _*) {
-          spark.read.format(formatName).schema("v VARCHAR(4)").load(path).collect()
-          assert(TrackingOrcFileFormat.publicReaderCalls > 0,
-            s"subclass reader override was skipped for $extraConf")
+    val formatName = classOf[TrackingOrcFileFormat].getName
+    // A delegating subclass overrides the public seven-argument reader and calls `super`. That
+    // `super` call must retain the analyzed scan mode bridged across the legacy signature, so a
+    // standard-semantics scan cannot be silently downgraded to native preserve behavior. Cover
+    // both the row and vectorized ORC readers.
+    Seq(true, false).foreach { vectorizedReaderEnabled =>
+      withSQLConf(
+          SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorizedReaderEnabled.toString) {
+        // In-length value: assert the subclass override actually runs under both bound modes.
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          Seq("ab").toDF("v").write.mode("overwrite").orc(path)
+          val boundModes = Seq(
+            Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true"),
+            Seq(
+              SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+              SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+              SQLConf.READ_SIDE_CHAR_PADDING.key -> "false"))
+          boundModes.foreach { extraConf =>
+            TrackingOrcFileFormat.publicReaderCalls = 0
+            withSQLConf(extraConf: _*) {
+              spark.read.format(formatName).schema("v VARCHAR(4)").load(path).collect()
+              assert(TrackingOrcFileFormat.publicReaderCalls > 0,
+                s"subclass reader override was skipped for $extraConf " +
+                  s"(vectorized=$vectorizedReaderEnabled)")
+            }
+          }
+        }
+        // Over-length value: SparkStandard must observe the original value and raise
+        // EXCEED_LIMIT_LENGTH; PreserveNative keeps native ORC truncation.
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          Seq("abcdef").toDF("v").write.mode("overwrite").orc(path)
+          withClue(s"SparkStandard vectorized=$vectorizedReaderEnabled: ") {
+            withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+              checkError(
+                exception = intercept[SparkRuntimeException] {
+                  spark.read.format(formatName).schema("v VARCHAR(4)").load(path).collect()
+                },
+                condition = "EXCEED_LIMIT_LENGTH",
+                parameters = Map("limit" -> "4"))
+            }
+          }
+          withClue(s"PreserveNative vectorized=$vectorizedReaderEnabled: ") {
+            withSQLConf(
+                SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+                SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+              checkAnswer(
+                spark.read.format(formatName).schema("v VARCHAR(4)").load(path),
+                Row("abcd"))
+            }
+          }
         }
       }
     }
