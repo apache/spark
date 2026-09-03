@@ -6768,6 +6768,123 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59050: SPJ: regrouping a marked layout must not keep the unknown-keyed claim") {
+    // The union declares keys in child order [3, 4, 1, 2]; the first join one-side-shuffles rt's
+    // out-of-set id=5 onto it at hash(5) % 4 and marks the layout. The second join aligns that
+    // marked side to rs's sorted keys [1, 2, 3, 4] with a GroupPartitionsExec, which reorders the
+    // partitions and moves the id=5 row, so the regrouped layout may no longer claim the
+    // hash-routing contract. b is an independent one-side-shuffled marked layout [1, 2, 3, 4] with
+    // id=5 at hash(5) % 4. If the regrouped side kept the claim, the final marked-vs-marked join
+    // would skip the shuffle and the two id=5 rows (at different partitions) would never meet.
+    val cols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
+    createTable("rp", cols, Array(identity("id")))
+    createTable("rq", cols, Array(identity("id")))
+    createTable("rs", cols, Array(identity("id")))
+    createTable("ra2", cols, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.rp VALUES (3, 'p3'), (4, 'p4')")
+    sql("INSERT INTO testcat.ns.rq VALUES (1, 'q1'), (2, 'q2')")
+    sql("INSERT INTO testcat.ns.rs VALUES (1, 's1'), (2, 's2'), (3, 's3'), (4, 's4')")
+    sql("INSERT INTO testcat.ns.ra2 VALUES (1, 'x1'), (2, 'x2'), (3, 'x3'), (4, 'x4')")
+
+    withTable("rt", "rt2") {
+      sql("CREATE TABLE rt (id INT, data STRING) USING parquet")
+      sql("INSERT INTO rt VALUES (1,'t1'),(2,'t2'),(3,'t3'),(4,'t4'),(5,'t5')")
+      sql("CREATE TABLE rt2 (id INT, data STRING) USING parquet")
+      sql("INSERT INTO rt2 VALUES (1,'y1'),(2,'y2'),(3,'y3'),(4,'y4'),(5,'y5')")
+
+      val query =
+        """
+          |SELECT r2.id, b.data
+          |FROM (
+          |  SELECT r1.id FROM (
+          |    SELECT tt.id AS id FROM (
+          |      SELECT id FROM testcat.ns.rp UNION ALL SELECT id FROM testcat.ns.rq
+          |    ) u RIGHT OUTER JOIN rt tt ON u.id = tt.id
+          |  ) r1 LEFT OUTER JOIN testcat.ns.rs ss ON r1.id = ss.id
+          |) r2
+          |JOIN (
+          |  SELECT tt2.id AS id, tt2.data AS data FROM testcat.ns.ra2 aa
+          |  RIGHT OUTER JOIN rt2 tt2 ON aa.id = tt2.id
+          |) b ON r2.id = b.id
+          |""".stripMargin
+      val expected = Seq(Row(1, "y1"), Row(2, "y2"), Row(3, "y3"), Row(4, "y4"), Row(5, "y5"))
+
+      // Baseline: no SPJ -> all five rows.
+      withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "false") {
+        checkAnswer(sql(query), expected)
+      }
+      withSQLConf(
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          "spark.sql.autoBroadcastJoinThreshold" -> "-1",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        // The regrouped marked side can no longer claim the hash-routing contract, so the final
+        // join re-shuffles it instead of storage-partitioning. Three one-side shuffles, all keyed
+        // with unknown partition keys: rt onto the union, rt2 onto ra2, and the final join's
+        // re-shuffle of the regrouped side. Before the fix the final join storage-partitioned
+        // (only the first two shuffles) and silently lost the id=5 row.
+        assertShuffleMayContainUnknownPartitionKeys(df.queryExecution.executedPlan,
+          Seq(true, true, true))
+      }
+    }
+  }
+
+  test("SPARK-59050: SPJ: a reducer-free identity regrouping keeps the unknown-keyed claim") {
+    // Positive counterpart to the regrouping test above. The first join one-side-shuffles pt
+    // onto pa's sorted keys [1, 2, 3] and marks the layout (pt's id=4 is out-of-set). The second
+    // join aligns that marked [1, 2, 3] superset with pb's [1, 2] by pushing the merged keys
+    // [1, 2, 3] to both sides. The marked side already holds exactly the merged keys, so its
+    // GroupPartitionsExec is a reducer-free identity grouping and must keep the claim; only the
+    // subset side pads. This pins that the identity branch is reachable, not dead code.
+    val cols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
+    createTable("pa", cols, Array(identity("id")))
+    createTable("pb", cols, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.pa VALUES (1, 'a1'), (2, 'a2'), (3, 'a3')")
+    sql("INSERT INTO testcat.ns.pb VALUES (1, 'b1'), (2, 'b2')")
+    withTable("pt") {
+      sql("CREATE TABLE pt (id INT, data STRING) USING parquet")
+      sql("INSERT INTO pt VALUES (1, 't1'), (2, 't2'), (3, 't3'), (4, 't4')")
+      val query =
+        """
+          |SELECT r.id, pb.data
+          |FROM (SELECT pt.id AS id FROM testcat.ns.pa RIGHT OUTER JOIN pt ON pa.id = pt.id) r
+          |JOIN testcat.ns.pb ON r.id = pb.id
+          |""".stripMargin
+      val expected = Seq(Row(1, "b1"), Row(2, "b2"))
+
+      // Baseline: no SPJ.
+      withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "false") {
+        checkAnswer(sql(query), expected)
+      }
+      withSQLConf(
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          "spark.sql.autoBroadcastJoinThreshold" -> "-1",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        // A GroupPartitionsExec with no reducers whose output partition i holds exactly input
+        // partition i is an identity grouping; the fix keeps the unknown-keyed claim for it.
+        val identityGpe = collectAllGroupPartitions(plan).find { g =>
+          g.reducers.isEmpty && g.groupedPartitions.zipWithIndex.forall {
+            case ((_, inputIndices), outputIndex) =>
+              inputIndices.lengthCompare(1) == 0 && inputIndices.head == outputIndex
+          }
+        }
+        assert(identityGpe.isDefined,
+          s"expected a reducer-free identity GroupPartitionsExec, got:\n$plan")
+        identityGpe.get.outputPartitioning match {
+          case k: KeyedPartitioning =>
+            assert(k.mayContainUnknownPartitionKeys,
+              "the identity grouping must keep the unknown-keyed claim")
+          case other =>
+            fail(s"expected a KeyedPartitioning output, got $other")
+        }
+      }
+    }
+  }
+
 }
 
 /**
