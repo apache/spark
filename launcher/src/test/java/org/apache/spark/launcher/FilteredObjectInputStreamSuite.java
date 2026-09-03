@@ -25,7 +25,7 @@ import java.io.ObjectStreamClass;
 import java.util.ArrayList;
 import java.util.HashMap;
 
-import org.apache.spark.launcherMalicious.LauncherPrefixSpoof;
+import org.apache.spark.launchermalicious.LauncherPrefixSpoof;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -105,7 +105,7 @@ public class FilteredObjectInputStreamSuite extends BaseSuite {
 
   // ALLOWED_PACKAGES entries end in a literal dot, so a class merely sharing the
   // "org.apache.spark.launcher" text without being in that package must still be
-  // rejected: LauncherPrefixSpoof (org.apache.spark.launcherMalicious.LauncherPrefixSpoof)
+  // rejected: LauncherPrefixSpoof (org.apache.spark.launchermalicious.LauncherPrefixSpoof)
   // pins down that boundary, since startsWith("org.apache.spark.launcher.") is false
   // once the character after the prefix is "M" rather than ".". A matching spoof of
   // the "java.lang." prefix (e.g. java.langfoo.Bar) can't be tested the same way: the
@@ -120,7 +120,7 @@ public class FilteredObjectInputStreamSuite extends BaseSuite {
         () -> deserializeFiltered(bytes));
     assertTrue(thrown.getMessage().contains("Unexpected class in stream"));
     assertTrue(thrown.getMessage().contains(
-        "org.apache.spark.launcherMalicious.LauncherPrefixSpoof"));
+        "org.apache.spark.launchermalicious.LauncherPrefixSpoof"));
   }
 
   // The three tests below document CURRENT resolveClass behavior for classes in

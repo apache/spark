@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.launcherMalicious;
+package org.apache.spark.launchermalicious;
 
 import java.io.Serializable;
 
