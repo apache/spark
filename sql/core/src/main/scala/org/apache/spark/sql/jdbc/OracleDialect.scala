@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Date, SQLException, Timestamp, Types}
+import java.time.LocalDateTime
 import java.util.Locale
 
 import scala.util.control.NonFatal
@@ -26,7 +27,7 @@ import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.connector.expressions.{Expression, Extract, Literal}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.jdbc.OracleDialect._
 import org.apache.spark.sql.types._
 
@@ -181,7 +182,23 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       case BINARY_DOUBLE => Some(DoubleType) // Value for OracleTypes.BINARY_DOUBLE
       case INTERVAL_YM => Some(YearMonthIntervalType())
       case INTERVAL_DS => Some(DayTimeIntervalType())
+      case Types.TIMESTAMP if !conf.legacyOracleTimestampNTZMappingEnabled && typeName != null &&
+          typeName.toUpperCase(Locale.ROOT).matches("DATE|TIMESTAMP") =>
+        // Oracle DATE and TIMESTAMP are zoneless; map to NTZ and mark it wall-clock so a later flag
+        // flip can't desync the read. TZ/LTZ variants are handled above.
+        if (md != null) md.putBoolean(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK, value = true)
+        // TODO: map sub-microsecond TIMESTAMP(7-9) to TimestampNTZNanosType when the nanosecond
+        // timestamp preview is enabled, instead of truncating to microsecond TimestampNTZType.
+        Some(TimestampNTZType)
       case _ => None
+    }
+  }
+
+  override def updateExtraColumnMetaForWrite(dt: DataType, metadata: MetadataBuilder): Unit = {
+    dt match {
+      case TimestampNTZType if !conf.legacyOracleTimestampNTZMappingEnabled =>
+        metadata.putBoolean(JdbcUtils.WRITE_TIMESTAMP_NTZ_WALL_CLOCK, value = true)
+      case _ =>
     }
   }
 
@@ -210,6 +227,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     // Appendix A Reference Information.
     case stringValue: String => s"'${escapeSql(stringValue)}'"
     case timestampValue: Timestamp => "{ts '" + timestampValue + "'}"
+    case localDateTimeValue: LocalDateTime => "{ts '" + Timestamp.valueOf(localDateTimeValue) + "'}"
     case dateValue: Date => "{d '" + dateValue + "'}"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
     case binaryValue: Array[Byte] =>
