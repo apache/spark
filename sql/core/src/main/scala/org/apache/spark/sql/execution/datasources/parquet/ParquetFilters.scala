@@ -467,6 +467,16 @@ class ParquetFilters(
     v.asInstanceOf[LocalTime].getLong(MICRO_OF_DAY)
   }
 
+  // A LocalTime filter literal is only pushable against a TIME(MICROS) column when it carries no
+  // sub-microsecond (nanosecond) component. TimeType is held internally as nanos-of-day, so a
+  // literal can be finer-grained than the on-disk MICROS unit; localTimeToMicros would then
+  // truncate it and push a bound that skips matching rows (e.g. `t < 12:00:00.000000001` truncates
+  // to `t < 12:00:00`, wrongly pruning a row at exactly 12:00:00; `!=` has the symmetric
+  // false-negative). Sub-microsecond literals are therefore not pushed down; the read falls back
+  // to a full scan, which is always correct.
+  private def isMicrosResolution(v: Any): Boolean =
+    v.asInstanceOf[LocalTime].getNano % 1000 == 0
+
   private def decimalToInt32(decimal: JBigDecimal): Integer = decimal.unscaledValue().intValue()
 
   private def decimalToInt64(decimal: JBigDecimal): JLong = decimal.unscaledValue().longValue()
@@ -972,7 +982,8 @@ class ParquetFilters(
       case ParquetTimestampMicrosType | ParquetTimestampMillisType =>
         value.isInstanceOf[Timestamp] || value.isInstanceOf[Instant]
       case FrameworkFilterOps(ops) => ops.acceptsValue(value)
-      case ParquetTimeMicrosTypeAdjToUTC => value.isInstanceOf[LocalTime]
+      case ParquetTimeMicrosTypeAdjToUTC =>
+        value.isInstanceOf[LocalTime] && isMicrosResolution(value)
       case ParquetSchemaType(decimalType: DecimalLogicalTypeAnnotation, INT32, _) =>
         isDecimalMatched(value, decimalType)
       case ParquetSchemaType(decimalType: DecimalLogicalTypeAnnotation, INT64, _) =>

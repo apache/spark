@@ -2883,6 +2883,52 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-53368: TIME(MICROS) filter pushdown ignores sub-microsecond literals") {
+    // TimeType is held internally as nanos-of-day, so a filter literal can carry a sub-microsecond
+    // component that a TIME(MICROS) column cannot represent. Truncating such a literal to micros
+    // would push a bound that skips matching rows (e.g. `t < 12:00:00.000000001` truncates to
+    // `t < 12:00:00`, wrongly pruning a row at exactly 12:00:00; `!=` has the symmetric
+    // false-negative). These literals must not be pushed down; a full scan is always correct. A
+    // micros-exact literal (no sub-micro component) still pushes down. Both the isAdjustedToUTC
+    // false (framework) and true (SPARK-53368) TIME(MICROS) encodings are covered.
+    val subMicro = LocalTime.NOON.plusNanos(1)       // 12:00:00.000000001, not micros-representable
+    val microsExact = LocalTime.NOON.plusNanos(1000) // 12:00:00.000001, micros-representable
+
+    def check(schema: MessageType): Unit = {
+      val filters = createParquetFilters(schema)
+      Seq(
+        sources.LessThan("t", subMicro),
+        sources.LessThanOrEqual("t", subMicro),
+        sources.GreaterThan("t", subMicro),
+        sources.GreaterThanOrEqual("t", subMicro),
+        sources.EqualTo("t", subMicro),
+        sources.EqualNullSafe("t", subMicro),
+        sources.Not(sources.EqualTo("t", subMicro)),
+        sources.In("t", Array[Any](subMicro)),
+        // A single sub-microsecond element disqualifies the whole In list.
+        sources.In("t", Array[Any](microsExact, subMicro))
+      ).foreach { filter =>
+        assert(filters.createFilter(filter).isEmpty,
+          s"$filter shouldn't be pushed down for schema $schema.")
+      }
+      // A micros-exact literal still pushes down.
+      assert(filters.createFilter(sources.LessThan("t", microsExact)).isDefined)
+      assert(filters.createFilter(sources.EqualTo("t", microsExact)).isDefined)
+      assert(filters.createFilter(sources.Not(sources.EqualTo("t", microsExact))).isDefined)
+      assert(filters.createFilter(sources.In("t", Array[Any](microsExact))).isDefined)
+    }
+
+    // isAdjustedToUTC = false: the SparkToParquetSchemaConverter maps TimeType(<= 6) to
+    // TIME(MICROS, false), routed through TimeTypeParquetOps.filterOps.
+    check(new SparkToParquetSchemaConverter(conf)
+      .convert(new StructType().add("t", TimeType(TimeType.MICROS_PRECISION))))
+    // isAdjustedToUTC = true: matched explicitly by ParquetTimeMicrosTypeAdjToUTC.
+    check(MessageTypeParser.parseMessageType(
+      """message root {
+        |  optional int64 t(TIME(MICROS,true));
+        |}""".stripMargin))
+  }
 }
 
 @ExtendedSQLTest

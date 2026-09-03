@@ -2084,9 +2084,12 @@ object SQLConf {
 
   val PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ =
     buildConf("spark.sql.parquet.timeType.allowIsAdjustedToUtcRead")
-      .doc("When true, Spark reads Parquet TIME(MICROS,isAdjustedToUTC=true) as TimeType, " +
-        "for compatibility with writers such as Apache Arrow. When false (default), reading " +
-        "TIME(MICROS,isAdjustedToUTC=true) throws an error.")
+      .doc("When true, Spark infers Parquet TIME(MICROS,isAdjustedToUTC=true) columns as " +
+        "TimeType during schema inference, for compatibility with writers such as Apache Arrow. " +
+        "When false (default), schema inference rejects such columns with an error. This only " +
+        "affects schema inference: a read with an explicit user-specified TimeType schema " +
+        "succeeds regardless of this flag, since Spark's zone-less TimeType decodes the same " +
+        "time-of-day either way.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
