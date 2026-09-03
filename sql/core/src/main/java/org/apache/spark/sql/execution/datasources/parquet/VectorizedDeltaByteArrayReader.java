@@ -214,17 +214,19 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
   }
 
   /**
-   * Guards against a corrupt page whose {@code prefixLength} exceeds the length of the previously
-   * decoded value ({@code prevLen}). Legal writers never emit this, but because {@code prevBuf} is
-   * pre-zeroed and reused across values, an unchecked prefix would silently pull stale or zero
-   * bytes into the assembled value instead of failing. Throwing here keeps corrupt input a
-   * fail-fast error, matching the pre-buffer-reuse behavior (an NPE on the old {@code previous}).
+   * Guards against a corrupt page whose {@code prefixLength} is out of range: negative, or larger
+   * than the length of the previously decoded value ({@code prevLen}). Legal writers never emit
+   * this, but because {@code prevBuf} is pre-zeroed and reused across values, an unchecked prefix
+   * would silently pull stale or zero bytes into the assembled value instead of failing. Throwing
+   * here keeps corrupt input a fail-fast error, matching the pre-buffer-reuse behavior (an NPE on
+   * the old {@code previous}). The suffix length is validated separately in
+   * {@link VectorizedDeltaLengthByteArrayReader#getSuffixLength}.
    */
   private void checkPrefixLength(int prefixLength) {
-    if (prefixLength > prevLen) {
+    if (prefixLength < 0 || prefixLength > prevLen) {
       throw new ParquetDecodingException(
-          "Prefix length " + prefixLength + " is larger than the previous value length "
-              + prevLen + "; the DELTA_BYTE_ARRAY page is corrupt");
+          "Prefix length " + prefixLength + " is out of range [0, " + prevLen
+              + "]; the DELTA_BYTE_ARRAY page is corrupt");
     }
   }
 

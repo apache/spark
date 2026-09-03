@@ -173,6 +173,67 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
     previous.set(writer, data)
   }
 
+  test("corrupt suffix/prefix lengths fail fast without over-allocating") {
+    // The reader now sizes its reusable prevBuf from the decoded prefix/suffix lengths before
+    // reading the bytes. A legal DELTA_BYTE_ARRAY page never encodes a suffix length larger than
+    // the bytes remaining in the page, nor a negative prefix/suffix length; a corrupt one could.
+    // Without the up-front guards a bogus suffix length (up to ~2GB) would drive a huge buffer
+    // allocation / OutOfMemoryError -- an Error that ignoreCorruptFiles cannot catch -- instead of
+    // a plain ParquetDecodingException. These checks keep such input a fail-fast decoding error.
+    val vals = Array("aaaa", "bbbb", "cccc")
+    Utils.writeData(writer, vals)
+    val bytes = writer.getBytes
+
+    // Corrupts the decoded length vectors after initFromPage to simulate a malformed page, since a
+    // conforming writer cannot emit these values.
+    def freshReaderWith(
+        corruptSuffix: Option[Int] = None,
+        corruptPrefix: Option[Int] = None): VectorizedDeltaByteArrayReader = {
+      val reader = new VectorizedDeltaByteArrayReader()
+      reader.initFromPage(vals.length, bytes.toInputStream)
+      corruptSuffix.foreach { len =>
+        val suffixReaderField =
+          classOf[VectorizedDeltaByteArrayReader].getDeclaredField("suffixReader")
+        suffixReaderField.setAccessible(true)
+        val suffixReader = suffixReaderField.get(reader)
+        val lengthsVectorField =
+          classOf[VectorizedDeltaLengthByteArrayReader].getDeclaredField("lengthsVector")
+        lengthsVectorField.setAccessible(true)
+        lengthsVectorField.get(suffixReader).asInstanceOf[WritableColumnVector].putInt(0, len)
+      }
+      corruptPrefix.foreach { len =>
+        val prefixVectorField =
+          classOf[VectorizedDeltaByteArrayReader].getDeclaredField("prefixLengthVector")
+        prefixVectorField.setAccessible(true)
+        prefixVectorField.get(reader).asInstanceOf[WritableColumnVector].putInt(0, len)
+      }
+      reader
+    }
+
+    def readFirst(reader: VectorizedDeltaByteArrayReader): Unit = {
+      val vec: WritableColumnVector = new OnHeapColumnVector(vals.length, StringType)
+      reader.readBinary(vals.length, vec, 0)
+    }
+
+    // Suffix length far beyond the page: must fail before allocating prevBuf.
+    val tooLong = intercept[ParquetDecodingException] {
+      readFirst(freshReaderWith(corruptSuffix = Some(Int.MaxValue)))
+    }
+    assert(tooLong.getMessage.contains("exceeds"))
+
+    // Negative suffix length.
+    val negSuffix = intercept[ParquetDecodingException] {
+      readFirst(freshReaderWith(corruptSuffix = Some(-1)))
+    }
+    assert(negSuffix.getMessage.contains("Negative suffix length"))
+
+    // Negative prefix length (guarded in checkPrefixLength alongside the upper bound).
+    val negPrefix = intercept[ParquetDecodingException] {
+      readFirst(freshReaderWith(corruptPrefix = Some(-1)))
+    }
+    assert(negPrefix.getMessage.contains("out of range"))
+  }
+
   test("test lengths") {
     var reader = new VectorizedDeltaBinaryPackedReader
     Utils.writeData(writer, values)
@@ -218,9 +279,19 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
     // A geometry column with null or skipped rows alternates skipBinary (used for the
     // skipped rows) with readGeometry/readGeography on the same reader. Both paths now
     // share the reusable prevBuf, so the shared prefix carried across a skipped value must
-    // still be honored by the following read. The values also exceed prevBuf's initial
-    // 64-byte capacity, exercising the grow-and-preserve branch under interleaving.
-    assertGeoReadWriteWithSkip(writer, reader, sharedPrefixPolygons(6), geoType)
+    // still be honored by the following read.
+    //
+    // growingPrefixPolygons is shaped like longPrefixValues on the non-geo side so that this
+    // test can actually distinguish a bug from working code:
+    //   - Values differ in length (point count), so a read (readGeoData) crosses prevBuf's
+    //     capacity and takes the grow-and-preserve branch with a non-zero prefixLength -- not
+    //     just the first value at prefixLength 0.
+    //   - Consecutive equal-length polygons share a long prefix while polygons two apart differ
+    //     at the numPoints field (byte 9, a 9-byte prefix). Reading an even row therefore relies
+    //     on the shared prefix left by the odd row that skipBinary just processed; if skipBinary
+    //     stopped maintaining prevBuf, that read would decode wrong bytes (or fail the prefix
+    //     guard) instead of silently passing.
+    assertGeoReadWriteWithSkip(writer, reader, growingPrefixPolygons(), geoType)
   }
 
   testGeo("geo setPreviousReader recovers a long value across pages (PARQUET-246)") { geoType =>
@@ -280,6 +351,40 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
     intercept[ParquetDecodingException] {
       readGeoInto(corruptReader, vals.length, vec, isGeometry)
     }
+  }
+
+  /**
+   * Generates WKB polygons shaped like `longPrefixValues` for the geo interleave test: values of
+   * differing length where consecutive equal-length polygons share a long prefix but polygons two
+   * apart do not. The point counts (8, 12, 12, 16, 30, 30) drive two properties:
+   *
+   *   - The 30-point polygon at an even (read) index exceeds prevBuf's grown capacity, so
+   *     `readGeoData` takes the grow-and-preserve branch with a non-zero prefixLength (the 9-byte
+   *     WKB header shared with the shorter predecessor), not merely the first value at prefix 0.
+   *   - Each equal-length pair (indices 1/2 and 4/5) differs only in a late coordinate, so an
+   *     even row reads with a long prefix against the odd row that `skipBinary` just processed,
+   *     while the even row two positions back has a different point count and diverges at the
+   *     numPoints field (byte 9). A read after a skip therefore genuinely depends on the prefix
+   *     `skipBinary` left in prevBuf; a skip that stopped maintaining prevBuf would decode wrong
+   *     bytes or trip the prefix-length guard rather than pass unnoticed.
+   *
+   * Coordinates stay within geography bounds (lon in [-180, 180], lat in [-90, 90]) so the same
+   * WKB is valid for every geo type. The count is even so the read-even/skip-odd pattern in
+   * `assertGeoReadWriteWithSkip` does not run past the last value.
+   */
+  private def growingPrefixPolygons(): Array[Array[Byte]] = {
+    val counts = Array(8, 12, 12, 16, 30, 30)
+    def basePoint(i: Int): (Double, Double) = (-100.0 + i * 2, -40.0 + i)
+    var variant = 0
+    counts.map { n =>
+      variant += 1
+      val body = (0 until n - 2).map(basePoint)
+      // Nudge the second-to-last point's latitude to distinguish this polygon from its
+      // same-length predecessor; earlier points stay identical so the shared prefix is long.
+      val (lon, lat) = basePoint(n - 2)
+      val ring = (body :+ (lon, lat + variant * 0.001)) :+ basePoint(0)
+      makePolygonWkb(ring: _*)
+    }.toArray
   }
 
   /**
