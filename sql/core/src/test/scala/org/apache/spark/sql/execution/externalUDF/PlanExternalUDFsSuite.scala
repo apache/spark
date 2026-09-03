@@ -441,7 +441,9 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
       case node: Window => node
       case other => fail(s"Expected a Window node, found:\n$other")
     }
-    assert(window.output.map(_.exprId).distinct.size == window.output.size)
+    val windowOutputExprIds =
+      window.child.output.map(_.exprId) ++ window.windowExpressions.map(_.exprId)
+    assert(windowOutputExprIds.distinct.size == windowOutputExprIds.size)
     assert(evaluation.udf.children.size == 2)
     assert(evaluation.udf.children.last.semanticEquals(input))
     assert(!evaluation.udf.exists(_.isInstanceOf[WindowExpression]))
