@@ -6934,7 +6934,12 @@ object SQLConf {
         "oracle.jdbc.mapDateToTimestamp surfaces it as TIMESTAMP) is read per the JDBC read " +
         "option preferTimestampNTZ (TimestampType by default), preserving pre-Spark-4.4 " +
         "behavior. When false (default), it is read as TimestampNTZType, which faithfully " +
-        "represents these zoneless Oracle types. Oracle DATE read as JDBC DATE " +
+        "represents these zoneless Oracle types. The same flag governs the write path: when " +
+        "false a TimestampNTZType column is written to Oracle zoneless via setObject, and when " +
+        "true via a JVM-default-zone java.sql.Timestamp; these can differ for wall-clocks in a " +
+        "DST gap. The flag is read at schema-resolution and write time, so a JDBC relation " +
+        "whose schema was already resolved (e.g. a cached or metastore-registered table) must " +
+        "be re-resolved for a change to take effect. Oracle DATE read as JDBC DATE " +
         "(oracle.jdbc.mapDateToTimestamp=false, mapped to DateType), TIMESTAMP WITH TIME ZONE, " +
         "and TIMESTAMP WITH LOCAL TIME ZONE are unaffected.")
       .version("4.4.0")
