@@ -64,7 +64,7 @@ private[sql] object ExtractExternalUDFFromWindow extends Rule[LogicalPlan] {
           }
         }
         Project(
-          externalUdfProjectList,
+          window.child.output ++ externalUdfProjectList,
           window.copy(windowExpressions = windowProjectList.toSeq))
     }
   }

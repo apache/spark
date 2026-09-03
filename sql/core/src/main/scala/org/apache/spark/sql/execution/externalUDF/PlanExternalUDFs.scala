@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, EXTERNAL_UDF, JOIN}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf
 
 /**
  * Converts each scalar external UDF expression into a separate logical evaluation node.
@@ -44,10 +44,10 @@ private[sql] object PlanExternalUDFs
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     // A correlated subquery is rewritten as a join and revisits this rule later.
     case subquery: Subquery if subquery.correlated => plan
-    case _ if !conf.getConf(SQLConf.UNIFIED_UDF_EXECUTION_ENABLED) =>
+    case _ if !conf.getConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED) =>
       if (plan.containsPattern(EXTERNAL_UDF)) {
         throw QueryCompilationErrors.externalUDFsDisabledError(
-          SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key)
+          StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key)
       }
       plan
     case _ =>

@@ -154,7 +154,7 @@ class SparkOptimizer(
    * batch executing the [[ExperimentalMethods]] optimizer rules. This hook can be used to add
    * custom optimizer batches to the Spark optimizer.
    *
-   * Note that 'Extract UDFs' batch is an exception and ran after the batches defined here.
+   * Note that 'Extract UDFs' batch is an exception and runs after the batches defined here.
    */
    def postHocOptimizationBatches: Seq[Batch] = Nil
 }

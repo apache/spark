@@ -350,6 +350,17 @@ object StaticSQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val UNIFIED_UDF_EXECUTION_ENABLED =
+    buildStaticConf("spark.sql.execution.udf.unified.execution.enabled")
+      .doc("When true, enable planning through the language-agnostic external UDF worker " +
+        "framework. Execution requires a supported external UDF physical operator. When false, " +
+        "external UDF expressions are rejected. This config must be set before the SparkSession " +
+        "is created. Experimental.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val REFLECT_ALLOW_LIST = buildStaticConf("spark.sql.reflect.allowList")
     .doc("A comma-separated allow list of regular expressions matched against the canonical " +
       "static method name (in the form `class.method`, e.g. `java.util.UUID.randomUUID`) " +

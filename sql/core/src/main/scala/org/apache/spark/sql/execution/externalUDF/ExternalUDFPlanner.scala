@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression,
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan,
   MapInArrow, MapInPandas, MapPartitionsExternalUDF}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -32,8 +33,8 @@ import org.apache.spark.sql.types.StructType
  * language-specific runner or the unified external UDF worker
  * framework.
  *
- * Wired into [[org.apache.spark.sql.internal.SessionState]] via
- * [[org.apache.spark.sql.internal.BaseSessionStateBuilder]].
+ * Called by [[org.apache.spark.sql.classic.Dataset]] when constructing logical plans for
+ * partition-oriented UDF operations.
  */
 trait ExternalUDFPlanner {
 
@@ -56,6 +57,36 @@ trait ExternalUDFPlanner {
       child: LogicalPlan,
       isBarrier: Boolean,
       profile: Option[ResourceProfile]): LogicalPlan
+}
+
+object ExternalUDFPlanner {
+  private def planner(sqlConf: SQLConf, sparkConf: SparkConf): ExternalUDFPlanner = {
+    if (sqlConf.getConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED)) {
+      new UnifiedExternalUDFPlanner(sparkConf)
+    } else {
+      new ClassicExternalUDFPlanner()
+    }
+  }
+
+  private[sql] def planPythonMapInPandas(
+      sqlConf: SQLConf,
+      sparkConf: SparkConf,
+      func: Expression,
+      child: LogicalPlan,
+      isBarrier: Boolean,
+      profile: Option[ResourceProfile]): LogicalPlan = {
+    planner(sqlConf, sparkConf).planPythonMapInPandas(func, child, isBarrier, profile)
+  }
+
+  private[sql] def planPythonMapInArrow(
+      sqlConf: SQLConf,
+      sparkConf: SparkConf,
+      func: Expression,
+      child: LogicalPlan,
+      isBarrier: Boolean,
+      profile: Option[ResourceProfile]): LogicalPlan = {
+    planner(sqlConf, sparkConf).planPythonMapInArrow(func, child, isBarrier, profile)
+  }
 }
 
 /**

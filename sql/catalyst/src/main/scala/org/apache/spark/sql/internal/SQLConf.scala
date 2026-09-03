@@ -5454,16 +5454,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val UNIFIED_UDF_EXECUTION_ENABLED =
-    buildConf("spark.sql.execution.udf.unified.execution.enabled")
-      .doc("When true, enable planning through the language-agnostic external UDF worker " +
-        "framework. Execution requires a supported external UDF physical operator. When false, " +
-        "external UDF expressions are rejected. Experimental.")
-      .version("4.2.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
-      .booleanConf
-      .createWithDefault(false)
-
   val PYTHON_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.arrow.enabled")
       .doc("Enable Arrow optimization in regular Python UDFs. This optimization " +

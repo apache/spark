@@ -60,6 +60,7 @@ import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConver
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelationWithTable
 import org.apache.spark.sql.execution.datasources.v2.{ExtractV2ScanInfo, ExtractV2Table, FileTable}
+import org.apache.spark.sql.execution.externalUDF.ExternalUDFPlanner
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.internal.SQLConf
@@ -1531,7 +1532,9 @@ class Dataset[T] private[sql](
       profile: ResourceProfile = null): DataFrame = {
     Dataset.ofRows(
       sparkSession,
-      sparkSession.sessionState.externalUDFPlanner.planPythonMapInPandas(
+      ExternalUDFPlanner.planPythonMapInPandas(
+        sparkSession.sessionState.conf,
+        sparkSession.sparkContext.conf,
         funcCol.expr, logicalPlan, isBarrier, Option(profile)))
   }
 
@@ -1546,7 +1549,9 @@ class Dataset[T] private[sql](
       profile: ResourceProfile = null): DataFrame = {
     Dataset.ofRows(
       sparkSession,
-      sparkSession.sessionState.externalUDFPlanner.planPythonMapInArrow(
+      ExternalUDFPlanner.planPythonMapInArrow(
+        sparkSession.sessionState.conf,
+        sparkSession.sparkContext.conf,
         funcCol.expr, logicalPlan, isBarrier, Option(profile)))
   }
 
