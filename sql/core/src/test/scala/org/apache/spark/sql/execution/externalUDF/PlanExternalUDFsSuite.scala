@@ -40,7 +40,7 @@ import org.apache.spark.udf.worker.{DirectWorker, ProcessCallable, UDFWorkerProp
 class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
 
   override def sparkConf: SparkConf = super.sparkConf.set(
-    StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key, true)
+    StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED, true)
 
   private case class TestBinaryPlan(
       expression: Expression,
