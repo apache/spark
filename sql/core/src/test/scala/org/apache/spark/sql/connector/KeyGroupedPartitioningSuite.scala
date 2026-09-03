@@ -326,12 +326,26 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       "JOIN testcat.ns.bucket8 b8 ON b12.id = b8.id " +
       s"JOIN testcat.ns.bucket$third b ON b12.id = b.id")
 
+  /** The `(id, ts)` rows the `withReducedTsJoinLegs` tables are filled from, one per year. */
+  private val row2020 = "(0, cast('2020-01-01' as timestamp))"
+  private val row2021 = "(1, cast('2021-01-03' as timestamp))"
+  private val bothRows = s"$row2020, $row2021"
+
+  /** The timestamps those rows hold, as a query over them reports them. */
+  private val ts2020 = Row(Timestamp.valueOf("2020-01-01 00:00:00"))
+  private val ts2021 = Row(Timestamp.valueOf("2021-01-03 00:00:00"))
+  private val bothTimestamps = Seq(ts2020, ts2021)
+
   /**
    * Creates `days1` and `days2` partitioned by `days(ts)` and `years1` and `years2` by `years(ts)`,
    * all over `(id, ts)`, with the `toYears`-reducing `days` and `years` functions registered.
-   * `leg1Values` goes into `days1` and `years1`, `leg2Values` into `days2` and `years2`.
+   * `leg1Values` goes into `days1` and `years1`, `leg2Values` into `days2` and `years2`, unless
+   * `leg2YearsValues` puts something else into `years2`.
    */
-  private def withReducedTsJoinLegs(leg1Values: String, leg2Values: String)(body: => Unit): Unit = {
+  private def withReducedTsJoinLegs(
+      leg1Values: String,
+      leg2Values: String,
+      leg2YearsValues: Option[String] = None)(body: => Unit): Unit = {
     withFunction(
       UnboundDaysFunctionWithToYearsReducerWithLongResult,
       UnboundYearsFunctionWithToYearsReducerWithLongResult) {
@@ -339,7 +353,8 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
         Column.create("id", LongType),
         Column.create("ts", TimestampType))
       Seq(("days1", leg1Values, days("ts")), ("days2", leg2Values, days("ts")),
-        ("years1", leg1Values, years("ts")), ("years2", leg2Values, years("ts"))).foreach {
+        ("years1", leg1Values, years("ts")),
+        ("years2", leg2YearsValues.getOrElse(leg2Values), years("ts"))).foreach {
         case (table, values, partition) =>
           createTable(table, tsColumns, Array(partition))
           sql(s"INSERT INTO testcat.ns.$table VALUES $values")
@@ -351,16 +366,16 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
   /**
    * Joins `days1` to `years1` and `days2` to `years2`, each reducing both of its sides onto the
-   * year key space, then joins the two reduced legs to each other.
+   * year key space, then joins the two reduced legs to each other with `joinType`. `leg2First` puts
+   * the second leg on the left of that join. The projection takes the timestamp from whichever side
+   * has it, so an outer join reports the same rows in either order.
    */
-  private val reducedTsLegJoin =
-    """
-      |SELECT l.ts FROM
-      |  (SELECT d.ts FROM testcat.ns.days1 d JOIN testcat.ns.years1 y ON y.ts = d.ts) l
-      |  JOIN
-      |  (SELECT y.ts FROM testcat.ns.days2 d JOIN testcat.ns.years2 y ON y.ts = d.ts) r
-      |  ON l.ts = r.ts
-      |""".stripMargin
+  private def reducedTsLegJoin(leg2First: Boolean = false, joinType: String = "JOIN"): String = {
+    val leg1 = "SELECT d.ts FROM testcat.ns.days1 d JOIN testcat.ns.years1 y ON y.ts = d.ts"
+    val leg2 = "SELECT y.ts FROM testcat.ns.days2 d JOIN testcat.ns.years2 y ON y.ts = d.ts"
+    val (left, right) = if (leg2First) (leg2, leg1) else (leg1, leg2)
+    s"SELECT coalesce(l.ts, r.ts) AS ts FROM ($left) l $joinType ($right) r ON l.ts = r.ts"
+  }
 
   private def testWithCustomersAndOrders(
       customers_partitions: Array[Transform],
@@ -775,9 +790,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
   }
 
   test("SPARK-59121: two sides reduced together are not reduced a second time") {
-    val both = "(0, cast('2020-01-01' as timestamp)), (1, cast('2021-01-03' as timestamp))"
-    val one = "(1, cast('2021-01-03' as timestamp))"
-    withReducedTsJoinLegs(both, one) {
+    withReducedTsJoinLegs(bothRows, row2021) {
       // Both inner joins reduce onto the year key space, and the two legs hold different key sets,
       // so the outer join takes the path that pushes the common keys down and computes reducers.
       // The two legs are the same pairing, so they are compatible and there is nothing left to
@@ -787,7 +800,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-        checkAnswer(sql(reducedTsLegJoin), Seq(Row(Timestamp.valueOf("2021-01-03 00:00:00"))))
+        checkAnswer(sql(reducedTsLegJoin()), Seq(ts2021))
       }
     }
   }
@@ -890,8 +903,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
   }
 
   test("SPARK-59121: two sides reduced onto the same keys still join without a shuffle") {
-    val values = "(0, cast('2020-01-01' as timestamp)), (1, cast('2021-01-03' as timestamp))"
-    withReducedTsJoinLegs(values, values) {
+    withReducedTsJoinLegs(bothRows, bothRows) {
       // Each inner join reduces both of its sides onto the year key space, and the projections keep
       // one reduced partitioning per side. Refusing to compare reduced keys must not go so far as
       // to refuse these two. They came out of the same pairing, so they carry the same keys and
@@ -900,13 +912,77 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-        val df = sql(reducedTsLegJoin)
+        val df = sql(reducedTsLegJoin())
 
-        checkAnswer(df, Seq(
-          Row(Timestamp.valueOf("2020-01-01 00:00:00")),
-          Row(Timestamp.valueOf("2021-01-03 00:00:00"))))
+        checkAnswer(df, bothTimestamps)
         val plan = stripAQEPlan(df.queryExecution.executedPlan)
         assert(collectShuffles(plan).isEmpty, "should not add shuffle for any of the three joins")
+      }
+    }
+  }
+
+  test("SPARK-59176: a leg reduced onto no key at all still joins") {
+    withReducedTsJoinLegs(bothRows, row2020, leg2YearsValues = Some(row2021)) {
+      // The second leg's two sides hold disjoint years, so the partition filter intersects them to
+      // nothing and the leg reports a reduced partitioning with no key. The reduced types then have
+      // to come from the first leg. The marked expressions still name the un-reduced `days` and
+      // `years` transforms, whose types are not the `LongType` the reduced keys hold.
+      withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        // Both orders, since the side that has no key is the one to leave out of the comparison.
+        // And both join types, since the inner join intersects the two key sets to nothing and so
+        // has nothing to sort, while the full outer join keeps the other side's keys and sorts them
+        // by the reported types.
+        Seq("JOIN" -> Nil, "FULL OUTER JOIN" -> bothTimestamps).foreach {
+          case (joinType, expected) =>
+            Seq(false, true).foreach { leg2First =>
+              val df = sql(reducedTsLegJoin(leg2First, joinType))
+
+              checkAnswer(df, expected)
+              assert(collectShuffles(stripAQEPlan(df.queryExecution.executedPlan)).isEmpty,
+                "the two legs are the same pairing, so all three joins are co-partitioned")
+            }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59176: an empty side whose expressions describe its keys keeps the reducer check") {
+    withFunction(UnboundDaysFunctionWithToYearsReducerWithDateResult) {
+      createTable(items, itemsColumns, Array(days("arrive_time")))
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(0, 'aa', 39.0, cast('2020-01-01' as timestamp))")
+
+      Seq(purchases -> "2020-01-01", "purchases2" -> "2022-01-01").foreach {
+        case (table, day) =>
+          createTable(table, purchasesColumns, Array(years("time")))
+          sql(s"INSERT INTO testcat.ns.$table VALUES (1, 42.0, cast('$day' as timestamp))")
+      }
+
+      // The inner join intersects two disjoint year key sets, so its leg reports a `years(time)`
+      // partitioning with no key. Nothing reduced it, so its expressions still describe the keys it
+      // would have had, and the reduced-types comparison must still run. This `days` function
+      // breaks the reducer contract, returning `DateType` where the target `years` transform is
+      // `IntegerType`, and that is what the comparison is there to catch.
+      withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        val e = intercept[SparkException] {
+          sql(
+            s"""
+               |${selectWithMergeJoinHint("i", "e")} i.id
+               |FROM testcat.ns.$items i
+               |JOIN (SELECT p.time FROM testcat.ns.$purchases p
+               |  JOIN testcat.ns.purchases2 p2 ON p2.time = p.time) e
+               |ON e.time = i.arrive_time
+               |""".stripMargin).collect()
+        }
+        assert(e.getMessage.contains(
+          "Storage-partition join partition transforms produced incompatible reduced types"))
       }
     }
   }
