@@ -282,7 +282,10 @@ case class EnsureRequirements(
             child match {
               case s: ShuffleExchangeExec =>
                 s.copy(outputPartitioning = newPartitioning)
-              case gpe: GroupPartitionsExec => ShuffleExchangeExec(newPartitioning, gpe.child)
+              case gpe: GroupPartitionsExec =>
+                // Strip every grouping this rule inserted (they can stack on a re-run): a
+                // replicating one repeats every row, so none of them may feed the shuffle.
+                ShuffleExchangeExec(newPartitioning, unwrapGroupPartitions(gpe))
               case _ => ShuffleExchangeExec(newPartitioning, child)
             }
           }
@@ -663,10 +666,8 @@ case class EnsureRequirements(
               } else {
                 (unwrappedLeft, leftSpec)
               }
-              // Original `KeyedPartitioning` can be obtained from the child directly if the child
-              // satisfied the distribution requirement; or from the child's child if it didn't as
-              // the child must be a `GroupPartitionsExec` inserted by `EnsureRequirement`
-              // to satisfy the distribution requirement.
+              // The pre-alignment plan of the side that keeps its splits: its partitioning
+              // still holds the original partition keys, one per input split.
               val originalPartitioning =
                 partiallyClusteredChild.outputPartitioning.asInstanceOf[Expression]
               // `outputPartitioning` is either a `PartitioningCollection` or a `KeyedPartitioning`
@@ -731,53 +732,75 @@ case class EnsureRequirements(
   }
 
   /**
-   * Unwraps a GroupPartitionsExec to get the underlying child plan.
+   * The innermost `GroupPartitionsExec` reachable from `plan` by descending only through nodes
+   * this rule itself inserted above it, together with a function rebuilding the traversed local
+   * sorts over a replacement node. `None` when no `GroupPartitionsExec` is reachable.
+   *
+   * The descent only traverses a `GroupPartitionsExec` and a *local* `SortExec`. That bound is a
+   * decision, not an omission: a `GroupPartitionsExec` hidden behind any other node belongs to a
+   * different operator, and reusing it would move that operator's alignment. Instrumenting the
+   * descent over `KeyGroupedPartitioningSuite`, the non-`SortExec` shapes hiding a node are
+   * `Project > SortMergeJoin > Sort > GroupPartitions` and `Project > Filter > Window >
+   * WindowGroupLimit`, where refusing to descend is right every time. A global `SortExec` also
+   * stops the descent: it requires `OrderedDistribution`, which a `KeyedPartitioning` can
+   * satisfy (behind `spark.sql.sources.v2.bucketing.sorting.enabled`) through a
+   * `GroupPartitionsExec` built to emit the partition keys in sorted order, and reusing that
+   * node for a join would destroy the ordering it exists to provide.
    */
-  private def unwrapGroupPartitions(plan: SparkPlan): SparkPlan = plan match {
-    case g: GroupPartitionsExec => g.child
-    case other => other
+  private def innermostGroupPartition(
+      plan: SparkPlan): Option[(GroupPartitionsExec, SparkPlan => SparkPlan)] = plan match {
+    case g: GroupPartitionsExec =>
+      // A grouping over another grouping is one this rule added in an earlier pass: keep the
+      // descent below it and drop this one.
+      innermostGroupPartition(g.child).orElse(Some((g, identity[SparkPlan])))
+    case s: SortExec if !s.global =>
+      innermostGroupPartition(s.child).map { case (g, rebuild) =>
+        (g, (newChild: SparkPlan) => s.withNewChildren(Seq(rebuild(newChild))))
+      }
+    case _ => None
   }
 
   /**
-   * Finds the innermost `GroupPartitionsExec` in `plan`, rewrites it with `f`, and drops any
-   * redundant grouping stacked above it. Returns `None` when `plan` holds no `GroupPartitionsExec`,
-   * leaving it to the caller to create one.
+   * Rewrites the innermost `GroupPartitionsExec` in `plan` with `f` and drops any redundant
+   * grouping stacked above it, per the descent of [[innermostGroupPartition]]. Returns `None`
+   * when `plan` holds no `GroupPartitionsExec`, leaving it to the caller to create one.
    *
-   * This is what makes the rule idempotent for storage-partitioned joins. `EnsureRequirements` is
-   * re-run on plans it already produced -- `ConvertSortMergeJoinToShuffledHashJoin` and
-   * `OptimizeSkewedJoin` hand the whole tree back to it after rewriting some other join -- so a
-   * join child arrives as `SortExec(GroupPartitionsExec(...))` rather than a bare scan. The
-   * distribution step then adds a plain `GroupPartitionsExec` on top, because a partially clustered
-   * `KeyedPartitioning` reports `isGrouped = false` by design and so is only satisfied "after
-   * grouping". Rewriting that fresh outer node instead of the one below it re-derives the
-   * alignment from an already-aligned layout: the inner node replicates an input partition across
-   * the expected partitions and the outer one concatenates those replicas back together before
-   * replicating again, duplicating rows. Descending to the innermost node and dropping what sits
-   * above it reproduces exactly the plan a single pass would have produced.
+   * This is what makes the rule idempotent for storage-partitioned joins. `EnsureRequirements`
+   * is re-run on plans it already produced: `AdaptiveSparkPlanExec` builds one instance of this
+   * rule, and `ConvertSortMergeJoinToShuffledHashJoin` and `OptimizeSkewedJoin` hand the whole
+   * tree back to it after rewriting some other join, all within one
+   * `queryStagePreparationRules` pass. A join child then arrives as
+   * `SortExec(GroupPartitionsExec(...))` rather than a bare scan, and the distribution step adds
+   * a plain `GroupPartitionsExec` on top, because a partially clustered `KeyedPartitioning`
+   * reports `isGrouped = false` by design and so is only satisfied "after grouping". Rewriting
+   * that outer node instead of the one below it re-derives the alignment from an already-aligned
+   * layout and duplicates rows; descending to the innermost node and dropping what sits above it
+   * reproduces the plan a single pass would have produced.
    *
-   * Only a *local* `SortExec` is traversed. A global one requires `OrderedDistribution`, which a
-   * `KeyedPartitioning` can satisfy (behind `spark.sql.sources.v2.bucketing.sorting.enabled`)
-   * through a `GroupPartitionsExec` built to emit the partition keys in sorted order; reusing that
-   * node for a join would overwrite its `expectedPartitionKeys` and clear `distributePartitions`,
-   * destroying the ordering it exists to provide.
-   *
-   * Dropping a grouping is safe only because this is reached from `checkKeyGroupCompatible`, which
-   * runs for joins alone. An operator with a single child (an aggregate or a window over a
-   * partially clustered join, say) genuinely needs its non-grouped input grouped, and never gets
-   * here -- see `KeyGroupedPartitioningSuite`'s partially-clustered aggregate and window tests.
+   * Dropping a grouping is safe because only `applyGroupPartitions` calls this, reached from
+   * `checkKeyGroupCompatible`, which runs for joins alone: every `GroupPartitionsExec` a join
+   * child carries is this rule's own. A single-child operator genuinely needs its non-grouped
+   * input grouped and takes the wrap in the children loop instead; `withJoinKeyPositions`, which
+   * other multi-child operators reach, does not reuse at depth.
    */
-  private[exchange] def rewriteGroupPartitions(
-      plan: SparkPlan)(f: GroupPartitionsExec => GroupPartitionsExec): Option[SparkPlan] = {
-    plan match {
-      case g: GroupPartitionsExec =>
-        // A grouping over another grouping is one this rule added in an earlier pass: drop it and
-        // rewrite the node below, which is the one that owns the alignment.
-        rewriteGroupPartitions(g.child)(f).orElse(Some(f(g)))
-      case s @ SortExec(_, false, _, _) =>
-        rewriteGroupPartitions(s.child)(f).map(newChild => s.withNewChildren(Seq(newChild)))
-      case _ => None
+  private[exchange] def rewriteGroupPartitions(plan: SparkPlan)(
+      f: GroupPartitionsExec => GroupPartitionsExec): Option[SparkPlan] =
+    innermostGroupPartition(plan).map { case (g, rebuild) =>
+      val rewritten = f(g)
+      rewritten.copyTagsFrom(g)
+      rebuild(rewritten)
     }
-  }
+
+  /**
+   * Unwraps the `GroupPartitionsExec` nodes this rule inserted over a join child, down to the
+   * pre-alignment plan, per the descent of [[innermostGroupPartition]].
+   *
+   * The statistics-based replicate-side choice and the original partition keys below must read
+   * from the pre-alignment plan on every pass: the local sort one level down carries no
+   * `logicalLink` and reports the aligned layout instead.
+   */
+  private def unwrapGroupPartitions(plan: SparkPlan): SparkPlan =
+    innermostGroupPartition(plan).map(_._1.child).getOrElse(plan)
 
   /**
    * Applies or updates `GroupPartitionsExec` with the given parameters.
@@ -793,13 +816,11 @@ case class EnsureRequirements(
       reducers: Option[Seq[Option[KeyReducer]]],
       distributePartitions: Boolean): SparkPlan = {
     rewriteGroupPartitions(plan) { g =>
-      val newGroupPartitions = g.copy(
-        joinKeyPositions = joinKeyPositions,
+      g.copy(
+        joinKeyPositions = g.joinKeyPositions.orElse(joinKeyPositions),
         expectedPartitionKeys = Some(mergedPartitionKeys),
         reducers = reducers,
         distributePartitions = distributePartitions)
-      newGroupPartitions.copyTagsFrom(g)
-      newGroupPartitions
     }.getOrElse {
       GroupPartitionsExec(plan, joinKeyPositions, Some(mergedPartitionKeys), reducers,
         distributePartitions)
@@ -816,13 +837,18 @@ case class EnsureRequirements(
 
   /**
    * Applies join key positions to a plan by wrapping or updating GroupPartitionsExec.
+   *
+   * Unlike `applyGroupPartitions`, this does not descend: it serves every multi-child operator,
+   * not just joins, so a `GroupPartitionsExec` below the top is not known to be this rule's own.
    */
-  private def withJoinKeyPositions(plan: SparkPlan, positions: Seq[Int]): SparkPlan = {
-    rewriteGroupPartitions(plan) { g =>
-      val newGroupPartitions = g.copy(joinKeyPositions = Some(positions))
-      newGroupPartitions.copyTagsFrom(g)
-      newGroupPartitions
-    }.getOrElse(GroupPartitionsExec(plan, joinKeyPositions = Some(positions)))
+  private[exchange] def withJoinKeyPositions(plan: SparkPlan, positions: Seq[Int]): SparkPlan = {
+    plan match {
+      case g: GroupPartitionsExec =>
+        val newGroupPartitions = g.copy(joinKeyPositions = Some(positions))
+        newGroupPartitions.copyTagsFrom(g)
+        newGroupPartitions
+      case _ => GroupPartitionsExec(plan, joinKeyPositions = Some(positions))
+    }
   }
 
   /**

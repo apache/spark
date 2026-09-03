@@ -3462,26 +3462,25 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  test("partially clustered join keeps its row count when EnsureRequirements re-runs") {
-    // The storage-partitioned join branch has no shuffle of its own, so AQE's re-run of
-    // `EnsureRequirements` (triggered by the other branch below) reaches it. The ALTER between the
-    // two inserts changes the write schema, which opens a second split for id = 1 -- that is what
-    // makes partial clustering replicate the right side across two expected partitions. Regrouping
-    // that replicated layout on the second pass concatenated the replicas and replicated again,
+  test("SPARK-58996: partially clustered join keeps its row count when EnsureRequirements " +
+      "re-runs") {
+    // The storage-partitioned join branch has no shuffle of its own, so the re-run of
+    // `EnsureRequirements` (triggered by the other branch below) reaches it. With
+    // `numRowsPerSplit = 1` the two id = 1 rows end up in two splits, which is what makes
+    // partial clustering replicate a side across two expected partitions. Regrouping that
+    // replicated layout on the second pass concatenated the replicas and replicated again,
     // duplicating every id = 1 row.
-    sql("CREATE TABLE testcat.ns.sp1 (id BIGINT, data STRING) PARTITIONED BY (id)")
-    sql("INSERT INTO testcat.ns.sp1 VALUES (1, 'aa'), (2, 'bb')")
-    sql("ALTER TABLE testcat.ns.sp1 ADD COLUMN extra STRING")
-    sql("INSERT INTO testcat.ns.sp1 VALUES (1, 'ab', 'x')")
-
-    sql("CREATE TABLE testcat.ns.sp2 (id BIGINT, data STRING) PARTITIONED BY (id)")
+    val spColumns = Array(Column.create("id", LongType), Column.create("data", StringType))
+    createTable("sp1", spColumns, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.sp1 VALUES (1, 'aa'), (1, 'ab'), (2, 'bb')")
+    createTable("sp2", spColumns, Array(identity("id")))
     sql("INSERT INTO testcat.ns.sp2 VALUES (1, 'p'), (2, 'q')")
 
     // Unpartitioned, so this branch's join materializes shuffle stages and is converted to a
     // shuffled hash join, which hands the whole plan back to `EnsureRequirements`.
-    sql("CREATE TABLE testcat.ns.np1 (id BIGINT, data STRING)")
+    createTable("np1", spColumns, Array.empty)
     sql("INSERT INTO testcat.ns.np1 VALUES (7, 'x')")
-    sql("CREATE TABLE testcat.ns.np2 (id BIGINT, data STRING)")
+    createTable("np2", spColumns, Array.empty)
     sql("INSERT INTO testcat.ns.np2 VALUES (7, 'y')")
 
     withSQLConf(
@@ -3497,6 +3496,108 @@ class KeyGroupedPartitioningSuite
           |FROM testcat.ns.np1 c JOIN testcat.ns.np2 d ON c.id = d.id
           |""".stripMargin)
       checkAnswer(df, Seq(Row(1L), Row(1L), Row(2L), Row(7L)))
+
+      // The re-run must leave the storage-partitioned side shuffle-free, with the single
+      // grouping per child the first pass built: a grouping stacked over another re-derives the
+      // alignment from an already-aligned layout and duplicates rows.
+      assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+        "the storage-partitioned join must stay shuffle-free")
+      val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(groupPartitions.nonEmpty, "the storage-partitioned join must keep its groupings")
+      groupPartitions.foreach { g =>
+        assert(collectAllGroupPartitions(g.child).isEmpty,
+          s"a GroupPartitionsExec must not be stacked over another:\n${g.treeString}")
+      }
+    }
+  }
+
+  test("SPARK-58996: partially clustered join keeps its replicate-side choice when " +
+      "EnsureRequirements re-runs") {
+    // The smaller side is replicated, chosen by plan statistics on the first pass. On the re-run
+    // the statistics must be read from the pre-alignment plan again: reading them from the
+    // aligned layout skips the statistics branch and deterministically flips the choice. The
+    // flipped side then distributes where it used to replicate, and since the smaller side holds
+    // more splits for id = 1 than the larger one, its raw splits overflow the expected count
+    // (`padTo` never truncates) and the join sides end up with an unequal number of partitions.
+    val spColumns = Array(Column.create("id", LongType), Column.create("data", StringType))
+    createTable("sp_small", spColumns, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.sp_small VALUES " +
+        "(1, 'a1'), (1, 'a2'), (1, 'a3'), (1, 'a4'), (1, 'a5')")
+    createTable("sp_large", spColumns, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.sp_large VALUES " +
+        "(1, 'p'), (2, 'q1'), (2, 'q2'), (2, 'q3'), (2, 'q4'), (2, 'q5')")
+
+    createTable("np1", spColumns, Array.empty)
+    sql("INSERT INTO testcat.ns.np1 VALUES (7, 'x')")
+    createTable("np2", spColumns, Array.empty)
+    sql("INSERT INTO testcat.ns.np2 VALUES (7, 'y')")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "100m") {
+      val df = sql(
+        """
+          |SELECT /*+ MERGE(a, b) */ a.id AS k
+          |FROM testcat.ns.sp_small a JOIN testcat.ns.sp_large b ON a.id = b.id
+          |UNION ALL
+          |SELECT c.id AS k
+          |FROM testcat.ns.np1 c JOIN testcat.ns.np2 d ON c.id = d.id
+          |""".stripMargin)
+      checkAnswer(df, Seq.fill(5)(Row(1L)) :+ Row(7L))
+
+      assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+        "the storage-partitioned join must stay shuffle-free")
+      assert(collectGroupPartitions(df.queryExecution.executedPlan).nonEmpty,
+        "the storage-partitioned join must keep its groupings")
+    }
+  }
+
+  test("SPARK-58996: partially clustered subset-key join keeps its join key positions when " +
+      "EnsureRequirements re-runs") {
+    // The left table is partitioned by (extra, id) and the join uses only `id`, the second
+    // partition key, so the first pass stores positions that project the raw partition keys down
+    // to the join key. On the re-run the incoming positions are computed against the node's
+    // already projected report and must not overwrite the stored ones: applied to the raw keys
+    // again they would project a second time and group by the wrong key, every expected key
+    // misses and all rows are silently dropped. The query must also select `extra`, or column
+    // pruning drops it from the scan output and the scan stops reporting its partitioning at
+    // all.
+    createTable("multi_part",
+      Array(Column.create("id", LongType), Column.create("extra", LongType),
+        Column.create("data", StringType)),
+      Array(identity("extra"), identity("id")))
+    sql("INSERT INTO testcat.ns.multi_part VALUES (1, 10, 'x'), (2, 20, 'y')")
+    createTable("single_part",
+      Array(Column.create("id", LongType), Column.create("data", StringType)),
+      Array(identity("id")))
+    sql("INSERT INTO testcat.ns.single_part VALUES (1, 'p'), (2, 'q')")
+
+    val spColumns = Array(Column.create("id", LongType), Column.create("data", StringType))
+    createTable("np1", spColumns, Array.empty)
+    sql("INSERT INTO testcat.ns.np1 VALUES (7, 'x')")
+    createTable("np2", spColumns, Array.empty)
+    sql("INSERT INTO testcat.ns.np2 VALUES (7, 'y')")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "100m") {
+      val df = sql(
+        """
+          |SELECT /*+ MERGE(a, b) */ a.id AS k, a.extra AS e
+          |FROM testcat.ns.multi_part a JOIN testcat.ns.single_part b ON a.id = b.id
+          |UNION ALL
+          |SELECT c.id AS k, 0L AS e
+          |FROM testcat.ns.np1 c JOIN testcat.ns.np2 d ON c.id = d.id
+          |""".stripMargin)
+      checkAnswer(df, Seq(Row(1L, 10L), Row(2L, 20L), Row(7L, 0L)))
+
+      assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+        "the storage-partitioned join must stay shuffle-free")
+      assert(collectGroupPartitions(df.queryExecution.executedPlan).nonEmpty,
+        "the storage-partitioned join must keep its groupings")
     }
   }
 

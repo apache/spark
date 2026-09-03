@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.optimizer.BuildRight
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical.{SinglePartition, _}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.execution.{BinaryExecNode, DummySparkPlan, LeafExecNode, SafeForKWayMerge, SortExec, UnaryExecNode}
@@ -1936,7 +1937,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
-  test("only a local sort is looked through when reusing GroupPartitionsExec") {
+  test("SPARK-58996: only a local sort is looked through when reusing GroupPartitionsExec") {
     // A global `SortExec` requires `OrderedDistribution`, which a `KeyedPartitioning` can satisfy
     // (behind `spark.sql.sources.v2.bucketing.sorting.enabled`) through a `GroupPartitionsExec`
     // built to emit the partition keys in sorted order. Reusing that node for a join would
@@ -1961,17 +1962,123 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       case other => fail(s"expected the local sort to be looked through, got $other")
     }
 
+    // A grouping stacked over another is dropped and the node below is rewritten.
+    EnsureRequirements.rewriteGroupPartitions(GroupPartitionsExec(localSort))(mark) match {
+      case Some(SortExec(_, false, g: GroupPartitionsExec, _)) =>
+        assert(g.distributePartitions, "the stacked grouping must be dropped and the node " +
+          "below it rewritten")
+      case other => fail(s"expected the stacked grouping to be dropped, got $other")
+    }
+
     // A global sort is not looked through, so the caller wraps instead of reusing.
     val globalSort = SortExec(ordering, global = true, gpe)
     assert(EnsureRequirements.rewriteGroupPartitions(globalSort)(mark).isEmpty,
       "a GroupPartitionsExec below a global sort must never be reused")
   }
 
-  test("a single-child operator over a partially clustered layout still gets grouped") {
-    // A partially clustered `GroupPartitionsExec` reports a non-grouped partitioning by design, so
-    // an operator above it that needs `ClusteredDistribution` (an aggregate or a window, say) must
-    // still have that partitioning grouped -- stacking a second `GroupPartitionsExec` here is
-    // legitimate. See the aggregate and window cases in `KeyGroupedPartitioningSuite`.
+  test("SPARK-58996: withJoinKeyPositions reuses only a topmost GroupPartitionsExec") {
+    // Non-join multi-child operators (a cogroup, say) reach `withJoinKeyPositions`, so it must
+    // not descend to a node that may belong to another operator: over anything but a topmost
+    // `GroupPartitionsExec` it wraps, leaving the nodes below untouched.
+    val leaf = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(InternalRow(1), InternalRow(2))))
+    val gpe = GroupPartitionsExec(leaf)
+    val ordering = Seq(SortOrder(exprA, Ascending))
+
+    // A topmost GroupPartitionsExec is rewritten in place.
+    EnsureRequirements.withJoinKeyPositions(gpe, Seq(0)) match {
+      case g: GroupPartitionsExec => assert(g.joinKeyPositions === Some(Seq(0)))
+      case other => fail(s"expected a rewritten GroupPartitionsExec, got $other")
+    }
+
+    // A GroupPartitionsExec below a local sort is left alone; a new node wraps the sort.
+    EnsureRequirements.withJoinKeyPositions(SortExec(ordering, global = false, gpe), Seq(0))
+      match {
+      case g: GroupPartitionsExec =>
+        assert(g.joinKeyPositions === Some(Seq(0)))
+        g.child match {
+          case SortExec(_, false, childGpe: GroupPartitionsExec, _) =>
+            assert(childGpe.joinKeyPositions.isEmpty,
+              "the GroupPartitionsExec below the sort must stay untouched")
+          case other => fail(s"expected the sort to be wrapped, got $other")
+        }
+      case other => fail(s"expected a wrapping GroupPartitionsExec, got $other")
+    }
+  }
+
+  test("SPARK-58996: reusing a GroupPartitionsExec keeps its tags") {
+    // Tags are instance state that a `copy` does not carry, so every rewrite must copy them
+    // back onto the new node.
+    val tag = TreeNodeTag[String]("test tag")
+    val leaf = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(InternalRow(1), InternalRow(2))))
+    val gpe = GroupPartitionsExec(leaf)
+    gpe.setTagValue(tag, "kept")
+    val ordering = Seq(SortOrder(exprA, Ascending))
+
+    // The join path: a bare node and one behind a local sort.
+    EnsureRequirements.rewriteGroupPartitions(gpe)(_.copy(distributePartitions = true)) match {
+      case Some(g: GroupPartitionsExec) => assert(g.getTagValue(tag) === Some("kept"))
+      case other => fail(s"expected a rewritten GroupPartitionsExec, got $other")
+    }
+    EnsureRequirements.rewriteGroupPartitions(SortExec(ordering, global = false, gpe))(
+      _.copy(distributePartitions = true)) match {
+      case Some(SortExec(_, false, g: GroupPartitionsExec, _)) =>
+        assert(g.getTagValue(tag) === Some("kept"))
+      case other => fail(s"expected the local sort to be looked through, got $other")
+    }
+
+    // The non-join path: a topmost node is rewritten in place.
+    EnsureRequirements.withJoinKeyPositions(gpe, Seq(0)) match {
+      case g: GroupPartitionsExec => assert(g.getTagValue(tag) === Some("kept"))
+      case other => fail(s"expected a rewritten GroupPartitionsExec, got $other")
+    }
+  }
+
+  test("SPARK-58996: the shuffle site strips every grouping the rule inserted") {
+    // When a join child that already carries the rule's groupings must be re-shuffled, every
+    // grouping is stripped down to the pre-alignment plan: a replicating grouping repeats every
+    // row, so none of them may feed the shuffle. End-to-end this site only sees the stacked
+    // shape if a first pass succeeds with SPJ and a second pass gives it up, which no query
+    // reaches today; this pins the site itself so the descent cannot silently rot. With only a
+    // one-level peel the shuffle would land over the local sort and the grouping below it.
+    val leaf = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(InternalRow(1), InternalRow(1))))
+    val inner = GroupPartitionsExec(leaf, expectedPartitionKeys = Some(Seq(
+      (InternalRowComparableWrapper(InternalRow(1), Seq(exprA)), 2))))
+    assert(!inner.outputPartitioning.asInstanceOf[KeyedPartitioning].isGrouped,
+      "precondition: the inner grouping reports a non-grouped partitioning")
+    val ordering = Seq(SortOrder(exprA, Ascending))
+    val stackedChild = SortExec(ordering, global = false, inner)
+
+    val distribution = ClusteredDistribution(Seq(exprA))
+    val sibling = DummySparkPlan(outputPartitioning = HashPartitioning(Seq(exprA), 4))
+    val parent = DummySparkPlan(
+      children = Seq(stackedChild, sibling),
+      requiredChildDistribution = Seq(distribution, distribution),
+      requiredChildOrdering = Seq(Nil, Nil))
+
+    EnsureRequirements.apply(parent).children.head match {
+      case s: ShuffleExchangeExec =>
+        assert(s.child eq leaf,
+          s"every grouping the rule inserted must be stripped before the shuffle:\n" +
+            s"${s.treeString}")
+      case other => fail(s"expected the stacked child to be re-shuffled, got $other")
+    }
+  }
+
+  test("SPARK-58996: a single-child operator over a partially clustered layout still gets " +
+      "grouped") {
+    // A partially clustered `GroupPartitionsExec` reports a non-grouped partitioning by design,
+    // so an operator above it that needs `ClusteredDistribution` (an aggregate or a window, say)
+    // must still have that partitioning grouped -- stacking a second `GroupPartitionsExec` here
+    // is legitimate. See the aggregate and window cases in `KeyGroupedPartitioningSuite`.
+    //
+    // With one child the multi-child block never runs, so this does not exercise
+    // `rewriteGroupPartitions`: it pins the intentional non-idempotence of the children loop's
+    // wrap for single-child operators. If that wrap were "generalized" into a reuse of the node
+    // below, the returned child would stay non-grouped and this assertion would fail, which is
+    // exactly what the `rewriteGroupPartitions` scaladoc argues must not happen.
     val leaf = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(
         Seq(exprA), Seq(InternalRow(1), InternalRow(1), InternalRow(2))))
