@@ -71,16 +71,17 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         w.child.asInstanceOf[UnionExec]
     }
 
-  /** A cached aggregate, so the union's children read an `InMemoryTableScanExec`. */
+  /**
+   * A cached aggregate, so the union's children read an `InMemoryTableScanExec`. The caller needs
+   * the cache unmaterialized; `withTempView` uncaches this plan on the way out, so nothing is left
+   * for the next caller to trip over.
+   */
   private def cacheAggregateView(view: String): Unit = {
     spark.range(0, 200, 1, 4)
       .selectExpr("id % 10 AS k", "id AS v")
       .groupBy("k")
       .agg(sum("v").as("s"))
       .createOrReplaceTempView(view)
-    // Both callers need the cache unmaterialized, and `CacheManager` no-ops on an already-cached
-    // plan, so drop whatever an earlier test left for this one. `isCached` matches by plan.
-    if (spark.catalog.isCached(view)) spark.catalog.uncacheTable(view)
     spark.catalog.cacheTable(view)
   }
 
@@ -654,7 +655,7 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
   }
 
-  test("SPARK-59122: a fused union keeps numOutputRows when a child's partitioning firms up") {
+  test("SPARK-59122: a fused union keeps numOutputRows and reports UnknownPartitioning") {
     // The children's partitioning is not stable while the plan is being prepared:
     // `InMemoryTableScanExec.cachedPlan` unwraps the inner `AdaptiveSparkPlanExec` only once
     // `isFinalPlan` is true, and reports `UnknownPartitioning(0)` until then, so the union looks
@@ -665,6 +666,11 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     // this. Once the cache stages finalise, both children report the same `HashPartitioning`, and
     // re-deriving the decision at that point left `metrics` empty while the generated code still
     // incremented it, so `doProduce` threw `key not found: numOutputRows`.
+    //
+    // Both halves of the decision are asserted here. Registering the metric unconditionally would
+    // fix the crash and leave the other half broken: a fused union concatenates its children's
+    // partitions, so claiming their `HashPartitioning` would let a parent satisfy a clustered
+    // distribution from an RDD that does not have it.
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       withTempView("v") {
         cacheAggregateView("v")
@@ -675,25 +681,9 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         val fused = fusedUnions(df)
         assert(fused.nonEmpty,
           "this shape must actually fuse, or the test is not exercising the defect")
-        assert(fused.forall(_.metrics.contains("numOutputRows")),
-          "a fused union must register the metric its generated code increments")
-      }
-    }
-  }
-
-  test("SPARK-59122: a fused union reports UnknownPartitioning, so no parent skips an exchange") {
-    // The other half of the same decision. A fused union concatenates its children's partitions,
-    // so if it went on claiming the children's `HashPartitioning` a parent could satisfy a
-    // clustered distribution from an RDD that does not have it -- a wrong answer rather than a
-    // crash, which is why the missing metric must not simply be registered unconditionally.
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
-      withTempView("v") {
-        cacheAggregateView("v")
-        val df = spark.sql("SELECT k, abs(s) AS s FROM v UNION ALL SELECT k, s FROM v")
-        df.collect()
-        val fused = fusedUnions(df)
-        assert(fused.nonEmpty, "this shape must actually fuse")
         fused.foreach { u =>
+          assert(u.metrics.contains("numOutputRows"),
+            "a fused union must register the metric its generated code increments")
           assert(u.outputPartitioning.isInstanceOf[UnknownPartitioning],
             s"a fused union must not claim a concrete partitioning, got ${u.outputPartitioning}")
         }
@@ -712,15 +702,10 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val left = spark.range(0, 20, 1, 2).selectExpr("id % 5 AS k")
       val right = spark.range(20, 40, 1, 2).selectExpr("id % 5 AS k")
-      def build(): DataFrame =
-        left.repartition(4, col("k")).union(right.repartition(4, col("k"))).groupBy("k").count()
-
-      val expected = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
-        build().collect().toSeq
-      }
 
       val planned = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
-        val df = build()
+        val df = left.repartition(4, col("k"))
+          .union(right.repartition(4, col("k"))).groupBy("k").count()
         val plan = df.queryExecution.executedPlan
         val unions = plan.collect { case u: UnionExec => u }
         assert(unions.size == 1)
@@ -732,7 +717,9 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       }
 
       withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
-        checkAnswer(planned, expected)
+        // Each side contributes four ids per `k`, so the answer is fixed. Comparing against the
+        // same query run with the conf off would also pass if both paths regressed to ten rows.
+        checkAnswer(planned, (0L until 5L).map(k => Row(k, 8L)))
       }
     }
   }

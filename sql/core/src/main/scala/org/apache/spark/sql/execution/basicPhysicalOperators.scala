@@ -1026,9 +1026,10 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     }
   }
 
-  // Serializes the latch below so concurrent first readers agree on one answer. Not this node's own
-  // monitor, which `unionedInputRDD`'s `lazy val` holds while it drives `child.execute()`.
-  // Driver-only, hence `@transient`.
+  // Serializes the latch below so concurrent first readers agree on one answer. Held across the
+  // derivation, which only walks the children, so nothing below can be waiting on it. Not this
+  // node's own monitor, which `unionedInputRDD`'s `lazy val` holds while it drives
+  // `child.execute()`. Driver-only, hence `@transient`.
   @transient private val decisionLock = new Object()
 
   /**
@@ -1048,16 +1049,12 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    * `UNION_OUTPUT_PARTITIONING` is read here rather than in `rawPartitioning` so it is latched too:
    * `conf` is live, and re-reading it let a plan made with the conf on execute with it off.
    */
-  private[sql] def isPlainUnion: Boolean = {
-    decisionLock.synchronized(getTagValue(UnionExec.PLAIN_UNION_DECISION)).getOrElse {
+  private[sql] def isPlainUnion: Boolean = decisionLock.synchronized {
+    getTagValue(UnionExec.PLAIN_UNION_DECISION).getOrElse {
       val plain = !conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING) ||
         rawPartitioning.isInstanceOf[UnknownPartitioning]
-      decisionLock.synchronized {
-        getTagValue(UnionExec.PLAIN_UNION_DECISION).getOrElse {
-          setTagValue(UnionExec.PLAIN_UNION_DECISION, plain)
-          plain
-        }
-      }
+      setTagValue(UnionExec.PLAIN_UNION_DECISION, plain)
+      plain
     }
   }
 
@@ -1066,10 +1063,10 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    * one: a fused union concatenates, and claiming their partitioning would let a parent skip an
    * exchange it needs. The cost is SPARK-52921's exchange elimination for such a union.
    *
-   * The other branch is derived per call and can come back `UnknownPartitioning` later -- AQE skew
-   * splitting through a union leaves the children's partition counts divergent. Failing there was
-   * tried and reverted: nothing in those plans required the reported partitioning, and this node
-   * cannot tell at execution time whether anything did.
+   * The other branch is derived per call and can come back `UnknownPartitioning` later, since AQE
+   * skew splitting through a union leaves the children's partition counts divergent. Such a union
+   * concatenates, which is tolerated because the plans it arises in ask nothing of its
+   * partitioning.
    */
   override def outputPartitioning: Partitioning =
     if (isPlainUnion) super.outputPartitioning else rawPartitioning
@@ -1092,8 +1089,8 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
 
   // Memoized so `supportCodegen` (called repeatedly by `CollapseCodegenStages`)
   // and `metrics` see one reason on one instance; `conf` is live, so re-deriving
-  // could answer differently. Agreeing with the `withNewChildren` copy is the
-  // `isPlainUnion` tag's job, not this memo's.
+  // could answer differently. The `withNewChildren` copy gets its own memo, and
+  // agrees on the `isPlainUnion` term because that one is latched on a tag.
   @transient private lazy val supportCodegenFailureReason: Option[String] = {
     if (!conf.getConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED)) {
       Some("union-codegen-disabled")
