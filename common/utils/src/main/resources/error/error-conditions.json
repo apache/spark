@@ -239,6 +239,30 @@
     ],
     "sqlState" : "22023"
   },
+  "AUTOCDC_IGNORE_NULL_CANNOT_SELECT_RESERVED_COLUMN" : {
+    "message" : [
+      "In AutoCDC flow <flowName>, the ignore-null selection names column `<columnName>` which collides with the reserved column name prefix `<reservedColumnNamePrefix>` (<caseSensitivity>). Reserved columns may not appear in an ignore-null selection."
+    ],
+    "sqlState" : "42710"
+  },
+  "AUTOCDC_IGNORE_NULL_COLUMN_NOT_IN_OUTPUT_COLUMNS" : {
+    "message" : [
+      "In AutoCDC flow <flowName>, the ignore-null selection names column `<columnName>` which is not present in the effective target schema (<caseSensitivity>). Only columns written to the target may appear in an ignore-null selection."
+    ],
+    "sqlState" : "42703"
+  },
+  "AUTOCDC_IGNORE_NULL_EMPTY_COLUMN_LIST" : {
+    "message" : [
+      "AutoCDC flow specifies an empty `ignore_null_updates_column_list`. Provide at least one column, or omit the option entirely to disable ignore-null updates. To ignore nulls for every column, specify an empty `ignore_null_updates_except_column_list` instead."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_IGNORE_NULL_SELECTION_CONTAINS_KEY_COLUMN" : {
+    "message" : [
+      "In AutoCDC flow <flowName>, the ignore-null selection names key column `<columnName>` (<caseSensitivity>). Key columns identify rows and may not appear in an ignore-null selection. Key columns: <keyColumnNames>."
+    ],
+    "sqlState" : "22023"
+  },
   "AUTOCDC_INVALID_STATE" : {
     "message" : [
       "Detected an invalid AutoCDC state for target table <tableName>:"
