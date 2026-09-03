@@ -244,13 +244,17 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       val scanClass = classOf[MissingFullyPushedFilterAttributeScan].getName
       checkError(
         exception = e,
-        condition = "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE.NOT_IN_FILTER_ATTRIBUTES",
+        condition = "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE.CANNOT_RESOLVE",
         parameters = Map(
           "attribute" -> "`missing`",
           "method" -> "fullyPushedFilterAttributes()",
           "scanClass" -> scanClass,
           "relationOutput" -> "\"STRUCT<id: INT, part: INT>\""),
         sqlState = "KD000")
+      checkError(
+        exception = e.getCause.asInstanceOf[AnalysisException],
+        condition = "_LEGACY_ERROR_TEMP_1137",
+        parameters = Map("name" -> "missing", "outputStr" -> "id,part"))
     }
   }
 
@@ -481,6 +485,60 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
           "scanClass" -> scanClass,
           "relationOutput" -> "\"STRUCT<id: INT, p1: INT, p2: INT>\""),
         sqlState = "KD000")
+    }
+  }
+
+  test("filter on column outside filterAttributes -> not pushed") {
+    val tbl = s"$catalogName.tbl_restricted_filter_attrs"
+    val dim = s"$catalogName.dim_restricted_filter_attrs"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, p1 INT, p2 INT) USING $v2Source " +
+        "PARTITIONED BY (p1, p2) " +
+        "TBLPROPERTIES('filter-attributes' = 'p1')")
+      for (i <- 0 until 5) {
+        sql(s"INSERT INTO $tbl VALUES ($i, $i, $i)")
+      }
+      sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES (3)")
+
+      val df = sql(s"SELECT * FROM $tbl WHERE p2 = (SELECT max(val) FROM $dim)")
+      checkAnswer(df, Row(3, 3, 3))
+
+      val scan = collectBatchScan(df)
+      assert(scan.runtimeFilters.isEmpty,
+        "Expected no runtime filters for a column outside filterAttributes")
+      assertPushedCatalystPredicates(df, expected = 0)
+      assertScalarSubqueryEvaluatedAfterScan(df, expected = true)
+      assert(scan.inputPartitions.size === 5)
+      assert(scan.filteredPartitions.flatten.size === 5)
+    }
+  }
+
+  test("two predicates on filter attributes -> pushed together in a single filter() call") {
+    val tbl = s"$catalogName.tbl_two_predicates"
+    val dim1 = s"$catalogName.dim_two_predicates1"
+    val dim2 = s"$catalogName.dim_two_predicates2"
+    withTable(tbl, dim1, dim2) {
+      sql(s"CREATE TABLE $tbl (id INT, p1 INT, p2 INT) USING $v2Source PARTITIONED BY (p1, p2)")
+      for (i <- 0 until 5) {
+        sql(s"INSERT INTO $tbl VALUES ($i, $i, ${i * 10})")
+      }
+      sql(s"CREATE TABLE $dim1 (val INT) USING $v2Source")
+      sql(s"INSERT INTO $dim1 VALUES (3)")
+      sql(s"CREATE TABLE $dim2 (val INT) USING $v2Source")
+      sql(s"INSERT INTO $dim2 VALUES (30)")
+
+      val df = sql(s"SELECT * FROM $tbl WHERE p1 = (SELECT max(val) FROM $dim1) " +
+        s"AND p2 = (SELECT max(val) FROM $dim2)")
+      checkAnswer(df, Row(3, 3, 30))
+
+      assertScalarSubqueryRuntimeFilters(df, expectedCount = 2)
+      val p1 = AttributeReference("p1", IntegerType, nullable = false)()
+      val p2 = AttributeReference("p2", IntegerType, nullable = false)()
+      assertPushedCatalystPredicatesEqual(
+        df, EqualTo(p1, Literal(3)), EqualTo(p2, Literal(30)))
+      assert(getCatalystScan(df).filterCallCount === 1,
+        "expected both predicates pushed in a single filter() call")
     }
   }
 

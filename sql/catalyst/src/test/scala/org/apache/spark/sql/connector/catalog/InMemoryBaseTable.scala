@@ -515,9 +515,10 @@ abstract class InMemoryBaseTable(
   }
 
   private def canEvaluate(filter: Filter): Boolean = {
-    if (partitioning.length == 1 && partitioning.head.references.length == 1) {
+    val identityRefs = identityPartitionReferences
+    if (partitioning.length == 1 && identityRefs.length == 1) {
       filter match {
-        case In(attrName, _) if attrName == partitioning.head.references.head.toString => true
+        case In(attrName, _) if attrName == identityRefs.head.toString => true
         case _ => false
       }
     } else {
@@ -634,6 +635,12 @@ abstract class InMemoryBaseTable(
     extends Scan with Batch with SupportsReportStatistics with SupportsReportPartitioning {
 
     override def toBatch: Batch = this
+
+    protected def identityPartitionAttributes: Array[NamedReference] = {
+      identityPartitionReferences.distinct
+        .filter(ref => readSchema.findNestedField(
+          ref.fieldNames.toImmutableArraySeq, resolver = SQLConf.get.resolver).isDefined)
+    }
 
     override def estimateStatistics(): Statistics = {
       if (data.isEmpty) {
@@ -831,9 +838,7 @@ abstract class InMemoryBaseTable(
     var pushedFilters: Array[Filter] = Array.empty
 
     override def filterAttributes(): Array[NamedReference] = {
-      identityPartitionReferences
-        .filter(ref => readSchema.findNestedField(
-          ref.fieldNames.toImmutableArraySeq, resolver = SQLConf.get.resolver).isDefined)
+      identityPartitionAttributes
     }
 
     override def filter(filters: Array[Filter]): Unit = {
