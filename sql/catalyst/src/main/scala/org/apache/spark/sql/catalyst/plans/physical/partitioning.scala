@@ -612,17 +612,18 @@ case class KeyedPartitioning(
    *
    * The two cases can meet, and then the fallback is not truthful. A marked partitioning can end up
    * with no key, for instance when `v2BucketingPartitionFilterEnabled` intersects two sides that
-   * hold disjoint keys, and it then reports the un-reduced transform's type while the other leg of
-   * the same pairing reports the reducer's. `EnsureRequirements`' reduced-types check compares the
-   * two and fails a query whose result is empty. The same query fails on a `ClassCastException`
-   * without this marker, so nothing regresses. SPARK-59176 tracks the fix, which needs the
-   * reducer's result type recorded where the key is missing.
+   * hold disjoint keys, and this then reports the un-reduced transform's type. What it reports is a
+   * fact about the key rows, so with no key row there is no fact, and a caller must not hold the
+   * fallback against a real answer. The reduced-types comparison in `EnsureRequirements` leaves out
+   * a marked side that has no key for that reason (SPARK-59176). An unmarked one still answers,
+   * since its expressions describe the keys it would have had, and stays in the comparison.
    *
    * `ShuffleExchangeExec` is the one reader that stays on `expressionDataTypes`. It evaluates the
    * expressions to place the other child's rows, and it runs on executors, where this value is not
    * available. `expressionsDescribeKeys` is what keeps that site sound.
    *
-   * Only the first key's types are read, and nothing enforces that the rest match.
+   * Only the first key's types are read, and nothing enforces that the rest match. SPARK-59187 is
+   * to carry the types on the partitioning instead of sampling a key row.
    */
   @transient lazy val keyDataTypes: Seq[DataType] =
     partitionKeys.headOption.map(_.dataTypes).getOrElse(expressionDataTypes)
