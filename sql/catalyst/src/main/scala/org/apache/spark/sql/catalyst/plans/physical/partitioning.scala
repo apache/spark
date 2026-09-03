@@ -612,11 +612,11 @@ case class KeyedPartitioning(
    *
    * The two cases can meet, and then the fallback is not truthful. A marked partitioning can end up
    * with no key, for instance when `v2BucketingPartitionFilterEnabled` intersects two sides that
-   * hold disjoint keys, and this then reports the un-reduced transform's type, which no key of that
-   * partitioning would have held. What it reports is a fact about the key rows, so with no key row
-   * there is no fact, and a caller must not hold the fallback against a real answer. The
-   * reduced-types comparison in `EnsureRequirements` leaves out a side that has no key for that
-   * reason (SPARK-59176).
+   * hold disjoint keys, and this then reports the un-reduced transform's type. What it reports is a
+   * fact about the key rows, so with no key row there is no fact, and a caller must not hold the
+   * fallback against a real answer. The reduced-types comparison in `EnsureRequirements` leaves out
+   * a marked side that has no key for that reason (SPARK-59176). An unmarked one still answers,
+   * since its expressions describe the keys it would have had, and stays in the comparison.
    *
    * `ShuffleExchangeExec` is the one reader that stays on `expressionDataTypes`. It evaluates the
    * expressions to place the other child's rows, and it runs on executors, where this value is not

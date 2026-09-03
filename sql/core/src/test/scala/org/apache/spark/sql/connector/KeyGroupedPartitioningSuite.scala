@@ -596,10 +596,10 @@ class KeyGroupedPartitioningSuite
   private val row2021 = "(1, cast('2021-01-03' as timestamp))"
   private val bothRows = s"$row2020, $row2021"
 
-  /** The timestamps `bothRows` holds, as a query over both years reports them. */
-  private val bothTimestamps = Seq(
-    Row(Timestamp.valueOf("2020-01-01 00:00:00")),
-    Row(Timestamp.valueOf("2021-01-03 00:00:00")))
+  /** The timestamps those rows hold, as a query over them reports them. */
+  private val ts2020 = Row(Timestamp.valueOf("2020-01-01 00:00:00"))
+  private val ts2021 = Row(Timestamp.valueOf("2021-01-03 00:00:00"))
+  private val bothTimestamps = Seq(ts2020, ts2021)
 
   /**
    * Creates `days1` and `days2` partitioned by `days(ts)` and `years1` and `years2` by `years(ts)`,
@@ -999,7 +999,7 @@ class KeyGroupedPartitioningSuite
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-        checkAnswer(sql(reducedTsLegJoin()), Seq(Row(Timestamp.valueOf("2021-01-03 00:00:00"))))
+        checkAnswer(sql(reducedTsLegJoin()), Seq(ts2021))
       }
     }
   }
@@ -1132,9 +1132,9 @@ class KeyGroupedPartitioningSuite
         SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
         // Both orders, since the side that has no key is the one to leave out of the comparison.
-        // And both join types, since the inner join intersects the two key sets to nothing and
-        // never sorts, while the full outer join keeps the other side's keys and sorts them by the
-        // reported types.
+        // And both join types, since the inner join intersects the two key sets to nothing and so
+        // has nothing to sort, while the full outer join keeps the other side's keys and sorts them
+        // by the reported types.
         Seq("JOIN" -> Nil, "FULL OUTER JOIN" -> bothTimestamps).foreach {
           case (joinType, expected) =>
             Seq(false, true).foreach { leg2First =>
@@ -1145,6 +1145,43 @@ class KeyGroupedPartitioningSuite
                 "the two legs are the same pairing, so all three joins are co-partitioned")
             }
         }
+      }
+    }
+  }
+
+  test("SPARK-59176: an empty side whose expressions describe its keys keeps the reducer check") {
+    withFunction(UnboundDaysFunctionWithToYearsReducerWithDateResult) {
+      createTable(items, itemsColumns, Array(days("arrive_time")))
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(0, 'aa', 39.0, cast('2020-01-01' as timestamp))")
+
+      Seq(purchases -> "2020-01-01", "purchases2" -> "2022-01-01").foreach {
+        case (table, day) =>
+          createTable(table, purchasesColumns, Array(years("time")))
+          sql(s"INSERT INTO testcat.ns.$table VALUES (1, 42.0, cast('$day' as timestamp))")
+      }
+
+      // The inner join intersects two disjoint year key sets, so its leg reports a `years(time)`
+      // partitioning with no key. Nothing reduced it, so its expressions still describe the keys it
+      // would have had, and the reduced-types comparison must still run. This `days` function
+      // breaks the reducer contract, returning `DateType` where the target `years` transform is
+      // `IntegerType`, and that is what the comparison is there to catch.
+      withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        val e = intercept[SparkException] {
+          sql(
+            s"""
+               |${selectWithMergeJoinHint("i", "e")} i.id
+               |FROM testcat.ns.$items i
+               |JOIN (SELECT p.time FROM testcat.ns.$purchases p
+               |  JOIN testcat.ns.purchases2 p2 ON p2.time = p.time) e
+               |ON e.time = i.arrive_time
+               |""".stripMargin).collect()
+        }
+        assert(e.getMessage.contains(
+          "Storage-partition join partition transforms produced incompatible reduced types"))
       }
     }
   }
