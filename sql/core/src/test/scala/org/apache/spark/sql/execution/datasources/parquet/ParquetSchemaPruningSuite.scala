@@ -44,7 +44,7 @@ class ParquetV1SchemaPruningSuite extends ParquetSchemaPruningSuite {
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 
-  test("SPARK-57659: SchemaPruning is idempotent with metadata and a filtered variant") {
+  test("SPARK-59171: SchemaPruning is idempotent with metadata and a filtered variant") {
     withTempPath { path =>
       spark.range(10)
         .selectExpr("parse_json(cast(id as string)) as v")
