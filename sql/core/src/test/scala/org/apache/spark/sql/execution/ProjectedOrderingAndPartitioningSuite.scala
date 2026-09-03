@@ -50,9 +50,9 @@ class ProjectedOrderingAndPartitioningSuite
               .toSet.subsetOf(Set("x", "y", "z")))
           case 1 =>
             assert(outputOrdering.size == 1)
-            assert(outputOrdering.head.sameOrderExpressions.size == 0)
+            assert(outputOrdering.head.sameOrderExpressions.isEmpty)
           case 0 =>
-            assert(outputOrdering.size == 0)
+            assert(outputOrdering.isEmpty)
         }
       }
     }
@@ -118,7 +118,7 @@ class ProjectedOrderingAndPartitioningSuite
     val outputOrdering = df.queryExecution.optimizedPlan.outputOrdering
     assert(outputOrdering.size == 1)
     assert(outputOrdering.head.sql == "(x + y) ASC NULLS FIRST")
-    assert(outputOrdering.head.sameOrderExpressions.size == 0)
+    assert(outputOrdering.head.sameOrderExpressions.isEmpty)
   }
 
   test("SPARK-42049: Improve AliasAwareOutputExpression - partitioning - multi-references") {
@@ -222,7 +222,7 @@ class ProjectedOrderingAndPartitioningSuite
 
     val df3 = df.selectExpr("id + 2 AS b")
     val outputOrdering3 = df3.queryExecution.optimizedPlan.outputOrdering
-    assert(outputOrdering3.size == 0)
+    assert(outputOrdering3.isEmpty)
   }
 
   test("SPARK-42049: Improve AliasAwareOutputExpression - no alias but still prune expressions") {
@@ -236,7 +236,7 @@ class ProjectedOrderingAndPartitioningSuite
     val outputOrdering = df2.queryExecution.optimizedPlan.outputOrdering
     assert(outputOrdering.size == 1)
     assert(outputOrdering.head.child.asInstanceOf[Attribute].name == "a")
-    assert(outputOrdering.head.sameOrderExpressions.size == 0)
+    assert(outputOrdering.head.sameOrderExpressions.isEmpty)
   }
 
   test("SPARK-46367: KeyedPartitioning expressions are projected through " +

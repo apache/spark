@@ -2313,7 +2313,7 @@ class JDBCSuite extends SharedSparkSession {
     modifiedParameters += ("customKey" -> "a-value")
     modifiedParameters += ("dbTable" -> "t1")
     testJdbcOptions(new JDBCOptions(modifiedParameters))
-    assert ((modifiedParameters -- parameters.keys).size == 0)
+    assert ((modifiedParameters -- parameters.keys).isEmpty)
   }
 
   test("SPARK-19318: jdbc data source options should be treated case-insensitive.") {
