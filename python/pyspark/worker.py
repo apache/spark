@@ -152,7 +152,7 @@ class RunnerConf(Conf):
         return (
             self.get(
                 "spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled",
-                "false",
+                "true",
             )
             == "true"
         )
@@ -226,6 +226,10 @@ class EvalConf(Conf):
             return int(port)
         except ValueError:
             return port
+
+    @property
+    def state_server_auth_secret(self) -> Optional[str]:
+        return self.get("state_server_auth_secret", None, lower_str=False)
 
     @property
     def input_type(self) -> Optional[DataType]:
@@ -4099,7 +4103,9 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         output_schema = StructType([StructField("_0", return_type)])
 
         stateful_processor_api_client = StatefulProcessorApiClient(
-            eval_conf.state_server_socket_port, eval_conf.grouping_key_schema
+            eval_conf.state_server_socket_port,
+            eval_conf.grouping_key_schema,
+            auth_secret=eval_conf.state_server_auth_secret,
         )
 
         arrow_max_records_per_batch = runner_conf.arrow_max_records_per_batch
@@ -4241,7 +4247,9 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         output_schema = StructType([StructField("_0", return_type)])
 
         stateful_processor_api_client = StatefulProcessorApiClient(
-            eval_conf.state_server_socket_port, eval_conf.grouping_key_schema
+            eval_conf.state_server_socket_port,
+            eval_conf.grouping_key_schema,
+            auth_secret=eval_conf.state_server_auth_secret,
         )
 
         arrow_max_records_per_batch = runner_conf.arrow_max_records_per_batch
@@ -4778,7 +4786,9 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         key_offsets = parsed_offsets[0][0]
 
         stateful_processor_api_client = StatefulProcessorApiClient(
-            eval_conf.state_server_socket_port, eval_conf.grouping_key_schema
+            eval_conf.state_server_socket_port,
+            eval_conf.grouping_key_schema,
+            auth_secret=eval_conf.state_server_auth_secret,
         )
 
         def func(
@@ -4884,7 +4894,9 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         init_key_offsets = parsed_offsets[1][0]
 
         stateful_processor_api_client = StatefulProcessorApiClient(
-            eval_conf.state_server_socket_port, eval_conf.grouping_key_schema
+            eval_conf.state_server_socket_port,
+            eval_conf.grouping_key_schema,
+            auth_secret=eval_conf.state_server_auth_secret,
         )
 
         arrow_max_records_per_batch = runner_conf.arrow_max_records_per_batch

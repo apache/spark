@@ -198,7 +198,7 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
-  test("missing fully pushed filter attribute -> identifies the declaring method") {
+  test("missing fully pushed filter attribute -> rejected through runtime filter attrs") {
     val tbl = s"$catalogName.tbl_missing_fully_pushed_filter_attr"
     withTable(tbl) {
       sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
@@ -208,7 +208,7 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
       val e = intercept[AnalysisException] {
         scanRelation.copy(scan = new MissingFullyPushedFilterAttributeScan)
-          .fullyPushedRuntimeFilterAttrs
+          .runtimeFilterAttrs
       }
       val scanClass = classOf[MissingFullyPushedFilterAttributeScan].getName
       checkError(
@@ -594,7 +594,7 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     val partitioning = KeyedPartitioning(
       Seq(partAttr),
       Seq(InternalRowComparableWrapper(InternalRow(1), Seq(partAttr))),
-      isGrouped = false)
+      isGrouped = false, isCollapsed = false)
 
     def replanAfterFiltering(afterFilter: Seq[InputPartition]): Unit = {
       val scan = new PartitioningBreakingScan(Seq(KeyedInputPartition(1)), afterFilter)

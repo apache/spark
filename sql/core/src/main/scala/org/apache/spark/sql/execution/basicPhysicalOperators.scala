@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit._
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
+import scala.reflect.ClassTag
 
 import org.apache.spark.{InterruptibleIterator, SparkException, TaskContext}
 import org.apache.spark.internal.LogKeys
@@ -989,11 +990,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       // The `KeyedPartitioning`s must agree on the partition expressions to merge.
       val compatible = kps.forall(comparePartitioning(_, headKp))
       if (compatible) {
-        val mergedKeys = kps.flatMap(_.partitionKeys)
-        val mergedExpressions = headKp.expressions
-        val isGrouped = mergedKeys.distinct.size == mergedKeys.size
-        val isNarrowed = kps.exists(_.isNarrowed)
-        return KeyedPartitioning(mergedExpressions, mergedKeys, isGrouped, isNarrowed)
+        return KeyedPartitioning.concat(kps)
       } else {
         return super.outputPartitioning
       }
@@ -1014,7 +1011,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     // Intersect across all children, anchored on the first child's set. Every surviving member
     // is shared by all children, so their `numPartitions` agree; a `PartitioningCollection`
     // built from a subset of one child's members therefore keeps its uniform-numPartitions
-    // invariant, and the co-located `doExecute` arm's invariant holds.
+    // invariant, and the co-located arm in `unionRDDs` keeps its invariant.
     val head = candidateSets.head
     val intersection = head.filter { c =>
       candidateSets.tail.forall(_.exists(comparePartitioning(c, _)))
@@ -1034,7 +1031,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
 
   /**
    * True when this union behaves as a plain concatenation, so `unionedInputRDD` matches
-   * `sparkContext.union(...)` in `doExecute` and the codegen path applies. A `KeyedPartitioning`
+   * `sparkContext.union(...)` in `unionRDDs` and the codegen path applies. A `KeyedPartitioning`
    * union also concatenates, but codegen stays off for it: `supportCodegenFailureReason` reports
    * "partitioning-aware", because a downstream `GroupPartitionsExec` consumes its key descriptor.
    *
@@ -1274,11 +1271,13 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   // decides which output columns to materialize.
   override def usedInputs: AttributeSet = AttributeSet.empty
 
-  protected override def doExecute(): RDD[InternalRow] = {
-    // One read: the non-plain branch is derived per call, so the branch and `numPartitions` have to
-    // come from the same answer -- an `UnknownPartitioning(0)` here would give
-    // `SQLPartitioningAwareUnionRDD` zero partitions and this union an empty result.
+  // Shared by `doExecute` and `doExecuteColumnar` so the two cannot report one partitioning and
+  // build another. `outputPartitioning` is read once, before the children execute: a child's
+  // partitioning can sharpen once it has run, as `InMemoryTableScanExec` does over a
+  // not-yet-materialized AQE cached plan.
+  private def unionRDDs[T: ClassTag](executeChild: SparkPlan => RDD[T]): RDD[T] = {
     val partitioning = outputPartitioning
+    val rdds = children.map(executeChild)
     partitioning match {
       case _: UnknownPartitioning | _: KeyedPartitioning =>
         // An `UnknownPartitioning` union simply concatenates its children. A
@@ -1287,23 +1286,23 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
         // `GroupPartitionsExec` regroups partitions that share a key. This differs from an
         // index-co-locatable partitioning (e.g. `HashPartitioning`), where a partitioning-aware
         // union RDD interleaves same-index partitions across children.
-        sparkContext.union(children.map(_.execute()))
+        sparkContext.union(rdds)
       case _ =>
         // This union has a known, index-co-locatable partitioning, i.e., its children have the
         // same partitioning in semantics so this union can choose not to change the partitioning
         // by using a custom partitioning aware union RDD.
-        val nonEmptyRdds = children.map(_.execute()).filter(!_.partitions.isEmpty)
-        new SQLPartitioningAwareUnionRDD(sparkContext, nonEmptyRdds, partitioning.numPartitions)
+        new SQLPartitioningAwareUnionRDD(
+          sparkContext, rdds.filter(!_.partitions.isEmpty), partitioning.numPartitions)
     }
   }
+
+  protected override def doExecute(): RDD[InternalRow] = unionRDDs(_.execute())
 
   override def supportsColumnar: Boolean = children.forall(_.supportsColumnar)
 
   override def supportsRowBased: Boolean = children.forall(_.supportsRowBased)
 
-  protected override def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    sparkContext.union(children.map(_.executeColumnar()))
-  }
+  protected override def doExecuteColumnar(): RDD[ColumnarBatch] = unionRDDs(_.executeColumnar())
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): UnionExec =
     copy(children = newChildren)
