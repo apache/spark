@@ -601,15 +601,14 @@ case class CoalescedNullAwareHashPartitioning(
  *                                 whether it coarsens it (key-dropping projection, reducer,
  *                                 join-key projection) or expands it over a marked leg (a union,
  *                                 where another leg may declare exactly the key that leg holds
- *                                 out-of-set); (2) a marked member beside an unmarked sibling is
- *                                 agreement is enforced by `PartitioningCollection`: the
- *                                 constructor requires it and `fromPartitionings` normalizes by
- *                                 OR, so members are uniformly marked or unmarked and consumers
- *                                 may read one member. `ShuffledJoin`'s `InnerLike` arm, the
- *                                 only site that meets a marked input with an unmarked one,
- *                                 clears the markers first -- precision, so the OR spreads a
- *                                 spurious marker onto the accurate side instead of a genuine
- *                                 one.
+ *                                 out-of-set); (2) marker agreement is enforced by
+ *                                 `PartitioningCollection`: the constructor requires it and
+ *                                 `fromPartitionings` normalizes by OR, so members are
+ *                                 uniformly marked or unmarked and consumers may read one
+ *                                 member. `ShuffledJoin`'s `InnerLike` arm, the only site that
+ *                                 meets a marked input with an unmarked one, clears the markers
+ *                                 first. That is precision, not the guarantee: without it the
+ *                                 OR would spread the spurious marker onto the accurate side.
  */
 case class KeyedPartitioning(
     expressions: Seq[Expression],

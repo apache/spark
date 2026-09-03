@@ -260,6 +260,28 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59050: an identity grouping that shrinks the partition count drops the claim") {
+    // `alignToExpectedKeys` emits only the expected keys, so a declared key the merged set
+    // does not carry is never emitted. When the dropped key is trailing, every kept group
+    // still reads as the identity, but the partition count shrank and the hash modulus with
+    // it: the child's undeclared rows sit at hash(key) % 3 while the retained claim would
+    // promise hash(key) % 2. The count check catches what the per-group check cannot.
+    val child = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(3)))
+        .copy(mayContainUnknownPartitionKeys = true))
+    def keyOf(a: Int): InternalRowComparableWrapper =
+      InternalRowComparableWrapper(row(a), Seq(exprA))
+    val gpe = GroupPartitionsExec(child,
+      expectedPartitionKeys = Some(Seq(keyOf(1) -> 1, keyOf(2) -> 1)))
+    assert(gpe.groupedPartitions.size === 2, "the trailing key 3 is dropped")
+    gpe.outputPartitioning match {
+      case u: UnknownPartitioning =>
+        assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
+      case other =>
+        fail(s"expected the unknown-keyed claim to be dropped on a shrink, got $other")
+    }
+  }
+
   test("SPARK-59050: unknown-keyed child with reducers gives up the keyed claim at the real " +
     "count") {
     // The reducer instance of the give-up: a reduction regroups by the reduced keys, a
