@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, RelationProvider, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
@@ -69,7 +70,29 @@ class SaveIntoDataSourceCommandSuite extends SharedSparkSession {
     saveIntoDataSource(2)
     checkAnswer(loadData, Row(0) :: Row(1) :: Nil)
 
+    spark.catalog.clearCache()
     FakeV1DataSource.data = null
+
+    // Bound modes store Some(false)/Some(true) on LogicalRelation, so recache must match
+    // the written BaseRelation rather than sameResult against an unbound probe.
+    Seq(
+      Seq(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false"),
+      Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")).foreach { extraConf =>
+      extraConf.foreach { case (k, v) => spark.conf.set(k, v) }
+      try {
+        saveIntoDataSource(1)
+        val boundCached = loadData.cache()
+        checkAnswer(boundCached, Row(0))
+        saveIntoDataSource(2)
+        checkAnswer(loadData, Row(0) :: Row(1) :: Nil)
+      } finally {
+        spark.catalog.clearCache()
+        extraConf.foreach { case (k, _) => spark.conf.unset(k) }
+        FakeV1DataSource.data = null
+      }
+    }
   }
 
   test("Data type support") {

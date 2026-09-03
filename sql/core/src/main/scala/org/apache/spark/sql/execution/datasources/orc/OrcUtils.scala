@@ -541,6 +541,9 @@ object OrcUtils extends Logging {
    * @param resultSchema Result data schema created after pruning cols.
    * @param partitionSchema Schema of partitions.
    * @param conf Hadoop Configuration.
+   * @param charVarcharStandardSemantics When true, request physical ORC STRING so Spark can
+   *                                 apply CHAR/VARCHAR length checks. When false, keep native
+   *                                 constrained ORC CHAR/VARCHAR types.
    * @return Returns the result schema as string.
    */
   def orcResultSchemaString(
