@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
 import org.apache.spark.sql.connector.catalog.TableCapability
-import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
+import org.apache.spark.sql.execution.{FileSourceScanExec, FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileDataSourceV2, FileTable}
 import org.apache.spark.sql.functions._
@@ -3870,6 +3870,29 @@ class AvroV1Suite extends AvroSuite {
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
 
+  test("SPARK-59108: two positional reads of different columns share one widened scan") {
+    // SPARK-59107 named avro under this option, so the two subqueries used to keep their own scans.
+    // They share one now, and the values are the file's either way because each column resolves
+    // against the data schema. AQE off because `AdaptiveSparkPlanExec` is a leaf node, so with it
+    // on the scan underneath is not reachable from the executed plan.
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(0, 5).selectExpr("id AS a", "id * 10 AS b").write.format("avro").save(path)
+        withTempView("t") {
+          spark.read.option("positionalFieldMatching", true.toString).format("avro").load(path)
+            .createOrReplaceTempView("t")
+          val df = sql("SELECT (SELECT sum(a) FROM t), (SELECT sum(b) FROM t)")
+          checkAnswer(df, Row(10L, 100L))
+          val scanColumns = df.queryExecution.executedPlan
+            .collectWithSubqueries { case s: FileSourceScanExec => s }
+            .map(_.requiredSchema.fieldNames.sorted.toSeq)
+          assert(scanColumns === Seq(Seq("a", "b")))
+        }
+      }
+    }
+  }
+
   test("SPARK-36271: V1 insert should check schema field name too") {
     withView("v") {
       spark.range(1).createTempView("v")
@@ -3908,6 +3931,40 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  test("SPARK-59108: two positional reads of different columns share one widened scan") {
+    // SPARK-57205 withheld SCAN_MERGING from AvroTable under this option, so the two subqueries
+    // used to keep their own scans. The table declares it now, they share one, and the values are
+    // the file's either way because each column resolves against the data schema. FileTable
+    // withholds the capability when the reads are not strict, so pin that rather than inherit it.
+    withSQLConf(
+        SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
+        SQLConf.IGNORE_MISSING_FILES.key -> "false") {
+      val dsV2 = DataSource.lookupDataSourceV2("avro", spark.sessionState.conf)
+        .get.asInstanceOf[FileDataSourceV2]
+      val positional = dsV2.getTable(new StructType(), Array.empty,
+        JCollections.singletonMap("positionalFieldMatching", "true"))
+      assert(positional.capabilities().contains(TableCapability.SCAN_MERGING))
+
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(0, 5).selectExpr("id AS a", "id * 10 AS b").write.format("avro").save(path)
+        withTempView("t") {
+          spark.read.option("positionalFieldMatching", true.toString).format("avro").load(path)
+            .createOrReplaceTempView("t")
+          val df = sql("SELECT (SELECT sum(a) FROM t), (SELECT sum(b) FROM t)")
+          checkAnswer(df, Row(10L, 100L))
+          // Distinct by canonical form: the merged subquery is referenced twice, so it is
+          // collected once per reference.
+          val scanColumns = df.queryExecution.optimizedPlan
+            .collectWithSubqueries { case r: DataSourceV2ScanRelation => r }
+            .distinctBy(_.canonicalized)
+            .map(_.output.map(_.name).sorted)
+          assert(scanColumns === Seq(Seq("a", "b")))
+        }
+      }
+    }
+  }
 
   test("Avro source v2: support partition pruning") {
     withTempPath { dir =>
