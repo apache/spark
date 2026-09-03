@@ -69,6 +69,8 @@ public class TransportRequestHandlerSuite {
     Assertions.assertEquals(1, streamManager.numStreamStates());
 
     TransportClient reverseClient = mock(TransportClient.class);
+    // TransportContext gives the reverse client the channel it serves; match that here.
+    when(reverseClient.getChannel()).thenReturn(channel);
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, reverseClient,
       rpcHandler, 2L, null);
 
