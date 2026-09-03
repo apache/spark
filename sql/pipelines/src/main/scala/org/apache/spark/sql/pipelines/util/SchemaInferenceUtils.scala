@@ -19,13 +19,13 @@ package org.apache.spark.sql.pipelines.util
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{
   caseInsensitiveResolution,
   caseSensitiveResolution,
   Resolver
 }
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.common.DatasetType

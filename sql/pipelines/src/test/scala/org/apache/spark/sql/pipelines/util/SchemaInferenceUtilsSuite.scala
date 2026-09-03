@@ -415,7 +415,7 @@ class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("mergeSchemas - a nested case-only field whose type also changes fails to merge, and " +
-    "diffSchemas reports it as a type change") {
+    "diffSchemas reports it as a drop-then-add") {
     // A nested field that differs only in case AND changes type is rejected rather than silently
     // resolved. Note this is a *type* incompatibility, not a case one: `StructType.merge` never
     // widens numeric types, so `int` -> `long` fails identically for a same-cased field and at the
