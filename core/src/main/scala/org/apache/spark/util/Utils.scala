@@ -3160,6 +3160,85 @@ private[spark] object Utils
   }
 
   /**
+   * Return the n-th smallest element (0-indexed) of a long array, reordering `sizes` in place.
+   *
+   * This is an introselect: a quickselect that gives up and sorts the range still under
+   * consideration once the ranges have stopped shrinking quickly enough, so it runs in
+   * O(sizes.length) on average and in O(sizes.length * log(sizes.length)) in the worst case.
+   * Callers that only need a few order statistics should prefer it over sorting the whole array.
+   * They must not rely on the element order of `sizes` afterwards, other than that no element
+   * before index n is larger and no element after it is smaller than the returned value.
+   */
+  def nthSmallest(sizes: Array[Long], n: Int): Long = {
+    require(n >= 0 && n < sizes.length, s"n must be in [0, ${sizes.length}) but was $n")
+    var low = 0
+    var high = sizes.length - 1
+    // A well chosen pivot roughly halves the range, so a good run takes about log2(sizes.length)
+    // rounds. Inputs such as an organ pipe distribution defeat any fixed pivot choice and would
+    // make plain quickselect quadratic, so stop partitioning after twice that many rounds.
+    var remainingRounds = 2 * (32 - Integer.numberOfLeadingZeros(sizes.length))
+    while (low < high) {
+      if (remainingRounds == 0) {
+        java.util.Arrays.sort(sizes, low, high + 1)
+        low = n
+        high = n
+      } else {
+        remainingRounds -= 1
+        // The median of the first, middle and last element keeps already sorted and reverse
+        // sorted inputs, which are both common for shuffle block sizes, on the linear path.
+        val pivot = medianOfThree(sizes, low, low + (high - low) / 2, high)
+        var i = low
+        var j = high
+        while (i <= j) {
+          while (sizes(i) < pivot) i += 1
+          while (sizes(j) > pivot) j -= 1
+          if (i <= j) {
+            val tmp = sizes(i)
+            sizes(i) = sizes(j)
+            sizes(j) = tmp
+            i += 1
+            j -= 1
+          }
+        }
+        if (n <= j) {
+          high = j
+        } else if (n >= i) {
+          low = i
+        } else {
+          // The n-th element sits between the two partitions, so it is in its final position.
+          low = n
+          high = n
+        }
+      }
+    }
+    sizes(n)
+  }
+
+  /** Return the median of the elements of `sizes` at the three given positions. */
+  private def medianOfThree(sizes: Array[Long], i: Int, j: Int, k: Int): Long = {
+    val a = sizes(i)
+    val b = sizes(j)
+    val c = sizes(k)
+    if (a < b) {
+      if (b < c) b else if (a < c) c else a
+    } else {
+      if (a < c) a else if (b < c) c else b
+    }
+  }
+
+  /**
+   * Same as `median(sizes, false)`, but reorders `sizes` in place instead of sorting a copy of it.
+   */
+  def medianInPlace(sizes: Array[Long]): Long = {
+    val len = sizes.length
+    len match {
+      case _ if (len % 2 == 0) =>
+        math.max((nthSmallest(sizes, len / 2) + nthSmallest(sizes, len / 2 - 1)) / 2, 1)
+      case _ => math.max(nthSmallest(sizes, len / 2), 1)
+    }
+  }
+
+  /**
    * Check if a command is available.
    */
   def checkCommandAvailable(command: String): Boolean = {

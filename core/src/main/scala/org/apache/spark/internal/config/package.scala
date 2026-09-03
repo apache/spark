@@ -1467,12 +1467,20 @@ package object config {
     ConfigBuilder("spark.shuffle.accurateBlockSkewedFactor")
       .doc("A shuffle block is considered as skewed and will be accurately recorded in " +
         "HighlyCompressedMapStatus if its size is larger than this factor multiplying " +
-        "the median shuffle block size or SHUFFLE_ACCURATE_BLOCK_THRESHOLD. It is " +
-        "recommended to set this parameter to be the same as SKEW_JOIN_SKEWED_PARTITION_FACTOR." +
-        "Set to -1.0 to disable this feature by default.")
+        "the median shuffle block size or SHUFFLE_ACCURATE_BLOCK_THRESHOLD. Otherwise every " +
+        "block below SHUFFLE_ACCURATE_BLOCK_THRESHOLD is reported as the average block size, " +
+        "which hides skew from adaptive query execution once a shuffle has more than " +
+        "SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS partitions. At most " +
+        "SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER block sizes are recorded accurately per map " +
+        "task, plus the blocks tied at the cutoff of that selection, whose reduce ids are held " +
+        "in a bitmap. The tied blocks are not capped, so in the worst case, where they are " +
+        "scattered across the reduce id space, that bitmap costs a bit per reduce partition per " +
+        "map task on the driver, about 8 KiB per map task at 50000 reduce partitions. " +
+        "The default matches SKEW_JOIN_SKEWED_PARTITION_FACTOR. Set to -1.0 to disable " +
+        "this feature.")
       .version("3.3.0")
       .doubleConf
-      .createWithDefault(-1.0)
+      .createWithDefault(5.0)
 
   private[spark] val SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER =
     ConfigBuilder("spark.shuffle.maxAccurateSkewedBlockNumber")

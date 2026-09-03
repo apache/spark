@@ -1304,14 +1304,18 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.accurateBlockSkewedFactor</code></td>
-  <td>-1.0</td>
+  <td>5.0</td>
   <td>
     A shuffle block is considered as skewed and will be accurately recorded in
     <code>HighlyCompressedMapStatus</code> if its size is larger than this factor multiplying
-    the median shuffle block size or <code>spark.shuffle.accurateBlockThreshold</code>. It is
-    recommended to set this parameter to be the same as
-    <code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code>. Set to -1.0 to disable this
-    feature by default.
+    the median shuffle block size or <code>spark.shuffle.accurateBlockThreshold</code>.
+    Otherwise every block below <code>spark.shuffle.accurateBlockThreshold</code> is reported
+    as the average block size, which hides skew from adaptive query execution once a shuffle
+    has more than <code>spark.shuffle.minNumPartitionsToHighlyCompress</code> partitions. At
+    most <code>spark.shuffle.maxAccurateSkewedBlockNumber</code> block sizes are recorded
+    accurately per map task. The default matches
+    <code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code>. Set to -1.0 to disable
+    this feature.
   </td>
   <td>3.3.0</td>
 </tr>

@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Core 4.3 to 4.4
+
+- Since Spark 4.4, Spark accurately records skewed shuffle block sizes in `HighlyCompressedMapStatus`, so that adaptive query execution can still detect skewed partitions in shuffles with more than 2000 partitions. The default of `spark.shuffle.accurateBlockSkewedFactor` changed from `-1.0` to `5.0`, matching `spark.sql.adaptive.skewJoin.skewedPartitionFactor`. This can change query plans, since such skewed partitions are now split by skew join optimization, and it costs driver memory: up to `spark.shuffle.maxAccurateSkewedBlockNumber` (100 by default) block sizes per map task, plus a bitmap holding the reduce ids of the blocks tied at the cutoff of that selection. The tied blocks are not capped, so in the worst case, where they are scattered across the reduce id space, that bitmap costs a bit per reduce partition per map task, about 8 KiB per map task at 50000 reduce partitions, or roughly 80 MiB across a stage with 10000 map tasks. To restore the legacy behavior, you can set `spark.shuffle.accurateBlockSkewedFactor` to `-1.0`.
+
 ## Upgrading from Core 4.2 to 4.3
 
 - Since Spark 4.3, Spark compresses serialized RDD partitions by default. To restore the legacy behavior, you can set `spark.rdd.compress` to `false`.

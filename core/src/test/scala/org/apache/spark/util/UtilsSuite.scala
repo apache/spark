@@ -39,6 +39,7 @@ import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.logging.log4j.Level
 import org.mockito.Mockito.when
+import org.scalatest.time.SpanSugar._
 import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
@@ -1900,6 +1901,80 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       assert(extracted.map(_.getName).toSet === Set("file1.txt", "file2.txt"))
       assert(new String(Files.readAllBytes(new File(dir, "file1.txt").toPath), UTF_8) === "hello")
       assert(new String(Files.readAllBytes(new File(dir, "file2.txt").toPath), UTF_8) === "world")
+    }
+  }
+
+  test("SPARK-48290: nthSmallest returns the same elements as sorting") {
+    val inputs = Seq(
+      Array(1L),
+      Array(2L, 1L),
+      Array(5L, 4L, 3L, 2L, 1L),
+      Array(1L, 1L, 1L, 1L),
+      Array.tabulate(1000)(i => i.toLong),
+      Array.tabulate(1000)(i => (1000 - i).toLong),
+      Array.tabulate(1000)(_ => 7L),
+      Array.tabulate(1000)(i => math.min(i, 999 - i).toLong),
+      Array.fill(1000)(Random.nextLong()))
+    inputs.foreach { input =>
+      val expected = input.sorted
+      for (n <- input.indices) {
+        assert(Utils.nthSmallest(input.clone(), n) === expected(n))
+      }
+    }
+  }
+
+  test("SPARK-48290: nthSmallest is not quadratic on an organ pipe distribution") {
+    // Sizes that rise and then fall defeat any fixed pivot choice, so a plain quickselect needs
+    // more than 10^11 comparisons for these selections and does not finish in any reasonable
+    // time. Sorting the range still under consideration keeps each selection in the millisecond
+    // range, so the time limit only has to be generous enough to be free of flakiness.
+    val length = 1 << 20
+    val input = Array.tabulate(length)(i => math.min(i, length - 1 - i).toLong)
+    val expected = input.sorted
+    failAfter(60.seconds) {
+      Seq(0, 1, length / 2 - 1, length / 2, length - 100, length - 1).foreach { n =>
+        assert(Utils.nthSmallest(input.clone(), n) === expected(n))
+      }
+    }
+  }
+
+  test("SPARK-48290: nthSmallest partitions the array around the returned element") {
+    // nthSmallest reorders the array in place and documents that no element before index n is
+    // larger and none after it is smaller than the returned value. Callers are allowed to rely on
+    // that much of the ordering, so pin it here rather than only the returned value.
+    val inputs = Seq(
+      Array.tabulate(1000)(i => i.toLong),
+      Array.tabulate(1000)(i => (1000 - i).toLong),
+      Array.tabulate(1000)(i => math.min(i, 999 - i).toLong),
+      Array.tabulate(1000)(i => (i % 7).toLong),
+      Array.fill(1000)(Random.nextLong()))
+    inputs.foreach { input =>
+      Seq(0, 1, 17, 500, 900, 998, 999).foreach { n =>
+        val sizes = input.clone()
+        val nth = Utils.nthSmallest(sizes, n)
+        assert(sizes(n) === nth)
+        assert(sizes.take(n).forall(_ <= nth), "no element below index n may be larger")
+        assert(sizes.drop(n + 1).forall(_ >= nth), "no element above index n may be smaller")
+      }
+    }
+  }
+
+  test("SPARK-48290: nthSmallest rejects an out of range index") {
+    intercept[IllegalArgumentException](Utils.nthSmallest(Array(1L, 2L), -1))
+    intercept[IllegalArgumentException](Utils.nthSmallest(Array(1L, 2L), 2))
+    intercept[IllegalArgumentException](Utils.nthSmallest(Array.empty[Long], 0))
+  }
+
+  test("SPARK-48290: medianInPlace agrees with median") {
+    val inputs = Seq(
+      Array(1L),
+      Array(2L, 1L),
+      Array(0L, 0L, 0L),
+      Array(5L, 4L, 3L, 2L, 1L),
+      Array.tabulate(999)(i => i.toLong),
+      Array.fill(1000)(Random.nextLong().abs))
+    inputs.foreach { input =>
+      assert(Utils.medianInPlace(input.clone()) === Utils.median(input, false))
     }
   }
 }
