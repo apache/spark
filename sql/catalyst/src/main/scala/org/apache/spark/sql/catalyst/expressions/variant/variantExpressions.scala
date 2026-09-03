@@ -22,8 +22,6 @@ import java.util.ArrayDeque
 
 import scala.util.parsing.combinator.RegexParsers
 
-import org.apache.commons.text.StringEscapeUtils
-
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, GeneratorBuilder, TypeCheckResult}
@@ -1964,16 +1962,24 @@ object VariantExplode {
     }
   }
 
+  // Appends `key` to `parentPath`: dot notation for dot-safe keys, else `['...']` with `\` and
+  // `'` escaped.
   private def appendObjectPath(parentPath: String, key: String): String = {
-    if (key.nonEmpty && !key.contains('.') && !key.contains('[')) {
+    if (isDotSafeKey(key)) {
       s"$parentPath.$key"
-    } else if (!key.contains('"')) {
-      s"""$parentPath["$key"]"""
-    } else if (!key.contains('\'')) {
-      s"$parentPath['$key']"
     } else {
-      s"""$parentPath["${StringEscapeUtils.escapeJson(key)}"]"""
+      s"$parentPath['${key.replace("\\", "\\\\").replace("'", "\\'")}']"
     }
+  }
+
+  // Dot-safe keys are non-empty and identifier-like: an ASCII letter, `_`, or non-ASCII character
+  // first, then those or ASCII digits. All other keys use bracket notation.
+  private def isDotSafeKey(key: String): Boolean = {
+    def isStart(c: Char): Boolean =
+      (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c >= 0x80
+    def isPart(c: Char): Boolean = isStart(c) || (c >= '0' && c <= '9')
+    key.nonEmpty && isStart(key.charAt(0)) &&
+      (1 until key.length).forall(i => isPart(key.charAt(i)))
   }
 }
 

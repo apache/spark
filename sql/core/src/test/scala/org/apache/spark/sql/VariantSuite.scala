@@ -1174,6 +1174,7 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
             Row("$[0].a", 0, "a", "1"),
             Row("$[1]", 1, null, "2")))
 
+        // Keys that are not dot-safe use bracket notation.
         checkAnswer(
           sql("""
             |SELECT path, key, to_json(value)
@@ -1181,10 +1182,28 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
             |  map('a.b', 1, 'a[b', 2, 'a."b', 3, '', 4)), true)
             |""".stripMargin),
           Seq(
-            Row("""$["a.b"]""", "a.b", "1"),
-            Row("""$["a[b"]""", "a[b", "2"),
+            Row("""$['a.b']""", "a.b", "1"),
+            Row("""$['a[b']""", "a[b", "2"),
             Row("""$['a."b']""", """a."b""", "3"),
-            Row("""$[""]""", "", "4")))
+            Row("""$['']""", "", "4")))
+
+        // Bracketed keys escape `\` and `'`; `"` is left literal.
+        checkAnswer(
+          sql("""SELECT path, key FROM variant_explode(
+            |  to_variant_object(map('a''b', 1)), true)""".stripMargin),
+          Seq(Row("""$['a\'b']""", "a'b")))
+        checkAnswer(
+          sql("""SELECT path, key FROM variant_explode(
+            |  to_variant_object(map('a"''b', 1)), true)""".stripMargin),
+          Seq(Row("""$['a"\'b']""", """a"'b""")))
+        checkAnswer(
+          sql("""SELECT path, key FROM variant_explode(
+            |  to_variant_object(map('a\\b', 1)), true)""".stripMargin),
+          Seq(Row("""$['a\\b']""", """a\b""")))
+        checkAnswer(
+          sql("""SELECT path, key FROM variant_explode(
+            |  to_variant_object(map('0', 1)), true)""".stripMargin),
+          Seq(Row("""$['0']""", "0")))
 
         // scalastyle:off nonascii
         checkAnswer(
@@ -1199,8 +1218,32 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
             |SELECT path, key, to_json(value)
             |FROM variant_explode(parse_json('{"键.名": 5}'), true)
             |""".stripMargin),
-          Seq(Row("""$["键.名"]""", "键.名", "5")))
+          Seq(Row("""$['键.名']""", "键.名", "5")))
         // scalastyle:on nonascii
+
+        // A single path can mix representations per segment: dot for dot-safe keys, bracket for
+        // the rest, and `[i]` for array indices.
+        checkAnswer(
+          sql("""
+            |SELECT path, to_json(value)
+            |FROM variant_explode(parse_json('{"a": {"b c": [{"d.e": 1}]}}'), true)
+            |""".stripMargin),
+          Seq(
+            Row("$.a", """{"b c":[{"d.e":1}]}"""),
+            Row("""$.a['b c']""", """[{"d.e":1}]"""),
+            Row("""$.a['b c'][0]""", """{"d.e":1}"""),
+            Row("""$.a['b c'][0]['d.e']""", "1")))
+
+        checkAnswer(
+          sql("""
+            |SELECT path, to_json(value)
+            |FROM variant_explode(parse_json('{"a": {"b''c": {"d e": [1]}}}'), true)
+            |""".stripMargin),
+          Seq(
+            Row("$.a", """{"b'c":{"d e":[1]}}"""),
+            Row("""$.a['b\'c']""", """{"d e":[1]}"""),
+            Row("""$.a['b\'c']['d e']""", "[1]"),
+            Row("""$.a['b\'c']['d e'][0]""", "1")))
 
         checkAnswer(
           sql("SELECT * FROM variant_explode(parse_json('[]'), true)"),
