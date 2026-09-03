@@ -474,6 +474,50 @@ def _check_operand_types(op_name: str, inputs: Tuple[Any, ...]) -> None:
             )
 
 
+def _numpy_output_dtypes(ufunc: Callable, inputs: Tuple[Any, ...], count: int) -> Tuple[Any, ...]:
+    # The dtypes NumPy itself produces for these operands, asked of NumPy directly rather
+    # than by reimplementing its promotion rules: float32 with an int8 or a Python scalar
+    # stays float32, while float32 with an int64 widens to float64. Always returns one entry
+    # per output, None where NumPy cannot answer for these operands.
+    unknown = (None,) * count
+    if not any(str(getattr(inp, "dtype", "")) in ("float32", "Float32") for inp in inputs):
+        # Only a float32 operand can lose precision below, so skip the probe entirely.
+        return unknown
+    probes = []
+    for inp in inputs:
+        dtype = getattr(inp, "dtype", None)
+        if dtype is None:
+            # A scalar, which NumPy promotes weakly; pass it through as itself.
+            probes.append(inp)
+        else:
+            probes.append(np.ones(1, dtype=getattr(dtype, "numpy_dtype", dtype)))
+    try:
+        with np.errstate(all="ignore"):
+            outputs = ufunc(*probes)
+    except Exception:
+        # NumPy cannot evaluate every dtype reaching here (a decimal column arrives as
+        # object), and a ufunc that rejects these operands has to keep raising from the
+        # call itself rather than from this probe.
+        return unknown
+    dtypes = (
+        tuple(output.dtype for output in outputs)
+        if isinstance(outputs, tuple)
+        else (outputs.dtype,)
+    )
+    return dtypes if len(dtypes) == count else unknown
+
+
+def _restore_float32_output(output: SeriesOrIndex, expected: Any) -> SeriesOrIndex:
+    # Spark's functions return a double for a float input, so a float32 column comes back
+    # as float64 where NumPy keeps single precision. Besides the dtype, that lets values
+    # outside the float32 range through: NumPy overflows exp(90) to infinity and underflows
+    # square(1e-23) to zero, while the double result keeps both finite and non-zero.
+    dtype = str(output.dtype)
+    if expected == np.float32 and dtype in ("float64", "Float64"):
+        return output.astype("Float32" if dtype == "Float64" else "float32")
+    return output
+
+
 # Copied from pandas.
 # See also https://docs.scipy.org/doc/numpy/reference/arrays.classes.html#standard-array-subclasses
 def maybe_dispatch_ufunc_to_dunder_op(
@@ -562,7 +606,11 @@ def maybe_dispatch_ufunc_to_spark_func(
         # that column_op unwraps to a Column -- no literal wrapping needed. Build one
         # Series per output and return them as a 2-tuple (see the mapping's docstring).
         first_func, second_func = multi_output_np_spark_mappings[op_name]
-        return column_op(first_func)(*inputs), column_op(second_func)(*inputs)
+        first_dtype, second_dtype = _numpy_output_dtypes(ufunc, inputs, 2)
+        return (
+            _restore_float32_output(column_op(first_func)(*inputs), first_dtype),
+            _restore_float32_output(column_op(second_func)(*inputs), second_dtype),
+        )
 
     if (
         method == "__call__"
@@ -578,7 +626,9 @@ def maybe_dispatch_ufunc_to_spark_func(
             args = [F.lit(inp) for inp in args]
             return np_spark_map_func(*args)
 
-        return column_op(convert_arguments)(*inputs)
+        return _restore_float32_output(
+            column_op(convert_arguments)(*inputs), _numpy_output_dtypes(ufunc, inputs, 1)[0]
+        )
     else:
         return NotImplemented
 

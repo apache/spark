@@ -274,6 +274,75 @@ class NumPyCompatTestsMixin:
                 self.assert_eq(np_func(psdf.a), np_func(pdf.a), almost=True)
 
     @_skip_if_numpy_differs
+    def test_np_float32_output_dtypes(self):
+        # NumPy keeps single precision for a float32 input, while Spark's functions return a
+        # double. Only a strict assert_eq compares dtypes -- almost=True checks values and
+        # null positions alone -- so the assertions below are deliberately not approximate.
+        pdf = pd.DataFrame(
+            {
+                "a": np.array([0.25, 1.5, 8.0, 64.0], dtype="float32"),
+                "b": np.array([0.5, 2.0, 3.0, -1.5], dtype="float32"),
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        # Rounding the double result back to float32 returns exactly what NumPy computes for
+        # these: they either only move the exponent or are correctly rounded in both widths.
+        for np_func in (np.absolute, np.fabs, np.rint, np.sqrt, np.square, np.trunc):
+            with self.subTest(ufunc=np_func.__name__):
+                self.assert_eq(np_func(psdf.a), np_func(pdf.a))
+        for np_func in (np.copysign, np.fmax, np.fmin, np.fmod, np.hypot):
+            with self.subTest(ufunc=np_func.__name__):
+                self.assert_eq(np_func(psdf.a, psdf.b), np_func(pdf.a, pdf.b))
+
+        # A transcendental computed in double and rounded once can land a single bit away
+        # from NumPy's single-precision loop, so its values are compared approximately; the
+        # dtype is what this test is for and is still checked exactly.
+        for np_func in (np.cbrt, np.cos, np.exp, np.log, np.tanh):
+            with self.subTest(ufunc=np_func.__name__):
+                self.assert_eq(np_func(psdf.a), np_func(pdf.a), almost=True)
+                self.assertEqual(np_func(psdf.a).dtype, np_func(pdf.a).dtype)
+
+        # Multi-output ufuncs restore each output on its own: frexp's exponent is an int32
+        # either way, and only its mantissa follows the input's precision.
+        for np_func in (np.frexp, np.modf):
+            with self.subTest(ufunc=np_func.__name__):
+                ps_first, ps_second = np_func(psdf.a)
+                pd_first, pd_second = np_func(pdf.a)
+                self.assert_eq(ps_first, pd_first)
+                self.assert_eq(ps_second, pd_second)
+
+        # A nullable Float32 keeps the extension dtype rather than widening to Float64.
+        pser = pd.Series(pd.array([0.25, None, 8.0], dtype="Float32"))
+        psser = ps.from_pandas(pser)
+        self.assert_eq(np.sqrt(psser), np.sqrt(pser))
+
+        # NumPy's own promotion decides the result, so it is what the restore follows: an
+        # int8 operand or a Python scalar keeps float32, while an int64 widens to float64.
+        pdf = pd.DataFrame(
+            {
+                "a": np.array([0.25, 8.0], dtype="float32"),
+                "narrow": np.array([2, 3], dtype="int8"),
+                "wide": np.array([2, 3], dtype="int64"),
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(np.fmod(psdf.a, psdf.narrow), np.fmod(pdf.a, pdf.narrow))
+        self.assert_eq(np.fmod(psdf.a, psdf.wide), np.fmod(pdf.a, pdf.wide))
+        self.assert_eq(np.fmod(psdf.a, 2), np.fmod(pdf.a, 2))
+
+    def test_np_float32_range(self):
+        # Restoring the dtype also restores float32's range. NumPy overflows to infinity
+        # past ~3.4e38 and underflows to zero below the smallest subnormal, where a double
+        # result stays finite and non-zero and so disagrees with pandas on both.
+        pdf = pd.DataFrame({"a": np.array([80.0, 88.0, 90.0, 100.0, 200.0], dtype="float32")})
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(np.isinf(np.exp(psdf.a).to_pandas()), np.isinf(np.exp(pdf.a)))
+
+        pdf = pd.DataFrame({"a": np.array([1e-20, 1e-23, 1e-30], dtype="float32")})
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(np.square(psdf.a), np.square(pdf.a))
+
     def test_np_reciprocal_integer(self):
         # np.reciprocal on an integer column does integer division (truncated
         # toward zero): 1 -> 1, -1 -> -1, and every other magnitude -> 0. The
