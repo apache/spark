@@ -360,6 +360,18 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
+   * Re-caches every entry whose plan contains a [[LogicalRelation]] for `relation`.
+   * Unlike [[recacheByPlan]], this ignores CHAR/VARCHAR scan-mode identity so a V1 write
+   * invalidates preserve-only, standard, and unbound cache entries for that BaseRelation.
+   */
+  def recacheByV1Relation(spark: SparkSession, relation: BaseRelation): Unit = {
+    recacheByCondition(spark, cd => cd.plan.exists {
+      case logical: LogicalRelation => logical.relation == relation
+      case _ => false
+    })
+  }
+
+  /**
    * Re-caches all cache entries that reference the given table name.
    */
   def recacheTableOrView(
