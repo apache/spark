@@ -19,7 +19,10 @@ package org.apache.spark.sql
 
 import scala.util.Try
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkThrowable}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverGuard
 import org.apache.spark.sql.catalyst.expressions.{
@@ -36,7 +39,8 @@ import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, InMemoryPartitionTableCatalog}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, PartitionedFile}
+import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.functions
 import org.apache.spark.sql.internal.SQLConf
@@ -2445,6 +2449,29 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58814: OrcFileFormat subclasses keep public reader dispatch") {
+    import testImplicits._
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      Seq("ab").toDF("v").write.mode("overwrite").orc(path)
+      val formatName = classOf[TrackingOrcFileFormat].getName
+      val boundModes = Seq(
+        Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true"),
+        Seq(
+          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+          SQLConf.READ_SIDE_CHAR_PADDING.key -> "false"))
+      boundModes.foreach { extraConf =>
+        TrackingOrcFileFormat.publicReaderCalls = 0
+        withSQLConf(extraConf: _*) {
+          spark.read.format(formatName).schema("v VARCHAR(4)").load(path).collect()
+          assert(TrackingOrcFileFormat.publicReaderCalls > 0,
+            s"subclass reader override was skipped for $extraConf")
+        }
+      }
+    }
+  }
+
   test("SPARK-59001: text datasource accepts CHAR/VARCHAR as a string family type") {
     Seq("text", "").foreach { useV1SourceList =>
       withSQLConf(
@@ -2467,6 +2494,27 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       }
     }
   }
+}
+
+class TrackingOrcFileFormat extends OrcFileFormat {
+  override def shortName(): String = "tracking-orc"
+
+  override def buildReaderWithPartitionValues(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[org.apache.spark.sql.sources.Filter],
+      options: Map[String, String],
+      hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
+    TrackingOrcFileFormat.publicReaderCalls += 1
+    super.buildReaderWithPartitionValues(
+      sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
+  }
+}
+
+object TrackingOrcFileFormat {
+  @volatile var publicReaderCalls: Int = 0
 }
 
 class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSparkSession {

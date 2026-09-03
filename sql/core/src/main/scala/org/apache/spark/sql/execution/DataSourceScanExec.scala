@@ -759,7 +759,9 @@ case class FileSourceScanExec(
       (FileFormat.OPTION_RETURNING_BATCH -> supportsColumnar.toString)
     val hadoopConf = getHadoopConf(relation.sparkSession, relation.options)
     val readFile: (PartitionedFile) => Iterator[InternalRow] = relation.fileFormat match {
-      case format: OrcFileFormat if charVarcharStandardSemantics.isDefined =>
+      case format: OrcFileFormat
+          if format.getClass == classOf[OrcFileFormat] &&
+            charVarcharStandardSemantics.isDefined =>
         format.buildReaderWithPartitionValues(
           sparkSession = relation.sparkSession,
           dataSchema = relation.dataSchema,
