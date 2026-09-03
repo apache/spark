@@ -19,10 +19,13 @@ package org.apache.spark.launcher;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.ObjectOutputStream;
 import java.io.ObjectStreamClass;
+import java.util.ArrayList;
 import java.util.HashMap;
 
+import org.apache.spark.launcherMalicious.LauncherPrefixSpoof;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -78,7 +81,7 @@ public class FilteredObjectInputStreamSuite extends BaseSuite {
 
   @Test
   public void testDisallowedArrayListIsRejected() throws Exception {
-    java.util.ArrayList<String> payload = new java.util.ArrayList<>();
+    ArrayList<String> payload = new ArrayList<>();
     payload.add("a");
     byte[] bytes = serialize(payload);
     IllegalArgumentException thrown = assertThrows(
@@ -90,14 +93,34 @@ public class FilteredObjectInputStreamSuite extends BaseSuite {
 
   @Test
   public void testDisallowedCustomClassIsRejected() throws Exception {
-    // java.io.File is Serializable but lives in java.io, not in the allow-list.
-    java.io.File payload = new java.io.File("/tmp/evil");
+    // File is Serializable but lives in java.io, not in the allow-list.
+    File payload = new File("/tmp/evil");
     byte[] bytes = serialize(payload);
     IllegalArgumentException thrown = assertThrows(
         IllegalArgumentException.class,
         () -> deserializeFiltered(bytes));
     assertTrue(thrown.getMessage().contains("Unexpected class in stream"));
     assertTrue(thrown.getMessage().contains("java.io.File"));
+  }
+
+  // ALLOWED_PACKAGES entries end in a literal dot, so a class merely sharing the
+  // "org.apache.spark.launcher" text without being in that package must still be
+  // rejected: LauncherPrefixSpoof (org.apache.spark.launcherMalicious.LauncherPrefixSpoof)
+  // pins down that boundary, since startsWith("org.apache.spark.launcher.") is false
+  // once the character after the prefix is "M" rather than ".". A matching spoof of
+  // the "java.lang." prefix (e.g. java.langfoo.Bar) can't be tested the same way: the
+  // JVM refuses to define any class whose package starts with "java.", so no real
+  // Class backs that name.
+  @Test
+  public void testDisallowedLauncherPrefixSpoofIsRejected() throws Exception {
+    LauncherPrefixSpoof payload = new LauncherPrefixSpoof();
+    byte[] bytes = serialize(payload);
+    IllegalArgumentException thrown = assertThrows(
+        IllegalArgumentException.class,
+        () -> deserializeFiltered(bytes));
+    assertTrue(thrown.getMessage().contains("Unexpected class in stream"));
+    assertTrue(thrown.getMessage().contains(
+        "org.apache.spark.launcherMalicious.LauncherPrefixSpoof"));
   }
 
   // The three tests below document CURRENT resolveClass behavior for classes in
@@ -119,7 +142,7 @@ public class FilteredObjectInputStreamSuite extends BaseSuite {
   public void testJavaLangReflectFieldIsCurrentlyAllowed() throws Exception {
     ObjectStreamClass desc = ObjectStreamClass.lookupAny(java.lang.reflect.Field.class);
     try (FilteredObjectInputStream in = newFilteredStream()) {
-      assertNotNull(in.resolveClass(desc));
+      assertEquals(java.lang.reflect.Field.class, in.resolveClass(desc));
     }
   }
 
@@ -127,7 +150,7 @@ public class FilteredObjectInputStreamSuite extends BaseSuite {
   public void testJavaLangInvokeMethodHandleIsCurrentlyAllowed() throws Exception {
     ObjectStreamClass desc = ObjectStreamClass.lookupAny(java.lang.invoke.MethodHandle.class);
     try (FilteredObjectInputStream in = newFilteredStream()) {
-      assertNotNull(in.resolveClass(desc));
+      assertEquals(java.lang.invoke.MethodHandle.class, in.resolveClass(desc));
     }
   }
 
@@ -135,7 +158,7 @@ public class FilteredObjectInputStreamSuite extends BaseSuite {
   public void testJavaLangRefWeakReferenceIsCurrentlyAllowed() throws Exception {
     ObjectStreamClass desc = ObjectStreamClass.lookupAny(java.lang.ref.WeakReference.class);
     try (FilteredObjectInputStream in = newFilteredStream()) {
-      assertNotNull(in.resolveClass(desc));
+      assertEquals(java.lang.ref.WeakReference.class, in.resolveClass(desc));
     }
   }
 
