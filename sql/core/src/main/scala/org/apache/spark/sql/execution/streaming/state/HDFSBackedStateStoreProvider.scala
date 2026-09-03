@@ -691,7 +691,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
 
     if (numberOfVersionsToRetainInMemory <= 0) {
-      if (loadedMaps.size() > 0) loadedMaps.clear()
+      if (!loadedMaps.isEmpty) loadedMaps.clear()
       return
     }
 

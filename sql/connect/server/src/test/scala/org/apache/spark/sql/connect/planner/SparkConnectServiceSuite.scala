@@ -496,7 +496,7 @@ class SparkConnectServiceSuite
                 assert(chunk.getArrowBatch.getRowCount == rowCount)
                 assert(chunk.getArrowBatch.getStartOffset == rowStartOffset)
                 assert(chunk.getArrowBatch.getData != null)
-                assert(chunk.getArrowBatch.getData.size() > 0)
+                assert(!chunk.getArrowBatch.getData.isEmpty)
                 assert(
                   chunk.getArrowBatch.getData.size() <= preferredChunkSizeOption.getOrElse(
                     maxChunkSizeOption.get))

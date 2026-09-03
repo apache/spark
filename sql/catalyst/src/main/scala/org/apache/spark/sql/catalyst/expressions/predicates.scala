@@ -773,7 +773,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
           break;
        """)
 
-    val switchCode = if (caseBranches.size > 0) {
+    val switchCode = if (caseBranches.nonEmpty) {
       code"""
         switch (${valueGen.value}) {
           ${caseBranches.mkString("\n")}
