@@ -158,11 +158,16 @@ class PendingState(_PoolStateRecord):
         return cls._positive_pid(data.get("attendant_pid")) if data is not None else None
 
     @classmethod
+    def created_from_data(cls, data: Optional[Dict[str, Any]]) -> Optional[float]:
+        """Recover a valid creation time even when another record field is malformed."""
+        return cls._timestamp(data.get("created")) if data is not None else None
+
+    @classmethod
     def from_data(cls, data: Optional[Dict[str, Any]]) -> Optional["PendingState"]:
         if data is None:
             return None
         attendant_pid = cls.attendant_pid_from_data(data)
-        created = cls._timestamp(data.get("created"))
+        created = cls.created_from_data(data)
         fingerprint = data.get("fingerprint")
         if (
             attendant_pid is None
@@ -731,6 +736,9 @@ class ServerPool:
         rules use that pid to retire members whose client died without releasing them. The
         caller must hold the directory lock so selection and rename form one transition.
 
+        Publication writes the server record before removing its pending marker. Such a member
+        is not claimable until publication completes or pending recovery retires it.
+
         Ordering is by ``created``, a wall-clock ``time.time()`` reading. It is comparable
         across the independent processes that publish members, which ``time.monotonic()`` is
         not, at the cost that a backward clock step (NTP, suspend/resume) can perturb the order.
@@ -742,8 +750,11 @@ class ServerPool:
         count is bounded by ``spark.local.connect.pool.size``, which is user-tunable, so a large
         pool widens the window the lock is held; the reaping rules keep stale members from
         accumulating without bound."""
+        pending_uids = {uid for uid, _ in self._directory.paths_of_kind("pending")}
         candidates = []
         for uid, path in self._directory.paths_of_kind("server"):
+            if uid in pending_uids:
+                continue
             data = self._directory.read_json(path)
             member = PoolMember.from_data(data) if data is not None else None
             if member is not None and member.fingerprint == fingerprint:
@@ -829,8 +840,9 @@ class ServerPool:
         parsed_pid = pending.attendant_pid if pending is not None else None
         created = pending.created if pending is not None else None
         if pending is None and data is not None:
-            # Preserve an independently valid pid when another field is corrupt.
+            # Preserve independently valid lifecycle fields when another field is corrupt.
             parsed_pid = PendingState.attendant_pid_from_data(data)
+            created = PendingState.created_from_data(data)
         age = time.time() - created if created is not None else self._LAUNCH_TIMEOUT_SECONDS + 1
         attendant_pid = parsed_pid if parsed_pid is not None else -1
         attendant_alive = _pid_alive(attendant_pid)

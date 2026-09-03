@@ -704,6 +704,9 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertIsNone(
             PendingState.from_data({"attendant_pid": "123", "created": 1, "fingerprint": "fp"})
         )
+        malformed_pending = {"attendant_pid": 123, "created": 2, "fingerprint": ""}
+        self.assertIsNone(PendingState.from_data(malformed_pending))
+        self.assertEqual(PendingState.created_from_data(malformed_pending), 2.0)
 
         retired = RetiredState.from_data(
             {"pid": 456, "process_start_id": "process-1", "retired": 2}
@@ -1021,6 +1024,20 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
 
         self.assertTrue(_wait_proc_dead(attendant))
 
+    def test_reap_fresh_malformed_pending_preserves_grace_period(self) -> None:
+        attendant = self._attendant("bad3")
+        self._write_state(
+            self._directory.pending_path("bad3"),
+            {"attendant_pid": attendant.pid, "created": time.time()},
+        )
+        self._write_state(self._directory.conf_path("bad3"), {"spark.foo": "bar"})
+
+        with self._directory:
+            self.assertFalse(self._pool.reap("bad3"))
+
+        self.assertEqual(set(self._states("bad3")), {"conf", "pending"})
+        self.assertIsNone(attendant.poll())
+
     def test_reap_does_not_signal_reused_attendant_pid(self) -> None:
         unrelated = self._live_process()
         self._write_state(
@@ -1063,24 +1080,30 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
 
     def test_reap_pending_with_published_server_retires_server(self) -> None:
         # Publishing writes server-* before removing pending-*. If the attendant dies between
-        # those operations, the janitor must not leave that server available to claim.
-        server = self._stubborn_process()
-        self._write_daemon_pid("bad7", server.pid)
-        with _non_listening_socket() as port:
-            self._write_state(
-                self._directory.server_path("bad7"), self._server_data(port, server.pid)
-            )
+        # those operations, the server must remain unclaimable until the janitor retires it.
+        # The server stays in the attendant's process group, matching spark-daemon.sh.
+        attendant, server_pid = self._attendant_with_launch_child("bad7")
+        self._write_daemon_pid("bad7", server_pid)
+        with _listening_socket() as port:
+            server_data = self._server_data(port, server_pid)
+            member = PoolMember.from_data(server_data)
+            assert member is not None
+            self.assertTrue(member.is_usable())
+            self._write_state(self._directory.server_path("bad7"), server_data)
             self._write_state(
                 self._directory.pending_path("bad7"),
-                {"attendant_pid": 2**31 - 1, "created": time.time(), "fingerprint": "fp"},
+                {"attendant_pid": attendant.pid, "created": time.time(), "fingerprint": "fp"},
             )
             self._write_state(self._directory.conf_path("bad7"), {"spark.foo": "bar"})
+            attendant.kill()
+            self.assertTrue(_wait_proc_dead(attendant))
+            self.assertTrue(_pid_alive(server_pid))
             with self._directory:
-                self._pool.reap("bad7")
                 self.assertIsNone(self._pool.claim("fp"))
+                self.assertFalse(self._pool.reap("bad7"))
 
         self.assertEqual(set(self._states("bad7")), {"member", "retired"})
-        self.assertIsNone(server.poll())
+        self.assertTrue(_wait_pid_dead(server_pid))
 
     def test_reap_preserves_retirement_after_interrupted_pending_cleanup(self) -> None:
         server = self._stubborn_process()
