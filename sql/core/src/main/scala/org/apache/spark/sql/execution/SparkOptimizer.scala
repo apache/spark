@@ -53,7 +53,10 @@ class SparkOptimizer(
       V2ScanPartitioningAndOrdering,
       V2Writes,
       PruneFileSourcePartitions,
-      PushVariantIntoScan)
+      PushVariantIntoScan,
+      // Variant pushdown can make a reconstruction projection unnecessary. Prune again so this
+      // Once batch reaches the same plan on its first application as it would on a second one.
+      SchemaPruning)
 
   override def preCBORules: Seq[Rule[LogicalPlan]] =
     Seq(OptimizeMetadataOnlyDeleteFromTable)
