@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReferen
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics, StreamSourceAwareLogicalPlan}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharScanMode, CharVarcharUtils}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.sources.BaseRelation
 
@@ -44,7 +44,7 @@ case class LogicalRelation(
     @transient stream: Option[SparkDataStream],
     // Bound at analysis so sameResult / cache reuse distinguish preserve-only vs standard
     // CHAR/VARCHAR scans. None means the relation was not analyzed under first-class types.
-    charVarcharStandardSemantics: Option[Boolean])
+    charVarcharScanMode: Option[CharVarcharScanMode])
   extends LeafNode
   with StreamSourceAwareLogicalPlan
   with MultiInstanceRelation
