@@ -1078,6 +1078,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // %s is unchanged, because Decimal.toString already delegates to the same BigDecimal string.
     checkEvaluation(FormatString(Literal("%s"), Literal(Decimal(12, 18, 10))), "1.2E-9")
 
+    // %h hashes whatever object reaches Formatter, so it pins the conversion down: this is
+    // java.math.BigDecimal.hashCode (31 * unscaledValue + scale, scale sensitive), not
+    // Decimal.hashCode, which follows Double hashing and would print 3fc00000 here.
+    checkEvaluation(FormatString(Literal("%h"), Literal(Decimal("1.50"))), "122c")
+
     checkEvaluation(
       FormatString(Literal("%f"), Literal.create(null, DecimalType(10, 2))), "null")
 
