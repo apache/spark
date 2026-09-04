@@ -24,7 +24,7 @@ import org.scalatest.Assertions.assert
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue, NamedReference, SortOrder, Transform}
-import org.apache.spark.sql.connector.expressions.filter.{And, Predicate}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, And, Predicate}
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsOverwriteV2, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.types.StructType
@@ -81,6 +81,10 @@ class InMemoryTableWithV2Filter(
     }
 
     override def filter(filters: Array[Predicate]): Unit = {
+      if (filters.exists(_.isInstanceOf[AlwaysFalse])) {
+        data = Seq.empty
+        return
+      }
       if (partitioning.length == 1 && identityPartitionReferences.length == 1) {
         val ref = identityPartitionReferences.head
         filters.foreach {
