@@ -41,7 +41,7 @@ from pyspark.errors.exceptions.base import QueryContextType
 from pyspark.sql import Row
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import col, when
-from pyspark.sql.types import AnyTimestampNanoType, StructField, StructType, VariantVal
+from pyspark.sql.types import StructField, StructType, VariantVal
 
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
@@ -701,11 +701,6 @@ def assertSchemaEqual(
             elif dt1.typeName() == "decimal":
                 # Fix for SPARK-51062: Compare precision and scale for decimal types
                 return dt1.precision == dt2.precision and dt1.scale == dt2.scale
-            elif isinstance(dt1, AnyTimestampNanoType):
-                # SPARK-57462: the nanosecond timestamp types carry a fractional-second
-                # precision, like decimal above; the type name alone does not distinguish
-                # timestamp_ntz(7) from timestamp_ntz(9), so compare the precision too.
-                return dt1.precision == dt2.precision
             elif dt1.typeName() == "struct":
                 return compare_schemas_ignore_nullable(dt1, dt2)
             else:
