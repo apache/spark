@@ -318,7 +318,7 @@ trait HashPartitioningLike extends Expression with Partitioning with Unevaluable
 case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   extends HashPartitioningLike {
 
-  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
+  override def createShuffleSpec(distribution: ClusteredDistribution): HashShuffleSpec =
     HashShuffleSpec(this, distribution)
 
   /**
@@ -364,7 +364,7 @@ case class NullAwareHashPartitioning(expressions: Seq[Expression], numPartitions
     }
   }
 
-  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
+  override def createShuffleSpec(distribution: ClusteredDistribution): NullAwareHashShuffleSpec =
     NullAwareHashShuffleSpec(this, distribution)
 
   override protected def withNewChildrenInternal(
@@ -1199,18 +1199,6 @@ case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
 }
 
 /**
- * This is used in the scenario where an operator has multiple children (e.g., join) and one or more
- * of which have their own requirement regarding whether its data can be considered as
- * co-partitioned from others. This offers APIs for:
- *
- *   - Comparing with specs from other children of the operator and check if they are compatible.
- *      When two specs are compatible, we can say their data are co-partitioned, and Spark will
- *      potentially be able to eliminate shuffle if necessary.
- *   - Creating a partitioning that can be used to re-partition another child, so that to make it
- *      having a compatible partitioning as this node.
- */
-
-/**
  * Represents a partitioning where partition IDs are passed through directly from the
  * DirectShufflePartitionID expression. This partitioning scheme is used when users
  * want to directly control partition placement rather than using hash-based partitioning.
@@ -1253,12 +1241,17 @@ case class ShufflePartitionIdPassThrough(
     copy(expr = newChildren.head.asInstanceOf[DirectShufflePartitionID])
 }
 
-trait ShuffleSpec {
-  /**
-   * Returns the number of partitions of this shuffle spec
-   */
-  def numPartitions: Int
-
+/**
+ * Describes how a child's data is laid out, for the purpose of deciding whether two children are
+ * co-partitioned and, if not, what to shuffle the other one onto.
+ *
+ * There are two kinds, and the split is deliberate. A [[LeafShuffleSpec]] is one concrete layout.
+ * A [[ShuffleSpecCollection]] stands for a choice between several, so it can answer
+ * [[isCompatibleWith]], which succeeds when any member matches, but it cannot answer anything that
+ * needs one member: which member is the right one depends on what the other side matched, and that
+ * is only visible to the caller comparing the two sides.
+ */
+sealed trait ShuffleSpec {
   /**
    * Returns true iff this spec is compatible with the provided shuffle spec.
    *
@@ -1276,6 +1269,21 @@ trait ShuffleSpec {
   def canCreatePartitioning: Boolean
 
   /**
+   * This spec's leaf specs: a [[ShuffleSpecCollection]] yields its members recursively, and a
+   * [[LeafShuffleSpec]] yields itself. A caller that needs one member picks from these.
+   */
+  def flatten: Seq[LeafShuffleSpec]
+}
+
+trait LeafShuffleSpec extends ShuffleSpec {
+  override final def flatten: Seq[LeafShuffleSpec] = this +: Nil
+
+  /**
+   * Returns the number of partitions of this shuffle spec
+   */
+  def numPartitions: Int
+
+  /**
    * Creates a partitioning that can be used to re-partition the other side with the given
    * clustering expressions.
    *
@@ -1286,9 +1294,10 @@ trait ShuffleSpec {
     throw SparkUnsupportedOperationException()
 }
 
-case object SinglePartitionShuffleSpec extends ShuffleSpec {
-  override def isCompatibleWith(other: ShuffleSpec): Boolean = {
-    other.numPartitions == 1
+case object SinglePartitionShuffleSpec extends LeafShuffleSpec {
+  override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
+    case leaf: LeafShuffleSpec => leaf.numPartitions == 1
+    case ShuffleSpecCollection(specs) => specs.exists(isCompatibleWith)
   }
 
   override def canCreatePartitioning: Boolean = false
@@ -1301,7 +1310,7 @@ case object SinglePartitionShuffleSpec extends ShuffleSpec {
 
 case class RangeShuffleSpec(
     numPartitions: Int,
-    distribution: ClusteredDistribution) extends ShuffleSpec {
+    distribution: ClusteredDistribution) extends LeafShuffleSpec {
 
   // `RangePartitioning` is not compatible with any other partitioning since it can't guarantee
   // data are co-partitioned for all the children, as range boundaries are randomly sampled. We
@@ -1338,7 +1347,7 @@ private object HashShuffleSpecCompatibility {
 
 case class HashShuffleSpec(
     partitioning: HashPartitioning,
-    distribution: ClusteredDistribution) extends ShuffleSpec {
+    distribution: ClusteredDistribution) extends LeafShuffleSpec {
 
   /**
    * A sequence where each element is a set of positions of the hash partition key to the cluster
@@ -1424,7 +1433,7 @@ case class HashShuffleSpec(
  */
 case class NullAwareHashShuffleSpec(
     partitioning: NullAwareHashPartitioning,
-    distribution: ClusteredDistribution) extends ShuffleSpec {
+    distribution: ClusteredDistribution) extends LeafShuffleSpec {
 
   lazy val hashKeyPositions: Seq[mutable.BitSet] = {
     val distKeyToPos = mutable.Map.empty[Expression, mutable.BitSet]
@@ -1481,8 +1490,8 @@ case class NullAwareHashShuffleSpec(
 }
 
 case class CoalescedHashShuffleSpec(
-    from: ShuffleSpec,
-    partitions: Seq[CoalescedBoundary]) extends ShuffleSpec {
+    from: LeafShuffleSpec,
+    partitions: Seq[CoalescedBoundary]) extends LeafShuffleSpec {
 
   override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
     case SinglePartitionShuffleSpec =>
@@ -1558,7 +1567,7 @@ case class IdentityReducer(transform: TransformExpression) extends Reducer[Any, 
 case class KeyedShuffleSpec(
     partitioning: KeyedPartitioning,
     distribution: ClusteredDistribution,
-    joinKeyPositions: Option[Seq[Int]] = None) extends ShuffleSpec {
+    joinKeyPositions: Option[Seq[Int]] = None) extends LeafShuffleSpec {
 
   /**
    * A sequence where each element is a set of positions of the partition expression to the cluster
@@ -1595,7 +1604,7 @@ case class KeyedShuffleSpec(
     //  4. the partition values from both sides are following the same order.
     case otherSpec @ KeyedShuffleSpec(otherPartitioning, otherDistribution, _) =>
       distribution.clustering.length == otherDistribution.clustering.length &&
-        numPartitions == other.numPartitions && areKeysCompatible(otherSpec) &&
+        numPartitions == otherSpec.numPartitions && areKeysCompatible(otherSpec) &&
           partitioning.partitionKeys == otherPartitioning.partitionKeys
     case ShuffleSpecCollection(specs) =>
       specs.exists(isCompatibleWith)
@@ -1775,7 +1784,7 @@ case class KeyedShuffleSpec(
 
 case class ShufflePartitionIdPassThroughSpec(
     partitioning: ShufflePartitionIdPassThrough,
-    distribution: ClusteredDistribution) extends ShuffleSpec {
+    distribution: ClusteredDistribution) extends LeafShuffleSpec {
 
   /**
    * A sequence where each element is a set of positions of the partition key to the cluster
@@ -1818,7 +1827,14 @@ case class ShufflePartitionIdPassThroughSpec(
   override def numPartitions: Int = partitioning.numPartitions
 }
 
+/**
+ * A choice between several layouts, produced by [[PartitioningCollection.createShuffleSpec]].
+ *
+ * `specs` can hold a nested collection, since a [[PartitioningCollection]] can hold a nested one.
+ */
 case class ShuffleSpecCollection(specs: Seq[ShuffleSpec]) extends ShuffleSpec {
+  require(specs.nonEmpty, "expected specs to be non-empty")
+
   override def isCompatibleWith(other: ShuffleSpec): Boolean = {
     specs.exists(_.isCompatibleWith(other))
   }
@@ -1826,16 +1842,5 @@ case class ShuffleSpecCollection(specs: Seq[ShuffleSpec]) extends ShuffleSpec {
   override def canCreatePartitioning: Boolean =
     specs.forall(_.canCreatePartitioning)
 
-  override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
-    // as we only consider # of partitions as the cost now, it doesn't matter which one we choose
-    // since they should all have the same # of partitions.
-    require(specs.map(_.numPartitions).toSet.size == 1, "expected all specs in the collection " +
-      "to have the same number of partitions")
-    specs.head.createPartitioning(clustering)
-  }
-
-  override def numPartitions: Int = {
-    require(specs.nonEmpty, "expected specs to be non-empty")
-    specs.head.numPartitions
-  }
+  override def flatten: Seq[LeafShuffleSpec] = specs.flatMap(_.flatten)
 }

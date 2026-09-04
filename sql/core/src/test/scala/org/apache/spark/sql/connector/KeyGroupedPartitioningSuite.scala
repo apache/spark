@@ -887,8 +887,8 @@ class KeyGroupedPartitioningSuite
 
   test("SPARK-59045: reduced expression is retargeted per KeyedPartitioning") {
     // A chained SPJ's output partitioning reports one `KeyedPartitioning` per join side, but the
-    // reduced expression is derived from the single spec that `createKeyedShuffleSpec` picks
-    // (`collectFirst`). Re-targeting it at each `KeyedPartitioning`'s own key attribute keeps the
+    // reduced expression is derived from the one member `checkKeyGroupCompatible` paired this side
+    // on. Re-targeting it at each `KeyedPartitioning`'s own key attribute keeps the
     // other sides' partitionings intact - otherwise a GROUP BY on the other side's key no longer
     // sees a partitioning on it and the query shuffles (0 shuffles on base and here, 1 if the
     // use-site re-targeting is dropped).
