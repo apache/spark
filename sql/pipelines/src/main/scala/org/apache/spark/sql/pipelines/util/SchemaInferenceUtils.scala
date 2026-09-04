@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   caseSensitiveResolution,
   Resolver
 }
+import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.common.DatasetType
@@ -213,7 +214,7 @@ object SchemaInferenceUtils extends Logging {
 
   /**
    * Produces the [[TableChange]] sequence needed to transform `currentSchema` into
-   * `targetSchema`: additions, type updates, deletions, nullability and comment changes.
+   * `targetSchema`: additions, type updates, deletions, nullability, and comment changes.
    * Recurses into structs, arrays, and maps so changes are emitted at the leaf level.
    * Similar to [[org.apache.spark.sql.catalyst.analysis.ResolveSchemaEvolution]], but
    * produces a full bidirectional sync (deletes, nullability, and comment changes) rather
@@ -227,6 +228,8 @@ object SchemaInferenceUtils extends Logging {
    * keeps a case-only rename visible as an explicit drop-then-add.
    * Exact keying also avoids silently collapsing two genuinely distinct declared columns that
    * differ only in case (`value` and `Value`) into an arbitrary one of the two.
+   *
+   * TODO (SPARK-59269): Support changes to field default value in the target schema.
    *
    * @param currentSchema The current schema of the table
    * @param targetSchema The target schema that we want the table to have
@@ -303,9 +306,9 @@ object SchemaInferenceUtils extends Logging {
 
   /**
    * Diffs the type, nullability, and comment of one field present in both schemas. Other
-   * StructField.metadata entries (defaults, generated-column expressions, connector-specific
-   * metadata) are not diffed: pipeline schema synchronization does not support propagating
-   * them, and Spark's own ResolveSchemaEvolution likewise ignores them.
+   * StructField.metadata entries (generated-column expressions, connector-specific metadata) are
+   * not diffed: pipeline schema synchronization does not support propagating them, and Spark's
+   * own ResolveSchemaEvolution likewise ignores them.
    */
   private def diffField(
       currentField: StructField,
@@ -318,17 +321,18 @@ object SchemaInferenceUtils extends Logging {
   }
 
   /**
-   * Logs a warning when two fields' metadata bags differ beyond the "comment" key
-   * (which is already handled by [[diffComment]]). Pipeline schema synchronization does not
-   * support propagating other metadata entries (defaults, generated-column expressions,
-   * connector-specific metadata), so these differences are left for the user to reconcile.
+   * Logs a warning when two fields' metadata bags differ beyond the keys that are either already
+   * handled (comment) or known-safe to ignore (catalog-assigned field IDs). Pipeline schema
+   * synchronization does not support propagating other metadata entries (defaults,
+   * generated-column expressions, connector-specific metadata), so these differences are left
+   * for the user to reconcile.
    */
   private def warnOnFieldMetadataDrift(
       currentField: StructField,
       targetField: StructField,
       pathToField: Seq[String]): Unit = {
-    val current = stripMetadataComment(currentField.metadata)
-    val target = stripMetadataComment(targetField.metadata)
+    val current = stripHandledMetadata(currentField.metadata)
+    val target = stripHandledMetadata(targetField.metadata)
     if (current != target) {
       logWarning(
         s"Field ${pathToField.mkString(".")} has metadata changes that pipeline schema " +
@@ -337,8 +341,11 @@ object SchemaInferenceUtils extends Logging {
     }
   }
 
-  private def stripMetadataComment(m: Metadata): Metadata =
-    new MetadataBuilder().withMetadata(m).remove("comment").build()
+  private def stripHandledMetadata(m: Metadata): Metadata =
+    new MetadataBuilder().withMetadata(m)
+      .remove("comment")
+      .remove(FIELD_ID_METADATA_KEY) // Catalog-assigned; not present in target schemas
+      .build()
 
   private def diffNullability(
       currentNullable: Boolean,

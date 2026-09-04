@@ -800,6 +800,24 @@ class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
     assert(nullabilityUpdatesOf(changes) === Map(Seq("a", "element") -> true))
   }
 
+  test("SPARK-59269: diffSchemas does not emit default-value changes") {
+    // diffSchemas does not yet support propagating default-value
+    // changes. This test locks in the gap so it can be flipped when
+    // SPARK-59269 adds support.
+    val currentSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add(StructField("score", IntegerType, nullable = true)
+        .withCurrentDefaultValue("0"))
+    val desiredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add(StructField("score", IntegerType, nullable = true)
+        .withCurrentDefaultValue("42"))
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, desiredSchema)
+    assert(changes.isEmpty)
+  }
+
   test("inferSchemaFromFlows folds a case-only column to the same spelling regardless of flow " +
     "order, even when identifier names contain dots") {
     // The merge order decides which spelling of a case-only-differing column survives, so it must
