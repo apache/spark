@@ -209,7 +209,8 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
         fail(s"expected the group filter pushed as an InSubqueryExec, got $other")
     }
 
-    val scannedGroups = scan.data.map(_.asInstanceOf[BufferedRows].keyString()).distinct
+    val scannedGroups =
+      scan.readPartitions.map(_.asInstanceOf[BufferedRows].keyString()).distinct
     assert(scannedGroups.sorted === expectedFilter.groups.sorted,
       s"scan must read only the filtered groups, got ${scannedGroups.mkString(", ")}")
   }

@@ -729,7 +729,8 @@ private class BothRuntimeFilteringInterfacesScan
 
   override def filter(predicates: Array[Predicate]): Unit = {}
 
-  override def filter(expressions: Array[Expression]): Unit = {}
+  override def planInputPartitionsWithRuntimeFilters(
+      expressions: Array[Expression]): Array[InputPartition] = Array.empty
 }
 
 /** A scan declaring a filter attribute that its read schema does not contain. */
@@ -739,7 +740,8 @@ private class MissingFilterAttributeScan extends SupportsRuntimeCatalystFilterin
 
   override def filterAttributes(): Array[NamedReference] = Array(FieldReference("missing"))
 
-  override def filter(expressions: Array[Expression]): Unit = {}
+  override def planInputPartitionsWithRuntimeFilters(
+      expressions: Array[Expression]): Array[InputPartition] = Array.empty
 }
 
 /** A scan declaring a fully pushed filter attribute that its relation output does not contain. */
@@ -752,7 +754,8 @@ private class MissingFullyPushedFilterAttributeScan extends SupportsRuntimeCatal
   override def fullyPushedFilterAttributes(): Array[NamedReference] =
     Array(FieldReference("missing"))
 
-  override def filter(expressions: Array[Expression]): Unit = {}
+  override def planInputPartitionsWithRuntimeFilters(
+      expressions: Array[Expression]): Array[InputPartition] = Array.empty
 }
 
 /** A scan declaring a nested runtime-filter attribute beneath an integer column. */
@@ -763,7 +766,8 @@ private class NestedFilterAttributeScan extends SupportsRuntimeCatalystFiltering
   override def filterAttributes(): Array[NamedReference] =
     Array(FieldReference(Seq("part", "nested")))
 
-  override def filter(expressions: Array[Expression]): Unit = {}
+  override def planInputPartitionsWithRuntimeFilters(
+      expressions: Array[Expression]): Array[InputPartition] = Array.empty
 }
 
 private case class KeyedInputPartition(key: Int) extends InputPartition with HasPartitionKey {
@@ -779,21 +783,17 @@ private class PartitioningBreakingScan(
     afterFilter: Seq[InputPartition])
   extends Scan with Batch with SupportsRuntimeCatalystFiltering {
 
-  private var filtered = false
-
   override def readSchema(): StructType = new StructType().add("part", IntegerType)
 
   override def toBatch: Batch = this
 
-  override def planInputPartitions(): Array[InputPartition] =
-    if (filtered) afterFilter.toArray else initialPartitions.toArray
+  override def planInputPartitions(): Array[InputPartition] = initialPartitions.toArray
 
   override def createReaderFactory(): PartitionReaderFactory =
     throw new UnsupportedOperationException()
 
   override def filterAttributes(): Array[NamedReference] = Array(FieldReference("part"))
 
-  override def filter(expressions: Array[Expression]): Unit = {
-    filtered = true
-  }
+  override def planInputPartitionsWithRuntimeFilters(
+      expressions: Array[Expression]): Array[InputPartition] = afterFilter.toArray
 }

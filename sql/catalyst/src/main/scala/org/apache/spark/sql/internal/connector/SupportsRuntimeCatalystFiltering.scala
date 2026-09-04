@@ -19,12 +19,11 @@ package org.apache.spark.sql.internal.connector
 
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.expressions.NamedReference
-import org.apache.spark.sql.connector.read.Scan
+import org.apache.spark.sql.connector.read.{InputPartition, Scan}
 
 /**
  * A mix-in interface for [[Scan]]. Data sources can implement this interface if they can
- * filter initially planned [[org.apache.spark.sql.connector.read.InputPartition]]s using
- * Catalyst [[Expression]]s Spark infers at runtime.
+ * plan their [[InputPartition]]s using Catalyst [[Expression]]s Spark infers at runtime.
  * A scan must not implement this interface together with
  * [[org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering]] or its subinterface
  * [[org.apache.spark.sql.connector.read.SupportsRuntimeFiltering]]; Spark rejects such a scan.
@@ -40,9 +39,15 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
   /**
    * Returns attributes this scan can be filtered by at runtime.
    *
-   * Spark will call [[filter]] if it can derive a runtime filter for any of these attributes.
-   * Each reference must resolve against the scan relation output when Spark builds it. Attributes
-   * pruned out of [[Scan.readSchema]] fail to resolve.
+   * Spark will call [[planInputPartitionsWithRuntimeFilters]] if it can derive a runtime filter
+   * for any of these attributes. Each reference must resolve against the scan relation output
+   * when Spark builds it. Attributes pruned out of [[Scan.readSchema]] fail to resolve.
+   *
+   * A dynamic partition pruning filter has no post-scan evaluator at all: Spark removes it from
+   * the post-scan filters whether or not the attribute is also in [[fullyPushedFilterAttributes]],
+   * because the join it was derived from already implies it. So an attribute exposed here must be
+   * one this scan can filter on exactly, not approximately. [[fullyPushedFilterAttributes]]
+   * changes what Spark does only for a filter it derived from a scalar subquery.
    */
   def filterAttributes(): Array[NamedReference]
 
@@ -51,16 +56,19 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    *
    * Any runtime predicate that references only attributes in this set is considered fully pushed
    * and will not be evaluated again after the scan. These attributes must also be returned by
-   * [[filterAttributes]]. Each attribute's value must therefore be fixed within every
-   * [[org.apache.spark.sql.connector.read.InputPartition]] the scan returns, since pruning
-   * partitions cannot fully evaluate a predicate on a column that varies within a partition.
+   * [[filterAttributes]].
    *
-   * Spark relies on the scan alone here, so the scan must return only partitions it has proven
-   * satisfy such a predicate. Spark passes these expressions through as they are, leaving both
-   * translation and capability checking to the scan, so evaluating one can fail, for example on
-   * an ANSI cast or overflow error, or on a nested access that the scan matches differently
-   * against its partition layout. Declare an attribute only when the scan can evaluate every
-   * predicate over it.
+   * Spark relies on the scan alone here, so every row of every [[InputPartition]] the scan
+   * returns must satisfy such a predicate. A scan that prunes previously planned partitions can
+   * guarantee that only for an attribute whose value is fixed within a partition; a scan that
+   * plans its partitions with the predicate applied -- for instance one that selects only the
+   * partition directories matching it -- guarantees it even when the attribute varies within a
+   * returned partition.
+   *
+   * Spark passes these expressions through as they are, leaving both translation and capability
+   * checking to the scan, so evaluating one can fail, for example on an ANSI cast or overflow
+   * error, or on a nested access that the scan matches differently against its partition layout.
+   * Declare an attribute only when the scan can evaluate every predicate over it.
    *
    * Each reference must be a top-level attribute present in [[Scan.readSchema]]. Nested
    * references are rejected, and attributes pruned out of the read schema fail to resolve, when
@@ -72,34 +80,33 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
   def fullyPushedFilterAttributes(): Array[NamedReference] = Array.empty
 
   /**
-   * Filters this scan using runtime Catalyst expressions.
+   * Plans this scan's input partitions with runtime Catalyst expressions applied.
    *
-   * The provided expressions must be interpreted as a set of predicates that are ANDed together.
-   * Implementations may use the expressions to prune initially planned
-   * [[org.apache.spark.sql.connector.read.InputPartition]]s.
+   * The provided expressions must be interpreted as a set of predicates that are ANDed together,
+   * and applied on top of the filters already pushed at query compilation. Implementations may use
+   * them to plan fewer [[InputPartition]]s than [[org.apache.spark.sql.connector.read.Batch]]
+   * would without them.
+   *
+   * Spark calls this method at execution time, and only when at least one runtime filter survives
+   * screening; the partitions it returns replace the ones that scan node would otherwise have
+   * read. Spark may also call `Batch.planInputPartitions()` on the same scan, so neither method may
+   * assume it is the only one used. One scan instance can back several scan nodes (e.g. the two
+   * branches of a group-based UPDATE), each with its own runtime filters, so an implementation
+   * must derive its result from the given expressions alone and must not carry state over from a
+   * previous call.
    *
    * Spark tracks runtime-filter eligibility by root attribute. If [[filterAttributes]] returns a
    * nested reference, an expression may access another nested field under the same root. The scan
    * must match each access against its own partition layout and use only expressions it can apply.
    *
-   * Spark may call this method more than once for the same scan instance: a plan can hold several
-   * scan nodes sharing one scan (e.g. the two branches of a group-based UPDATE), and each pushes
-   * its own copy of the runtime filters. Implementations must treat successive calls as additive,
-   * ANDing the new expressions with those already pushed rather than replacing them.
-   *
    * If the scan also implements
    * [[org.apache.spark.sql.connector.read.SupportsReportPartitioning]], it must preserve
-   * the originally reported partitioning during runtime filtering. While applying runtime
-   * predicates, the scan may detect that some
-   * [[org.apache.spark.sql.connector.read.InputPartition]]s have no matching data, in which
-   * case it can either replace the initially planned
-   * [[org.apache.spark.sql.connector.read.InputPartition]]s that have no matching data with
-   * empty [[org.apache.spark.sql.connector.read.InputPartition]]s, or report only a subset of
-   * the original partition values (omitting those with no data) via
-   * [[org.apache.spark.sql.connector.read.Batch#planInputPartitions]]. The scan must not
-   * report new partition values that were not present in the original partitioning.
-   *
-   * Note that Spark will call [[Scan.toBatch]] again after filtering the scan at runtime.
+   * the originally reported partitioning. While applying runtime predicates, the scan may detect
+   * that some [[InputPartition]]s have no matching data, in which case it can either replace
+   * them with empty [[InputPartition]]s, or report only a subset of the original partition
+   * values (omitting those with no data). The scan must not report new partition values that
+   * were not present in the original partitioning.
    */
-  def filter(expressions: Array[Expression]): Unit
+  def planInputPartitionsWithRuntimeFilters(
+      expressions: Array[Expression]): Array[InputPartition]
 }
