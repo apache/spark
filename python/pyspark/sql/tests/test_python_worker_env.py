@@ -436,6 +436,49 @@ class PythonWorkerEnvMixin:
             shutil.rmtree(source_dir, ignore_errors=True)
             shutil.rmtree(observed_dir, ignore_errors=True)
 
+    def test_env_var_reaches_a_native_arrow_udtf(self):
+        # `arrow_udtf` is a separate API from `udtf(useArrow=True)` and produces a different
+        # evaluation type, so it does not follow from the other UDTF tests.
+        import pyarrow as pa
+
+        from pyspark.sql.functions import arrow_udtf
+
+        self._set_env("UDTF_SETTING", "arrow_native")
+        try:
+
+            @arrow_udtf(returnType="value string")
+            class ReadEnv:
+                def eval(self):
+                    import os
+
+                    yield pa.table({"value": [os.environ.get("UDTF_SETTING", "<unset>")]})
+
+            self.assertEqual(ReadEnv().collect()[0]["value"], "arrow_native")
+        finally:
+            self._unset_env("UDTF_SETTING")
+
+    def test_a_registered_udf_uses_the_environment_of_each_execution(self):
+        # Registration keeps the function as supplied; the environment is merged when a worker
+        # launches. So a value set, changed or unset after registration takes effect on the next
+        # execution rather than being captured at registration.
+        def read_env():
+            import os
+
+            return os.environ.get("REGISTERED_SETTING", "<unset>")
+
+        self.spark.udf.register("read_registered_env", read_env, "string")
+        query = "SELECT read_registered_env() AS value"
+        try:
+            self._set_env("REGISTERED_SETTING", "first")
+            self.assertEqual(self.spark.sql(query).collect()[0]["value"], "first")
+
+            self._set_env("REGISTERED_SETTING", "second")
+            self.assertEqual(self.spark.sql(query).collect()[0]["value"], "second")
+        finally:
+            self._unset_env("REGISTERED_SETTING")
+
+        self.assertEqual(self.spark.sql(query).collect()[0]["value"], "<unset>")
+
     def test_env_var_reaches_a_data_source_planning_worker(self):
         """A planning worker is a separate process from the ones that run a query's partitions.
 
