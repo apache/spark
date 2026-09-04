@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.DirectShufflePartitionID
 import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
 import org.apache.spark.sql.catalyst.optimizer.BuildRight
-import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{SinglePartition, _}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.connector.catalog.functions._
@@ -1165,6 +1165,40 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           assert(attrs == a1 :: Nil)
           assert(partitionKeys == pks.map(_.row))
         case other => fail(other.toString)
+      }
+    }
+  }
+
+  test("SPARK-59199: mergeAndDedupPartitions filters partitions per join type") {
+    def partitioning(values: Int*): KeyedPartitioning =
+      KeyedPartitioning(Seq(exprA), values.map(v => InternalRow(v)))
+    val left = partitioning(1, 2, 3)
+    val right = partitioning(2, 3, 4)
+    val intersected = partitioning(2, 3).partitionKeys
+    val union = partitioning(1, 2, 3, 4).partitionKeys
+    def merge(joinType: JoinType): Seq[InternalRow] =
+      EnsureRequirements.mergeAndDedupPartitions(
+        left.partitionKeys, right.partitionKeys, joinType, left.keyOrdering).map(_.row)
+
+    val expected = Seq(
+      Inner -> intersected,
+      Cross -> intersected,
+      LeftSemi -> intersected,
+      LeftOuter -> left.partitionKeys,
+      LeftAnti -> left.partitionKeys,
+      LeftSingle -> left.partitionKeys,
+      ExistenceJoin(exprA) -> left.partitionKeys,
+      RightOuter -> right.partitionKeys,
+      FullOuter -> union)
+
+    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+      expected.foreach { case (joinType, keys) =>
+        assert(merge(joinType) === keys.map(_.row), joinType)
+      }
+    }
+    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false") {
+      expected.foreach { case (joinType, _) =>
+        assert(merge(joinType) === union.map(_.row), joinType)
       }
     }
   }

@@ -24,6 +24,7 @@ import org.apache.spark.rdd.SortedMergeCoalescedRDD
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, ExprId, Literal, TransformExpression}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, JoinType, LeftAnti, LeftSemi, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryCatalystRuntimeFilterCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.functions._
@@ -42,7 +43,7 @@ import org.apache.spark.sql.execution.{
   UnionExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
-import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.functions.{col, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
@@ -562,6 +563,47 @@ class KeyGroupedPartitioningSuite
          |ON ${keys.map(k => s"i.${k._1} = p.${k._2}").mkString(" AND ")}
          |ORDER BY id, purchase_price, sale_price $extraColList
          |""".stripMargin)
+  }
+
+  /**
+   * Creates `items` with ids 0, 1, 4 and `purchases` with item ids 4, 5, both bucketed by those
+   * columns, so a join on them sees two left-only key groups, one shared and one right-only, then
+   * runs `body` with partition filtering enabled.
+   */
+  private def withPartitionFilterJoinTables(body: => Unit): Unit = {
+    createTable(items, itemsColumns, Array(bucket(8, "id")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(0, 'aa', 38.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'bb', 39.0, cast('2020-01-02' as timestamp)), " +
+        s"(4, 'cc', 40.0, cast('2020-01-02' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array(bucket(8, "item_id")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(4, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(5, 44.0, cast('2020-01-15' as timestamp))")
+
+    withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+      body
+    }
+  }
+
+  /**
+   * Asserts `df` plans exactly one shuffled join accepted by `isJoinType`, that no shuffle was
+   * added under it, and that partition filtering left it `expectedNumGroups` key groups.
+   */
+  private def checkPartitionFilteredJoin(
+      df: DataFrame,
+      isJoinType: JoinType => Boolean,
+      expectedNumGroups: Int): Unit = {
+    val plan = df.queryExecution.executedPlan
+    val joins = collect(plan) { case j: ShuffledJoin if isJoinType(j.joinType) => j }
+    assert(joins.size == 1, s"expected one matching join in\n$plan")
+    assert(collectAllShuffles(joins.head).isEmpty,
+      "should not add shuffle for both sides of the join")
+    val groupPartitions = collectAllGroupPartitions(joins.head)
+    assert(groupPartitions.nonEmpty, s"expected GroupPartitionsExec in\n$plan")
+    assert(groupPartitions.forall(_.outputPartitioning.numPartitions == expectedNumGroups))
   }
 
   /**
@@ -3570,6 +3612,64 @@ class KeyGroupedPartitioningSuite
       )
       val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
       assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 2))
+    }
+  }
+
+  // A semi join drops the key groups absent on either side. An anti join has to probe every left
+  // row, so only the right-only groups are dropped.
+  Seq(
+    ("LEFT SEMI", LeftSemi, Seq(Row(4, "cc", 40.0)), 1),
+    ("LEFT ANTI", LeftAnti, Seq(Row(0, "aa", 38.0), Row(1, "bb", 39.0)), 3)
+  ).foreach { case (joinSql, joinType, expectedRows, expectedNumGroups) =>
+    test(s"SPARK-59199: test partition filters with $joinSql join") {
+      withPartitionFilterJoinTables {
+        val df = sql(
+          s"""
+             |${selectWithMergeJoinHint("i", "p")}
+             |id, name, price
+             |FROM testcat.ns.$items i $joinSql JOIN testcat.ns.$purchases p
+             |ON i.id = p.item_id
+             |ORDER BY id
+             |""".stripMargin)
+        checkAnswer(df, expectedRows)
+        checkPartitionFilteredJoin(df, _ == joinType, expectedNumGroups)
+      }
+    }
+  }
+
+  test("SPARK-59199: test partition filters with existence join") {
+    withPartitionFilterJoinTables {
+      // EXISTS in a disjunction is planned as an ExistenceJoin
+      val df = sql(
+        s"""
+           |SELECT id, name, price FROM testcat.ns.$items i
+           |WHERE EXISTS (SELECT /*+ MERGE(p) */ 1 FROM testcat.ns.$purchases p
+           |              WHERE i.id = p.item_id)
+           |   OR i.name = 'bb'
+           |ORDER BY id
+           |""".stripMargin)
+      checkAnswer(df, Seq(Row(1, "bb", 39.0), Row(4, "cc", 40.0)))
+      // an existence join tests every left row, so only the right-only key groups are dropped
+      checkPartitionFilteredJoin(df, _.isInstanceOf[ExistenceJoin], expectedNumGroups = 3)
+    }
+  }
+
+  test("SPARK-59199: test partition filters with left single join") {
+    withPartitionFilterJoinTables {
+      // a correlated scalar subquery not proven to return one row is planned as a LeftSingle
+      // join, which cannot sort-merge, hence the shuffled hash join hint
+      withSQLConf(SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN.key -> "true") {
+        val df = sql(
+          s"""
+             |SELECT id, name,
+             |  (SELECT /*+ SHUFFLE_HASH(p) */ p.price FROM testcat.ns.$purchases p
+             |   WHERE i.id = p.item_id) AS sale_price
+             |FROM testcat.ns.$items i
+             |""".stripMargin)
+        checkAnswer(df, Seq(Row(0, "aa", null), Row(1, "bb", null), Row(4, "cc", 42.0)))
+        // a left single join keeps every left row, so only the right-only key groups are dropped
+        checkPartitionFilteredJoin(df, _ == LeftSingle, expectedNumGroups = 3)
+      }
     }
   }
 

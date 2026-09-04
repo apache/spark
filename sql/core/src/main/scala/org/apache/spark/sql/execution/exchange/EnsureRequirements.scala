@@ -851,11 +851,16 @@ case class EnsureRequirements(
       joinType: JoinType,
       keyOrdering: Ordering[InternalRowComparableWrapper]): Seq[InternalRowComparableWrapper] = {
     val merged = if (SQLConf.get.getConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED)) {
+      // Rows only match within a key group, so a group no output row can come from is dropped.
+      // Same split as `PushExtraPredicateThroughJoin`, plus LeftSingle.
       joinType match {
-        case Inner =>
+        // neither side keeps unmatched rows
+        case _: InnerLike | LeftSemi =>
           mergeAndDedupPartitionKeys(leftPartitionKeys, rightPartitionKeys, intersect = true)
-        case LeftOuter => leftPartitionKeys.distinct
+        // every left row is kept or tested
+        case LeftOuter | LeftAnti | LeftSingle | ExistenceJoin(_) => leftPartitionKeys.distinct
         case RightOuter => rightPartitionKeys.distinct
+        // FullOuter keeps both sides' unmatched rows; any other join type is not filtered
         case _ => mergeAndDedupPartitionKeys(leftPartitionKeys, rightPartitionKeys)
       }
     } else {
