@@ -4698,6 +4698,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       None)
   }
 
+  def fullyPushedDataSourceRuntimeFilterAttributeNotFilterableError(
+      attribute: Array[String],
+      scanClass: String,
+      relationOutput: StructType): AnalysisException = {
+    invalidDataSourceRuntimeFilterAttributeError(
+      attribute,
+      "fullyPushedFilterAttributes()",
+      scanClass,
+      relationOutput,
+      "NOT_IN_FILTER_ATTRIBUTES",
+      None)
+  }
+
   private def invalidDataSourceRuntimeFilterAttributeError(
       attribute: Array[String],
       method: String,
