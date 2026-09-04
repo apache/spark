@@ -2297,6 +2297,11 @@
           "The attribute cannot be resolved."
         ]
       },
+      "NOT_IN_FILTER_ATTRIBUTES" : {
+        "message" : [
+          "The attribute must also be returned by `filterAttributes()`."
+        ]
+      },
       "NOT_TOP_LEVEL" : {
         "message" : [
           "The attribute must be top-level, but it is a nested reference."

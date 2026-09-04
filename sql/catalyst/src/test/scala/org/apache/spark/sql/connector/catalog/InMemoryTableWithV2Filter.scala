@@ -27,7 +27,6 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue,
 import org.apache.spark.sql.connector.expressions.filter.{And, Predicate}
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsOverwriteV2, WriteBuilder, WriterCommitMessage}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -78,14 +77,12 @@ class InMemoryTableWithV2Filter(
     extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeV2Filtering {
 
     override def filterAttributes(): Array[NamedReference] = {
-      partitioning.flatMap(_.references)
-        .filter(ref => readSchema.findNestedField(
-          ref.fieldNames.toImmutableArraySeq, resolver = SQLConf.get.resolver).isDefined)
+      identityPartitionAttributes
     }
 
     override def filter(filters: Array[Predicate]): Unit = {
-      if (partitioning.length == 1 && partitioning.head.references().length == 1) {
-        val ref = partitioning.head.references().head
+      if (partitioning.length == 1 && identityPartitionReferences.length == 1) {
+        val ref = identityPartitionReferences.head
         filters.foreach {
           case p : Predicate if p.name().equals("IN") =>
             if (p.children().length > 1) {

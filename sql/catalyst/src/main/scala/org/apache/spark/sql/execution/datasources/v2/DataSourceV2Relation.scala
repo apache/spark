@@ -20,10 +20,9 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.util.{Collections, Optional, OptionalLong}
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, NamedExpression, SortOrder, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, SortOrder, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
@@ -208,12 +207,13 @@ case class DataSourceV2ScanRelation(
   lazy val runtimeFilterAttrs: AttributeSet = {
     checkRuntimeFilteringInterfaces()
     resolvedFullyPushedRuntimeFilterAttrs
-    val filterAttrs = scan match {
-      case s: SupportsRuntimeV2Filtering => s.filterAttributes
-      case s: SupportsRuntimeCatalystFiltering => s.filterAttributes()
-      case _ => Array.empty[NamedReference]
-    }
-    resolveFilterAttrs(filterAttrs, "filterAttributes()")
+    resolvedRuntimeFilterAttrs
+  }
+
+  private[sql] lazy val declaredRuntimeFilterAttrs: Array[NamedReference] = scan match {
+    case s: SupportsRuntimeV2Filtering => s.filterAttributes
+    case s: SupportsRuntimeCatalystFiltering => s.filterAttributes()
+    case _ => Array.empty
   }
 
   private lazy val declaredFullyPushedRuntimeFilterAttrs: Array[NamedReference] = scan match {
@@ -221,10 +221,17 @@ case class DataSourceV2ScanRelation(
     case _ => Array.empty
   }
 
+  private lazy val resolvedRuntimeFilterAttrs: AttributeSet = {
+    resolveFilterAttrs(declaredRuntimeFilterAttrs, "filterAttributes()")
+  }
+
   private lazy val resolvedFullyPushedRuntimeFilterAttrs: AttributeSet = {
-    checkFullyPushedFilterAttrs()
-    resolveFilterAttrs(
+    checkFullyPushedFilterAttrsAreTopLevel()
+    val resolvedAttrs = resolveFilterAttrs(
       declaredFullyPushedRuntimeFilterAttrs, "fullyPushedFilterAttributes()")
+    resolvedRuntimeFilterAttrs
+    checkFullyPushedFilterAttrsAreFilterable()
+    resolvedAttrs
   }
 
   /**
@@ -245,20 +252,8 @@ case class DataSourceV2ScanRelation(
   private def resolveFilterAttrs(
       filterAttrs: Array[NamedReference],
       method: String): AttributeSet = {
-    val resolvedAttrs = filterAttrs.map { ref =>
-      try {
-        V2ExpressionUtils.resolveRef[NamedExpression](ref, this)
-      } catch {
-        case e: AnalysisException =>
-          throw QueryCompilationErrors.cannotResolveDataSourceRuntimeFilterAttributeError(
-            attribute = ref.fieldNames,
-            method = method,
-            scanClass = scan.getClass.getName,
-            relationOutput = fromAttributes(output),
-            cause = e)
-      }
-    }
-    AttributeSet(resolvedAttrs)
+    V2ExpressionUtils.resolveDataSourceRuntimeFilterRefs(
+      filterAttrs, output, method, scan.getClass.getName)
   }
 
   override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_SCAN_RELATION)
@@ -319,9 +314,23 @@ case class DataSourceV2ScanRelation(
     }
   }
 
-  private def checkFullyPushedFilterAttrs(): Unit = {
+  private def checkFullyPushedFilterAttrsAreTopLevel(): Unit = {
     declaredFullyPushedRuntimeFilterAttrs.find(_.fieldNames.length > 1).foreach { ref =>
       throw QueryCompilationErrors.nestedDataSourceFullyPushedRuntimeFilterAttributeError(
+        attribute = ref.fieldNames,
+        scanClass = scan.getClass.getName,
+        relationOutput = fromAttributes(output))
+    }
+  }
+
+  private def checkFullyPushedFilterAttrsAreFilterable(): Unit = {
+    declaredFullyPushedRuntimeFilterAttrs.find { fullyPushedRef =>
+      !declaredRuntimeFilterAttrs.exists { filterRef =>
+        fullyPushedRef.fieldNames.length == filterRef.fieldNames.length &&
+          fullyPushedRef.fieldNames.lazyZip(filterRef.fieldNames).forall(conf.resolver)
+      }
+    }.foreach { ref =>
+      throw QueryCompilationErrors.fullyPushedDataSourceRuntimeFilterAttributeNotFilterableError(
         attribute = ref.fieldNames,
         scanClass = scan.getClass.getName,
         relationOutput = fromAttributes(output))
