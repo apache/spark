@@ -591,24 +591,25 @@ case class CoalescedNullAwareHashPartitioning(
  *                                 same keys in the same order and using the same partition
  *                                 function per position still pair (equal undeclared keys hash
  *                                 to the same partition), but a row of an undeclared key sits in
- *                                 the partition of some other declared key, away from rows
- *                                 sharing a subset of its columns. `satisfies` and
- *                                 `KeyedShuffleSpec.areKeysCompatible` therefore accept a marked
- *                                 partitioning only for full-key clustering, never for a subset
- *                                 of its partition columns and never for a global ordering
- *                                 across several partitions. Two carry rules: (1) a node that
- *                                 changes the declared key set must drop the keyed partitioning,
- *                                 whether it coarsens it (key-dropping projection, reducer,
- *                                 join-key projection) or expands it over a marked leg (a union,
- *                                 where another leg may declare exactly the key that leg holds
- *                                 out-of-set); (2) marker agreement is enforced by
- *                                 `PartitioningCollection`: the constructor requires it and
- *                                 `fromPartitionings` normalizes by OR, so members are
- *                                 uniformly marked or unmarked and consumers may read one
- *                                 member. `ShuffledJoin`'s `InnerLike` arm, the only site that
- *                                 meets a marked input with an unmarked one, clears the markers
- *                                 first. That is precision, not the guarantee: without it the
- *                                 OR would spread the spurious marker onto the accurate side.
+ *                                 the partition of some other declared key and need not be
+ *                                 co-located with rows sharing only a subset of its columns.
+ *                                 `satisfies` and `KeyedShuffleSpec.areKeysCompatible` therefore
+ *                                 accept a marked partitioning only for full-key clustering,
+ *                                 never for a subset of its partition columns and never for a
+ *                                 global ordering across several partitions. Two carry rules:
+ *                                 (1) a node that changes the declared key set must drop the
+ *                                 keyed partitioning, whether it coarsens it (a key-dropping
+ *                                 projection, a key-changing reduction, a join-key projection)
+ *                                 or expands it over a marked leg (a union, where another leg
+ *                                 may declare exactly the key that leg holds out-of-set);
+ *                                 (2) marker agreement is enforced by `PartitioningCollection`:
+ *                                 the constructor requires it and `fromPartitionings` normalizes
+ *                                 by OR, so members are uniformly marked or unmarked and
+ *                                 consumers may read one member. `ShuffledJoin`'s `InnerLike`
+ *                                 arm, the only site that meets a marked input with an unmarked
+ *                                 one, clears the markers first. That is precision, not the
+ *                                 guarantee: without it the OR would spread the spurious marker
+ *                                 onto the accurate side.
  */
 case class KeyedPartitioning(
     expressions: Seq[Expression],

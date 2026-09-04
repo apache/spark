@@ -291,8 +291,9 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     // `PartitioningCollection` over both sides. (`areKeysCompatible` pairs a marked layout
     // only with same-function partners that need no reducer, so no planner path applies a
     // reducer to a marked layout; this pins the contract directly.)
-    // The reducer must be real: `Some(Seq(None))` leaves every key unchanged, an identity
-    // grouping that keeps the claim, testing none of the collapse that motivates the give-up.
+    // The reducer must be real: it is the collapse of [1, 2, 3] to two groups that exercises
+    // the regrouping the give-up answers. A reducer slot that rewrites no key is pinned by the
+    // next test, where it is the slot itself, not a merge, that drops the claim.
     // Keys [1, 2, 3] reduced mod 2 give [1, 0, 1]: the node emits 2 grouped partitions where
     // the child had 3, and the give-up count has to be that physical 2.
     val mod2 = new Reducer[Int, Int] {
@@ -319,6 +320,41 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     // throwing fails the test.
     val partner = KeyedPartitioning(Seq(exprB), Seq(row(1), row(2)))
     PartitioningCollection.fromPartitionings(Seq(gpe.outputPartitioning, partner))
+  }
+
+  test("SPARK-59050: a grouping that rewrites the declared keys drops the claim") {
+    // `identityGrouping` also asks whether the grouping rewrote the keys: the claim the node
+    // goes on to declare lives in the projected or reduced key space, while the child's
+    // undeclared rows still sit at hash(originalKey) % numPartitions. A reducer slot or a
+    // narrowing projection therefore gives up the claim even when every group keeps its index
+    // and the count is unchanged. A conforming self-reducer cannot rewrite a reachable key
+    // (its contract is r(f(x)) = f(x)), so the give-up there loses at most an optimization;
+    // no planner path applies a reducer or a narrowing projection to a marked layout, so these
+    // shapes are pinned here directly.
+    val child = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA, exprB), Seq(row(1, 10), row(2, 20)))
+        .copy(mayContainUnknownPartitionKeys = true))
+
+    // Reducer slots: `Some(Seq(None, None))` leaves every key and every index unchanged.
+    val reduced = GroupPartitionsExec(child, reducers = Some(Seq(None, None)))
+    assert(reduced.groupedPartitions.size === 2)
+    reduced.outputPartitioning match {
+      case u: UnknownPartitioning =>
+        assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
+      case other =>
+        fail(s"expected the unknown-keyed claim to be dropped with reducer slots, got $other")
+    }
+
+    // Narrowing projection: position 0 of keys [(1, 10), (2, 20)] keeps both groups in order.
+    val projected = GroupPartitionsExec(child, joinKeyPositions = Some(Seq(0)))
+    assert(projected.groupedPartitions.size === 2)
+    projected.outputPartitioning match {
+      case u: UnknownPartitioning =>
+        assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
+      case other =>
+        fail("expected the unknown-keyed claim to be dropped on a narrowing projection, " +
+          s"got $other")
+    }
   }
 
   test("SPARK-55715: sorted merge config enabled but child not SafeForKWayMerge falls back " +
