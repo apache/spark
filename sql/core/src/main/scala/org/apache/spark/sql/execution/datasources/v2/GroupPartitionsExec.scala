@@ -81,16 +81,16 @@ case class GroupPartitionsExec(
         //
         // A marked claim pins undeclared rows to hash(key) % numPartitions (see
         // `KeyedPartitioning.mayContainUnknownPartitionKeys`). Only an identity grouping keeps
-        // that relationship: any other grouping -- a reorder, a coalesce, a resize, or the
-        // collapse a reduction applies -- moves those rows. Clearing only the marker would
-        // misreport the undeclared rows that remain, so give up the keyed partitioning at the
-        // physical output count (one per group, padding included) that a parent's
-        // `PartitioningCollection` requires for uniformity. The give-up deliberately
-        // under-reports: the node still physically groups the partitions but no longer claims a
-        // keyed layout, so a join planned over it does not see its required distribution
-        // satisfied and a plan containing it does not pass `ValidateRequirements`.
-        // `identityGrouping` is a lazy val, so repeated `outputPartitioning` calls scan it at
-        // most once.
+        // that relationship: a reorder, a coalesce, or a resize moves those rows, and a
+        // projection or reduction rewrites the keys the claim speaks for (see
+        // `identityGrouping`). Clearing only the marker would misreport the undeclared rows
+        // that remain, so give up the keyed partitioning at the physical output count (one per
+        // group, padding included) that a parent's `PartitioningCollection` requires for
+        // uniformity. The give-up deliberately under-reports: the node still physically groups
+        // the partitions but no longer claims a keyed layout, so a join planned over it does
+        // not see its required distribution satisfied and a plan containing it does not pass
+        // `ValidateRequirements`. `identityGrouping` is a lazy val, so repeated
+        // `outputPartitioning` calls scan it at most once.
         if (PartitioningCollection.keyedMarkerOf(p).contains(true) && !identityGrouping) {
           return UnknownPartitioning(grouping.partitions.size)
         }
@@ -214,7 +214,9 @@ case class GroupPartitionsExec(
 
     // Both cheap terms come first, so the scan below runs only where a merge is possible. A
     // grouping that left the keys as they are groups the child's own key values, and one of those
-    // groups can only ever cover the one key it was built from.
+    // groups can only ever cover the one key it was built from. `keysChanged` also feeds
+    // `identityGrouping`: a projection or reduction re-labels the groups into a different key
+    // space, which no index alignment can undo.
     val keysChanged =
       joinKeyPositions.exists(_.length < childKp.expressions.length) || reducers.isDefined
     val isCollapsed = childKp.isCollapsed || keysChanged && {
@@ -233,19 +235,25 @@ case class GroupPartitionsExec(
         group.tail.exists(childKeys(_) != first)
       }
     }
-    PartitionGrouping(partitions, isGrouped, isCollapsed)
+    PartitionGrouping(partitions, isGrouped, isCollapsed, keysChanged)
   }
 
   /**
-   * Whether this node's grouping leaves every partition where it was and keeps all of them, i.e.
-   * output partition i holds exactly input partition i and there is one output per input. That is
-   * the only grouping that keeps a marked layout's undeclared rows at hash(key) % numPartitions:
-   * a grouping that drops trailing declared keys still reads identity for every group it keeps,
-   * but the partition count shrinks and the hash modulus with it. The `forall` stops at the first
-   * moved partition, so a reorder or coalesce is rejected without a full scan.
+   * Whether this node's grouping leaves the declared keys and every partition where they were:
+   * no projection or reduction rewrote the keys, output partition i holds exactly input
+   * partition i, and there is one output per input. That is the only grouping that keeps a
+   * marked layout's undeclared rows at hash(key) % numPartitions. A projection or reduction
+   * re-labels the groups into a different key space, so even a grouping whose indices line up
+   * would pin the claim to keys it no longer declares; `keysChanged` rejects it up front. A
+   * reducer slot is treated as key-changing: a conforming self-reducer cannot rewrite a
+   * reachable key value, so the give-up there loses at most an optimization. A grouping that
+   * drops trailing declared keys still reads identity for every group it keeps, but the
+   * partition count shrinks and the hash modulus with it. The `forall` stops at the first moved
+   * partition, so a reorder or coalesce is rejected without a full scan.
    */
   @transient private lazy val identityGrouping: Boolean =
-    grouping.partitions.size == child.outputPartitioning.numPartitions &&
+    !grouping.keysChanged &&
+      grouping.partitions.size == child.outputPartitioning.numPartitions &&
       grouping.partitions.zipWithIndex.forall {
         case ((_, Seq(single)), outputIndex) => single == outputIndex
         case _ => false
@@ -436,7 +444,8 @@ case class GroupPartitionsExec(
 private case class PartitionGrouping(
     partitions: Seq[(InternalRowComparableWrapper, Seq[Int])],
     isGrouped: Boolean,
-    isCollapsed: Boolean)
+    isCollapsed: Boolean,
+    keysChanged: Boolean)
 
 /**
  * A PartitionCoalescer that groups partitions according to a pre-computed grouping plan.
