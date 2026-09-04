@@ -738,9 +738,11 @@ abstract class InMemoryBaseTable(
     protected def tableSchema: StructType
 
     private val catalystPredicates = ArrayBuffer.empty[CatalystExpression]
+    private var filterCalls = 0
 
     override def filter(expressions: Array[CatalystExpression]): Unit = {
       catalystPredicates ++= expressions
+      filterCalls += 1
       val partAttrs = partitionAttributes
       if (partAttrs.isEmpty) return
 
@@ -771,6 +773,8 @@ abstract class InMemoryBaseTable(
 
     /** Predicates recorded by [[filter]], for test assertions only. */
     def pushedCatalystPredicates: Seq[CatalystExpression] = catalystPredicates.toSeq
+
+    def filterCallCount: Int = filterCalls
 
     /**
      * Identity partition columns paired with their bound partition-key slots.

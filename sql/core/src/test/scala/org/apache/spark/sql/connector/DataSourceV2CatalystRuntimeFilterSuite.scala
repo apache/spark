@@ -709,13 +709,18 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }.getOrElse(fail("Expected BatchScanExec in plan"))
   }
 
-  private def getPushedCatalystPredicates(df: DataFrame): Seq[Expression] = {
+  private type CatalystScan =
+    InMemoryCatalystRuntimeFilterTable#InMemoryCatalystRuntimeFilterBatchScan
+
+  private def getCatalystScan(df: DataFrame): CatalystScan = {
     collectBatchScan(df).scan match {
-      case s: InMemoryCatalystRuntimeFilterTable#InMemoryCatalystRuntimeFilterBatchScan =>
-        s.pushedCatalystPredicates
-      case other =>
-        fail(s"Expected InMemoryCatalystRuntimeFilterBatchScan, got $other")
+      case s: CatalystScan => s
+      case other => fail(s"Expected InMemoryCatalystRuntimeFilterBatchScan, got $other")
     }
+  }
+
+  private def getPushedCatalystPredicates(df: DataFrame): Seq[Expression] = {
+    getCatalystScan(df).pushedCatalystPredicates
   }
 
   private def assertPushedCatalystPredicates(df: DataFrame, expected: Int): Unit = {
