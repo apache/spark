@@ -361,9 +361,11 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
 
   test("isCanonical soundness oracle: a true result guarantees canonicalize is a no-op") {
     // The crown-jewel invariant. For every sample:
-    //   (soundness) isCanonical(v) == true  =>  canonicalize(v) is byte-identical to v. A false
-    //     positive would let a non-canonical Variant through and silently split hash-agg buckets.
-    //   (quality)   canonicalize(v) is always recognized as canonical (fast path engages).
+    //   (soundness) isCanonical(v) == true  =>  the full canonicalization (doCanonicalize, no fast
+    //     path) is byte-identical to v. A false positive would let a non-canonical Variant through
+    //     and silently split hash-agg buckets.
+    //   (completeness) canonicalize(v) is always recognized as canonical (writer and recognizer
+    //     agree).
     val parsed = Seq(
       "0", "1", "-1", "127", "128", "-128", "100000",
       "1.0", "1.5", "1.50", "1.000", "0.0",
@@ -401,13 +403,17 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
         longStrHi, unusedKey)
 
     for (v <- parsed ++ handCrafted) {
-      val c = canon(v)
-      if (VariantBuilder.isCanonical(v.getValue, v.getMetadata)) {
-        assert(bytesEqual(v, c),
-          "SOUNDNESS VIOLATION: isCanonical was true but canonicalize changed the bytes")
+      // Soundness: a true isCanonical(v) must mean the FULL canonicalization is a no-op. canon(v)
+      // short-circuits on isCanonical, which would make this vacuous (comparing v against itself),
+      // so compare against doCanonicalize -- the rebuild with no fast path.
+      if (isCanon(v)) {
+        assert(bytesEqual(v, VariantBuilder.doCanonicalize(v)),
+          "SOUNDNESS VIOLATION: isCanonical was true but the full rebuild changed the bytes")
       }
-      assert(VariantBuilder.isCanonical(c.getValue, c.getMetadata),
-        "canonicalize output must be recognized as canonical (fast path must engage)")
+      // Completeness: canonicalize's output is always recognized as canonical (writer and
+      // recognizer agree).
+      assert(isCanon(canon(v)),
+        "canonicalize output must be recognized as canonical")
     }
   }
 
