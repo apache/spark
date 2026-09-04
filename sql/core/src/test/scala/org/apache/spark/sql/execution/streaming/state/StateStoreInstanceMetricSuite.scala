@@ -509,17 +509,23 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
             val stateOp = q.lastExecution.executedPlan.collectFirst {
               case s: StateStoreWriter => s
             }.get
-            // Verify accumulator has entries for executed partitions without allocating
-            // individual per-partition SQLMetrics on the plan.
-            val accEntries = stateOp.instanceMetricsAccumulator.value.asScala
-            assert(accEntries.nonEmpty)
-            assert(accEntries.map(_._1.name).forall(_.startsWith(SNAPSHOT_LAG_METRIC_PREFIX)))
+            // Verify the accumulator is a PartitionKeyedAccumulator (not a CollectionAccumulator),
+            // has entries for the executed partitions, and does not allocate individual
+            // per-partition SQLMetrics on the plan.
+            val accValue = stateOp.instanceMetricsAccumulator.value
+            assert(!accValue.isEmpty, "accumulator should have entries after processing data")
+            // Each partition's metrics are stored as a Map; flatten all metric keys.
+            val allMetricKeys = accValue.values().asScala.flatMap(_.keys)
+            assert(
+              allMetricKeys.forall(_.name.startsWith(SNAPSHOT_LAG_METRIC_PREFIX)),
+              s"unexpected metric keys: ${allMetricKeys.map(_.name).mkString(", ")}")
           },
           StopStream
         )
       }
     }
   }
+
 }
 
 /**
