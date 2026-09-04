@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.types._
 
 class InternalRowComparableWrapperSuite extends SparkFunSuite {
@@ -79,6 +80,19 @@ class InternalRowComparableWrapperSuite extends SparkFunSuite {
 
     val alreadyErased = Seq(IntegerType, ArrayType(LongType))
     assert(InternalRowComparableWrapper.comparableTypes(alreadyErased) eq alreadyErased)
+  }
+
+  test("SPARK-59249: the grouped key layout and wrapper equality hold one ordering instance") {
+    // Identity is the property to assert, because behaviour is not what changes here: both sides
+    // were already built by the same function, so they already compared the same way. What one
+    // instance buys is that neither side can later be given a definition the other does not have.
+    // `InternalRowComparableWrapper.equals` compares its rows with the instance below, and
+    // `KeyedPartitioning` sorts and groups partition keys with it. The two type lists are built
+    // separately, so this pins the shared cache as well.
+    val wrapper = InternalRowComparableWrapper
+      .getInternalRowComparableWrapperFactory(Seq(IntegerType, LongType))(InternalRow(1, 2L))
+
+    assert(KeyedPartitioning.groupedKeyRowOrdering(Seq(IntegerType, LongType)) eq wrapper.ordering)
   }
 
   test("SPARK-59187: a factory answers for the types it settled on") {
