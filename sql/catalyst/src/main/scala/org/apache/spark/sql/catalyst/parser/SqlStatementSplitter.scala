@@ -58,6 +58,26 @@ case class SqlStatementSplitResult(
   def isEmpty: Boolean = completeStatements.isEmpty && partialStatement.isEmpty
 }
 
+/** A split SQL statement together with its 0-based start in the original input. */
+private[sql] case class PositionedSqlStatement(
+    statement: String,
+    terminator: String,
+    start: Int) {
+  def length: Int = statement.length
+}
+
+/** Internal splitter result that retains source positions. */
+private[sql] case class PositionedSqlStatementSplitResult(
+    completeStatements: Seq[PositionedSqlStatement],
+    partialStatement: Option[PositionedSqlStatement],
+    hasUnclosedComment: Boolean) {
+
+  def withoutPositions: SqlStatementSplitResult = SqlStatementSplitResult(
+    completeStatements.map(s => SqlStatement(s.statement, s.terminator)),
+    partialStatement.map(_.statement).getOrElse(""),
+    hasUnclosedComment)
+}
+
 /**
  * A parser-based SQL statement splitter, inspired by Trino's
  * `io.trino.cli.lexer.StatementSplitter`.
@@ -111,7 +131,7 @@ object SqlStatementSplitter {
 
   /** Split the given SQL text into individual statements at `;` boundaries. */
   def split(sqlText: String): SqlStatementSplitResult =
-    split(sqlText, identity)
+    splitWithPositions(sqlText, identity).withoutPositions
 
   /**
    * Split the given SQL text, applying `validationPreprocess` to each candidate
@@ -121,7 +141,18 @@ object SqlStatementSplitter {
    *
    * Pass `identity` for a pure original-text splitter (the default).
    */
-  def split(sqlText: String, validationPreprocess: String => String): SqlStatementSplitResult = {
+  def split(
+      sqlText: String,
+      validationPreprocess: String => String): SqlStatementSplitResult =
+    splitWithPositions(sqlText, validationPreprocess).withoutPositions
+
+  /**
+   * Split SQL while retaining each statement's source position. This is used by
+   * parse-only tooling that reports spans into the original input.
+   */
+  private[sql] def splitWithPositions(
+      sqlText: String,
+      validationPreprocess: String => String): PositionedSqlStatementSplitResult = {
     require(sqlText != null, "sqlText must not be null")
     require(validationPreprocess != null, "validationPreprocess must not be null")
 
@@ -142,8 +173,9 @@ object SqlStatementSplitter {
       acc.toArray
     }
 
-    val completeStatements = mutable.ArrayBuffer.empty[SqlStatement]
+    val completeStatements = mutable.ArrayBuffer.empty[PositionedSqlStatement]
     val buffer = new StringBuilder()
+    var bufferStart = -1
     // Whether `buffer` contains any non-hidden token (i.e. any actual SQL content
     // beyond whitespace and comments). Chunks that only contain whitespace/comments
     // are dropped, matching the spark-sql CLI's long-standing behavior.
@@ -158,6 +190,32 @@ object SqlStatementSplitter {
     // interpretation (e.g. `double_quoted_identifiers`).
     val conf = SqlApiConf.get
 
+    def appendToken(token: Token): Unit = {
+      if (buffer.isEmpty) bufferStart = token.getStartIndex
+      buffer.append(token.getText)
+    }
+
+    def resetBuffer(): Unit = {
+      buffer.setLength(0)
+      bufferStart = -1
+      bufferHasContent = false
+    }
+
+    def positionedStatement(terminator: String): Option[PositionedSqlStatement] = {
+      val raw = buffer.toString
+      val statement = raw.trim
+      if (statement.isEmpty) {
+        None
+      } else {
+        val leadingWhitespace = raw.indexOf(statement)
+        assert(bufferStart >= 0 && leadingWhitespace >= 0)
+        Some(PositionedSqlStatement(
+          statement,
+          terminator,
+          bufferStart + leadingWhitespace))
+      }
+    }
+
     while (!stopOuter && index < numTokens) {
       val startIdx = nextSignificantTokenIndex(tokenStream, index)
       if (startIdx < 0) {
@@ -167,7 +225,7 @@ object SqlStatementSplitter {
         while (index < numTokens) {
           val tok = tokenStream.get(index)
           index += 1
-          if (tok.getType != Token.EOF) buffer.append(tok.getText)
+          if (tok.getType != Token.EOF) appendToken(tok)
         }
         stopOuter = true
       } else if (tokenStream.get(startIdx).getType == SqlBaseLexer.SEMICOLON) {
@@ -216,17 +274,13 @@ object SqlStatementSplitter {
           while (index < matchedDelimIdx) {
             val tok = tokenStream.get(index)
             if (tok.getChannel != Token.HIDDEN_CHANNEL) bufferHasContent = true
-            buffer.append(tok.getText)
+            appendToken(tok)
             index += 1
           }
           if (bufferHasContent) {
-            val stmt = buffer.toString.trim
-            if (stmt.nonEmpty) {
-              completeStatements += SqlStatement(stmt, terminator)
-            }
+            positionedStatement(terminator).foreach(completeStatements += _)
           }
-          buffer.setLength(0)
-          bufferHasContent = false
+          resetBuffer()
           index = matchedDelimIdx + 1
           delimSearchStart = d + 1
         } else if (failedNonEof) {
@@ -253,17 +307,13 @@ object SqlStatementSplitter {
               stopInner = true
             } else if (token.getType == SqlBaseLexer.SEMICOLON) {
               if (bufferHasContent) {
-                val stmt = buffer.toString.trim
-                if (stmt.nonEmpty) {
-                  completeStatements += SqlStatement(stmt, token.getText)
-                }
+                positionedStatement(token.getText).foreach(completeStatements += _)
               }
-              buffer.setLength(0)
-              bufferHasContent = false
+              resetBuffer()
               stopInner = true
             } else {
               if (token.getChannel != Token.HIDDEN_CHANNEL) bufferHasContent = true
-              buffer.append(token.getText)
+              appendToken(token)
             }
           }
         } else {
@@ -275,7 +325,7 @@ object SqlStatementSplitter {
             index += 1
             if (tok.getType != Token.EOF) {
               if (tok.getChannel != Token.HIDDEN_CHANNEL) bufferHasContent = true
-              buffer.append(tok.getText)
+              appendToken(tok)
             }
           }
           stopOuter = true
@@ -285,8 +335,11 @@ object SqlStatementSplitter {
 
     val unclosed = lexer.has_unclosed_bracketed_comment
     val partial =
-      if (bufferHasContent || unclosed) buffer.toString.trim else ""
-    SqlStatementSplitResult(completeStatements.toSeq, partial, unclosed && partial.nonEmpty)
+      if (bufferHasContent || unclosed) positionedStatement("") else None
+    PositionedSqlStatementSplitResult(
+      completeStatements.toSeq,
+      partial,
+      unclosed && partial.nonEmpty)
   }
 
   /** Outcome of attempting to parse one statement candidate. */

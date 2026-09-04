@@ -71,6 +71,20 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
     assert(result.partialStatement == "select * from")
   }
 
+  test("source positions skip comments attached to empty statements") {
+    val sql = "  select 1 ; /* select 2 */; select 2"
+    val result = SqlStatementSplitter.splitWithPositions(sql, identity)
+    val complete = result.completeStatements.head
+    assert(complete.statement == "select 1")
+    assert(complete.start == 2)
+    assert(complete.length == 8)
+
+    val partial = result.partialStatement.get
+    assert(partial.statement == "select 2")
+    assert(partial.start == sql.lastIndexOf("select 2"))
+    assert(partial.length == 8)
+  }
+
   // ----------------------------------------------------------------------------------
   // Error tolerance (mirrors Trino behavior)
   // ----------------------------------------------------------------------------------

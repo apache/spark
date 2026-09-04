@@ -29,8 +29,16 @@ import org.apache.spark.sql.internal.SQLConf
  */
 class ParseSqlResultSuite extends SparkFunSuite {
 
-  private def obj(sql: String): JObject =
-    parse(ParseSqlResult.fromSql(sql)).asInstanceOf[JObject]
+  private def objs(sql: String): List[JObject] =
+    parse(ParseSqlResult.fromSql(sql)) match {
+      case JArray(values) => values.map(_.asInstanceOf[JObject])
+      case other => fail(s"expected JSON array, got: $other")
+    }
+
+  private def obj(sql: String): JObject = objs(sql) match {
+    case value :: Nil => value
+    case other => fail(s"expected one statement, got ${other.size}: $other")
+  }
 
   private def tableRefs(sql: String, field: String): Set[Seq[String]] =
     obj(sql) \ field match {
@@ -65,6 +73,51 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(SqlStatementCodes.Explain.statementCode === -23)
     assert(SqlStatementCodes.Set.statementCode === -24)
     assert(SqlStatementCodes.CreateMetricViewStmt.statementCode === -37)
+  }
+
+  test("batches return one statement object per statement with source spans") {
+    Seq("select 1; select 2", "select 1; select 2;").foreach { sql =>
+      val statements = objs(sql)
+      assert(statements.size === 2)
+      assert(statements.map(_ \ "start") === Seq(JInt(1), JInt(11)))
+      assert(statements.map(_ \ "length") === Seq(JInt(8), JInt(8)))
+      assert(statements.map(_ \ "parse_success") === Seq(JBool(true), JBool(true)))
+      assert(statements.map(_ \ "statement_identifier") ===
+        Seq(JString("SELECT"), JString("SELECT")))
+    }
+
+    val statements = objs("  SELECT 1 ;\n SELECT 2;  ")
+    assert(statements.map(_ \ "start") === Seq(JInt(3), JInt(15)))
+    assert(statements.map(_ \ "length") === Seq(JInt(8), JInt(8)))
+
+    val sqlWithDroppedComment = "SELECT 1; /* SELECT 2 */; SELECT 2"
+    val commentStatements = objs(sqlWithDroppedComment)
+    assert(commentStatements.map(_ \ "start") ===
+      Seq(JInt(1), JInt(sqlWithDroppedComment.lastIndexOf("SELECT 2") + 1)))
+  }
+
+  test("batch errors are isolated and preserve statement order") {
+    val statements = objs("SELECT 1; SELEC 2; SELECT 3")
+    assert(statements.map(_ \ "start") === Seq(JInt(1), JInt(11), JInt(20)))
+    assert(statements.map(_ \ "length") === Seq(JInt(8), JInt(7), JInt(8)))
+    assert(statements.map(_ \ "parse_success") ===
+      Seq(JBool(true), JBool(false), JBool(true)))
+    assert(statements(1) \ "error" \ "errorClass" === JString("PARSE_SYNTAX_ERROR"))
+  }
+
+  test("SQL scripts remain one statement in a batch") {
+    val statements = objs("BEGIN SELECT 1; SELECT 2; END; SELECT 3")
+    assert(statements.size === 2)
+    assert(statements.map(_ \ "start") === Seq(JInt(1), JInt(32)))
+    assert(statements.map(_ \ "length") === Seq(JInt(29), JInt(8)))
+    assert(statements.map(_ \ "statement_identifier") ===
+      Seq(JString("BEGIN END"), JString("SELECT")))
+  }
+
+  test("empty batches contain no statements") {
+    Seq("", "  ", ";;", "-- comment").foreach { sql =>
+      assert(objs(sql).isEmpty, sql)
+    }
   }
 
   test("TABLE and VALUES classify as SELECT") {

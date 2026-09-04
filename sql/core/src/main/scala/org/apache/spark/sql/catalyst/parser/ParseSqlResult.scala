@@ -33,8 +33,8 @@ import org.apache.spark.sql.execution.command.{CreateViewCommand, DescribeQueryC
 import org.apache.spark.sql.execution.datasources.CreateTempViewUsing
 
 /**
- * Parses a SQL statement string and returns a compact JSON description of the
- * unresolved plan (parse-only; no catalog resolution).
+ * Parses a SQL batch string and returns a compact JSON array describing its
+ * unresolved statements (parse-only; no catalog resolution).
  *
  * Uses a stock [[SparkSqlParser]] (ThreadLocal) so statement coverage matches
  * the default production parser (EXPLAIN / SET / ADD JAR / temp views / etc.).
@@ -43,12 +43,17 @@ import org.apache.spark.sql.execution.datasources.CreateTempViewUsing
  * executors without a session, so only the stock parser is available under
  * distributed eval.
  *
- * On success the JSON always includes `parse_success`, the statement
+ * Every statement object includes its 1-based `start` in the original batch
+ * and its `length`, excluding surrounding whitespace and the terminating
+ * semicolon. On success it also includes `parse_success`, the statement
  * identifier/code (ISO/IEC 9075-2:2023 Table 39), and omits unused optional
  * fields (`target_table_references`, `source_table_references`,
- * `function_references`, `select_list`, `parameter_markers`) when empty. On parse
- * failure it returns `parse_success: false` with source location and a nested
- * STANDARD-format error object, and does not throw. Only [[ParseException]] /
+ * `function_references`, `select_list`, `parameter_markers`) when empty. On
+ * parse failure the statement object contains `parse_success: false` with
+ * source location and a nested STANDARD-format error object, and parsing
+ * continues with later statements. Nested error locations are relative to the
+ * individual statement, while `start` is relative to the original batch. An
+ * empty or comment-only batch produces an empty array. Only [[ParseException]] /
  * [[SqlScriptingException]] are converted to JSON; unexpected / internal
  * failures propagate so the function fails.
  */
@@ -57,11 +62,18 @@ object ParseSqlResult {
   private val parser: ThreadLocal[SparkSqlParser] =
     ThreadLocal.withInitial(() => new SparkSqlParser())
 
-  /** Parse `sql` and render the JSON result string. */
+  /** Parse `sql` as a batch and render the JSON result array. */
   def fromSql(sql: String): String = {
+    val split = parser.get().splitStatementsWithPositions(sql)
+    val statements = split.completeStatements ++ split.partialStatement
+    compact(render(JArray(statements.map(parseStatement).toList)))
+  }
+
+  private def parseStatement(segment: PositionedSqlStatement): JObject = {
+    val sql = segment.statement
     try {
       // Do not inherit the outer query's origin from the parse_sql expression.
-      // Errors and parsed nodes must refer to the SQL string passed to this function.
+      // Errors and parsed nodes refer to the individual statement.
       val origin = if (sql.nonEmpty) {
         Origin(startIndex = Some(0), stopIndex = Some(sql.length - 1), sqlText = Some(sql))
       } else {
@@ -69,21 +81,23 @@ object ParseSqlResult {
       }
       CurrentOrigin.withOrigin(origin) {
         val plan = parser.get().parsePlan(sql)
-        fromPlan(plan)
+        successJson(plan, segment)
       }
     } catch {
       // User-facing parse / scripting failures become JSON; everything else fails.
       case e: ParseException =>
-        errorJson(e)
+        errorJson(e, segment)
       case e: SqlScriptingException =>
-        errorJson(e)
+        errorJson(e, segment)
     }
   }
 
   /** Build success JSON from an already-parsed unresolved plan. */
-  def fromPlan(plan: LogicalPlan): String = {
+  private def successJson(plan: LogicalPlan, segment: PositionedSqlStatement): JObject = {
     val classification = SqlStatementCodes.classify(plan)
     val fields = mutable.ListBuffer.empty[JField]
+    fields += "start" -> JInt(segment.start + 1)
+    fields += "length" -> JInt(segment.length)
     fields += "parse_success" -> JBool(true)
     fields += "statement_identifier" -> JString(classification.statementIdentifier)
     fields += "statement_code" -> JInt(classification.statementCode)
@@ -105,10 +119,12 @@ object ParseSqlResult {
       fields += "select_list" -> JArray(selectList.toList)
     }
     refs.parameterMarkers.foreach(markers => fields += "parameter_markers" -> markers)
-    compact(render(JObject(fields.toList)))
+    JObject(fields.toList)
   }
 
-  private def errorJson(e: SparkThrowable with Throwable): String = {
+  private def errorJson(
+      e: SparkThrowable with Throwable,
+      segment: PositionedSqlStatement): JObject = {
     val errorObj = parseJson(
       SparkThrowableHelper.getMessage(e, ErrorMessageFormat.STANDARD)).asInstanceOf[JObject]
     val origin = e match {
@@ -122,10 +138,12 @@ object ParseSqlResult {
     } else {
       origin.toSeq.flatMap(queryContextField)
     }
-    compact(render(JObject(
+    JObject(
+      "start" -> JInt(segment.start + 1),
+      "length" -> JInt(segment.length),
       "parse_success" -> JBool(false),
       "error" -> JObject(errorObj.obj ++ contextFields ++ locationFields)
-    )))
+    )
   }
 
   private def queryContextField(origin: Origin): Option[JField] = origin.context match {
