@@ -2090,7 +2090,7 @@ object SQLConf {
         "affects schema inference: a read with an explicit user-specified TimeType schema " +
         "succeeds regardless of this flag, since Spark's zone-less TimeType decodes the same " +
         "time-of-day either way.")
-      .version("4.3.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
