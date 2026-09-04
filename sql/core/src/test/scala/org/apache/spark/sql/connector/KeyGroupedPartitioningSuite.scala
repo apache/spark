@@ -603,7 +603,9 @@ class KeyGroupedPartitioningSuite
       "should not add shuffle for both sides of the join")
     val groupPartitions = collectAllGroupPartitions(joins.head)
     assert(groupPartitions.nonEmpty, s"expected GroupPartitionsExec in\n$plan")
-    assert(groupPartitions.forall(_.outputPartitioning.numPartitions == expectedNumGroups))
+    val actualNumGroups = groupPartitions.map(_.outputPartitioning.numPartitions)
+    assert(actualNumGroups.forall(_ == expectedNumGroups),
+      s"expected $expectedNumGroups key groups, got ${actualNumGroups.mkString(", ")}")
   }
 
   /**
@@ -3636,6 +3638,20 @@ class KeyGroupedPartitioningSuite
         checkAnswer(df, expectedRows)
         checkPartitionFilteredJoin(df, _ == joinType, expectedNumGroups)
       }
+    }
+  }
+
+  test("SPARK-59199: a cross join without an equi condition does not reach SPJ") {
+    withPartitionFilterJoinTables {
+      val df = sql(
+        s"""
+           |SELECT i.id, p.item_id
+           |FROM testcat.ns.$items i CROSS JOIN testcat.ns.$purchases p
+           |""".stripMargin)
+      val plan = df.queryExecution.executedPlan
+      assert(collectAllGroupPartitions(plan).isEmpty,
+        s"a cartesian product must not group partitions in\n$plan")
+      assert(df.count() == 6, "every left x right pair survives")
     }
   }
 
