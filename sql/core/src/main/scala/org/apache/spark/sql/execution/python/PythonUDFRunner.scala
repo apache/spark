@@ -41,7 +41,14 @@ abstract class BasePythonUDFRunner(
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics) {
 
   override val envVars: util.Map[String, String] = {
-    val envVars = new util.HashMap(funcs.head._1.funcs.head.envVars)
+    // Installed at worker launch, so a cached plan cannot pin an older environment. `appliesTo` is
+    // what keeps UDTFs out of scope: `PythonUDTFRunner` extends this class too.
+    val envVars = if (PythonWorkerEnvironment.appliesTo(evalType)) {
+      PythonWorkerEnvironment.mergeValidated(funcs.head._1.funcs.head.envVars, SQLConf.get)
+    } else {
+      new util.HashMap(funcs.head._1.funcs.head.envVars)
+    }
+    // Applied after the session's environment, so a session cannot override a Spark-owned name.
     sessionUUID.foreach { uuid =>
       envVars.put("PYSPARK_SPARK_SESSION_UUID", uuid)
     }
