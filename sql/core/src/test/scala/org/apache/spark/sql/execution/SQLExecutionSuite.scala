@@ -423,6 +423,57 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
       spark.stop()
     }
   }
+
+  /**
+   * Runs `f` with `spark`'s `dagScheduler` nulled out, standing in for a `SparkContext` that has
+   * already been stopped. `SparkContext.stop()` nulls `_dagScheduler` before it stops the listener
+   * bus, so a query really can unwind through `withNewExecutionId`'s `finally` in this state.
+   */
+  private def withStoppedDagScheduler[T](spark: SparkSession)(f: => T): T = {
+    val sc = spark.sparkContext
+    val savedDagScheduler = sc.dagScheduler
+    sc.dagScheduler = null
+    try {
+      f
+    } finally {
+      sc.dagScheduler = savedDagScheduler
+    }
+  }
+
+  test("SPARK-59242: withNewExecutionId surfaces the body's failure when the SparkContext " +
+    "has been stopped") {
+    val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
+    try {
+      val qe = spark.range(1, 10).queryExecution
+      val bodyFailure = new IllegalStateException("body failed")
+      // Without the null guard, the DAGScheduler cleanup in the `finally` throws an NPE that,
+      // because it is thrown from a `finally`, replaces `bodyFailure` entirely -- destroying the
+      // only record of why the query actually failed.
+      val thrown = intercept[IllegalStateException] {
+        withStoppedDagScheduler(spark) {
+          SQLExecution.withNewExecutionId(qe) {
+            throw bodyFailure
+          }
+        }
+      }
+      assert(thrown eq bodyFailure)
+    } finally {
+      spark.stop()
+    }
+  }
+
+  test("SPARK-59242: withNewExecutionId completes normally when the SparkContext has been " +
+    "stopped") {
+    val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
+    try {
+      val qe = spark.range(1, 10).queryExecution
+      withStoppedDagScheduler(spark) {
+        assert(SQLExecution.withNewExecutionId(qe)("result") === "result")
+      }
+    } finally {
+      spark.stop()
+    }
+  }
 }
 
 object SQLExecutionSuite {

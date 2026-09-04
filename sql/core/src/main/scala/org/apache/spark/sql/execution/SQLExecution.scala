@@ -300,13 +300,20 @@ object SQLExecution extends Logging {
               event.executionFailure = ex
               if (Utils.isTesting) {
                 import scala.jdk.CollectionConverters._
-                event.jobIds = Option(sc.dagScheduler.activeQueryToJobs.get(executionId))
+                // Tolerate a stopped context here too: this runs earlier in the same `finally`
+                // as the `cleanupQueryJobs` call below, so it hits the same teardown race.
+                event.jobIds = Option(sc.dagScheduler)
+                  .flatMap(ds => Option(ds.activeQueryToJobs.get(executionId)))
                   .map(_.asScala.map(_.jobId).toSet)
                   .getOrElse(Set.empty)
               }
 
               // Clean up jobs tracked by DAGScheduler for this query execution.
-              sc.dagScheduler.cleanupQueryJobs(executionId)
+              // `SparkContext.stop()` nulls `dagScheduler` before it stops the listener bus, so a
+              // query unwinding here while the context tears down would NPE. As this runs in a
+              // `finally`, that NPE would replace the query's real failure and skip the event post
+              // and observation completion below, so tolerate an already-stopped context.
+              Option(sc.dagScheduler).foreach(_.cleanupQueryJobs(executionId))
 
               sc.listenerBus.post(event)
 
