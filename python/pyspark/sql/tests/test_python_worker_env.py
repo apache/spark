@@ -390,6 +390,52 @@ class PythonWorkerEnvMixin:
         finally:
             self._unset_env("UDTF_SETTING")
 
+    def test_env_var_reaches_a_streaming_foreach_writer(self):
+        """`writeStream.foreach` runs the user's `process` in a worker, on classic and on Connect.
+
+        The worker cannot return a value, so it records what it saw in a file. A file source with
+        `availableNow` keeps the query bounded rather than relying on wall-clock timing.
+        """
+        import os
+        import shutil
+        import tempfile
+
+        source_dir = tempfile.mkdtemp()
+        observed_dir = tempfile.mkdtemp()
+        self._set_env("FOREACH_SETTING", "written")
+        try:
+            with open(os.path.join(source_dir, "input.txt"), "w") as handle:
+                handle.write("a row\n")
+
+            def process_row(row):
+                import os
+                import uuid
+
+                path = os.path.join(observed_dir, "observed-{}.txt".format(uuid.uuid4().hex))
+                with open(path, "w") as out:
+                    out.write(os.environ.get("FOREACH_SETTING", "<unset>"))
+
+            query = (
+                self.spark.readStream.format("text")
+                .load(source_dir)
+                .writeStream.foreach(process_row)
+                .trigger(availableNow=True)
+                .start()
+            )
+            try:
+                query.awaitTermination(timeout=120)
+            finally:
+                query.stop()
+
+            observed = sorted(os.listdir(observed_dir))
+            self.assertNotEqual(observed, [], "foreach never processed a row")
+            with open(os.path.join(observed_dir, observed[0])) as handle:
+                self.assertEqual(handle.read(), "written")
+        finally:
+            self._unset_env("FOREACH_SETTING")
+            shutil.rmtree(source_dir, ignore_errors=True)
+            shutil.rmtree(observed_dir, ignore_errors=True)
+
     def test_env_var_reaches_a_data_source_planning_worker(self):
         """A planning worker is a separate process from the ones that run a query's partitions.
 

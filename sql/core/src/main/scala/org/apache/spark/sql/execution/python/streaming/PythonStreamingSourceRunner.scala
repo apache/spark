@@ -80,8 +80,9 @@ class PythonStreamingSourceRunner(
   private val bufferSize: Int = conf.get(BUFFER_SIZE)
   private val authSocketTimeout = conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
 
-  // Installed at worker launch. This runner serves a streaming query, which launches one
-  // worker rather than one per batch, so its worker keeps the values the query started with.
+  // Installed at worker launch. Unlike the task-side runners this one is a single worker for the
+  // whole query, started on the driver when the source is created, so it keeps the values read
+  // here for the query's lifetime.
   private val envVars: java.util.Map[String, String] =
     PythonWorkerEnvironment.mergeValidated(func.envVars, SQLConf.get)
   private val pythonExec: String = func.pythonExec

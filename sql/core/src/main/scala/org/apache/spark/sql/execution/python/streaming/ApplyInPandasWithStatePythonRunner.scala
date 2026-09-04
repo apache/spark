@@ -72,9 +72,10 @@ class ApplyInPandasWithStatePythonRunner(
   with PythonArrowOutput[OutType] {
   ArrowUtils.failDuplicatedFieldNames(inputSchema)
 
-  // Installed at worker launch, so a cached plan cannot pin an older environment. A streaming
-  // query launches one worker rather than one per batch, so its worker keeps the values the query
-  // started with.
+  // Installed at worker launch. This runner is constructed per task, so each launch reads the
+  // configuration that task carries. A running streaming query carries a snapshot: `StreamExecution`
+  // runs its batches on `sparkSession.cloneSession()`, whose conf is copied at query start, so a
+  // change made while the query runs is not seen until it restarts.
   override val envVars: java.util.Map[String, String] =
     PythonWorkerEnvironment.mergeValidated(funcs.head._1.funcs.head.envVars, SQLConf.get)
 

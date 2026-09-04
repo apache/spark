@@ -33,21 +33,35 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
  * follows the session wherever ordinary session configurations do, `cloneSession` included.
  *
  * It is installed when a worker is launched rather than when a function is built, so a worker
- * receives the session's values as of the query that launched it and a cached plan cannot pin an
- * older set. A worker that outlives the query that launched it keeps the values it started with:
- * the streaming paths launch one worker per query rather than one per batch, so a change made
- * while a streaming query is running reaches that query's worker only when it is restarted.
+ * receives the session's values as of the moment it starts and a cached plan cannot pin an older
+ * set for execution.
  *
  * Every Python worker a session launches for a Python function that session supplied receives the
  * environment. That covers scalar UDFs in all serialization modes, grouped and cogrouped map,
  * grouped-aggregate and window functions, `mapInPandas` and `mapInArrow`, UDTFs both row and
- * Arrow, the stateful `applyInPandasWithState` and `transformWithState` paths, Python data sources
- * including the planning and streaming-reader workers, and the `foreachBatch` worker. A Spark
- * Connect listener added through `addListener` runs its callbacks in the client process rather
- * than in a worker, so no environment applies to it; the server-side `PythonStreamingQueryListener`
- * does launch a worker and does receive one. The scope is the set of runners that install it,
- * not a list of evaluation types, so an evaluation type added to a runner already covered is
- * covered with it.
+ * Arrow, the stateful `applyInPandasWithState` and `transformWithState` paths, `writeStream`'s
+ * `foreach` writer, and Python data sources including the workers that plan them and read a
+ * streaming source. The scope is the set of runners that install it, not a list of evaluation
+ * types, so an evaluation type added to a runner already covered is covered with it.
+ *
+ * A planning worker's result is resolved once for a given DataFrame -- a dynamic UDTF's
+ * `analyze` and a Python data source's schema and partition planning -- and is not recomputed if
+ * the environment changes afterwards. A new read picks up the current values.
+ *
+ * Three qualifications, each about a path that does not run in a worker Spark launched:
+ *
+ *  - A running streaming query holds a configuration snapshot. `StreamExecution` runs its batches
+ *    on `sparkSession.cloneSession()`, whose conf is copied at query start, so a change made while
+ *    a query runs reaches it only on restart. That is why a query's workers appear to keep their
+ *    initial values, not because one worker serves the whole query: the task-side runners are
+ *    constructed per task, while the streaming-source worker really is one per query.
+ *  - `foreachBatch` receives the environment on Spark Connect, where the function runs in a worker
+ *    the server starts. On classic it is a Py4J callback into the client's own Python process, so
+ *    no session environment applies to it.
+ *  - A listener added through `addListener` runs its callbacks in the client process on both
+ *    classic and Spark Connect, so no session environment applies to it either. The server-side
+ *    `PythonStreamingQueryListener` does launch a worker and does receive one, but it is reached
+ *    only by the `add_listener` command that older Spark Connect clients send.
  *
  * Names are case-sensitive, so `FOO` and `foo` are distinct variables. Windows process
  * environments are case-insensitive, so what a worker observes there is the platform's business.
