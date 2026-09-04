@@ -19,50 +19,44 @@ package org.apache.spark.sql.execution.externalUDF
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
-import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
+  AttributeSet,
   ExternalUserDefinedFunction
 }
-import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 
 /**
  * :: Experimental ::
- * Physical plan node that executes a mapPartitions-style UDF in an
- * external worker process.
+ * Physical plan node representing one scalar UDF evaluation. Worker execution is intentionally
+ * unimplemented until the scalar worker path is added.
  *
- * @param function         The UDF to invoke.
- * @param isBarrier        Whether the UDF should be invoked using barrier execution.
- * @param profile          Optional resource profile for the UDF execution.
- * @param child            Child plan providing input partitions.
+ * @param udf UDF expression represented by this node.
+ * @param resultAttr Output attribute for the UDF expression.
+ * @param child Child plan providing input rows.
  */
 @Experimental
-case class MapPartitionsExternalUDFExec(
-    function: ExternalUserDefinedFunction,
-    isBarrier: Boolean,
-    profile: Option[ResourceProfile],
+case class ExecuteExternalUDFExec(
+    udf: ExternalUserDefinedFunction,
+    resultAttr: Attribute,
     child: SparkPlan)
   extends ExternalUDFExec {
 
-  override def workerSpec: UDFWorkerSpecification = function.workerSpec
+  override def workerSpec: UDFWorkerSpecification = udf.workerSpec
 
-  // Map partitions always operate on StructTypes
-  override def output: Seq[Attribute] = toAttributes(
-    function.dataType.asInstanceOf[StructType]
-  )
+  override def output: Seq[Attribute] = child.output :+ resultAttr
+
+  override def producedAttributes: AttributeSet = AttributeSet(Seq(resultAttr))
 
   override protected def doExecute(): RDD[InternalRow] = {
     // TODO(SPARK-55278): Stream rows to and from the worker through session.process().
     throw QueryExecutionErrors.methodNotImplementedError(
-      "MapPartitionsExternalUDFExec.doExecute")
+      "ExecuteExternalUDFExec.doExecute")
   }
 
-  override protected def withNewChildInternal(
-      newChild: SparkPlan): MapPartitionsExternalUDFExec =
+  override protected def withNewChildInternal(newChild: SparkPlan): ExecuteExternalUDFExec =
     copy(child = newChild)
 }
