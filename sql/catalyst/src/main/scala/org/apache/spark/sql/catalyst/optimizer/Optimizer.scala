@@ -67,7 +67,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Set(
       "PartitionPruning",
       "RewriteSubquery",
-      "Extract Python UDFs",
+      "Extract UDFs",
       "Infer Filters")
 
   protected def fixedPoint =
@@ -321,6 +321,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // execution, so it must never be excludable.
       ConvertToCatalyst.ruleName,
       FinishAnalysis.ruleName,
+      // ReplaceExpressions (in FinishAnalysis) turns Between/NullIf into the Unevaluable
+      // With expression; excluding this rule leaks it into codegen and fails with INTERNAL_ERROR.
+      RewriteWithExpression.ruleName,
       RewriteDistinctAggregates.ruleName,
       ReplaceDeduplicateWithAggregate.ruleName,
       ReplaceIntersectWithSemiJoin.ruleName,
@@ -1018,6 +1021,10 @@ object LimitPushDown extends Rule[LogicalPlan] {
     case LocalLimit(le, udf: ArrowEvalPython) =>
       LocalLimit(le, udf.copy(child = maybePushLocalLimit(le, udf.child)))
     case LocalLimit(le, p @ Project(_, udf: ArrowEvalPython)) =>
+      LocalLimit(le, p.copy(child = udf.copy(child = maybePushLocalLimit(le, udf.child))))
+    case LocalLimit(le, udf: ExecuteExternalUDF) =>
+      LocalLimit(le, udf.copy(child = maybePushLocalLimit(le, udf.child)))
+    case LocalLimit(le, p @ Project(_, udf: ExecuteExternalUDF)) =>
       LocalLimit(le, p.copy(child = udf.copy(child = maybePushLocalLimit(le, udf.child))))
   }
 }
@@ -2449,6 +2456,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _: RebalancePartitions => true
     case _: ScriptTransformation => true
     case _: Sort => true
+    case _: ExecuteExternalUDF => true
     case _: BatchEvalPython => true
     case _: ArrowEvalPython => true
     case _: Expand => true
@@ -2836,9 +2844,11 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
     _.containsPattern(LOCAL_RELATION), ruleId) {
     case Project(projectList, LocalRelation(output, data, isStreaming, stream))
         if !projectList.exists(hasUnevaluableExpr) =>
-      val projection = new InterpretedMutableProjection(projectList, output)
+      val freshProjectList = projectList.map(
+        _.freshCopyIfContainsStatefulExpression().asInstanceOf[NamedExpression])
+      val projection = new InterpretedMutableProjection(freshProjectList, output)
       projection.initialize(0)
-      LocalRelation(projectList.map(_.toAttribute), data.map(projection(_).copy()),
+      LocalRelation(freshProjectList.map(_.toAttribute), data.map(projection(_).copy()),
         isStreaming, stream)
 
     case Limit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming, stream)) =>
@@ -2849,7 +2859,8 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
 
     case Filter(condition, LocalRelation(output, data, isStreaming, stream))
         if !hasUnevaluableExpr(condition) =>
-      val predicate = Predicate.create(condition, output)
+      val freshCondition = condition.freshCopyIfContainsStatefulExpression()
+      val predicate = Predicate.create(freshCondition, output)
       predicate.initialize(0)
       LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming, stream)
   }

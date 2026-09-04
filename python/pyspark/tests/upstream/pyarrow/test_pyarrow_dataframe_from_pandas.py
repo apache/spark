@@ -17,9 +17,9 @@
 
 """
 Golden-file tests for the PyArrow ``from_pandas`` constructors that take a whole pandas
-DataFrame: ``pa.RecordBatch.from_pandas`` (with ``pa.Table.from_pandas`` /
-``pa.Schema.from_pandas`` to follow in this file). These take a DataFrame, unlike
-``pa.Array.from_pandas`` which takes a Series (covered by test_pyarrow_array_from_pandas_*).
+DataFrame: ``pa.RecordBatch.from_pandas``, ``pa.Schema.from_pandas`` and
+``pa.Table.from_pandas``. These take a DataFrame, unlike ``pa.Array.from_pandas`` which
+takes a Series (covered by test_pyarrow_array_from_pandas_*).
 
 Per-column type inference matches the Array tests, so these pin the DataFrame-level
 behavior instead: whole-frame assembly, the pandas index under ``preserve_index``, and --
@@ -29,19 +29,30 @@ for RecordBatch -- num_rows preservation for a 0-column DataFrame. Spark calls
 the default ``preserve_index=None`` to carry num_rows via the index metadata -- otherwise a
 0-column relation loses its rows.
 
+``Schema.from_pandas`` is inspected to build a Spark schema, and the two prod call sites
+diverge on ``preserve_index``: classic pandas/conversion.py:971 passes ``False`` (index
+dropped), Connect session.py:573 passes it bare/``None`` (a named or non-range index becomes
+an extra field) -- so a named-index frame yields different field sets. Spark reads each
+field's type AND nullability (conversion.py:989 / session.py:590), so the schema test pins
+name/type/nullability across ``preserve_index``.
+
+``Table.from_pandas`` has no production call site and is covered for completeness. A Table
+column is a ChunkedArray, so unlike RecordBatch it accepts a chunked-backed column (which
+RecordBatch rejects with TypeError, SPARK-58625); the Table test also pins chunk counts.
+
 Regenerate with SPARK_GENERATE_GOLDEN_FILES=1.
 """
 
 import datetime
 import unittest
 
-from pyspark.testing.utils import (
-    have_pyarrow,
-    have_pandas,
-    pyarrow_requirement_message,
-    pandas_requirement_message,
-)
 from pyspark.testing.goldenutils import GoldenFileTestMixin
+from pyspark.testing.utils import (
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 
 if have_pandas:
     import pandas as pd
@@ -51,10 +62,24 @@ if have_pyarrow:
 
 class _PyArrowFromPandasFrameTestBase(GoldenFileTestMixin, unittest.TestCase):
     """
-    Shared machinery for the DataFrame-input ``from_pandas`` constructors (RecordBatch
-    here; Table/Schema as followups). Owns the source-frame inventory and defines no
+    Shared machinery for the DataFrame-input ``from_pandas`` constructors (RecordBatch,
+    Schema and Table). Owns the source-frame inventory and the index-aware input-cell
+    rendering (all three depend on the index under ``preserve_index``); defines no
     ``test_*`` of its own.
     """
+
+    @staticmethod
+    def _index_desc(index) -> str:
+        """Compact, deterministic description of a pandas index for the input cell."""
+        if isinstance(index, pd.MultiIndex):
+            return f"MultiIndex[names={list(index.names)}]"
+        if isinstance(index, pd.RangeIndex):
+            return f"RangeIndex[{index.start}:{index.stop}:{index.step}]"
+        return f"{index.name!r}:{index.tolist()}"
+
+    def _input_cell(self, df) -> str:
+        """Input DataFrame repr, extended with its index (repr_value drops it)."""
+        return f"{self.repr_value(df, max_len=0)}[index={self._index_desc(df.index)}]"
 
     def _build_source_frames(self):
         """Named pandas DataFrames covering shape x index-kind, plus a dtype sample."""
@@ -120,17 +145,6 @@ class _PyArrowFromPandasFrameTestBase(GoldenFileTestMixin, unittest.TestCase):
 class PyArrowRecordBatchFromPandasTests(_PyArrowFromPandasFrameTestBase):
     """Tests pa.RecordBatch.from_pandas() across preserve_index via golden file comparison."""
 
-    @staticmethod
-    def _index_desc(index) -> str:
-        """Compact, deterministic description of a pandas index for the input cell."""
-        if isinstance(index, pd.RangeIndex):
-            return f"RangeIndex[{index.start}:{index.stop}:{index.step}]"
-        return f"{index.name!r}:{index.tolist()}"
-
-    def _input_cell(self, df) -> str:
-        """Input DataFrame repr, extended with its index (repr_value drops it)."""
-        return f"{self.repr_value(df, max_len=0)}[index={self._index_desc(df.index)}]"
-
     def _from_pandas_cell(self, df, **kwargs) -> str:
         """
         Convert ``df`` via RecordBatch.from_pandas(**kwargs) and append num_rows -- the
@@ -168,6 +182,168 @@ class PyArrowRecordBatchFromPandasTests(_PyArrowFromPandasFrameTestBase):
             col_names=col_names,
             compute_cell=compute_cell,
             golden_file_prefix="golden_pyarrow_record_batch_from_pandas",
+            index_name="test case",
+            overrides=overrides,
+        )
+
+
+@unittest.skipIf(
+    not have_pyarrow or not have_pandas,
+    pyarrow_requirement_message or pandas_requirement_message,
+)
+class PyArrowSchemaFromPandasTests(_PyArrowFromPandasFrameTestBase):
+    """Tests pa.Schema.from_pandas() across preserve_index via golden file comparison."""
+
+    def _schema_source_frames(self):
+        """Shared frames plus two MultiIndex rows -- a MultiIndex has several index levels,
+        each becoming its own field, so these pin multi-level index-to-field naming at the
+        schema. Level values are integers (stable int64 on pandas 2 and 3; strings drift)."""
+        frames = self._build_source_frames()
+        frames["single-column:multiindex"] = pd.DataFrame(
+            {"a": [1, 2, 3]},
+            index=pd.MultiIndex.from_tuples([(1, 10), (1, 20), (2, 30)], names=["g", "n"]),
+        )
+        frames["single-column:multiindex-partial-name"] = pd.DataFrame(
+            {"a": [1, 2]},
+            index=pd.MultiIndex.from_tuples([(1, 10), (2, 20)], names=["g", None]),
+        )
+        return frames
+
+    def _from_pandas_cell(self, df, **kwargs) -> str:
+        """
+        Infer the schema via Schema.from_pandas(**kwargs) and render its fields with
+        nullability -- the name/type/nullable Spark reads to build its StructType. Returns
+        ERR@<ExceptionClass> if inference raises; a formatting error is a test bug.
+        """
+        try:
+            schema = pa.Schema.from_pandas(df, **kwargs)
+        except Exception as e:
+            return f"ERR@{type(e).__name__}"
+        return self.repr_value(schema, max_len=0)
+
+    def test_from_pandas(self):
+        """Test pa.Schema.from_pandas() across preserve_index against golden file."""
+        sources = self._schema_source_frames()
+        row_names = list(sources.keys())
+        preserve = {
+            "preserve_index=None": None,
+            "preserve_index=False": False,
+            "preserve_index=True": True,
+        }
+        col_names = ["pandas dataframe", *preserve.keys()]
+
+        # Version-specific expected values go here, keyed by (row, col), for known drift.
+        overrides: dict[tuple[str, str], str] = {}
+
+        def compute_cell(row_name, col_name):
+            df = sources[row_name]
+            if col_name == "pandas dataframe":
+                return self._input_cell(df)
+            return self._from_pandas_cell(df, preserve_index=preserve[col_name])
+
+        self.compare_or_generate_golden_matrix(
+            row_names=row_names,
+            col_names=col_names,
+            compute_cell=compute_cell,
+            golden_file_prefix="golden_pyarrow_schema_from_pandas",
+            index_name="test case",
+            overrides=overrides,
+        )
+
+
+@unittest.skipIf(
+    not have_pyarrow or not have_pandas,
+    pyarrow_requirement_message or pandas_requirement_message,
+)
+class PyArrowTableFromPandasTests(_PyArrowFromPandasFrameTestBase):
+    """Tests pa.Table.from_pandas() across preserve_index via golden file comparison."""
+
+    def _table_source_frames(self):
+        """Shared frames plus arrow-backed rows: a Table column is a ChunkedArray, so it
+        accepts the multi-chunk input RecordBatch.from_pandas rejects."""
+        frames = self._build_source_frames()
+
+        def chunked(*chunks, arrow_type=pa.int64()):
+            stored = pa.chunked_array(list(chunks), type=arrow_type)
+            return pd.arrays.ArrowExtensionArray(stored)
+
+        # Arrow storage always has a chunk count, even at 1; the numpy rows have none.
+        frames["single-column:arrow-backed"] = pd.DataFrame(
+            {"a": pd.Series([1, 2, 3], dtype="int64[pyarrow]")}
+        )
+        frames["single-column:chunked"] = pd.DataFrame({"a": chunked([1, 2], [3])})
+        # Chunk counts are per column, and a plain numpy column arrives as a single chunk.
+        frames["multi-column:chunked-uneven"] = pd.DataFrame(
+            {
+                "a": chunked([1, 2], [3]),
+                "b": chunked([1], [2], [3]),
+                "c": pd.Series([7, 8, 9], dtype="int64"),
+            }
+        )
+        # An empty chunk is carried through rather than compacted away.
+        frames["single-column:chunked-empty-chunk"] = pd.DataFrame({"a": chunked([1, 2], [], [3])})
+        frames["single-column:chunked-string"] = pd.DataFrame(
+            {"a": chunked(["a"], ["b", "c"], arrow_type=pa.string())}
+        )
+        return frames
+
+    def _input_cell(self, df) -> str:
+        """Base input cell plus source chunk counts -- the repr renders a 2-chunk and a
+        1-chunk column identically. Only ChunkedArray-backed columns have a count
+        (``Int64`` exports a plain Array), so the suffix is omitted when none do."""
+        source_chunks = {}
+        for name in df.columns:
+            array = df[name].array
+            if not hasattr(array, "__arrow_array__"):
+                continue
+            stored = array.__arrow_array__()
+            if isinstance(stored, pa.ChunkedArray):
+                source_chunks[name] = stored.num_chunks
+        suffix = f"[chunks={source_chunks}]" if source_chunks else ""
+        return f"{super()._input_cell(df)}{suffix}"
+
+    def _from_pandas_cell(self, df, **kwargs) -> str:
+        """Convert ``df`` via Table.from_pandas(**kwargs), appending num_rows and per-column
+        chunk counts -- the repr shows neither. Returns ERR@<ExceptionClass> if the
+        conversion raises."""
+        try:
+            table = pa.Table.from_pandas(df, **kwargs)
+        except Exception as e:
+            return f"ERR@{type(e).__name__}"
+        # Every Table column is a ChunkedArray, so this always applies.
+        result_chunks = {
+            name: col.num_chunks for name, col in zip(table.schema.names, table.columns)
+        }
+        return (
+            f"{self.repr_value(table, max_len=0)}"
+            f"[num_rows={table.num_rows}, num_chunks={result_chunks}]"
+        )
+
+    def test_from_pandas(self):
+        """Test pa.Table.from_pandas() across preserve_index against golden file."""
+        sources = self._table_source_frames()
+        row_names = list(sources.keys())
+        preserve = {
+            "preserve_index=None": None,
+            "preserve_index=False": False,
+            "preserve_index=True": True,
+        }
+        col_names = ["pandas dataframe", *preserve.keys()]
+
+        # Version-specific expected values go here, keyed by (row, col), for known drift.
+        overrides: dict[tuple[str, str], str] = {}
+
+        def compute_cell(row_name, col_name):
+            df = sources[row_name]
+            if col_name == "pandas dataframe":
+                return self._input_cell(df)
+            return self._from_pandas_cell(df, preserve_index=preserve[col_name])
+
+        self.compare_or_generate_golden_matrix(
+            row_names=row_names,
+            col_names=col_names,
+            compute_cell=compute_cell,
+            golden_file_prefix="golden_pyarrow_table_from_pandas",
             index_name="test case",
             overrides=overrides,
         )

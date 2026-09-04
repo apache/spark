@@ -25,10 +25,8 @@ ML, as shown in examples/src/main/python/ml/logistic_regression_with_elastic_net
 import sys
 from typing import Iterable, List
 
-
 import numpy as np
 from pyspark.sql import SparkSession
-
 
 D = 10  # Number of dimensions
 

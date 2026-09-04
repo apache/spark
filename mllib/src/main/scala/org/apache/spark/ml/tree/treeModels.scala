@@ -49,17 +49,13 @@ private[spark] trait DecisionTreeModel {
   def rootNode: Node
 
   /** Number of nodes in tree, including leaf nodes. */
-  def numNodes: Int = {
-    1 + rootNode.numDescendants
-  }
+  def numNodes: Int = treeStats.numDescendants + 1
 
   /**
    * Depth of the tree.
    * E.g.: Depth 0 means 1 leaf node.  Depth 1 means 1 internal node and 2 leaf nodes.
    */
-  lazy val depth: Int = {
-    rootNode.subtreeDepth
-  }
+  def depth: Int = treeStats.subtreeDepth
 
   /** Summary of the model */
   override def toString: String = {
@@ -83,32 +79,14 @@ private[spark] trait DecisionTreeModel {
   /** Convert to spark.mllib DecisionTreeModel (losing some information) */
   private[spark] def toOld: OldDecisionTreeModel
 
-  /**
-   * @return an iterator that traverses (DFS, left to right) the leaves
-   *         in the subtree of this node.
-   */
-  private def leafIterator(node: Node): Iterator[LeafNode] = {
-    node match {
-      case l: LeafNode => Iterator.single(l)
-      case n: InternalNode =>
-        leafIterator(n.leftChild) ++ leafIterator(n.rightChild)
-    }
-  }
+  private[ml] def treeStats: NodeStats
 
-  private[ml] lazy val numLeave: Int =
-    leafIterator(rootNode).size
+  private[ml] def numLeaves: Int = treeStats.numLeaves
 
-  private[ml] def leafAttr = {
-    NominalAttribute.defaultAttr
-      .withNumValues(numLeave)
-  }
+  private[ml] def leafAttr = NominalAttribute.defaultAttr.withNumValues(numLeaves)
 
   private[ml] def getLeafField(leafCol: String) = {
     leafAttr.withName(leafCol).toStructField()
-  }
-
-  @transient private lazy val leafIndices: Map[LeafNode, Int] = {
-    leafIterator(rootNode).zipWithIndex.toMap
   }
 
   /**
@@ -116,11 +94,20 @@ private[spark] trait DecisionTreeModel {
    *         Leaves are indexed in pre-order from 0.
    */
   def predictLeaf(features: Vector): Double = {
-    leafIndices(rootNode.predictImpl(features)).toDouble
+    DecisionTreeModel.predictLeaf(features, rootNode)
   }
 
   def getEstimatedSize(): Long = {
     org.apache.spark.util.SizeEstimator.estimate(rootNode)
+  }
+}
+
+private[spark] object DecisionTreeModel {
+
+  private[ml] def predictLeaf(features: Vector, rootNode: Node): Double = {
+    val leaf = rootNode.predictImpl(features)
+    assert(leaf.leafIndex >= 0, "Leaf indices are not assigned.")
+    leaf.leafIndex.toDouble
   }
 }
 
@@ -249,7 +236,7 @@ private[ml] object TreeEnsembleModel {
       maxFeatureIndex + 1
     }
     if (d == 0) {
-      assert(totalImportances.size == 0, s"Unknown error in computing feature" +
+      assert(totalImportances.isEmpty, s"Unknown error in computing feature" +
         s" importance: No splits found, but some non-zero importances.")
     }
     val (indices, values) = totalImportances.iterator.toSeq.sortBy(_._1).unzip
@@ -500,6 +487,7 @@ private[ml] object DecisionTreeModelReadWrite {
     // We fill `finalNodes` in reverse order.  Since node IDs are assigned via a pre-order
     // traversal, this guarantees that child nodes will be built before parent nodes.
     val finalNodes = new Array[Node](nodes.length)
+    var leafIndex = nodes.count(_.leftChild == -1) - 1
     nodes.reverseIterator.foreach { case n: NodeData =>
       val impurityStats =
         ImpurityCalculator.getCalculator(impurityType, n.impurityStats, n.rawCount)
@@ -509,7 +497,9 @@ private[ml] object DecisionTreeModelReadWrite {
         new InternalNode(n.prediction, n.impurity, n.gain, leftChild, rightChild,
           n.split.getSplit, impurityStats)
       } else {
-        new LeafNode(n.prediction, n.impurity, impurityStats)
+        val leaf = new LeafNode(n.prediction, n.impurity, impurityStats, leafIndex)
+        leafIndex -= 1
+        leaf
       }
       finalNodes(n.id) = node
     }
@@ -533,10 +523,11 @@ private[ml] object EnsembleModelReadWrite {
       sparkSession: SparkSession,
       extraMetadata: JObject): Unit = {
     DefaultParamsWriter.saveMetadata(instance, path, sparkSession, Some(extraMetadata))
+    val treeWeights = instance.treeWeights
     val treesMetadataWeights = instance.trees.zipWithIndex.map { case (tree, treeID) =>
       (treeID,
         DefaultParamsWriter.getMetadataToSave(tree.asInstanceOf[Params], sparkSession),
-        instance.treeWeights(treeID))
+        treeWeights(treeID))
     }
     val treesMetadataPath = new Path(path, "treesMetadata").toString
     ReadWriteUtils.saveArray[(Int, String, Double)](

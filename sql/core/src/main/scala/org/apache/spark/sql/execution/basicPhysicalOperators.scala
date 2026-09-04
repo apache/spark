@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit._
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
+import scala.reflect.ClassTag
 
 import org.apache.spark.{InterruptibleIterator, SparkException, TaskContext}
 import org.apache.spark.internal.LogKeys
@@ -915,22 +916,24 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   }
 
   /**
-   * Returns the output partitionings of the children, with the attributes converted to
-   * the first child's attributes at the same position.
+   * Returns the output partitionings of the children, with the attributes converted to this
+   * union's output attributes at the same position.
    */
   private def prepareOutputPartitioning(): Seq[Partitioning] = {
-    // Create a map of attributes from the other children to the first child.
-    val firstAttrs = children.head.output
-    val attributesMap = children.tail.map(_.output).map { otherAttrs =>
-      AttributeMap(otherAttrs.zip(firstAttrs))
+    // Map every child's partitioning attributes to this union's output attributes, so all
+    // partitionings are expressed in the same attribute space before comparison. A child's
+    // `outputPartitioning` may reference attributes that differ from its own `output` in any
+    // field `AttributeReference.equals` compares other than `dataType`, which two attributes
+    // sharing an `ExprId` agree on (so name, nullability, metadata, qualifier): a Filter
+    // narrows nullability via `IsNotNull` while passing its child's partitioning through, and
+    // a partitioning built inside a view or subquery carries that relation's qualifier.
+    // `AttributeMap` is keyed by `ExprId`, so remapping every child (including the first)
+    // normalizes all of those.
+    val unionOutput = output
+    val attributesMap = children.map(_.output).map { childAttrs =>
+      AttributeMap(childAttrs.zip(unionOutput))
     }
-
-    val partitionings = children.map(_.outputPartitioning)
-    val firstPartitioning = partitionings.head
-    val otherPartitionings = partitionings.tail
-
-    val convertedOtherPartitionings = otherPartitionings.zipWithIndex.map { case (p, idx) =>
-      val attributeMap = attributesMap(idx)
+    children.map(_.outputPartitioning).zip(attributesMap).map { case (p, attributeMap) =>
       p match {
         case e: Expression =>
           e.transform {
@@ -940,7 +943,6 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
         case _ => p
       }
     }
-    Seq(firstPartitioning) ++ convertedOtherPartitionings
   }
 
   // Compares two leaf partitionings for union pass-through equivalence. Callers pass leaf
@@ -950,8 +952,8 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     (left, right) match {
       case (SinglePartition, SinglePartition) => true
       case (l: HashPartitioningLike, r: HashPartitioningLike) => l == r
-      // For `KeyedPartitioning`, only the partition expressions must match (the other child's
-      // expressions have already been remapped to the first child's attributes by
+      // For `KeyedPartitioning`, only the partition expressions must match (both sides'
+      // expressions have already been remapped to this union's output attributes by
       // `prepareOutputPartitioning`). The partition keys are intentionally not compared here:
       // children typically carry different key sets, and `outputPartitioning` merges them.
       case (l: KeyedPartitioning, r: KeyedPartitioning) =>
@@ -968,17 +970,8 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       return super.outputPartitioning
     }
 
-    // Children's partitionings with attributes remapped to the first child's attributes.
+    // Children's partitionings with attributes remapped to this union's output attributes.
     val partitionings = prepareOutputPartitioning()
-    // Map from the first child's attributes to this union's own output attributes.
-    val attributeMap = children.head.output.zip(output).toMap
-    def toUnionOutput(p: Partitioning): Partitioning = p match {
-      case e: Expression =>
-        e.transform {
-          case a: Attribute if attributeMap.contains(a) => attributeMap(a)
-        }.asInstanceOf[Partitioning]
-      case _ => p
-    }
 
     // Case A: every child is a single `KeyedPartitioning`. A `UnionExec` concatenates its
     // children's partitions in order (one child's partitions after another's), so the merged
@@ -994,13 +987,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       // The `KeyedPartitioning`s must agree on the partition expressions to merge.
       val compatible = kps.forall(comparePartitioning(_, headKp))
       if (compatible) {
-        val mergedKeys = kps.flatMap(_.partitionKeys)
-        val mergedExpressions = headKp.expressions.map(_.transform {
-          case a: Attribute if attributeMap.contains(a) => attributeMap(a)
-        })
-        val isGrouped = mergedKeys.distinct.size == mergedKeys.size
-        val isNarrowed = kps.exists(_.isNarrowed)
-        return KeyedPartitioning(mergedExpressions, mergedKeys, isGrouped, isNarrowed)
+        return KeyedPartitioning.concat(kps)
       } else {
         return super.outputPartitioning
       }
@@ -1021,21 +1008,21 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     // Intersect across all children, anchored on the first child's set. Every surviving member
     // is shared by all children, so their `numPartitions` agree; a `PartitioningCollection`
     // built from a subset of one child's members therefore keeps its uniform-numPartitions
-    // invariant, and the co-located `doExecute` arm's invariant holds.
+    // invariant, and the co-located arm in `unionRDDs` keeps its invariant.
     val head = candidateSets.head
     val intersection = head.filter { c =>
       candidateSets.tail.forall(_.exists(comparePartitioning(c, _)))
     }
     intersection match {
       case Seq() => super.outputPartitioning
-      case Seq(p) => toUnionOutput(p)
-      case ps => PartitioningCollection.fromPartitionings(ps.map(toUnionOutput))
+      case Seq(p) => p
+      case ps => PartitioningCollection.fromPartitionings(ps)
     }
   }
 
   // True when the codegen path applies: `outputPartitioning` is `UnknownPartitioning`,
-  // and `unionedInputRDD` matches the semantics of `sparkContext.union(...)` in `doExecute`.
-  // A `KeyedPartitioning` union also uses `sparkContext.union(...)` in `doExecute`, but
+  // and `unionedInputRDD` matches the semantics of `sparkContext.union(...)` in `unionRDDs`.
+  // A `KeyedPartitioning` union also uses `sparkContext.union(...)` in `unionRDDs`, but
   // codegen is disabled for it (`supportCodegenFailureReason` reports "partitioning-aware"):
   // the per-partition key descriptor is consumed by a downstream `GroupPartitionsExec`, and
   // keeping these unions out of whole-stage codegen matches the `HashPartitioning` union case.
@@ -1244,8 +1231,14 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   // decides which output columns to materialize.
   override def usedInputs: AttributeSet = AttributeSet.empty
 
-  protected override def doExecute(): RDD[InternalRow] = {
-    outputPartitioning match {
+  // Shared by `doExecute` and `doExecuteColumnar` so the two cannot report one partitioning and
+  // build another. `outputPartitioning` is read once, before the children execute: a child's
+  // partitioning can sharpen once it has run, as `InMemoryTableScanExec` does over a
+  // not-yet-materialized AQE cached plan.
+  private def unionRDDs[T: ClassTag](executeChild: SparkPlan => RDD[T]): RDD[T] = {
+    val partitioning = outputPartitioning
+    val rdds = children.map(executeChild)
+    partitioning match {
       case _: UnknownPartitioning | _: KeyedPartitioning =>
         // An `UnknownPartitioning` union simply concatenates its children. A
         // `KeyedPartitioning` union does the same: its merged partition keys describe the
@@ -1253,24 +1246,23 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
         // `GroupPartitionsExec` regroups partitions that share a key. This differs from an
         // index-co-locatable partitioning (e.g. `HashPartitioning`), where a partitioning-aware
         // union RDD interleaves same-index partitions across children.
-        sparkContext.union(children.map(_.execute()))
+        sparkContext.union(rdds)
       case _ =>
         // This union has a known, index-co-locatable partitioning, i.e., its children have the
         // same partitioning in semantics so this union can choose not to change the partitioning
         // by using a custom partitioning aware union RDD.
-        val nonEmptyRdds = children.map(_.execute()).filter(!_.partitions.isEmpty)
         new SQLPartitioningAwareUnionRDD(
-          sparkContext, nonEmptyRdds, outputPartitioning.numPartitions)
+          sparkContext, rdds.filter(!_.partitions.isEmpty), partitioning.numPartitions)
     }
   }
+
+  protected override def doExecute(): RDD[InternalRow] = unionRDDs(_.execute())
 
   override def supportsColumnar: Boolean = children.forall(_.supportsColumnar)
 
   override def supportsRowBased: Boolean = children.forall(_.supportsRowBased)
 
-  protected override def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    sparkContext.union(children.map(_.executeColumnar()))
-  }
+  protected override def doExecuteColumnar(): RDD[ColumnarBatch] = unionRDDs(_.executeColumnar())
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): UnionExec =
     copy(children = newChildren)

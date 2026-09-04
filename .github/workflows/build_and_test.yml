@@ -116,6 +116,10 @@ jobs:
           if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
             yarn=`./dev/is-changed.py -m yarn`
             kubernetes=`./dev/is-changed.py -m kubernetes`
+            # The OIDC E2E job covers connector/credential-aws end to end on K8s, so it
+            # must run when either the Kubernetes support or the credential-aws module
+            # (including its integration-tests module, mapped to credential-aws) changes.
+            oidc_e2e=`./dev/is-changed.py -m kubernetes,credential-aws`
             sparkr=`./dev/is-changed.py -m sparkr`
             tpcds=`./dev/is-changed.py -m sql`
             docker=`./dev/is-changed.py -m docker-integration-tests`
@@ -156,6 +160,7 @@ jobs:
             pandas=false
             yarn=false
             kubernetes=false
+            oidc_e2e=false
             sparkr=false
             tpcds=false
             docker=false
@@ -182,6 +187,7 @@ jobs:
               \"docs\" : \"$docs\",
               \"yarn\" : \"$yarn\",
               \"k8s-integration-tests\" : \"$kubernetes\",
+              \"oidc-e2e\" : \"$oidc_e2e\",
               \"buf\" : \"$buf\",
               \"ui\" : \"$ui\",
               \"transpile\": \"$transpile\",
@@ -541,6 +547,7 @@ jobs:
         fromJson(needs.precondition.outputs.required).sparkr == 'true' ||
         fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true' ||
         fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true' ||
+        fromJson(needs.precondition.outputs.required).oidc-e2e == 'true' ||
         fromJson(needs.precondition.outputs.required).tpcds-1g == 'true')
     name: "Precompile Spark"
     runs-on: ubuntu-latest
@@ -582,7 +589,7 @@ jobs:
       run: |
         ./build/sbt -Phadoop-3 -Pyarn -Pspark-ganglia-lgpl -Phadoop-cloud -Phive \
           -Pkubernetes -Pjvm-profiler -Pkinesis-asl -Pcredential-aws -Phive-thriftserver \
-          -Pdocker-integration-tests -Pkubernetes-integration-tests -Pvolcano \
+          -Pdocker-integration-tests -Pkubernetes-integration-tests -Pvolcano -Poidc-e2e \
           Test/package streaming-kinesis-asl-assembly/assembly connect/assembly assembly/package
     - name: Package compile output
       run: |
@@ -1420,7 +1427,11 @@ jobs:
       - name: Start Minikube
         uses: medyagh/setup-minikube@e9e035a86bbc3caea26a450bd4dbf9d0c453682e # v0.0.21
         with:
-          kubernetes-version: "1.36.0"
+          kubernetes-version: "1.37.0"
+          # Minikube 1.39.0 changed the default container runtime to containerd. The image
+          # builds below go through `minikube docker-env`, which needs a real Docker daemon
+          # in the node, so pin the runtime rather than inherit the default.
+          container-runtime: docker
           # GitHub Actions limit 4C/16G, limit to 2C/6G for better resource statistic
           # https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-public-repositories
           cpus: 2
@@ -1445,6 +1456,175 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: spark-on-kubernetes-it-log
+          path: "**/target/integration-tests.log"
+
+  oidc-e2e:
+    needs: [precondition, precompile]
+    if: fromJson(needs.precondition.outputs.required).oidc-e2e == 'true'
+    name: Run OIDC E2E integration tests (Minikube + moto)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Bootstrap composite actions
+        uses: actions/checkout@v6
+      - name: Checkout and sync Spark repository
+        uses: ./.github/actions/checkout-and-sync
+        with:
+          ref: ${{ needs.precondition.outputs.head_sha }}
+      - name: Cache SBT and Maven
+        uses: actions/cache@v5
+        with:
+          path: |
+            build/apache-maven-*
+            build/*.jar
+            ~/.sbt
+          key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          restore-keys: |
+            build-${{ runner.os }}-
+      - name: Restore Coursier local repository
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.cache/coursier
+          key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          restore-keys: |
+            coursier-${{ runner.os }}-
+      - name: Free up disk space
+        timeout-minutes: 10
+        continue-on-error: true
+        run: |
+          if [ -f ./dev/free_disk_space ]; then
+            ./dev/free_disk_space
+          fi
+      - name: Install Java ${{ inputs.java }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: ${{ inputs.java }}
+      - name: Download precompiled artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
+      - name: Extract precompiled artifact
+        run: |
+          zstd -dc compile-artifact.tar.zst | tar -xf -
+          rm compile-artifact.tar.zst
+      - name: Install Python and moto
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y python3-venv
+          # Install moto into an isolated virtualenv. A plain "pip install --user"
+          # leaves the OS-provided packages under /usr/lib/python3/dist-packages on
+          # the import path, and that copy of pyOpenSSL is incompatible with the
+          # cryptography build pulled in transitively, which crashes moto on startup
+          # (AttributeError: module 'lib' has no attribute 'GEN_EMAIL'). A venv gives
+          # moto a clean, self-consistent dependency set.
+          python3 -m venv "${RUNNER_TEMP}/moto-venv"
+          "${RUNNER_TEMP}/moto-venv/bin/pip" install --upgrade pip
+          "${RUNNER_TEMP}/moto-venv/bin/pip" install "moto[server,s3,sts]>=5.0.0,<6.0.0"
+          echo "MOTO_PYTHON=${RUNNER_TEMP}/moto-venv/bin/python" >> $GITHUB_ENV
+      - name: Start Minikube
+        uses: medyagh/setup-minikube@e9e035a86bbc3caea26a450bd4dbf9d0c453682e # v0.0.21
+        with:
+          kubernetes-version: "1.36.0"
+          # Minikube 1.39.0 changed the default container runtime to containerd. The image
+          # builds below go through `minikube docker-env`, which needs a real Docker daemon
+          # in the node, so pin the runtime rather than inherit the default.
+          container-runtime: docker
+          cpus: 2
+          memory: 6144m
+      - name: Print K8S pods and nodes info
+        run: |
+          kubectl get pods -A
+          kubectl describe node
+      - name: Resolve moto host IP reachable from Minikube pods
+        run: |
+          # The host gateway IP as seen from inside Minikube
+          HOST_IP=$(minikube ssh "ip route | grep default | awk '{print \$3}'" | tr -d '[:space:]')
+          echo "MOTO_HOST_IP=${HOST_IP}" >> $GITHUB_ENV
+          echo "Moto reachable from Minikube at: http://${HOST_IP}:5000"
+      - name: Build and load Spark image into Minikube
+        run: |
+          eval $(minikube docker-env)
+          # Build the base Spark Docker image using the precompiled artifact. The
+          # precompile step builds with -Phadoop-cloud, so hadoop-aws and the AWS SDK
+          # (needed for S3A) are included in /opt/spark/jars.
+          ./bin/docker-image-tool.sh \
+            -r docker.io/kubespark \
+            -t oidc-e2e-test \
+            build
+          # The job class (OidcS3ReadWriteJob) lives in this module's jar, which is not
+          # part of the assembly and is not copied into the image by docker-image-tool.sh
+          # (it only copies examples/jars). SparkSubmit already puts a local:// primary
+          # resource on the driver classpath, so this is not a classpath gap -- the jar
+          # simply has to be present in the container, so bake it into /opt/spark/jars.
+          JOB_JAR=$(ls connector/credential-aws-integration-tests/target/scala-*/spark-credential-aws-integration-tests_*.jar | grep -v -- '-tests.jar' | head -1)
+          JOB_JAR_NAME=$(basename "$JOB_JAR")
+          BUILD_CTX=$(mktemp -d)
+          cp "$JOB_JAR" "$BUILD_CTX/"
+          cat > "$BUILD_CTX/Dockerfile" <<EOF
+          FROM docker.io/kubespark/spark:oidc-e2e-test
+          COPY ${JOB_JAR_NAME} /opt/spark/jars/${JOB_JAR_NAME}
+          EOF
+          docker build -t docker.io/kubespark/spark:oidc-e2e-test-job "$BUILD_CTX"
+          rm -rf "$BUILD_CTX"
+          export SPARK_IMAGE="docker.io/kubespark/spark:oidc-e2e-test-job"
+          echo "SPARK_IMAGE=${SPARK_IMAGE}" >> $GITHUB_ENV
+      - name: Run OIDC E2E integration tests
+        run: |
+          # moto must be started in the same step as the test run: GitHub Actions
+          # terminates background processes when a step's shell exits, so a moto
+          # started in a previous step would already be dead here.
+          # Use the isolated venv python so moto runs against a clean, self-consistent
+          # dependency set (avoids the broken OS-provided pyOpenSSL).
+          "${MOTO_PYTHON}" -m moto.server -H 0.0.0.0 -p 5000 > /tmp/moto.log 2>&1 &
+          MOTO_PID=$!
+          trap "kill ${MOTO_PID} 2>/dev/null || true" EXIT
+          # Wait for moto to be ready, and fail loudly (with logs) if it never comes up.
+          ready=false
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:5000/ >/dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            if ! kill -0 ${MOTO_PID} 2>/dev/null; then
+              echo "ERROR: moto server process exited early." >&2
+              cat /tmp/moto.log >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "${ready}" != "true" ]; then
+            echo "ERROR: moto server did not become ready within 30s." >&2
+            cat /tmp/moto.log >&2
+            exit 1
+          fi
+          echo "moto server is ready on 127.0.0.1:5000 (PID ${MOTO_PID})."
+          # Pods inside Minikube reach moto via the host gateway IP; the test
+          # process (on the host) reaches the same moto server on loopback.
+          MOTO_ENDPOINT="http://${MOTO_HOST_IP}:5000"
+          MOTO_CLIENT_ENDPOINT="http://127.0.0.1:5000"
+          # Grant cluster-admin to all service accounts. This is intentionally broad
+          # but scoped to this ephemeral, single-run CI Minikube cluster (destroyed
+          # with the runner). It mirrors kubernetes-integration-tests and spares the
+          # test from provisioning fine-grained RBAC (pod create/exec/log, namespace
+          # management) for the many service accounts Spark-on-K8s uses. Do NOT copy
+          # this into any shared or long-lived cluster; there, create a minimal Role
+          # limited to the test namespace instead.
+          kubectl create clusterrolebinding serviceaccounts-cluster-admin \
+            --clusterrole=cluster-admin --group=system:serviceaccounts || true
+          build/sbt \
+            -Phadoop-3 -Pkubernetes -Pcredential-aws -Poidc-e2e \
+            -Dspark.kubernetes.test.deployMode=minikube \
+            -Dspark.oidc.test.stsEndpoint="${MOTO_ENDPOINT}" \
+            -Dspark.oidc.test.s3Endpoint="${MOTO_ENDPOINT}" \
+            -Dspark.oidc.test.s3ClientEndpoint="${MOTO_CLIENT_ENDPOINT}" \
+            -Dspark.oidc.test.sparkImage="${SPARK_IMAGE}" \
+            "credential-aws-integration-tests/test"
+      - name: Upload OIDC E2E integration tests log files
+        if: ${{ !success() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: oidc-e2e-it-log
           path: "**/target/integration-tests.log"
 
   ui:

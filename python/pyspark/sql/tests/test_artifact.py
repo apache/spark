@@ -17,10 +17,10 @@
 import os
 import tempfile
 
-from pyspark.sql.tests.connect.client.test_artifact import ArtifactTestsMixin
-from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.errors import PySparkRuntimeError
 from pyspark.sql.functions import assert_true, lit, udf
+from pyspark.sql.tests.connect.client.test_artifact import ArtifactTestsMixin
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):

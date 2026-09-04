@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector
 import java.util
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
@@ -27,6 +28,7 @@ import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.{
   AnalysisContext,
   AsOfVersion,
+  NoSuchTableException,
   RelationCache,
   RelationResolution,
   UnresolvedRelation,
@@ -34,18 +36,24 @@ import org.apache.spark.sql.catalyst.analysis.{
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.{
+  DelegatingTable,
   Identifier,
   InMemoryBaseTable,
   InMemoryCatalog,
+  InMemoryRelationCatalog,
   InMemoryRowLevelOperationTableCatalog,
+  InMemoryTable,
   InMemoryTableCatalog,
+  Relation,
   StagedTable,
   StagingTableCatalog,
   Table,
   TableChange,
+  TableContext,
   TableInfo,
   TableWritePrivilege,
-  TimeTravel}
+  TimeTravel,
+  View}
 import org.apache.spark.sql.connector.write.Write
 import org.apache.spark.sql.execution.{CommandResultExec, QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2._
@@ -97,6 +105,102 @@ class NullReturningStagingInMemoryCatalog extends InMemoryCatalog with StagingTa
   }
 }
 
+class V2InMemoryRelationCatalog extends InMemoryRelationCatalog {
+  private val v2Tables = mutable.HashMap.empty[(Identifier, Option[String]), InMemoryTable]
+  private val _loadRelationCalls = mutable.ArrayBuffer.empty[Identifier]
+
+  protected def loadV2Relation(ident: Identifier, state: Option[String]): Relation = {
+    super.loadRelation(ident) match {
+      case table: DelegatingTable =>
+        v2Tables.getOrElseUpdate(
+          (ident, state),
+          new InMemoryTable(
+            table.name(),
+            table.columns(),
+            table.partitioning(),
+            table.properties(),
+            table.constraints()))
+      case relation => relation
+    }
+  }
+
+  override def loadRelation(ident: Identifier): Relation = {
+    _loadRelationCalls += ident
+    loadV2Relation(ident, None)
+  }
+
+  def loadRelationCalls: Seq[Identifier] = _loadRelationCalls.toSeq
+  def resetLoadRelationCalls(): Unit = _loadRelationCalls.clear()
+
+  override def dropTable(ident: Identifier): Boolean = {
+    v2Tables.keys.filter(_._1 == ident).toSeq.foreach(v2Tables.remove)
+    super.dropTable(ident)
+  }
+}
+
+class StateAwareV2InMemoryRelationCatalog extends V2InMemoryRelationCatalog {
+  private val _loadTableCalls =
+    mutable.ArrayBuffer.empty[(Identifier, TableContext, CaseInsensitiveStringMap)]
+  private val _loadViewCalls = mutable.ArrayBuffer.empty[Identifier]
+
+  override def tableStateOptionKeys(): util.Set[String] = util.Set.of("snapshot")
+
+  override def loadTable(
+      ident: Identifier,
+      context: TableContext,
+      stateOptions: CaseInsensitiveStringMap): Table = {
+    _loadTableCalls += ((ident, context, stateOptions))
+    if (context.timeTravel().isPresent || !context.writePrivileges().isEmpty) {
+      super.loadTable(ident, context, stateOptions)
+    } else {
+      loadV2Relation(ident, Option(stateOptions.get("snapshot"))) match {
+        case table: Table => table
+        case _ => throw new NoSuchTableException(ident)
+      }
+    }
+  }
+
+  override def loadView(ident: Identifier): View = {
+    _loadViewCalls += ident
+    super.loadView(ident)
+  }
+
+  def loadTableCalls: Seq[(Identifier, TableContext, CaseInsensitiveStringMap)] =
+    _loadTableCalls.toSeq
+  def loadViewCalls: Seq[Identifier] = _loadViewCalls.toSeq
+
+  def resetDispatchCalls(): Unit = {
+    resetLoadRelationCalls()
+    _loadTableCalls.clear()
+    _loadViewCalls.clear()
+  }
+}
+
+class DispatchTrackingRelationCatalog extends InMemoryRelationCatalog {
+  private var _loadedVersion: Option[String] = None
+  private var _loadedWritePrivileges: Option[util.Set[TableWritePrivilege]] = None
+
+  def loadedVersion: Option[String] = _loadedVersion
+  def loadedWritePrivileges: Option[util.Set[TableWritePrivilege]] = _loadedWritePrivileges
+
+  def resetDispatchCalls(): Unit = {
+    _loadedVersion = None
+    _loadedWritePrivileges = None
+  }
+
+  override def loadTable(ident: Identifier, version: String): Table = {
+    _loadedVersion = Some(version)
+    loadTable(ident)
+  }
+
+  override def loadTable(
+      ident: Identifier,
+      writePrivileges: util.Set[TableWritePrivilege]): Table = {
+    _loadedWritePrivileges = Some(writePrivileges)
+    loadTable(ident)
+  }
+}
+
 class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
   import testImplicits._
 
@@ -124,6 +228,18 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       expectedSnapshot: String): Unit = {
     val loadOptions = catalog.loadTableCalls.map(_._2)
     assert(loadOptions.nonEmpty, "expected at least one options-aware table load")
+    assert(loadOptions.forall { options =>
+      options.size() == 1 && options.get("snapshot") == expectedSnapshot
+    }, s"expected only snapshot=$expectedSnapshot to be forwarded, got: $loadOptions")
+  }
+
+  private def assertOnlySnapshotTableOptions(
+      catalog: StateAwareV2InMemoryRelationCatalog,
+      expectedSnapshot: String,
+      expectedCalls: Int): Unit = {
+    val loadOptions = catalog.loadTableCalls.map(_._3)
+    assert(loadOptions.size === expectedCalls,
+      s"expected $expectedCalls state-aware table loads, got: $loadOptions")
     assert(loadOptions.forall { options =>
       options.size() == 1 && options.get("snapshot") == expectedSnapshot
     }, s"expected only snapshot=$expectedSnapshot to be forwarded, got: $loadOptions")
@@ -786,6 +902,249 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         .collect()
 
       assertOnlySnapshotOptions(stateCatalog, "s1")
+    }
+  }
+
+  test("SPARK-58392: RelationCatalog uses loadTable only for non-empty table state") {
+    registerCatalog("testrelcat", classOf[StateAwareV2InMemoryRelationCatalog])
+    val t1 = "testrelcat.ns1.ns2.table"
+    val ident = Identifier.of(Array("ns1", "ns2"), "table")
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING parquet")
+
+      val relCatalog =
+        catalog("testrelcat").asInstanceOf[StateAwareV2InMemoryRelationCatalog]
+      relCatalog.resetDispatchCalls()
+      val df = spark.read
+        .option("SnApShOt", "s1")
+        .option("split-size", "5")
+        .table(t1)
+      val relations = df.queryExecution.analyzed.collect { case r: DataSourceV2Relation => r }
+
+      assertOnlySnapshotTableOptions(relCatalog, "s1", expectedCalls = 1)
+      assert(relCatalog.loadRelationCalls.isEmpty)
+      assert(relations.size === 1)
+      assert(relations.head.options.size() === 2)
+      assert(relations.head.options.get("snapshot") === "s1")
+      assert(relations.head.options.get("split-size") === "5")
+
+      relCatalog.resetDispatchCalls()
+      spark.table(t1).queryExecution.analyzed
+      assert(relCatalog.loadTableCalls.isEmpty)
+      assert(relCatalog.loadRelationCalls === Seq(ident))
+    }
+  }
+
+  test("SPARK-58392: option-bearing View uses loadTable then option-less loadView") {
+    registerCatalog("testrelcat", classOf[StateAwareV2InMemoryRelationCatalog])
+    val v1 = "testrelcat.ns1.ns2.view"
+    val ident = Identifier.of(Array("ns1", "ns2"), "view")
+    withView(v1) {
+      sql(s"CREATE VIEW $v1 AS SELECT 1 AS x")
+
+      val relCatalog =
+        catalog("testrelcat").asInstanceOf[StateAwareV2InMemoryRelationCatalog]
+      relCatalog.resetDispatchCalls()
+      spark.read
+        .option("snapshot", "s1")
+        .option("split-size", "5")
+        .table(v1)
+        .queryExecution
+        .analyzed
+
+      assertOnlySnapshotTableOptions(relCatalog, "s1", expectedCalls = 1)
+      assert(relCatalog.loadViewCalls === Seq(ident))
+      assert(relCatalog.loadRelationCalls === Seq(ident))
+    }
+  }
+
+  test("SPARK-58392: view and nested table keep independent state options") {
+    registerCatalog("nestedviewrel", classOf[StateAwareV2InMemoryRelationCatalog])
+    val t1 = "nestedviewrel.ns1.ns2.table"
+    val v1 = "nestedviewrel.ns1.ns2.view"
+    withTable(t1) {
+      withView(v1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING parquet")
+        sql(s"CREATE VIEW $v1 AS SELECT * FROM $t1 WITH ('snapshot' = 'inner')")
+
+        val relCatalog =
+          catalog("nestedviewrel").asInstanceOf[StateAwareV2InMemoryRelationCatalog]
+        relCatalog.resetDispatchCalls()
+        spark.read
+          .option("snapshot", "outer")
+          .option("split-size", "5")
+          .table(v1)
+          .collect()
+
+        val calls = relCatalog.loadTableCalls.map(_._3)
+        assert(calls.map(_.get("snapshot")) === Seq("outer", "inner", "inner"))
+        assert(calls.forall(_.size() === 1))
+        val viewIdent = Identifier.of(Array("ns1", "ns2"), "view")
+        assert(relCatalog.loadViewCalls === Seq(viewIdent))
+        assert(relCatalog.loadRelationCalls === Seq(viewIdent))
+      }
+    }
+  }
+
+  test("SPARK-58392: RelationCatalog table pins use the state-option projection") {
+    registerCatalog("pinningrel", classOf[StateAwareV2InMemoryRelationCatalog])
+    val t1 = "pinningrel.ns1.ns2.table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING parquet")
+      val relCatalog =
+        catalog("pinningrel").asInstanceOf[StateAwareV2InMemoryRelationCatalog]
+
+      relCatalog.resetDispatchCalls()
+      val sameState = sql(s"SELECT a.id FROM $t1 " +
+        s"WITH (`snapshot` = 's1', `split-size` = 5) a JOIN $t1 " +
+        s"WITH (`snapshot` = 's1', `split-size` = 9) b ON a.id = b.id")
+      val sameStateRelations = sameState.queryExecution.analyzed.collect {
+        case r: DataSourceV2Relation if r.options.containsKey("split-size") => r
+      }
+      assertOnlySnapshotTableOptions(relCatalog, "s1", expectedCalls = 1)
+      assert(sameStateRelations.size === 2)
+      assert(sameStateRelations.map(_.options.get("split-size")).sorted === Seq("5", "9"))
+      assert(sameStateRelations.head.table eq sameStateRelations.last.table)
+      assert(relCatalog.loadRelationCalls.isEmpty)
+
+      relCatalog.resetDispatchCalls()
+      val differentStates = sql(s"SELECT a.id FROM $t1 " +
+        s"WITH (`snapshot` = 's1') a JOIN $t1 " +
+        s"WITH (`snapshot` = 's2') b ON a.id = b.id")
+      val differentStateRelations = differentStates.queryExecution.analyzed.collect {
+        case r: DataSourceV2Relation if r.options.containsKey("snapshot") => r
+      }
+      assert(differentStateRelations.size === 2)
+      assert(differentStateRelations.head.table ne differentStateRelations.last.table)
+      val loadedStates = relCatalog.loadTableCalls.map(_._3)
+      assert(loadedStates.map(_.get("snapshot")).sorted === Seq("s1", "s2"))
+      assert(loadedStates.forall(_.size() === 1))
+      assert(relCatalog.loadRelationCalls.isEmpty)
+    }
+  }
+
+  test("SPARK-58392: execution refresh forwards only table-state options") {
+    registerCatalog("loadcountingrel", classOf[StateAwareV2InMemoryRelationCatalog])
+    val relCatalog =
+      catalog("loadcountingrel").asInstanceOf[StateAwareV2InMemoryRelationCatalog]
+    val t1 = "loadcountingrel.ns1.ns2.table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING parquet")
+      relCatalog.resetDispatchCalls()
+
+      spark.read
+        .option("snapshot", "s1")
+        .option("split-size", "5")
+        .table(t1)
+        .collect()
+
+      assertOnlySnapshotTableOptions(relCatalog, "s1", expectedCalls = 2)
+      assert(relCatalog.loadRelationCalls.isEmpty)
+    }
+  }
+
+  test("SPARK-58392: recache forwards RelationCatalog table-state options") {
+    registerCatalog("recacherel", classOf[StateAwareV2InMemoryRelationCatalog])
+    val relCatalog = catalog("recacherel").asInstanceOf[StateAwareV2InMemoryRelationCatalog]
+    val t1 = "recacherel.ns1.ns2.table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING parquet")
+      val cached = spark.read
+        .option("snapshot", "s1")
+        .option("split-size", "5")
+        .table(t1)
+        .filter("id >= 0")
+      cached.cache()
+      try {
+        cached.collect()
+        relCatalog.resetDispatchCalls()
+
+        spark.catalog.refreshTable(t1)
+
+        val recacheOptions = relCatalog.loadTableCalls.map(_._3)
+        assert(recacheOptions.nonEmpty, "expected recache to reload the table")
+        assert(
+          recacheOptions.forall { options =>
+            options.size() == 1 && options.get("snapshot") == "s1"
+          },
+          s"expected recache to forward only snapshot=s1, got: $recacheOptions")
+
+        val samePlan = spark.read
+          .option("snapshot", "s1")
+          .option("split-size", "5")
+          .table(t1)
+          .filter("id >= 0")
+        val recached = spark.sharedState.cacheManager.lookupCachedData(samePlan)
+        assert(recached.isDefined, "the option-bearing plan should remain cached after refresh")
+        val recachedOptions = recached.get.plan.collect { case r: DataSourceV2Relation =>
+          r.options.get("split-size")
+        }
+        assert(recachedOptions === Seq("5"))
+      } finally {
+        spark.catalog.clearCache()
+      }
+    }
+  }
+
+  test("SPARK-58392: SupportsCatalogOptions uses RelationCatalog state-aware loadTable") {
+    registerCatalog("providerrel", classOf[StateAwareV2InMemoryRelationCatalog])
+    val relCatalog = catalog("providerrel").asInstanceOf[StateAwareV2InMemoryRelationCatalog]
+    val t1 = "providerrel.table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING parquet")
+      relCatalog.resetDispatchCalls()
+
+      val df = spark.read
+        .format(classOf[CatalogSupportingInMemoryTableProvider].getName)
+        .option("catalog", "providerrel")
+        .option("name", "table")
+        .option("snapshot", "s1")
+        .option("split-size", "5")
+        .load()
+      val relation = df.queryExecution.analyzed
+        .collectFirst { case r: DataSourceV2Relation =>
+          r
+        }
+        .getOrElse(fail("expected a v2 relation"))
+
+      assertOnlySnapshotTableOptions(relCatalog, "s1", expectedCalls = 1)
+      assert(relCatalog.loadRelationCalls.isEmpty)
+      assert(relation.options.get("catalog") === "providerrel")
+      assert(relation.options.get("name") === "table")
+      assert(relation.options.get("snapshot") === "s1")
+      assert(relation.options.get("split-size") === "5")
+
+      relCatalog.resetDispatchCalls()
+      df.collect()
+      assertOnlySnapshotTableOptions(relCatalog, "s1", expectedCalls = 1)
+      assert(relCatalog.loadRelationCalls.isEmpty)
+    }
+  }
+
+  test("SPARK-58392: TableCatalog default preserves RelationCatalog table-only context") {
+    registerCatalog("dispatchtrackingrel", classOf[DispatchTrackingRelationCatalog])
+    val relCatalog =
+      catalog("dispatchtrackingrel").asInstanceOf[DispatchTrackingRelationCatalog]
+    val ident = Identifier.of(Array("ns1", "ns2"), "table")
+    val t1 = "dispatchtrackingrel.ns1.ns2.table"
+    val stateOptions = new CaseInsensitiveStringMap(util.Map.of("snapshot", "s1"))
+
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING parquet")
+      relCatalog.resetDispatchCalls()
+
+      relCatalog.loadTable(
+        ident,
+        new TableContext(new TimeTravel.AsOfVersion("v1"), util.Set.of()),
+        stateOptions)
+      assert(relCatalog.loadedVersion === Some("v1"))
+
+      relCatalog.resetDispatchCalls()
+      relCatalog.loadTable(
+        ident,
+        new TableContext(null, util.Set.of(TableWritePrivilege.INSERT)),
+        stateOptions)
+      assert(relCatalog.loadedWritePrivileges === Some(util.Set.of(TableWritePrivilege.INSERT)))
     }
   }
 

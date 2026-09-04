@@ -16,68 +16,51 @@
 #
 
 # mypy: disable-error-code="override"
-from pyspark.errors.exceptions.base import (
-    SessionNotSameException,
-    PySparkIndexError,
-)
-from pyspark.resource import ResourceProfile
-from pyspark.sql.connect.logging import logger
-
+import copy
+import functools
+import json
+import os
+import random
+import sys
+import warnings
+from collections.abc import Iterable
 from typing import (
+    TYPE_CHECKING,
     Any,
+    Callable,
     Dict,
     Iterator,
     List,
     NoReturn,
     Optional,
-    Tuple,
-    Union,
     Sequence,
-    TYPE_CHECKING,
-    overload,
-    Callable,
-    cast,
+    Tuple,
     Type,
+    Union,
+    cast,
+    overload,
 )
 
-import copy
-import os
-import sys
-import random
 import pyarrow as pa
-import json
-import warnings
-from collections.abc import Iterable
-import functools
 
+import pyspark.sql.connect.plan as plan
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
-from pyspark.util import is_remote_only
-from pyspark.sql.types import Row, StructType, _create_row
-from pyspark.sql.dataframe import (
-    DataFrame as ParentDataFrame,
-    DataFrameNaFunctions as ParentDataFrameNaFunctions,
-    DataFrameStatFunctions as ParentDataFrameStatFunctions,
-)
-
 from pyspark.errors import (
-    PySparkTypeError,
     PySparkAttributeError,
-    PySparkValueError,
     PySparkNotImplementedError,
     PySparkRuntimeError,
+    PySparkTypeError,
+    PySparkValueError,
 )
-from pyspark.util import PythonEvalType
+from pyspark.errors.exceptions.base import (
+    PySparkIndexError,
+    SessionNotSameException,
+)
+from pyspark.resource import ResourceProfile
 from pyspark.serializers import CPickleSerializer
-from pyspark.storagelevel import StorageLevel
-import pyspark.sql.connect.plan as plan
-from pyspark.sql.conversion import ArrowTableToRowsConversion
-from pyspark.sql.connect.group import GroupedData
-from pyspark.sql.connect.merge import MergeIntoWriter
-from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
-from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
-from pyspark.sql.connect.column import Column as ConnectColumn
 from pyspark.sql.column import Column
+from pyspark.sql.connect.column import Column as ConnectColumn
 from pyspark.sql.connect.expressions import (
     ColumnReference,
     DirectShufflePartitionID,
@@ -87,26 +70,44 @@ from pyspark.sql.connect.expressions import (
     UnresolvedStar,
 )
 from pyspark.sql.connect.functions import builtin as F
-from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
+from pyspark.sql.connect.group import GroupedData
+from pyspark.sql.connect.logging import logger
+from pyspark.sql.connect.merge import MergeIntoWriter
+from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
+from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
+from pyspark.sql.conversion import ArrowTableToRowsConversion
+from pyspark.sql.dataframe import (
+    DataFrame as ParentDataFrame,
+)
+from pyspark.sql.dataframe import (
+    DataFrameNaFunctions as ParentDataFrameNaFunctions,
+)
+from pyspark.sql.dataframe import (
+    DataFrameStatFunctions as ParentDataFrameStatFunctions,
+)
 from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignore[attr-defined]
+from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.table_arg import TableArg
+from pyspark.sql.types import Row, StructType, _create_row
+from pyspark.storagelevel import StorageLevel
+from pyspark.util import PythonEvalType, is_remote_only
 
 if TYPE_CHECKING:
+    from pyspark.core.rdd import RDD
+    from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
     from pyspark.sql.connect._typing import (
+        ArrowMapIterFunction,
         ColumnOrName,
         ColumnOrNameOrOrdinal,
         LiteralType,
-        PrimitiveType,
         OptionalPrimitiveType,
         PandasMapIterFunction,
-        ArrowMapIterFunction,
+        PrimitiveType,
     )
-    from pyspark.core.rdd import RDD
-    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
     from pyspark.sql.connect.observation import Observation
     from pyspark.sql.connect.session import SparkSession
-    from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
     from pyspark.sql.metrics import ExecutionInfo
+    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
     from pyspark.sql.plot import PySparkPlotAccessor
 
 
@@ -2243,9 +2244,9 @@ class DataFrame(ParentDataFrame):
     def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None
     ) -> "PandasOnSparkDataFrame":
-        from pyspark.pandas.namespace import _get_index_map
         from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
         from pyspark.pandas.internal import InternalFrame
+        from pyspark.pandas.namespace import _get_index_map
 
         index_spark_columns, index_names = _get_index_map(self, index_col)
         internal = InternalFrame(
@@ -2332,7 +2333,7 @@ class DataFrame(ParentDataFrame):
             for f in schema.fields
         ]
 
-        def foreach_partition_func(itr: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:
+        def foreach_partition_func(itr: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
             def flatten() -> Iterator[Row]:
                 for table in itr:
                     columnar_data = [
@@ -2505,13 +2506,14 @@ class DataFrameStatFunctions(ParentDataFrameStatFunctions):
 
 
 def _test() -> None:
+    import doctest
     import os
     import sys
-    import doctest
-    from pyspark.util import is_remote_only
-    from pyspark.sql import SparkSession as PySparkSession
+
     import pyspark.sql.dataframe
+    from pyspark.sql import SparkSession as PySparkSession
     from pyspark.testing.utils import have_pandas, have_pyarrow
+    from pyspark.util import is_remote_only
 
     # It inherits docstrings but doctests cannot detect them so we run
     # the parent classe's doctests here directly.
@@ -2533,6 +2535,7 @@ def _test() -> None:
         del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
     else:
         import pyarrow as pa
+
         from pyspark.loose_version import LooseVersion
 
         if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):

@@ -15,25 +15,26 @@
 # limitations under the License.
 #
 
-from contextlib import redirect_stdout
 import datetime
-from enum import Enum
-from inspect import getmembers, isfunction, isclass
 import io
-from itertools import chain
 import math
 import re
 import unittest
+from contextlib import redirect_stdout
+from enum import Enum
+from inspect import getmembers, isclass, isfunction
+from itertools import chain
 
 from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeException
 from pyspark.errors.exceptions.base import IllegalArgumentException
-from pyspark.sql import Row, Window, functions as F, types
+from pyspark.sql import Row, Window, types
+from pyspark.sql import functions as F
 from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
 from pyspark.sql.functions.builtin import nullifzero, randstr, uniform, zeroifnull
-from pyspark.sql.types import StructType, StructField, StringType
+from pyspark.sql.types import StringType, StructField, StructType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
-from pyspark.testing.utils import have_numpy, assertDataFrameEqual
+from pyspark.testing.utils import assertDataFrameEqual, have_numpy
 
 
 class FunctionsTestsMixin:
@@ -974,6 +975,18 @@ class FunctionsTestsMixin:
                 df.select(getattr(F, name)(F.col("name"))),
             )
 
+    def test_bitmap_scalar_functions(self):
+        df = self.spark.createDataFrame([("F00F", "70")], ["left", "right"])
+        left = F.to_binary("left", F.lit("hex"))
+        right = F.to_binary("right", F.lit("hex"))
+        actual = df.select(
+            F.substring(F.hex(F.bitmap_and(left, right)), 0, 4),
+            F.substring(F.hex(F.bitmap_or(left, right)), 0, 4),
+            F.substring(F.hex(F.bitmap_andnot(left, right)), 0, 4),
+            F.substring(F.hex(F.bitmap_xor(left, right)), 0, 4),
+        )
+        assertDataFrameEqual([Row("7000", "F00F", "800F", "800F")], actual)
+
     def test_collation(self):
         df = self.spark.createDataFrame([("a",), ("b",)], ["name"])
         actual = df.select(F.collation(F.collate("name", "UNICODE"))).distinct()
@@ -1009,7 +1022,7 @@ class FunctionsTestsMixin:
         assertDataFrameEqual([Row(b=-1)], actual_with_threshold)
 
     def test_vector_functions(self):
-        from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+        from pyspark.sql.types import ArrayType, FloatType, StructField, StructType
 
         schema = StructType(
             [

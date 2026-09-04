@@ -4,6 +4,7 @@ SELECT * from SQL_KEYWORDS()
 -- !query schema
 struct<keyword:string,reserved:boolean>
 -- !query output
+ABSENT	false
 ADD	false
 AFTER	false
 AGGREGATE	false
@@ -77,6 +78,7 @@ COMPENSATION	false
 COMPUTE	false
 CONCATENATE	false
 CONDITION	false
+CONDITIONAL	false
 CONSTRAINT	true
 CONTAINS	false
 CONTINUE	false
@@ -212,9 +214,12 @@ ITEMS	false
 ITERATE	false
 JOIN	true
 JSON	false
+JSON_ARRAY	false
 JSON_EXISTS	false
+JSON_QUERY	false
 JSON_TABLE	false
 JSON_VALUE	false
+KEEP	false
 KEY	false
 KEYS	false
 LANGUAGE	false
@@ -273,8 +278,10 @@ NOT	true
 NULL	true
 NULLS	false
 NUMERIC	false
+OBJECT	false
 OF	false
 OFFSET	true
+OMIT	false
 ON	true
 ONLY	true
 OPEN	false
@@ -308,6 +315,7 @@ PURGE	false
 QUALIFY	false
 QUARTER	false
 QUERY	false
+QUOTES	false
 RANGE	false
 READ	false
 READS	false
@@ -414,6 +422,7 @@ TYPE	false
 UNARCHIVE	false
 UNBOUNDED	false
 UNCACHE	false
+UNCONDITIONAL	false
 UNIFORM	false
 UNION	true
 UNIQUE	true
@@ -448,6 +457,7 @@ WINDOW	false
 WITH	true
 WITHIN	true
 WITHOUT	false
+WRAPPER	false
 X	false
 YEAR	false
 YEARS	false

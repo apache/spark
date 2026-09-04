@@ -19,11 +19,13 @@ Commonly used utils in pandas-on-Spark.
 """
 
 import functools
-from contextlib import contextmanager
 import json
 import os
 import threading
+import warnings
+from contextlib import contextmanager
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -33,33 +35,33 @@ from typing import (
     Optional,
     Tuple,
     Union,
-    TYPE_CHECKING,
     cast,
     no_type_check,
     overload,
 )
-import warnings
 
 import pandas as pd
 from pandas.api.types import is_list_like
 
-from pyspark.sql import functions as F, Column, DataFrame as PySparkDataFrame, SparkSession
-from pyspark.sql.types import DoubleType
-from pyspark.sql.utils import is_remote
-from pyspark.errors import PySparkTypeError, UnsupportedOperationException
 from pyspark import pandas as ps
+from pyspark.errors import PySparkTypeError, UnsupportedOperationException
 from pyspark.pandas._typing import (
     Axis,
+    DataFrameOrSeries,
     Label,
     Name,
-    DataFrameOrSeries,
 )
 from pyspark.pandas.typedef.typehints import as_spark_type
+from pyspark.sql import Column, SparkSession
+from pyspark.sql import DataFrame as PySparkDataFrame
+from pyspark.sql import functions as F
+from pyspark.sql.types import DoubleType
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
-    from pyspark.pandas.indexes.base import Index
     from pyspark.pandas.base import IndexOpsMixin
     from pyspark.pandas.frame import DataFrame
+    from pyspark.pandas.indexes.base import Index
     from pyspark.pandas.internal import InternalFrame
     from pyspark.pandas.series import Series
 
@@ -133,11 +135,11 @@ def combine_frames(
     from pyspark.pandas.config import get_option
     from pyspark.pandas.frame import DataFrame
     from pyspark.pandas.internal import (
-        InternalField,
-        InternalFrame,
         HIDDEN_COLUMNS,
         NATURAL_ORDER_COLUMN_NAME,
         SPARK_INDEX_NAME_FORMAT,
+        InternalField,
+        InternalFrame,
     )
     from pyspark.pandas.series import Series
 
@@ -1044,6 +1046,102 @@ def compare_allow_null(
     return left.isNull() | right.isNull() | comp(left, right)
 
 
+def _floor_divide_floating(c1: Column, c2: Column) -> Column:
+    """Return floor(c1 / c2) for finite non-zero double operands, derived from the remainder.
+
+    Flooring the quotient is wrong when the division rounds up across an integer: 1.0 / 0.1
+    rounds to exactly 10.0, so its floor is 10 where NumPy, pandas and Python return 9. A
+    remainder is exact, so NumPy's npy_divmod derives the quotient from it, as this does.
+    """
+    remainder = F.try_mod(c1, c2)
+    # The remainder carries the dividend's sign, so this is the truncating quotient.
+    truncated = (c1 - remainder) / c2
+    # Truncating and flooring differ by one on opposite signs with a remainder left over.
+    quotient = F.when(
+        (remainder != 0) & ((remainder < 0) != (c2 < 0)), truncated - F.lit(1.0)
+    ).otherwise(truncated)
+    # The quotient is whole in exact arithmetic, but the division can leave it a few bits off, so
+    # round it back. F.floor cannot do this: it returns a bigint, which raises on an infinity.
+    floor = quotient - F.pmod(quotient, F.lit(1.0))
+    return (
+        # An infinite quotient is its own floor, and has to be returned before the line above
+        # is used, since pmod of an infinity is nan and leaves `floor` nan.
+        F.when(quotient.isin(float("inf"), float("-inf")), quotient)
+        # Flooring goes one too low when the division landed just under the whole number.
+        .when(quotient - floor > F.lit(0.5), floor + F.lit(1.0))
+        .otherwise(floor)
+    )
+
+
+def _floor_divide_integral(c1: Column, c2: Column) -> Column:
+    """Return floor(c1 / c2) for integral operands, keeping the quotient in integer space.
+
+    Casting an operand above 2**53 to double drops its low bits, turning 9007199254740993 into
+    9007199254740992, and Spark's `/` always divides as double. The long casts are no-ops for
+    the integral types the caller admits; they are there because `div` rejects a double even in
+    a branch the guard turns off.
+    """
+    c1_long = c1.cast("long")
+    c2_long = c2.cast("long")
+    # `div` is integer division, truncating toward zero, so it needs the same flooring
+    # correction as the floating helper. Integer arithmetic cannot round, so nothing more.
+    truncated = F.call_function("div", c1_long, c2_long)
+    remainder = F.try_mod(c1_long, c2_long)
+    return F.when(
+        # The one quotient a long cannot hold, where NumPy wraps around and `div` would raise.
+        (c1_long == F.lit(-(2**63))) & (c2_long == F.lit(-1)),
+        F.lit(float(-(2**63))),
+    ).otherwise(
+        F.when((remainder != 0) & ((remainder < 0) != (c2_long < 0)), truncated - F.lit(1))
+        .otherwise(truncated)
+        .cast("double")
+    )
+
+
+def _floor_divide_func(c1: Column, c2: Column) -> Column:
+    c1_double = c1.cast("double")
+    c2_double = c2.cast("double")
+    integral_types = ["tinyint", "smallint", "int", "bigint"]
+
+    return (
+        # Null, nan and a zero divisor are handled the same way for every operand type.
+        F.when(c1.isNull() | F.isnan(c1), c1_double)
+        .when(c2.isNull() | F.isnan(c2), c2_double)
+        # pandas upcasts a zero divisor instead of raising. A negative zero divisor negates the
+        # result, and no comparison can see that sign, so the string form is used. A nullable Int64
+        # returns 0 instead, but arrives as bigint like a default int64, whose answer this follows.
+        .when(
+            c2_double == 0,
+            F.when(c1_double == 0, F.lit(float("nan")))
+            .when((c1_double < 0) != (c2_double.cast("string") == "-0.0"), F.lit(float("-inf")))
+            .otherwise(F.lit(float("inf"))),
+        )
+        # Integral operands divide as integers, so operands above 2**53 keep their low bits.
+        .when(
+            F.typeof(c1).isin(integral_types) & F.typeof(c2).isin(integral_types),
+            _floor_divide_integral(c1, c2),
+        )
+        # Only floating operands can be infinite or a negative zero, handled before the division.
+        .when(
+            F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
+            # An infinite dividend has no remainder, so NumPy's quotient is nan for any divisor.
+            F.when(c1_double.isin(float("-inf"), float("inf")), F.lit(float("nan")))
+            # An infinite divisor gives a quotient between -1 and 1, so the floor is 0 or -1.
+            .when(
+                c2_double.isin(float("-inf"), float("inf")),
+                F.when(c1_double == 0, c1_double / c2_double)
+                .when((c1_double < 0) != (c2_double < 0), F.lit(-1.0))
+                .otherwise(F.lit(0.0)),
+            )
+            # Dividing a zero dividend keeps its sign, so -0.0 // 3.0 is -0.0.
+            .when(c1_double == 0, c1_double / c2_double)
+            .otherwise(_floor_divide_floating(c1_double, c2_double)),
+        )
+        # A decimal cannot be matched by name: typeof reports its precision, as in decimal(10,2).
+        .otherwise(_floor_divide_floating(c1_double, c2_double))
+    )
+
+
 def log_advice(message: str) -> None:
     """
     Display advisory logs for functions to be aware of when using pandas API on Spark
@@ -1153,8 +1251,8 @@ def ansi_mode_context(spark: SparkSession) -> Iterator[None]:
 def is_ansi_mode_enabled(spark: SparkSession) -> bool:
     def _is_ansi_mode_enabled() -> bool:
         if is_remote():
-            from pyspark.sql.connect.session import SparkSession as ConnectSession
             from pyspark.pandas.config import _key_format, _options_dict
+            from pyspark.sql.connect.session import SparkSession as ConnectSession
 
             client = cast(ConnectSession, spark).client
             ansi_mode_support, ansi_enabled = client.get_config_with_defaults(
@@ -1186,11 +1284,12 @@ def is_ansi_mode_enabled(spark: SparkSession) -> bool:
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.utils
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

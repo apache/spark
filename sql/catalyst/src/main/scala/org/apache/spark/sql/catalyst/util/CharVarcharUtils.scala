@@ -167,6 +167,15 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
     }.getOrElse(expr)
   }
 
+  /**
+   * Write-side CHAR/VARCHAR length checks apply unless the session is on the legacy
+   * `charVarcharAsString` path with no first-class types. `standardSemantics` and
+   * `preserveCharVarcharTypeInfo` keep first-class types even if the legacy flag is also on.
+   */
+  def shouldApplyWriteSideLengthCheck(conf: SQLConf): Boolean = {
+    !conf.charVarcharAsString || conf.charVarcharFirstClassTypes
+  }
+
   def stringLengthCheck(expr: Expression, dt: DataType): Expression = {
     processStringForCharVarchar(
       expr,

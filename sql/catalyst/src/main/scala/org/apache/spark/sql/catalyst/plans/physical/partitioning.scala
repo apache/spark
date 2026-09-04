@@ -438,26 +438,22 @@ case class CoalescedNullAwareHashPartitioning(
  * Represents a partitioning where rows are split across partitions based on transforms defined by
  * `expressions`.
  *
- * == Usage Forms ==
- * `KeyedPartitioning` is used in two distinct forms:
- *
- * 1. '''As outputPartitioning''': When used as a node's output partitioning (e.g., in
- *    `BatchScanExec` or `GroupPartitionsExec`), the `partitionKeys` are typically in sorted order
- *    because data sources produce them that way and `GroupPartitionsExec` sorts while grouping.
- *    Sorted order is not a hard requirement, but it is a useful property: when both sides of a
- *    storage-partitioned join report sorted keys, `EnsureRequirements` can often match them
- *    without inserting an additional `GroupPartitionsExec`. After a narrowing projection through
- *    `PartitioningPreservingUnaryExecNode`, the projected keys may no longer be sorted; this is
- *    acceptable because `EnsureRequirements` can always reconcile both sides via
- *    `GroupPartitionsExec` with `expectedPartitionKeys`.
- *
- * 2. '''In KeyedShuffleSpec''': When used within `KeyedShuffleSpec`, the `partitionKeys` may not
- *    be in sorted order. `EnsureRequirements` handles this by building a common ordered set of
- *    keys and pushing them down to `GroupPartitionsExec` on both sides.
- *
  * == Partition Keys ==
- * - `partitionKeys`: The partition keys, one per partition. May contain duplicates initially
- *   (ungrouped state), but becomes unique after `GroupPartitionsExec` applies grouping.
+ * A partition key is a property of the partition it belongs to. `partitionKeys(i)` is the constant
+ * value that `expressions` takes for every row in partition `i`, so there is one key per partition.
+ * Keys may repeat while the partitioning is ungrouped. They become unique once
+ * `GroupPartitionsExec` has grouped it.
+ *
+ * `EnsureRequirements` uses the keys for three things:
+ *
+ * - Deciding whether the partitioning meets a required distribution, for instance whether a
+ *   group-by can run on these partitions as they are.
+ * - Pairing up the partitions of two children that hold the same key, which is what lets a join
+ *   read both sides without shuffling either.
+ * - Laying another child out on these keys, when it cannot pair the partitions up.
+ *   `ShuffleExchangeExec` builds a `KeyGroupedPartitioner` from this order, so the shuffled side
+ *   lands in the same partitions as the side that declared the keys. This is also why a consumer
+ *   must keep the order given here.
  *
  * == Grouping State ==
  * A KeyedPartitioning can be in two states:
@@ -467,22 +463,85 @@ case class CoalescedNullAwareHashPartitioning(
  *   splits for the same partition value.
  *
  * - '''Grouped''' (when `isGrouped == true`): `partitionKeys` contains only unique values, with
- *   each partition having a distinct key. This occurs when: (1) a data source natively produces
- *   unique partition keys, or (2) `GroupPartitionsExec` coalesces partitions with duplicate keys.
+ *   each partition having a distinct key. A data source can report unique partition keys natively,
+ *   or a `GroupPartitionsExec` can coalesce the partitions that share a key.
  *
  * == Distribution Satisfaction and Grouping ==
- * Besides the default `satisfies()`, `KeyedPartitioning` exposes two additional methods used by
- * `EnsureRequirements` to handle grouped and non-grouped KPs separately:
+ * Besides the default `satisfies()`, `KeyedPartitioning` answers four questions. They differ in
+ * what they let happen to the data before the distribution counts as met. Only `keysMaySatisfy()`
+ * is asked from outside the class. The other three build it and `satisfies()` up.
  *
- * - `nonGroupedSatisfies()`: called on non-grouped KPs to check as-is satisfaction (without
- *   inserting `GroupPartitionsExec`).
- * - `groupedSatisfies()`: called on non-grouped KPs to check whether inserting
- *   `GroupPartitionsExec` would satisfy the distribution. When it returns true, the distribution
- *   is NOT yet satisfied -- `EnsureRequirements` will insert `GroupPartitionsExec` to coalesce
- *   duplicate partition keys.
+ * - `nonGroupedSatisfies()`: is the distribution met by the partitioning as it stands, with no node
+ *   inserted? It is the default `Partitioning` implementation, so for a `ClusteredDistribution` it
+ *   is always false.
+ * - `keysSatisfy()`: do the partition keys match what the distribution asks for? Duplicate keys are
+ *   ignored, so this asks about the key expressions alone. `satisfies()` is this plus `isGrouped`,
+ *   and nothing more.
+ * - `mayGroupToSatisfy()`: may `EnsureRequirements` insert a `GroupPartitionsExec` to meet the
+ *   distribution? It is asked of non-grouped partitionings only, where such a node coalesces the
+ *   duplicate keys. So the answer is `keysSatisfy()`, plus whether that coalescing is allowed.
+ *   "Key Collapse" below says when it is not.
+ * - `keysMaySatisfy()`: the same question for a partitioning that may already be grouped, which is
+ *   what `EnsureRequirements` asks. It is `mayGroupToSatisfy()` for a non-grouped one, and
+ *   `keysSatisfy()` for a grouped one, which has no duplicate keys left for the node to coalesce,
+ *   and so nothing for the permission to govern.
  *
  * For `OrderedDistribution`, `GroupPartitionsExec` must also sort the partition keys to meet the
  * ordering requirement.
+ *
+ * == Key Collapse ==
+ * Two things happen to partition keys, and only the first is a loss of granularity:
+ *
+ * - '''Key collapse''': a projection or a reduction maps two keys that were distinct onto the same
+ *   new key. `[(1, 'a'), (1, 'b'), (2, 'c')]` projected onto the first position gives `[1, 1, 2]`,
+ *   so three distinct keys became two. `isCollapsed` records this.
+ * - '''Grouping''': `GroupPartitionsExec` physically combines the partitions that share a key.
+ *   `[1, 1, 2]` becomes `[1, 2]`. `isGrouped` says the keys are unique, not how they became unique.
+ *
+ * Nothing downstream makes a partitioning finer, so once the flag is set, every partitioning
+ * derived from that one inherits it.
+ *
+ * Whether a grouping needs `allowKeysSubsetOfPartitionKeys` follows from that difference:
+ *
+ * - '''Grouping without a collapse''' merges only partitions that already shared a key. A source
+ *   reporting several splits per key produces those, and so does a union of children whose keys
+ *   overlap. A partitioning that went through neither a projection nor a reduction is always in
+ *   this case, so no opt-in is needed.
+ * - '''Grouping after a collapse''' merges partitions that the finer-grained partitioning held
+ *   apart. The two `1` partitions above came from the different keys `(1, 'a')` and `(1, 'b')`, so
+ *   the merged partition holds more data than any partition the source declared. This is what the
+ *   opt-in exists to gate.
+ * - '''Grouping for an `OrderedDistribution`''' is not gated at all. `GroupPartitionsExec` pads
+ *   that path out to the expected split counts instead of coalescing, so it merges nothing.
+ *
+ * A collapsed partitioning is therefore in one of two states, and only the first is gated:
+ *
+ * - '''Collapsed and ungrouped''': duplicate keys remain, so grouping them would merge partitions
+ *   the source held apart. `mayGroupToSatisfy()` refuses a `ClusteredDistribution` unless the
+ *   config is on.
+ * - '''Collapsed and grouped''': the keys are already unique, so grouping merges nothing and
+ *   `satisfies()` accepts a `ClusteredDistribution` whatever the config says. A partitioning
+ *   reaches this state by being grouped with the config on, or by having its keys reduced onto a
+ *   coarser transform.
+ *
+ * A collapsed partitioning is still reported as it is. The gate above refuses one route only, and
+ * that route is meeting a `ClusteredDistribution` by grouping. It refuses nothing when the operator
+ * asks for `UnspecifiedDistribution`, nothing once the keys are unique, and nothing on the path
+ * that lays another child out on these keys, which never reads the flag. Which of those applies
+ * depends on the required distribution, and the producer of the partitioning does not know it.
+ * Reporting `UnknownPartitioning` would give up all of them, and make the plan shape depend on a
+ * config.
+ *
+ * == Key Order ==
+ * `partitionKeys` is usually in ascending order, but nothing guarantees it, so a consumer must not
+ * assume it. A projection that drops key positions can leave the keys unsorted. So can a
+ * `UnionExec` that concatenates its children's keys. The keys inside a `KeyedShuffleSpec` are not
+ * sorted at all.
+ *
+ * Sorted keys are still worth having. Data sources produce them that way, and `GroupPartitionsExec`
+ * sorts while grouping. When both sides of a storage-partitioned join report them,
+ * `EnsureRequirements` can often match the two sides without inserting an additional
+ * `GroupPartitionsExec`.
  *
  * == Example ==
  * Consider a data source with partition transform `[years(ts_col)]` and 4 input splits:
@@ -493,8 +552,9 @@ case class CoalescedNullAwareHashPartitioning(
  *   partitionKeys:                               [0, 1, 2, 2]  // partitions 2 and 3 share a key
  *   numPartitions:                               4
  *   isGrouped:                                   false
- *   satisfies(ClusteredDistribution(...))        == false      // isGrouped guards groupedSatisfies
- *   groupedSatisfies(ClusteredDistribution(...)) == true       // would satisfy after grouping
+ *   keysSatisfy(ClusteredDistribution(...))      == true       // the keys match
+ *   satisfies(ClusteredDistribution(...))        == false      // but they are not unique yet
+ *   mayGroupToSatisfy(...)                       == true       // grouping would settle it
  * }}}
  *
  * '''After GroupPartitionsExec''' (grouped):
@@ -503,7 +563,8 @@ case class CoalescedNullAwareHashPartitioning(
  *   partitionKeys:                              [0, 1, 2]      // duplicates removed
  *   numPartitions:                              3
  *   isGrouped:                                  true
- *   satisfies(ClusteredDistribution(...))       == true        // satisfies now
+ *   keysSatisfy(ClusteredDistribution(...))     == true         // the keys still match
+ *   satisfies(ClusteredDistribution(...))       == true         // and now they are unique
  * }}}
  *
  * @param expressions Partition transform expressions (e.g., `years(col)`, `bucket(10, col)`).
@@ -513,18 +574,16 @@ case class CoalescedNullAwareHashPartitioning(
  *                      guaranteed after projection. May contain duplicates when ungrouped.
  * @param isGrouped Whether partition keys are unique (no duplicates). Computed on first
  *                  creation, then preserved through copy operations to avoid recomputation.
- * @param isNarrowed Whether this partitioning was derived from a finer-grained one by dropping key
- *                   positions (e.g. via `PartitioningPreservingUnaryExecNode`). When true,
- *                   `GroupPartitionsExec` will merge partitions that shared distinct keys in the
- *                   original partitioning, carrying the same skew risk as
- *                   `allowKeysSubsetOfPartitionKeys`. Such a partitioning will not satisfy
- *                   `ClusteredDistribution` unless that config is enabled.
+ * @param isCollapsed Whether a projection or a reduction mapped keys that were distinct in the
+ *                    partitioning this one was derived from onto the same key, so one key here can
+ *                    stand for several of the original ones. Sticky. See "Key Collapse" above for
+ *                    what it gates and how it travels.
  */
 case class KeyedPartitioning(
     expressions: Seq[Expression],
     @transient partitionKeys: Seq[InternalRowComparableWrapper],
     isGrouped: Boolean,
-    isNarrowed: Boolean = false) extends Expression with Partitioning with Unevaluable {
+    isCollapsed: Boolean) extends Expression with Partitioning with Unevaluable {
   override val numPartitions = partitionKeys.length
 
   override def children: Seq[Expression] = expressions
@@ -535,17 +594,100 @@ case class KeyedPartitioning(
       newChildren: IndexedSeq[Expression]): KeyedPartitioning =
     copy(expressions = newChildren)
 
+  /** Need not be what the `partitionKeys` rows hold. See `keyDataTypes`. */
   @transient lazy val expressionDataTypes: Seq[DataType] = expressions.map(_.dataType)
 
+  /**
+   * The types the `partitionKeys` rows were built with. Anything reading those rows should take its
+   * types from here. It is a driver-side value, since `partitionKeys` is `@transient`.
+   *
+   * They differ from the `expressionDataTypes` in two cases. A join that reduced both sides' keys
+   * onto a key space no transform names leaves a marked expression whose type can be anything, see
+   * `expressionsDescribeKeys`. A one-side reduce keeps them equal, because the expression the
+   * partitioning then reports is the target transform and `EnsureRequirements` refuses a reducer
+   * whose result type disagrees with it. `KeyedShuffleSpec.createPartitioning` is the other case.
+   * It puts the other child's expressions over these keys with no reducer in sight, so a struct
+   * field can be named differently on the two sides. With no key at all the expressions are all
+   * there is, and there is no row to read or to place.
+   *
+   * The two cases can meet, and then the fallback is not truthful. A marked partitioning can end up
+   * with no key, for instance when `v2BucketingPartitionFilterEnabled` intersects two sides that
+   * hold disjoint keys, and this then reports the un-reduced transform's type. What it reports is a
+   * fact about the key rows, so with no key row there is no fact, and a caller must not hold the
+   * fallback against a real answer. The reduced-types comparison in `EnsureRequirements` leaves out
+   * a marked side that has no key for that reason (SPARK-59176). An unmarked one still answers,
+   * since its expressions describe the keys it would have had, and stays in the comparison.
+   *
+   * `ShuffleExchangeExec` is the one reader that stays on `expressionDataTypes`. It evaluates the
+   * expressions to place the other child's rows, and it runs on executors, where this value is not
+   * available. `expressionsDescribeKeys` is what keeps that site sound.
+   *
+   * Only the first key's types are read, and nothing enforces that the rest match. SPARK-59187 is
+   * to carry the types on the partitioning instead of sampling a key row.
+   */
+  @transient lazy val keyDataTypes: Seq[DataType] =
+    partitionKeys.headOption.map(_.dataTypes).getOrElse(expressionDataTypes)
+
+  /** Driver-side, like the `keyDataTypes` it comes from. */
   @transient lazy val keyRowOrdering =
-    RowOrdering.createNaturalAscendingOrdering(expressionDataTypes)
+    KeyedPartitioning.groupedKeyRowOrdering(keyDataTypes)
 
   @transient lazy val keyOrdering = keyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
 
-  def toGrouped: KeyedPartitioning = {
-    val groupedPartitionKeys = partitionKeys.distinct.sorted(keyOrdering)
+  /**
+   * Whether the partition expressions still describe the `partitionKeys`, i.e. whether evaluating
+   * them on a row produces the key the row belongs under.
+   *
+   * They stop describing the keys when a join reduces both sides onto a common key space. The keys
+   * become `r1(f1(x))` = `r2(f2(x))`, which is a third space no transform names, so the reduce
+   * marks the expressions instead (`TransformExpression.reducedWith`). Reducing one side only keeps
+   * them truthful, because the other side's transform describes the reduced keys exactly and
+   * `KeyedShuffleSpec.reducersBothWays` reports that one.
+   */
+  def expressionsDescribeKeys: Boolean = !expressions.exists(TransformExpression.hasReducedKeys)
 
-    new KeyedPartitioning(expressions, groupedPartitionKeys, isGrouped = true)
+  /**
+   * Projects this partitioning onto the key positions in `positions`, whose order becomes the order
+   * of the projected expressions and key fields. The projected `isGrouped` and `isCollapsed` are
+   * computed together, because dropping a position can map keys that were distinct here onto the
+   * same key. Keeping every position changes no key, so both answers are inherited as they are,
+   * with no pass over the keys. `GroupPartitionsExec` decides the same two answers from the key
+   * groups it keeps, so it does not use this.
+   */
+  def project(positions: Seq[Int]): KeyedPartitioning = {
+    if (positions == expressions.indices) {
+      this
+    } else {
+      // One pass answers both questions, walking the projected keys alongside the keys they came
+      // from. Two different source keys landing on one projected key is the collapse, and it is
+      // also what makes the projected keys non-unique, so the walk stops at the first one. The
+      // source keys are never hashed, only compared where a projected key repeats.
+      val projectedKeys = projectKeys(positions)._2
+      val sourceOf =
+        mutable.HashMap.empty[InternalRowComparableWrapper, InternalRowComparableWrapper]
+      var collapses = false
+      val projectedIter = projectedKeys.iterator
+      val sourceIter = partitionKeys.iterator
+      while (projectedIter.hasNext && !collapses) {
+        val projected = projectedIter.next()
+        val source = sourceIter.next()
+        sourceOf.put(projected, source) match {
+          case Some(previous) if previous != source => collapses = true
+          case _ =>
+        }
+      }
+      copy(
+        expressions = positions.map(expressions),
+        partitionKeys = projectedKeys,
+        isGrouped = !collapses && sourceOf.size == projectedKeys.length,
+        isCollapsed = isCollapsed || collapses)
+    }
+  }
+
+  def toGrouped: KeyedPartitioning = {
+    // Unique keys need no dedup, only the sort.
+    val uniqueKeys = if (isGrouped) partitionKeys else partitionKeys.distinct
+    copy(partitionKeys = uniqueKeys.sorted(keyOrdering), isGrouped = true)
   }
 
   /**
@@ -553,23 +695,45 @@ case class KeyedPartitioning(
    * Returns the projected expressions and their data types together with the projected keys.
    */
   def projectKeys(positions: Seq[Int]): (Seq[DataType], Seq[InternalRowComparableWrapper]) =
-    KeyedPartitioning.projectKeys(partitionKeys, expressionDataTypes, positions)
+    KeyedPartitioning.projectKeys(partitionKeys, keyDataTypes, positions)
+
+  /**
+   * The number of partitions a `GroupPartitionsExec` projecting these keys to `positions` would
+   * leave, which is the number of distinct projected keys. `positions` must be distinct and in
+   * range, as it must be for `project` and `projectKeys`.
+   *
+   * A projection that keeps every position is the identity on the key values, so it needs no
+   * projected rows at all. The rest allocate a row per partition and hash it with an uncached
+   * `hashCode`, which makes this the expensive question to ask of a partitioning. A caller asking
+   * it for several position sets should memoize on the set.
+   */
+  def numPartitionsProjectedOn(positions: Seq[Int]): Int = {
+    if (positions.length < expressions.length) {
+      projectKeys(positions)._2.distinct.size
+    } else if (isGrouped) {
+      numPartitions
+    } else {
+      partitionKeys.distinct.size
+    }
+  }
 
   /**
    * Reduces this partitioning's partition keys by applying the given reducers.
    * Returns the reduced keys and their data types.
    */
   def reduceKeys(
-      reducers: Seq[Option[Reducer[_, _]]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) =
-    KeyedPartitioning.reduceKeys(partitionKeys, expressionDataTypes, reducers)
+      reducers: Seq[Option[KeyReducer]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) =
+    KeyedPartitioning.reduceKeys(partitionKeys, keyDataTypes, reducers)
 
   override def satisfies0(required: Distribution): Boolean = {
-    nonGroupedSatisfies(required) || (isGrouped && groupedSatisfies(required))
+    nonGroupedSatisfies(required) || (isGrouped && keysSatisfy(required))
   }
 
-  def nonGroupedSatisfies(required: Distribution): Boolean = super.satisfies0(required)
+  /** The first of the four questions the class doc lists. */
+  private def nonGroupedSatisfies(required: Distribution): Boolean = super.satisfies0(required)
 
-  def groupedSatisfies(required: Distribution): Boolean = {
+  /** The second of the four questions the class doc lists. */
+  private def keysSatisfy(required: Distribution): Boolean = {
     required match {
       case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
         if (requireAllClusterKeys) {
@@ -578,30 +742,53 @@ case class KeyedPartitioning(
           c.areAllClusterKeysMatched(expressions)
         } else {
           // We'll need to find leaf attributes from the partition expressions first.
-          lazy val attributes = AttributeSet.fromAttributeSets(expressions.map(_.references))
+          val attributes = AttributeSet.fromAttributeSets(expressions.map(_.references))
 
           if (SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys) {
-            // check that operation keys (required clustering keys)
-            // overlap with partition keys (KeyedPartitioning attributes)
+            // The operation keys may be a subset of the partition keys, so one partition expression
+            // covering one of them is enough. Partitions can then still hold rows that share an
+            // operation key. What makes the distribution true is the projection onto the covering
+            // positions, plus the grouping that follows it. Given the single reference per
+            // expression that `supportsExpressions` enforces, the test below is exactly
+            // `KeyedShuffleSpec.keyPositions.exists(_.nonEmpty)`, where `createShuffleSpec` takes
+            // its `joinKeyPositions` from. Consolidating the two is left to a follow-up.
             requiredClustering.exists(x => attributes.exists(_.semanticEquals(x))) &&
               expressions.forall(_.references.size == 1)
-          } else if (isNarrowed && !isGrouped) {
-            // A narrowed, non-grouped partitioning carries the same skew risk as using a subset of
-            // partition keys for a join: GroupPartitionsExec will merge partitions that held
-            // distinct keys in the original finer-grained partitioning. Require the same config to
-            // opt in.
-            false
           } else {
             attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
           }
         }
 
       case o @ OrderedDistribution(_) if SQLConf.get.v2BucketingAllowSorting =>
-        o.areAllClusterKeysMatched(expressions)
+        // `EnsureRequirements` orders the key rows by the attributes the expressions are over, and
+        // nothing makes a reducer order-preserving, so that ordering says nothing about reduced
+        // keys. This is the local gate. A reduced position always carries a transform and an
+        // `ORDER BY` cannot name one, so the match below already refuses every case a query can
+        // reach. Do not read the first clause as redundant.
+        expressionsDescribeKeys && o.areAllClusterKeysMatched(expressions)
 
       case _ =>
         false
     }
+  }
+
+  /**
+   * The third of the four questions the class doc lists. Ask it only of a partitioning that is not
+   * grouped, since a grouped one has nothing to coalesce and `keysMaySatisfy` covers both.
+   */
+  private[sql] def mayGroupToSatisfy(required: Distribution): Boolean = {
+    val mayCoalesce = required match {
+      case _: ClusteredDistribution =>
+        !isCollapsed || SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys
+      case _ => true
+    }
+    // The permission is the cheap half, so it is asked first.
+    mayCoalesce && keysSatisfy(required)
+  }
+
+  /** The fourth of the four questions the class doc lists. */
+  private[sql] def keysMaySatisfy(required: Distribution): Boolean = {
+    if (isGrouped) keysSatisfy(required) else mayGroupToSatisfy(required)
   }
 
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec = {
@@ -611,11 +798,12 @@ case class KeyedPartitioning(
       // `KeyedPartitioning` grouped on the operation keys, and use that as
       // the returned shuffle spec.
       val joinKeyPositions = result.keyPositions.map(_.nonEmpty).zipWithIndex.filter(_._1).map(_._2)
-      val projectedExpressions = joinKeyPositions.map(expressions)
-      val projectedKeys = projectKeys(joinKeyPositions)._2
-      val distinctProjectedKeys = projectedKeys.distinct
-      val projectedPartitioning =
-        KeyedPartitioning(projectedExpressions, distinctProjectedKeys, isGrouped = true)
+      // `toGrouped` sorts the keys the same way `GroupPartitionsExec` does (both sort with
+      // `KeyedPartitioning.groupedKeyRowOrdering`). Otherwise, when only the keyed side is
+      // grouped and the other side is re-shuffled using this spec, the two `KeyedPartitioning`s
+      // carry the same keys in a different order and `PartitioningCollection.fromPartitionings`
+      // rejects them.
+      val projectedPartitioning = project(joinKeyPositions).toGrouped
       result.copy(partitioning = projectedPartitioning, joinKeyPositions = Some(joinKeyPositions))
     } else {
       result
@@ -636,7 +824,27 @@ object KeyedPartitioning {
       InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
     val comparablePartitionKeys = partitionKeys.map(comparableKeyWrapperFactory)
     val isGrouped = comparablePartitionKeys.distinct.size == comparablePartitionKeys.size
-    new KeyedPartitioning(expressions, comparablePartitionKeys, isGrouped)
+    // Built from scratch, so it is the layout everything else is compared against.
+    new KeyedPartitioning(expressions, comparablePartitionKeys, isGrouped, isCollapsed = false)
+  }
+
+  /**
+   * Concatenates partitionings that agree on their expressions, which is what a `UnionExec` does to
+   * its children's partitions. The result reports one key per output partition, so its keys are the
+   * children's keys in child order.
+   *
+   * Keys repeating across children is not a collapse. Only a child's own collapse carries over,
+   * since such a key still stands for several finer-grained ones in the concatenation.
+   */
+  def concat(kps: Seq[KeyedPartitioning]): KeyedPartitioning = {
+    val concatenatedKeys = kps.flatMap(_.partitionKeys)
+    kps.head.copy(
+      partitionKeys = concatenatedKeys,
+      // A child that has duplicates of its own puts them in the concatenation too, which answers
+      // this without walking the keys.
+      isGrouped = kps.forall(_.isGrouped) &&
+        concatenatedKeys.distinct.length == concatenatedKeys.length,
+      isCollapsed = kps.exists(_.isCollapsed))
   }
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
@@ -659,6 +867,24 @@ object KeyedPartitioning {
   }
 
   /**
+   * The ascending ordering in which grouped partition keys are laid out, for keys of the given
+   * data types.
+   *
+   * This is a shared contract, not a convenience: with `allowKeysSubsetOfPartitionKeys`,
+   * `createShuffleSpec` declares the keyed side's projected keys in this order (via `toGrouped`),
+   * and the other side of the join may be shuffled onto exactly those keys, while the
+   * `GroupPartitionsExec` inserted on the keyed side independently re-groups its partitions with
+   * the same key positions and sorts them with this same ordering
+   * (`GroupPartitionsExec.groupAndSortByKeys`). If the two sorts diverged, inner joins would fail
+   * loudly at planning time -- `ShuffledJoin` wraps both sides' partitionings into a
+   * `PartitioningCollection`, whose invariant requires equal partition keys -- but join types that
+   * expose only one side's partitioning (e.g. LEFT OUTER) run nothing that compares the two
+   * orders, and silently return wrong results.
+   */
+  def groupedKeyRowOrdering(dataTypes: Seq[DataType]): BaseOrdering =
+    RowOrdering.createNaturalAscendingOrdering(dataTypes)
+
+  /**
    * Projects a sequence of partition keys by selecting only the specified positions.
    */
   def projectKeys(
@@ -668,11 +894,17 @@ object KeyedPartitioning {
     val projectedDataTypes = positions.map(dataTypes)
     val comparableKeyWrapperFactory =
       InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(projectedDataTypes)
-    val positionsWithTypes = positions.zip(projectedDataTypes)
+    // Indexed arrays rather than `Seq`s, because the loop below runs once per key and a key list is
+    // as long as the number of splits the scan reported.
+    val positionArray = positions.toArray
+    val typeArray = projectedDataTypes.toArray
     val projectedKeys = keys.map { key =>
-      val projectedKey = positionsWithTypes.map {
-        case (position, dataType) => key.row.get(position, dataType)
-      }.toArray[Any]
+      val projectedKey = new Array[Any](positionArray.length)
+      var i = 0
+      while (i < positionArray.length) {
+        projectedKey(i) = key.row.get(positionArray(i), typeArray(i))
+        i += 1
+      }
       comparableKeyWrapperFactory(new GenericInternalRow(projectedKey))
     }
 
@@ -685,19 +917,32 @@ object KeyedPartitioning {
   def reduceKeys(
       keys: Seq[InternalRowComparableWrapper],
       dataTypes: Seq[DataType],
-      reducers: Seq[Option[Reducer[_, _]]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) = {
-    val reducedDataTypes = dataTypes.zip(reducers).map {
-      case (_, Some(reducer: Reducer[Any, Any])) => reducer.resultType()
-      case (t, _) => t
+      reducers: Seq[Option[KeyReducer]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) = {
+    // The `Reducer[Any, Any]` match is erased, so it only ever checks for `Some`. Settling it per
+    // position keeps it out of the key loop below, and gives the result types with it.
+    val reducerArray =
+      reducers.map(_.map(_.reducer.asInstanceOf[Reducer[Any, Any]]).orNull).toArray
+    val reducedDataTypes = dataTypes.zip(reducerArray).map {
+      case (t, reducer) => if (reducer == null) t else reducer.resultType()
     }
     val comparableKeyWrapperFactory =
       InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(reducedDataTypes)
+    val typeArray = dataTypes.toArray
+    // `InternalRow.toSeq(dataTypes)`, which the loop below replaces, asserted the row's arity once
+    // per key. All the keys of a partitioning share an arity, so asserting on the first one keeps
+    // the check. The loop also indexes `reducerArray` by the same bound, where the old `zip` would
+    // have truncated to the shorter of the two, so that length is asserted with it.
+    assert(reducerArray.length == typeArray.length)
+    keys.headOption.foreach(k => assert(k.row.numFields == typeArray.length))
     val reducedKeys = keys.map { key =>
-      val keyValues = key.row.toSeq(dataTypes)
-      val reducedKey = keyValues.zip(reducers).map {
-        case (v, Some(reducer: Reducer[Any, Any])) => reducer.reduce(v)
-        case (v, _) => v
-      }.toArray
+      val reducedKey = new Array[Any](typeArray.length)
+      var i = 0
+      while (i < typeArray.length) {
+        val value = key.row.get(i, typeArray(i))
+        val reducer = reducerArray(i)
+        reducedKey(i) = if (reducer == null) value else reducer.reduce(value)
+        i += 1
+      }
       comparableKeyWrapperFactory(new GenericInternalRow(reducedKey))
     }
 
@@ -781,11 +1026,23 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
  * in this collection do not need to be equivalent, which is useful for
  * Outer Join operators.
  *
- * [[KeyedPartitioning]]s within a `PartitioningCollection` describe the same physical partitioning
- * and so must share the same `partitionKeys` reference, differing only in their `expressions` (with
- * matching arity). Use [[PartitioningCollection.fromPartitionings]] to build a collection from
- * independently-computed partitionings (e.g. join `outputPartitioning`); it interns `partitionKeys`
- * references (including across nested collections) so the invariant holds.
+ * [[KeyedPartitioning]]s within a `PartitioningCollection` describe the same physical partitioning.
+ * The constructor therefore requires all of them to share the same `partitionKeys` reference and
+ * `isCollapsed` flag, and to have matching expression arity. Only their `expressions` differ.
+ *
+ * Use [[PartitioningCollection.fromPartitionings]] to build one from independently-computed
+ * partitionings, such as a join's `outputPartitioning`. Its inputs need not agree on `isCollapsed`.
+ * Each member carries the history of the child it came from, so one side can have collapsed its
+ * keys in a projection while the other reports what its source declared. `fromPartitionings` ORs
+ * the flags, including across nested collections, which is right because the members name one
+ * shared layout, and one coarse member makes that layout coarse. Uniformity matters because
+ * consumers read the flag off a single member. `satisfies0` and `EnsureRequirements` accept when
+ * any one member satisfies the distribution, so a member that under-reported the collapse would let
+ * the gate through.
+ *
+ * The key lists are required rather than reconciled. `fromPartitionings` interns the reference when
+ * they are structurally equal, since members whose keys differ describe different layouts, which
+ * one collection cannot stand for.
  */
 case class PartitioningCollection(partitionings: Seq[Partitioning])
   extends Expression with Partitioning with Unevaluable {
@@ -799,16 +1056,11 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
   /**
    * First [[KeyedPartitioning]] reachable from this collection through direct members or nested
    * collections, if any. Since every collection validates the invariant on construction, this
-   * single representative stands for all [[KeyedPartitioning]]s in the subtree: they all share
-   * its `partitionKeys` reference and expression arity. The invariant check forces this lazy val
-   * during construction, so it is only recomputed after deserialization.
+   * single representative stands for all [[KeyedPartitioning]]s in the subtree. The invariant check
+   * forces this lazy val during construction, so it is only recomputed after deserialization.
    */
   @transient private[physical] lazy val firstKeyedPartitioning: Option[KeyedPartitioning] =
-    partitionings.view.map {
-      case k: KeyedPartitioning => Some(k)
-      case pc: PartitioningCollection => pc.firstKeyedPartitioning
-      case _ => None
-    }.collectFirst { case Some(k) => k }
+    partitionings.view.flatMap(PartitioningCollection.representativeOf).headOption
 
   /**
    * Nested collections already enforced the invariant on their own construction, so comparing one
@@ -816,22 +1068,25 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
    * subtree without walking it. Keeping this check O(partitionings.size) matters: join
    * `outputPartitioning` builds these collections afresh on every call, and plans chaining many
    * same-key joins nest them linearly deep.
+   *
+   * `expressionsDescribeKeys` is deliberately not in that list. It would matter if the members
+   * could disagree, since `satisfies0` is an `exists` over them and would then answer from an
+   * unmarked one. They cannot disagree. The members share one key list, so they describe one
+   * reduce, and a reduce that marks one side's expressions marks the other's in the same step,
+   * while a one-side reduce marks neither.
    */
   private def checkKeyedPartitioningInvariant(): Unit = {
     firstKeyedPartitioning.foreach { first =>
-      partitionings.foreach { p =>
-        val representative = p match {
-          case k: KeyedPartitioning => k
-          case pc: PartitioningCollection => pc.firstKeyedPartitioning.orNull
-          case _ => null
-        }
-        if (representative != null && (representative ne first)) {
-          require(representative.expressions.length == first.expressions.length,
+      partitionings.iterator.flatMap(PartitioningCollection.representativeOf).foreach { rep =>
+        if (rep ne first) {
+          require(rep.expressions.length == first.expressions.length,
             "All KeyedPartitionings in a PartitioningCollection must have matching expression " +
               "arity")
-          require(representative.partitionKeys eq first.partitionKeys,
+          require(rep.partitionKeys eq first.partitionKeys,
             "All KeyedPartitionings in a PartitioningCollection must share the same " +
               "partitionKeys reference")
+          require(rep.isCollapsed == first.isCollapsed,
+            "All KeyedPartitionings in a PartitioningCollection must agree on isCollapsed")
         }
       }
     }
@@ -870,6 +1125,16 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
 
 object PartitioningCollection {
   /**
+   * One [[KeyedPartitioning]] standing for every one in this partitioning, if there is any. By the
+   * invariant in the class doc, any of them describes the layout.
+   */
+  private[physical] def representativeOf(p: Partitioning): Option[KeyedPartitioning] = p match {
+    case k: KeyedPartitioning => Some(k)
+    case pc: PartitioningCollection => pc.firstKeyedPartitioning
+    case _ => None
+  }
+
+  /**
    * Builds a [[PartitioningCollection]], unifying the `partitionKeys` reference across all
    * [[KeyedPartitioning]]s (including those in nested collections). Use this when combining
    * independently-computed partitionings (e.g. join `outputPartitioning`) where
@@ -878,38 +1143,33 @@ object PartitioningCollection {
    * Note: this can't be implemented with `TreeNode.transform`.
    */
   def fromPartitionings(partitionings: Seq[Partitioning]): PartitioningCollection = {
+    // See the class doc for why the flag is normalized by OR rather than required to agree. One
+    // representative per member is enough, because every collection agrees on the flag internally
+    // by this same construction, and only a member that disagrees is rebuilt.
+    val anyCollapsed = partitionings.exists(representativeOf(_).exists(_.isCollapsed))
+
     var canonicalKeys: Seq[InternalRowComparableWrapper] = null
-    def intern(p: Partitioning): Partitioning = p match {
-      case k: KeyedPartitioning =>
-        if (canonicalKeys == null) {
-          canonicalKeys = k.partitionKeys
-          k
-        } else if (k.partitionKeys ne canonicalKeys) {
-          require(k.partitionKeys == canonicalKeys,
-            "All KeyedPartitionings in a PartitioningCollection must have equal partitionKeys")
-          k.copy(partitionKeys = canonicalKeys)
+    // A partitioning with no `KeyedPartitioning` in it has nothing to normalize, and one that
+    // already agrees on both the keys and the flag is returned as it is. That is what keeps
+    // repeated `outputPartitioning` computations over deeply nested collections (e.g. chains of
+    // same-key joins) O(1) per level.
+    def intern(p: Partitioning): Partitioning = representativeOf(p) match {
+      case None => p
+      case Some(representative) =>
+        if (canonicalKeys == null) canonicalKeys = representative.partitionKeys
+        if ((representative.partitionKeys eq canonicalKeys) &&
+            representative.isCollapsed == anyCollapsed) {
+          p
         } else {
-          k
+          require(representative.partitionKeys == canonicalKeys,
+            "All KeyedPartitionings in a PartitioningCollection must have equal partitionKeys")
+          p match {
+            case keyed: KeyedPartitioning =>
+              keyed.copy(partitionKeys = canonicalKeys, isCollapsed = anyCollapsed)
+            case pc: PartitioningCollection =>
+              new PartitioningCollection(pc.partitionings.map(intern))
+          }
         }
-      case pc: PartitioningCollection =>
-        pc.firstKeyedPartitioning match {
-          // No KeyedPartitioning anywhere in this subtree: nothing to intern. Returning the
-          // collection as-is keeps repeated outputPartitioning computations over deeply nested
-          // collections (e.g. chains of same-key joins) O(1) per level.
-          case None => pc
-          case Some(representative) if canonicalKeys == null =>
-            canonicalKeys = representative.partitionKeys
-            pc
-          // The collection's own invariant guarantees all its KeyedPartitionings share the
-          // representative's `partitionKeys` reference, so reference-equality of the
-          // representative's keys means the whole subtree is already interned.
-          case Some(representative) if representative.partitionKeys eq canonicalKeys => pc
-          case Some(representative) =>
-            require(representative.partitionKeys == canonicalKeys,
-              "All KeyedPartitionings in a PartitioningCollection must have equal partitionKeys")
-            new PartitioningCollection(pc.partitionings.map(intern))
-        }
-      case other => other
     }
     new PartitioningCollection(partitionings.map(intern))
   }
@@ -1241,6 +1501,53 @@ case class CoalescedHashShuffleSpec(
 }
 
 /**
+ * A [[Reducer]] paired with the reduced partition expression it produces.
+ *
+ * When a key-grouped partitioning is reduced onto another partitioning's key space, the original
+ * partition expressions no longer describe the reduced keys (their data type and their value are
+ * those of the target key space). This pair carries both the reducer and the expression the
+ * reduced keys correspond to, so the output partitioning can report an expression that either
+ * describes the keys or says that it does not.
+ *
+ * @param reducer reducer that maps this side's partition key values onto the other side's key space
+ * @param reducedExpression the expression the reduced keys correspond to. When only this side
+ *                          reduces, that is the other side's transform and its data type matches
+ *                          the reduced keys. When both sides reduce, no transform describes the
+ *                          keys, and this is this side's own expression marked with the pairing
+ *                          that reduced it (`TransformExpression.reducedWith`). Stored as-is from
+ *                          the expression pair that produced the reducer; the only structural
+ *                          consumer, `GroupPartitionsExec`, re-targets it at each reported
+ *                          `KeyedPartitioning`'s own key attribute in `outputPartitioning` and
+ *                          normalizes it positionally in `doCanonicalize`, so the attribute it
+ *                          carries here is not load-bearing.
+ */
+case class KeyReducer(reducer: Reducer[_, _], reducedExpression: TransformExpression)
+
+/**
+ * A [[Reducer]] that reduces an identity transform onto a partition transform: it applies the
+ * given partition transform to the raw value of the identity transform's key. For instance, an
+ * `identity(id)` side joined to a `bucket(4, id)` side reduces with
+ * `IdentityReducer(bucket(4, id))`, which maps each raw id value to its `bucket(4, id)` value.
+ *
+ * It is a case class so that structurally identical reducers compare by value, and plans holding
+ * them stay canonicalization-equal.
+ *
+ * @param transform the partition transform, re-targeted at the identity side's key attribute
+ */
+case class IdentityReducer(transform: TransformExpression) extends Reducer[Any, Any] {
+  // `transform` has a single leaf attribute (`KeyedPartitioning.supportsExpressions`), which is
+  // bound to ordinal 0 of the single-value row `reduce` evaluates it against.
+  @transient private lazy val bound: Expression =
+    BindReferences.bindReference(transform, AttributeSeq(transform.references.toSeq))
+
+  override def reduce(v: Any): Any = bound.eval(new GenericInternalRow(Array[Any](v)))
+
+  override def resultType(): DataType = transform.dataType
+
+  override def displayName(): String = transform.toString
+}
+
+/**
  * [[ShuffleSpec]] created by [[KeyedPartitioning]].
  *
  * @param partitioning key grouped partitioning
@@ -1311,72 +1618,144 @@ case class KeyedShuffleSpec(
     }
   }
 
-  private def isExpressionCompatible(left: Expression, right: Expression): Boolean =
-    (left, right) match {
-      case (_: LeafExpression, _: LeafExpression) => true
-      case (left: TransformExpression, right: TransformExpression) =>
-        if (SQLConf.get.v2BucketingPushPartValuesEnabled &&
-          !SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
-          SQLConf.get.v2BucketingAllowCompatibleTransforms) {
-          left.isCompatible(right)
-        } else {
-          left.isSameFunction(right)
-        }
-      case (_: AttributeReference, _: TransformExpression) |
-           (_: TransformExpression, _: AttributeReference) =>
-        SQLConf.get.v2BucketingPushPartValuesEnabled &&
-          !SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
-          SQLConf.get.v2BucketingAllowCompatibleTransforms
-      case _ => false
+  private def isExpressionCompatible(left: Expression, right: Expression): Boolean = {
+    if (TransformExpression.hasReducedKeys(left) || TransformExpression.hasReducedKeys(right)) {
+      // Reduced keys are in a key space that neither transform names, so comparing the transforms
+      // says nothing about whether the two sides are laid out the same way. The pair that was
+      // reduced together is laid out the same way, since its two sides came out of one reduce onto
+      // one key space. Anything else has to shuffle. That includes a pair that reduced onto the
+      // same space through a different pairing, which nothing here can tell apart, and an identity
+      // side, which holds raw values.
+      (left, right) match {
+        case (l: TransformExpression, r: TransformExpression) => l.hasSameReducedKeys(r)
+        case _ => false
+      }
+    } else {
+      (left, right) match {
+        case (_: LeafExpression, _: LeafExpression) => true
+        case (left: TransformExpression, right: TransformExpression) =>
+          if (canReduceKeys) left.isCompatible(right) else left.isSameFunction(right)
+        case (_: AttributeReference, _: TransformExpression) |
+             (_: TransformExpression, _: AttributeReference) => canReduceKeys
+        case _ => false
+      }
     }
+  }
 
   /**
-   * Return a set of [[Reducer]] for the partition expressions of this shuffle spec,
-   * on the partition expressions of another shuffle spec.
+   * Whether a join may reduce one or both sides' partition keys onto a common key space, which is
+   * what lets two different transforms be compatible in the first place.
+   */
+  private def canReduceKeys: Boolean = {
+    val conf = SQLConf.get
+    conf.v2BucketingPushPartValuesEnabled &&
+      !conf.v2BucketingPartiallyClusteredDistributionEnabled &&
+      conf.v2BucketingAllowCompatibleTransforms
+  }
+
+  /**
+   * Compute the reducers for both sides of a join between this shuffle spec and `other`, in a
+   * single pass over the two sides' partition expressions. A pair's reducer lookups
+   * (`TransformExpression.reducers`) are shared between the two directions: the reverse lookup a
+   * direction needs to detect a single-side reduce is exactly the other direction's reducer, so
+   * this materializes each catalog `Reducer` once per direction.
    * <p>
-   * A [[Reducer]] exists for a partition expression function of this shuffle spec if it is
-   * 'reducible' on the corresponding partition expression function of the other shuffle spec.
+   * A [[Reducer]] exists for a partition expression of one side if it is 'reducible' on the
+   * corresponding partition expression of the other side. If a side's value is returned, there
+   * must be one entry per partition expression of that side. A None entry indicates that the
+   * particular partition expression is not reducible on the corresponding expression.
    * <p>
-   * If a value is returned, there must be one [[Reducer]] per partition expression.
-   * A None value in the set indicates that the particular partition expression is not reducible
-   * on the corresponding expression on the other shuffle spec.
-   * <p>
-   * Returning none also indicates that none of the partition expressions can be reduced on the
-   * corresponding expression on the other shuffle spec.
+   * Returning none for a side indicates that none of its partition expressions can be reduced on
+   * the corresponding expression of the other side.
    *
    * @param other other key-grouped shuffle spec
+   * @return the reducers for this side and for `other` w.r.t. each other
    */
-  def reducers(other: KeyedShuffleSpec): Option[Seq[Option[Reducer[_, _]]]] = {
-    val results = partitioning.expressions.zip(other.partitioning.expressions).map {
-      case (e1: TransformExpression, e2: TransformExpression) => e1.reducers(e2)
+  def reducersBothWays(other: KeyedShuffleSpec)
+      : (Option[Seq[Option[KeyReducer]]], Option[Seq[Option[KeyReducer]]]) = {
+    val results: Seq[(Option[KeyReducer], Option[KeyReducer])] =
+      partitioning.expressions.zip(other.partitioning.expressions).map {
+      // Keys an earlier join already reduced live in a key space that neither expression
+      // describes, so a reducer derived from those expressions would be applied to values it was
+      // not built for. `areKeysCompatible` admits only the pair that was reduced together, and
+      // that pair is already in one key space, so there is nothing left to reduce.
+      case (e1, e2)
+          if TransformExpression.hasReducedKeys(e1) || TransformExpression.hasReducedKeys(e2) =>
+        (None, None)
+
+      case (e1: TransformExpression, e2: TransformExpression) =>
+        val thisReducer = e1.reducers(e2)
+        val otherReducer = e2.reducers(e1)
+
+        val thisResult = thisReducer.map { reducer =>
+          if (otherReducer.isEmpty) {
+            // Only this side reduces. The reducer contract is r(f1(x)) = f2(x) where "=" matches
+            // both value and data type, so the reduced keys equal the target transform applied to
+            // this side's child. Report the target transform (re-targeted at the reporting
+            // partitioning's key attribute by `GroupPartitionsExec`) instead of the un-reduced
+            // `e1`, whose type can differ from the reduced keys. A connector that violates the
+            // contract with a reducer of a different result type fails the reduced-types check in
+            // `EnsureRequirements`, since the other side's keys are typed by the target transform.
+            KeyReducer(reducer, e2)
+          } else {
+            // Both sides reduce: the reduced keys are r1(f1(x)) = r2(f2(x)), which no single
+            // transform describes. Report `e1` and mark it with the pairing that produced that key
+            // space, so that whatever needs the keys' values or their type refuses it, while the
+            // partitionings that share the space are still recognised.
+            KeyReducer(reducer, e1.reducedTogetherWith(e2))
+          }
+        }
+
+        val otherResult = otherReducer.map { reducer =>
+          if (thisReducer.isEmpty) {
+            // Only the other side reduces; symmetric to the single-side case above.
+            KeyReducer(reducer, e1)
+          } else {
+            // Both sides reduce; symmetric to the both-sides case above.
+            KeyReducer(reducer, e2.reducedTogetherWith(e1))
+          }
+        }
+
+        (thisResult, otherResult)
 
       // Identity transform on this side, arbitrary transform on the other side: create a reducer
-      // that applies the other's transform to the raw identity values. The symmetric case
-      // (TransformExpression, AttributeReference) is handled when the other side calls reducers.
-      // Each partition expression is guaranteed to have exactly one leaf child (asserted in
-      // keyPositions), so `a` lives at position 0 in the row we construct.
+      // that applies the other's transform to the raw identity values. Each partition expression
+      // is guaranteed to have exactly one leaf child (asserted in keyPositions), which
+      // `IdentityReducer` binds to ordinal 0.
       case (a: AttributeReference, t: TransformExpression) =>
-        val reducerExpr = t.transform { case _: AttributeReference => a }
-        val boundExpr = BindReferences.bindReference(reducerExpr, AttributeSeq(Seq(a)))
-        Some(new Reducer[Any, Any] {
-          override def reduce(v: Any): Any = boundExpr.eval(new GenericInternalRow(Array[Any](v)))
-          override def resultType(): DataType = reducerExpr.dataType
-          override def displayName(): String = reducerExpr.toString
-        })
+        (Some(KeyReducer(IdentityReducer(t.withReference(a)), t)), None)
 
-      case (_, _) => None
+      // Symmetric: identity transform on the other side.
+      case (t: TransformExpression, a: AttributeReference) =>
+        (None, Some(KeyReducer(IdentityReducer(t.withReference(a)), t)))
+
+      case (_, _) => (None, None)
     }
 
     // optimize to not return a value, if none of the partition expressions are reducible
-    if (results.forall(p => p.isEmpty)) None else Some(results)
+    val thisReducers = results.map(_._1)
+    val otherReducers = results.map(_._2)
+    val thisResult = if (thisReducers.forall(_.isEmpty)) None else Some(thisReducers)
+    val otherResult = if (otherReducers.forall(_.isEmpty)) None else Some(otherReducers)
+    (thisResult, otherResult)
   }
 
   override def canCreatePartitioning: Boolean =
     SQLConf.get.v2BucketingShuffleEnabled &&
       !SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
+      // Shuffling another child onto these partition keys assigns each key a single partition, so
+      // an ungrouped partitioning cannot be reproduced: its duplicate keys live in more than one
+      // partition. This is the local gate. Such a spec is not reachable today for a non-local
+      // reason -- `EnsureRequirements` wraps a child whose `KeyedPartitioning` does not satisfy the
+      // distribution in a `GroupPartitionsExec` before it builds any spec -- so do not read this
+      // clause as redundant.
+      partitioning.isGrouped &&
       partitioning.expressions.forall { e =>
         e.isInstanceOf[AttributeReference] || e.isInstanceOf[TransformExpression]
-      }
+      } &&
+      // Shuffling another child onto these keys evaluates the partition expressions per row to
+      // decide where each row goes, and reduced keys are not what those expressions compute.
+      partitioning.expressionsDescribeKeys
 
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
     assert(clustering.size == distribution.clustering.size,
@@ -1387,7 +1766,10 @@ case class KeyedShuffleSpec(
         te.copy(children = te.children.map(_ => clustering(positionSet.head)))
       case (_, positionSet) => clustering(positionSet.head)
     }
-    KeyedPartitioning(newExpressions, partitioning.partitionKeys, partitioning.isGrouped)
+    // The shuffled side is laid out on this side's partition keys, so it inherits the flag. That
+    // is conservative rather than strictly true, and it can only ever add a shuffle: a later
+    // grouping of the shared key set carries the collapsed side's risk.
+    partitioning.copy(expressions = newExpressions)
   }
 }
 

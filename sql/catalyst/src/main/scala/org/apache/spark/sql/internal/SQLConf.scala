@@ -2512,10 +2512,14 @@ object SQLConf {
       .withAlternative("spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled")
       .doc("Whether to allow storage-partitioned operations (joins, aggregates, and windows) in " +
         "the case where the operation's keys are a subset of the partition keys of the source " +
-        "tables. At  planning time, Spark will group the partitions by only those keys that are " +
-        "in the operation's keys. " +
-        s"This is currently enabled only if ${REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key} " +
-        "is false."
+        "tables. At planning time, Spark will group the partitions by only those keys that are " +
+        "in the operation's keys. That is currently enabled only if " +
+        s"${REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key} is false. This config also gates " +
+        "grouping a partitioning whose keys collapsed, that is, where a projection or a " +
+        "reduction mapped keys that were distinct in the source onto the same key, so that " +
+        "grouping them would produce a partition larger than any the source declared. That " +
+        s"applies regardless of ${REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key}. It does not " +
+        "apply to duplicate keys the source itself reported, which are grouped without this config."
       )
       .version("4.0.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
@@ -2644,6 +2648,18 @@ object SQLConf {
     .version("4.0.0")
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
+
+  val DATAFRAME_CACHE_PLAN_ID_NAME_ENABLED =
+    buildConf("spark.sql.dataframeCache.planIdName.enabled")
+      .internal()
+      .doc("When true and the cached table has no name, use the physical plan id, e.g. " +
+        "'CachedRDD (plan_id=42)', as the cached name instead of the abbreviated plan tree " +
+        "string. Rendering the plan tree string can be expensive for large plans. The name " +
+        "is resolved when the cache is first materialized.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
 
   val DROP_TABLE_VIEW_ENABLED =
     buildConf("spark.sql.dropTableOnView.enabled")
@@ -5438,17 +5454,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val UNIFIED_UDF_EXECUTION_ENABLED =
-    buildConf("spark.sql.execution.udf.unified.execution.enabled")
-      .doc("When true, UDFs that support the language-agnostic " +
-        "UDF worker protocol are executed via the unified, " +
-        "external UDF worker framework instead of the " +
-        "language-specific runners. Experimental.")
-      .version("4.2.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
-      .booleanConf
-      .createWithDefault(false)
-
   val PYTHON_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.arrow.enabled")
       .doc("Enable Arrow optimization in regular Python UDFs. This optimization " +
@@ -5541,6 +5546,17 @@ object SQLConf {
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
+
+  val PYTHON_UDF_MAP_IN_BATCH_LEGACY_ACCEPT_ANY_ITERABLE_ENABLED =
+    buildConf("spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled")
+      .internal()
+      .doc("When true, mapInPandas and mapInArrow UDFs may return any iterable (e.g. a list) " +
+        "rather than a strict iterator, matching the behavior before 4.3.0. When false, the " +
+        "returned value must be an iterator, matching the declared Iterator[...] signatures.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
 
   val PYTHON_PLANNER_EXEC_MEMORY =
     buildConf("spark.sql.planner.pythonExecution.memory")
@@ -6654,14 +6670,15 @@ object SQLConf {
     .createWithDefault(false)
 
   val UI_EXPLAIN_MODE = buildConf("spark.sql.ui.explainMode")
-    .doc("Configures the query explain mode used in the Spark SQL UI. The value can be 'simple', " +
-      "'extended', 'codegen', 'cost', or 'formatted'. The default value is 'formatted'.")
+    .doc("Configures the query explain mode used in the Spark SQL UI. The value can be 'none', " +
+      "'simple', 'extended', 'codegen', 'cost', or 'formatted'. The default value is 'formatted'.")
     .version("3.1.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
-    .checkValue(mode => Set("SIMPLE", "EXTENDED", "CODEGEN", "COST", "FORMATTED").contains(mode),
-      "Invalid value for 'spark.sql.ui.explainMode'. Valid values are 'simple', 'extended', " +
-      "'codegen', 'cost' and 'formatted'.")
+    .checkValue(mode =>
+      Set("NONE", "SIMPLE", "EXTENDED", "CODEGEN", "COST", "FORMATTED").contains(mode),
+      "Invalid value for 'spark.sql.ui.explainMode'. Valid values are 'none', 'simple', " +
+      "'extended', 'codegen', 'cost' and 'formatted'.")
     .createWithDefault("formatted")
 
   val SOURCES_BINARY_FILE_MAX_LENGTH = buildConf("spark.sql.sources.binaryFile.maxLength")
@@ -6901,6 +6918,26 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.oracle.timestampNTZMapping.enabled")
+      .internal()
+      .doc("When true, Oracle TIMESTAMP (and Oracle DATE when the driver default " +
+        "oracle.jdbc.mapDateToTimestamp surfaces it as TIMESTAMP) is read per the JDBC read " +
+        "option preferTimestampNTZ (TimestampType by default), preserving pre-Spark-4.4 " +
+        "behavior. When false (default), it is read as TimestampNTZType, which faithfully " +
+        "represents these zoneless Oracle types. The same flag governs the write path: when " +
+        "false a TimestampNTZType column is written to Oracle zoneless via setObject, and when " +
+        "true via a JVM-default-zone java.sql.Timestamp; these can differ for wall-clocks in a " +
+        "DST gap. The flag is read at schema-resolution and write time, so a JDBC relation " +
+        "whose schema was already resolved (e.g. a cached or metastore-registered table) must " +
+        "be re-resolved for a change to take effect. Oracle DATE read as JDBC DATE " +
+        "(oracle.jdbc.mapDateToTimestamp=false, mapped to DateType), TIMESTAMP WITH TIME ZONE, " +
+        "and TIMESTAMP WITH LOCAL TIME ZONE are unaffected.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.db2.numericMapping.enabled")
       .internal()
@@ -6946,6 +6983,18 @@ object SQLConf {
     .doc("When true, enable filter pushdown to Python datasource, at the cost of running " +
       "Python worker one additional time during planning.")
     .version("4.1.0")
+    .booleanConf
+    .createWithDefault(false)
+
+  val PYTHON_LIMIT_PUSHDOWN_ENABLED = buildConf("spark.sql.python.limitPushdown.enabled")
+    .internal()
+    .doc("When true, enable limit pushdown to Python datasource. Pushing a limit runs a Python " +
+      "worker during planning; for a limit-only scan this replaces the worker that plans a " +
+      "plain read, while for a scan that also pushes down filters it runs in addition to " +
+      "filter pushdown. Spark always applies the limit again after the scan, so a pushed limit " +
+      "only lets the data source read less data.")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(false)
 
@@ -7099,6 +7148,33 @@ object SQLConf {
       .internal()
       .doc("Infer shredding schema when writing Variant columns in Parquet tables.")
       .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val VARIANT_SHREDDED_PREDICATE_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.variant.shreddedPredicatePushdown.enabled")
+      .internal()
+      .doc("When true, comparison predicates on shredded Variant fields produced by " +
+        "PushVariantIntoScan (e.g. variant_get(v, '$.a', 'bigint') > 999) are pushed to Parquet " +
+        "as a predicate on the physical shredded typed_value leaf column, guarded so that a row " +
+        "group is skipped only when the leaf min/max cannot match AND every value for the path " +
+        "is provably in the typed leaf (either every untyped residual value column along the " +
+        "path is entirely null, or the leaf column itself has no nulls). This enables row-group " +
+        "skipping for shredded Variant columns while never dropping rows that fall back to an " +
+        "untyped residual. The benefit depends on the data layout, like any Parquet min/max " +
+        "skipping: it helps most when the data is sorted on the filtered field (so each row " +
+        "group covers a narrow value range) and a file holds many row groups; unsorted data or " +
+        "a single row group per file gains little. Has no effect unless the Parquet column is " +
+        "shredded and spark.sql.variant.pushVariantIntoScan is also true. It also does not fire " +
+        "for a strict cast to a non-string type when " +
+        "spark.sql.variant.pushVariantIntoScan.deferCastError is true (the extraction is wrapped " +
+        "in UnwrapVariantCastError and is not translated to a pushable filter); try_variant_get " +
+        "and string targets are unaffected. Results are unaffected either way; this only " +
+        "controls whether row groups can be skipped.")
+      .version("4.4.0")
+      // Physical scan optimization only: it changes which Parquet row groups are read, not the
+      // resolved plan of a view/UDF/procedure body, so it does not participate in binding.
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
@@ -9054,6 +9130,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyOracleTimestampMappingEnabled: Boolean =
     getConf(LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED)
 
+  def legacyOracleTimestampNTZMappingEnabled: Boolean =
+    getConf(LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED)
+
   def legacyDB2numericMappingEnabled: Boolean =
     getConf(LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED)
 
@@ -9490,6 +9569,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyPandasConversionUDF: Boolean = getConf(PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED)
 
+  def legacyMapInBatchAcceptAnyIterable: Boolean =
+    getConf(PYTHON_UDF_MAP_IN_BATCH_LEGACY_ACCEPT_ANY_ITERABLE_ENABLED)
+
   def pythonPlannerExecMemory: Option[Long] = getConf(PYTHON_PLANNER_EXEC_MEMORY)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
@@ -9627,6 +9709,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def useListFilesFileSystemList: String = getConf(SQLConf.USE_LISTFILES_FILESYSTEM_LIST)
 
   def pythonFilterPushDown: Boolean = getConf(PYTHON_FILTER_PUSHDOWN_ENABLED)
+
+  def pythonLimitPushDown: Boolean = getConf(PYTHON_LIMIT_PUSHDOWN_ENABLED)
 
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
 

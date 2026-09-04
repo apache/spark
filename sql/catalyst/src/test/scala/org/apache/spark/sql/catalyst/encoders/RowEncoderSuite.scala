@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
-import org.apache.spark.sql.{RandomDataGenerator, Row}
+import org.apache.spark.sql.{AnalysisException, RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, GenericArrayData, IntervalUtils}
@@ -588,6 +588,26 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     val encoder = ExpressionEncoder(schema, lenient = true).resolveAndBind()
     val data = Row(mutable.ArraySeq.make(Array(Row("key", "value".getBytes))))
     val row = encoder.createSerializer()(data)
+  }
+
+  test("SPARK-58794: encoderFor rejects CHAR/VARCHAR when first-class types are off") {
+    Seq(CharType(4), VarcharType(6)).foreach { dt =>
+      val schema = new StructType().add("c", dt)
+      withSQLConf(
+          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            RowEncoder.encoderFor(schema)
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
+          sqlState = "0A000",
+          parameters = Map("dataType" -> s"\"${dt.sql}\"")
+        )
+        // Engine-produced result schemas still decode on the Connect client.
+        RowEncoder.encoderForResultSchema(schema)
+      }
+    }
   }
 
   test("do not allow serializing too long strings into char/varchar") {

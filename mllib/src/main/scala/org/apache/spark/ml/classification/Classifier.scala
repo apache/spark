@@ -24,7 +24,7 @@ import org.apache.spark.ml.linalg.{SQLDataTypes, Vector}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{Column, DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -86,11 +86,82 @@ abstract class Classifier[
  * Model produced by a [[Classifier]].
  * Classes are indexed {0, 1, ..., numClasses - 1}.
  *
+ * `transform` selects column-producing methods based on which output columns are set:
+ *
+ * <table>
+ *   <caption>Column-producing methods by requested output columns</caption>
+ *   <tr>
+ *     <th>Raw prediction</th>
+ *     <th>Prediction</th>
+ *     <th>Column-producing methods</th>
+ *   </tr>
+ *   <tr>
+ *     <td>Not set</td>
+ *     <td>Not set</td>
+ *     <td>None</td>
+ *   </tr>
+ *   <tr>
+ *     <td>Set</td>
+ *     <td>Not set</td>
+ *     <td><code>predictRawColumn</code></td>
+ *   </tr>
+ *   <tr>
+ *     <td>Not set</td>
+ *     <td>Set</td>
+ *     <td><code>predictionColumn</code></td>
+ *   </tr>
+ *   <tr>
+ *     <td>Set</td>
+ *     <td>Set</td>
+ *     <td><code>predictRawColumn</code> => <code>raw2predictionColumn</code></td>
+ *   </tr>
+ * </table>
+ *
  * @tparam FeaturesType  Type of input features.  E.g., `Vector`
  * @tparam M  Concrete Model type
  */
 abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[FeaturesType, M]]
   extends PredictionModel[FeaturesType, M] with ClassifierParams {
+
+  /**
+   * Returns an expression that produces a raw-prediction vector from a features column.
+   * The default wraps [[predictRaw]] in a UDF. Models may override this with a native expression or
+   * a UDF that snapshots prediction state.
+   *
+   * `transform` uses this whenever [[rawPredictionCol]] is set. When [[predictionCol]] is also set,
+   * it is used together with [[raw2predictionColumn]].
+   *
+   * @param features input features column
+   * @return raw-prediction column of type `Vector`
+   */
+  protected def predictRawColumn(features: Column): Column = {
+    udf { value: Any => predictRaw(value.asInstanceOf[FeaturesType]) }.apply(features)
+  }
+
+  /**
+   * Returns an expression that produces a predicted label from a raw-prediction vector column.
+   *
+   * `transform` uses this when both [[rawPredictionCol]] and [[predictionCol]] are set. It consumes
+   * the output of [[predictRawColumn]].
+   *
+   * @param rawPrediction input raw-prediction column
+   * @return prediction column of type `Double`
+   */
+  protected def raw2predictionColumn(rawPrediction: Column): Column = {
+    udf(raw2prediction _).apply(rawPrediction)
+  }
+
+  /**
+   * Returns an expression that produces a predicted label directly from a features column.
+   *
+   * `transform` uses this when [[predictionCol]] is set and [[rawPredictionCol]] is not set.
+   *
+   * @param features input features column
+   * @return prediction column of type `Double`
+   */
+  protected def predictionColumn(features: Column): Column = {
+    udf { value: Any => predict(value.asInstanceOf[FeaturesType]) }.apply(features)
+  }
 
   /** @group setParam */
   def setRawPredictionCol(value: String): M = set(rawPredictionCol, value).asInstanceOf[M]
@@ -127,24 +198,19 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
     // This is a bit complicated since it tries to avoid repeated computation.
     var outputData = dataset
     var numColsOutput = 0
-    if (getRawPredictionCol != "") {
-      val predictRawUDF = udf { features: Any =>
-        predictRaw(features.asInstanceOf[FeaturesType])
-      }
-      outputData = outputData.withColumn(getRawPredictionCol, predictRawUDF(col(getFeaturesCol)),
+    if ($(rawPredictionCol).nonEmpty) {
+      outputData = outputData.withColumn($(rawPredictionCol),
+        predictRawColumn(col($(featuresCol))),
         outputSchema($(rawPredictionCol)).metadata)
       numColsOutput += 1
     }
-    if (getPredictionCol != "") {
-      val predCol = if (getRawPredictionCol != "") {
-        udf(raw2prediction _).apply(col(getRawPredictionCol))
+    if ($(predictionCol).nonEmpty) {
+      val predCol = if ($(rawPredictionCol).nonEmpty) {
+        raw2predictionColumn(col($(rawPredictionCol)))
       } else {
-        val predictUDF = udf { features: Any =>
-          predict(features.asInstanceOf[FeaturesType])
-        }
-        predictUDF(col(getFeaturesCol))
+        predictionColumn(col($(featuresCol)))
       }
-      outputData = outputData.withColumn(getPredictionCol, predCol,
+      outputData = outputData.withColumn($(predictionCol), predCol,
         outputSchema($(predictionCol)).metadata)
       numColsOutput += 1
     }

@@ -16,6 +16,7 @@
 #
 
 import time
+
 from pyspark.sql.dataframe import DataFrame
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
