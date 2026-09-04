@@ -14191,7 +14191,7 @@ object functions {
    *   additional JSONPath arguments, applied after `path` in order. A column that evaluates to a
    *   string.
    * @group variant_funcs
-   * @since 5.0.0
+   * @since 4.3.0
    * @return
    *   Returns a column that evaluates to a variant.
    */
@@ -14212,7 +14212,7 @@ object functions {
    * @param paths
    *   additional JSONPath strings, applied after `path` in order. A string. Must be a constant.
    * @group variant_funcs
-   * @since 5.0.0
+   * @since 4.3.0
    * @return
    *   Returns a column that evaluates to a variant.
    */
