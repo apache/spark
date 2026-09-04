@@ -1774,6 +1774,48 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     }
   }
 
+  test("isTemporaryFunctionVisible honors stored-view captured temp functions") {
+    withBasicCatalog { catalog =>
+      val tempFunc = (e: Seq[Expression]) => e.head
+      catalog.registerFunction(
+        newFunc("temp_json", None), overrideIfExists = false, functionBuilder = Some(tempFunc))
+
+      // A view descriptor whose frozen catalog/namespace is non-empty (so we are resolving a view)
+      // and that captured the given temp function names.
+      def viewDesc(captured: Seq[String]): CatalogTable = {
+        val tempFnProp = if (captured.isEmpty) {
+          Map.empty[String, String]
+        } else {
+          Map(CatalogTable.VIEW_REFERRED_TEMP_FUNCTION_NAMES ->
+            captured.map(n => s""""$n"""").mkString("[", ",", "]"))
+        }
+        CatalogTable(
+          TableIdentifier("v", Some("default")),
+          CatalogTableType.VIEW,
+          CatalogStorageFormat.empty,
+          StructType(Seq(StructField("a", IntegerType))),
+          viewText = Some("SELECT 1"),
+          properties =
+            CatalogTable.catalogAndNamespaceToProps(SESSION_CATALOG_NAME, Seq("default")) ++
+              tempFnProp)
+      }
+
+      // Outside any view context, a registered temp function is visible (== isTemporaryFunction).
+      assert(catalog.isTemporaryFunctionVisible(FunctionIdentifier("temp_json")))
+
+      // Inside a view that did NOT capture it (e.g. an unrelated temp created after the view), it
+      // is hidden, matching handleViewContext used by actual resolution -- so the builtin-ownership
+      // probe won't be fooled into skipping builtin-only syntax handling.
+      AnalysisContext.withAnalysisContext(viewDesc(captured = Nil)) {
+        assert(!catalog.isTemporaryFunctionVisible(FunctionIdentifier("temp_json")))
+      }
+      // Inside a view that captured it, it stays visible.
+      AnalysisContext.withAnalysisContext(viewDesc(captured = Seq("temp_json"))) {
+        assert(catalog.isTemporaryFunctionVisible(FunctionIdentifier("temp_json")))
+      }
+    }
+  }
+
   test("isRegisteredFunction") {
     withBasicCatalog { catalog =>
       // Returns false when the function does not register
