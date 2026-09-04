@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, JoinSelectionHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, Join, JoinHint, NO_BROADCAST_AND_REPLICATION, Union}
-import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, UnionExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins._
@@ -1850,7 +1850,16 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     assert(!optimized.exists(_.isInstanceOf[Join]))
     assert(optimized.exists(_.isInstanceOf[Union]))
 
+    // `range` produces a non-nullable column, but a full outer join makes both sides
+    // nullable and the union has to keep it that way
+    assert(df.schema.fields.forall(_.nullable))
+
     checkAnswer(df, Row(0, null) :: Row(1, null) :: Row(null, 10) :: Row(null, 11) :: Nil)
+
+    // the point of the rewrite: the nested loop join and its broadcast are gone
+    val executed = df.queryExecution.executedPlan
+    assert(find(executed)(_.isInstanceOf[UnionExec]).isDefined)
+    assert(find(executed)(_.isInstanceOf[BroadcastNestedLoopJoinExec]).isEmpty)
   }
 }
 
