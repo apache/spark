@@ -21,7 +21,7 @@ import java.util
 
 import org.scalatest.Assertions.assert
 
-import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, LiteralValue, NamedReference, Transform}
+import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue, NamedReference, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{And, Predicate}
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsOverwriteV2, WriteBuilder, WriterCommitMessage}
