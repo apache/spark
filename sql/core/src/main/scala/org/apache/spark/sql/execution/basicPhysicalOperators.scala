@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit._
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
+import scala.reflect.ClassTag
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
 import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD, SQLPartitioningAwareUnionRDD}
@@ -761,25 +762,31 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
     }
   }
 
-  protected override def doExecute(): RDD[InternalRow] = {
-    if (outputPartitioning.isInstanceOf[UnknownPartitioning]) {
-      sparkContext.union(children.map(_.execute()))
+  // Shared by `doExecute` and `doExecuteColumnar` so the two cannot report one partitioning and
+  // build another. `outputPartitioning` is read once, before the children execute: a child's
+  // partitioning can sharpen once it has run, as `InMemoryTableScanExec` does over a
+  // not-yet-materialized AQE cached plan.
+  private def unionRDDs[T: ClassTag](executeChild: SparkPlan => RDD[T]): RDD[T] = {
+    val partitioning = outputPartitioning
+    val rdds = children.map(executeChild)
+    if (partitioning.isInstanceOf[UnknownPartitioning]) {
+      sparkContext.union(rdds)
     } else {
       // This union has a known partitioning, i.e., its children have the same partitioning
       // in semantics so this union can choose not to change the partitioning by using a
       // custom partitioning aware union RDD.
-      val nonEmptyRdds = children.map(_.execute()).filter(!_.partitions.isEmpty)
-      new SQLPartitioningAwareUnionRDD(sparkContext, nonEmptyRdds, outputPartitioning.numPartitions)
+      new SQLPartitioningAwareUnionRDD(
+        sparkContext, rdds.filter(!_.partitions.isEmpty), partitioning.numPartitions)
     }
   }
+
+  protected override def doExecute(): RDD[InternalRow] = unionRDDs(_.execute())
 
   override def supportsColumnar: Boolean = children.forall(_.supportsColumnar)
 
   override def supportsRowBased: Boolean = children.forall(_.supportsRowBased)
 
-  protected override def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    sparkContext.union(children.map(_.executeColumnar()))
-  }
+  protected override def doExecuteColumnar(): RDD[ColumnarBatch] = unionRDDs(_.executeColumnar())
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): UnionExec =
     copy(children = newChildren)
