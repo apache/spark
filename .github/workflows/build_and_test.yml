@@ -1080,8 +1080,8 @@ jobs:
     env:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
-      PYSPARK_DRIVER_PYTHON: python3.9
-      PYSPARK_PYTHON: python3.9
+      PYSPARK_DRIVER_PYTHON: python3.12
+      PYSPARK_PYTHON: python3.12
       GITHUB_PREV_SHA: ${{ github.event.before }}
     container:
       image: ${{ needs.precondition.outputs.image_docs_url_link }}
@@ -1152,8 +1152,6 @@ jobs:
           if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
           if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
-        export PYSPARK_DRIVER_PYTHON=python3.12
-        export PYSPARK_PYTHON=python3.12
         # Print the values of environment variables `SKIP_ERRORDOC`, `SKIP_SCALADOC`, `SKIP_PYTHONDOC`, `SKIP_RDOC` and `SKIP_SQLDOC`
         echo "SKIP_ERRORDOC: $SKIP_ERRORDOC"
         echo "SKIP_SCALADOC: $SKIP_SCALADOC"
