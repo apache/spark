@@ -2069,12 +2069,28 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
   test("SPARK-58996: the replicate-side fallback counts pre-alignment partitions") {
     // The replicate side is chosen by plan statistics; when there is none (the dummy plans carry
-    // no `logicalLink`, which forces the fallback), the side with fewer partitions is picked. On
-    // a re-run the join children arrive already aligned, and both aligned reports hold the same
-    // keys, so counting them decides nothing: the counts must come from the pre-alignment
-    // partitioning. Each arm hands the rule the output shape of a first pass -- a local sort
-    // over an aligned `GroupPartitionsExec` -- and reads the replicate-side choice back off the
-    // `distributePartitions` flags.
+    // no `logicalLink`, which forces the fallback), the side with fewer partitions is picked.
+    // The counts must come from the pre-alignment partitioning. On a re-run the join children
+    // arrive already aligned -- a local sort over an aligned `GroupPartitionsExec` -- and both
+    // aligned reports hold the same keys, so counting them decides nothing. On a bare first pass
+    // the pre-fix count read the aligned report's distinct keys, because the children loop had
+    // already wrapped the non-grouped side, and picked a different side wherever one holds more
+    // than one split per key. Both shapes read the choice back off the `distributePartitions`
+    // flags.
+    def distribute(child: SparkPlan): Boolean = child.collectFirst {
+      case g: GroupPartitionsExec => g
+    }.get.distributePartitions
+
+    def flags(smj: SparkPlan): (Boolean, Boolean) =
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+        val Seq(newLeft, newRight) = EnsureRequirements.apply(smj).children
+        (distribute(newLeft), distribute(newRight))
+      }
+
+    // The re-run shape: each child is the output of a first pass, a local sort over an aligned
+    // `GroupPartitionsExec`.
     def distributeFlags(
         leftKeys: Seq[InternalRow], leftSplits: Int,
         rightKeys: Seq[InternalRow], rightSplits: Int): (Boolean, Boolean) = {
@@ -2085,22 +2101,20 @@ class EnsureRequirementsSuite extends SharedSparkSession {
             (InternalRowComparableWrapper(InternalRow(1), Seq(expr)), splits))))
         SortExec(Seq(SortOrder(expr, Ascending)), global = false, gpe)
       }
-      val smj = SortMergeJoinExec(Seq(exprA), Seq(exprB), Inner, None,
-        alignedChild(exprA, leftKeys, leftSplits), alignedChild(exprB, rightKeys, rightSplits))
-      withSQLConf(
-          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
-        val Seq(newLeft, newRight) = EnsureRequirements.apply(smj).children
-        def distribute(child: SparkPlan): Boolean = child.collectFirst {
-          case g: GroupPartitionsExec => g
-        }.get.distributePartitions
-        (distribute(newLeft), distribute(newRight))
-      }
+      flags(SortMergeJoinExec(Seq(exprA), Seq(exprB), Inner, None,
+        alignedChild(exprA, leftKeys, leftSplits), alignedChild(exprB, rightKeys, rightSplits)))
     }
 
-    // The left side holds one partition against three on the right: it is replicated, so it
-    // does not distribute. Counting the aligned reports instead sees one key on both sides and
-    // always picks the right side.
+    // The bare first-pass shape: the children are the scans themselves.
+    def firstPassFlags(
+        leftKeys: Seq[InternalRow], rightKeys: Seq[InternalRow]): (Boolean, Boolean) =
+      flags(SortMergeJoinExec(Seq(exprA), Seq(exprB), Inner, None,
+        DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprA), leftKeys)),
+        DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprB), rightKeys))))
+
+    // Re-run shape. The left side holds one partition against three on the right: it is
+    // replicated, so it does not distribute. Counting the aligned reports instead sees one key
+    // on both sides and always picks the right side.
     assert(distributeFlags(
       leftKeys = Seq(InternalRow(1)), leftSplits = 1,
       rightKeys = Seq(InternalRow(1), InternalRow(1), InternalRow(1)), rightSplits = 3) ===
@@ -2111,6 +2125,21 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       leftKeys = Seq(InternalRow(1), InternalRow(1), InternalRow(1)), leftSplits = 3,
       rightKeys = Seq(InternalRow(1)), rightSplits = 1) ===
         ((true, false)))
+
+    // Bare first pass where the pre-fix count disagrees: the left side holds three splits under
+    // one distinct key, the right two splits under two keys. The pre-fix count saw one distinct
+    // key against two and replicated the left side; the pre-alignment count replicates the side
+    // with fewer splits.
+    assert(firstPassFlags(
+      leftKeys = Seq(InternalRow(1), InternalRow(1), InternalRow(1)),
+      rightKeys = Seq(InternalRow(1), InternalRow(2))) ===
+        ((true, false)))
+
+    // The first-pass control where both counts agree.
+    assert(firstPassFlags(
+      leftKeys = Seq(InternalRow(1), InternalRow(2)),
+      rightKeys = Seq(InternalRow(1), InternalRow(2), InternalRow(3))) ===
+        ((false, true)))
   }
 
   test("SPARK-58996: a single-child operator over a partially clustered layout still gets " +

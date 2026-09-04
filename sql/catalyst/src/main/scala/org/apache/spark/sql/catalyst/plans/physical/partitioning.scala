@@ -1134,11 +1134,12 @@ object PartitioningCollection {
   }
 
   /**
-   * The number of partitions of the [[KeyedPartitioning]] representing the keyed members of
-   * `partitioning`, if any. Collections validate on construction that their keyed members agree,
-   * so the representative's count stands for all of them.
+   * The number of partitions of the keyed members of `partitioning`, if it has any. A
+   * collection requires all of its members to agree on the count, keyed or not, so the answer
+   * is `partitioning.numPartitions` whenever a keyed member exists; the representative only
+   * decides whether there is one.
    */
-  def numKeyedPartitions(partitioning: Partitioning): Option[Int] =
+  private[sql] def numKeyedPartitions(partitioning: Partitioning): Option[Int] =
     representativeOf(partitioning).map(_.numPartitions)
 
   /**

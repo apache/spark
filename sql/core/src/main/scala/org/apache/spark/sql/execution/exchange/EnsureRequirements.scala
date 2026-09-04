@@ -646,6 +646,8 @@ case class EnsureRequirements(
               // apply the grouping & replication of partitions. The counts read the
               // pre-alignment plans, for the same reason the statistics do: on a re-run both
               // aligned reports hold the same number of keys, so comparing them decides nothing.
+              // This also changes a first pass, which compared the aligned report's distinct
+              // keys rather than the splits behind them.
               logInfo("Using number of partitions to determine which side of join " +
                   "to fully cluster partition values")
               PartitioningCollection.numKeyedPartitions(unwrappedLeft.outputPartitioning)
