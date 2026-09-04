@@ -882,7 +882,7 @@ object TryVariantGetExpressionBuilder extends VariantGetExpressionBuilderBase(fa
       > SELECT _FUNC_(NULL, '$.a');
        NULL
   """,
-  since = "5.0.0",
+  since = "4.3.0",
   group = "variant_funcs"
 )
 // scalastyle:on line.size.limit

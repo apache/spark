@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, sorttable */
+/* global $, sorttable, uiRoot */
 
 import {
   createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, createTemplateURI,
@@ -120,15 +120,16 @@ function openDetailOffcanvas(url, title) {
 
 function initOffcanvasFlamegraph(fgData, fgChart, offcanvasEl) {
   // Load CSS
-  if (!document.querySelector('link[href="/static/d3-flamegraph.css"]')) {
+  var flamegraphCss = uiRoot + '/static/d3-flamegraph.css';
+  if (!document.querySelector('link[href="' + flamegraphCss + '"]')) {
     var link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = '/static/d3-flamegraph.css';
+    link.href = flamegraphCss;
     document.head.appendChild(link);
   }
   // Load d3 then d3-flamegraph, then render
-  loadScript('/static/d3.min.js').then(function() {
-    return loadScript('/static/d3-flamegraph.min.js');
+  loadScript(uiRoot + '/static/d3.min.js').then(function() {
+    return loadScript(uiRoot + '/static/d3-flamegraph.min.js');
   }).then(function() {
     /* global d3, flamegraph */
     var width = offcanvasEl.offsetWidth - 60;

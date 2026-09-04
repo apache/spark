@@ -495,6 +495,18 @@
     ],
     "sqlState" : "22001"
   },
+  "BUCKET_COLUMN_IN_PARTITION_COLUMNS" : {
+    "message" : [
+      "Bucketing column <bucketColumn> should not be part of partition columns <partitionColumns>."
+    ],
+    "sqlState" : "42713"
+  },
+  "BUCKET_SORT_COLUMN_IN_PARTITION_COLUMNS" : {
+    "message" : [
+      "Bucket sort column <sortColumn> should not be part of partition columns <partitionColumns>."
+    ],
+    "sqlState" : "42713"
+  },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
       "The method <methodName> can not be called on streaming Dataset/DataFrame."
@@ -1973,6 +1985,11 @@
           "The <inputName> value must to be a <requireType> literal of <validValues>, but got <inputValue>."
         ]
       },
+      "INVALID_JSON_FORMAT_JSON_INPUT" : {
+        "message" : [
+          "<functionName> FORMAT JSON requires a string argument containing JSON text, but the argument at position <position> has type <inputType>."
+        ]
+      },
       "INVALID_JSON_MAP_KEY_TYPE" : {
         "message" : [
           "Input schema <schema> can only contain STRING as a key type for a MAP."
@@ -1991,6 +2008,11 @@
       "INVALID_JSON_QUERY_WRAPPER_AND_QUOTES" : {
         "message" : [
           "<functionName> cannot combine an OMIT QUOTES clause with a WITH ARRAY WRAPPER clause. OMIT QUOTES applies only to an unwrapped result."
+        ]
+      },
+      "INVALID_JSON_RETURNING_TYPE" : {
+        "message" : [
+          "<functionName> RETURNING clause must be a STRING type, but got <returningType>."
         ]
       },
       "INVALID_JSON_SCALAR_RETURNING_TYPE" : {
@@ -4509,6 +4531,12 @@
     ],
     "sqlState" : "2203G"
   },
+  "INVALID_JSON_FORMAT_JSON_VALUE" : {
+    "message" : [
+      "<functionName> FORMAT JSON argument at position <position> must contain exactly one well-formed JSON value, but got <value>."
+    ],
+    "sqlState" : "22032"
+  },
   "INVALID_JSON_RECORD_TYPE" : {
     "message" : [
       "Detected an invalid type of a JSON record while inferring a common schema in the mode <failFastMode>. Expected a STRUCT type, but found <invalidType>."
@@ -5097,6 +5125,16 @@
           "<memoryFractionKey> should be between 0 and 1 (was '<memoryFractionValue>')."
         ]
       },
+      "INVALID_PYTHON_WORKER_ENV_VAR_NAME" : {
+        "message" : [
+          "The environment variable name <name>, set under <prefix>, is not valid. Names must match the pattern <pattern> and contain at most <maxLength> characters."
+        ]
+      },
+      "INVALID_PYTHON_WORKER_ENV_VAR_VALUE" : {
+        "message" : [
+          "The value of the environment variable <name>, set under <prefix>, contains a NUL character, which a process environment cannot carry."
+        ]
+      },
       "INVALID_SPARK_SUBMIT_DEPLOY_MODE_KEY" : {
         "message" : [
           "<sparkSubmitDeployModeKey> can only be \"cluster\" or \"client\"."
@@ -5105,6 +5143,21 @@
       "NETWORK_AUTH_MUST_BE_ENABLED" : {
         "message" : [
           "<networkAuthEnabledConf> must be enabled when enabling encryption."
+        ]
+      },
+      "PYTHON_WORKER_ENV_TOO_LARGE" : {
+        "message" : [
+          "The environment variables set under <prefix> total <size> bytes, which is more than the maximum of <maxSize> bytes."
+        ]
+      },
+      "PYTHON_WORKER_ENV_TOO_MANY_VARIABLES" : {
+        "message" : [
+          "<count> environment variables are set under <prefix>, which is more than the maximum of <maxCount>."
+        ]
+      },
+      "RESERVED_PYTHON_WORKER_ENV_VAR_NAME" : {
+        "message" : [
+          "The environment variable name <name>, set under <prefix>, is reserved for Spark. Names beginning with <reservedPrefixes>, and the names <reservedNames>, are set by Spark for its own Python workers and cannot be set by a session."
         ]
       }
     },
@@ -10380,16 +10433,6 @@
   "_LEGACY_ERROR_TEMP_1165" : {
     "message" : [
       "It is not allowed to specify partitioning when the table schema is not defined."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1166" : {
-    "message" : [
-      "Bucketing column '<bucketCol>' should not be part of partition columns '<normalizedPartCols>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1167" : {
-    "message" : [
-      "Bucket sorting column '<sortCol>' should not be part of partition columns '<normalizedPartCols>'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1169" : {

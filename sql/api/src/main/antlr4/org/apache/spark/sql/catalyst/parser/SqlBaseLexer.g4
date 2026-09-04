@@ -122,12 +122,13 @@ BANG: '!';
 
 // NOTE: If you add a new token in the list below, you should update the list of keywords
 // and reserved tag in `docs/sql-ref-ansi-compliance.md#sql-keywords`, and
-// modify `ParserUtils.toExprAlias()` which assumes all keywords are between `ADD` and `ZONE`.
+// modify `ParserUtils.toExprAlias()` which assumes all keywords are between `ABSENT` and `ZONE`.
 
 //============================
 // Start of the keywords list
 //============================
 //--SPARK-KEYWORD-LIST-START
+ABSENT: 'ABSENT';
 ADD: 'ADD';
 AFTER: 'AFTER';
 AGGREGATE: 'AGGREGATE';
@@ -336,6 +337,7 @@ ITEMS: 'ITEMS';
 ITERATE: 'ITERATE';
 JOIN: 'JOIN';
 JSON: 'JSON';
+JSON_ARRAY: 'JSON_ARRAY';
 JSON_EXISTS: 'JSON_EXISTS';
 JSON_QUERY: 'JSON_QUERY';
 JSON_TABLE: 'JSON_TABLE';

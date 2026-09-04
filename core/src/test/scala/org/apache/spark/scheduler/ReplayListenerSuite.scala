@@ -206,7 +206,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
 
     // Prepare information needed for replay
     val applications = fileSystem.listStatus(logDirPath)
-    assert(applications != null && applications.size > 0)
+    assert(applications != null && applications.nonEmpty)
     val eventLog = applications.sortBy(_.getModificationTime).last
     assert(!eventLog.isDirectory)
 

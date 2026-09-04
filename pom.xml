@@ -345,7 +345,7 @@
       --enable-native-access=ALL-UNNAMED
       -XX:+EnableDynamicAgentLoading
     </extraJavaTestArgs>
-    <mariadb.java.client.version>3.5.7</mariadb.java.client.version>
+    <mariadb.java.client.version>3.5.10</mariadb.java.client.version>
     <mysql.connector.version>9.6.0</mysql.connector.version>
     <postgresql.version>42.7.13</postgresql.version>
     <db2.jcc.version>12.1.4.0</db2.jcc.version>
@@ -3522,6 +3522,17 @@
       <id>credential-aws</id>
       <modules>
         <module>connector/credential-aws</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>oidc-e2e</id>
+      <modules>
+        <!-- The integration-tests module depends on the credential-aws module, so
+             include it here too. This lets -Poidc-e2e be used on its own (without also
+             passing -Pcredential-aws) without failing dependency resolution. -->
+        <module>connector/credential-aws</module>
+        <module>connector/credential-aws-integration-tests</module>
       </modules>
     </profile>
 
