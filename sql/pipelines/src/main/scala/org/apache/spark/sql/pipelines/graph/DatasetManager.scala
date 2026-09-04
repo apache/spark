@@ -690,11 +690,7 @@ object DatasetManager extends Logging {
     // above has already folded a case-only-differing incoming field onto the persisted one. On the
     // non-merging paths (materialized views, full refresh), `targetSchema` is the declared schema
     // as-is, where exact-name matching keeps a case-only rename visible as a schema change.
-    val columnChanges = diffSchemas(
-      currentSchema,
-      targetSchema,
-      rejectNullabilityTightening = mergeWithExistingSchema
-    )
+    val columnChanges = diffSchemas(currentSchema, targetSchema)
 
     val existingProperties = existingTable.properties()
 

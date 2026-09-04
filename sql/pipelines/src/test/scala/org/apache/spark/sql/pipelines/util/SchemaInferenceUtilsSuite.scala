@@ -800,48 +800,6 @@ class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
     assert(nullabilityUpdatesOf(changes) === Map(Seq("a", "element") -> true))
   }
 
-  test("diffSchemas - tightening nullability throws when flag is set") {
-    val currentSchema = new StructType()
-      .add("a", IntegerType, nullable = true)
-    val targetSchema = new StructType()
-      .add("a", IntegerType, nullable = false)
-
-    // Without the flag, tightening is allowed (full-refresh / MV path).
-    val changes = SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
-    assert(nullabilityUpdatesOf(changes) === Map(Seq("a") -> false))
-
-    // With the flag, tightening is rejected (incremental path).
-    checkError(
-      intercept[SparkUnsupportedOperationException](
-        SchemaInferenceUtils.diffSchemas(
-          currentSchema,
-          targetSchema,
-          rejectNullabilityTightening = true)),
-      condition = "PIPELINE_TIGHTEN_NULLABILITY_UNSUPPORTED",
-      parameters = Map("columnPath" -> "a"))
-  }
-
-  test("diffSchemas - tightening nested nullability throws when flag is set") {
-    val currentSchema = new StructType()
-      .add("s", new StructType().add("x", IntegerType, nullable = true))
-    val targetSchema = new StructType()
-      .add("s", new StructType().add("x", IntegerType, nullable = false))
-
-    // Without the flag, allowed.
-    val changes = SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
-    assert(nullabilityUpdatesOf(changes) === Map(Seq("s", "x") -> false))
-
-    // With the flag, rejected.
-    checkError(
-      intercept[SparkUnsupportedOperationException](
-        SchemaInferenceUtils.diffSchemas(
-          currentSchema,
-          targetSchema,
-          rejectNullabilityTightening = true)),
-      condition = "PIPELINE_TIGHTEN_NULLABILITY_UNSUPPORTED",
-      parameters = Map("columnPath" -> "s.x"))
-  }
-
   test("inferSchemaFromFlows folds a case-only column to the same spelling regardless of flow " +
     "order, even when identifier names contain dots") {
     // The merge order decides which spelling of a case-only-differing column survives, so it must

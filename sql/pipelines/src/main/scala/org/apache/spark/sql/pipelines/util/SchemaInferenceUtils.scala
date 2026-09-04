@@ -230,36 +230,16 @@ object SchemaInferenceUtils extends Logging {
    *
    * @param currentSchema The current schema of the table
    * @param targetSchema The target schema that we want the table to have
-   * @param rejectNullabilityTightening When true, throws if any field changes
-   *        from nullable to non-nullable. Callers should set this when existing
-   *        rows are retained (incremental streaming tables) because those rows
-   *        may already contain nulls. Full-refresh and materialized-view paths
-   *        truncate the table first, so tightening is safe.
    * @return A sequence of TableChange objects representing the necessary changes
    */
-  def diffSchemas(
-      currentSchema: StructType,
-      targetSchema: StructType,
-      rejectNullabilityTightening: Boolean = false
-  ): Seq[TableChange] = {
-    val changes = diffStructs(
+  def diffSchemas(currentSchema: StructType, targetSchema: StructType): Seq[TableChange] =
+    diffStructs(
       currentStruct = currentSchema,
       targetStruct = targetSchema,
-      // Root call: path is empty because current and target are the top-level schemas.
+      // Root call: path is empty because current and target are the
+      // top-level schemas.
       pathToStruct = Seq.empty
     )
-    if (rejectNullabilityTightening) {
-      changes.foreach {
-        case nc: TableChange.UpdateColumnNullability if !nc.nullable() =>
-          throw new SparkUnsupportedOperationException(
-            errorClass = "PIPELINE_TIGHTEN_NULLABILITY_UNSUPPORTED",
-            messageParameters =
-              Map("columnPath" -> nc.fieldNames().mkString(".")))
-        case _ =>
-      }
-    }
-    changes
-  }
 
   /**
    * Diffs two structs field-by-field, matching fields by exact name.

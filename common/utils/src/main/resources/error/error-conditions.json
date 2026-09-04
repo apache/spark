@@ -6770,12 +6770,6 @@
     ],
     "sqlState" : "42K03"
   },
-  "PIPELINE_TIGHTEN_NULLABILITY_UNSUPPORTED" : {
-    "message" : [
-      "Cannot tighten nullability of <columnPath> from nullable to non-nullable. Existing data may already contain nulls."
-    ],
-    "sqlState" : "0A000"
-  },
   "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
     "message" : [
       "Non-grouping expression <expr> is provided as an argument to the |> AGGREGATE pipe operator but does not contain any aggregate function; please update it to include an aggregate function and then retry the query again."
