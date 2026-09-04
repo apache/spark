@@ -2353,6 +2353,20 @@ class SessionCatalog(
   }
 
   /**
+   * Returns whether a temporary function is visible in the current resolution context, applying the
+   * same stored-view filtering as actual resolution ([[handleViewContext]]) but WITHOUT its
+   * side effect of recording the name as a referred temp function. Inside a stored view a temp
+   * function is visible only if the view captured it; outside a view this matches
+   * [[isTemporaryFunction]]. Ownership probes use this so they agree with the resolver on which
+   * routine owns a name inside a view.
+   */
+  def isTemporaryFunctionVisible(name: FunctionIdentifier): Boolean = {
+    isTemporaryFunction(name) &&
+      (AnalysisContext.get.catalogAndNamespace.isEmpty ||
+        AnalysisContext.get.referredTempFunctionNames.contains(name.funcName))
+  }
+
+  /**
    * Return whether this function has been registered in the function registry of the current
    * session. If not existed, return false.
    */
