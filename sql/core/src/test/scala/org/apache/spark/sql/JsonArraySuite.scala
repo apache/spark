@@ -233,9 +233,10 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
   }
 
   test("a nested constructor wrapped in redundant parentheses is still spliced raw") {
-    // Parentheses wrap the nested constructor in a value-preserving ParenthesizedExpression. The
-    // implicit FORMAT JSON must be seen through that wrapper (as through Collate above), so the
-    // inner array is spliced ([[1]]), not treated as a plain string and quoted (["[1]"]).
+    // Parentheses produce a ParenthesizedExpressionContext that AstBuilder unwraps to the inner
+    // Catalyst expression directly (no wrapper node). The implicit FORMAT JSON must be seen through
+    // that parser context (as through Collate above), so the inner array is spliced ([[1]]), not
+    // treated as a plain string and quoted (["[1]"]).
     checkAnswer(sql("SELECT JSON_ARRAY((JSON_ARRAY(1)))"), Row("[[1]]"))
     checkAnswer(sql("SELECT JSON_ARRAY((JSON_ARRAY(1, 2)), 3)"), Row("[[1,2],3]"))
     checkAnswer(
