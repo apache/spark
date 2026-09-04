@@ -94,13 +94,20 @@ private[spark] trait DecisionTreeModel {
    *         Leaves are indexed in pre-order from 0.
    */
   def predictLeaf(features: Vector): Double = {
-    val leaf = rootNode.predictImpl(features)
-    assert(leaf.leafIndex >= 0, "Leaf indices are not assigned.")
-    leaf.leafIndex.toDouble
+    DecisionTreeModel.predictLeaf(features, rootNode)
   }
 
   def getEstimatedSize(): Long = {
     org.apache.spark.util.SizeEstimator.estimate(rootNode)
+  }
+}
+
+private[spark] object DecisionTreeModel {
+
+  private[ml] def predictLeaf(features: Vector, rootNode: Node): Double = {
+    val leaf = rootNode.predictImpl(features)
+    assert(leaf.leafIndex >= 0, "Leaf indices are not assigned.")
+    leaf.leafIndex.toDouble
   }
 }
 
