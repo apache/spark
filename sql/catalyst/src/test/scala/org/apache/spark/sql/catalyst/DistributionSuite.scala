@@ -495,6 +495,42 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     assert(err.getMessage.contains("agree on mayContainUnknownPartitionKeys"))
   }
 
+  test("SPARK-59050: fromPartitionings normalizes the unknown-keys marker through nesting") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+    val keys = Seq(InternalRow(1), InternalRow(2))
+    val marked = KeyedPartitioning(Seq(x), keys).copy(mayContainUnknownPartitionKeys = true)
+    val plainNested = PartitioningCollection.fromPartitionings(
+      Seq(KeyedPartitioning(Seq(y), keys)))
+    val combined = PartitioningCollection.fromPartitionings(Seq(marked, plainNested))
+    // The nested collection must be rebuilt with the OR'd-on marker, not excused: only the
+    // recursive arm of `fromPartitionings` carries the flag into it.
+    val leaves = PartitioningCollection.flatten(combined)
+      .collect { case k: KeyedPartitioning => k }
+    assert(leaves.length === 2, combined.toString)
+    assert(leaves.forall(_.mayContainUnknownPartitionKeys), leaves.toString)
+    assert(leaves.forall(_.partitionKeys eq leaves.head.partitionKeys),
+      "the interned keys must survive the rebuild")
+  }
+
+  test("SPARK-59050: PartitioningCollection requires a nested collection to agree on the " +
+    "marker") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+    val keys = Seq(InternalRow(1), InternalRow(2))
+    val base = KeyedPartitioning(Seq(x), keys)
+    val markedNested = PartitioningCollection.fromPartitionings(Seq(
+      base.copy(mayContainUnknownPartitionKeys = true)))
+    val plain = base.copy(expressions = Seq(y))
+    // The nested collection is internally uniform, so its own construction passes; the outer
+    // constructor must still catch its representative against the unmarked sibling. Same keys
+    // reference, arity and isCollapsed, only the marker disagrees.
+    val err = intercept[IllegalArgumentException] {
+      PartitioningCollection(Seq(markedNested, plain))
+    }
+    assert(err.getMessage.contains("agree on mayContainUnknownPartitionKeys"))
+  }
+
   test("SPARK-56877: PartitioningCollection enforces the invariant through nesting") {
     val x = AttributeReference("x", IntegerType)()
     val y = AttributeReference("y", IntegerType)()

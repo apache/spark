@@ -6509,13 +6509,46 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59050: SPJ: inner join keeps the marker beside a keyless sibling") {
+    // A keyless sibling makes no keyed claim about its rows, so it cannot prove the marked
+    // side's out-of-set rows away: the join equality can still match them, and they stay where
+    // the claim pins them. `keyedMarkerOf` answers `None` for such an input and the clearing
+    // must read that as "no unmarked keyed member", not as "unmarked" -- mapping `None` to
+    // `false` would clear the marker here while every sibling that carries a
+    // `KeyedPartitioning` stays green.
+    val attrA = AttributeReference("a", IntegerType)()
+    val attrB = AttributeReference("b", IntegerType)()
+    val keys = Seq(InternalRow(1), InternalRow(2))
+    def markedExchange(e: AttributeReference): ShuffleExchangeExec =
+      ShuffleExchangeExec(
+        KeyedPartitioning(Seq(e), keys).copy(mayContainUnknownPartitionKeys = true),
+        new LocalTableScanExec(Seq(e), Nil, None, false))
+    def keylessExchange(e: AttributeReference): ShuffleExchangeExec =
+      ShuffleExchangeExec(physical.HashPartitioning(Seq(e), keys.length),
+        new LocalTableScanExec(Seq(e), Nil, None, false))
+    val joins = Seq(
+      SortMergeJoinExec(attrA :: Nil, attrB :: Nil, Inner, None,
+        markedExchange(attrA), keylessExchange(attrB)),
+      SortMergeJoinExec(attrA :: Nil, attrB :: Nil, Inner, None,
+        keylessExchange(attrB), markedExchange(attrA)))
+    joins.zipWithIndex.foreach { case (join, idx) =>
+      val leaves = physical.PartitioningCollection.flatten(join.outputPartitioning)
+        .collect { case k: KeyedPartitioning => k }
+      assert(leaves.size == 1, s"order $idx: $leaves")
+      assert(leaves.forall(_.mayContainUnknownPartitionKeys),
+        s"order $idx: a keyless sibling must not clear the marker: $leaves")
+    }
+  }
+
   test("SPARK-59050: SPJ: inner join marker clearing reaches nested collections") {
     // `ShuffledJoin`'s `InnerLike` arm passes each child's partitioning into the joined
     // collection as reported, so the next inner join can find marked members nested inside a
-    // collection inherited from an all-marked inner join below. SQL cannot produce that shape:
-    // every inner join clears the markers of the mixed collection it builds, so an all-marked
-    // collection only ever appears beside marked siblings, never an unmarked one. The nodes are
-    // hand-built here, through the same exchange-leaf idiom used above.
+    // collection inherited from an all-marked inner join below. SQL can produce that shape:
+    // two one-side-shuffled RIGHT OUTER joins with the same declared keys each expose a marked
+    // output, joining those two keeps an all-marked collection, and a following join against an
+    // accurate keyed table supplies the unmarked sibling (the end-to-end counterpart below
+    // pins that path). The nodes are hand-built here to isolate the shape from planner
+    // choices, through the same exchange-leaf idiom used above.
     val attrA = AttributeReference("a", IntegerType)()
     val attrB = AttributeReference("b", IntegerType)()
     val keys = Seq(InternalRow(1), InternalRow(2))
@@ -6546,6 +6579,71 @@ class KeyGroupedPartitioningSuite
     assert(kept.size == 3, kept.toString)
     assert(kept.forall(_.mayContainUnknownPartitionKeys),
       s"an all-marked chain must keep its markers: $kept")
+  }
+
+  test("SPARK-59050: SPJ: marker clearing reaches a nested all-marked collection built by SQL") {
+    // End-to-end counterpart to the hand-built test above. The first two RIGHT OUTER joins
+    // one-side-shuffle `t` and `u` onto `a`'s and `b`'s declared keys {1, 2}; their id=3 rows
+    // are out-of-set, so both join outputs are marked. The inner join of those two outputs
+    // pairs marked against marked on equal key sequences, so its collection stays all-marked.
+    // The final join against the accurate keyed table `w` then supplies the unmarked sibling:
+    // the clearing must reach inside the nested collection, and id=3's rows, dropped by `w`,
+    // must not cost the plan its storage-partitioned final join.
+    createTable("a", columns, Array(identity("id")))
+    createTable("b", columns, Array(identity("id")))
+    createTable("w", columns, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.a VALUES (1, 'a1', NULL), (2, 'a2', NULL)")
+    sql("INSERT INTO testcat.ns.b VALUES (1, 'b1', NULL), (2, 'b2', NULL)")
+    sql("INSERT INTO testcat.ns.w VALUES (1, 'w1', NULL), (2, 'w2', NULL)")
+
+    withTable("t", "u") {
+      sql("CREATE TABLE t (id INT, data STRING) USING parquet")
+      sql("INSERT INTO t VALUES (1, 't1'), (2, 't2'), (3, 't3')")
+      sql("CREATE TABLE u (id INT, data STRING) USING parquet")
+      sql("INSERT INTO u VALUES (1, 'u1'), (2, 'u2'), (3, 'u3')")
+
+      val query =
+        """
+          |SELECT r3.id, w.data
+          |FROM (
+          |  SELECT r1.id FROM (
+          |    SELECT tt.id AS id FROM testcat.ns.a RIGHT OUTER JOIN t tt ON a.id = tt.id
+          |  ) r1
+          |  JOIN (
+          |    SELECT uu.id AS id FROM testcat.ns.b RIGHT OUTER JOIN u uu ON b.id = uu.id
+          |  ) r2 ON r1.id = r2.id
+          |) r3
+          |JOIN testcat.ns.w ON r3.id = w.id
+          |""".stripMargin
+      val expected = Seq(Row(1, "w1"), Row(2, "w2"))
+
+      // Baseline without SPJ.
+      withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "false") {
+        checkAnswer(sql(query), expected)
+      }
+
+      withSQLConf(
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          "spark.sql.autoBroadcastJoinThreshold" -> "-1",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        // Only the two one-side shuffles carry the marker: the final join storage-partitions
+        // without a re-shuffle (a third shuffle here would mean the marked-vs-marked pairing
+        // was refused).
+        assertShuffleMayContainUnknownPartitionKeys(df.queryExecution.executedPlan,
+          Seq(true, true))
+        // The clearing reached the nested collection: every keyed leaf of the final output is
+        // unmarked.
+        val leaves = physical.PartitioningCollection
+          .flatten(df.queryExecution.executedPlan.outputPartitioning)
+          .collect { case k: KeyedPartitioning => k }
+        assert(leaves.nonEmpty, s"expected keyed leaves in the final output: " +
+          df.queryExecution.executedPlan)
+        assert(leaves.forall(!_.mayContainUnknownPartitionKeys),
+          s"the unmarked sibling must clear the nested collection: $leaves")
+      }
+    }
   }
 
   test("SPARK-59050: SPJ: inner join drops out-of-set rows before the cleared marker is trusted") {
