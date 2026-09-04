@@ -608,6 +608,10 @@ public class VariantBuilder {
     if (v.pos == 0 && isCanonical(v.value, v.metadata)) {
       return v;
     }
+    return doCanonicalize(v);
+  }
+
+  static Variant doCanonicalize(Variant v) {
     VariantBuilder builder = new VariantBuilder(/* allowDuplicateKeys */ false);
     builder.buildCanonicalized(v.value, v.metadata, v.pos);
     return builder.result();
