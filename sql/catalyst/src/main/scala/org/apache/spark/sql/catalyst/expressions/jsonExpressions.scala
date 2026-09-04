@@ -1676,7 +1676,8 @@ object JsonArrayExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     // A routed call carries no lexical FORMAT JSON, so every element is a plain value (quoted).
     // Splicing a nested constructor is only reachable via `JSON_ARRAY(...)` syntax (which freezes
-    // the decision lexically); doing so through a routed call is left as a follow-up.
+    // the decision lexically).
+    // TODO(SPARK-59243): splice nested constructors reached through routed/qualified calls.
     val flags = expressions.map(_ => false)
     JsonArray(expressions, flags, flags, JsonConstructorNullBehavior.Absent, StringType)
   }
@@ -1697,6 +1698,8 @@ abstract class JsonPathExpressionBuilder extends ExpressionBuilder {
     val pathExpr = expressions(1)
     pathExpr.dataType match {
       case _: StringType if pathExpr.foldable =>
+        // TODO(SPARK-59244): wrap eval() so a foldable-but-throwing path re-throws as a clean
+        // invalid-argument analysis error naming `path`.
         val pathValue = pathExpr.eval()
         if (pathValue == null) {
           throw QueryCompilationErrors.unexpectedNullError("path", pathExpr)
