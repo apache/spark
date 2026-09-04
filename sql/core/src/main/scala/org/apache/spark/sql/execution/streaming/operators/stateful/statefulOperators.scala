@@ -47,7 +47,9 @@ import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, StateOperatorProgress}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{CollectionAccumulator, CompletionIterator, NextIterator, Utils}
+import org.apache.spark.sql.util.PartitionKeyedAccumulator
+import org.apache.spark.util.{AccumulatorV2, CollectionAccumulator, CompletionIterator}
+import org.apache.spark.util.{NextIterator, Utils}
 
 
 /** Used to identify the state store for a given operator.
@@ -169,6 +171,54 @@ case class StatefulOpStateStoreCheckpointInfo(
     // to validate the batch is processed based on the correct checkpoint.
     baseStateStoreCkptId: Option[Array[String]])
 
+/**
+ * An accumulator that records state store instance metrics per partition.
+ * Extends [[PartitionKeyedAccumulator]] to bound driver-side state to O(numPartitions).
+ * When duplicate updates for the same partition are received (e.g. from speculative execution,
+ * retries, or multiple stores within the same task), metrics are merged using each
+ * [[StateStoreInstanceMetric]]'s combine semantics rather than default last-write-wins.
+ */
+class StateStoreInstanceMetricAccumulator
+  extends PartitionKeyedAccumulator[Map[StateStoreInstanceMetric, Long]] {
+
+  override def copyAndReset(): StateStoreInstanceMetricAccumulator =
+    new StateStoreInstanceMetricAccumulator
+
+  override def copy(): StateStoreInstanceMetricAccumulator = synchronized {
+    val newAcc = new StateStoreInstanceMetricAccumulator
+    newAcc.byPartition.putAll(byPartition)
+    newAcc
+  }
+
+  override def add(v: (Int, Map[StateStoreInstanceMetric, Long])): Unit = synchronized {
+    byPartition.merge(v._1, v._2, (m1, m2) => combineMetrics(m1, m2))
+  }
+
+  override def merge(
+      other: AccumulatorV2[(Int, Map[StateStoreInstanceMetric, Long]),
+        java.util.Map[Int, Map[StateStoreInstanceMetric, Long]]]): Unit = synchronized {
+    other match {
+      case o: StateStoreInstanceMetricAccumulator =>
+        o.byPartition.forEach { (k, v) =>
+          byPartition.merge(k, v, (m1, m2) => combineMetrics(m1, m2))
+        }
+      case _ => throw new UnsupportedOperationException(
+        s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+    }
+  }
+
+  private def combineMetrics(
+      m1: Map[StateStoreInstanceMetric, Long],
+      m2: Map[StateStoreInstanceMetric, Long]): Map[StateStoreInstanceMetric, Long] = {
+    m2.foldLeft(m1) { case (acc, (metric, v2)) =>
+      acc.get(metric) match {
+        case Some(v1) => acc.updated(metric, metric.combine(v1, v2))
+        case None => acc.updated(metric, v2)
+      }
+    }
+  }
+}
+
 /** An operator that writes to a StateStore. */
 trait StateStoreWriter
   extends StatefulOperator with PythonSQLMetrics with Logging { self: SparkPlan =>
@@ -229,9 +279,14 @@ trait StateStoreWriter
 
   /**
    * Aggregator used for executors to pass instance metrics (per partition/store) back to driver.
+   * Extends PartitionKeyedAccumulator to bound driver-side state to O(numPartitions) while
+   * preserving StateStoreInstanceMetric.combine semantics when duplicate updates are merged
+   * (e.g. from retries, speculative execution, or multiple stores within the same task).
    */
-  val instanceMetricsAccumulator: CollectionAccumulator[(StateStoreInstanceMetric, Long)] = {
-    SparkContext.getActive.map(_.collectionAccumulator[(StateStoreInstanceMetric, Long)]).get
+  val instanceMetricsAccumulator: StateStoreInstanceMetricAccumulator = {
+    val acc = new StateStoreInstanceMetricAccumulator
+    SparkContext.getActive.foreach(_.register(acc))
+    acc
   }
 
   override def resetMetrics(): Unit = {
@@ -346,12 +401,12 @@ trait StateStoreWriter
    * the driver after this SparkPlan has been executed and metrics have been updated.
    */
   def getProgress(): StateOperatorProgress = {
-    val reportedMetrics = instanceMetricsAccumulator.value.asScala.toSeq
-    val combinedMetrics: Map[StateStoreInstanceMetric, Long] = reportedMetrics
-      .groupBy(_._1)
-      .map { case (metric, entries) =>
-        val combinedValue = entries.map(_._2).reduce((v1, v2) => metric.combine(v1, v2))
-        metric -> combinedValue
+    // StateStoreInstanceMetricAccumulator holds one Map[StateStoreInstanceMetric, Long] per
+    // partition, using combine semantics to deduplicate task retries and speculative execution.
+    // Folding the per-partition maps together produces a flat metric map for progress reporting.
+    val combinedMetrics: Map[StateStoreInstanceMetric, Long] =
+      instanceMetricsAccumulator.foldValues(Map.empty[StateStoreInstanceMetric, Long]) {
+        (acc, partitionMap) => acc ++ partitionMap
       }
 
     val instanceMetricsToReport = combinedMetrics
@@ -463,9 +518,12 @@ trait StateStoreWriter
 
   protected def setStoreInstanceMetrics(
       otherStoreInstanceMetrics: Map[StateStoreInstanceMetric, Long]): Unit = {
-    otherStoreInstanceMetrics.foreach {
-      case (metric, value) =>
-        instanceMetricsAccumulator.add((metric, value))
+    if (otherStoreInstanceMetrics.nonEmpty) {
+      // All instance metrics for a given store share the same partitionId.
+      val partitionId = otherStoreInstanceMetrics.keys.head.partitionId.getOrElse(
+        throw new IllegalStateException(
+          "StateStoreInstanceMetric must have a partitionId when reporting metrics"))
+      instanceMetricsAccumulator.add((partitionId, otherStoreInstanceMetrics))
     }
   }
 
