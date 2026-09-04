@@ -391,8 +391,10 @@ class FunctionResolution(
   /**
    * Returns whether an unqualified function name reaches `system.builtin` before any temp or
    * persistent function in the effective SQL PATH. When a temp or persistent function shadows the
-   * builtin, special-syntax rewrites (e.g. `count(*) -> count(1)`) must not fire, since the name no
-   * longer refers to Spark's builtin.
+   * builtin, special-syntax handling that only applies to Spark's builtins must not fire, since the
+   * name no longer refers to the builtin -- e.g. rejecting a bare `*` in a routed JSON constructor,
+   * or the `count(tbl.*)` guard. (Bare unqualified `count(*)` is normalized to `count(1)` earlier
+   * in `AstBuilder`, so it does not flow through this probe.)
    */
   def unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow(functionName: String): Boolean = {
     // Walk the PATH in order and stop at the first entry that owns the name. The default order puts
@@ -405,7 +407,10 @@ class FunctionResolution(
         case Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Builtin) =>
           return true
         case Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Temp) =>
-          if (v1SessionCatalog.isTemporaryFunction(FunctionIdentifier(functionName))) {
+          // Honor stored-view temp visibility so this probe picks the same owner the resolver
+          // would: a temp not captured by the view is hidden here too, just as the persistent
+          // branch below expands through the view's frozen catalog.
+          if (v1SessionCatalog.isTemporaryFunctionVisible(FunctionIdentifier(functionName))) {
             return false
           }
         case None =>
@@ -442,8 +447,9 @@ class FunctionResolution(
     }
   }
 
-  private val starDisallowedJsonConstructors =
-    Set("json_array", "json_exists", "json_query", "json_value")
+  // All routed SQL/JSON constructors forbid a bare `*` argument. Derived from the single registry
+  // list so a newly routed constructor is covered without editing this file too.
+  private val starDisallowedJsonConstructors = FunctionRegistry.routedJsonConstructorNames
 
   /** True if `nameParts` resolves to a built-in SQL/JSON constructor that forbids bare `*`. */
   def resolvesToStarDisallowedJsonConstructor(nameParts: Seq[String]): Boolean =
