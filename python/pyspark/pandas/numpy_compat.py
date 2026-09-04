@@ -28,6 +28,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import (
     BooleanType,
+    ByteType,
     DataType,
     DoubleType,
     FloatType,
@@ -546,12 +547,26 @@ def maybe_dispatch_ufunc_to_spark_func(
     ser_or_index: IndexOpsMixin, ufunc: Callable, method: str, *inputs: Any, **kwargs: Any
 ) -> Union[SeriesOrIndex, Tuple[SeriesOrIndex, SeriesOrIndex]]:
     from pyspark.pandas.base import column_op
+    from pyspark.pandas.data_type_ops.base import transform_boolean_operand_to_numeric
 
     op_name = ufunc.__name__
 
     # Check before building the expression, so the error comes from the ufunc call itself.
     if method == "__call__" and kwargs.get("out") is None:
         _check_operand_types(op_name, inputs)
+        if op_name in ("invert", "negative") and isinstance(
+            ser_or_index.spark.data_type, BooleanType
+        ):
+            # np.invert on a boolean is a logical not, and pandas reads np.negative the same way;
+            # Spark keeps that meaning in the logical_not entry instead.
+            op_name = "logical_not"
+        elif op_name in _np_spark_accepted_types:
+            # Spark's functions reject a boolean, so cast it to int8, the narrowest integer NumPy
+            # promotes one to. Only the gated ufuncs are cast, since the rest either return an
+            # operand unchanged, as np.fmax does, or handle a boolean already.
+            inputs = tuple(
+                transform_boolean_operand_to_numeric(inp, spark_type=ByteType()) for inp in inputs
+            )
 
     if (
         method == "__call__"
