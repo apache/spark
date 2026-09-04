@@ -291,7 +291,8 @@ class AvroCatalystDataConversionSuite extends SharedSparkSession
       filters,
       false,
       "",
-      -1)
+      -1,
+      dataSchema = None)
     val deserialized = deserializer.deserialize(data)
     expected match {
       case None => assert(deserialized == None)

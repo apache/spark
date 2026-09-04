@@ -45,7 +45,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone
 import org.apache.spark.sql.execution.{FileSourceScanExec, FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileDataSourceV2, FileTable}
-import org.apache.spark.sql.execution.planmerging.MergeSubplans
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
@@ -1733,6 +1732,143 @@ abstract class AvroSuite
         new StructType().add("foo", StringType).add("foo_map", MapType(StringType, IntegerType)))
       assert(reloadedDf.select($"foo".as("string"), $"foo_map".as("simple_map")).collect().toSet ===
         expectedDf.collect().toSet)
+    }
+  }
+
+  test("SPARK-59108: positionalFieldMatching resolves fields against the full schema") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 5).selectExpr("id AS a", "id * 100 AS b", "id * 10000 AS c")
+        .write.format("avro").save(path)
+      // The names differ from the file's, so only the positions can pair the two schemas.
+      val renamedSchema = new StructType()
+        .add("x", LongType).add("y", LongType).add("z", LongType)
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema(renamedSchema)
+        .load(path)
+
+      val rows = (0 until 5).map(i => Row(i.toLong, i * 100L, i * 10000L))
+      checkAnswer(df, rows)
+      // A column keeps its own Avro field however few of them the query projects.
+      checkAnswer(df.select("z"), rows.map(r => Row(r.get(2))))
+      checkAnswer(df.select("y"), rows.map(r => Row(r.get(1))))
+      checkAnswer(df.select("x", "z"), rows.map(r => Row(r.get(0), r.get(2))))
+      checkAnswer(df.select("z", "x"), rows.map(r => Row(r.get(2), r.get(0))))
+      checkAnswer(df.select("y", "z"), rows.map(r => Row(r.get(1), r.get(2))))
+      checkAnswer(df.selectExpr("sum(z)"), Row(100000L))
+      // With pushdown on, the filter runs inside the deserializer; with it off, it runs above the
+      // scan.
+      // Either way a wrong pairing drops rows rather than only returning wrong values for them.
+      Seq("true", "false").foreach { pushDown =>
+        withSQLConf(SQLConf.AVRO_FILTER_PUSHDOWN_ENABLED.key -> pushDown) {
+          checkAnswer(df.where("z = 20000").select("z"), Row(20000L))
+          checkAnswer(df.where("z > 20000").select("x"), Seq(Row(3L), Row(4L)))
+        }
+      }
+      // A projection of no columns at all.
+      checkAnswer(df.selectExpr("count(1)"), Row(5L))
+
+      // The projected schema carries the schema's own spelling whatever casing the query used, so
+      // the name lookup that resolves a position finds the field either way.
+      val mixedCase = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema(new StructType().add("Xx", LongType).add("yY", LongType).add("ZZ", LongType))
+        .load(path)
+      Seq("true", "false").foreach { caseSensitive =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+          checkAnswer(mixedCase.select("ZZ"), rows.map(r => Row(r.get(2))))
+        }
+      }
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        checkAnswer(mixedCase.select("zz"), rows.map(r => Row(r.get(2))))
+      }
+    }
+  }
+
+  test("SPARK-59108: positionalFieldMatching with a partition column in the schema") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 4).selectExpr("id AS a", "id * 100 AS b", "id % 2 AS p")
+        .write.partitionBy("p").format("avro").save(path)
+      // p is a partition column, so the files hold a and b only and the data schema is x and z.
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema("x long, p int, z long")
+        .load(path)
+
+      checkAnswer(df.select("z"), (0 until 4).map(i => Row(i * 100L)))
+      checkAnswer(df.select("x"), (0 until 4).map(i => Row(i.toLong)))
+      checkAnswer(df.select("p", "z"), (0 until 4).map(i => Row(i % 2, i * 100L)))
+      checkAnswer(df.where("p = 1").select("z"), Seq(Row(100L), Row(300L)))
+    }
+  }
+
+  test("SPARK-59108: positionalFieldMatching with a nested record and the avroSchema option") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 3).selectExpr(
+          "id AS a",
+          "named_struct('f1', id * 10, 'f2', cast(id AS string)) AS r",
+          "id * 1000 AS c")
+        .write.format("avro").save(path)
+
+      // Only the top level is a projection, so the nested record keeps resolving by its own
+      // positions. Reading the struct alone would take Avro field 0, a long, and fail.
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema("x long, s struct<g1: long, g2: string>, z long")
+        .load(path)
+      checkAnswer(df.select("s"), (0 until 3).map(i => Row(Row(i * 10L, i.toString))))
+      checkAnswer(df.select("s.g2"), (0 until 3).map(i => Row(i.toString)))
+      checkAnswer(df.select("z"), (0 until 3).map(i => Row(i * 1000L)))
+
+      // The avroSchema option supplies the Avro side, and the data schema is inferred from it, so
+      // the positions are the option's.
+      val avroSubset =
+        """{"type":"record","name":"topLevelRecord","fields":[
+          |{"name":"a","type":"long"},
+          |{"name":"c","type":"long"}]}""".stripMargin
+      val fromOption = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .option("avroSchema", avroSubset)
+        .load(path)
+      checkAnswer(fromOption.select("c"), (0 until 3).map(i => Row(i * 1000L)))
+      checkAnswer(fromOption.select("a"), (0 until 3).map(i => Row(i.toLong)))
+    }
+  }
+
+  test("SPARK-59108: a position past the end of the Avro schema reads null") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 3).selectExpr("id AS a", "id * 100 AS b").write.format("avro").save(path)
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema("x long, y long, z long")
+        .load(path)
+
+      // z is at position 2 of the schema and the file has two fields, so it has no Avro field to
+      // read and comes back null however few columns the query projects.
+      checkAnswer(df.select("z"), Seq(Row(null), Row(null), Row(null)))
+      checkAnswer(df, (0 until 3).map(i => Row(i.toLong, i * 100L, null)))
+    }
+  }
+
+  test("SPARK-59108: positionalFieldMatching fails a mispaired type rather than reading it") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 3).selectExpr("id AS a", "cast(id AS string) AS b", "id * 10 AS c")
+        .write.format("avro").save(path)
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema("x long, y long, z long")
+        .load(path)
+
+      // y takes Avro field 1, which is a string, so the read fails instead of returning the values
+      // of a neighbouring field.
+      val ex = intercept[SparkException](df.select("y").collect())
+      assert(Utils.exceptionString(ex).contains("Cannot convert Avro"))
+      checkAnswer(df.select("z"), (0 until 3).map(i => Row(i * 10L)))
     }
   }
 
@@ -3733,37 +3869,30 @@ class AvroV1Suite extends AvroSuite {
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
 
-  test("SPARK-59107: positionalFieldMatching makes an avro read projection-sensitive") {
-    // Strictness pinned rather than inherited, so that positional matching is the only reason the
-    // read is projection-sensitive. AQE off because `AdaptiveSparkPlanExec` is a leaf node, so with
-    // it on the scans underneath it are not reachable from the executed plan.
+  test("SPARK-59108: two positional reads of different columns share one widened scan") {
+    // SPARK-59107 named avro under this option, so the two subqueries used to keep their own scans.
+    // They share one now, and the values are the file's either way because each column resolves
+    // against the data schema. AQE off because `AdaptiveSparkPlanExec` is a leaf node, so with it
+    // on the scan underneath is not reachable from the executed plan.
     withSQLConf(
         SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
         SQLConf.IGNORE_MISSING_FILES.key -> "false",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        spark.range(0, 5).selectExpr("id AS a", "id * 10 AS b").write.format("avro").save(path)
+        spark.range(0, 5).selectExpr("id AS a", "id * 10 AS b", "id * 100 AS c")
+          .write.format("avro").save(path)
         withTempView("t") {
-          spark.read.option("positionalFieldMatching", "true").format("avro").load(path)
+          spark.read.option("positionalFieldMatching", true.toString).format("avro").load(path)
             .createOrReplaceTempView("t")
-          val query = "SELECT (SELECT sum(a) FROM t), (SELECT sum(b) FROM t)"
-          // Compared against the same query with merging excluded rather than against a literal
-          // row: positional matching resolves a column against its position in the read schema, so
-          // what `sum(b)` answers depends on its own subquery's projection. What this test pins is
-          // that merging changes neither value.
-          val unmerged = withSQLConf(
-              SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> MergeSubplans.ruleName) {
-            sql(query).collect().toSeq
-          }
-          val df = sql(query)
-          checkAnswer(df, unmerged)
+          // b and c sit at data schema positions 1 and 2, so the merged read of the two has to
+          // resolve against the data schema rather than against its own projection.
+          val df = sql("SELECT (SELECT sum(b) FROM t), (SELECT sum(c) FROM t)")
+          checkAnswer(df, Row(100L, 1000L))
           val scanColumns = df.queryExecution.executedPlan
             .collectWithSubqueries { case s: FileSourceScanExec => s }
             .map(_.requiredSchema.fieldNames.sorted.toSeq)
-            .sortBy(_.mkString(","))
-          // One entry per column means the two subqueries kept their own scans.
-          assert(scanColumns === Seq(Seq("a"), Seq("b")))
+          assert(scanColumns === Seq(Seq("b", "c")))
         }
       }
     }
