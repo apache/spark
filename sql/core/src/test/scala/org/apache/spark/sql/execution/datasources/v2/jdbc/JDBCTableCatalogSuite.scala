@@ -230,14 +230,11 @@ class JDBCTableCatalogSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-58945: H2 dialect supplies searchPath for TABLE_OR_VIEW_NOT_FOUND") {
+  test("SPARK-58945: H2 renameTable reports source table when it is missing") {
     val e = intercept[NoSuchTableException] {
-      H2Dialect().classifyException(
-        new SQLException("""Table "NOT_EXISTING_TABLE" not found""", "42S02", 42102),
-        condition = "FAILED_JDBC.LOAD_TABLE",
-        messageParameters = Map("tableName" -> "`test`.`not_existing_table`"),
-        description = "Failed to load table: [test, not_existing_table]",
-        isRuntime = false)
+      tableCatalog.renameTable(
+        Identifier.of(Array("test"), "not_existing_table"),
+        Identifier.of(Array("test"), "dst_table"))
     }
     checkErrorTableNotFoundWithSearchPath(
       e,

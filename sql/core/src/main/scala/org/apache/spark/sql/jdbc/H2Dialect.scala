@@ -231,7 +231,8 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
               cause = Some(e))
           // TABLE_OR_VIEW_NOT_FOUND_1
           case 42102 =>
-            val relationName = messageParameters.getOrElse("tableName", "")
+            val relationName = messageParameters
+              .getOrElse("tableName", messageParameters.getOrElse("oldName", ""))
             throw new NoSuchTableException(
               errorClass = "TABLE_OR_VIEW_NOT_FOUND",
               messageParameters = Map(
