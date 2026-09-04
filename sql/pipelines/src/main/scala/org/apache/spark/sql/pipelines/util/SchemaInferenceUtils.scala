@@ -19,6 +19,7 @@ package org.apache.spark.sql.pipelines.util
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{
@@ -343,6 +344,11 @@ object SchemaInferenceUtils extends Logging {
       targetNullable: Boolean,
       pathToField: Seq[String]
   ): Option[TableChange] = {
+    if (currentNullable && !targetNullable) {
+      throw new SparkUnsupportedOperationException(
+        errorClass = "PIPELINE_TIGHTEN_NULLABILITY_UNSUPPORTED",
+        messageParameters = Map("columnPath" -> pathToField.mkString(".")))
+    }
     Option.when(currentNullable != targetNullable)(
       TableChange.updateColumnNullability(pathToField.toArray, targetNullable)
     )
@@ -358,33 +364,102 @@ object SchemaInferenceUtils extends Logging {
     )
   }
 
-  /** Diffs two data types at `path`, descending through matching complex types. */
+  /**
+   * Diffs two data types at `path`, descending through matching complex types.
+   *
+   * Recurses freely through structs, arrays, and maps. After recursing into an array element
+   * or map key/value, any actual changes are rejected when the child type is itself an array
+   * or map, because [[org.apache.spark.sql.connector.catalog.CatalogV2Util]] cannot resolve
+   * paths with consecutive `element`/`key`/`value` segments (see SPARK-59188).
+   */
   private def diffDataTypes(
       currentType: DataType,
       targetType: DataType,
-      pathToField: Seq[String]
-  ): Seq[TableChange] = (currentType, targetType) match {
+      pathToField: Seq[String]): Seq[TableChange] = (currentType, targetType) match {
     case (currentStruct: StructType, targetStruct: StructType) =>
       diffStructs(currentStruct, targetStruct, pathToField)
 
     case (currentArray: ArrayType, targetArray: ArrayType) =>
       val elementPath = pathToField :+ "element"
-
-      diffDataTypes(currentArray.elementType, targetArray.elementType, elementPath) ++
-        diffNullability(currentArray.containsNull, targetArray.containsNull, elementPath)
+      val dataTypeChanges = diffDataTypes(
+        currentType = currentArray.elementType,
+        targetType = targetArray.elementType,
+        pathToField = elementPath
+      )
+      val nullabilityChanges = diffNullability(
+        currentNullable = currentArray.containsNull,
+        targetNullable = targetArray.containsNull,
+        pathToField = elementPath
+      )
+      rejectUnsupportedNestedTypeChanges(
+        currentType = currentArray.elementType,
+        targetType = targetArray.elementType,
+        typeChanges = dataTypeChanges,
+        pathToElement = elementPath
+      )
+      dataTypeChanges ++ nullabilityChanges
 
     case (currentMap: MapType, targetMap: MapType) =>
-      val valuePath = pathToField :+ "value"
       val keyPath = pathToField :+ "key"
-
-      diffDataTypes(currentMap.keyType, targetMap.keyType, keyPath) ++
-        diffDataTypes(currentMap.valueType, targetMap.valueType, valuePath) ++
-        diffNullability(currentMap.valueContainsNull, targetMap.valueContainsNull, valuePath)
+      val valuePath = pathToField :+ "value"
+      val keyTypeChanges = diffDataTypes(
+        currentType = currentMap.keyType,
+        targetType = targetMap.keyType,
+        pathToField = keyPath
+      )
+      val valueTypeChanges = diffDataTypes(
+        currentType = currentMap.valueType,
+        targetType = targetMap.valueType,
+        pathToField = valuePath
+      )
+      val valueNullabilityChanges = diffNullability(
+        currentNullable = currentMap.valueContainsNull,
+        targetNullable = targetMap.valueContainsNull,
+        pathToField = valuePath
+      )
+      rejectUnsupportedNestedTypeChanges(
+        currentType = currentMap.keyType,
+        targetType = targetMap.keyType,
+        typeChanges = keyTypeChanges,
+        pathToElement = keyPath
+      )
+      rejectUnsupportedNestedTypeChanges(
+        currentType = currentMap.valueType,
+        targetType = targetMap.valueType,
+        typeChanges = valueTypeChanges,
+        pathToElement = valuePath
+      )
+      keyTypeChanges ++ valueTypeChanges ++ valueNullabilityChanges
 
     case _ if currentType == targetType =>
       Seq.empty
 
     case _ =>
       Seq(TableChange.updateColumnType(pathToField.toArray, targetType))
+  }
+
+  /**
+   * Throws when an array element or map key/value is itself an array or map and the
+   * recursive diff found changes. The resulting paths would contain consecutive
+   * `element`/`key`/`value` segments that
+   * [[org.apache.spark.sql.connector.catalog.CatalogV2Util]] cannot resolve (SPARK-59188).
+   */
+  private def rejectUnsupportedNestedTypeChanges(
+      currentType: DataType,
+      targetType: DataType,
+      typeChanges: Seq[TableChange],
+      pathToElement: Seq[String]): Unit = {
+    if (typeChanges.nonEmpty) {
+      (currentType, targetType) match {
+        case (_: ArrayType | _: MapType, _: ArrayType | _: MapType) =>
+          throw new SparkUnsupportedOperationException(
+            errorClass = "PIPELINE_NESTED_COMPLEX_TYPE_SCHEMA_EVOLUTION_UNSUPPORTED",
+            messageParameters = Map(
+              "columnPath" -> pathToElement.mkString("."),
+              "currentType" -> currentType.simpleString,
+              "targetType" -> targetType.simpleString))
+        case _ =>
+      }
+    }
   }
 }

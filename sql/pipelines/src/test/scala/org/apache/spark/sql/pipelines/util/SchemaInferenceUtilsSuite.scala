@@ -19,7 +19,7 @@ package org.apache.spark.sql.pipelines.util
 
 import scala.util.Success
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connector.catalog.{
@@ -172,18 +172,18 @@ class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
   test("determineColumnChanges - updating nullability and comments") {
     val currentSchema = new StructType()
       .add("id", IntegerType, nullable = false)
-      .add("name", StringType, nullable = true)
+      .add("name", StringType, nullable = false)
       .add("description", StringType, nullable = true, "Item description")
 
     val targetSchema = new StructType()
-      .add("id", IntegerType, nullable = true) // Changed nullability
-      .add("name", StringType, nullable = false) // Changed nullability
+      .add("id", IntegerType, nullable = true) // Widened nullability
+      .add("name", StringType, nullable = true) // Widened nullability
       .add("description", StringType, nullable = true, "Product description") // Changed comment
 
     val changes = SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
 
-    // Should have 3 changes - updating nullability for 'id' and 'name', and comment for
-    // 'description'
+    // Should have 3 changes - widening nullability for 'id' and 'name', and comment
+    // for 'description'
     assert(changes.length === 3)
 
     // Verify the nullability changes
@@ -215,9 +215,9 @@ class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
       .get
       .asInstanceOf[TableChange.UpdateColumnComment]
 
-    // Verify the new nullability values
+    // Verify the new nullability values (both widened to nullable)
     assert(idNullabilityChange.nullable() === true)
-    assert(nameNullabilityChange.nullable() === false)
+    assert(nameNullabilityChange.nullable() === true)
 
     // Verify the new comment
     assert(descriptionCommentChange.newComment() === "Product description")
@@ -230,21 +230,19 @@ class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
       .add("old_field", BooleanType)
 
     val targetSchema = new StructType()
-      .add("id", LongType, nullable = true) // Changed type and nullability
-      // Added comment and changed nullability
-      .add("name", StringType, nullable = false, "Full name")
+      .add("id", LongType, nullable = true) // Changed type and widened nullability
+      .add("name", StringType, nullable = true, "Full name") // Added comment
       .add("new_field", StringType) // New field
 
     val changes = SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
 
     // Should have these changes:
     // 1. Update id type
-    // 2. Update id nullability
-    // 3. Update name nullability
-    // 4. Update name comment
-    // 5. Add new_field
-    // 6. Remove old_field
-    assert(changes.length === 6)
+    // 2. Update id nullability (widened)
+    // 3. Update name comment
+    // 4. Add new_field
+    // 5. Remove old_field
+    assert(changes.length === 5)
 
     // Count the types of changes
     val typeChanges = changes.collect { case _: TableChange.UpdateColumnType => 1 }.size
@@ -255,7 +253,7 @@ class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
     val addColumnChanges = changes.collect { case _: TableChange.AddColumn => 1 }.size
 
     assert(typeChanges === 1)
-    assert(nullabilityChanges === 2)
+    assert(nullabilityChanges === 1)
     assert(commentChanges === 1)
     assert(addColumnChanges === 1)
   }
@@ -529,13 +527,13 @@ class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
 
   test("diffSchemas - nested leaf nullability and comment changes are emitted at the leaf") {
     val currentSchema = new StructType()
-      .add("s", new StructType().add("a", IntegerType, nullable = true, "old"))
+      .add("s", new StructType().add("a", IntegerType, nullable = false, "old"))
     val targetSchema = new StructType()
-      .add("s", new StructType().add("a", IntegerType, nullable = false, "new"))
+      .add("s", new StructType().add("a", IntegerType, nullable = true, "new"))
 
     val changes = SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
     assert(changes.length === 2, s"changes=$changes")
-    assert(nullabilityUpdatesOf(changes) === Map(Seq("s", "a") -> false))
+    assert(nullabilityUpdatesOf(changes) === Map(Seq("s", "a") -> true))
     assert(commentUpdatesOf(changes) === Map(Seq("s", "a") -> "new"))
   }
 
@@ -718,6 +716,112 @@ class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
     assert(
       CatalogV2Util.clearIds(updated.columns()) ===
         CatalogV2Util.structTypeToV2Columns(targetSchema, keepIds = false))
+  }
+
+  test("diffSchemas - array<array<struct>> throws unsupported error") {
+    val innerCurrent =
+      ArrayType(new StructType().add("x", IntegerType).add("y", StringType))
+    val innerTarget = ArrayType(new StructType().add("x", IntegerType))
+
+    val currentSchema = new StructType().add("a", ArrayType(innerCurrent))
+    val targetSchema = new StructType().add("a", ArrayType(innerTarget))
+
+    // CatalogV2Util cannot resolve paths with consecutive element/key/value
+    // segments (SPARK-59188), so diffSchemas rejects nested complex type
+    // evolution rather than emitting changes the catalog cannot apply.
+    checkError(
+      intercept[SparkUnsupportedOperationException](
+        SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)),
+      condition =
+        "PIPELINE_NESTED_COMPLEX_TYPE_SCHEMA_EVOLUTION_UNSUPPORTED",
+      parameters = Map(
+        "columnPath" -> "a.element",
+        "currentType" -> innerCurrent.simpleString,
+        "targetType" -> innerTarget.simpleString))
+  }
+
+  test("diffSchemas - map<string, array<struct>> throws unsupported error") {
+    val valCurrent = ArrayType(new StructType().add("x", IntegerType))
+    val valTarget = ArrayType(
+      new StructType().add("x", IntegerType).add("y", StringType))
+
+    val currentSchema = new StructType()
+      .add("m", MapType(StringType, valCurrent))
+    val targetSchema = new StructType()
+      .add("m", MapType(StringType, valTarget))
+
+    checkError(
+      intercept[SparkUnsupportedOperationException](
+        SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)),
+      condition =
+        "PIPELINE_NESTED_COMPLEX_TYPE_SCHEMA_EVOLUTION_UNSUPPORTED",
+      parameters = Map(
+        "columnPath" -> "m.value",
+        "currentType" -> valCurrent.simpleString,
+        "targetType" -> valTarget.simpleString))
+  }
+
+  test("diffSchemas - map<struct, map<string, int>> recurses into struct key") {
+    val keyCurrent = new StructType().add("a", IntegerType)
+    val keyTarget =
+      new StructType().add("a", IntegerType).add("b", StringType)
+
+    val currentSchema = new StructType()
+      .add("m", MapType(keyCurrent, MapType(StringType, IntegerType)))
+    val targetSchema = new StructType()
+      .add("m", MapType(keyTarget, MapType(StringType, IntegerType)))
+
+    val changes = SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    // The key is a struct, so leaf-level diff is emitted.
+    assert(changes.length === 1, s"changes=$changes")
+    assert(
+      addsOf(changes) ===
+        Map(Seq("m", "key", "b") -> ((StringType, true, null))))
+  }
+
+  test("diffSchemas - identical nested array<array<struct>> produces no changes") {
+    val inner = ArrayType(new StructType().add("x", IntegerType))
+    val schema = new StructType().add("a", ArrayType(inner))
+    assert(SchemaInferenceUtils.diffSchemas(schema, schema).isEmpty)
+  }
+
+  test("diffSchemas - non-type changes on nested elements are supported") {
+    // Due to SPARK-59188, type changes on nested array/map elements are unsupported. But other
+    // schema changes like nullability are still supported.
+    val currentSchema = new StructType()
+      .add("a", ArrayType(ArrayType(IntegerType), containsNull = false))
+    val targetSchema = new StructType()
+      .add("a", ArrayType(ArrayType(IntegerType), containsNull = true))
+
+    val changes = SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(changes.length === 1, s"changes=$changes")
+    assert(nullabilityUpdatesOf(changes) === Map(Seq("a", "element") -> true))
+  }
+
+  test("diffSchemas - tightening nullability throws") {
+    val currentSchema = new StructType()
+      .add("a", IntegerType, nullable = true)
+    val targetSchema = new StructType()
+      .add("a", IntegerType, nullable = false)
+
+    checkError(
+      intercept[SparkUnsupportedOperationException](
+        SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)),
+      condition = "PIPELINE_TIGHTEN_NULLABILITY_UNSUPPORTED",
+      parameters = Map("columnPath" -> "a"))
+  }
+
+  test("diffSchemas - tightening nullability inside a nested struct throws") {
+    val currentSchema = new StructType()
+      .add("s", new StructType().add("x", IntegerType, nullable = true))
+    val targetSchema = new StructType()
+      .add("s", new StructType().add("x", IntegerType, nullable = false))
+
+    checkError(
+      intercept[SparkUnsupportedOperationException](
+        SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)),
+      condition = "PIPELINE_TIGHTEN_NULLABILITY_UNSUPPORTED",
+      parameters = Map("columnPath" -> "s.x"))
   }
 
   test("inferSchemaFromFlows folds a case-only column to the same spelling regardless of flow " +
