@@ -18,6 +18,10 @@
 package org.apache.spark.sql.util
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.execution.streaming.operators.stateful.{
+  StateStoreInstanceMetricAccumulator
+}
+import org.apache.spark.sql.execution.streaming.state.StateStoreSnapshotLastUploadInstanceMetric
 
 class PartitionKeyedAccumulatorSuite extends SparkFunSuite {
 
@@ -125,5 +129,46 @@ class PartitionKeyedAccumulatorSuite extends SparkFunSuite {
       case ((rows, bytes), (partitionRows, partitionBytes)) =>
         (rows + partitionRows, bytes + partitionBytes)
     }.contains((17L, 170L)))
+  }
+
+  test("SPARK-59174: StateStoreInstanceMetricAccumulator preserves combine semantics") {
+    val metric0 = StateStoreSnapshotLastUploadInstanceMetric(Some(0), "default")
+    val metric0Store2 = StateStoreSnapshotLastUploadInstanceMetric(Some(0), "other")
+    val metric1 = StateStoreSnapshotLastUploadInstanceMetric(Some(1), "default")
+
+    // 1. Add updates to the same partition: commutative combine (max version wins)
+    val acc1 = new StateStoreInstanceMetricAccumulator
+    acc1.add((0, Map(metric0 -> 100L)))
+    acc1.add((0, Map(metric0 -> 105L)))
+    assert(acc1.value.get(0).get(metric0) === Some(105L))
+
+    val acc2 = new StateStoreInstanceMetricAccumulator
+    acc2.add((0, Map(metric0 -> 105L)))
+    acc2.add((0, Map(metric0 -> 100L)))
+    assert(acc2.value.get(0).get(metric0) === Some(105L))
+
+    // Initial value (-1) does not overwrite an existing valid snapshot version
+    acc1.add((0, Map(metric0 -> -1L)))
+    assert(acc1.value.get(0).get(metric0) === Some(105L))
+
+    // 2. Multiple stores within the same partition merge cleanly
+    acc1.add((0, Map(metric0Store2 -> 50L)))
+    assert(acc1.value.get(0).size == 2)
+    assert(acc1.value.get(0).get(metric0) === Some(105L))
+    assert(acc1.value.get(0).get(metric0Store2) === Some(50L))
+
+    // 3. Merge between accumulators: preserves combine semantics across attempts/retries
+    val accA = new StateStoreInstanceMetricAccumulator
+    accA.add((0, Map(metric0 -> 100L)))
+    accA.add((1, Map(metric1 -> 200L)))
+
+    val accB = new StateStoreInstanceMetricAccumulator
+    accB.add((0, Map(metric0 -> 105L)))
+    accB.add((1, Map(metric1 -> 150L)))
+
+    accA.merge(accB)
+    assert(accA.accumulatedNumPartitions == 2)
+    assert(accA.value.get(0).get(metric0) === Some(105L))
+    assert(accA.value.get(1).get(metric1) === Some(200L))
   }
 }
