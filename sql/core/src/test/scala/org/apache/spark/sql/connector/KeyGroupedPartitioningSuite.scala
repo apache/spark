@@ -24,7 +24,7 @@ import org.apache.spark.rdd.SortedMergeCoalescedRDD
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, ExprId, Literal, TransformExpression}
-import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, JoinType, LeftAnti, LeftSemi, LeftSingle}
+import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, JoinType, LeftAnti, LeftSemi, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryCatalystRuntimeFilterCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.functions._
@@ -3615,9 +3615,11 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  // A semi join drops the key groups absent on either side. An anti join has to probe every left
-  // row, so only the right-only groups are dropped.
+  // A cross join reaches SPJ only with equi keys, so it and a semi join drop the key groups absent
+  // on either side. An anti join has to probe every left row, so only the right-only groups are
+  // dropped.
   Seq(
+    ("CROSS", Cross, Seq(Row(4, "cc", 40.0)), 1),
     ("LEFT SEMI", LeftSemi, Seq(Row(4, "cc", 40.0)), 1),
     ("LEFT ANTI", LeftAnti, Seq(Row(0, "aa", 38.0), Row(1, "bb", 39.0)), 3)
   ).foreach { case (joinSql, joinType, expectedRows, expectedNumGroups) =>
@@ -3626,7 +3628,7 @@ class KeyGroupedPartitioningSuite
         val df = sql(
           s"""
              |${selectWithMergeJoinHint("i", "p")}
-             |id, name, price
+             |id, name, i.price
              |FROM testcat.ns.$items i $joinSql JOIN testcat.ns.$purchases p
              |ON i.id = p.item_id
              |ORDER BY id

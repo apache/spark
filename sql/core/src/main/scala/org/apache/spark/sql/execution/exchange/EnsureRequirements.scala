@@ -852,7 +852,9 @@ case class EnsureRequirements(
       keyOrdering: Ordering[InternalRowComparableWrapper]): Seq[InternalRowComparableWrapper] = {
     val merged = if (SQLConf.get.getConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED)) {
       // Rows only match within a key group, so a group no output row can come from is dropped.
-      // Same split as `PushExtraPredicateThroughJoin`, plus LeftSingle.
+      // Only equi-joins reach here (SMJ/SHJ over `ExtractEquiJoinKeys`), so Cross matches on its
+      // keys like Inner, as `canReplicateLeftSide` already assumes. Which side's rows survive
+      // follows `PushExtraPredicateThroughJoin`, plus LeftSingle.
       joinType match {
         // neither side keeps unmatched rows
         case _: InnerLike | LeftSemi =>
