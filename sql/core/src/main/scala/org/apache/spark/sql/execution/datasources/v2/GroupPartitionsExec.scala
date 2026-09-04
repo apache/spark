@@ -214,11 +214,15 @@ case class GroupPartitionsExec(
 
     // Both cheap terms come first, so the scan below runs only where a merge is possible. A
     // grouping that left the keys as they are groups the child's own key values, and one of those
-    // groups can only ever cover the one key it was built from. `keysChanged` also feeds
-    // `identityGrouping`: a projection or reduction re-labels the groups into a different key
-    // space, which no index alignment can undo.
+    // groups can only ever cover the one key it was built from.
     val keysChanged =
       joinKeyPositions.exists(_.length < childKp.expressions.length) || reducers.isDefined
+    // `identityGrouping` asks the stronger question: a projection that only reorders the key
+    // columns merges no key, but it still re-labels the groups into a different key space,
+    // which no index alignment can undo. No producer of `joinKeyPositions` emits anything but
+    // ascending positions today, so this only matters as defence in depth.
+    val keysRewritten =
+      joinKeyPositions.exists(_ != childKp.expressions.indices) || reducers.isDefined
     val isCollapsed = childKp.isCollapsed || keysChanged && {
       // The groups this node keeps are the ones that can merge keys of the child, and asking the
       // child's keys rather than its partitions is what tells such a merge from a source that
@@ -235,7 +239,7 @@ case class GroupPartitionsExec(
         group.tail.exists(childKeys(_) != first)
       }
     }
-    PartitionGrouping(partitions, isGrouped, isCollapsed, keysChanged)
+    PartitionGrouping(partitions, isGrouped, isCollapsed, keysRewritten)
   }
 
   /**
@@ -244,15 +248,16 @@ case class GroupPartitionsExec(
    * partition i, and there is one output per input. That is the only grouping that keeps a
    * marked layout's undeclared rows at hash(key) % numPartitions. A projection or reduction
    * re-labels the groups into a different key space, so even a grouping whose indices line up
-   * would pin the claim to keys it no longer declares; `keysChanged` rejects it up front. A
-   * reducer slot is treated as key-changing: a conforming self-reducer cannot rewrite a
-   * reachable key value, so the give-up there loses at most an optimization. A grouping that
-   * drops trailing declared keys still reads identity for every group it keeps, but the
-   * partition count shrinks and the hash modulus with it. The `forall` stops at the first moved
-   * partition, so a reorder or coalesce is rejected without a full scan.
+   * would pin the claim to keys it no longer declares; `keysRewritten` rejects it up front --
+   * it covers a narrowing projection, a reordering one, and any reducer slot. A reducer slot
+   * is treated as key-changing: a conforming self-reducer cannot rewrite a reachable key
+   * value, so the give-up there loses at most an optimization. A grouping that drops trailing
+   * declared keys still reads identity for every group it keeps, but the partition count
+   * shrinks and the hash modulus with it. The `forall` stops at the first moved partition, so
+   * a reorder or coalesce is rejected without a full scan.
    */
   @transient private lazy val identityGrouping: Boolean =
-    !grouping.keysChanged &&
+    !grouping.keysRewritten &&
       grouping.partitions.size == child.outputPartitioning.numPartitions &&
       grouping.partitions.zipWithIndex.forall {
         case ((_, Seq(single)), outputIndex) => single == outputIndex
@@ -445,7 +450,7 @@ private case class PartitionGrouping(
     partitions: Seq[(InternalRowComparableWrapper, Seq[Int])],
     isGrouped: Boolean,
     isCollapsed: Boolean,
-    keysChanged: Boolean)
+    keysRewritten: Boolean)
 
 /**
  * A PartitionCoalescer that groups partitions according to a pre-computed grouping plan.

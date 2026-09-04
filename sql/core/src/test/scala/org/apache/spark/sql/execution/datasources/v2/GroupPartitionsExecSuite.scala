@@ -325,12 +325,12 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
   test("SPARK-59050: a grouping that rewrites the declared keys drops the claim") {
     // `identityGrouping` also asks whether the grouping rewrote the keys: the claim the node
     // goes on to declare lives in the projected or reduced key space, while the child's
-    // undeclared rows still sit at hash(originalKey) % numPartitions. A reducer slot or a
-    // narrowing projection therefore gives up the claim even when every group keeps its index
-    // and the count is unchanged. A conforming self-reducer cannot rewrite a reachable key
-    // (its contract is r(f(x)) = f(x)), so the give-up there loses at most an optimization;
-    // no planner path applies a reducer or a narrowing projection to a marked layout, so these
-    // shapes are pinned here directly.
+    // undeclared rows still sit at hash(originalKey) % numPartitions. A reducer slot, a
+    // narrowing projection, or a reordering projection therefore gives up the claim even when
+    // every group keeps its index and the count is unchanged. A conforming self-reducer cannot
+    // rewrite a reachable key (its contract is r(f(x)) = f(x)), so the give-up there loses at
+    // most an optimization; no planner path applies a reducer or a non-identity projection to
+    // a marked layout, so these shapes are pinned here directly.
     val child = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA, exprB), Seq(row(1, 10), row(2, 20)))
         .copy(mayContainUnknownPartitionKeys = true))
@@ -353,6 +353,23 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
         assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
       case other =>
         fail("expected the unknown-keyed claim to be dropped on a narrowing projection, " +
+          s"got $other")
+    }
+
+    // Reordering projection: positions Seq(1, 0) re-label every group into the swapped key
+    // space while each group keeps its index and the count, so only the rewrite clause can
+    // catch it. No producer of joinKeyPositions emits anything but ascending positions today;
+    // this pins the predicate directly.
+    val reordered = GroupPartitionsExec(child, joinKeyPositions = Some(Seq(1, 0)))
+    assert(reordered.groupedPartitions.size === 2)
+    assert(reordered.groupedPartitions.zipWithIndex.forall {
+      case ((_, inputIndices), outputIndex) => inputIndices == Seq(outputIndex)
+    }, "the reordering keeps every group at its index")
+    reordered.outputPartitioning match {
+      case u: UnknownPartitioning =>
+        assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
+      case other =>
+        fail("expected the unknown-keyed claim to be dropped on a reordering projection, " +
           s"got $other")
     }
   }
