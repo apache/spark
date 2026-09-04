@@ -463,7 +463,7 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
   // The evaluation types in scope
   // ---------------------------------------------------------------------------
 
-  test("SPARK-58752: every form of the regular scalar Python UDF installs the environment") {
+  test("SPARK-59233: every form of the regular scalar Python UDF installs the environment") {
     // A UDF inside a higher-order function's lambda is lifted to the element-wise type by
     // `ExtractPythonUDFFromLambda`, and that is on by default, so it is the same UDF to the user.
     withSQLConf(key("FOO") -> "bar") {
@@ -487,7 +487,7 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-58752: the pandas and Arrow element-wise types install the environment") {
+  test("SPARK-59233: the pandas and Arrow element-wise types install the environment") {
     // Lifting a pandas or Arrow UDF out of a lambda produces that family's own element-wise type.
     // These reach the same runner as their batched siblings, so they are covered with it.
     withSQLConf(key("FOO") -> "bar") {
@@ -597,7 +597,7 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-58752: the vectorized and specialized families install the environment") {
+  test("SPARK-59233: the vectorized and specialized families install the environment") {
     // The scope is the set of runners that install the environment, not a list of evaluation
     // types, so this walks the types each shared runner serves. A type added to one of these
     // runners is covered by construction; a type given a new runner is not, and needs a case here
@@ -630,7 +630,7 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
   // Installation by the runners
   // ---------------------------------------------------------------------------
 
-  test("SPARK-58752: the Arrow UDTF runner installs the session environment") {
+  test("SPARK-59233: the Arrow UDTF runner installs the session environment") {
     withSQLConf(key("FOO") -> "bar") {
       Seq(PythonEvalType.SQL_ARROW_TABLE_UDF, PythonEvalType.SQL_ARROW_UDTF).foreach { evalType =>
         assert(arrowUDTFRunnerEnv(evalType = evalType).get("FOO") === Some("bar"))
@@ -638,7 +638,7 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-58752: the cogrouped-map runner installs the session environment") {
+  test("SPARK-59233: the cogrouped-map runner installs the session environment") {
     withSQLConf(key("FOO") -> "bar") {
       Seq(
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
@@ -648,7 +648,7 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-58752: a runner keeps the function's own variables alongside the session's") {
+  test("SPARK-59233: a runner keeps the function's own variables alongside the session's") {
     // The runners added here take the same merge as the scalar ones, so the precedence rule that
     // `mergeToJavaMap` implements has to hold through each of them too.
     withSQLConf(key("FROM_SESSION") -> "session", key("BOTH") -> "session") {
@@ -682,7 +682,7 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-58752: the evaluation type no longer decides whether a runner installs anything") {
+  test("SPARK-59233: the evaluation type no longer decides whether a runner installs anything") {
     // These three combinations installed nothing while the scope was an evaluation-type allowlist,
     // even though the runner itself was already on the path. Keeping them asserted here records
     // that the allowlist, not the runner, was what held them back.
@@ -729,7 +729,7 @@ class PythonWorkerEnvironmentSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-58752: an invalid environment now fails every runner, not only the scalar ones") {
+  test("SPARK-59233: an invalid environment now fails every runner, not only the scalar ones") {
     // Validation is part of installing the environment, so widening which runners install it
     // widens which ones an invalid environment can fail. A family that previously ignored such an
     // environment now rejects it, which is the intended cost of covering it.
