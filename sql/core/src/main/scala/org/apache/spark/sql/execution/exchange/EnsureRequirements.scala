@@ -614,8 +614,13 @@ case class EnsureRequirements(
             logInfo(log"Skipping partially clustered distribution as it cannot be applied for " +
               log"join type '${MDC(LogKeys.JOIN_TYPE, joinType)}'")
           } else {
-            val unwrappedLeft = unwrapGroupPartitions(left)
-            val unwrappedRight = unwrapGroupPartitions(right)
+            // The pre-alignment plan of each side and the grouping this rule inserted over it,
+            // read once: the statistics and the original partition keys below come from the
+            // plan, the positions projecting them from the grouping.
+            val leftGrouping = innermostGroupPartition(left)
+            val rightGrouping = innermostGroupPartition(right)
+            val unwrappedLeft = leftGrouping.map(_._1.child).getOrElse(left)
+            val unwrappedRight = rightGrouping.map(_._1.child).getOrElse(right)
 
             val leftLink = unwrappedLeft.logicalLink
             val rightLink = unwrappedRight.logicalLink
@@ -637,11 +642,16 @@ case class EnsureRequirements(
                    |""".stripMargin)
               leftLink.get.stats.sizeInBytes < rightLink.get.stats.sizeInBytes
             } else {
-              // As a simple heuristic, we pick the side with fewer number of partitions
-              // to apply the grouping & replication of partitions
+              // As a simple heuristic, we pick the side with fewer number of partitions to
+              // apply the grouping & replication of partitions. The counts read the
+              // pre-alignment plans, for the same reason the statistics do: on a re-run both
+              // aligned reports hold the same number of keys, so comparing them decides nothing.
               logInfo("Using number of partitions to determine which side of join " +
                   "to fully cluster partition values")
-              leftPartKeys.size < rightPartKeys.size
+              PartitioningCollection.numKeyedPartitions(unwrappedLeft.outputPartitioning)
+                .getOrElse(leftPartKeys.size) <
+                PartitioningCollection.numKeyedPartitions(unwrappedRight.outputPartitioning)
+                .getOrElse(rightPartKeys.size)
             }
 
             replicateRightSide = !replicateLeftSide
@@ -661,18 +671,19 @@ case class EnsureRequirements(
               replicateRightSide = false
             } else {
               // In partially clustered distribution, we should use un-grouped partition values.
-              // The positions projecting them come from the innermost grouping when there is
-              // one: like in `applyGroupPartitions`, they were computed against the raw
-              // partition keys, while the spec's were computed against the node's already
-              // projected report on a re-run.
+              // The child and the positions projecting its keys come from the same grouping:
+              // the keys from the node's child, the positions from the node itself, falling back
+              // to the spec's when there is no grouping. Like in `applyGroupPartitions`, the
+              // node's positions were computed against the raw partition keys, while the spec's
+              // were computed against the node's already projected report on a re-run.
               val (partiallyClusteredChild, partiallyClusteredPositions) =
                 if (replicateLeftSide) {
                   (unwrappedRight,
-                    innermostGroupPartition(right).flatMap(_._1.joinKeyPositions)
+                    rightGrouping.flatMap(_._1.joinKeyPositions)
                       .orElse(rightSpec.joinKeyPositions))
                 } else {
                   (unwrappedLeft,
-                    innermostGroupPartition(left).flatMap(_._1.joinKeyPositions)
+                    leftGrouping.flatMap(_._1.joinKeyPositions)
                       .orElse(leftSpec.joinKeyPositions))
                 }
               // The pre-alignment plan of the side that keeps its splits: its partitioning
@@ -801,12 +812,9 @@ case class EnsureRequirements(
     }
 
   /**
-   * Unwraps the `GroupPartitionsExec` nodes this rule inserted over a join child, down to the
-   * pre-alignment plan, per the descent of [[innermostGroupPartition]].
-   *
-   * The statistics-based replicate-side choice and the original partition keys below must read
-   * from the pre-alignment plan on every pass: the local sort one level down carries no
-   * `logicalLink` and reports the aligned layout instead.
+   * Unwraps the groupings and local sorts this rule inserted over a child, down to the
+   * pre-alignment plan, per the descent of [[innermostGroupPartition]]. Peeling one level stops
+   * at the local sort this rule added, leaving the earlier pass's alignment in place.
    */
   private def unwrapGroupPartitions(plan: SparkPlan): SparkPlan =
     innermostGroupPartition(plan).map(_._1.child).getOrElse(plan)
@@ -827,6 +835,9 @@ case class EnsureRequirements(
       g.copy(
         joinKeyPositions = g.joinKeyPositions.orElse(joinKeyPositions),
         expectedPartitionKeys = Some(mergedPartitionKeys),
+        // Unlike `joinKeyPositions`, these need no `orElse`. A re-run with reducers never reaches
+        // here. Both sides then report the same reduced keys, so `isCompatible` above is true and
+        // the whole block is skipped.
         reducers = reducers,
         distributePartitions = distributePartitions)
     }.getOrElse {

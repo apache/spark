@@ -2067,6 +2067,52 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58996: the replicate-side fallback counts pre-alignment partitions") {
+    // The replicate side is chosen by plan statistics; when there is none (the dummy plans carry
+    // no `logicalLink`, which forces the fallback), the side with fewer partitions is picked. On
+    // a re-run the join children arrive already aligned, and both aligned reports hold the same
+    // keys, so counting them decides nothing: the counts must come from the pre-alignment
+    // partitioning. Each arm hands the rule the output shape of a first pass -- a local sort
+    // over an aligned `GroupPartitionsExec` -- and reads the replicate-side choice back off the
+    // `distributePartitions` flags.
+    def distributeFlags(
+        leftKeys: Seq[InternalRow], leftSplits: Int,
+        rightKeys: Seq[InternalRow], rightSplits: Int): (Boolean, Boolean) = {
+      def alignedChild(expr: AttributeReference, keys: Seq[InternalRow], splits: Int) = {
+        val leaf = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(expr), keys))
+        val gpe = GroupPartitionsExec(leaf,
+          expectedPartitionKeys = Some(Seq(
+            (InternalRowComparableWrapper(InternalRow(1), Seq(expr)), splits))))
+        SortExec(Seq(SortOrder(expr, Ascending)), global = false, gpe)
+      }
+      val smj = SortMergeJoinExec(Seq(exprA), Seq(exprB), Inner, None,
+        alignedChild(exprA, leftKeys, leftSplits), alignedChild(exprB, rightKeys, rightSplits))
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+        val Seq(newLeft, newRight) = EnsureRequirements.apply(smj).children
+        def distribute(child: SparkPlan): Boolean = child.collectFirst {
+          case g: GroupPartitionsExec => g
+        }.get.distributePartitions
+        (distribute(newLeft), distribute(newRight))
+      }
+    }
+
+    // The left side holds one partition against three on the right: it is replicated, so it
+    // does not distribute. Counting the aligned reports instead sees one key on both sides and
+    // always picks the right side.
+    assert(distributeFlags(
+      leftKeys = Seq(InternalRow(1)), leftSplits = 1,
+      rightKeys = Seq(InternalRow(1), InternalRow(1), InternalRow(1)), rightSplits = 3) ===
+        ((false, true)))
+
+    // The mirrored control: the right side is replicated.
+    assert(distributeFlags(
+      leftKeys = Seq(InternalRow(1), InternalRow(1), InternalRow(1)), leftSplits = 3,
+      rightKeys = Seq(InternalRow(1)), rightSplits = 1) ===
+        ((true, false)))
+  }
+
   test("SPARK-58996: a single-child operator over a partially clustered layout still gets " +
       "grouped") {
     // A partially clustered `GroupPartitionsExec` reports a non-grouped partitioning by design,
