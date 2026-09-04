@@ -880,9 +880,13 @@ object KeyedPartitioning {
    * `PartitioningCollection`, whose invariant requires equal partition keys -- but join types that
    * expose only one side's partitioning (e.g. LEFT OUTER) run nothing that compares the two
    * orders, and silently return wrong results.
+   *
+   * It is the keys' own ordering, the one `InternalRowComparableWrapper.equals` compares with, so
+   * one definition answers both. `EnsureRequirements`' `OrderedDistribution` arm is the one place
+   * that lays grouped keys out in another order, the distribution's own.
    */
   def groupedKeyRowOrdering(dataTypes: Seq[DataType]): BaseOrdering =
-    RowOrdering.createNaturalAscendingOrdering(dataTypes)
+    InternalRowComparableWrapper.orderingFor(dataTypes)
 
   /**
    * Projects a sequence of partition keys by selecting only the specified positions.
