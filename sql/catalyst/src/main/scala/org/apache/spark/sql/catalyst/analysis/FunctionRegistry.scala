@@ -1027,12 +1027,28 @@ object FunctionRegistry {
     expression[JsonObjectKeys]("json_object_keys"),
     expression[JsonTypeof]("json_typeof"),
     // Built-in forms of the SQL:2016 JSON constructor and path functions, resolved for plain calls
-    // that carry no SQL/JSON clauses (the dedicated grammar handles clause-bearing syntax).
+    // that carry no SQL/JSON clauses (the dedicated grammar handles clause-bearing syntax). The
+    // names must stay in sync with `routedJsonConstructorNames` below.
     expressionBuilder("json_value", JsonValueExpressionBuilder),
     expressionBuilder("json_query", JsonQueryExpressionBuilder),
     expressionBuilder("json_exists", JsonExistsExpressionBuilder),
     expressionBuilder("json_array", JsonArrayExpressionBuilder)
   )
+
+  /**
+   * Names of the clause-free SQL/JSON constructor/path functions that `AstBuilder` routes through
+   * function resolution. Single source of truth for the three places that must stay in sync when a
+   * constructor is added or removed:
+   *   1. the `expressionBuilder(...)` registrations in [[jsonExpressions]] above,
+   *   2. the routed grammar branches in `AstBuilder`, and
+   *   3. [[FunctionResolution.resolvesToStarDisallowedJsonConstructor]], which rejects a bare `*`
+   *      argument for the built-in forms -- it derives its set from here, so a newly routed
+   *      constructor is covered automatically.
+   * (1) can't be generated from this set because each registration needs its concrete builder's
+   * `ClassTag` to read the `ExpressionInfo` annotation, so keep it aligned by hand.
+   */
+  val routedJsonConstructorNames: Set[String] =
+    Set("json_value", "json_query", "json_exists", "json_array")
 
   private def variantExpressions: Seq[FunctionRegistryEntry] = Seq(
     // Variant
