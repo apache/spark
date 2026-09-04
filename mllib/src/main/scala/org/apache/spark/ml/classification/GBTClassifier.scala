@@ -32,6 +32,7 @@ import org.apache.spark.ml.util.DatasetUtils.extractInstances
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
+import org.apache.spark.mllib.tree.loss.{ClassificationLoss => OldClassificationLoss}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -304,11 +305,73 @@ class GBTClassificationModel private[ml](
 
     val outputData = super.transform(dataset)
     if ($(leafCol).nonEmpty) {
-      val leafUDF = udf { features: Vector => predictLeaf(features) }
+      val localRootNodes = _trees.map(_.rootNode)
+      val leafUDF = udf { features: Vector =>
+        TreeEnsembleModel.predictLeaf(features, localRootNodes)
+      }
       outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))),
         outputSchema($(leafCol)).metadata)
     } else {
       outputData
+    }
+  }
+
+  override protected def predictRawColumn(features: Column): Column = {
+    val localRootNodes = _trees.map(_.rootNode)
+    val localTreeWeights = _treeWeights.clone()
+    udf((features: Vector) =>
+      GBTClassificationModel.predictRaw(features, localRootNodes, localTreeWeights)
+    ).apply(features)
+  }
+
+  override protected def raw2probabilityColumn(rawPrediction: Column): Column = {
+    val localLoss = loss
+    udf((rawPrediction: Vector) =>
+      GBTClassificationModel.raw2probability(rawPrediction, localLoss)
+    ).apply(rawPrediction)
+  }
+
+  override protected def predictProbabilityColumn(features: Column): Column = {
+    val localRootNodes = _trees.map(_.rootNode)
+    val localTreeWeights = _treeWeights.clone()
+    val localLoss = loss
+    udf((features: Vector) => {
+      val rawPrediction =
+        GBTClassificationModel.predictRaw(features, localRootNodes, localTreeWeights)
+      GBTClassificationModel.raw2probability(rawPrediction, localLoss)
+    }).apply(features)
+  }
+
+  override protected def raw2predictionColumn(rawPrediction: Column): Column = {
+    if (isDefined(thresholds)) {
+      val localThresholds = getThresholds.clone()
+      val localLoss = loss
+      udf((rawPrediction: Vector) => {
+        val probability = GBTClassificationModel.raw2probability(rawPrediction, localLoss)
+        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+      }).apply(rawPrediction)
+    } else {
+      udf((rawPrediction: Vector) => rawPrediction.argmax.toDouble).apply(rawPrediction)
+    }
+  }
+
+  override protected def predictionColumn(features: Column): Column = {
+    val localRootNodes = _trees.map(_.rootNode)
+    val localTreeWeights = _treeWeights.clone()
+    if (isDefined(thresholds)) {
+      val localThresholds = getThresholds.clone()
+      val localLoss = loss
+      udf((features: Vector) => {
+        val rawPrediction =
+          GBTClassificationModel.predictRaw(features, localRootNodes, localTreeWeights)
+        val probability = GBTClassificationModel.raw2probability(rawPrediction, localLoss)
+        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+      }).apply(features)
+    } else {
+      udf((features: Vector) => {
+        val margin = GBTClassificationModel.margin(features, localRootNodes, localTreeWeights)
+        if (margin > 0.0) 1.0 else 0.0
+      }).apply(features)
     }
   }
 
@@ -402,6 +465,36 @@ class GBTClassificationModel private[ml](
 
 @Since("2.0.0")
 object GBTClassificationModel extends MLReadable[GBTClassificationModel] {
+
+  private def margin(
+      features: Vector,
+      rootNodes: Array[Node],
+      treeWeights: Array[Double]): Double = {
+    var prediction = 0.0
+    var i = 0
+    while (i < rootNodes.length) {
+      prediction += rootNodes(i).predictImpl(features).prediction * treeWeights(i)
+      i += 1
+    }
+    prediction
+  }
+
+  private def predictRaw(
+      features: Vector,
+      rootNodes: Array[Node],
+      treeWeights: Array[Double]): Vector = {
+    val prediction = margin(features, rootNodes, treeWeights)
+    Vectors.dense(-prediction, prediction)
+  }
+
+  private def raw2probability(
+      rawPrediction: Vector,
+      loss: OldClassificationLoss): Vector = {
+    val probability = rawPrediction.copy.toDense
+    probability.values(0) = loss.computeProbability(probability.values(0))
+    probability.values(1) = 1.0 - probability.values(0)
+    probability
+  }
 
   private val numFeaturesKey: String = "numFeatures"
   private val numTreesKey: String = "numTrees"
