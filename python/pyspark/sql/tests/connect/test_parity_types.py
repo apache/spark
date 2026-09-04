@@ -50,6 +50,26 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_timestamp_nanos_type_map_key_python_udf_input(self):
         super().test_timestamp_nanos_type_map_key_python_udf_input()
 
+    # The classic Arrow-rejection test asserts the classic PySparkTypeError / message parameters;
+    # Connect's data path rejects at a different layer, so it is covered by the Connect-specific
+    # test below rather than by inheriting the classic one.
+    @unittest.skip("SPARK-57462: nanosecond timestamp types are pending Connect/Arrow support.")
+    def test_timestamp_nanos_type_arrow_conversion_unsupported(self):
+        super().test_timestamp_nanos_type_arrow_conversion_unsupported()
+
+    def test_timestamp_nanos_type_connect_data_path_unsupported(self):
+        # SPARK-57462: the Spark Connect data path goes through Arrow (to_arrow_type /
+        # ArrowTableToRowsConversion), so collecting a nanosecond value must raise the documented
+        # UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION rather than mis-handle it. Connect collect is
+        # otherwise safe only because to_table supplies the Spark schema; this locks that in.
+        with self.sql_conf({"spark.sql.timestampNanosTypes.enabled": True}):
+            df = self.spark.sql(
+                "SELECT CAST('2020-01-02 03:04:05.123456789' AS TIMESTAMP_NTZ(9)) AS ts"
+            )
+            with self.assertRaises(Exception) as pe:
+                df.collect()
+            self.assertIn("UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION", str(pe.exception))
+
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_apply_schema(self):
         super().test_apply_schema()

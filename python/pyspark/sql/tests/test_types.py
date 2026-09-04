@@ -2265,12 +2265,15 @@ class TypesTestsMixin:
     def test_timestamp_nanos_type_preview_flag_off(self):
         # SPARK-57462: with the preview flag off, the classic explicit-schema createDataFrame
         # path (which goes through EvaluatePython.makeFromJava, not the row encoder) must not
-        # execute; the eager guard on makeFromJava enforces that.
+        # execute; the eager guard on makeFromJava enforces that with FEATURE_NOT_ENABLED.
         schema = StructType([StructField("ts", TimestampNTZNanosType(9))])
         data = [(datetime.datetime(2020, 1, 1),)]
         with self.sql_conf({"spark.sql.timestampNanosTypes.enabled": False}):
-            with self.assertRaises(Exception):
+            with self.assertRaises(Exception) as pe:
                 self.spark.createDataFrame(data, schema).collect()
+            # Assert the specific condition rather than any failure (the JVM SparkThrowable message
+            # carries the [FEATURE_NOT_ENABLED] token); a bare assertRaises would pass on any error.
+            self.assertIn("FEATURE_NOT_ENABLED", str(pe.exception))
 
     def test_timestamp_nanos_type_python_udf(self):
         # SPARK-57462: a Python UDF with a nanosecond return type exercises makeFromJava
@@ -2287,15 +2290,20 @@ class TypesTestsMixin:
     def test_timestamp_nanos_type_map_key_collision(self):
         # SPARK-57462: two nanosecond keys that differ only below a microsecond collapse to the
         # same microsecond-resolution Python key. Rather than silently drop a map entry, the
-        # conversion fails deterministically.
+        # Python-side guard fails deterministically with a specific error naming the key type.
         with self.sql_conf({"spark.sql.timestampNanosTypes.enabled": True}):
             df = self.spark.sql(
                 "SELECT map("
                 "CAST('2020-01-01 00:00:00.123456700' AS TIMESTAMP_NTZ(9)), 1, "
                 "CAST('2020-01-01 00:00:00.123456800' AS TIMESTAMP_NTZ(9)), 2) AS m"
             )
-            with self.assertRaises(Exception):
+            with self.assertRaises(PySparkTypeError) as pe:
                 df.collect()
+            self.check_error(
+                exception=pe.exception,
+                errorClass="TIMESTAMP_NANOS_PYTHON_MAP_KEY",
+                messageParameters={"type": "timestamp_ntz(9)"},
+            )
 
     def test_timestamp_nanos_type_python_udf_input(self):
         # SPARK-57462: a Python UDF that takes a nanosecond column as an *argument* exercises the
@@ -2310,6 +2318,12 @@ class TypesTestsMixin:
             df = self.spark.createDataFrame(
                 [(value,)], StructType([StructField("ts", TimestampNTZNanosType(9))])
             )
+            # Prove toJava actually handed the UDF a datetime.datetime (the epochMicros -> datetime
+            # arm), not a raw epoch-micros int: with `lambda x: x` alone a leaked int would be
+            # rebuilt into a datetime by makeFromJava and the round-trip below would still pass.
+            type_probe = udf(lambda x: type(x).__name__, returnType=StringType(), useArrow=False)
+            self.assertEqual("datetime", df.select(type_probe("ts")).first()[0])
+            # ... and the value itself round-trips at microsecond resolution.
             identity_udf = udf(lambda x: x, returnType=TimestampNTZNanosType(9), useArrow=False)
             row = df.select(identity_udf("ts").alias("out")).first()
             self.assertEqual(value, row.out)
@@ -2334,8 +2348,42 @@ class TypesTestsMixin:
                 returnType=IntegerType(),
                 useArrow=False,
             )
-            with self.assertRaises(Exception):
+            with self.assertRaises(Exception) as pe:
                 df.select(size_udf("m").alias("n")).collect()
+            # The JVM toJava map-key branch raises TIMESTAMP_NANOS_PYTHON_MAP_KEY (a
+            # SparkRuntimeException); assert that condition rather than any failure.
+            self.assertIn("TIMESTAMP_NANOS_PYTHON_MAP_KEY", str(pe.exception))
+
+    def test_timestamp_nanos_type_arrow_conversion_unsupported(self):
+        # SPARK-57462: Arrow/pandas value conversion for the nanosecond timestamp types is a pending
+        # follow-up; until then the classic read (toPandas) and write (createDataFrame from a pandas
+        # DataFrame) paths must reject an explicit nanosecond schema deterministically, naming the
+        # offending leaf type, rather than silently mis-handle the value. (The Connect data path is
+        # asserted separately in the parity suite.)
+        import pandas as pd
+
+        with self.sql_conf({"spark.sql.timestampNanosTypes.enabled": True}):
+            schema = StructType([StructField("ts", TimestampNTZNanosType(9))])
+            value = datetime.datetime(2020, 1, 2, 3, 4, 5, 123456)
+
+            # Read path: DataFrame.toPandas().
+            df = self.spark.createDataFrame([(value,)], schema)
+            with self.assertRaises(PySparkTypeError) as pe:
+                df.toPandas()
+            self.check_error(
+                exception=pe.exception,
+                errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                messageParameters={"data_type": "TimestampNTZNanosType(9)"},
+            )
+
+            # Write path: createDataFrame from a pandas DataFrame with an explicit nanos schema.
+            with self.assertRaises(PySparkTypeError) as pe:
+                self.spark.createDataFrame(pd.DataFrame({"ts": [value]}), schema)
+            self.check_error(
+                exception=pe.exception,
+                errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                messageParameters={"data_type": "TimestampNTZNanosType(9)"},
+            )
 
     def test_yearmonth_interval_type_constructor(self):
         self.assertEqual(YearMonthIntervalType().simpleString(), "interval year to month")
@@ -3153,6 +3201,10 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
         self.assertEqual('"timestamp_ltz(8)"', TimestampLTZNanosType(8).json())
         self.assertEqual("TimestampNTZNanosType(9)", repr(TimestampNTZNanosType(9)))
         self.assertEqual("TimestampLTZNanosType(7)", repr(TimestampLTZNanosType(7)))
+        # typeName() carries the precision (matching the JVM), rather than the "timestampntznanos"
+        # the DataType.typeName classmethod would derive from the class name.
+        self.assertEqual("timestamp_ntz(9)", TimestampNTZNanosType(9).typeName())
+        self.assertEqual("timestamp_ltz(7)", TimestampLTZNanosType(7).typeName())
         # printSchema() / treeString() must render the precision rather than the name derived
         # from the class, so these have to count as parameterized types in _get_jvm_type_name.
         self.assertEqual("timestamp_ntz(9)", DataType._get_jvm_type_name(TimestampNTZNanosType(9)))
@@ -3273,6 +3325,14 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
     def test_timestamp_microsecond(self):
         tst = TimestampType()
         self.assertEqual(tst.toInternal(datetime.datetime.max) % 1000000, 999999)
+
+    def test_bare_timestamp_ltz_json_value(self):
+        # SPARK-57462: bare "timestamp_ltz" is the LTZ spelling of the default TimestampType,
+        # matching the JVM parser; the JSON reader must accept it, like bare "timestamp_ntz".
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        self.assertEqual(TimestampType(), _parse_datatype_json_string('"timestamp_ltz"'))
+        self.assertEqual(TimestampNTZType(), _parse_datatype_json_string('"timestamp_ntz"'))
 
     # regression test for SPARK-23299
     def test_row_without_column_name(self):

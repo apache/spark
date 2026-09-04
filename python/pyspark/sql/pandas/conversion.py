@@ -640,10 +640,12 @@ class SparkConversionMixin:
         infer_pandas_dict_as_map = inferPandasDictAsMap == "true"
 
         # Building a DataFrame from pandas/PyArrow data goes through Arrow, whose nanosecond
-        # timestamp value conversion is a pending follow-up; fail deterministically for an
-        # explicit nanosecond-typed schema rather than silently mis-handle the values. Covers a
-        # bare atomic DataType schema as well as a StructType (a DDL string / list of names cannot
-        # carry these types without an explicit DataType, so is left to the server to gate).
+        # timestamp value conversion is a pending follow-up; fail deterministically for an explicit
+        # nanosecond-typed schema rather than silently mis-handle the values. createDataFrame has
+        # already parsed a DDL-string schema into a DataType by this point, so this guard covers
+        # both an explicit DataType and a DDL string (bare atomic or StructType). Only a plain list
+        # of column names carries no type information -- and so cannot name these types -- and is
+        # left to the server to gate.
         if isinstance(schema, DataType):
             from pyspark.sql.pandas.types import _reject_timestamp_nanos_conversion
 

@@ -543,6 +543,13 @@ class AnyTimestampNanoType(DatetimeType):
     def __repr__(self) -> str:
         return "%s(%d)" % (type(self).__name__, self.precision)
 
+    def typeName(self) -> str:  # type: ignore[override]
+        # Instance-level override of the DataType.typeName classmethod, whose default would derive
+        # "timestampntznanos" from the class name. Return simpleString() so the public type name
+        # carries the precision and matches the JVM (e.g. timestamp_ntz(9)), so callers such as
+        # df.schema["ts"].dataType.typeName() and assertSchemaEqual see a sensible name.
+        return self.simpleString()
+
 
 class TimestampNTZNanosType(AnyTimestampNanoType):
     """Timestamp (datetime.datetime) data type without timezone information, with
@@ -2414,6 +2421,9 @@ _all_mappable_types: Dict[str, Type[DataType]] = {
     "date": DateType,
     "timestamp": TimestampType,
     "timestamp_ntz": TimestampNTZType,
+    # Bare "timestamp_ltz" (no precision) is the LTZ spelling of the default TimestampType, matching
+    # the JVM parser (DataTypeAstBuilder: TIMESTAMP_LTZ with no precision -> TimestampType).
+    "timestamp_ltz": TimestampType,
     "void": NullType,
     "variant": VariantType,
     "interval": CalendarIntervalType,
@@ -3069,6 +3079,34 @@ def _first_timestamp_nanos_map_key_type(dt: DataType) -> Optional["DataType"]:
         return None
     elif isinstance(dt, UserDefinedType):
         return _first_timestamp_nanos_map_key_type(dt.sqlType())
+    else:
+        return None
+
+
+def _first_timestamp_nanos_type(dt: DataType) -> Optional["DataType"]:
+    """Return the first nanosecond-capable timestamp type (depth-first) that ``dt`` is or contains,
+    or ``None`` if it contains none.
+
+    The Arrow / pandas / Connect value conversion for :class:`TimestampNTZNanosType` /
+    :class:`TimestampLTZNanosType` is not implemented yet (planned follow-up). Callers reject such a
+    schema up front rather than mis-handle the value; the returned leaf type feeds the error
+    message, consistent with :func:`~pyspark.sql.pandas.types.to_arrow_type`, which reports the
+    offending leaf. This is the "find the node" companion to the ``_has_type`` boolean check.
+    """
+    if isinstance(dt, AnyTimestampNanoType):
+        return dt
+    elif isinstance(dt, ArrayType):
+        return _first_timestamp_nanos_type(dt.elementType)
+    elif isinstance(dt, MapType):
+        return _first_timestamp_nanos_type(dt.keyType) or _first_timestamp_nanos_type(dt.valueType)
+    elif isinstance(dt, StructType):
+        for field in dt.fields:
+            found = _first_timestamp_nanos_type(field.dataType)
+            if found is not None:
+                return found
+        return None
+    elif isinstance(dt, UserDefinedType):
+        return _first_timestamp_nanos_type(dt.sqlType())
     else:
         return None
 
