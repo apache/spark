@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-import java.sql.{Connection, DriverManager, SQLException}
+import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
 import scala.jdk.CollectionConverters._
@@ -32,7 +32,6 @@ import org.apache.spark.sql.connector.catalog.{Identifier, TableSummary}
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLConf, toSQLStmt}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.jdbc.H2Dialect
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
