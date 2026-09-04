@@ -358,6 +358,19 @@ abstract class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAn
     assert(!store.view(classOf[ApplicationStoreInfo]).iterator().hasNext)
   }
 
+  test("SPARK-58985: commit deducts a store deleted out of band") {
+    val manager = mockManager()
+    val dst = commitIdleStore(manager)
+    Utils.deleteRecursively(dst)
+
+    // A lease that fits without evicting anything, so commit() meets the leftover entry itself.
+    val lease = manager.lease(1)
+    doReturn(1L).when(manager).sizeOf(meq(lease.tmpPath))
+    assert(lease.commit("app1", None) === dst)
+    assert(manager.committed() === 1)
+    assert(store.read(classOf[ApplicationStoreInfo], dst.getAbsolutePath).size === 1)
+  }
+
   test("SPARK-58985: commit is atomic with release") {
     // updateApplicationStoreInfo() reads the clock after commit() has moved the store into
     // place; park commit() there and run release() concurrently.

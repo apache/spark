@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.File
+import java.io.{File, IOException}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable.{HashMap, ListBuffer}
@@ -156,6 +156,8 @@ private class HistoryServerDiskManager(
 
   /**
    * Tell the disk manager that the store for the given application is not being used anymore.
+   * A tracked store whose directory is already gone is dropped from the listing regardless of
+   * `delete`.
    *
    * @param delete Whether to delete the store from disk.
    */
@@ -178,6 +180,8 @@ private class HistoryServerDiskManager(
       if (path.isDirectory()) {
         if (delete) {
           // If the app was not actively tracked, its size was not deducted above; do it now.
+          // Measure it from disk rather than trusting the listing: a store directory without a
+          // listing entry is still counted, since initialize() measures the whole directory.
           if (oldSizeOpt.isEmpty) {
             val size = sizeOf(path)
             updateUsage(-size, committed = true)
@@ -228,6 +232,15 @@ private class HistoryServerDiskManager(
     listing.delete(classOf[ApplicationStoreInfo], path.getAbsolutePath())
   }
 
+  /** Returns the listing entry of the store at `path`, if any. */
+  private def readStoreInfo(path: String): Option[ApplicationStoreInfo] = {
+    try {
+      Some(listing.read(classOf[ApplicationStoreInfo], path))
+    } catch {
+      case _: NoSuchElementException => None
+    }
+  }
+
   private def makeRoom(size: Long): Unit = {
     if (free() < size) {
       logDebug(s"Not enough free space, looking at candidates for deletion...")
@@ -256,12 +269,7 @@ private class HistoryServerDiskManager(
           // active, or a concurrent release() or commit() may have deleted it along with its
           // listing entry. Deduct the size the listing holds now, which may have changed as well.
           if (!active.contains(candidate.appId -> candidate.attemptId)) {
-            val current = try {
-              Some(listing.read(classOf[ApplicationStoreInfo], candidate.path))
-            } catch {
-              case _: NoSuchElementException => None
-            }
-            current.foreach { info =>
+            readStoreInfo(candidate.path).foreach { info =>
               logInfo(log"Deleting store for" +
                 log" ${MDC(APP_ID, info.appId)}/${MDC(APP_ATTEMPT_ID, info.attemptId)}.")
               deleteStore(new File(info.path))
@@ -332,6 +340,13 @@ private class HistoryServerDiskManager(
           val size = sizeOf(dst)
           deleteStore(dst)
           updateUsage(-size, committed = true)
+        } else {
+          // The store directory is gone (e.g., deleted out of band) but may still be listed and
+          // counted; drop it before the new store takes over its listing entry.
+          readStoreInfo(dst.getAbsolutePath()).foreach { info =>
+            deleteStore(dst)
+            updateUsage(-info.size, committed = true)
+          }
         }
       }
 
@@ -343,7 +358,9 @@ private class HistoryServerDiskManager(
       // Move the store into place, account for it and mark the app active in one step, so a
       // concurrent release() or makeRoom() cannot delete the store before it is tracked.
       active.synchronized {
-        tmpPath.renameTo(dst)
+        if (!tmpPath.renameTo(dst)) {
+          throw new IOException(s"Failed to move the store from $tmpPath to $dst")
+        }
         updateUsage(newSize, committed = true)
         updateApplicationStoreInfo(appId, attemptId, newSize)
         active(appId -> attemptId) = newSize
