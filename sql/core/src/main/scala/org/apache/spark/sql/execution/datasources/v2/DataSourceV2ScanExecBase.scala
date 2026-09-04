@@ -96,7 +96,17 @@ trait DataSourceV2ScanExecBase
         val rowOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
         val partitionKeys =
           inputPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey()).sorted(rowOrdering)
-        KeyedPartitioning(exprs, partitionKeys)
+        val partitioning = KeyedPartitioning(exprs, partitionKeys)
+        // A partition key may reference a column that was pruned out of the scan output (kept only
+        // when operation keys may be a subset of the partition keys, see
+        // V2ScanPartitioningAndOrdering). Project such unresolvable key positions away so the
+        // reported partitioning only references output columns.
+        val resolvablePositions = exprs.indices.filter(i => exprs(i).references.subsetOf(outputSet))
+        if (resolvablePositions.isEmpty) {
+          super.outputPartitioning
+        } else {
+          partitioning.project(resolvablePositions)
+        }
       case _ =>
         super.outputPartitioning
     }

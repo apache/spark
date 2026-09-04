@@ -334,11 +334,21 @@ case class DataSourceV2ScanRelation(
         output = this.relation.output.map(QueryPlan.normalizeExpressions(_, this.relation.output))
       ),
       output = this.output.map(QueryPlan.normalizeExpressions(_, this.output)),
+      // keyGroupedPartitioning may reference columns pruned out of `output` (kept when operation
+      // keys may be a subset of the partition keys). A pruned key carries no information for plan
+      // comparison, since the physical outputPartitioning projects it away, so drop it before
+      // normalizing; otherwise the dangling attribute's exprId would keep otherwise-equivalent
+      // scans unequal and defeat subplan merging.
       keyGroupedPartitioning = keyGroupedPartitioning.map(
-        _.map(QueryPlan.normalizeExpressions(_, output))
+        _.filter(_.references.subsetOf(outputSet))
+          .map(QueryPlan.normalizeExpressions(_, output))
       ),
+      // ordering may likewise reference columns pruned out of `output`. Ordering is prefix-based,
+      // so keep only the leading run of sort orders that reference output columns and drop the rest
+      // before normalizing, for the same reason as keyGroupedPartitioning above.
       ordering = ordering.map(
-        _.map(o => o.copy(child = QueryPlan.normalizeExpressions(o.child, output)))
+        _.takeWhile(_.references.subsetOf(outputSet))
+          .map(o => o.copy(child = QueryPlan.normalizeExpressions(o.child, output)))
       ),
       // pushedFilters may reference columns pruned out of `output` (see the field doc), so they are
       // normalized against the relation's full output rather than `output`.
