@@ -1428,6 +1428,7 @@ private class BufferedRowsWriterFactory(schema: StructType)
 private class BufferWriter(schema: StructType) extends DataWriter[InternalRow] {
 
   private final val WRITE = UTF8String.fromString(Write.toString)
+  private final val WRITE_UPDATE = UTF8String.fromString(WriteUpdate.toString)
 
   protected val buffer = new BufferedRows(Seq.empty, schema)
 
@@ -1440,6 +1441,21 @@ private class BufferWriter(schema: StructType) extends DataWriter[InternalRow] {
   override def write(row: InternalRow): Unit = {
     buffer.rows.append(row.copy())
     val logEntry = new GenericInternalRow(Array[Any](WRITE, null, null, row.copy()))
+    buffer.log.append(logEntry)
+  }
+
+  // Tag UPDATE/COPY rows distinctly so tests can verify that Spark dispatches
+  // through writeUpdate (the SupportsColumnUpdates path) rather than write.
+  override def writeUpdate(metadata: InternalRow, row: InternalRow): Unit = {
+    buffer.rows.append(row.copy())
+    val logEntry = new GenericInternalRow(
+      Array[Any](WRITE_UPDATE, null, metadata.copy(), row.copy()))
+    buffer.log.append(logEntry)
+  }
+
+  override def writeUpdate(row: InternalRow): Unit = {
+    buffer.rows.append(row.copy())
+    val logEntry = new GenericInternalRow(Array[Any](WRITE_UPDATE, null, null, row.copy()))
     buffer.log.append(logEntry)
   }
 
@@ -1486,6 +1502,7 @@ case class Commit(id: Long, writeSummary: Option[WriteSummary] = None)
 
 sealed trait Operation
 case object Write extends Operation
+case object WriteUpdate extends Operation
 case object Delete extends Operation
 case object Update extends Operation
 case object Reinsert extends Operation
