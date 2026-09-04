@@ -4539,7 +4539,10 @@ class AstBuilder extends DataTypeAstBuilder
     val path = if (field.startsWith("[")) "$" + field else s"$$.$field"
     val parsedPath = JsonPathParser.parse(path)
     if (parsedPath.isEmpty) {
-      throw new ParseException(errorClass = "PARSE_SYNTAX_ERROR", ctx = ctx)
+      throw new ParseException(
+        errorClass = "PARSE_SYNTAX_ERROR",
+        messageParameters = Map("error" -> s"'$field'", "hint" -> ""),
+        ctx = ctx)
     }
     val potentialAlias = parsedPath.get.collect { case Named(name) => name }.lastOption
     val node = SemiStructuredExtract(expression(ctx.col), path)
