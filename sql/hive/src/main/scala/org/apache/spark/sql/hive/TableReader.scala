@@ -80,7 +80,7 @@ class HadoopTableReader(
   //
   // In order keep consistency with Hive, we will let it be 0 in local mode also.
   private val _minSplitsPerRDD = if (sparkSession.sparkContext.isLocal) {
-    0 // will splitted based on block by default.
+    0 // will be split based on block by default.
   } else {
     math.max(hadoopConf.getInt("mapreduce.job.maps", 1),
       sparkSession.sparkContext.defaultMinPartitions)
