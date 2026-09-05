@@ -84,13 +84,20 @@ public final class Geography implements Geo {
 
   // Returns a Geography object with the specified SRID value by parsing the input WKB.
   public static Geography fromWkb(byte[] wkb, int srid) {
+    return fromWkb(wkb, 0, wkb == null ? 0 : wkb.length, srid);
+  }
+
+  // Returns a Geography object with the specified SRID value by parsing a sub-range
+  // [offset, offset + length) of the input WKB. This lets callers reuse a larger backing
+  // buffer without materializing an exact-size copy of the WKB bytes.
+  public static Geography fromWkb(byte[] wkb, int offset, int length, int srid) {
     try {
       WkbReader reader = new WkbReader(true);
-      reader.read(wkb); // Validate WKB with geography coordinate bounds.
+      reader.read(wkb, offset, length); // Validate WKB with geography coordinate bounds.
 
-      byte[] bytes = new byte[HEADER_SIZE + wkb.length];
+      byte[] bytes = new byte[HEADER_SIZE + length];
       ByteBuffer.wrap(bytes).order(DEFAULT_ENDIANNESS).putInt(srid);
-      System.arraycopy(wkb, 0, bytes, WKB_OFFSET, wkb.length);
+      System.arraycopy(wkb, offset, bytes, WKB_OFFSET, length);
       return fromBytes(bytes);
     } catch (WkbParseException e) {
       throw QueryExecutionErrors.wkbParseError(e.getParseError(), e.getPosition());

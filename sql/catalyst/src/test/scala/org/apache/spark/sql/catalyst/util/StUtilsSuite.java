@@ -216,6 +216,60 @@ class STUtilsSuite {
     }
   }
 
+  // ST_GeomFromWKB / ST_GeogFromWKB with an offset/length sub-range. These exercise the
+  // overloads used by the vectorized DELTA_BYTE_ARRAY decoder, which assembles each WKB value
+  // into a reusable buffer that may be longer than the value itself. The parse must read only
+  // [offset, offset + length) and ignore any surrounding bytes.
+  @Test
+  void testStGeomFromWKBWithOffsetAndLength() {
+    // Embed testWkb in a larger buffer with leading and trailing filler bytes.
+    int offset = 3;
+    byte[] padded = new byte[offset + testWkb.length + 5];
+    java.util.Arrays.fill(padded, (byte) 0x7F);
+    System.arraycopy(testWkb, 0, padded, offset, testWkb.length);
+
+    BinaryView geometryVal =
+      STUtils.stGeomFromWKB(padded, offset, testWkb.length, testGeometrySrid);
+    assertNotNull(geometryVal);
+    // The parsed physical value must equal the one parsed from the exact-size WKB: the
+    // surrounding filler bytes must not ride along.
+    assertArrayEquals(testGeometryBytes, geometryVal.getBytes());
+  }
+
+  @Test
+  void testStGeogFromWKBWithOffsetAndLength() {
+    int offset = 4;
+    byte[] padded = new byte[offset + testWkb.length + 7];
+    java.util.Arrays.fill(padded, (byte) 0x7F);
+    System.arraycopy(testWkb, 0, padded, offset, testWkb.length);
+
+    BinaryView geographyVal =
+      STUtils.stGeogFromWKB(padded, offset, testWkb.length, testGeographySrid);
+    assertNotNull(geographyVal);
+    assertArrayEquals(testGeographyBytes, geographyVal.getBytes());
+  }
+
+  @Test
+  void testStGeomFromWKBWithOutOfBoundsRange() {
+    // A range that escapes the backing array must surface as WKB_PARSE_ERROR, the same as any
+    // other malformed WKB, rather than a raw IndexOutOfBoundsException from ByteBuffer.wrap that
+    // fromWkb's WkbParseException handler would never see. Covers negative offset, offset past
+    // the end, and a length that runs past the end.
+    int[][] badRanges = {
+      {-1, testWkb.length},                 // negative offset
+      {testWkb.length + 1, testWkb.length}, // offset past the end
+      {1, testWkb.length}                   // offset + length past the end
+    };
+    for (int[] range : badRanges) {
+      int offset = range[0];
+      int length = range[1];
+      SparkIllegalArgumentException exception = assertThrows(SparkIllegalArgumentException.class,
+        () -> STUtils.stGeomFromWKB(testWkb, offset, length, testGeometrySrid),
+        "offset=" + offset + ", length=" + length + " should raise WKB_PARSE_ERROR");
+      assertEquals("WKB_PARSE_ERROR", exception.getCondition());
+    }
+  }
+
   // ST_Srid
   @Test
   void testStSridGeography() {

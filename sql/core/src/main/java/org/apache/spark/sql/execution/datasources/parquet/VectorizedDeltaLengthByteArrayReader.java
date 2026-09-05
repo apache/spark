@@ -102,13 +102,54 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
     currentRow += total;
   }
 
-  public ByteBuffer getBytes(int rowId) {
+  /**
+   * Returns the suffix length for the given row and reads the suffix bytes directly into
+   * {@code dest} at {@code destOffset}, avoiding the intermediate {@link ByteBuffer}
+   * allocation that a slice-based read would perform.
+   */
+  public int getSuffixInto(int rowId, byte[] dest, int destOffset) {
     int length = lengthsVector.getInt(rowId);
+    int totalRead = 0;
     try {
-      return in.slice(length);
-    } catch (EOFException e) {
-      throw new ParquetDecodingException("Failed to read " + length + " bytes");
+      while (totalRead < length) {
+        int n = in.read(dest, destOffset + totalRead, length - totalRead);
+        if (n < 0) {
+          throw new ParquetDecodingException("Failed to read " + length + " bytes");
+        }
+        totalRead += n;
+      }
+    } catch (IOException e) {
+      throw new ParquetDecodingException("Failed to read " + length + " bytes", e);
     }
+    return length;
+  }
+
+  /**
+   * Returns the suffix length for the given row without consuming the bytes.
+   *
+   * <p>Callers size their reusable buffer from this value before reading, so a corrupt length
+   * is validated here rather than at read time. When this is called {@code in} sits exactly at
+   * this row's suffix (all earlier suffixes are already consumed), so {@link
+   * ByteBufferInputStream#available()} is the exact number of bytes left in the page: a negative
+   * length, or one exceeding what remains, means the page is corrupt. Checking up front prevents
+   * a bogus length from driving a huge (up to 2GB) buffer allocation and an {@code
+   * OutOfMemoryError} -- an {@code Error} that {@code ignoreCorruptFiles} cannot catch -- instead
+   * of a plain {@link ParquetDecodingException}. On master this was implicit in the {@code
+   * in.slice(length)} bounds check.
+   */
+  public int getSuffixLength(int rowId) {
+    int length = lengthsVector.getInt(rowId);
+    if (length < 0) {
+      throw new ParquetDecodingException(
+          "Negative suffix length " + length + "; the DELTA_BYTE_ARRAY page is corrupt");
+    }
+    int available = in.available();
+    if (length > available) {
+      throw new ParquetDecodingException(
+          "Suffix length " + length + " exceeds the " + available
+              + " bytes remaining in the page; the DELTA_BYTE_ARRAY page is corrupt");
+    }
+    return length;
   }
 
   @Override
