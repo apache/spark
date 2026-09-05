@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
 object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
@@ -154,6 +155,25 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       }.getOrElse(field)
     }
     StructType(fields)
+  }
+
+  /**
+   * Applies CHAR padding and VARCHAR length checks when parsing text into a typed schema.
+   * Null stays null. Unbounded STRING is unchanged. This is assignment semantics
+   * (overflow raises EXCEED_LIMIT_LENGTH), not explicit CAST truncation.
+   */
+  def applyTextParseSemantics(value: UTF8String, dt: DataType): UTF8String = {
+    if (value == null) {
+      null
+    } else {
+      dt match {
+        case c: CharType =>
+          CharVarcharCodegenUtils.charTypeWriteSideCheck(value, c.length)
+        case v: VarcharType =>
+          CharVarcharCodegenUtils.varcharTypeWriteSideCheck(value, v.length)
+        case _ => value
+      }
+    }
   }
 
   /**
