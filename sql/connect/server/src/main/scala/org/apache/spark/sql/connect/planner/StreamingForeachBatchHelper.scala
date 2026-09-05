@@ -134,7 +134,8 @@ object StreamingForeachBatchHelper extends Logging {
    */
   def pythonForeachBatchWrapper(
       pythonFn: SimplePythonFunction,
-      sessionHolder: SessionHolder): (ForeachBatchFnType, AutoCloseable) = {
+      sessionHolder: SessionHolder,
+      sessionTags: Set[String] = Set.empty): (ForeachBatchFnType, AutoCloseable) = {
 
     val port = SparkConnectService.localPort
     var connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
@@ -153,6 +154,9 @@ object StreamingForeachBatchHelper extends Logging {
         log"pythonExec: ${MDC(PYTHON_EXEC, pythonFn.pythonExec)})")
 
     val (dataOut, dataIn) = runner.init()
+    dataOut.writeInt(sessionTags.size)
+    sessionTags.toSeq.sorted.foreach(tag => PythonWorkerUtils.writeUTF(tag, dataOut))
+    dataOut.flush()
 
     val foreachBatchRunnerFn: FnArgsWithId => Unit = (args: FnArgsWithId) => {
 
