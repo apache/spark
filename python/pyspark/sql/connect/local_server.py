@@ -117,12 +117,8 @@ def _port_open(host: str, port: int, timeout: float = 0.5) -> bool:
         return False
 
 
-def _is_local_connect_server(pid: int) -> Optional[bool]:
-    """Whether ``pid`` is still the managed Connect server recorded in discovery.
-
-    Returns ``None`` when the process cannot be inspected, so callers do not discard the
-    discovery information needed to retry later.
-    """
+def _process_command(pid: int) -> Optional[str]:
+    """The command of ``pid``, an empty string if it is gone, or ``None`` if inspection fails."""
     try:
         result = subprocess.run(
             ["ps", "-ww", "-p", str(pid), "-o", "command="],
@@ -132,7 +128,17 @@ def _is_local_connect_server(pid: int) -> Optional[bool]:
         )
     except (OSError, subprocess.SubprocessError):
         return None
-    return result.returncode == 0 and _SERVER_CLASS in result.stdout
+    return result.stdout if result.returncode == 0 else ""
+
+
+def _is_local_connect_server(pid: int) -> Optional[bool]:
+    """Whether ``pid`` is still the managed Connect server recorded in discovery.
+
+    Returns ``None`` when the process cannot be inspected, so callers do not discard the
+    discovery information needed to retry later.
+    """
+    command = _process_command(pid)
+    return None if command is None else _SERVER_CLASS in command
 
 
 def runtime_dir() -> str:
@@ -359,7 +365,10 @@ class ServerLauncher:
     launch path without duplicating its process and readiness handling.
     """
 
+    _SCRIPT_TIMEOUT = 120
     _READY_TIMEOUT = 120
+    # The two phases have independent deadlines and run sequentially.
+    _MAX_STARTUP_SECONDS = _SCRIPT_TIMEOUT + _READY_TIMEOUT
 
     def __init__(
         self,
@@ -495,7 +504,7 @@ class ServerLauncher:
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=self._SCRIPT_TIMEOUT,
         )
         if result.returncode != 0:
             stale_pid = self._discovery.daemon_pid()
