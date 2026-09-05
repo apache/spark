@@ -18,8 +18,11 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import scala.concurrent.duration.DurationInt
-import scala.jdk.CollectionConverters.MapHasAsScala
+import scala.jdk.CollectionConverters._
 
+import org.apache.spark.sql.execution.streaming.operators.stateful.{
+  StateStoreInstanceMetricAccumulator, StateStoreWriter
+}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.internal.SQLConf
@@ -485,6 +488,85 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
           }
         }
       }
+  }
+
+  testWithChangelogCheckpointingEnabled(
+    "SPARK-59174: StateStoreWriter uses single accumulator for instance metrics"
+  ) {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100"
+    ) {
+      withTempDir { checkpointDir =>
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS().dropDuplicates()
+
+        testStream(result, outputMode = OutputMode.Update)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a", "b", "c"),
+          ProcessAllAvailable(),
+          Execute { q =>
+            val stateOp = q.lastExecution.executedPlan.collectFirst {
+              case s: StateStoreWriter => s
+            }.get
+            // Verify the accumulator is a PartitionKeyedAccumulator (not a CollectionAccumulator),
+            // has entries for the executed partitions, and does not allocate individual
+            // per-partition SQLMetrics on the plan.
+            val accValue = stateOp.instanceMetricsAccumulator.value
+            assert(!accValue.isEmpty, "accumulator should have entries after processing data")
+            // Each partition's metrics are stored as a Map; flatten all metric keys.
+            val allMetricKeys = accValue.values().asScala.flatMap(_.keys)
+            assert(
+              allMetricKeys.forall(_.name.startsWith(SNAPSHOT_LAG_METRIC_PREFIX)),
+              s"unexpected metric keys: ${allMetricKeys.map(_.name).mkString(", ")}")
+          },
+          StopStream
+        )
+      }
+    }
+  }
+
+  test("SPARK-59174: StateStoreInstanceMetricAccumulator preserves combine semantics") {
+    val metric0 = StateStoreSnapshotLastUploadInstanceMetric(Some(0), "default")
+    val metric0Store2 = StateStoreSnapshotLastUploadInstanceMetric(Some(0), "other")
+    val metric1 = StateStoreSnapshotLastUploadInstanceMetric(Some(1), "default")
+
+    // 1. Add updates to the same partition: commutative combine (max version wins)
+    val acc1 = new StateStoreInstanceMetricAccumulator
+    acc1.add((0, Map(metric0 -> 100L)))
+    acc1.add((0, Map(metric0 -> 105L)))
+    assert(acc1.value.get(0).get(metric0) === Some(105L))
+
+    val acc2 = new StateStoreInstanceMetricAccumulator
+    acc2.add((0, Map(metric0 -> 105L)))
+    acc2.add((0, Map(metric0 -> 100L)))
+    assert(acc2.value.get(0).get(metric0) === Some(105L))
+
+    // Initial value (-1) does not overwrite an existing valid snapshot version
+    acc1.add((0, Map(metric0 -> -1L)))
+    assert(acc1.value.get(0).get(metric0) === Some(105L))
+
+    // 2. Multiple stores within the same partition merge cleanly
+    acc1.add((0, Map(metric0Store2 -> 50L)))
+    assert(acc1.value.get(0).size == 2)
+    assert(acc1.value.get(0).get(metric0) === Some(105L))
+    assert(acc1.value.get(0).get(metric0Store2) === Some(50L))
+
+    // 3. Merge between accumulators: preserves combine semantics across attempts/retries
+    val accA = new StateStoreInstanceMetricAccumulator
+    accA.add((0, Map(metric0 -> 100L)))
+    accA.add((1, Map(metric1 -> 200L)))
+
+    val accB = new StateStoreInstanceMetricAccumulator
+    accB.add((0, Map(metric0 -> 105L)))
+    accB.add((1, Map(metric1 -> 150L)))
+
+    accA.merge(accB)
+    assert(accA.accumulatedNumPartitions == 2)
+    assert(accA.value.get(0).get(metric0) === Some(105L))
+    assert(accA.value.get(1).get(metric1) === Some(200L))
   }
 }
 
