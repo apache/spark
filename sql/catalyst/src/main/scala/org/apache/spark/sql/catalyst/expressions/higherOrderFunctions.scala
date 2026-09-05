@@ -580,7 +580,7 @@ case class ArraySort(
     argument: Expression,
     function: Expression,
     allowNullComparisonResult: Boolean)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback with ResultTypeFromArgument {
+  extends ArrayBasedSimpleHigherOrderFunction with ResultTypeFromArgument {
 
   def this(argument: Expression, function: Expression) = {
     this(
@@ -655,6 +655,147 @@ case class ArraySort(
       java.util.Arrays.sort(arr, comparator(inputRow))
     }
     new GenericArrayData(arr.asInstanceOf[Array[Any]])
+  }
+
+  private def isDefaultComparator: Boolean = function match {
+    case LambdaFunction(_, Seq(left: NamedLambdaVariable, right: NamedLambdaVariable), _) =>
+      val defaultFunction = LambdaFunction(ArraySort.comparator(left, right), Seq(left, right))
+      function.canonicalized == defaultFunction.canonicalized
+    case _ => false
+  }
+
+  private def sortCodegen(ctx: CodegenContext, ev: ExprCode, base: String): String = {
+    val genericArrayData = classOf[GenericArrayData].getName
+    val unsafeArrayData = classOf[UnsafeArrayData].getName
+    val array = ctx.freshName("array")
+
+    if (elementType == NullType) {
+      s"${ev.value} = $base.copy();"
+    } else {
+      val canPerformFastSort = elementType match {
+        case BooleanType | DoubleType | FloatType => false
+        case _ => CodeGenerator.isPrimitiveType(elementType) &&
+          !dataType.asInstanceOf[ArrayType].containsNull
+      }
+
+      if (canPerformFastSort) {
+        val javaType = CodeGenerator.javaType(elementType)
+        val primitiveTypeName = CodeGenerator.primitiveTypeName(elementType)
+        s"""
+           |$javaType[] $array = $base.to${primitiveTypeName}Array();
+           |java.util.Arrays.parallelSort($array);
+           |${ev.value} = $unsafeArrayData.fromPrimitiveArray($array);
+         """.stripMargin
+      } else {
+        val elementTypeTerm = ctx.addReferenceObj("elementTypeTerm", elementType)
+        val o1 = ctx.freshName("o1")
+        val o2 = ctx.freshName("o2")
+        val c = ctx.freshName("c")
+        val jt = CodeGenerator.javaType(elementType)
+        val comp = if (CodeGenerator.isPrimitiveType(elementType)) {
+          val bt = CodeGenerator.boxedType(elementType)
+          val v1 = ctx.freshName("v1")
+          val v2 = ctx.freshName("v2")
+          s"""
+             |$jt $v1 = (($bt) $o1).${jt}Value();
+             |$jt $v2 = (($bt) $o2).${jt}Value();
+             |int $c = ${ctx.genComp(elementType, v1, v2)};
+           """.stripMargin
+        } else {
+          val left = s"(($jt) $o1)"
+          val right = s"(($jt) $o2)"
+          s"int $c = ${ctx.genComp(elementType, left, right)};"
+        }
+
+        s"""
+           |Object[] $array = $base.toObjectArray($elementTypeTerm);
+           |java.util.Arrays.parallelSort($array, new java.util.Comparator() {
+           |  @Override public int compare(Object $o1, Object $o2) {
+           |    if ($o1 == null && $o2 == null) {
+           |      return 0;
+           |    } else if ($o1 == null) {
+           |      return 1;
+           |    } else if ($o2 == null) {
+           |      return -1;
+           |    }
+           |    $comp
+           |    return $c;
+           |  }
+           |});
+           |${ev.value} = new $genericArrayData($array);
+         """.stripMargin
+      }
+    }
+  }
+
+  private def fallbackCodegen(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val idx = ctx.references.length
+    ctx.references += this
+    var childIndex = idx
+    this.foreach {
+      case n: Nondeterministic =>
+        ctx.references += n
+        childIndex += 1
+        ctx.addPartitionInitializationStatement(
+          s"""
+             |((Nondeterministic) references[$childIndex])
+             |  .initialize(partitionIndex);
+          """.stripMargin)
+      case _ =>
+    }
+    val objectTerm = ctx.freshName("obj")
+    val placeHolder = ctx.registerComment(this.toString)
+    val javaType = CodeGenerator.javaType(dataType)
+    val (evalInput, evalInputCode) = if (ctx.INPUT_ROW != null) {
+      (ctx.INPUT_ROW, EmptyBlock)
+    } else {
+      val row = ctx.freshName("row")
+      val values = ctx.freshName("values")
+      val genericInternalRow = classOf[GenericInternalRow].getName
+      val inputVars = ctx.currentVars.zipWithIndex.map { case (input, ordinal) =>
+        code"""
+          ${input.code}
+          if (${input.isNull}) {
+            $values[$ordinal] = null;
+          } else {
+            $values[$ordinal] = ${input.value};
+          }
+        """
+      }
+      val inputVarsCode: Block = inputVars
+      val code = code"""
+        Object[] $values = new Object[${ctx.currentVars.length}];
+        $inputVarsCode
+        InternalRow $row = new $genericInternalRow($values);
+      """
+      (row, code)
+    }
+    if (nullable) {
+      ev.copy(code = code"""
+        $placeHolder
+        $evalInputCode
+        Object $objectTerm = ((Expression) references[$idx]).eval($evalInput);
+        boolean ${ev.isNull} = $objectTerm == null;
+        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        if (!${ev.isNull}) {
+          ${ev.value} = (${CodeGenerator.boxedType(dataType)}) $objectTerm;
+        }""")
+    } else {
+      ev.copy(code = code"""
+        $placeHolder
+        $evalInputCode
+        Object $objectTerm = ((Expression) references[$idx]).eval($evalInput);
+        $javaType ${ev.value} = (${CodeGenerator.boxedType(dataType)}) $objectTerm;
+        """, isNull = FalseLiteral)
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (isDefaultComparator) {
+      nullSafeCodeGen(ctx, ev, arg => sortCodegen(ctx, ev, arg))
+    } else {
+      fallbackCodegen(ctx, ev)
+    }
   }
 
   override def nodeName: String = "array_sort"
