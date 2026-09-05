@@ -813,6 +813,11 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
   private val contains = "%+([^_%]+)%+".r
   private val equalTo = "([^_%]*)".r
 
+  // Marks a residual `Like` that `derivePrefixStartsWith` has already guarded with a leading
+  // `StartsWith`, so the rule does not re-wrap it on later fixed-point iterations (which would
+  // otherwise loop and break the batch's idempotence). Tags are ignored by `fastEquals`.
+  private[sql] val LIKE_PREFIX_GUARDED = TreeNodeTag[Unit]("likePrefixStartsWithAdded")
+
   private def simplifyLike(
       input: Expression, pattern: String, escapeChar: Char = '\\'): Option[Expression] = {
     if (pattern.contains(escapeChar)) {
@@ -863,6 +868,43 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  // For a leading-literal pattern that `simplifyLike` leaves as a full `Like` (e.g. 'a%b%'),
+  // derive the necessary condition `StartsWith(input, <leading literal>)` and keep the `Like`
+  // as the exact residual: `StartsWith(input, prefix) && (input LIKE pattern)`. `StartsWith` is
+  // placed first so the cheap check short-circuits the regex, and it can be pushed to data
+  // sources (e.g. Parquet prunes row groups on `StringStartsWith`) while the `Like` re-checks
+  // the match exactly.
+  //
+  // Restricted to collations with binary equality: only then do the `Like` regex match and
+  // `StartsWith` agree byte-for-byte, so `StartsWith(prefix)` is a sound necessary condition of
+  // the `Like` (under e.g. UTF8_LCASE the two matchers can disagree, risking a false negative),
+  // and only then does `StringStartsWith` push down. The residual `Like` is tagged so the rule
+  // stays idempotent under the fixed-point batch.
+  private def derivePrefixStartsWith(
+      input: Expression,
+      pattern: String,
+      escapeChar: Char,
+      like: Expression): Option[Expression] = {
+    val binaryCollation = input.dataType match {
+      case st: StringType => st.supportsBinaryEquality
+      case _ => false
+    }
+    if (!binaryCollation || pattern.contains(escapeChar) ||
+        like.containsTag(LIKE_PREFIX_GUARDED)) {
+      None
+    } else {
+      val prefix = pattern.takeWhile(c => c != '%' && c != '_')
+      if (prefix.isEmpty || prefix.length == pattern.length) {
+        // No leading literal (pattern starts with a wildcard), or no wildcard at all (the
+        // latter is already turned into `EqualTo` by `simplifyLike`).
+        None
+      } else {
+        like.setTagValue(LIKE_PREFIX_GUARDED, ())
+        Some(And(StartsWith(input, Literal.create(prefix, input.dataType)), like))
+      }
+    }
+  }
+
   private def simplifyMultiLike(
       child: Expression, patterns: Seq[UTF8String], multi: MultiLikeBase): Expression = {
     val (remainPatternMap, replacementMap) =
@@ -898,7 +940,10 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
         // If pattern is null, return null value directly, since "col like null" == null.
         Literal(null, BooleanType)
       } else {
-        simplifyLike(input, pattern.toString, escapeChar).getOrElse(l)
+        val patternStr = pattern.toString
+        simplifyLike(input, patternStr, escapeChar)
+          .orElse(derivePrefixStartsWith(input, patternStr, escapeChar, l))
+          .getOrElse(l)
       }
     case l @ LikeAll(child, patterns) if CollapseProject.isCheap(child) =>
       simplifyMultiLike(child, patterns, l)

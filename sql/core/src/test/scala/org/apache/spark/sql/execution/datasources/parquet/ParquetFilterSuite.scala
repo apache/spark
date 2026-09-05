@@ -1751,6 +1751,26 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
+  test("filter pushdown - leading-literal LIKE derives a StartsWith prefix filter") {
+    import testImplicits._
+    // A multi-wildcard pattern with a leading literal (e.g. 'ab%cd%') is not rewritten to a
+    // single StartsWith/EndsWith/Contains, but LikeSimplification also derives the necessary
+    // condition StartsWith(<leading literal>), which pushes down and prunes row groups whose
+    // min/max cannot contain the prefix. The digit-string data below has no value starting with
+    // the alphabetic prefix, so canDrop() removes every row group.
+    Seq(
+      "value like 'ab%cd%'",   // leading literal 'ab'
+      "value like 'ab%cd%ef'", // leading literal 'ab', trailing literal 'ef'
+      "value like 'a_b%'"      // leading literal 'a' before an '_' wildcard
+    ).foreach { filter =>
+      testStringPredicate(
+        spark.range(1024).map(_.toString).toDF(),
+        filter,
+        shouldFilterOut = true,
+        enableDictionary = false)
+    }
+  }
+
   test("SPARK-17091: Convert IN predicate to Parquet filter push-down") {
     val schema = StructType(Seq(
       StructField("a", IntegerType, nullable = false)
