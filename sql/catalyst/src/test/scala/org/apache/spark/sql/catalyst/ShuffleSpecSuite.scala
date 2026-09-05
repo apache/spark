@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, DirectShufflePartitionID, Expression, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, DirectShufflePartitionID, Expression, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
@@ -689,5 +689,35 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       HashShuffleSpec(HashPartitioning(Seq($"c"), 10), cd),
       expected = false
     )
+  }
+
+  test("SPARK-59080: a collection whose members cover different key subsets disagrees") {
+    val id = AttributeReference("id", IntegerType)()
+    val t1 = AttributeReference("t1", IntegerType)()
+    val t2 = AttributeReference("t2", IntegerType)()
+    val keys = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 1))
+
+    // The shape an alias cross-product produces: same arity, same keys, different expressions. The
+    // operation clusters on (id, t1), so the first member projects onto both positions and keeps
+    // three partitions, while the second matches only `id` and keeps two.
+    val collection = PartitioningCollection.fromPartitionings(Seq(
+      KeyedPartitioning(Seq(id, t1), keys),
+      KeyedPartitioning(Seq(id, t2), keys)))
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val spec = collection.createShuffleSpec(ClusteredDistribution(Seq(id, t1)))
+        .asInstanceOf[ShuffleSpecCollection]
+
+      // The disagreement is kept rather than resolved here. Every member has to stay for
+      // `isCompatibleWith`, which answers for any of them, and the collection cannot know which one
+      // the other side matched. `EnsureRequirements` resolves that and asks the member, not the
+      // collection.
+      assert(spec.specs.map(_.numPartitions).toSet === Set(3, 2))
+      assert(spec.isCompatibleWith(spec), "every member stays available for matching")
+
+      // So asking the collection for a single answer is the caller's mistake, and it says so.
+      val e = intercept[IllegalArgumentException](spec.createPartitioning(Seq(id, t1)))
+      assert(e.getMessage.contains("expected all specs in the collection to have the same number"))
+    }
   }
 }

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.exchange
 
-import scala.annotation.tailrec
 import scala.collection.immutable.BitSet
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -247,30 +246,50 @@ case class EnsureRequirements(
         }
       }
 
+      // A `ShuffleSpecCollection` answers `isCompatibleWith` if *any* of its members does, so the
+      // collection alone does not say which member the sides agreed on. The projection pushed into
+      // a compatible child and the partitioning built for a re-shuffled child both have to come
+      // from one member, otherwise the sides end up grouped on different keys, or on a key set the
+      // child does not even have. Pick that member once, preferring the finest when several
+      // qualify. Only the branch that shuffles a child reads these, hence `lazy`.
+      lazy val matchedIndexes = bestSpecOpt.toSeq.flatMap { best =>
+        childrenIndexes.filter(i => best.isCompatibleWith(specs(i)))
+      }
+      lazy val bestMemberOpt = bestSpecOpt.flatMap { best =>
+        val matchedMembers = matchedIndexes.map(i => flattenSpec(specs(i)))
+        // No member serving every matched child means there is no layout to align them on, so they
+        // all take the ordinary shuffle. That needs three or more clustered children, since with
+        // two the member that reported the match serves both, and no operator has three today.
+        flattenSpec(best)
+          .filter(m => matchedMembers.forall(_.exists(m.isCompatibleWith)))
+          .maxByOption(_.numPartitions)
+      }
+
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
         case ((child, _), idx) if areChildrenCompatible ||
             !childrenIndexes.contains(idx) =>
           child
         case ((child, dist), idx) =>
-          if (bestSpecOpt.isDefined && bestSpecOpt.get.isCompatibleWith(specs(idx))) {
-            // If the child's partitioning is a `PartitioningCollection`, its spec is a
-            // `ShuffleSpecCollection` whose `createPartitioning` delegates to the head spec,
-            // so unwrap to the head spec to stay aligned with the re-shuffled side below.
-            unwrapSpecCollection(bestSpecOpt.get) match {
+          if (bestMemberOpt.isDefined && matchedIndexes.contains(idx)) {
+            // The positions come from this child's own matching member, since they index into its
+            // own partition expressions -- the chosen best member only says which member of it the
+            // two sides agreed on.
+            val bestMember = bestMemberOpt.get
+            flattenSpec(specs(idx)).find(bestMember.isCompatibleWith) match {
               // If `areChildrenCompatible` is false, we can still perform SPJ
               // by shuffling the other side based on join keys (see the else case below).
               // Hence we need to ensure that after this call, the outputPartitioning of the
               // partitioned side's BatchScanExec is grouped by join keys to match,
               // and we do that by pushing down the join keys
-              case KeyedShuffleSpec(_, _, Some(joinKeyPositions)) =>
+              case Some(KeyedShuffleSpec(_, _, Some(joinKeyPositions))) =>
                 withJoinKeyPositions(child, joinKeyPositions)
               case _ => child
             }
           } else {
-            val newPartitioning = bestSpecOpt.map { bestSpec =>
+            val newPartitioning = bestMemberOpt.map { bestMember =>
               // Use the best spec to create a new partitioning to re-shuffle this child
               val clustering = dist.asInstanceOf[ClusteredDistribution].clustering
-              bestSpec.createPartitioning(clustering)
+              bestMember.createPartitioning(clustering)
             }.getOrElse {
               // No best spec available, so we create default partitioning from the required
               // distribution
@@ -779,12 +798,10 @@ case class EnsureRequirements(
     }
   }
 
-  // Unwraps a `ShuffleSpecCollection` (possibly nested) to the spec that its
-  // `createPartitioning` delegates to, i.e. the head spec.
-  @tailrec
-  private def unwrapSpecCollection(spec: ShuffleSpec): ShuffleSpec = spec match {
-    case ShuffleSpecCollection(specs) => unwrapSpecCollection(specs.head)
-    case other => other
+  // Flattens a (possibly nested) `ShuffleSpecCollection` into its member specs.
+  private def flattenSpec(spec: ShuffleSpec): Seq[ShuffleSpec] = spec match {
+    case ShuffleSpecCollection(specs) => specs.flatMap(flattenSpec)
+    case other => Seq(other)
   }
 
   /**
