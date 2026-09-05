@@ -454,6 +454,7 @@ Aggregate Functions
     bit_and
     bit_or
     bit_xor
+    bitmap_and_agg
     bitmap_construct_agg
     bitmap_or_agg
     bitmap_xor_agg
@@ -461,6 +462,7 @@ Aggregate Functions
     bool_or
     collect_list
     collect_set
+    collect_union
     corr
     count
     count_distinct

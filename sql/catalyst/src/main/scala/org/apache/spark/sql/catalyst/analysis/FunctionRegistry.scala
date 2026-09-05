@@ -405,40 +405,55 @@ object FunctionRegistry {
   // anymore. See `AesEncrypt`/`AesDecrypt` as an example.
   private type FunctionRegistryEntry = (String, (ExpressionInfo, FunctionBuilder))
 
-  private def miscNonAggregateExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // misc non-aggregate functions
-    expression[Abs]("abs"),
+  private def conditionalExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // conditional functions
     expression[Coalesce]("coalesce"),
-    expressionBuilder("explode", ExplodeExpressionBuilder),
-    expressionGeneratorBuilderOuter("explode_outer", ExplodeExpressionBuilder),
-    expression[Greatest]("greatest"),
     expression[If]("if"),
-    expressionBuilder("inline", InlineExpressionBuilder),
-    expressionGeneratorBuilderOuter("inline_outer", InlineExpressionBuilder),
-    expression[IsNaN]("isnan"),
     expression[Nvl]("ifnull", setAlias = true),
-    expression[IsNull]("isnull"),
-    expression[IsNotNull]("isnotnull"),
-    expression[Least]("least"),
     expression[NaNvl]("nanvl"),
     expression[NullIf]("nullif"),
     expression[NullIfZero]("nullifzero"),
     expression[Nvl]("nvl"),
     expression[Nvl2]("nvl2"),
-    expressionBuilder("posexplode", PosExplodeExpressionBuilder),
-    expressionGeneratorBuilderOuter("posexplode_outer", PosExplodeExpressionBuilder),
-    expression[Rand]("rand"),
-    expression[Rand]("random", true, Some("3.0.0")),
-    expression[Randn]("randn"),
-    expression[RandStr]("randstr"),
-    expression[Stack]("stack"),
-    expression[Uniform]("uniform"),
     expression[ZeroIfNull]("zeroifnull"),
-    CaseWhen.registryEntry
+    CaseWhen.registryEntry,
+    expression[Between]("between")
+  )
+
+  private def predicateExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // predicate functions
+    expression[IsNaN]("isnan"),
+    expression[IsNull]("isnull"),
+    expression[IsNotNull]("isnotnull"),
+    expression[Like]("like"),
+    expression[ILike]("ilike"),
+    expression[RLike]("rlike"),
+    expression[RLike]("regexp_like", true, Some("3.2.0")),
+    expression[RLike]("regexp", true, Some("3.2.0")),
+    expression[EqualNull]("equal_null"),
+    expression[And]("and"),
+    expression[In]("in"),
+    expression[Not]("not"),
+    expression[Or]("or"),
+    expression[EqualNullSafe]("<=>"),
+    expression[EqualTo]("="),
+    expression[EqualTo]("=="),
+    expression[GreaterThan](">"),
+    expression[GreaterThanOrEqual](">="),
+    expression[LessThan]("<"),
+    expression[LessThanOrEqual]("<="),
+    expression[Not]("!")
   )
 
   private def mathExpressions: Seq[FunctionRegistryEntry] = Seq(
     // math functions
+    expression[Abs]("abs"),
+    expression[Greatest]("greatest"),
+    expression[Least]("least"),
+    expression[Rand]("rand"),
+    expression[Rand]("random", true, Some("3.0.0")),
+    expression[Randn]("randn"),
+    expression[Uniform]("uniform"),
     expression[Acos]("acos"),
     expression[Acosh]("acosh"),
     expression[Asin]("asin"),
@@ -479,51 +494,314 @@ object FunctionRegistry {
     expression[Rint]("rint"),
     expression[Round]("round"),
     expression[Truncate]("truncate"),
-    expression[ShiftLeft]("shiftleft"),
-    expression[ShiftRight]("shiftright"),
-    expression[ShiftRightUnsigned]("shiftrightunsigned"),
     expression[Signum]("sign", true),
     expression[Signum]("signum"),
     expression[Sin]("sin"),
     expression[Csc]("csc"),
     expression[Sinh]("sinh"),
-    expression[StringToMap]("str_to_map"),
     expression[Sqrt]("sqrt"),
     expression[Tan]("tan"),
     expression[Cot]("cot"),
     expression[Tanh]("tanh"),
     expression[WidthBucket]("width_bucket"),
-
     expression[Add]("+"),
     expression[Subtract]("-"),
     expression[Multiply]("*"),
     expression[Divide]("/"),
     expression[IntegralDivide]("div"),
-    expression[Remainder]("%")
-  )
-
-  private def tryExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // "try_*" function which always return Null instead of runtime error.
+    expression[Remainder]("%"),
     expression[TryAdd]("try_add"),
     expression[TryDivide]("try_divide"),
     expression[TryMod]("try_mod"),
     expression[TrySubtract]("try_subtract"),
     expression[TryMultiply]("try_multiply"),
-    expression[TryElementAt]("try_element_at"),
-    expressionBuilder("try_avg", TryAverageExpressionBuilder, setAlias = true),
-    expressionBuilder("try_sum", TrySumExpressionBuilder, setAlias = true),
+    expression[Unhex]("unhex")
+  )
+
+  private def stringExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // string functions
+    expression[RandStr]("randstr"),
     expression[TryToBinary]("try_to_binary"),
+    expression[Ascii]("ascii"),
+    expression[Chr]("char", true),
+    expression[Chr]("chr"),
+    expressionBuilder("collate", CollateExpressionBuilder),
+    expression[Collation]("collation"),
+    expressionBuilder("contains", ContainsExpressionBuilder),
+    expressionBuilder("startswith", StartsWithExpressionBuilder),
+    expressionBuilder("endswith", EndsWithExpressionBuilder),
+    expression[Base64]("base64"),
+    expression[Base32]("to_base32"),
+    expression[BitLength]("bit_length"),
+    expression[Length]("char_length", true, Some("2.3.0")),
+    expression[Length]("character_length", true, Some("2.3.0")),
+    expression[ConcatWs]("concat_ws"),
+    expression[Decode]("decode"),
+    expression[Elt]("elt"),
+    expression[Encode]("encode"),
+    expression[FindInSet]("find_in_set"),
+    expression[FormatNumber]("format_number"),
+    expression[FormatString]("format_string"),
+    expression[ToNumber]("to_number"),
+    expression[TryToNumber]("try_to_number"),
+    expressionBuilder("to_char", ToCharacterBuilder),
+    expressionBuilder("to_varchar", ToCharacterBuilder, setAlias = true, Some("3.5.0")),
+    expression[InitCap]("initcap"),
+    expressionBuilder("instr", StringInstrExpressionBuilder),
+    expression[Lower]("lcase", true),
+    expression[Length]("length"),
+    expression[Length]("len", setAlias = true, Some("3.4.0")),
+    expression[Levenshtein]("levenshtein"),
+    expression[JaroWinkler]("jaro_winkler_similarity"),
+    expression[Luhncheck]("luhn_check"),
+    expression[Lower]("lower"),
+    expression[OctetLength]("octet_length"),
+    expression[StringLocate]("locate"),
+    expressionBuilder("lpad", LPadExpressionBuilder),
+    expression[StringTrimLeft]("ltrim"),
+    expression[StringLocate]("position", true, Some("2.3.0")),
+    expression[FormatString]("printf", true),
+    expression[RegExpExtract]("regexp_extract"),
+    expression[RegExpExtractAll]("regexp_extract_all"),
+    expression[RegExpReplace]("regexp_replace"),
+    expression[StringRepeat]("repeat"),
+    expression[StringReplace]("replace"),
+    expression[Overlay]("overlay"),
+    expressionBuilder("rpad", RPadExpressionBuilder),
+    expression[StringTrimRight]("rtrim"),
+    expression[Sentences]("sentences"),
+    expression[SoundEx]("soundex"),
+    expression[StringSpace]("space"),
+    expression[StringSplit]("split"),
+    expression[SplitPart]("split_part"),
+    expression[Substring]("substr", true),
+    expression[Substring]("substring"),
+    expression[Left]("left"),
+    expression[Right]("right"),
+    expression[SubstringIndex]("substring_index"),
+    expression[StringTranslate]("translate"),
+    expression[StringTrim]("trim"),
+    expression[StringTrimBoth]("btrim"),
+    expression[Upper]("ucase", true),
+    expression[UnBase64]("unbase64"),
+    expression[UnBase32]("from_base32"),
+    expression[Upper]("upper"),
+    expression[RegExpCount]("regexp_count"),
+    expression[RegExpSubStr]("regexp_substr"),
+    expression[RegExpInStr]("regexp_instr"),
+    expression[IsValidUTF8]("is_valid_utf8"),
+    expression[MakeValidUTF8]("make_valid_utf8"),
+    expression[ValidateUTF8]("validate_utf8"),
+    expression[TryValidateUTF8]("try_validate_utf8"),
+    expression[Quote]("quote"),
+    expression[Normalize]("normalize"),
+    expression[ToBinary]("to_binary"),
+    expressionBuilder("mask", MaskExpressionBuilder)
+  )
+
+  private def bitwiseExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // bitwise functions
+    expression[ShiftLeft]("shiftleft"),
+    expression[ShiftRight]("shiftright"),
+    expression[ShiftRightUnsigned]("shiftrightunsigned"),
+    expression[BitwiseAnd]("&"),
+    expression[BitwiseNot]("~"),
+    expression[BitwiseOr]("|"),
+    expression[BitwiseXor]("^"),
+    expression[ShiftLeft]("<<", true, Some("4.0.0")),
+    expression[ShiftRight](">>", true, Some("4.0.0")),
+    expression[ShiftRightUnsigned](">>>", true, Some("4.0.0")),
+    expression[BitwiseCount]("bit_count"),
+    expression[BitwiseGet]("bit_get"),
+    expression[BitwiseGet]("getbit", true)
+  )
+
+  private def datetimeExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // datetime functions
     expressionBuilder("try_to_timestamp", TryToTimestampExpressionBuilder, setAlias = true),
     expressionBuilder("try_to_date", TryToDateExpressionBuilder, setAlias = true),
     expressionBuilder("try_to_time", TryToTimeExpressionBuilder, setAlias = true),
-    expression[TryAesDecrypt]("try_aes_decrypt"),
-    expression[TryReflect]("try_reflect"),
-    expression[TryUrlDecode]("try_url_decode"),
-    expression[TryMakeInterval]("try_make_interval")
+    expression[TryMakeInterval]("try_make_interval"),
+    expression[AddMonths]("add_months"),
+    expression[CurrentDate]("current_date"),
+    expressionBuilder("curdate", CurDateExpressionBuilder, setAlias = true),
+    expressionBuilder("current_timestamp", CurrentTimestampExpressionBuilder),
+    expression[CurrentTime]("current_time"),
+    expression[CurrentTime]("localtime", since = Some("4.3.0")),
+    expression[CurrentTimeZone]("current_timezone"),
+    expressionBuilder("localtimestamp", LocalTimestampExpressionBuilder),
+    expression[DateDiff]("datediff"),
+    expression[DateDiff]("date_diff", setAlias = true, Some("3.4.0")),
+    expression[DateAdd]("date_add"),
+    expression[DateAdd]("dateadd", setAlias = true, Some("3.4.0")),
+    expression[DateFormatClass]("date_format"),
+    expression[DateSub]("date_sub"),
+    expression[DayOfMonth]("day", true),
+    expression[DayOfYear]("dayofyear"),
+    expression[DayOfMonth]("dayofmonth"),
+    expression[FromUnixTime]("from_unixtime"),
+    expression[FromUTCTimestamp]("from_utc_timestamp"),
+    expressionBuilder("hour", HourExpressionBuilder),
+    expression[LastDay]("last_day"),
+    expressionBuilder("minute", MinuteExpressionBuilder),
+    expression[Month]("month"),
+    expression[MonthsBetween]("months_between"),
+    expression[NextDay]("next_day"),
+    expressionBuilder("now", NowExpressionBuilder),
+    expression[Quarter]("quarter"),
+    expressionBuilder("second", SecondExpressionBuilder),
+    expression[ParseToTimestamp]("to_timestamp"),
+    expression[ParseToDate]("to_date"),
+    expression[TimeDiff]("time_diff"),
+    expression[ToTime]("to_time"),
+    expression[ToUnixTimestamp]("to_unix_timestamp"),
+    expression[ToUTCTimestamp]("to_utc_timestamp"),
+    // We keep the 2 expression builders below to have different function docs.
+    expressionBuilder("to_timestamp_ntz", ParseToTimestampNTZExpressionBuilder, setAlias = true),
+    expressionBuilder("to_timestamp_ltz", ParseToTimestampLTZExpressionBuilder, setAlias = true),
+    expression[TruncDate]("trunc"),
+    expression[TruncTimestamp]("date_trunc"),
+    expression[UnixTimestamp]("unix_timestamp"),
+    expression[DayOfWeek]("dayofweek"),
+    expression[WeekDay]("weekday"),
+    expression[DayName]("dayname"),
+    expression[WeekOfYear]("weekofyear"),
+    expression[Year]("year"),
+    expression[TimeWindow]("window"),
+    expression[SessionWindow]("session_window"),
+    expression[WindowTime]("window_time"),
+    expression[MakeDate]("make_date"),
+    expression[MakeTime]("make_time"),
+    expression[TimeTrunc]("time_trunc"),
+    expression[TimeFromSeconds]("time_from_seconds"),
+    expression[TimeFromMillis]("time_from_millis"),
+    expression[TimeFromMicros]("time_from_micros"),
+    expression[TimeToSeconds]("time_to_seconds"),
+    expression[TimeToMillis]("time_to_millis"),
+    expression[TimeToMicros]("time_to_micros"),
+    expressionBuilder("make_timestamp", MakeTimestampExpressionBuilder),
+    expressionBuilder("try_make_timestamp", TryMakeTimestampExpressionBuilder),
+    expression[MonthName]("monthname"),
+    // We keep the 2 expression builders below to have different function docs.
+    expressionBuilder("make_timestamp_ntz", MakeTimestampNTZExpressionBuilder, setAlias = true),
+    expressionBuilder("make_timestamp_ltz", MakeTimestampLTZExpressionBuilder, setAlias = true),
+    expressionBuilder(
+      "try_make_timestamp_ntz", TryMakeTimestampNTZExpressionBuilder, setAlias = true),
+    expressionBuilder(
+      "try_make_timestamp_ltz", TryMakeTimestampLTZExpressionBuilder, setAlias = true),
+    expression[MakeInterval]("make_interval"),
+    expression[MakeDTInterval]("make_dt_interval"),
+    expression[MakeYMInterval]("make_ym_interval"),
+    expression[Extract]("extract"),
+    // We keep the `DatePartExpressionBuilder` to have different function docs.
+    expressionBuilder("date_part", DatePartExpressionBuilder, setAlias = true),
+    expressionBuilder("datepart", DatePartExpressionBuilder, setAlias = true, Some("3.4.0")),
+    expression[DateFromUnixDate]("date_from_unix_date"),
+    expression[UnixDate]("unix_date"),
+    expression[SecondsToTimestamp]("timestamp_seconds"),
+    expression[MillisToTimestamp]("timestamp_millis"),
+    expression[MicrosToTimestamp]("timestamp_micros"),
+    expression[NanosToTimestamp]("timestamp_nanos"),
+    expression[UnixSeconds]("unix_seconds"),
+    expression[UnixMillis]("unix_millis"),
+    expression[UnixMicros]("unix_micros"),
+    expression[UnixNanos]("unix_nanos"),
+    expression[ConvertTimezone]("convert_timezone"),
+    expressionBuilder("time_bucket", TimeBucketExpressionBuilder)
+  )
+
+  private def hashExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // hash functions
+    expression[Crc32]("crc32"),
+    expression[Md5]("md5"),
+    expression[Murmur3Hash]("hash"),
+    expression[XxHash64]("xxhash64"),
+    expression[Xxh364]("xxh3_64"),
+    expression[Xxh3128]("xxh3_128"),
+    expression[Sha1]("sha", true),
+    expression[Sha1]("sha1"),
+    expression[Sha2]("sha2")
+  )
+
+  private def collectionExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // collection functions
+    expression[TryElementAt]("try_element_at"),
+    expression[ElementAt]("element_at"),
+    expression[Size]("size"),
+    expression[Size]("cardinality", true, Some("2.4.0")),
+    expression[Reverse]("reverse"),
+    expression[Concat]("concat")
+  )
+
+  private def lambdaExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // lambda functions
+    expression[ArraySort]("array_sort"),
+    expression[ArrayTransform]("transform"),
+    expression[MapFilter]("map_filter"),
+    expression[ArrayFilter]("filter"),
+    expression[ArrayExists]("exists"),
+    expression[ArrayForAll]("forall"),
+    expression[ArrayAggregate]("aggregate"),
+    expression[ArrayAggregate]("reduce", setAlias = true, Some("3.4.0")),
+    expression[TransformValues]("transform_values"),
+    expression[TransformKeys]("transform_keys"),
+    expression[MapZipWith]("map_zip_with"),
+    expression[ZipWith]("zip_with")
+  )
+
+  private def arrayExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // array functions
+    expression[CreateArray]("array"),
+    expression[ArrayContains]("array_contains"),
+    expression[ArraysOverlap]("arrays_overlap"),
+    expression[ArrayInsert]("array_insert"),
+    expression[ArrayIntersect]("array_intersect"),
+    expression[ArrayJoin]("array_join"),
+    expression[ArrayPosition]("array_position"),
+    expression[ArraySize]("array_size"),
+    expression[ArrayExcept]("array_except"),
+    expression[ArrayUnion]("array_union"),
+    expression[ArrayCompact]("array_compact"),
+    expression[Slice]("slice"),
+    expression[TrimArray]("trim_array"),
+    expression[ArraysZip]("arrays_zip"),
+    expression[SortArray]("sort_array"),
+    expression[Shuffle]("shuffle"),
+    expression[ArrayMin]("array_min"),
+    expression[ArrayMax]("array_max"),
+    expression[ArrayAppend]("array_append"),
+    expression[Flatten]("flatten"),
+    expression[Sequence]("sequence"),
+    expression[ArrayRepeat]("array_repeat"),
+    expression[ArrayRemove]("array_remove"),
+    expression[ArrayPrepend]("array_prepend"),
+    expression[ArrayDistinct]("array_distinct"),
+    expression[Get]("get")
+  )
+
+  private def structExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // struct functions
+    expression[CreateNamedStruct]("named_struct"),
+    CreateStruct.registryEntry
+  )
+
+  private def mapExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // map functions
+    expression[StringToMap]("str_to_map"),
+    expression[CreateMap]("map"),
+    expression[MapContainsKey]("map_contains_key"),
+    expression[MapFromArrays]("map_from_arrays"),
+    expression[MapKeys]("map_keys"),
+    expression[MapValues]("map_values"),
+    expression[MapEntries]("map_entries"),
+    expression[MapFromEntries]("map_from_entries"),
+    expression[MapConcat]("map_concat")
   )
 
   private def aggregateExpressions: Seq[FunctionRegistryEntry] = Seq(
     // aggregate functions
+    expressionBuilder("try_avg", TryAverageExpressionBuilder, setAlias = true),
+    expressionBuilder("try_sum", TrySumExpressionBuilder, setAlias = true),
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
     expression[Average]("avg"),
     expression[Corr]("corr"),
@@ -599,94 +877,107 @@ object FunctionRegistry {
     expressionBuilder("tuple_sketch_agg_double", TupleSketchAggDoubleExpressionBuilder),
     expressionBuilder("tuple_sketch_agg_integer", TupleSketchAggIntegerExpressionBuilder),
     expressionBuilder("tuple_union_agg_double", TupleUnionAggDoubleExpressionBuilder),
-    expressionBuilder("tuple_union_agg_integer", TupleUnionAggIntegerExpressionBuilder)
+    expressionBuilder("tuple_union_agg_integer", TupleUnionAggIntegerExpressionBuilder),
+    expression[Measure]("measure"),
+    expression[Grouping]("grouping"),
+    expression[GroupingID]("grouping_id"),
+    expression[BitAndAgg]("bit_and"),
+    expression[BitOrAgg]("bit_or"),
+    expression[BitXorAgg]("bit_xor"),
+    expression[BitmapConstructAgg]("bitmap_construct_agg"),
+    expression[BitmapOrAgg]("bitmap_or_agg"),
+    expression[BitmapAndAgg]("bitmap_and_agg"),
+    expression[BitmapXorAgg]("bitmap_xor_agg")
   )
 
-  private def vectorExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // vector functions
-    expression[VectorCosineSimilarity]("vector_cosine_similarity"),
-    expression[VectorInnerProduct]("vector_inner_product"),
-    expression[VectorL2Distance]("vector_l2_distance"),
-    expression[VectorNorm]("vector_norm"),
-    expression[VectorNormalize]("vector_normalize"),
-    expression[VectorAvg]("vector_avg"),
-    expression[VectorSum]("vector_sum")
+  private def windowExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // window functions
+    expression[Lead]("lead"),
+    expression[Lag]("lag"),
+    expression[RowNumber]("row_number"),
+    expression[CumeDist]("cume_dist"),
+    expression[NthValue]("nth_value"),
+    expression[NTile]("ntile"),
+    expression[Rank]("rank"),
+    expression[DenseRank]("dense_rank"),
+    expression[PercentRank]("percent_rank"),
+    expressionBuilder("counter_diff", CounterDiffExpressionBuilder)
   )
 
-  private def stringExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // string functions
-    expression[Ascii]("ascii"),
-    expression[Chr]("char", true),
-    expression[Chr]("chr"),
-    expressionBuilder("collate", CollateExpressionBuilder),
-    expression[Collation]("collation"),
-    expressionBuilder("contains", ContainsExpressionBuilder),
-    expressionBuilder("startswith", StartsWithExpressionBuilder),
-    expressionBuilder("endswith", EndsWithExpressionBuilder),
-    expression[Base64]("base64"),
-    expression[Base32]("to_base32"),
-    expression[BitLength]("bit_length"),
-    expression[Length]("char_length", true, Some("2.3.0")),
-    expression[Length]("character_length", true, Some("2.3.0")),
-    expression[ConcatWs]("concat_ws"),
-    expression[Decode]("decode"),
-    expression[Elt]("elt"),
-    expression[Encode]("encode"),
-    expression[FindInSet]("find_in_set"),
-    expression[FormatNumber]("format_number"),
-    expression[FormatString]("format_string"),
-    expression[ToNumber]("to_number"),
-    expression[TryToNumber]("try_to_number"),
-    expressionBuilder("to_char", ToCharacterBuilder),
-    expressionBuilder("to_varchar", ToCharacterBuilder, setAlias = true, Some("3.5.0")),
+  private def generatorExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // generator functions
+    expressionBuilder("explode", ExplodeExpressionBuilder),
+    expressionGeneratorBuilderOuter("explode_outer", ExplodeExpressionBuilder),
+    expressionBuilder("inline", InlineExpressionBuilder),
+    expressionGeneratorBuilderOuter("inline_outer", InlineExpressionBuilder),
+    expressionBuilder("posexplode", PosExplodeExpressionBuilder),
+    expressionGeneratorBuilderOuter("posexplode_outer", PosExplodeExpressionBuilder),
+    expression[Stack]("stack")
+  )
+
+  private def conversionExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // conversion functions
+    expression[Cast]("cast"),
+    // Cast aliases (SPARK-16730)
+    castAlias("boolean", BooleanType),
+    castAlias("tinyint", ByteType),
+    castAlias("smallint", ShortType),
+    castAlias("int", IntegerType),
+    castAlias("bigint", LongType),
+    castAlias("float", FloatType),
+    castAlias("double", DoubleType),
+    castAlias("decimal", DecimalType.USER_DEFAULT),
+    castAlias("date", DateType),
+    castAlias("timestamp", TimestampType),
+    castAlias("time", TimeType()),
+    castAlias("binary", BinaryType),
+    castAlias("string", StringType)
+  )
+
+  private def csvExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // CSV functions
+    expression[CsvToStructs]("from_csv"),
+    expression[SchemaOfCsv]("schema_of_csv"),
+    expression[StructsToCsv]("to_csv")
+  )
+
+  private def jsonExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // JSON functions
     expression[GetJsonObject]("get_json_object"),
-    expression[InitCap]("initcap"),
-    expressionBuilder("instr", StringInstrExpressionBuilder),
-    expression[Lower]("lcase", true),
-    expression[Length]("length"),
-    expression[Length]("len", setAlias = true, Some("3.4.0")),
-    expression[Levenshtein]("levenshtein"),
-    expression[JaroWinkler]("jaro_winkler_similarity"),
-    expression[Luhncheck]("luhn_check"),
-    expression[Like]("like"),
-    expression[ILike]("ilike"),
-    expression[Lower]("lower"),
-    expression[OctetLength]("octet_length"),
-    expression[StringLocate]("locate"),
-    expressionBuilder("lpad", LPadExpressionBuilder),
-    expression[StringTrimLeft]("ltrim"),
     expression[JsonTuple]("json_tuple"),
-    expression[StringLocate]("position", true, Some("2.3.0")),
-    expression[FormatString]("printf", true),
-    expression[RegExpExtract]("regexp_extract"),
-    expression[RegExpExtractAll]("regexp_extract_all"),
-    expression[RegExpReplace]("regexp_replace"),
-    expression[StringRepeat]("repeat"),
-    expression[StringReplace]("replace"),
-    expression[Overlay]("overlay"),
-    expression[RLike]("rlike"),
-    expression[RLike]("regexp_like", true, Some("3.2.0")),
-    expression[RLike]("regexp", true, Some("3.2.0")),
-    expressionBuilder("rpad", RPadExpressionBuilder),
-    expression[StringTrimRight]("rtrim"),
-    expression[Sentences]("sentences"),
-    expression[SoundEx]("soundex"),
-    expression[StringSpace]("space"),
-    expression[StringSplit]("split"),
-    expression[SplitPart]("split_part"),
-    expression[Substring]("substr", true),
-    expression[Substring]("substring"),
-    expression[Left]("left"),
-    expression[Right]("right"),
-    expression[SubstringIndex]("substring_index"),
-    expression[StringTranslate]("translate"),
-    expression[StringTrim]("trim"),
-    expression[StringTrimBoth]("btrim"),
-    expression[Upper]("ucase", true),
-    expression[UnBase64]("unbase64"),
-    expression[UnBase32]("from_base32"),
-    expression[Unhex]("unhex"),
-    expression[Upper]("upper"),
+    expression[StructsToJson]("to_json"),
+    expression[JsonToStructs]("from_json"),
+    expression[SchemaOfJson]("schema_of_json"),
+    expression[LengthOfJsonArray]("json_array_length"),
+    expression[JsonObjectKeys]("json_object_keys"),
+    expression[JsonTypeof]("json_typeof")
+  )
+
+  private def variantExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // variant functions
+    expressionBuilder("parse_json", ParseJsonExpressionBuilder),
+    expressionBuilder("try_parse_json", TryParseJsonExpressionBuilder),
+    expression[IsVariantNull]("is_variant_null"),
+    expressionBuilder("variant_get", VariantGetExpressionBuilder),
+    expressionBuilder("try_variant_get", TryVariantGetExpressionBuilder),
+    expression[SchemaOfVariant]("schema_of_variant"),
+    expression[SchemaOfVariantAgg]("schema_of_variant_agg"),
+    expression[ToVariantObject]("to_variant_object"),
+    expression[VariantFromArrays]("variant_from_arrays"),
+    expression[VariantFromEntries]("variant_from_entries"),
+    expression[IsValidVariant]("is_valid_variant"),
+    expression[VariantDelete]("variant_delete"),
+    expressionBuilder("variant_insert", VariantInsertExpressionBuilder),
+    expressionBuilder("try_variant_insert", TryVariantInsertExpressionBuilder),
+    expressionBuilder("variant_set", VariantSetExpressionBuilder),
+    expressionBuilder("try_variant_set", TryVariantSetExpressionBuilder),
+    expressionBuilder("variant_array_append", VariantArrayAppendExpressionBuilder),
+    expressionBuilder("try_variant_array_append", TryVariantArrayAppendExpressionBuilder),
+    expressionBuilder("variant_strip_nulls", VariantStripNullsExpressionBuilder)
+  )
+
+  private def xmlExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // XML functions
     expression[XPathList]("xpath"),
     expression[XPathBoolean]("xpath_boolean"),
     expression[XPathDouble]("xpath_double"),
@@ -696,188 +987,27 @@ object FunctionRegistry {
     expression[XPathLong]("xpath_long"),
     expression[XPathShort]("xpath_short"),
     expression[XPathString]("xpath_string"),
-    expression[RegExpCount]("regexp_count"),
-    expression[RegExpSubStr]("regexp_substr"),
-    expression[RegExpInStr]("regexp_instr"),
-    expression[IsValidUTF8]("is_valid_utf8"),
-    expression[MakeValidUTF8]("make_valid_utf8"),
-    expression[ValidateUTF8]("validate_utf8"),
-    expression[TryValidateUTF8]("try_validate_utf8"),
-    expression[Quote]("quote"),
-    expression[Normalize]("normalize")
+    expression[XmlToStructs]("from_xml"),
+    expression[SchemaOfXml]("schema_of_xml"),
+    expression[StructsToXml]("to_xml")
   )
 
   private def urlExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // url functions
+    // URL functions
+    expression[TryUrlDecode]("try_url_decode"),
     expression[UrlEncode]("url_encode"),
     expression[UrlDecode]("url_decode"),
     expression[ParseUrl]("parse_url"),
     expression[TryParseUrl]("try_parse_url")
   )
 
-  private def datetimeExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // datetime functions
-    expression[AddMonths]("add_months"),
-    expression[CurrentDate]("current_date"),
-    expressionBuilder("curdate", CurDateExpressionBuilder, setAlias = true),
-    expressionBuilder("current_timestamp", CurrentTimestampExpressionBuilder),
-    expression[CurrentTime]("current_time"),
-    expression[CurrentTime]("localtime", since = Some("4.3.0")),
-    expression[CurrentTimeZone]("current_timezone"),
-    expressionBuilder("localtimestamp", LocalTimestampExpressionBuilder),
-    expression[DateDiff]("datediff"),
-    expression[DateDiff]("date_diff", setAlias = true, Some("3.4.0")),
-    expression[DateAdd]("date_add"),
-    expression[DateAdd]("dateadd", setAlias = true, Some("3.4.0")),
-    expression[DateFormatClass]("date_format"),
-    expression[DateSub]("date_sub"),
-    expression[DayOfMonth]("day", true),
-    expression[DayOfYear]("dayofyear"),
-    expression[DayOfMonth]("dayofmonth"),
-    expression[FromUnixTime]("from_unixtime"),
-    expression[FromUTCTimestamp]("from_utc_timestamp"),
-    expressionBuilder("hour", HourExpressionBuilder),
-    expression[LastDay]("last_day"),
-    expressionBuilder("minute", MinuteExpressionBuilder),
-    expression[Month]("month"),
-    expression[MonthsBetween]("months_between"),
-    expression[NextDay]("next_day"),
-    expressionBuilder("now", NowExpressionBuilder),
-    expression[Quarter]("quarter"),
-    expressionBuilder("second", SecondExpressionBuilder),
-    expression[ParseToTimestamp]("to_timestamp"),
-    expression[ParseToDate]("to_date"),
-    expression[TimeDiff]("time_diff"),
-    expression[ToTime]("to_time"),
-    expression[ToBinary]("to_binary"),
-    expression[ToUnixTimestamp]("to_unix_timestamp"),
-    expression[ToUTCTimestamp]("to_utc_timestamp"),
-    // We keep the 2 expression builders below to have different function docs.
-    expressionBuilder("to_timestamp_ntz", ParseToTimestampNTZExpressionBuilder, setAlias = true),
-    expressionBuilder("to_timestamp_ltz", ParseToTimestampLTZExpressionBuilder, setAlias = true),
-    expression[TruncDate]("trunc"),
-    expression[TruncTimestamp]("date_trunc"),
-    expression[UnixTimestamp]("unix_timestamp"),
-    expression[DayOfWeek]("dayofweek"),
-    expression[WeekDay]("weekday"),
-    expression[DayName]("dayname"),
-    expression[WeekOfYear]("weekofyear"),
-    expression[Year]("year"),
-    expression[TimeWindow]("window"),
-    expression[SessionWindow]("session_window"),
-    expression[WindowTime]("window_time"),
-    expression[MakeDate]("make_date"),
-    expression[MakeTime]("make_time"),
-    expression[TimeTrunc]("time_trunc"),
-    expression[TimeFromSeconds]("time_from_seconds"),
-    expression[TimeFromMillis]("time_from_millis"),
-    expression[TimeFromMicros]("time_from_micros"),
-    expression[TimeToSeconds]("time_to_seconds"),
-    expression[TimeToMillis]("time_to_millis"),
-    expression[TimeToMicros]("time_to_micros"),
-    expressionBuilder("make_timestamp", MakeTimestampExpressionBuilder),
-    expressionBuilder("try_make_timestamp", TryMakeTimestampExpressionBuilder),
-    expression[MonthName]("monthname"),
-    // We keep the 2 expression builders below to have different function docs.
-    expressionBuilder("make_timestamp_ntz", MakeTimestampNTZExpressionBuilder, setAlias = true),
-    expressionBuilder("make_timestamp_ltz", MakeTimestampLTZExpressionBuilder, setAlias = true),
-    expressionBuilder(
-      "try_make_timestamp_ntz", TryMakeTimestampNTZExpressionBuilder, setAlias = true),
-    expressionBuilder(
-      "try_make_timestamp_ltz", TryMakeTimestampLTZExpressionBuilder, setAlias = true),
-    expression[MakeInterval]("make_interval"),
-    expression[MakeDTInterval]("make_dt_interval"),
-    expression[MakeYMInterval]("make_ym_interval"),
-    expression[Extract]("extract"),
-    // We keep the `DatePartExpressionBuilder` to have different function docs.
-    expressionBuilder("date_part", DatePartExpressionBuilder, setAlias = true),
-    expressionBuilder("datepart", DatePartExpressionBuilder, setAlias = true, Some("3.4.0")),
-    expression[DateFromUnixDate]("date_from_unix_date"),
-    expression[UnixDate]("unix_date"),
-    expression[SecondsToTimestamp]("timestamp_seconds"),
-    expression[MillisToTimestamp]("timestamp_millis"),
-    expression[MicrosToTimestamp]("timestamp_micros"),
-    expression[NanosToTimestamp]("timestamp_nanos"),
-    expression[UnixSeconds]("unix_seconds"),
-    expression[UnixMillis]("unix_millis"),
-    expression[UnixMicros]("unix_micros"),
-    expression[UnixNanos]("unix_nanos"),
-    expression[ConvertTimezone]("convert_timezone"),
-    expressionBuilder("time_bucket", TimeBucketExpressionBuilder)
-  )
-
-  private def collectionExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // collection functions
-    expression[CreateArray]("array"),
-    expression[ArrayContains]("array_contains"),
-    expression[ArraysOverlap]("arrays_overlap"),
-    expression[ArrayInsert]("array_insert"),
-    expression[ArrayIntersect]("array_intersect"),
-    expression[ArrayJoin]("array_join"),
-    expression[ArrayPosition]("array_position"),
-    expression[ArraySize]("array_size"),
-    expression[ArraySort]("array_sort"),
-    expression[ArrayExcept]("array_except"),
-    expression[ArrayUnion]("array_union"),
-    expression[ArrayCompact]("array_compact"),
-    expression[CreateMap]("map"),
-    expression[CreateNamedStruct]("named_struct"),
-    expression[ElementAt]("element_at"),
-    expression[MapContainsKey]("map_contains_key"),
-    expression[MapFromArrays]("map_from_arrays"),
-    expression[MapKeys]("map_keys"),
-    expression[MapValues]("map_values"),
-    expression[MapEntries]("map_entries"),
-    expression[MapFromEntries]("map_from_entries"),
-    expression[MapConcat]("map_concat"),
-    expression[Size]("size"),
-    expression[Slice]("slice"),
-    expression[TrimArray]("trim_array"),
-    expression[Size]("cardinality", true, Some("2.4.0")),
-    expression[ArraysZip]("arrays_zip"),
-    expression[SortArray]("sort_array"),
-    expression[Shuffle]("shuffle"),
-    expression[ArrayMin]("array_min"),
-    expression[ArrayMax]("array_max"),
-    expression[ArrayAppend]("array_append"),
-    expression[Reverse]("reverse"),
-    expression[Concat]("concat"),
-    expression[Flatten]("flatten"),
-    expression[Sequence]("sequence"),
-    expression[ArrayRepeat]("array_repeat"),
-    expression[ArrayRemove]("array_remove"),
-    expression[ArrayPrepend]("array_prepend"),
-    expression[ArrayDistinct]("array_distinct"),
-    expression[ArrayTransform]("transform"),
-    expression[MapFilter]("map_filter"),
-    expression[ArrayFilter]("filter"),
-    expression[ArrayExists]("exists"),
-    expression[ArrayForAll]("forall"),
-    expression[ArrayAggregate]("aggregate"),
-    expression[ArrayAggregate]("reduce", setAlias = true, Some("3.4.0")),
-    expression[TransformValues]("transform_values"),
-    expression[TransformKeys]("transform_keys"),
-    expression[MapZipWith]("map_zip_with"),
-    expression[ZipWith]("zip_with"),
-    expression[Get]("get"),
-
-    CreateStruct.registryEntry
-  )
-
   private def miscExpressions: Seq[FunctionRegistryEntry] = Seq(
     // misc functions
+    expression[TryAesDecrypt]("try_aes_decrypt"),
+    expression[TryReflect]("try_reflect"),
     expression[AssertTrue]("assert_true"),
     expressionBuilder("raise_error", RaiseErrorExpressionBuilder),
-    expression[Crc32]("crc32"),
-    expression[Md5]("md5"),
     expression[Uuid]("uuid"),
-    expression[Murmur3Hash]("hash"),
-    expression[XxHash64]("xxhash64"),
-    expression[Xxh364]("xxh3_64"),
-    expression[Xxh3128]("xxh3_128"),
-    expression[Sha1]("sha", true),
-    expression[Sha1]("sha1"),
-    expression[Sha2]("sha2"),
     expression[AesEncrypt]("aes_encrypt"),
     expression[AesDecrypt]("aes_decrypt"),
     expression[Hmac]("hmac"),
@@ -897,12 +1027,17 @@ object FunctionRegistry {
     expression[CallMethodViaReflection]("java_method", true),
     expression[SparkVersion]("version"),
     expression[TypeOf]("typeof"),
-    expression[EqualNull]("equal_null"),
-    expression[Measure]("measure")
+    expression[BitmapBucketNumber]("bitmap_bucket_number"),
+    expression[BitmapBitPosition]("bitmap_bit_position"),
+    expression[BitmapCount]("bitmap_count"),
+    expression[BitmapAnd]("bitmap_and"),
+    expression[BitmapOr]("bitmap_or"),
+    expression[BitmapAndNot]("bitmap_andnot"),
+    expression[BitmapXor]("bitmap_xor")
   )
 
   private def dataSketchExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // datasketch functions
+    // Datasketch functions
     expression[HllSketchEstimate]("hll_sketch_estimate"),
     expression[HllUnion]("hll_union"),
     expression[ThetaSketchEstimate]("theta_sketch_estimate"),
@@ -945,114 +1080,21 @@ object FunctionRegistry {
     expression[KllSketchGetRankDouble]("kll_sketch_get_rank_double")
   )
 
-  private def groupingExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // grouping sets
-    expression[Grouping]("grouping"),
-    expression[GroupingID]("grouping_id")
+  private def avroExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // Avro functions
+    expression[FromAvro]("from_avro"),
+    expression[ToAvro]("to_avro"),
+    expression[SchemaOfAvro]("schema_of_avro")
   )
 
-  private def windowExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // window functions
-    expression[Lead]("lead"),
-    expression[Lag]("lag"),
-    expression[RowNumber]("row_number"),
-    expression[CumeDist]("cume_dist"),
-    expression[NthValue]("nth_value"),
-    expression[NTile]("ntile"),
-    expression[Rank]("rank"),
-    expression[DenseRank]("dense_rank"),
-    expression[PercentRank]("percent_rank"),
-    expressionBuilder("counter_diff", CounterDiffExpressionBuilder)
-  )
-
-  private def predicateExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // predicates
-    expression[Between]("between"),
-    expression[And]("and"),
-    expression[In]("in"),
-    expression[Not]("not"),
-    expression[Or]("or")
-  )
-
-  private def comparisonExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // comparison operators
-    expression[EqualNullSafe]("<=>"),
-    expression[EqualTo]("="),
-    expression[EqualTo]("=="),
-    expression[GreaterThan](">"),
-    expression[GreaterThanOrEqual](">="),
-    expression[LessThan]("<"),
-    expression[LessThanOrEqual]("<="),
-    expression[Not]("!")
-  )
-
-  private def bitwiseExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // bitwise
-    expression[BitwiseAnd]("&"),
-    expression[BitwiseNot]("~"),
-    expression[BitwiseOr]("|"),
-    expression[BitwiseXor]("^"),
-    expression[ShiftLeft]("<<", true, Some("4.0.0")),
-    expression[ShiftRight](">>", true, Some("4.0.0")),
-    expression[ShiftRightUnsigned](">>>", true, Some("4.0.0")),
-    expression[BitwiseCount]("bit_count"),
-    expression[BitAndAgg]("bit_and"),
-    expression[BitOrAgg]("bit_or"),
-    expression[BitXorAgg]("bit_xor"),
-    expression[BitwiseGet]("bit_get"),
-    expression[BitwiseGet]("getbit", true)
-  )
-
-  private def bitmapExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // bitmap functions and aggregates
-    expression[BitmapBucketNumber]("bitmap_bucket_number"),
-    expression[BitmapBitPosition]("bitmap_bit_position"),
-    expression[BitmapConstructAgg]("bitmap_construct_agg"),
-    expression[BitmapCount]("bitmap_count"),
-    expression[BitmapAnd]("bitmap_and"),
-    expression[BitmapOr]("bitmap_or"),
-    expression[BitmapAndNot]("bitmap_andnot"),
-    expression[BitmapXor]("bitmap_xor"),
-    expression[BitmapOrAgg]("bitmap_or_agg"),
-    expression[BitmapAndAgg]("bitmap_and_agg"),
-    expression[BitmapXorAgg]("bitmap_xor_agg")
-  )
-
-  private def jsonExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // json
-    expression[StructsToJson]("to_json"),
-    expression[JsonToStructs]("from_json"),
-    expression[SchemaOfJson]("schema_of_json"),
-    expression[LengthOfJsonArray]("json_array_length"),
-    expression[JsonObjectKeys]("json_object_keys"),
-    expression[JsonTypeof]("json_typeof")
-  )
-
-  private def variantExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // Variant
-    expressionBuilder("parse_json", ParseJsonExpressionBuilder),
-    expressionBuilder("try_parse_json", TryParseJsonExpressionBuilder),
-    expression[IsVariantNull]("is_variant_null"),
-    expressionBuilder("variant_get", VariantGetExpressionBuilder),
-    expressionBuilder("try_variant_get", TryVariantGetExpressionBuilder),
-    expression[SchemaOfVariant]("schema_of_variant"),
-    expression[SchemaOfVariantAgg]("schema_of_variant_agg"),
-    expression[ToVariantObject]("to_variant_object"),
-    expression[VariantFromArrays]("variant_from_arrays"),
-    expression[VariantFromEntries]("variant_from_entries"),
-    expression[IsValidVariant]("is_valid_variant"),
-    expression[VariantDelete]("variant_delete"),
-    expressionBuilder("variant_insert", VariantInsertExpressionBuilder),
-    expressionBuilder("try_variant_insert", TryVariantInsertExpressionBuilder),
-    expressionBuilder("variant_set", VariantSetExpressionBuilder),
-    expressionBuilder("try_variant_set", TryVariantSetExpressionBuilder),
-    expressionBuilder("variant_array_append", VariantArrayAppendExpressionBuilder),
-    expressionBuilder("try_variant_array_append", TryVariantArrayAppendExpressionBuilder),
-    expressionBuilder("variant_strip_nulls", VariantStripNullsExpressionBuilder)
+  private def protobufExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // Protobuf functions
+    expression[FromProtobuf]("from_protobuf"),
+    expression[ToProtobuf]("to_protobuf")
   )
 
   private def spatialExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // Spatial
+    // ST geospatial functions
     expression[ST_AsBinary]("st_asbinary"),
     expression[ST_GeogFromWKB]("st_geogfromwkb"),
     expression[ST_GeomFromWKB]("st_geomfromwkb"),
@@ -1060,86 +1102,49 @@ object FunctionRegistry {
     expression[ST_SetSrid]("st_setsrid")
   )
 
-  private def castExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // cast
-    expression[Cast]("cast"),
-    // Cast aliases (SPARK-16730)
-    castAlias("boolean", BooleanType),
-    castAlias("tinyint", ByteType),
-    castAlias("smallint", ShortType),
-    castAlias("int", IntegerType),
-    castAlias("bigint", LongType),
-    castAlias("float", FloatType),
-    castAlias("double", DoubleType),
-    castAlias("decimal", DecimalType.USER_DEFAULT),
-    castAlias("date", DateType),
-    castAlias("timestamp", TimestampType),
-    castAlias("time", TimeType()),
-    castAlias("binary", BinaryType),
-    castAlias("string", StringType)
+  private def vectorExpressions: Seq[FunctionRegistryEntry] = Seq(
+    // vector functions
+    expression[VectorCosineSimilarity]("vector_cosine_similarity"),
+    expression[VectorInnerProduct]("vector_inner_product"),
+    expression[VectorL2Distance]("vector_l2_distance"),
+    expression[VectorNorm]("vector_norm"),
+    expression[VectorNormalize]("vector_normalize"),
+    expression[VectorAvg]("vector_avg"),
+    expression[VectorSum]("vector_sum")
   )
 
-  private def maskExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // mask functions
-    expressionBuilder("mask", MaskExpressionBuilder)
-  )
-
-  private def csvExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // csv
-    expression[CsvToStructs]("from_csv"),
-    expression[SchemaOfCsv]("schema_of_csv"),
-    expression[StructsToCsv]("to_csv")
-  )
-
-  private def xmlExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // Xml
-    expression[XmlToStructs]("from_xml"),
-    expression[SchemaOfXml]("schema_of_xml"),
-    expression[StructsToXml]("to_xml")
-  )
-
-  private def avroExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // Avro
-    expression[FromAvro]("from_avro"),
-    expression[ToAvro]("to_avro"),
-    expression[SchemaOfAvro]("schema_of_avro")
-  )
-
-  private def protobufExpressions: Seq[FunctionRegistryEntry] = Seq(
-    // Protobuf
-    expression[FromProtobuf]("from_protobuf"),
-    expression[ToProtobuf]("to_protobuf")
-  )
-
-  // Keep expression groups in separate methods to limit the bytecode size of the static
-  // initializer and leave enough headroom for coverage instrumentation.
+  // Keep registry entries aligned with their ExpressionInfo groups. Public APIs and documentation
+  // use the corresponding taxonomy where applicable. Separate methods also limit the bytecode size
+  // of the static initializer and leave enough headroom for coverage instrumentation.
   val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] = Seq(
-    miscNonAggregateExpressions,
-    mathExpressions,
-    tryExpressions,
-    aggregateExpressions,
-    vectorExpressions,
-    stringExpressions,
-    urlExpressions,
-    datetimeExpressions,
-    collectionExpressions,
-    miscExpressions,
-    dataSketchExpressions,
-    groupingExpressions,
-    windowExpressions,
+    conditionalExpressions,
     predicateExpressions,
-    comparisonExpressions,
+    mathExpressions,
+    stringExpressions,
     bitwiseExpressions,
-    bitmapExpressions,
+    datetimeExpressions,
+    hashExpressions,
+    collectionExpressions,
+    lambdaExpressions,
+    arrayExpressions,
+    structExpressions,
+    mapExpressions,
+    aggregateExpressions,
+    windowExpressions,
+    generatorExpressions,
+    conversionExpressions,
+    csvExpressions,
     jsonExpressions,
     variantExpressions,
-    spatialExpressions,
-    castExpressions,
-    maskExpressions,
-    csvExpressions,
     xmlExpressions,
+    urlExpressions,
+    miscExpressions,
+    dataSketchExpressions,
     avroExpressions,
-    protobufExpressions).flatten.toMap
+    protobufExpressions,
+    spatialExpressions,
+    vectorExpressions
+  ).flatten.toMap
 
   // BuiltinRegistryMixin normalizes any name to the builtin 3-part key (system.builtin.name).
   val builtin: SimpleFunctionRegistry = {
