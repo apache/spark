@@ -202,6 +202,68 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-47672: avoid evaluating scalar Python UDFs twice") {
+    val evalTypes = Seq(
+      "regular" -> PythonEvalType.SQL_BATCHED_UDF,
+      "Arrow-optimized" -> PythonEvalType.SQL_ARROW_BATCHED_UDF,
+      "Arrow element-wise" -> PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
+      "scalar Pandas element-wise" -> PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF,
+      "scalar Pandas iterator element-wise" ->
+        PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
+      "scalar Arrow element-wise" -> PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF,
+      "scalar Arrow iterator element-wise" ->
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF,
+      "scalar Pandas" -> PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+      "scalar Pandas iterator" -> PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+      "scalar Arrow" -> PythonEvalType.SQL_SCALAR_ARROW_UDF,
+      "scalar Arrow iterator" -> PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF)
+
+    evalTypes.foreach { case (name, evalType) =>
+      withClue(s"$name Python UDF: ") {
+        val pythonUDF = PythonUDF(
+          "pythonUDF",
+          null,
+          BooleanType,
+          Seq(attrA),
+          evalType,
+          udfDeterministic = true)
+        val originalQuery = testRelation
+          .select(pythonUDF.as("result"))
+          .where($"result")
+          .analyze
+
+        comparePlans(Optimize.execute(originalQuery), originalQuery)
+      }
+    }
+  }
+
+  test("SPARK-47672: all Python function expressions are expensive") {
+    val pythonExpressions = Seq(
+      "mapInPandas" -> PythonUDF(
+        "mapInPandas", null, StructType(Nil), Seq(attrA),
+        PythonEvalType.SQL_MAP_PANDAS_ITER_UDF, udfDeterministic = true),
+      "mapInArrow" -> PythonUDF(
+        "mapInArrow", null, StructType(Nil), Seq(attrA),
+        PythonEvalType.SQL_MAP_ARROW_ITER_UDF, udfDeterministic = true),
+      "Pandas aggregate" -> PythonUDAF(
+        "pandasAggregate", null, IntegerType, Seq(attrA), udfDeterministic = true),
+      "Arrow aggregate" -> PythonUDAF(
+        "arrowAggregate", null, IntegerType, Seq(attrA), udfDeterministic = true,
+        evalType = PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF),
+      "incremental Arrow aggregate" -> PythonAggregate(
+        "incrementalArrowAggregate", null, IntegerType, Seq(attrA),
+        udfDeterministic = true, bufferSchema = StructType(Nil)),
+      "Python UDTF" -> PythonUDTF(
+        "pythonUDTF", null, StructType(Nil), None, Seq(attrA),
+        PythonEvalType.SQL_TABLE_UDF, udfDeterministic = true))
+
+    pythonExpressions.foreach { case (name, expression) =>
+      withClue(s"$name: ") {
+        assert(expression.expensive)
+      }
+    }
+  }
+
   // Case 1: Multiple filters that don't reference any projection aliases - all should be pushed
   test("SPARK-47672: Case 1 - multiple filters not referencing projection aliases") {
     val originalQuery = testStringRelation
