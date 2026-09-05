@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.{lang => jl}
+
 import org.apache.spark.QueryContext
 import org.apache.spark.sql.errors.ExecutionErrors
 
@@ -121,6 +123,56 @@ object MathUtils {
   def pmod(a: Double, n: Double): Double = {
     val r = a % n
     if (r < 0) (r + n) % n else r
+  }
+
+  // Greatest common divisor of two longs, computed with the Euclidean algorithm. The result is
+  // always non-negative, and `gcd(0, 0)` is 0. The only unrepresentable result is `-Long.MinValue`,
+  // reached by `(0, x)`, `(x, 0)` and `(x, x)` for `x == Long.MinValue`; as elsewhere in Spark that
+  // overflow raises under ANSI mode and yields null otherwise. Shared by `Gcd`'s eval and codegen
+  // paths so the two never diverge.
+  def gcd(a: Long, b: Long, ansiEnabled: Boolean, context: QueryContext): jl.Long = {
+    var x = a
+    var y = b
+    while (y != 0) {
+      val remainder = x % y
+      x = y
+      y = remainder
+    }
+    // `x` carries the sign of the inputs, so take the absolute value to normalize the result.
+    if (x == Long.MinValue) {
+      overflowOrNull(ansiEnabled, context)
+    } else {
+      Math.abs(x)
+    }
+  }
+
+  // Least common multiple of two longs. Dividing by the greatest common divisor before multiplying
+  // keeps the intermediate product as small as possible, so only genuinely unrepresentable results
+  // overflow. The result is always non-negative, and is 0 when either input is 0. Shared by `Lcm`'s
+  // eval and codegen paths so the two never diverge.
+  def lcm(a: Long, b: Long, ansiEnabled: Boolean, context: QueryContext): jl.Long = {
+    if (a == 0 || b == 0) {
+      jl.Long.valueOf(0L)
+    } else {
+      val divisor = gcd(a, b, ansiEnabled, context)
+      if (divisor == null) {
+        null
+      } else {
+        try {
+          Math.multiplyExact(Math.absExact(a / divisor.longValue()), Math.absExact(b))
+        } catch {
+          case _: ArithmeticException => overflowOrNull(ansiEnabled, context)
+        }
+      }
+    }
+  }
+
+  private def overflowOrNull(ansiEnabled: Boolean, context: QueryContext): jl.Long = {
+    if (ansiEnabled) {
+      throw ExecutionErrors.arithmeticOverflowError("long overflow", context = context)
+    } else {
+      null
+    }
   }
 
   // Casts a rounded double (the result of Math.ceil/Math.floor) to long, throwing an arithmetic

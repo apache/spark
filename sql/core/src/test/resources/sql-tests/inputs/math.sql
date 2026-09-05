@@ -148,3 +148,37 @@ SELECT POSITIVE(25.5);
 SELECT POSITIVE("25.5");
 SELECT POSITIVE("invalid");
 SELECT POSITIVE(null);
+
+-- Gcd
+SELECT gcd(24, 36);
+SELECT gcd(17, 5);
+-- The result is never negative, whichever inputs are.
+SELECT gcd(-24, 36);
+SELECT gcd(24, -36);
+SELECT gcd(-24, -36);
+-- Zero is divisible by everything, so it acts as the identity.
+SELECT gcd(0, 0);
+SELECT gcd(0, -7);
+SELECT gcd(7, 0);
+SELECT gcd(null, 5);
+SELECT gcd(5, null);
+
+-- Lcm
+SELECT lcm(4, 6);
+SELECT lcm(17, 5);
+-- The result is never negative, whichever inputs are.
+SELECT lcm(-4, 6);
+SELECT lcm(4, -6);
+SELECT lcm(-4, -6);
+-- Zero has no non-zero multiple in common with anything.
+SELECT lcm(0, 0);
+SELECT lcm(0, 5);
+SELECT lcm(5, 0);
+SELECT lcm(null, 5);
+SELECT lcm(5, null);
+-- Dividing by the gcd before multiplying keeps a representable result in range: the naive product
+-- 4611686018427387904 * 2 would overflow, while the least common multiple does not.
+SELECT lcm(4611686018427387904L, 2L);
+-- Long.MaxValue and Long.MaxValue - 2 are both odd and differ by 2, so they are coprime and their
+-- least common multiple is not representable.
+SELECT lcm(9223372036854775807L, 9223372036854775805L);

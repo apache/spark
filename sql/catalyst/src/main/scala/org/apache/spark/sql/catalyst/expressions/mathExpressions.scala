@@ -763,6 +763,142 @@ case class Factorial(child: Expression)
 }
 
 @ExpressionDescription(
+  usage = "_FUNC_(expr1, expr2) - Returns the greatest common divisor of `expr1` and `expr2`.",
+  arguments = """
+    Arguments:
+      * expr1 - The first value. An expression that evaluates to an integral number.
+      * expr2 - The second value. An expression that evaluates to an integral number.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(24, 36);
+       12
+      > SELECT _FUNC_(-24, 36);
+       12
+      > SELECT _FUNC_(0, 0);
+       0
+  """,
+  since = "4.4.0",
+  group = "math_funcs")
+case class Gcd(
+    left: Expression,
+    right: Expression,
+    ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
+  extends BinaryExpression with ImplicitCastInputTypes with SupportQueryContext {
+  override def nullIntolerant: Boolean = true
+
+  def this(left: Expression, right: Expression) =
+    this(left, right, ansiEnabled = SQLConf.get.ansiEnabled)
+
+  override def inputTypes: Seq[DataType] = Seq(LongType, LongType)
+
+  override def dataType: DataType = LongType
+
+  // The result overflows for inputs whose divisor is -Long.MinValue, which is null in ANSI mode.
+  override def nullable: Boolean = true
+
+  override def initQueryContext(): Option[QueryContext] = if (ansiEnabled) {
+    Some(origin.context)
+  } else {
+    None
+  }
+
+  protected override def nullSafeEval(left: Any, right: Any): Any = {
+    MathUtils.gcd(
+      left.asInstanceOf[Long], right.asInstanceOf[Long], ansiEnabled, getContextOrNull())
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val errorContext = getContextOrNullCode(ctx, ansiEnabled)
+    val result = ctx.freshName("gcd")
+    nullSafeCodeGen(ctx, ev, (leftValue, rightValue) => {
+      s"""
+        java.lang.Long $result = org.apache.spark.sql.catalyst.util.MathUtils.gcd(
+          $leftValue, $rightValue, $ansiEnabled, $errorContext);
+        if ($result == null) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = $result;
+        }
+      """
+    })
+  }
+
+  override def prettyName: String = "gcd"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Gcd = copy(left = newLeft, right = newRight)
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr1, expr2) - Returns the least common multiple of `expr1` and `expr2`.",
+  arguments = """
+    Arguments:
+      * expr1 - The first value. An expression that evaluates to an integral number.
+      * expr2 - The second value. An expression that evaluates to an integral number.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(4, 6);
+       12
+      > SELECT _FUNC_(-4, 6);
+       12
+      > SELECT _FUNC_(0, 5);
+       0
+  """,
+  since = "4.4.0",
+  group = "math_funcs")
+case class Lcm(
+    left: Expression,
+    right: Expression,
+    ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
+  extends BinaryExpression with ImplicitCastInputTypes with SupportQueryContext {
+  override def nullIntolerant: Boolean = true
+
+  def this(left: Expression, right: Expression) =
+    this(left, right, ansiEnabled = SQLConf.get.ansiEnabled)
+
+  override def inputTypes: Seq[DataType] = Seq(LongType, LongType)
+
+  override def dataType: DataType = LongType
+
+  // The result overflows once it exceeds Long.MaxValue, which is null in non-ANSI mode.
+  override def nullable: Boolean = true
+
+  override def initQueryContext(): Option[QueryContext] = if (ansiEnabled) {
+    Some(origin.context)
+  } else {
+    None
+  }
+
+  protected override def nullSafeEval(left: Any, right: Any): Any = {
+    MathUtils.lcm(
+      left.asInstanceOf[Long], right.asInstanceOf[Long], ansiEnabled, getContextOrNull())
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val errorContext = getContextOrNullCode(ctx, ansiEnabled)
+    val result = ctx.freshName("lcm")
+    nullSafeCodeGen(ctx, ev, (leftValue, rightValue) => {
+      s"""
+        java.lang.Long $result = org.apache.spark.sql.catalyst.util.MathUtils.lcm(
+          $leftValue, $rightValue, $ansiEnabled, $errorContext);
+        if ($result == null) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = $result;
+        }
+      """
+    })
+  }
+
+  override def prettyName: String = "lcm"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Lcm = copy(left = newLeft, right = newRight)
+}
+
+@ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the natural logarithm (base e) of `expr`.",
   arguments = """
     Arguments:

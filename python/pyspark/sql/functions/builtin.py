@@ -9213,6 +9213,92 @@ def factorial(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("factorial", col)
 
 
+@_try_remote_functions
+def gcd(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Computes the greatest common divisor of the two given values.
+    The result is never negative, and is 0 when both values are 0.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or str
+        the first value.
+        A column that evaluates to an integral.
+    col2 : :class:`~pyspark.sql.Column` or str
+        the second value.
+        A column that evaluates to an integral.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        greatest common divisor of the given values.
+        Returns a column that evaluates to a long.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.lcm`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1, 5).select("*", sf.gcd(sf.lit(12), 'id')).show()
+    +---+-----------+
+    | id|gcd(12, id)|
+    +---+-----------+
+    |  1|          1|
+    |  2|          2|
+    |  3|          3|
+    |  4|          4|
+    +---+-----------+
+    """
+    return _invoke_function_over_columns("gcd", col1, col2)
+
+
+@_try_remote_functions
+def lcm(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Computes the least common multiple of the two given values.
+    The result is never negative, and is 0 when either value is 0.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or str
+        the first value.
+        A column that evaluates to an integral.
+    col2 : :class:`~pyspark.sql.Column` or str
+        the second value.
+        A column that evaluates to an integral.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        least common multiple of the given values.
+        Returns a column that evaluates to a long.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.gcd`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1, 5).select("*", sf.lcm(sf.lit(6), 'id')).show()
+    +---+----------+
+    | id|lcm(6, id)|
+    +---+----------+
+    |  1|         6|
+    |  2|         6|
+    |  3|         6|
+    |  4|        12|
+    +---+----------+
+    """
+    return _invoke_function_over_columns("lcm", col1, col2)
+
+
 # ---------------  Window functions ------------------------
 
 

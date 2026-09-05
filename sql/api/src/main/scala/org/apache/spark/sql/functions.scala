@@ -5443,6 +5443,36 @@ object functions {
   def factorial(e: Column): Column = Column.fn("factorial", e)
 
   /**
+   * Computes the greatest common divisor of the two given values. The result is never negative,
+   * and is 0 when both values are 0.
+   *
+   * @param l
+   *   the first value. A column that evaluates to an integral.
+   * @param r
+   *   the second value. A column that evaluates to an integral.
+   * @group math_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a long.
+   */
+  def gcd(l: Column, r: Column): Column = Column.fn("gcd", l, r)
+
+  /**
+   * Computes the least common multiple of the two given values. The result is never negative, and
+   * is 0 when either value is 0.
+   *
+   * @param l
+   *   the first value. A column that evaluates to an integral.
+   * @param r
+   *   the second value. A column that evaluates to an integral.
+   * @group math_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a long.
+   */
+  def lcm(l: Column, r: Column): Column = Column.fn("lcm", l, r)
+
+  /**
    * Computes the floor of the given value of `e` to `scale` decimal places.
    *
    * @param e
