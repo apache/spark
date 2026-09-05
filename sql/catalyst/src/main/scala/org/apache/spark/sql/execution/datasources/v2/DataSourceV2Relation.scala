@@ -22,7 +22,7 @@ import java.util.{Collections, Optional, OptionalLong}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, SortOrder, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSeq, AttributeSet, Expression, SortOrder, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
@@ -338,20 +338,21 @@ case class DataSourceV2ScanRelation(
   }
 
   override def doCanonicalize(): DataSourceV2ScanRelation = {
+    val outputAttrs: AttributeSeq = output
     this.copy(
       relation = this.relation.copy(
-        output = this.relation.output.map(QueryPlan.normalizeExpressions(_, this.relation.output))
+        output = QueryPlan.normalizeExpressions(this.relation.output, this.relation.output)
       ),
-      output = this.output.map(QueryPlan.normalizeExpressions(_, this.output)),
+      output = QueryPlan.normalizeExpressions(this.output, outputAttrs),
       keyGroupedPartitioning = keyGroupedPartitioning.map(
-        _.map(QueryPlan.normalizeExpressions(_, output))
+        QueryPlan.normalizeExpressions(_, outputAttrs)
       ),
-      ordering = ordering.map(
-        _.map(o => o.copy(child = QueryPlan.normalizeExpressions(o.child, output)))
-      ),
+      ordering = ordering.map { orderings =>
+        orderings.map(o => o.copy(child = QueryPlan.normalizeExpressions(o.child, outputAttrs)))
+      },
       // pushedFilters may reference columns pruned out of `output` (see the field doc), so they are
       // normalized against the relation's full output rather than `output`.
-      pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, relation.output))
+      pushedFilters = QueryPlan.normalizeExpressions(pushedFilters, relation.output)
     )
   }
 }

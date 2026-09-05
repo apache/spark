@@ -49,7 +49,7 @@ case class SubqueryAdaptiveBroadcastExec(
   }
 
   protected override def doCanonicalize(): SparkPlan = {
-    val keys = buildKeys.map(k => QueryPlan.normalizeExpressions(k, child.output))
+    val keys = QueryPlan.normalizeExpressions(buildKeys, child.output)
     copy(name = "dpp", buildKeys = keys, child = child.canonicalized)(None)
   }
 

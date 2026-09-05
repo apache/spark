@@ -79,10 +79,12 @@ case class InMemoryTableScanExec(
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
-  override def doCanonicalize(): SparkPlan =
-    copy(attributes = attributes.map(QueryPlan.normalizeExpressions(_, relation.output)),
-      predicates = predicates.map(QueryPlan.normalizeExpressions(_, relation.output)),
+  override def doCanonicalize(): SparkPlan = {
+    val relationOutput: AttributeSeq = relation.output
+    copy(attributes = QueryPlan.normalizeExpressions(attributes, relationOutput),
+      predicates = QueryPlan.normalizeExpressions(predicates, relationOutput),
       relation = relation.canonicalized.asInstanceOf[InMemoryRelation])
+  }
 
   override def vectorTypes: Option[Seq[String]] =
     relation.cacheBuilder.serializer.vectorTypes(attributes, conf)
