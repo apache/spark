@@ -1023,13 +1023,13 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     }
   }
 
-  // Serializes the latch below so concurrent first readers agree on one answer. Private, and
-  // `isPlainUnion` is its only user, so the only lock taken under it is a nested union's own
-  // `decisionLock`, always a descendant's. It has to stay that way: no child `outputPartitioning`
-  // the derivation walks may take a lock, or it would invert `CoalesceShufflePartitions`, which
-  // reads `isPlainUnion` while holding the AQE lock. `InMemoryTableScanExec` qualifies only
-  // because it reads `adaptive.executedPlan`, a volatile read, not `finalPhysicalPlan`, which is
-  // `lock.synchronized`. Driver-only, hence `@transient`.
+  // Serializes the two latches below so concurrent first readers agree on one answer. Private to
+  // this node, so the only lock taken under it is a nested union's own `decisionLock`, always a
+  // descendant's. It has to stay that way: nothing either derivation walks may take a lock, or it
+  // would invert `CoalesceShufflePartitions`, which reads `isPlainUnion` while holding the AQE
+  // lock. That surface is the children's `outputPartitioning`, `supportsColumnar` and `output`;
+  // `InMemoryTableScanExec` qualifies only because it reads `adaptive.executedPlan`, a volatile
+  // read, not `finalPhysicalPlan`, which is `lock.synchronized`. Driver-only, hence `@transient`.
   @transient private val decisionLock = new Object()
 
   /**
@@ -1091,13 +1091,21 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       }
     }
 
-  // Memoized so `supportCodegen` (called repeatedly by `CollapseCodegenStages`)
-  // and `metrics` see one reason on one instance; `conf` is live, so re-deriving
-  // could answer differently. The `withNewChildren` copy gets its own memo; it
-  // re-derives every term but `isPlainUnion`, which it inherits from the tag when
-  // the original latched first, as the codegen path does (`insertWholeStageCodegen`
-  // calls `supportCodegen` before `insertInputAdapter` takes the copy).
-  @transient private lazy val supportCodegenFailureReason: Option[String] = {
+  // Latched for the same reason `isPlainUnion` is: `supportCodegen` and `metrics` must see one
+  // answer, and `conf` is live. When a child is not `CodegenSupport`, `insertInputAdapter` wraps
+  // it, so `withNewChildren` returns a real copy whose first evaluation of this would land at
+  // execution; re-deriving there left `metrics` empty while `doProduce` asked `metricTerm` for
+  // `numOutputRows`. The first force is not always the gate: under AQE it is a plan-update event
+  // on the pre-stage-creation tree, so a term added here sees more of the plan than the gate does.
+  private def supportCodegenFailureReason: Option[String] = decisionLock.synchronized {
+    getTagValue(UnionExec.CODEGEN_FAILURE_REASON).getOrElse {
+      val reason = deriveCodegenFailureReason
+      setTagValue(UnionExec.CODEGEN_FAILURE_REASON, reason)
+      reason
+    }
+  }
+
+  private def deriveCodegenFailureReason: Option[String] = {
     if (!conf.getConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED)) {
       Some("union-codegen-disabled")
     } else if (!isPlainUnion) {
@@ -1327,6 +1335,12 @@ object UnionExec {
    * increments it.
    */
   private val PLAIN_UNION_DECISION = TreeNodeTag[Boolean]("plainUnionDecision")
+
+  /**
+   * The latched whole-stage-codegen decision. See `supportCodegenFailureReason`. Carried across
+   * rebuilds on the same terms as [[PLAIN_UNION_DECISION]].
+   */
+  private val CODEGEN_FAILURE_REASON = TreeNodeTag[Option[String]]("codegenFailureReason")
 
   /**
    * Codegen operators that return more than one RDD from `inputRDDs()`.

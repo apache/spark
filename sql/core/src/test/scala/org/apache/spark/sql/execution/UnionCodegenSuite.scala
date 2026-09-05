@@ -733,6 +733,31 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
   }
 
+  test("SPARK-59122: a fused union keeps numOutputRows when the codegen conf changes between " +
+    "planning and execution") {
+    // `supportCodegenFailureReason` used to read `WHOLESTAGE_UNION_CODEGEN_ENABLED` live, and the
+    // copy that `insertInputAdapter` puts inside the codegen shell evaluated it for the first time
+    // at execution. Planned with the conf on the union is fused, so the generated code increments
+    // `numOutputRows`; if the copy re-derives the reason with the conf off, `metrics` comes back
+    // empty and `doProduce` throws `key not found: numOutputRows`.
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val planned = withSQLConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true") {
+        // Each child is an exchange, which is not `CodegenSupport`, so `insertInputAdapter` wraps
+        // it and `withNewChildren` really does produce a copy. With codegen-support children it
+        // returns `this`, the memo stays the original's warm one, and nothing re-derives.
+        val df = rangeDF(100).repartition(2).union(rangeDF(100).repartition(2))
+        // `fusedUnions` requires the union to be the stage root; `unionInsideWSCG` would also
+        // match a union that an `InputAdapter` left inside the stage unfused, which is exactly
+        // the degradation this guard has to catch.
+        assert(fusedUnions(df).size == 1, "this shape must fuse, or the test exercises nothing")
+        df
+      }
+      withSQLConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "false") {
+        assert(planned.collect().length == 200)
+      }
+    }
+  }
+
   test("SPARK-56482: input_file_name child fuses (Nondeterministic but partition-index-free)") {
     // `InputFileName` is `Nondeterministic` but reads from `InputFileBlockHolder`
     // (a per-task thread-local) and does not embed `partitionIndex`. The gate's
