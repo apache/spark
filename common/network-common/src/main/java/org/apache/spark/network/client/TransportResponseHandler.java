@@ -235,6 +235,9 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     } else if (message instanceof StreamResponse resp) {
       Pair<String, StreamCallback> entry = streamCallbacks.poll();
       if (entry != null) {
+        // Assert the FIFO ordering invariant (response streamId == head-of-queue callback's
+        // streamId) before using the polled callback; see verifyStreamCallbackMatches.
+        verifyStreamCallbackMatches(entry, resp.streamId, "response");
         StreamCallback callback = entry.getRight();
         if (resp.byteCount > 0) {
           StreamInterceptor<ResponseMessage> interceptor = new StreamInterceptor<>(
@@ -269,6 +272,9 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     } else if (message instanceof StreamFailure resp) {
       Pair<String, StreamCallback> entry = streamCallbacks.poll();
       if (entry != null) {
+        // Same invariant check as the StreamResponse branch before routing this failure to the
+        // polled callback.
+        verifyStreamCallbackMatches(entry, resp.streamId, "failure");
         StreamCallback callback = entry.getRight();
         try {
           callback.onFailure(resp.streamId, new RuntimeException(resp.error));
@@ -282,6 +288,50 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     } else {
       throw new IllegalStateException("Unknown response type: " + message.type());
     }
+  }
+
+  /**
+   * Asserts the FIFO ordering invariant for stream responses: the streamId carried by this
+   * response/failure must equal the streamId of the callback at the head of the
+   * {@link #streamCallbacks} queue. Responses to {@code StreamRequest}s are matched to callbacks by
+   * {@code poll()} order (see SPARK-11265), which is correct only if the server answers requests in
+   * the order the client sent them; this verifies that invariant before the polled callback is
+   * used. The check cannot false-fire: the client registers each callback under the exact streamId
+   * it requested, so a matching response always finds its callback at the head of the queue.
+   *
+   * <p>If the invariant does not hold the callback queue is desynced -- delivering this response
+   * would route the wrong block's bytes to the callback. It fails the polled callback under its own
+   * streamId (so its caller does not hang waiting for a response it will never correctly receive;
+   * {@code poll()} has already removed it from the queue) and throws {@link IllegalStateException},
+   * which propagates to Netty's {@code exceptionCaught} so the connection is torn down and its
+   * remaining outstanding requests are re-fetched in order on a fresh channel. This turns a silent
+   * wrong-block delivery into a loud, retriable failure.
+   */
+  private void verifyStreamCallbackMatches(
+      Pair<String, StreamCallback> entry, String responseStreamId, String kind) {
+    if (entry.getLeft().equals(responseStreamId)) {
+      return;
+    }
+    // Log at the detection site, in the structured MDC form used throughout this file, so this
+    // otherwise-silent condition is directly greppable ("desynced") for incidence analysis,
+    // independent of the generic connection-exception log the thrown IllegalStateException produces
+    // downstream.
+    logger.error("Stream callback queue desynced: received streamId {} does not match the head of "
+        + "the callback queue from {}; failing the connection to avoid delivering the wrong block.",
+      MDC.of(LogKeys.STREAM_ID, responseStreamId),
+      MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
+    // Full detail (both streamIds) goes on the exception that fails the callback and tears down the
+    // connection.
+    String msg = String.format(
+      "Stream callback queue desynced: %s streamId %s does not match the head of the callback "
+        + "queue (streamId %s) from %s; failing the connection to avoid delivering the wrong "
+        + "block.", kind, responseStreamId, entry.getLeft(), getRemoteAddress(channel));
+    try {
+      entry.getRight().onFailure(entry.getLeft(), new IOException(msg));
+    } catch (IOException ioe) {
+      logger.warn("Error in stream failure handler.", ioe);
+    }
+    throw new IllegalStateException(msg);
   }
 
   /** Returns total number of outstanding requests (fetch requests + rpcs) */
