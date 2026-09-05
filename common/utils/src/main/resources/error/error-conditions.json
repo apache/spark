@@ -6772,6 +6772,14 @@
     ],
     "sqlState" : "0A000"
   },
+  "PIPELINE_NESTED_COMPLEX_TYPE_SCHEMA_EVOLUTION_UNSUPPORTED" : {
+    "message" : [
+      "Schema evolution within a complex type (array or map) whose element is itself a complex type is not supported.",
+      "Column path <columnPath> has element type <currentType> but the target element type is <targetType>.",
+      "Flatten the nesting or apply the change manually."
+    ],
+    "sqlState" : "0A000"
+  },
   "PIPELINE_RUN_FAILED" : {
     "message" : [
       "<message>"
