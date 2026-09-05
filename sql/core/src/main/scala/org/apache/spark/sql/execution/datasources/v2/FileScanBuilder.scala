@@ -110,3 +110,7 @@ abstract class FileScanBuilder(
   val partitionNameSet: Set[String] =
     partitionSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
 }
+
+private[v2] trait SupportsPushDownVariantPredicateFilters {
+  def pushVariantPredicateFilters(filters: Array[Filter]): Array[Filter]
+}

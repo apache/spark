@@ -48,7 +48,8 @@ case class ParquetScan(
     pushedAggregate: Option[Aggregation] = None,
     partitionFilters: Seq[Expression] = Seq.empty,
     dataFilters: Seq[Expression] = Seq.empty,
-    pushedVariantExtractions: Array[VariantExtraction] = Array.empty) extends FileScan {
+    pushedVariantExtractions: Array[VariantExtraction] = Array.empty,
+    pushedVariantPredicateFilters: Array[Filter] = Array.empty) extends FileScan {
   override def isSplitable(path: Path): Boolean = {
     // If aggregate is pushed down, only the file footer will be read once,
     // so file should not be split across multiple tasks.
@@ -176,6 +177,7 @@ case class ParquetScan(
       effectiveSchema,
       readPartitionSchema,
       pushedFilters,
+      pushedVariantPredicateFilters,
       pushedAggregate,
       new ParquetOptions(options.asCaseSensitiveMap.asScala.toMap, conf))
   }
@@ -190,9 +192,11 @@ case class ParquetScan(
       val pushedVariantEqual =
         java.util.Arrays.equals(pushedVariantExtractions.asInstanceOf[Array[Object]],
           p.pushedVariantExtractions.asInstanceOf[Array[Object]])
+      val pushedVariantPredicateFiltersEqual =
+        equivalentFilters(pushedVariantPredicateFilters, p.pushedVariantPredicateFilters)
       super.equals(p) && dataSchema == p.dataSchema && options == p.options &&
         equivalentFilters(pushedFilters, p.pushedFilters) && pushedDownAggEqual &&
-        pushedVariantEqual
+        pushedVariantEqual && pushedVariantPredicateFiltersEqual
     case _ => false
   }
 
@@ -214,9 +218,17 @@ case class ParquetScan(
     } else {
       "[]"
     }
+    val variantPredicateFilterMetadata =
+      if (pushedVariantPredicateFilters.nonEmpty) {
+        Map("PushedVariantPredicateFilters" ->
+          seqToString(pushedVariantPredicateFilters.toImmutableArraySeq))
+      } else {
+        Map.empty[String, String]
+      }
     super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters.toImmutableArraySeq)) ++
       Map("PushedAggregation" -> pushedAggregationsStr) ++
       Map("PushedGroupBy" -> pushedGroupByStr) ++
-      Map("PushedVariantExtractions" -> variantExtractionStr)
+      Map("PushedVariantExtractions" -> variantExtractionStr) ++
+      variantPredicateFilterMetadata
   }
 }

@@ -929,6 +929,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val variants = holder.pushedVariants.get
       val attributeMap = holder.pushedVariantAttributeMap
 
+      pushDownVariantPredicateFilters(filters, variants, attributeMap, holder.builder)
+
       // Build the scan
       val scan = holder.builder.build()
       val realOutput = toAttributes(scan.readSchema())
@@ -971,6 +973,26 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val withProjection = Project(outputProjection, scanRelation)
       val withFilter = rewrittenFilters.map(Filter(_, withProjection)).getOrElse(withProjection)
       Project(rewrittenProjectList, withFilter)
+  }
+
+  private def pushDownVariantPredicateFilters(
+      filters: Seq[Expression],
+      variants: VariantInRelation,
+      attributeMap: Map[ExprId, AttributeReference],
+      builder: ScanBuilder): Unit = {
+    builder match {
+      case s: SupportsPushDownVariantPredicateFilters =>
+        val pushedFilters = filters.flatMap { filter =>
+          val rewritten = variants.rewriteExpr(filter, attributeMap)
+          if (rewritten.semanticEquals(filter)) {
+            None
+          } else {
+            DataSourceStrategy.translateFilter(rewritten, supportNestedPredicatePushdown = true)
+          }
+        }
+        s.pushVariantPredicateFilters(pushedFilters.toArray)
+      case _ =>
+    }
   }
 
   def pruneColumns(plan: LogicalPlan): LogicalPlan = plan.transform {
