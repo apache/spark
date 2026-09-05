@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, GreaterThan, LessThan, Literal, Or, Rand}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.internal.SQLConf
@@ -938,6 +940,62 @@ abstract class CTEInlineSuiteBase
           |LEFT JOIN agg1 a1 ON b.c1 = a1.c1
           |LEFT JOIN agg2 a2 ON b.c2 = a2.c2
           |""".stripMargin).show()
+    }
+  }
+
+  test("SPARK-58006: forceSkipInline CTE with self-contained correlation is materialized") {
+    // End-to-end with a real analyzer: the CTE definition is a fully analyzed plan containing a
+    // correlated subquery whose outer reference binds inside the definition body. Validation
+    // must tolerate it, and the query must run with the CTE kept materialized (replaced by
+    // repartitioned subplans instead of being inlined).
+    withTempView("t1", "t2") {
+      Seq(1, 2).toDF("id").createOrReplaceTempView("t1")
+      Seq(2, 3).toDF("id").createOrReplaceTempView("t2")
+      val analyzed =
+        sql("SELECT id FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE t2.id = t1.id)")
+          .queryExecution.analyzed
+      val cteDef = CTERelationDef(analyzed, forceSkipInline = true)
+      val cteRef1 = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+      val cteRef2 = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+      // Reference the CTE twice so that inlining would duplicate the definition; with
+      // forceSkipInline the refs must be materialized as repartitioned subplans instead.
+      val main = Union(
+        Project(cteDef.output, cteRef1),
+        Project(cteDef.output, cteRef2))
+      val df = Dataset.ofRows(spark, WithCTE(main, Seq(cteDef)))
+      checkAnswer(df, Row(2) :: Row(2) :: Nil)
+      val reparts = df.queryExecution.optimizedPlan.collect {
+        case r: RepartitionOperation => r
+      }
+      assert(reparts.nonEmpty,
+        "forceSkipInline CTE with a self-contained correlation should be materialized.")
+    }
+  }
+
+  test("SPARK-58006: forceSkipInline CTE with an escaping reference from stitched plans fails") {
+    // Simulates a producer stitching already-analyzed plans: the correlated condition is
+    // re-anchored on a plan that no longer produces the correlated column, so the outer
+    // reference escapes the definition boundary. Unlike the hand-built plans in
+    // InlineCTESuite, this exercises the validation against exprIds allocated by the real
+    // analyzer.
+    withTempView("t1", "t2") {
+      Seq(1, 2).toDF("id").createOrReplaceTempView("t1")
+      Seq(2, 3).toDF("id").createOrReplaceTempView("t2")
+      val analyzed =
+        sql("SELECT id FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE t2.id = t1.id)")
+          .queryExecution.analyzed
+      val correlatedCond = analyzed.collectFirst { case f: Filter => f.condition }.get
+      // Re-anchor the condition on t2, which does not produce the correlated column t1.id.
+      val stitched =
+        Filter(correlatedCond, sql("SELECT id FROM t2").queryExecution.analyzed)
+      val cteDef = CTERelationDef(stitched, forceSkipInline = true)
+      val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+      val e = intercept[SparkException] {
+        InlineCTE().apply(WithCTE(Project(Seq(cteDef.output.head), cteRef), Seq(cteDef)))
+      }
+      assert(e.getCondition == "INTERNAL_ERROR")
+      assert(e.getMessage.contains(
+        "A force-materialized CTE cannot carry an outer reference across its boundary"))
     }
   }
 }
