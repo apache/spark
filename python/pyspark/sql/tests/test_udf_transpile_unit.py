@@ -891,6 +891,56 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             "both parameters are supplied at the call site, so both get placeholders",
         )
 
+    def test_udf_transpile_positional_only_params(self):
+        from pyspark.errors import PythonException
+
+        def subtract(a: int, /, b: int):
+            return a - b
+
+        def repeat(value: str, /, count: int):
+            return value * count
+
+        def with_default(value=1, /):
+            return value + 1
+
+        positional_lambda = lambda a, b, /: a - b  # noqa: E731
+
+        with self.sql_conf(_TRANSPILE_ON):
+            subtract_udf = self._transpiled_udf(subtract, LongType())
+            self.assertEqual(subtract_udf._transpiled_param_names, ["a", "b"])
+            self.assertEqual(subtract_udf._transpiled_positional_only_names, {"a"})
+
+            numbers = self.spark.createDataFrame([(5, 3)], "a long, b long")
+            mixed_call = numbers.select(subtract_udf("a", b="b"))
+            self.assertEqual(mixed_call.first()[0], 2)
+            self.assertEqual(self._eval_python_count(mixed_call), 0)
+
+            with self.assertRaises(PythonException) as ctx:
+                numbers.select(subtract_udf(a="a", b="b")).collect()
+            self.assertIn("positional-only", str(ctx.exception))
+
+            repeat_udf = self._transpiled_udf(repeat, StringType())
+            self.assertTrue(
+                all(
+                    categories == ["string", "numeric"]
+                    for categories in repeat_udf._transpiled_input_categories
+                )
+            )
+            repeated = self.spark.createDataFrame([("ab", 3)], "value string, count long").select(
+                repeat_udf("value", "count")
+            )
+            self.assertEqual(repeated.first()[0], "ababab")
+            self.assertEqual(self._eval_python_count(repeated), 0)
+
+            self.assertEqual(
+                self._vals(positional_lambda, LongType(), "a long, b long", [(7, 2)]),
+                [5],
+            )
+
+            default_udf, reasons = self._udf_and_warnings(with_default, LongType())
+            self.assertEqual(default_udf.transpiled, [])
+            self.assertIn("default", reasons)
+
     def test_udf_transpile_falls_back_for_wraps_decorated_function(self):
         # inspect.getsource follows __wrapped__, so a functools.wraps-decorated
         # UDF previously transpiled the WRAPPED function's source while the
