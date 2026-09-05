@@ -214,7 +214,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.BLOB => BinaryType
     case java.sql.Types.BOOLEAN => BooleanType
     case java.sql.Types.CHAR
-        if conf.charVarcharAsString && !conf.charVarcharStandardSemantics => StringType
+        if conf.charVarcharAsString && !conf.charVarcharFirstClassTypes => StringType
     case java.sql.Types.CHAR => CharType(precision)
     case java.sql.Types.CLOB => StringType
     case java.sql.Types.DATE => DateType
@@ -263,7 +263,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.TINYINT => IntegerType
     case java.sql.Types.VARBINARY => BinaryType
     case java.sql.Types.VARCHAR
-        if conf.charVarcharAsString && !conf.charVarcharStandardSemantics => StringType
+        if conf.charVarcharAsString && !conf.charVarcharFirstClassTypes => StringType
     case java.sql.Types.VARCHAR => VarcharType(precision)
     case java.sql.Types.NULL => NullType
     case _ =>

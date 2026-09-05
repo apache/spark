@@ -1850,18 +1850,22 @@ class JDBCSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-59273: standard semantics takes precedence in JDBC schema inference") {
-    withSQLConf(
-        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
-        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
-      val df = spark.read.format("jdbc")
-        .option("url", urlWithUserAndPass)
-        .option("dbtable", "TEST.STRTYPES")
-        .load()
+  test("SPARK-59273: first-class modes take precedence in JDBC schema inference") {
+    Seq(
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key,
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key).foreach { firstClassConfig =>
+      withSQLConf(
+          firstClassConfig -> "true",
+          SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        val df = spark.read.format("jdbc")
+          .option("url", urlWithUserAndPass)
+          .option("dbtable", "TEST.STRTYPES")
+          .load()
 
-      assert(df.schema("B").dataType === VarcharType(20))
-      assert(df.schema("D").dataType === CharType(20))
-      checkAnswer(df.select("B", "D"), Row("Sensitive", "Twenty-byte CHAR    "))
+        assert(df.schema("B").dataType === VarcharType(20))
+        assert(df.schema("D").dataType === CharType(20))
+        checkAnswer(df.select("B", "D"), Row("Sensitive", "Twenty-byte CHAR    "))
+      }
     }
   }
 
