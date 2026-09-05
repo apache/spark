@@ -175,17 +175,17 @@ class TimeTypeParquetOpsSuite extends SparkFunSuite {
     assert(ParquetTypeOps.getVectorUpdaterOrNull(IntegerType, null) == null)
   }
 
-  test("supportsLazyDictionaryDecoding is false for TimeType (updater does per-value work)") {
-    // TIME decoding does per-value micros->nanos + truncation in the updater, so lazy dictionary
-    // decoding (which would bypass the updater) must stay disabled on the vectorized path.
-    assert(!TimeTypeParquetOps(timeMicros)
+  test("supportsLazyDictionaryDecoding is true for TimeType (transform in ParquetDictionary)") {
+    // TIME decoding (micros->nanos + truncation) is applied inside ParquetDictionary.decodeToLong
+    // when the TIME-aware constructor is used, so lazy dictionary decoding is safe.
+    assert(TimeTypeParquetOps(timeMicros)
       .supportsLazyDictionaryDecoding(timeColumn(TimeUnit.MICROS)))
-    assert(!TimeTypeParquetOps(timeNanos)
+    assert(TimeTypeParquetOps(timeNanos)
       .supportsLazyDictionaryDecoding(timeColumn(TimeUnit.NANOS)))
-    // Java-friendly companion entry point used by VectorizedColumnReader: FALSE for TimeType,
+    // Java-friendly companion entry point used by VectorizedColumnReader: TRUE for TimeType,
     // null for a non-framework type (so the reader keeps its built-in lazy-decoding decision).
     assert(ParquetTypeOps.supportsLazyDictionaryDecodingOrNull(
-      timeMicros, timeColumn(TimeUnit.MICROS)) === java.lang.Boolean.FALSE)
+      timeMicros, timeColumn(TimeUnit.MICROS)) === java.lang.Boolean.TRUE)
     assert(ParquetTypeOps.supportsLazyDictionaryDecodingOrNull(IntegerType, null) == null)
   }
 
