@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.bucketing
 
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SortExec, SparkPlan}
+import org.apache.spark.sql.execution.{FileSourceScanExec, FileSourceScanLike, FilterExec, ProjectExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.exchange.Exchange
 
@@ -142,7 +142,7 @@ object DisableUnnecessaryBucketedScan extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
     lazy val hasBucketedScan = plan.exists {
-      case scan: FileSourceScanExec => scan.bucketedScan
+      case scan: FileSourceScanLike => scan.bucketedScan
       case _ => false
     }
 
