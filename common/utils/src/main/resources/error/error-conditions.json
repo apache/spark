@@ -1040,6 +1040,13 @@
     ],
     "sqlState" : "58030"
   },
+  "CHECKPOINT_TRUNCATED_DIRECTORY" : {
+    "message" : [
+      "The checkpoint directory <path> was written with <expected> partition(s) but only <found> partition file(s) were found. One or more trailing part files may have been lost.",
+      "Use `spark.checkpoint.verifyPartitionCount.enabled=false` to bypass this check and load the truncated directory as-is."
+    ],
+    "sqlState" : "58030"
+  },
   "CHECK_CONSTRAINT_VIOLATION" : {
     "message" : [
       "CHECK constraint <constraintName> <expression> violated by row with values:",
