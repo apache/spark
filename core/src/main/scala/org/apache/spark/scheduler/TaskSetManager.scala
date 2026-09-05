@@ -1228,8 +1228,20 @@ private[spark] class TaskSetManager(
     // pipelined set and aborts the whole group. Note isZombie already skips a fully-complete
     // producer's set; this guard also covers a PARTIALLY-complete producer losing an executor on
     // decommission.
+
+    // OR, not AND: a shuffle reliably stored off-executor (globally, or just this one via a remote
+    // shuffle service) keeps its map output when the executor dies. The per-shuffle bit only ever
+    // adds reliability (defaults to false, set true solely by an opting-in manager), so a false
+    // there means "no info", not "unreliable".
+    val reliablyStored = sched.sc.shuffleDriverComponents.supportsReliableStorage() ||
+      taskSet.shuffleId.exists { shuffleId =>
+        sched.mapOutputTracker match {
+          case master: MapOutputTrackerMaster => master.isReliablyStored(shuffleId)
+          case _ => false
+        }
+      }
     val maybeShuffleMapOutputLoss = isShuffleMapTasks && !taskSet.isPipelined &&
-      !sched.sc.shuffleDriverComponents.supportsReliableStorage() &&
+      !reliablyStored &&
       (reason.isInstanceOf[ExecutorDecommission] || !env.blockManager.externalShuffleServiceEnabled)
     if (maybeShuffleMapOutputLoss && !isZombie) {
       val iter1 = taskIdsOnExec.iterator

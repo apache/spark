@@ -762,7 +762,8 @@ private[spark] class DAGScheduler(
         log"(${MDC(CREATION_SITE, rdd.getCreationSite)}) as input to " +
         log"shuffle ${MDC(SHUFFLE_ID, shuffleDep.shuffleId)}")
       outputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length,
-        shuffleDep.partitioner.numPartitions, jobId)
+        shuffleDep.partitioner.numPartitions, jobId,
+        isReliablyStored = shuffleDep.shuffleHandle.isReliablyStored)
     }
     stage
   }
@@ -4199,7 +4200,10 @@ private[spark] class DAGScheduler(
       execId = execId,
       fileLost = fileLost,
       hostToUnregisterOutputs = workerHost,
-      maybeEpoch = None)
+      maybeEpoch = None,
+      // Executor loss (not a fetch failure): preserve shuffles whose output is reliably stored
+      // off-executor. Their data survives the executor, so recomputing them would be wasteful.
+      skipReliablyStored = true)
   }
 
   /**
@@ -4267,7 +4271,8 @@ private[spark] class DAGScheduler(
       fileLost: Boolean,
       hostToUnregisterOutputs: Option[String],
       maybeEpoch: Option[Long] = None,
-      ignoreShuffleFileLostEpoch: Boolean = false): Unit = {
+      ignoreShuffleFileLostEpoch: Boolean = false,
+      skipReliablyStored: Boolean = false): Unit = {
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
     logDebug(s"Considering removal of executor $execId; " +
       s"fileLost: $fileLost, currentEpoch: $currentEpoch")
@@ -4307,11 +4312,11 @@ private[spark] class DAGScheduler(
           case Some(host) =>
             logInfo(log"Shuffle files lost for host: ${MDC(HOST, host)} (epoch " +
               log"${MDC(EPOCH, currentEpoch)}")
-            mapOutputTracker.removeOutputsOnHost(host)
+            mapOutputTracker.removeOutputsOnHost(host, skipReliablyStored)
           case None =>
               logInfo(log"Shuffle files lost for executor: ${MDC(EXECUTOR_ID, execId)} " +
                 log"(epoch ${MDC(EPOCH, currentEpoch)})")
-            mapOutputTracker.removeOutputsOnExecutor(execId)
+            mapOutputTracker.removeOutputsOnExecutor(execId, skipReliablyStored)
         }
       }
     }
@@ -4334,7 +4339,9 @@ private[spark] class DAGScheduler(
       message: String): Unit = {
     logInfo(log"Shuffle files lost for worker ${MDC(WORKER_ID, workerId)} " +
       log"on host ${MDC(HOST, host)}")
-    mapOutputTracker.removeOutputsOnHost(host)
+    // Worker loss (not a fetch failure): reliably-stored shuffle output lives off the worker and
+    // survives, so leave those outputs registered and only drop the rest.
+    mapOutputTracker.removeOutputsOnHost(host, skipReliablyStored = true)
     clearCacheLocs()
   }
 
