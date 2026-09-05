@@ -94,6 +94,19 @@ class ParseSqlResultSuite extends SparkFunSuite {
     val commentStatements = objs(sqlWithDroppedComment)
     assert(commentStatements.map(_ \ "start") ===
       Seq(JInt(1), JInt(sqlWithDroppedComment.lastIndexOf("SELECT 2") + 1)))
+
+    val emoji = "\uD83D\uDE00"
+    val unicodeSql = s"SELECT '$emoji$emoji'; SELECT 2;"
+    val unicodeStatements = objs(unicodeSql)
+    val spans = unicodeStatements.map { statement =>
+      val JInt(start) = statement \ "start"
+      val JInt(length) = statement \ "length"
+      (start.toInt, length.toInt)
+    }
+    assert(spans === Seq((1, 13), (16, 8)))
+    assert(spans.map { case (start, length) =>
+      unicodeSql.substring(start - 1, start - 1 + length)
+    } === Seq(s"SELECT '$emoji$emoji'", "SELECT 2"))
   }
 
   test("batch errors are isolated and preserve statement order") {

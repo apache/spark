@@ -191,7 +191,11 @@ object SqlStatementSplitter {
     val conf = SqlApiConf.get
 
     def appendToken(token: Token): Unit = {
-      if (buffer.isEmpty) bufferStart = token.getStartIndex
+      if (buffer.isEmpty) {
+        // CodePointCharStream token offsets count Unicode code points, while
+        // String offsets and lengths count UTF-16 code units.
+        bufferStart = sqlText.offsetByCodePoints(0, token.getStartIndex)
+      }
       buffer.append(token.getText)
     }
 
@@ -354,13 +358,14 @@ object SqlStatementSplitter {
    * position of the trailing `;` token whose char range belongs to the
    * region) as a complete top-level Spark SQL statement.
    *
-   * The region is extracted from the original source by char-offset
-   * (`Token.getStartIndex` / `getStopIndex`), `validationPreprocess` is
-   * applied to it, and the result is re-lexed and parsed with a fresh
-   * [[SqlBaseParser]]. This isolation means the splitter's parser sees a
-   * sub-stream whose EOF lands right after the trailing `;`, so the existing
-   * `compoundOrSingleStatement` rule (which requires `SEMICOLON* EOF`) acts
-   * as the per-statement validator without any custom grammar rule.
+   * The region is extracted from the original source by converting ANTLR's
+   * Unicode code-point token offsets to UTF-16 String offsets.
+   * `validationPreprocess` is applied to it, and the result is re-lexed and
+   * parsed with a fresh [[SqlBaseParser]]. This isolation means the splitter's
+   * parser sees a sub-stream whose EOF lands right after the trailing `;`, so
+   * the existing `compoundOrSingleStatement` rule (which requires
+   * `SEMICOLON* EOF`) acts as the per-statement validator without any custom
+   * grammar rule.
    *
    * Uses the same two-stage SLL -> LL prediction strategy as the main parser
    * for performance (most statements parse cleanly with the faster SLL stage).
@@ -386,9 +391,9 @@ object SqlStatementSplitter {
       conf: SqlApiConf): ParseOutcome = {
     val firstTok = stream.get(startIdx)
     val lastTok = stream.get(endIdx)
-    val regionStart = firstTok.getStartIndex
+    val regionStart = sqlText.offsetByCodePoints(0, firstTok.getStartIndex)
     // Token.getStopIndex is inclusive, substring's upper bound is exclusive.
-    val regionEnd = lastTok.getStopIndex + 1
+    val regionEnd = sqlText.offsetByCodePoints(0, lastTok.getStopIndex + 1)
     val original = sqlText.substring(regionStart, regionEnd)
     val preprocessed = validationPreprocess(original)
 

@@ -85,6 +85,22 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
     assert(partial.length == 8)
   }
 
+  test("source positions use UTF-16 offsets for supplementary characters") {
+    val emoji = "\uD83D\uDE00"
+    val sql = s"SELECT '$emoji$emoji'; SELECT 2;"
+    val result = SqlStatementSplitter.splitWithPositions(sql, identity)
+
+    assert(result.completeStatements.map(_.statement) ==
+      Seq(s"SELECT '$emoji$emoji'", "SELECT 2"))
+    assert(result.completeStatements.map(_.start) == Seq(0, 15))
+    assert(result.completeStatements.map(_.length) == Seq(13, 8))
+    result.completeStatements.foreach { statement =>
+      assert(sql.substring(statement.start, statement.start + statement.length) ==
+        statement.statement)
+    }
+    assert(result.partialStatement.isEmpty)
+  }
+
   // ----------------------------------------------------------------------------------
   // Error tolerance (mirrors Trino behavior)
   // ----------------------------------------------------------------------------------
