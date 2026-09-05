@@ -19,9 +19,12 @@ package org.apache.spark.sql
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkRuntimeException
+import org.apache.spark.{SparkArithmeticException, SparkConf, SparkRuntimeException}
+import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal, NamedExpression, OuterReference, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, EqualTo, ExprId,
+  GreaterThanOrEqual, Literal, NamedExpression, OuterReference, Rand, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project, Sort, Union}
 import org.apache.spark.sql.execution._
@@ -31,6 +34,7 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.IntegerType
 
 class SubquerySuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -2677,5 +2681,477 @@ class SubquerySuite extends SharedSparkSession
     }.get
 
     assert(exposedAttribute.exprId == outerReferenceAttribute.exprId)
+  }
+
+  test("SPARK-58481: InSubqueryExec nullable correctly accounts for subquery output nullability") {
+    // 5 NOT IN (99, NULL) is UNKNOWN, not TRUE or FALSE.  A join condition that is not TRUE
+    // matches no rows, so a FULL OUTER JOIN must emit null-padded rows for every row in each
+    // side -- 3 + 3 = 6 null-padded rows -- not the full cross product (9 rows).
+    //
+    // The predicate 5 NOT IN (...) is a constant that references neither join input, so
+    // RewritePredicateSubquery returns the original Join unchanged and PlanSubqueries always
+    // constructs InSubqueryExec here regardless of any optimizer config.
+    withTable("t0", "t1", "t3") {
+      sql("CREATE TABLE t0(c0 INT) USING PARQUET")
+      sql("INSERT INTO t0 VALUES (1), (2), (3)")
+      sql("CREATE TABLE t1(c0 INT) USING PARQUET")
+      sql("INSERT INTO t1 VALUES (10), (20), (30)")
+      sql("CREATE TABLE t3(c0 INT) USING PARQUET")
+      sql("INSERT INTO t3 VALUES (99), (CAST(NULL AS INT))")
+
+      val query = sql(
+        "SELECT t0.c0, t1.c0 FROM t1 FULL OUTER JOIN t0" +
+        " ON (5 NOT IN (SELECT t3.c0 FROM t3))")
+      // Verify the physical plan contains InSubqueryExec so the nullability fix is
+      // actually exercised and not silently bypassed by an optimizer path.
+      // Use AdaptiveSparkPlanHelper.find to traverse AQE wrapper nodes, and recurse
+      // into expression subtrees via Expression.exists to find the wrapped InSubqueryExec.
+      assert(
+        find(query.queryExecution.executedPlan) { p =>
+          p.expressions.exists(_.exists {
+            case _: InSubqueryExec => true
+            case _ => false
+          })
+        }.isDefined,
+        "Expected InSubqueryExec in the physical plan")
+      // Unmatched t1 rows null-pad t0; unmatched t0 rows null-pad t1.
+      checkAnswer(query, Seq(
+        Row(null, 10), Row(null, 20), Row(null, 30),
+        Row(1, null), Row(2, null), Row(3, null)))
+    }
+  }
+
+  test("SPARK-58481: multi-column IN subquery with nullable non-head output is nullable") {
+    // Disable the optimizer's join-condition IN rewrite so the query exercises InSubqueryExec.
+    // Use VALUES-derived temp views: their nullability is inferred from the literals (no NULL
+    // literal => non-nullable), rather than declared and then widened. Parquet file-source
+    // analysis applies dataSchema.asNullable regardless of DDL NOT NULL, which would defeat
+    // the nullability control this test relies on.
+    withSQLConf(
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false"
+    ) {
+      // Case A: NULL after a definitive match (null in non-head position after matching head).
+      // RHS: (99,99) and (1,NULL).
+      //   (1,1) vs (99,99): first field 1!=99 => FALSE.
+      //   (1,1) vs (1,NULL): first fields equal, second null => UNKNOWN.
+      //   Overall for (1,1): UNKNOWN => NOT IN = null-padded.
+      //   (2,2) vs both: all FALSE => NOT IN = TRUE => joins with both rhs rows.
+      withTempView("lhs", "rhs") {
+        sql("CREATE TEMPORARY VIEW lhs AS SELECT * FROM VALUES (1, 1), (2, 2) AS t(a, b)")
+        sql(
+          """CREATE TEMPORARY VIEW rhs AS
+            |SELECT * FROM VALUES (99, 99), (1, CAST(NULL AS INT)) AS t(a, b)""".stripMargin)
+        checkAnswer(
+          sql(
+            """SELECT lhs.a, rhs.a FROM lhs FULL OUTER JOIN rhs
+              |ON ((lhs.a, lhs.b) NOT IN (SELECT a, b FROM rhs))""".stripMargin),
+          Seq(Row(1, null), Row(2, 99), Row(2, 1)))
+      }
+
+      // Case B: NULL in head position followed by a definitive mismatch in a later field.
+      // RHS: (NULL, 99).
+      //   (1,1) vs (NULL,99): first field null => UNKNOWN so far; second field 1!=99 => FALSE.
+      //   A later definitive mismatch must override the earlier UNKNOWN: result is FALSE,
+      //   NOT IN = TRUE. A field-order regression would leave (1,1) as UNKNOWN instead.
+      withTempView("lhs2", "rhs2") {
+        sql("CREATE TEMPORARY VIEW lhs2 AS SELECT * FROM VALUES (1, 1) AS t(a, b)")
+        sql(
+          """CREATE TEMPORARY VIEW rhs2 AS
+            |SELECT * FROM VALUES (CAST(NULL AS INT), 99) AS t(a, b)""".stripMargin)
+        // (1,1) NOT IN ((NULL,99)): second field 1!=99 makes the candidate FALSE =>
+        // NOT IN = TRUE => inner join returns the single matching row.
+        checkAnswer(
+          sql(
+            """SELECT lhs2.a FROM lhs2 JOIN (SELECT 1 AS a)
+              |ON ((lhs2.a, lhs2.b) NOT IN (SELECT a, b FROM rhs2))""".stripMargin),
+          Seq(Row(1)))
+      }
+
+      // Case C: UNKNOWN candidate followed by an exact-match candidate => IN = TRUE.
+      // RHS: (1,NULL) and (1,1).
+      //   (1,1) vs (1,NULL): first fields equal, second null => UNKNOWN.
+      //   (1,1) vs (1,1): exact match => TRUE.
+      //   The exact match must dominate the UNKNOWN: IN = TRUE, NOT IN = FALSE.
+      //   A candidate-order regression would short-circuit on UNKNOWN and miss the TRUE.
+      withTempView("lhs3", "rhs3") {
+        sql("CREATE TEMPORARY VIEW lhs3 AS SELECT * FROM VALUES (1, 1) AS t(a, b)")
+        sql(
+          """CREATE TEMPORARY VIEW rhs3 AS
+            |SELECT * FROM VALUES (1, CAST(NULL AS INT)), (1, 1) AS t(a, b)""".stripMargin)
+        // (1,1) IN ((1,NULL),(1,1)): exact match exists => IN = TRUE => inner join returns row.
+        checkAnswer(
+          sql(
+            """SELECT lhs3.a FROM lhs3 JOIN (SELECT 1 AS a)
+              |ON ((lhs3.a, lhs3.b) IN (SELECT a, b FROM rhs3))""".stripMargin),
+          Seq(Row(1)))
+      }
+    }
+  }
+
+  test("SPARK-58481: multi-column IN subquery uses Catalyst ordering for BinaryType fields") {
+    // Object.equals on Array[Byte] compares by identity, not value; Catalyst ordering compares
+    // by content. A multi-column IN where one field is BinaryType would incorrectly return FALSE
+    // (no match) with JVM equality even when the bytes are equal. Use an inner join to keep the
+    // assertion simple: the join condition is TRUE iff the IN match succeeds.
+    withSQLConf(
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false"
+    ) {
+      withTable("lbin", "rbin") {
+        sql("CREATE TABLE lbin(id INT NOT NULL, b BINARY NOT NULL) USING PARQUET")
+        sql("INSERT INTO lbin VALUES (1, X'01')")
+        sql("CREATE TABLE rbin(id INT NOT NULL, b BINARY NOT NULL) USING PARQUET")
+        sql("INSERT INTO rbin VALUES (1, X'01')")
+        // (1, 0x01) IN ((1, 0x01)) must be TRUE; the join should return one row.
+        checkAnswer(
+          sql(
+            """SELECT lbin.id FROM lbin JOIN rbin
+              |ON ((lbin.id, lbin.b) IN (SELECT id, b FROM rbin))""".stripMargin),
+          Seq(Row(1)))
+      }
+    }
+  }
+
+  test("SPARK-58481: multi-column NOT IN with nullable LHS and non-nullable RHS is nullable") {
+    // CreateNamedStruct.nullable is always false, so child.nullable would return false for a
+    // multi-column LHS even when individual fields are nullable. The generated NOT IN code
+    // would then suppress null handling and turn UNKNOWN into TRUE, producing wrong results.
+    withSQLConf(
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false"
+    ) {
+      // Case A: RHS is fully non-null (stored in nonNullSet). LHS (NULL, 2) vs RHS (99, 2):
+      // second fields equal, first field null => UNKNOWN; exercises the nonNullSet scan with
+      // a nullable LHS. Fixture: lhs.a is nullable; rhs columns are NOT NULL (VALUES-derived
+      // to avoid Parquet dataSchema.asNullable widening that would defeat the RHS control).
+      withTable("lhs") {
+        withTempView("rhs") {
+          sql("CREATE TABLE lhs(a INT, b INT NOT NULL) USING PARQUET")
+          sql("INSERT INTO lhs VALUES (1, 1), (NULL, 2)")
+          // rhs as VALUES view: both columns inferred non-nullable from all-literal rows.
+          sql("CREATE TEMPORARY VIEW rhs AS SELECT * FROM VALUES (99, 2) AS t(a, b)")
+          // (NULL, 2) NOT IN ((99,2)): second fields match, first is null => UNKNOWN
+          //   => join condition not TRUE => (NULL,2) is null-padded: Row(null, null).
+          // (1, 1)   NOT IN ((99,2)): first field 1!=99 => FALSE => NOT IN = TRUE
+          //   => (1,1) joins with rhs(99,2): Row(1, 99). rhs matched; no null-padded rhs.
+          checkAnswer(
+            sql(
+              """SELECT lhs.a, rhs.a FROM lhs FULL OUTER JOIN rhs
+                |ON ((lhs.a, lhs.b) NOT IN (SELECT a, b FROM rhs))""".stripMargin),
+            Seq(Row(1, 99), Row(null, null)))
+        }
+      }
+
+      // Case B: RHS is fully non-null (goes into nonNullSet, not nullRows). LHS (NULL, 1) vs
+      // RHS (99, 2): first field null, but second field 1 != 2 is a definitive mismatch that
+      // makes the candidate FALSE. An implementation that stops at the first UNKNOWN instead
+      // of continuing to check later fields would return UNKNOWN here instead of FALSE, causing
+      // NOT IN to be UNKNOWN and the inner join to return no rows.
+      withTempView("lhs_nn", "rhs_nn") {
+        sql("CREATE TEMPORARY VIEW lhs_nn AS " +
+          "SELECT * FROM VALUES (CAST(NULL AS INT), 1) AS t(a, b)")
+        sql("CREATE TEMPORARY VIEW rhs_nn AS " +
+          "SELECT * FROM VALUES (99, 2) AS t(a, b)")
+        // (NULL, 1) NOT IN ((99, 2)): second field 1 != 2 => candidate FALSE => NOT IN TRUE.
+        // Inner join returns the single lhs row.
+        checkAnswer(
+          sql(
+            """SELECT lhs_nn.b FROM lhs_nn JOIN (SELECT 1 AS x)
+              |ON ((lhs_nn.a, lhs_nn.b) NOT IN (SELECT a, b FROM rhs_nn))
+              |""".stripMargin),
+          Seq(Row(1)))
+      }
+    }
+  }
+
+  test("SPARK-58481: LEGACY_IN_SUBQUERY_NULLABILITY suppresses RHS-only nullability") {
+    // Legacy mode suppresses only RHS-derived nullability (plan.output nullable).
+    // A non-nullable scalar LHS (Literal 5) has lhsNullable=false; with RHS suppressed,
+    // nullable=false. The generated code omits null handling and NOT IN on a subquery that
+    // returns NULL evaluates to TRUE -- the pre-fix single-column behaviour the flag preserves.
+    // Note: intentionally codegen-specific. The interpreted path correctly returns UNKNOWN
+    // regardless of nullable (6 rows); the assertion of 9 verifies codegen ran.
+    withSQLConf(
+      SQLConf.LEGACY_IN_SUBQUERY_NULLABILITY.key -> "true",
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false"
+    ) {
+      withTable("t0", "t1", "t3") {
+        sql("CREATE TABLE t0(c0 INT) USING PARQUET")
+        sql("INSERT INTO t0 VALUES (1), (2), (3)")
+        sql("CREATE TABLE t1(c0 INT) USING PARQUET")
+        sql("INSERT INTO t1 VALUES (10), (20), (30)")
+        sql("CREATE TABLE t3(c0 INT) USING PARQUET")
+        sql("INSERT INTO t3 VALUES (99), (CAST(NULL AS INT))")
+
+        // Legacy: lhsNullable=false (Literal 5), rhsNullable suppressed => nullable=false.
+        // Generated code suppresses null; 5 NOT IN (99, NULL) evaluates to TRUE.
+        // FULL OUTER JOIN condition is TRUE => full cross product of 3 x 3 = 9 rows.
+        assert(sql(
+          "SELECT t0.c0, t1.c0 FROM t1 FULL OUTER JOIN t0 ON (5 NOT IN (SELECT t3.c0 FROM t3))")
+          .count() === 9)
+      }
+    }
+  }
+
+  test("SPARK-58481: LEGACY_IN_SUBQUERY_NULLABILITY preserves nullable LHS fields " +
+      "for multi-column IN subqueries") {
+    // Legacy mode suppresses RHS nullability but preserves LHS field nullability.
+    // With a nullable LHS field, lhsNullable=true even in legacy mode, so nullable=true.
+    // Generated NOT IN code propagates UNKNOWN correctly; result is identical to non-legacy.
+    withSQLConf(
+      SQLConf.LEGACY_IN_SUBQUERY_NULLABILITY.key -> "true",
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false"
+    ) {
+      withTable("lhs", "rhs") {
+        sql("CREATE TABLE lhs(a INT, b INT NOT NULL) USING PARQUET")
+        sql("INSERT INTO lhs VALUES (1, 1), (NULL, 2)")
+        sql("CREATE TABLE rhs(a INT NOT NULL, b INT NOT NULL) USING PARQUET")
+        sql("INSERT INTO rhs VALUES (99, 2)")
+        // (NULL, 2) NOT IN ((99,2)): first field null => UNKNOWN => null-padded: Row(null, null).
+        // (1, 1)   NOT IN ((99,2)): 1!=99 => FALSE => NOT IN=TRUE => joins: Row(1, 99).
+        checkAnswer(
+          sql(
+            """SELECT lhs.a, rhs.a FROM lhs FULL OUTER JOIN rhs
+              |ON ((lhs.a, lhs.b) NOT IN (SELECT a, b FROM rhs))""".stripMargin),
+          Seq(Row(1, 99), Row(null, null)))
+      }
+    }
+  }
+
+  test("SPARK-58481: InSubqueryExec.doGenCode registers Nondeterministic children " +
+      "for partition-level initialization") {
+    // A join-condition IN subquery with a nondeterministic LHS is rejected by CheckAnalysis,
+    // so this direct-construction test provides a focused unit check: it constructs
+    // InSubqueryExec directly (bypassing analysis) to verify that doGenCode correctly
+    // registers each Nondeterministic descendant of the LHS child for partition-level
+    // initialization. Without that registration, a Rand node's eval() would throw
+    // IllegalArgumentException (via require(initialized, ...)) because initialize() was
+    // never called.
+    //
+    // Two output columns force plan.output.length > 1, taking the multi-column fallback
+    // branch (with the explicit foreach loop), not the single-column InSet path where Rand
+    // would register itself through ordinary child codegen traversal.
+    //
+    // The test compiles the expression to bytecode via GeneratePredicate and executes it,
+    // so a missing initialize() call causes an actual failure rather than just a missing
+    // entry in partitionInitializationStatements.
+    val subplanOutput = spark
+      .range(0)
+      .select($"id".cast(IntegerType).as("a"), $"id".cast(IntegerType).as("b"))
+      .queryExecution.executedPlan.output
+    val subplan = SubqueryExec(
+      "test_subquery",
+      LocalTableScanExec(subplanOutput, Nil, None))
+    // LHS: struct of (Literal(1), Rand(42)>=0.0). Rand is always non-negative so the struct
+    // always equals the single RHS row (1, true), making IN = true.
+    val lhs = CreateNamedStruct(Seq(
+      Literal("a"), Literal(1),
+      Literal("b"), GreaterThanOrEqual(Rand(42L), Literal(0.0))))
+    val expr = InSubqueryExec(
+      lhs, subplan, ExprId(99),
+      isDynamicPruning = false,
+      result = Array[InternalRow](InternalRow(1, true)).asInstanceOf[Array[Any]])
+    // Compile to bytecode, initialize (seeds the Rand RNG), and evaluate.
+    // If initialize() were skipped the Rand eval() would throw IllegalArgumentException.
+    val pred = GeneratePredicate.generate(expr, useSubexprElimination = false)
+    pred.initialize(0)
+    assert(pred.eval(InternalRow.empty) === true,
+      "Expected IN to be TRUE: (1, rand()>=0.0) IN ((1, true))")
+  }
+
+  test("SPARK-58481: MultiColumnInSubqueryEvaluator preserves shared Nondeterministic " +
+      "identity after Java serialization round-trip") {
+    // In doGenCode, ctx.references receives both the MultiColumnInSubqueryEvaluator (slot 0)
+    // and the bare Nondeterministic node (slot 1) for partition initialization. On the driver
+    // both slots point to the same Rand instance (evaluator.child embeds it). The risk is that
+    // Java serialization could write two independent copies, causing initialize() called on
+    // references[1] to seed a different instance than eval() uses inside the evaluator.
+    //
+    // Java's ObjectOutputStream tracks shared references within a single graph (via its
+    // internal handle table), so a single serialize/deserialize round-trip of the references
+    // array as one object produces back-references rather than copies. This test verifies
+    // that invariant explicitly using the same JavaSerializer Spark uses for task closures.
+    val rand = Rand(42L)
+    val lhs = CreateNamedStruct(Seq(
+      Literal("a"), Literal(1),
+      Literal("b"), GreaterThanOrEqual(rand, Literal(0.0))))
+    val evaluator = new MultiColumnInSubqueryEvaluator(
+      lhs,
+      Array(IntegerType, IntegerType),
+      Array(InternalRow(1, true)),
+      legacyNullInEmptyBehavior = false)
+    // Simulate what doGenCode does: put the evaluator and the bare Nondeterministic into
+    // the references array as separate slots (as WholeStageCodegenEvaluatorFactory would).
+    val references: Array[Any] = Array(evaluator, rand)
+    // Round-trip through JavaSerializer -- the same serializer Spark uses for task closures
+    // (SparkEnv always sets closureSerializer = new JavaSerializer(...)).
+    // Serializing the array directly is equivalent to serializing it as a field of
+    // WholeStageCodegenEvaluatorFactory: Java's ObjectOutputStream maintains a handle table
+    // across the entire stream, so shared-reference tracking is independent of nesting depth.
+    val ser = new JavaSerializer(new SparkConf()).newInstance()
+    val rt = ser.deserialize[Array[Any]](ser.serialize(references))
+    val rtEvaluator = rt(0).asInstanceOf[MultiColumnInSubqueryEvaluator]
+    val rtRand = rt(1).asInstanceOf[Rand]
+    // Find the Rand inside the deserialized evaluator's child expression tree.
+    var embeddedRand: Rand = null
+    rtEvaluator.child.foreach {
+      case n: Rand => embeddedRand = n
+      case _ =>
+    }
+    assert(embeddedRand ne null,
+      "Expected a Rand node inside the evaluator's child after round-trip")
+    // The critical identity check: the Rand node that would receive initialize(partitionIndex)
+    // must be the same instance eval() uses inside the evaluator -- if Java serialization wrote
+    // two independent copies, initialize() would seed a different instance than eval() uses.
+    assert(embeddedRand eq rtRand,
+      "Rand inside evaluator and separately-registered Rand must be the same instance " +
+      "after serialization round-trip")
+  }
+
+  test("SPARK-58481: scalar subquery in multi-column LHS is literalized before capture") {
+    // If the multi-column LHS contains a nested scalar subquery (e.g. (col, (SELECT max(x)
+    // FROM t)) IN (...)), PlanSubqueries embeds an executable ScalarSubquery whose non-transient
+    // BaseSubqueryExec would otherwise remain reachable through evaluator.child in generated task
+    // closures. MultiColumnInSubqueryEvaluator replaces each ScalarSubquery with its already-
+    // evaluated Literal before capturing child, so no BaseSubqueryExec crosses the boundary.
+    //
+    // Verify via a direct-construction InSubqueryExec (same pattern as the nondeterministic test)
+    // that after a JavaSerializer round-trip the evaluator's child contains only a Literal where
+    // the scalar subquery was, with no ScalarSubquery or BaseSubqueryExec reachable.
+    val scalarSubplanOutput = spark
+      .range(0).select($"id".cast(IntegerType).as("v"))
+      .queryExecution.executedPlan.output
+    val scalarSubplan = SubqueryExec(
+      "scalar_subquery",
+      LocalTableScanExec(scalarSubplanOutput, Seq(InternalRow(42)), None))
+    // Build the scalar subquery expression, pre-update it with its result (42).
+    val scalarSub = ScalarSubquery(scalarSubplan, ExprId(77))
+    scalarSub.updateResult()
+    // Outer subplan for the IN clause: two-column output so plan.output.length > 1.
+    val outerSubplanOutput = spark
+      .range(0)
+      .select($"id".cast(IntegerType).as("a"), $"id".cast(IntegerType).as("b"))
+      .queryExecution.executedPlan.output
+    val outerSubplan = SubqueryExec(
+      "outer_subquery",
+      LocalTableScanExec(outerSubplanOutput, Nil, None))
+    // LHS: (scalarSub, Literal(1)) -- the scalar subquery is the first field.
+    val lhs = CreateNamedStruct(Seq(
+      Literal("a"), scalarSub,
+      Literal("b"), Literal(1)))
+    val expr = InSubqueryExec(
+      lhs, outerSubplan, ExprId(88),
+      isDynamicPruning = false,
+      result = Array[InternalRow](InternalRow(42, 1)).asInstanceOf[Array[Any]])
+    // Access multiColEvaluator to trigger literalization (normally done in doGenCode/eval).
+    val evaluator = expr.multiColEvaluator
+    // Serialize and deserialize the evaluator via JavaSerializer -- the task-closure serializer.
+    val ser = new JavaSerializer(new SparkConf()).newInstance()
+    val rtEvaluator = ser.deserialize[MultiColumnInSubqueryEvaluator](
+      ser.serialize(evaluator))
+    // The deserialized child must contain no ScalarSubquery or BaseSubqueryExec.
+    var foundScalarSubquery = false
+    rtEvaluator.child.foreach {
+      case _: ScalarSubquery => foundScalarSubquery = true
+      case _ =>
+    }
+    assert(!foundScalarSubquery,
+      "ScalarSubquery (and thus BaseSubqueryExec) must not be reachable from the " +
+      "deserialized evaluator's child -- scalar subqueries must be literalized first")
+    // The evaluator must still produce the correct result: (42, 1) IN ((42, 1)) = true.
+    assert(evaluator.eval(InternalRow.empty) === true,
+      "Expected IN to be TRUE: (42, 1) IN ((42, 1))")
+  }
+
+  test("SPARK-58481: multi-column IN with empty subquery short-circuits before evaluating LHS") {
+    // When legacyNullInEmptyBehavior=false, IN (empty subquery) is always FALSE regardless
+    // of the LHS value. MultiColumnInSubqueryEvaluator.eval must return false before calling
+    // child.eval so that a LHS expression containing a runtime error (e.g. division by zero)
+    // does not throw when the subquery is empty. Mirrors InSet.eval's guard (SPARK-44550).
+    //
+    // A plain WHERE IN is rewritten to LeftSemi by RewritePredicateSubquery before
+    // PlanSubqueries runs, which would make the test vacuous. Force the InSubqueryExec path
+    // via a FULL OUTER JOIN ON condition with the opt disabled, matching other tests here.
+    withSQLConf(
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true"
+    ) {
+      // lhs.id=0: (1 / lhs.id) would throw DIVIDE_BY_ZERO at runtime under ANSI if
+      // child.eval were called. The subquery is empty so the short-circuit must fire first.
+      withTable("lhs58481", "rhs58481") {
+        sql("CREATE TABLE lhs58481(id INT NOT NULL) USING PARQUET")
+        sql("INSERT INTO lhs58481 VALUES (0)")
+        sql("CREATE TABLE rhs58481(id INT NOT NULL) USING PARQUET")
+        sql("INSERT INTO rhs58481 VALUES (1)")
+        checkAnswer(
+          sql(
+            """SELECT lhs58481.id FROM lhs58481 FULL OUTER JOIN rhs58481
+              |ON ((1 / lhs58481.id, lhs58481.id) IN (SELECT 1, 0 WHERE false))
+              |""".stripMargin),
+          // FULL OUTER JOIN with FALSE condition: lhs row (id=0) plus null-padded rhs
+          Seq(Row(0), Row(null)))
+      }
+    }
+  }
+
+  test("SPARK-58481: legacy empty-subquery branch evaluates the LHS expression") {
+    // With legacyNullInEmptyBehavior=true, IN (empty set) must NOT skip child.eval: it returns
+    // NULL when the LHS is null and FALSE otherwise, so the LHS must be evaluated.
+    // Verify that MultiColumnInSubqueryEvaluator.eval does not short-circuit before child.eval
+    // in this branch: a DIVIDE_BY_ZERO LHS must throw when the subquery is empty.
+    withSQLConf(
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false",
+      SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "true",
+      SQLConf.ANSI_ENABLED.key -> "true"
+    ) {
+      withTable("lhs58481b", "rhs58481b") {
+        sql("CREATE TABLE lhs58481b(id INT NOT NULL) USING PARQUET")
+        sql("INSERT INTO lhs58481b VALUES (0)")
+        sql("CREATE TABLE rhs58481b(id INT NOT NULL) USING PARQUET")
+        sql("INSERT INTO rhs58481b VALUES (1)")
+        val ex = intercept[SparkArithmeticException] {
+          sql(
+            """SELECT lhs58481b.id FROM lhs58481b FULL OUTER JOIN rhs58481b
+              |ON ((1 / lhs58481b.id, lhs58481b.id) IN (SELECT 1, 0 WHERE false))
+              |""".stripMargin).collect()
+        }
+        assert(ex.getCondition === "DIVIDE_BY_ZERO")
+      }
+    }
+  }
+
+  test("SPARK-58481: multi-column IN with null LHS fields against null RHS fields") {
+    // (NULL, 1) IN ((NULL, 1)): both first fields null => UNKNOWN (never TRUE); result UNKNOWN.
+    // (NULL, 1) IN ((NULL, 2)): both first fields null so far UNKNOWN, but second field
+    //   1 != 2 is a definitive mismatch => the candidate is FALSE. An implementation that
+    //   short-circuits to UNKNOWN on the first null comparison would miss this mismatch and
+    //   return UNKNOWN instead of FALSE for that candidate, producing wrong results.
+    withSQLConf(
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false"
+    ) {
+      withTempView("lhs_null", "rhs_null1", "rhs_null2") {
+        sql("CREATE TEMPORARY VIEW lhs_null AS " +
+          "SELECT * FROM VALUES (CAST(NULL AS INT), 1) AS t(a, b)")
+
+        // (NULL,1) IN ((NULL,1)): UNKNOWN => NOT IN is UNKNOWN => FULL OUTER JOIN null-pads
+        // both sides: the lhs row (b=1) is unmatched and the rhs row yields a null lhs.
+        sql("CREATE TEMPORARY VIEW rhs_null1 AS " +
+          "SELECT * FROM VALUES (CAST(NULL AS INT), 1) AS t(a, b)")
+        checkAnswer(
+          sql(
+            """SELECT lhs_null.b FROM lhs_null FULL OUTER JOIN (SELECT 1 AS x)
+              |ON ((lhs_null.a, lhs_null.b) NOT IN (SELECT a, b FROM rhs_null1))
+              |""".stripMargin),
+          Seq(Row(1), Row(null)))
+
+        // (NULL,1) IN ((NULL,2)): second field 1 != 2 => candidate FALSE => NOT IN TRUE => joins.
+        sql("CREATE TEMPORARY VIEW rhs_null2 AS " +
+          "SELECT * FROM VALUES (CAST(NULL AS INT), 2) AS t(a, b)")
+        checkAnswer(
+          sql(
+            """SELECT lhs_null.b FROM lhs_null JOIN (SELECT 1 AS x)
+              |ON ((lhs_null.a, lhs_null.b) NOT IN (SELECT a, b FROM rhs_null2))
+              |""".stripMargin),
+          Seq(Row(1)))
+      }
+    }
   }
 }
