@@ -1057,6 +1057,12 @@ def abs(col: "ColumnOrName") -> Column:
         A new column object representing the absolute value of the input.
         Returns a column of the same type as the input.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     Example 1: Compute the absolute value of a long column
@@ -1693,6 +1699,12 @@ def sum(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.max`
     :meth:`pyspark.sql.functions.avg`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     Example 1: Calculating the sum of values in a column
@@ -1758,6 +1770,12 @@ def avg(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.max`
     :meth:`pyspark.sql.functions.sum`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     Example 1: Calculating the average age
@@ -1806,6 +1824,12 @@ def mean(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the column for computed results.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -1897,6 +1921,12 @@ def sumDistinct(col: "ColumnOrName") -> Column:
 
     .. deprecated:: 3.2.0
         Use :func:`sum_distinct` instead.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
     """
     warnings.warn("Deprecated in 3.2, use sum_distinct instead.", FutureWarning)
     return sum_distinct(col)
@@ -1921,6 +1951,12 @@ def sum_distinct(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the column for computed results.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -2756,6 +2792,12 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     --------
     :meth:`pyspark.sql.functions.ceiling`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     Example 1: Compute the ceiling of a column value
@@ -2816,6 +2858,12 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     See Also
     --------
     :meth:`pyspark.sql.functions.ceil`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -3236,6 +3284,12 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
         nearest integer that is less than or equal to given value.
         Returns a column that evaluates to a long or decimal.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     Example 1: Compute the floor of a column value
@@ -3383,6 +3437,12 @@ def negative(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         negative value.
         Returns a column of the same type as the input.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -6617,6 +6677,10 @@ def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", 
     -----
     Supports Spark Connect.
 
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -8300,6 +8364,12 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
         A column for the rounded value.
         Returns a column of the same type as the input.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     Example 1: Compute the rounded of a column value
@@ -8419,6 +8489,12 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     :class:`~pyspark.sql.Column`
         A column for the rounded value.
         Returns a column of the same type as the input.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -9149,6 +9225,12 @@ def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
         logariphm of given value.
         Returns a column that evaluates to a string.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -9839,6 +9921,12 @@ def curdate() -> Column:
     :meth:`pyspark.sql.functions.current_timestamp`
     :meth:`pyspark.sql.functions.localtimestamp`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -9875,6 +9963,12 @@ def current_date() -> Column:
     :meth:`pyspark.sql.functions.current_timestamp`
     :meth:`pyspark.sql.functions.localtimestamp`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -9903,6 +9997,12 @@ def current_timezone() -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.convert_timezone`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -9962,6 +10062,12 @@ def current_time(precision: Optional[int] = None) -> Column:
     --------
     :meth:`pyspark.sql.functions.current_date`
     :meth:`pyspark.sql.functions.current_timestamp`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -10083,6 +10189,12 @@ def localtimestamp() -> Column:
     :meth:`pyspark.sql.functions.current_date`
     :meth:`pyspark.sql.functions.current_timestamp`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -10114,6 +10226,10 @@ def date_format(date: "ColumnOrName", format: str) -> Column:
 
     Notes
     -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Whenever possible, use specialized functions like `year`.
 
     Parameters
@@ -10235,6 +10351,13 @@ def year(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.date_part`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the year from a string column representing dates
@@ -10327,6 +10450,13 @@ def quarter(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.extract`
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.date_part`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -10422,6 +10552,13 @@ def month(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.date_part`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the month from a string column representing dates
@@ -10511,6 +10648,13 @@ def dayofweek(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.dayofmonth`
     :meth:`pyspark.sql.functions.weekofyear`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the day of the week from a string column representing dates
@@ -10598,6 +10742,13 @@ def dayofmonth(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         day of the month for given date/timestamp as integer.
         Returns a column that evaluates to an integer.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -10694,6 +10845,13 @@ def day(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.date_part`
     :meth:`pyspark.sql.functions.weekday`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the day of the month from a string column representing dates
@@ -10782,6 +10940,13 @@ def dayofyear(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.dayofmonth`
     :meth:`pyspark.sql.functions.weekofyear`
     :meth:`pyspark.sql.functions.dayofweek`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -10879,6 +11044,13 @@ def hour(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.date_part`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the hours from a string column representing timestamp
@@ -10962,6 +11134,13 @@ def minute(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         minutes part of the timestamp as integer.
         Returns a column that evaluates to an integer.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -11047,6 +11226,13 @@ def second(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.date_part`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the seconds from a string column representing timestamp
@@ -11124,6 +11310,13 @@ def weekofyear(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.dayofweek`
     :meth:`pyspark.sql.functions.dayofmonth`
     :meth:`pyspark.sql.functions.dayofyear`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -11211,6 +11404,13 @@ def weekday(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.dayofmonth`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the day of the week from a string column representing dates
@@ -11294,6 +11494,13 @@ def monthname(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.month`
     :meth:`pyspark.sql.functions.dayname`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the month name from a string column representing dates
@@ -11376,6 +11583,13 @@ def dayname(col: "ColumnOrName") -> Column:
     --------
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.monthname`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -11639,6 +11853,12 @@ def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") 
     :meth:`pyspark.sql.functions.make_timestamp`
     :meth:`pyspark.sql.functions.make_timestamp_ltz`
     :meth:`pyspark.sql.functions.make_timestamp_ntz`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -12087,6 +12307,12 @@ def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool 
         number of months between two dates.
         Returns a column that evaluates to a double.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -12157,6 +12383,13 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     :meth:`pyspark.sql.functions.try_to_timestamp`
     :meth:`pyspark.sql.functions.date_format`
     :meth:`pyspark.sql.functions.try_to_date`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -12602,6 +12835,14 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     :meth:`pyspark.sql.functions.try_to_timestamp`
     :meth:`pyspark.sql.functions.date_format`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
+
     Examples
     --------
     Example 1: Convert string to a timestamp
@@ -12740,6 +12981,13 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
     :meth:`pyspark.sql.functions.date_format`
     :meth:`pyspark.sql.functions.try_to_date`
     :meth:`pyspark.sql.functions.try_to_time`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
 
     Examples
     --------
@@ -13199,6 +13447,12 @@ def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.trunc`
     :meth:`pyspark.sql.functions.time_trunc`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -13248,6 +13502,12 @@ def next_day(date: "ColumnOrName", dayOfWeek: str) -> Column:
     :class:`~pyspark.sql.Column`
         the column of computed results.
         Returns a column that evaluates to a date.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -13349,6 +13609,12 @@ def from_unixtime(timestamp: "ColumnOrName", format: str = "yyyy-MM-dd HH:mm:ss"
     :meth:`pyspark.sql.functions.date_from_unix_date`
     :meth:`pyspark.sql.functions.unix_seconds`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
@@ -13407,6 +13673,13 @@ def unix_timestamp(
     :class:`~pyspark.sql.Column`
         unix time as long integer.
         Returns a column that evaluates to a long.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -13908,6 +14181,12 @@ def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Col
     :meth:`pyspark.sql.functions.date_diff`
     :meth:`pyspark.sql.functions.time_diff`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> import datetime
@@ -13973,6 +14252,12 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
     --------
     :meth:`pyspark.sql.functions.dateadd`
     :meth:`pyspark.sql.functions.date_add`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -14046,6 +14331,12 @@ def time_bucket(
     -------
     :class:`~pyspark.sql.Column`
         The start of the bucket containing ``ts``, as the same type as ``ts``.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -14358,6 +14649,13 @@ def to_unix_timestamp(
     :meth:`pyspark.sql.functions.to_timestamp_ntz`
     :meth:`pyspark.sql.functions.to_utc_timestamp`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
@@ -14412,7 +14710,7 @@ def to_timestamp_ltz(
 ) -> Column:
     """
     Parses the `timestamp` with the `format` to a timestamp with time zone.
-    Returns null with invalid input.
+    Returns null with invalid input when ANSI mode is disabled, or raises an error otherwise.
 
     .. versionadded:: 3.5.0
 
@@ -14434,6 +14732,13 @@ def to_timestamp_ltz(
     :meth:`pyspark.sql.functions.to_unix_timestamp`
     :meth:`pyspark.sql.functions.date_format`
     :meth:`pyspark.sql.functions.try_to_timestamp`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -14485,7 +14790,7 @@ def to_timestamp_ntz(
 ) -> Column:
     """
     Parses the `timestamp` with the `format` to a timestamp without time zone.
-    Returns null with invalid input.
+    Returns null with invalid input when ANSI mode is disabled, or raises an error otherwise.
 
     .. versionadded:: 3.5.0
 
@@ -14507,6 +14812,13 @@ def to_timestamp_ntz(
     :meth:`pyspark.sql.functions.to_unix_timestamp`
     :meth:`pyspark.sql.functions.date_format`
     :meth:`pyspark.sql.functions.try_to_timestamp`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -15267,6 +15579,12 @@ def upper(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.lower`
     :meth:`pyspark.sql.functions.ucase`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.icu.caseMappings.enabled``
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -15309,6 +15627,12 @@ def lower(col: "ColumnOrName") -> Column:
     --------
     :meth:`pyspark.sql.functions.upper`
     :meth:`pyspark.sql.functions.lcase`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.icu.caseMappings.enabled``
 
     Examples
     --------
@@ -15390,6 +15714,12 @@ def base64(col: "ColumnOrName") -> Column:
     --------
     :meth:`pyspark.sql.functions.unbase64`
     :meth:`pyspark.sql.functions.to_base32`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.chunkBase64String.enabled``
 
     Examples
     --------
@@ -17841,6 +18171,12 @@ def initcap(col: "ColumnOrName") -> Column:
         string with all first letters are uppercase in each word.
         Returns a column that evaluates to a string.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.icu.caseMappings.enabled``
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -18733,6 +19069,12 @@ def parse_url(
         A new column of strings, each representing the value of the extracted part from the URL.
         Returns a column that evaluates to a string.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     Example 1: Extracting the query part from a URL
@@ -19514,6 +19856,12 @@ def elt(*inputs: "ColumnOrName") -> Column:
     inputs : :class:`~pyspark.sql.Column` or str
         Input columns or strings.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     >>> df = spark.createDataFrame([(1, "scala", "java")], ['a', 'b', 'c'])
@@ -19692,6 +20040,12 @@ def lcase(str: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.ucase`
     :meth:`pyspark.sql.functions.upper`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.icu.caseMappings.enabled``
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -19723,6 +20077,12 @@ def ucase(str: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.upper`
     :meth:`pyspark.sql.functions.lcase`
     :meth:`pyspark.sql.functions.lower`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.icu.caseMappings.enabled``
 
     Examples
     --------
@@ -19978,6 +20338,12 @@ def create_map(
         A new Column of Map type, where each value is a map formed from the corresponding
         key-value pairs provided in the input arguments.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.mapKeyDedupPolicy``
+
     Examples
     --------
     Example 1: Basic usage of create_map function.
@@ -20064,6 +20430,10 @@ def map_from_arrays(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Notes
     -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.mapKeyDedupPolicy``
+
     The input arrays for keys and values must have the same length and all elements
     in keys should not be null. If these conditions are not met, an exception will be thrown.
 
@@ -20878,6 +21248,10 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
 
     Notes
     -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     The position is not zero based, but 1 based index.
     If extraction is a string, :meth:`element_at` treats it as a literal string,
     while :meth:`try_element_at` treats it as a column name.
@@ -22722,6 +23096,14 @@ def from_json(
         a new column of complex type from given JSON object.
         Returns a column that evaluates to a struct, array, or map.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.columnNameOfCorruptRecord``
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
+
     Examples
     --------
     Example 1: Parsing JSON with a specified schema
@@ -23572,6 +23954,13 @@ def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) ->
         a column of `targetType` representing the extracted result
         Returns a column of the type given by `targetType`.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
+
     Examples
     --------
     >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }''', 'path': '$.a'} ])
@@ -23622,6 +24011,13 @@ def try_variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str
     :class:`~pyspark.sql.Column`
         a column of `targetType` representing the extracted result
         Returns a column of the type given by `targetType`.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
 
     Examples
     --------
@@ -23738,6 +24134,13 @@ def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) ->
     :class:`~pyspark.sql.Column`
         JSON object as string column.
         Returns a column that evaluates to a string.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.jsonGenerator.ignoreNullFields``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -23860,6 +24263,12 @@ def schema_of_json(json: Union[Column, str], options: Optional[Mapping[str, str]
     :class:`~pyspark.sql.Column`
         a string representation of a :class:`StructType` parsed from given JSON.
         Returns a column that evaluates to a string.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.timestampType``
 
     Examples
     --------
@@ -24021,6 +24430,15 @@ def from_xml(
         a new column of complex type from given XML object.
         Returns a column that evaluates to a struct.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.columnNameOfCorruptRecord``
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
+    * ``spark.sql.xml.variant.respectInferSchema``
+
     Examples
     --------
     Example 1: Parsing XML with a DDL-formatted string schema
@@ -24129,6 +24547,13 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Mapping[str, str]] 
         a string representation of a :class:`StructType` parsed from given XML.
         Returns a column that evaluates to a string.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.columnNameOfCorruptRecord``
+    * ``spark.sql.timestampType``
+
     Examples
     --------
     Example 1: Parsing a simple XML with a single element
@@ -24228,6 +24653,12 @@ def to_xml(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> 
         a XML string converted from given :class:`StructType`.
         Returns a column that evaluates to a string.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -24283,6 +24714,12 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Mapping[str, str]] 
     :class:`~pyspark.sql.Column`
         A string representation of a :class:`StructType` parsed from the given CSV.
         Returns a column that evaluates to a string.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.timestampType``
 
     Examples
     --------
@@ -24376,6 +24813,12 @@ def to_csv(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> 
         A CSV string converted from the given :class:`StructType`.
         Returns a column that evaluates to a string.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Converting a simple StructType to a CSV string
@@ -24460,6 +24903,12 @@ def size(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         length of the array/map.
         Returns a column that evaluates to an integer.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -24764,6 +25213,12 @@ def cardinality(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         length of the array/map.
         Returns a column that evaluates to an integer.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -25465,6 +25920,12 @@ def map_from_entries(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         A map created from the given array of entries.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.mapKeyDedupPolicy``
+
     Examples
     --------
     Example 1: Basic usage of map_from_entries
@@ -25717,6 +26178,10 @@ def map_concat(
 
     Notes
     -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.mapKeyDedupPolicy``
+
     For duplicate keys in input maps, the handling is governed by `spark.sql.mapKeyDedupPolicy`.
     By default, it throws an exception. If set to `LAST_WIN`, it uses the last map's value.
 
@@ -25818,6 +26283,12 @@ def sequence(
         A new column that contains an array of sequence values.
         Returns a column that evaluates to an array.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Generating a sequence with default step
@@ -25896,6 +26367,14 @@ def from_csv(
     :class:`~pyspark.sql.Column`
         A column of parsed CSV values.
         Returns a column that evaluates to a struct.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.columnNameOfCorruptRecord``
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
 
     Examples
     --------
@@ -26552,6 +27031,12 @@ def transform_keys(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -
         a new map of entries where new keys were calculated by applying given function to
         each key value argument.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.mapKeyDedupPolicy``
+
     Examples
     --------
     >>> df = spark.createDataFrame([(1, {"foo": -2.0, "bar": 2.0})], ("id", "data"))
@@ -26777,6 +27262,12 @@ def str_to_map(
     :class:`~pyspark.sql.Column`
         A new column of map type where each string in the original column is converted into a map.
         Returns a column that evaluates to a map.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.mapKeyDedupPolicy``
 
     Examples
     --------
@@ -27059,6 +27550,12 @@ def convert_timezone(
     See Also
     --------
     :meth:`pyspark.sql.functions.current_timezone`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -27428,6 +27925,12 @@ def make_interval(
     :meth:`pyspark.sql.functions.make_dt_interval`
     :meth:`pyspark.sql.functions.make_ym_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -27877,6 +28380,14 @@ def make_timestamp(
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
@@ -28112,6 +28623,13 @@ def try_make_timestamp(
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
@@ -28300,6 +28818,13 @@ def make_timestamp_ltz(
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
@@ -28404,6 +28929,12 @@ def try_make_timestamp_ltz(
     :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -28565,6 +29096,12 @@ def make_timestamp_ntz(
     :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -32807,6 +33344,12 @@ def reflect(*cols: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.java_method`
     :meth:`pyspark.sql.functions.try_reflect`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.reflect.allowList``
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -32841,6 +33384,12 @@ def java_method(*cols: "ColumnOrName") -> Column:
     --------
     :meth:`pyspark.sql.functions.reflect`
     :meth:`pyspark.sql.functions.try_reflect`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.reflect.allowList``
 
     Examples
     --------
@@ -32896,6 +33445,12 @@ def try_reflect(*cols: "ColumnOrName") -> Column:
     --------
     :meth:`pyspark.sql.functions.reflect`
     :meth:`pyspark.sql.functions.java_method`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.reflect.allowList``
 
     Examples
     --------
