@@ -41,6 +41,7 @@ class ProgressBarTest(unittest.TestCase, PySparkErrorTestUtils):
         self.assertIn("50.00%", val, "Current progress is 50%")
         self.assertIn("****", val, "Should use the default char to print.")
         self.assertIn("Scanned 999.0 B", val, "Should contain the bytes scanned metric.")
+        self.assertIn("10 Tasks running", val, "Should contain current running tasks.")
         self.assertFalse(val.endswith("\r"), "Line should not be empty")
         p.finish()
         val = buffer.getvalue()

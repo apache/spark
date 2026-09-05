@@ -174,10 +174,10 @@ class Progress:
             self._ticks = total_tasks
             self._tick = completed_tasks
             self._bytes_read = sum(map(lambda x: x.num_bytes_read, stages))
-            if self._tick is not None and self._tick >= 0:
-                self.output()
             self._running = inflight_tasks
             self._stages = stages
+            if self._tick is not None and self._tick >= 0:
+                self.output()
             self._notify(False)
 
     def finish(self) -> None:
