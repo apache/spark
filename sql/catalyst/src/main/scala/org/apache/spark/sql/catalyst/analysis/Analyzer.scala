@@ -3229,7 +3229,9 @@ class Analyzer(
           case grouping: Expression if agg.groupingExpressions.exists(grouping.semanticEquals) =>
             trimTempResolvedColumn(grouping) match {
               case ne: NamedExpression =>
-                val resultAttribute = aggExprMap.computeIfAbsent(ne.canonicalized, _ => ne)
+                val resultAttribute = aggExprMap.computeIfAbsent(
+                  ne.canonicalized,
+                  _ => aliasIfOuterReference(ne))
                 resultAttribute.toAttribute
               case other =>
                 val resultAlias = aggExprMap.computeIfAbsent(
