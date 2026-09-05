@@ -1462,40 +1462,48 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     )
 
   test("SPARK-59080: pushed-down positions index into the child's own partition expressions") {
-    val id = AttributeReference("id", IntegerType)()
-    val t1 = AttributeReference("t1", IntegerType)()
-    val other = AttributeReference("other", IntegerType)()
-    // Both children carry the same (id, t1) key set, but the second declares a leading partition
-    // expression the distribution does not cluster on. So the keys it projects onto sit at
-    // positions 1 and 2, while the first child's sit at 0 and 1.
-    //
-    // No query reaches two keyed children here: a join is handled by `checkKeyGroupCompatible`,
-    // which pushes each side's own positions, and a cogroup's grouping key is synthesized so
-    // neither side stays keyed. The test pins the invariant rather than reproducing a query.
-    val keys = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 1))
-    val paddedKeys = Seq(InternalRow(9, 1, 1), InternalRow(9, 1, 2), InternalRow(9, 2, 1))
-    val first = new DummySparkPlanWithBatchScanChild(
-      outputPartitioning = KeyedPartitioning(Seq(id, t1), keys))
-    val second = new DummySparkPlanWithBatchScanChild(
-      outputPartitioning = KeyedPartitioning(Seq(other, id, t1), paddedKeys))
-    val distribution = ClusteredDistribution(Seq(id, t1))
+    val nL = AttributeReference("nL", IntegerType)()
+    val iL = AttributeReference("iL", IntegerType)()
+    val iR = AttributeReference("iR", IntegerType)()
+    val nR = AttributeReference("nR", IntegerType)()
+    // Both sides declare the same two key columns, in the opposite order, so the cogroup key sits
+    // at position 1 on the left and at position 0 on the right. Both project onto {1, 2}, so the
+    // sides are co-partitioned and neither is re-shuffled.
+    val leftKeys = Seq(InternalRow(1, 1), InternalRow(2, 1), InternalRow(3, 2))
+    val rightKeys = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 3))
+    val left = new DummySparkPlanWithBatchScanChild(
+      outputPartitioning = KeyedPartitioning(Seq(nL, iL), leftKeys))
+    val right = new DummySparkPlanWithBatchScanChild(
+      outputPartitioning = KeyedPartitioning(Seq(iR, nR), rightKeys))
+
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    // A cogroup requires `ClusteredDistribution` on both children but is not a `ShuffledJoin`, so
+    // `checkKeyGroupCompatible` declines and both children go through the per-child branch that
+    // pushes the positions down. Unlike the Scala `CoGroupExec`, whose key comes from an
+    // `AppendColumns` no `KeyedPartitioning` satisfies, the Pandas one groups on real columns, so
+    // both sides stay keyed.
+    val cogroup = FlatMapCoGroupsInPandasExec(
+      Seq(iL), Seq(iR), pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil, left, right)
 
     withSQLConf(
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
-      // Not a join, so `checkKeyGroupCompatible` declines and both children go through the
-      // per-child branch that pushes the positions down.
-      val parent = DummySparkPlan(
-        children = Seq(first, second),
-        requiredChildDistribution = Seq(distribution, distribution),
-        requiredChildOrdering = Seq(Nil, Nil))
-      val planned = EnsureRequirements.apply(parent)
+      val result = EnsureRequirements.apply(cogroup)
 
-      assert(groupPartitionsNodes(planned.children.head).map(_.joinKeyPositions) ===
-        Seq(Some(Seq(0, 1))))
-      assert(groupPartitionsNodes(planned.children(1)).map(_.joinKeyPositions) ===
-        Seq(Some(Seq(1, 2))),
+      assert(result.collect { case s: ShuffleExchangeExec => s }.isEmpty,
+        "the sides are co-partitioned on the cogroup key")
+      assert(groupPartitionsNodes(result).map(_.joinKeyPositions) ===
+        Seq(Some(Seq(1)), Some(Seq(0))),
         "the positions pushed into a child must index into that child's own expressions")
+      assert(result.children.map(_.outputPartitioning).forall {
+        case k: KeyedPartitioning => k.expressions == Seq(iL) || k.expressions == Seq(iR)
+        case _ => false
+      }, "each side must end up grouped on its own cogroup key")
     }
   }
 
