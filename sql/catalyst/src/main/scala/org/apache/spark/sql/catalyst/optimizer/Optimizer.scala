@@ -1044,15 +1044,276 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
     // here could otherwise escape and reach execution un-stripped.
     plan.transformDownWithSubqueriesAndPruning(
       _.containsPattern(TRANSPILED_PYTHON_UDF), ruleId) {
-      case p => p.transformExpressionsWithPruning(_.containsPattern(TRANSPILED_PYTHON_UDF)) {
-        case s: TranspiledPythonUDF => applyExpr(s, parentIsUdf = false)
+      // A fast path, not a correctness guard -- `convertOperator` hands back an operator it finds
+      // nothing to do in. The pruning above only skips subtrees, so every Filter and Sort between
+      // the root and a call lands here. The bit is the cheap reject, cached per node; the walk then
+      // also rejects an operator whose only call sits in a subquery, since a SubqueryExpression
+      // reports its inner plan's bits while `Expression.exists` does not descend into the plan.
+      case p if !p.expressions.exists { e =>
+        e.containsPattern(TRANSPILED_PYTHON_UDF) && e.exists(_.isInstanceOf[TranspiledPythonUDF])
+      } => p
+
+      case p => convertOperator(p)
+    }
+  }
+
+  /**
+   * Whether the call still has its arguments. An analyzer rule may replace the Python UDF with an
+   * attribute -- `PullOutNondeterministic` does, for a nondeterministic call in an operator that
+   * cannot hold one -- and then [[TranspiledPythonUDF.arguments]] is empty while the option still
+   * refers to them by position. There is nothing to substitute, so the attribute stands.
+   */
+  private def callIsIntact(s: TranspiledPythonUDF): Boolean = s.pythonUDFExpr match {
+    case _: PythonFuncExpression => true
+    case agg: AggregateExpression => agg.aggregateFunction.isInstanceOf[PythonFuncExpression]
+    case _ => false
+  }
+
+  /**
+   * Converts the calls in one operator, putting an argument the body reads more than once in a
+   * column on the operator's child so we compute it once a row instead of once a read
+   * (SPARK-58626). Three operators can't hold that Project, and a call under one of them that owes
+   * an evaluation keeps the interpreted Python UDF instead:
+   *
+   *  - More than one child: we'd have to pick a side.
+   *  - A Command: the Project hides the relation DataSourceV2Strategy looks for, and
+   *    `DELETE FROM t WHERE udf(a + 1) > 0` becomes an internal error.
+   *  - An Aggregate: a result expression no aggregate function wraps has to be built from the
+   *    grouping expressions, and a column is not one, so `groupBy(a + 1).agg(udf(a + 1))` would
+   *    fail MISSING_AGGREGATION. Splitting the Aggregate to make room was tried and reverted: it
+   *    reshapes correlated subqueries, which broke `splitSubquery` on a HAVING and flipped
+   *    COUNT-bug handling, for a column in one uncommon shape.
+   *  - Anything whose child is an Aggregate, for the second half of that same trap:
+   *    `splitSubquery` finds a subquery's Aggregate by matching `Filter(_, Aggregate)`, so a
+   *    Project in between hides it and the COUNT bug goes unhandled. Measured on
+   *    `HAVING udf(count(*) + 1) > 0`: the outer rows that match nothing came back dropped where
+   *    the same plan without the column returns them. It runs before the pushdown that would
+   *    collapse the Project away, so being invisible later is no help.
+   *
+   * MergeRows is on neither list, on purpose. Its instructions are first-match-wins, so a column
+   * runs `WHEN ... AND udf(a / b) > 0` for every row of the join -- but so does the interpreted
+   * UDF, which computes its inputs below MergeRows and raises on an unmatched row under ANSI today.
+   * Turning it down there is what would diverge.
+   */
+  private def convertOperator(p: LogicalPlan): LogicalPlan =
+    // A column widens the operator's child, and we only learn whether this operator's output is a
+    // widening of its child's after building it. When it isn't, convert again without columns
+    // rather than fail the query: `preEvaluate` says yes to every single-child operator that is not
+    // a Command or an Aggregate, a longer list than anyone has thought about -- Window, Generate,
+    // Expand, CollectMetrics, ScriptTransformation, whatever an extension adds.
+    convertOperator(p, withColumns = true).getOrElse(convertOperator(p, withColumns = false).get)
+
+  private def convertOperator(p: LogicalPlan, withColumns: Boolean): Option[LogicalPlan] = {
+    val extraColumns = mutable.ArrayBuffer.empty[Alias]
+    val columnByKey = mutable.HashMap.empty[ShareKey, Alias]
+    // Per call *node*, by identity: an operator can hold one node in two expression slots -- Window
+    // copies its spec into every WindowSpecDefinition, MergeRows has five -- and each slot is
+    // visited on its own. Minting an id per visit gave one call two columns, so two draws. A plain
+    // counter, not an ExprId: nothing outside the sharing key ever reads it, and `newExprId` would
+    // bump the global counter for every call we merely looked at.
+    var nextCallId = 0L
+    val callIds = new java.util.IdentityHashMap[TranspiledPythonUDF, java.lang.Long]()
+    val preEvaluate: Option[PreEvaluate] =
+      if (withColumns && p.children.length == 1 && !p.isInstanceOf[Command] &&
+          !p.isInstanceOf[Aggregate] && !p.children.head.isInstanceOf[Aggregate]) {
+        val child = p.children.head
+        // Once per operator, not once per call: an operator can hold several, and this walks the
+        // whole child plan. See `canPlaceColumn`, which is the only reader.
+        lazy val joinBelow = child.exists(_.isInstanceOf[Join])
+        Some((call, args, option) => {
+          val callId = callIds.computeIfAbsent(call, _ => { nextCallId += 1; nextCallId })
+          def keyOf(index: Int): ShareKey = shareKey(args(index), callId, index)
+          val reads = TranspiledUDFParameter.referencedIndexes(option)
+          val readsPerKey = reads.groupBy(keyOf).map { case (k, is) => k -> is.length }
+          val owed = mustPreEvaluate(args, option)
+          // Read more than once under one key and not cheap to repeat. That covers everything we
+          // owe (`owed` counts reads of one index; a key only ever merges indexes together, so its
+          // count is at least as high) plus what is merely worth sharing: two parameters holding
+          // equal arguments, each read once. Not every repeat earns a column -- a pointless Project
+          // sticks around under anything CollapseProject can't merge through, and stops
+          // SpecialLimits matching `Project(_, Sort(...))` for TakeOrderedAndProjectExec.
+          val shared = reads.distinct.filter { index =>
+            readsPerKey(keyOf(index)) > 1 && !cheapToRepeat(args(index)) &&
+              canPlaceColumn(args(index), child, joinBelow)
+          }
+          if (!owed.forall(shared.contains)) {
+            // Something we owe one evaluation has nowhere to go, so hand the call back to Python,
+            // which evaluates each of its inputs once wherever it sits.
+            None
+          } else if (shared.isEmpty) {
+            Some(TranspiledUDFParameter.substitute(option, args))
+          } else {
+            val byIndex = shared.map { index =>
+              // The ExprId goes in the name: numbering per operator would give two operators
+              // each a `_udf_param_0`, which makes a plan string ambiguous. Same reason
+              // RewriteWithExpression has USE_COMMON_EXPR_ID_FOR_ALIAS.
+              index -> columnByKey.getOrElseUpdate(keyOf(index), {
+                val exprId = NamedExpression.newExprId
+                val alias = Alias(args(index), s"_udf_param_${exprId.id}")(exprId)
+                extraColumns += alias
+                alias
+              })
+            }.toMap
+            Some(TranspiledUDFParameter.substitute(
+              option, i => byIndex.get(i).map(_.toAttribute).getOrElse(args(i))))
+          }
+        })
+      } else {
+        None
+      }
+    // Enter each expression at its root rather than at the first TranspiledPythonUDF in it, so
+    // that `applyExpr` sees every node on the way down and can thread `parentIsUdf`. Starting
+    // at the node itself would report no enclosing UDF even when a PythonUDF wraps it, and the
+    // batch pipeline the flag exists to protect would be split anyway.
+    val converted = p.mapExpressions {
+      case e if e.containsPattern(TRANSPILED_PYTHON_UDF) =>
+        applyExpr(e, parentIsUdf = false, preEvaluate, inLambda = false)
+      case e => e
+    }
+    // A call turned down can orphan a column registered for an argument of its own. Drop those:
+    // an unread column still computes, and under ANSI can raise on a row nothing looked at.
+    val read = AttributeSet(converted.expressions.flatMap(_.references))
+    val columns = extraColumns.filter(a => read.contains(a.toAttribute)).toSeq
+    if (columns.isEmpty) {
+      Some(converted)
+    } else {
+      val child = p.children.head
+      val widened = converted.withNewChildren(Seq(Project(child.output ++ columns, child)))
+      // A Filter passes its child's output straight up, so it carries our columns now. Project them
+      // back off to keep the schema. The checks are the two RewriteWithExpression asserts, as a
+      // condition: we only ever append, so an operator whose output shrinks or loses an attribute
+      // is one we should not have offered a column to.
+      if (p.output.length > widened.output.length || !p.outputSet.subsetOf(widened.outputSet)) {
+        None
+      } else if (p.output.length < widened.output.length) {
+        Some(Project(p.output, widened))
+      } else {
+        Some(widened)
       }
     }
   }
 
-  def applyExpr(expression: Expression, parentIsUdf: Boolean = false): Expression = {
+  /**
+   * What decides whether two parameters share a column: an equal argument of equal nullability, or
+   * nothing -- a nondeterministic argument keys on the call it belongs to and its position in it.
+   */
+  private sealed trait ShareKey
+  // Nullability rides along because `canonicalized` drops it: an AttributeReference canonicalizes
+  // to `AttributeReference("none", dataType)(exprId)`, so `a#5` nullable and `a#5` not would
+  // otherwise share one column, and a body coerced against the nullable one would read a column
+  // declared without nulls -- enough for NullPropagation to fold an `IsNull` to false.
+  private case class DeterministicKey(canonical: Expression, nullable: Boolean) extends ShareKey
+  // A call id, not just the parameter index: `f(rand())` and `g(rand())` in one operator would
+  // otherwise collide on one column. `f(rand(), rand())` owes two draws, and so do two calls that
+  // each pass their own `rand()`.
+  private case class NondeterministicKey(callId: Long, index: Int) extends ShareKey
+
+  // One key per distinct deterministic argument in the operator: `f(a + 1, a + 1)` computes
+  // `a + 1` once, and two calls that each read it more than once share the column. The read
+  // count is still per call -- a call reading it once keeps its own copy, one evaluation.
+  private def shareKey(arg: Expression, callId: Long, index: Int): ShareKey =
+    if (arg.deterministic) DeterministicKey(arg.canonicalized, arg.nullable)
+    else NondeterministicKey(callId, index)
+
+  /**
+   * Whether `arg` can sit in a Project on `child`. Four ways it can't:
+   *
+   *  - It reads something the child doesn't output. `f(g(x))` is the one you hit: `f`'s
+   *    argument is `g`'s column, which this Project is still defining.
+   *  - It's an aggregate, window function or generator. Only PlanHelper can say, and
+   *    only about a Project, so this one is asked with a throwaway alias.
+   *  - It has an OuterReference and decorrelation is off, where the fallback rewrites
+   *    Filters only and would strand it. Both confs, since EXISTS and IN switch on
+   *    their own even while the global one is on.
+   *  - It still holds an enclosing call's reference, which only that call can
+   *    substitute, and only while the reference is in the option body.
+   *
+   * A nondeterministic column anywhere above a Join takes the join's condition down with
+   * it: PushPredicateThroughNonJoin pushes nothing through a Project holding a
+   * nondeterministic field, so a Filter above it never reaches the Join and
+   * `where t1.a = t2.a and udf(rand()) < 2` plans as a cartesian product. Below anywhere,
+   * not just at the child -- one `select` in between is enough, and the Filter can sit
+   * above whatever we are rewriting.
+   *
+   * `joinBelow` is by name so a deterministic argument never pays for the walk behind it.
+   */
+  private def canPlaceColumn(arg: Expression, child: LogicalPlan, joinBelow: => Boolean): Boolean =
+    (arg.deterministic || !joinBelow) &&
+      arg.references.subsetOf(child.outputSet) &&
+      PlanHelper.specialExpressionsInUnsupportedOperator(
+        // A fixed id, not `newExprId`: this alias is thrown away with the Project and
+        // PlanHelper never reads it, so minting one would bump the global counter and
+        // shift the ExprIds in every later plan string by however many arguments we
+        // merely considered.
+        Project(Seq(Alias(arg, "_udf_param")(ExprId(0))), child)).isEmpty &&
+      ((conf.decorrelateInnerQueryEnabled &&
+          conf.decorrelateInnerQueryEnabledForExistsIn) ||
+        !arg.containsPattern(OUTER_REFERENCE)) &&
+      // Bit first, then a walk, as in `apply`: a SubqueryExpression reports its inner plan's bits
+      // but `exists` does not descend into it, so an argument holding a subquery that merely
+      // *contains* a call would fail the bit test over a reference that is not ours to substitute.
+      !(arg.containsPattern(TRANSPILED_UDF_PARAMETER) &&
+        arg.exists(_.isInstanceOf[TranspiledUDFParameter]))
+
+  /**
+   * Notes the columns to add to the operator's child, and points the option's refs at them. None
+   * means we can't compute an evaluation the body is owed here, and the caller keeps the Python
+   * UDF. The call comes along so that two visits to one node share its columns.
+   */
+  private type PreEvaluate =
+    (TranspiledPythonUDF, Seq[Expression], Expression) => Option[Expression]
+
+  /**
+   * The parameters this call owes one evaluation: read more than once, with an argument that isn't
+   * cheap to repeat. Where no column can hold one we don't transpile at all. Per parameter:
+   * `f(rand(), rand())` owes two draws, `f(rand())` owes one however often it is read.
+   */
+  private def mustPreEvaluate(args: Seq[Expression], option: Expression): Set[Int] =
+    TranspiledUDFParameter.referencedIndexes(option).groupBy(identity).collect {
+      case (index, reads) if reads.length > 1 && !cheapToRepeat(args(index)) => index
+    }.toSet
+
+  /**
+   * Whether reading an argument twice is as good as reading a column that holds it once.
+   *
+   * A nondeterministic one never is, whatever `isCheap` says of it: two copies of `rand()` are two
+   * draws, so the body sees two values for one parameter. A deterministic one is only work, but
+   * work counts, so anything `isCheap` won't vouch for -- a regex, `a + 1` -- is owed one too.
+   */
+  private def cheapToRepeat(arg: Expression): Boolean = arg match {
+    // An enclosing call's reference computes nothing of its own. What it stands for may well be
+    // expensive, but that is the enclosing call's argument, and these copies are reads of it.
+    case _: TranspiledUDFParameter => true
+    case _ => arg.deterministic && CollapseProject.isCheap(arg)
+  }
+
+  /**
+   * Converts the transpiled calls in one expression, leaving every argument at its use sites -- and
+   * so keeping the Python UDF for a call that owes one of them a single evaluation.
+   *
+   * This is what a custom transpiler's own ConvertToX gets, and it comes with no column placement
+   * at all: whether a Project fits below the operator is the operator's business, and only `apply`
+   * above, walking the plan, can know. A custom rule that wants an argument computed once has to
+   * place the column itself.
+   */
+  def applyExpr(expression: Expression, parentIsUdf: Boolean = false): Expression =
+    applyExpr(expression, parentIsUdf, None, inLambda = false)
+
+  private def applyExpr(
+      expression: Expression,
+      parentIsUdf: Boolean,
+      preEvaluate: Option[PreEvaluate],
+      inLambda: Boolean): Expression = {
+    def recurse(e: Expression, parentIsUdf: Boolean): Expression =
+      applyExpr(e, parentIsUdf, preEvaluate, inLambda)
     expression match {
+      // Nothing to convert below here, so skip the subtree rather than walking it node by node.
+      case other if !other.containsPattern(TRANSPILED_PYTHON_UDF) => other
+
       case s: TranspiledPythonUDF =>
+        // Every branch that turns the call down leaves the Python UDF in place and keeps walking
+        // its arguments, which may hold transpilable calls of their own.
+        def keepPython: Expression = s.pythonUDFExpr.mapChildren(recurse(_, parentIsUdf = true))
         // We _shouldn't_ have these nodes if ANSI is not enabled or transpilation is disabled
         // but if someone changed it while running we'll want to strip the nodes out.
         if (!conf.getConf(SQLConf.ANSI_ENABLED)) {
@@ -1060,12 +1321,25 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
             log"${MDC(LogKeys.CONFIG, SQLConf.ANSI_ENABLED.key)} is disabled. The transpiler " +
             log"targets ANSI semantics and refuses to rewrite plans under non-ANSI mode. " +
             log"Enable ANSI or disable transpilation to silence this warning.")
-          s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
+          keepPython
         } else if (!conf.getConf(SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS)) {
           logWarning(log"Skipping Python UDF transpilation: " +
             log"${MDC(LogKeys.CONFIG, SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key)} " +
             log"is disabled but we still got TranspiledPythonUDFs in our plan.")
-          s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
+          keepPython
+        } else if (!callIsIntact(s)) {
+          // PullOutNondeterministic moves a nondeterministic call into a projection below and
+          // leaves an attribute here, so `arguments` is empty while the option still refers to
+          // them. Keep the attribute: the call is computed once below us, which is the promise,
+          // just not in Catalyst. `orderBy(u(rand()))` and `repartition(2, u(rand()))` land here.
+          keepPython
+        } else if (inLambda ||
+            s.transpiledOptions.headOption.exists(_.containsPattern(LAMBDA_FUNCTION))) {
+          // Lambdas are out of scope for lowering: a higher-order function's lambda already has a
+          // story for a Python UDF in ExtractPythonUDFFromLambda, which applies it over the whole
+          // array. Both shapes are left to it -- a call inside a lambda, and an option body that
+          // builds one.
+          keepPython
         } else if (!parentIsUdf || !s.hasOnlyPythonUDFInputs) {
           // Walk the full list of transpiled options and pick the first one,
           // falling back to the original Python UDF if none are available.
@@ -1079,26 +1353,59 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
           // option's dataType already matches; a custom transpiler MUST do the
           // same (or insert its own Cast), or it will silently change the output
           // schema.
-          val firstEvaluable = s.transpiledOptions.headOption
-          firstEvaluable match {
+          s.transpiledOptions.headOption match {
             case None =>
-              s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
+              keepPython
             case Some(catalystExpr) =>
-              // Recursively apply to the children first because we may use them as inputs in parent
-              catalystExpr.mapChildren(applyExpr(_, parentIsUdf = false))
+              // Arguments live on the Python UDF, not in the option, so convert them there -- one
+              // could be a transpilable call itself. Recurse on the option's root too, not just its
+              // children, or a nested call sitting at the root survives and throws at execution.
+              //
+              // Only the arguments the body actually reads. Converting an unread one would register
+              // a column for its nested call that nothing ever reads, and under ANSI that column
+              // computes -- and can raise on -- an argument `transpile.py` promises is never
+              // computed at all.
+              val reads = TranspiledUDFParameter.referencedIndexes(catalystExpr)
+              val read = reads.toSet
+              // Over `reads`, not `read`: a Set names whichever bad index it yields first, so the
+              // error moved around between JVMs.
+              reads.find(index => index < 0 || index >= s.arguments.length).foreach { index =>
+                // Only a hand-built option can be out of range: the builder bounds-checks what it
+                // emits, and a pre-typed reference slips past the analyzer's check too.
+                throw QueryCompilationErrors.invalidUDFParameterPlaceholderIndex(
+                  index, s.arguments.length)
+              }
+              val args = s.arguments.zipWithIndex.map {
+                case (arg, i) if read.contains(i) => recurse(arg, parentIsUdf = false)
+                case (arg, _) => arg
+              }
+              val option = recurse(catalystExpr, parentIsUdf = false)
+              val substituted = preEvaluate match {
+                case Some(f) => f(s, args, option)
+                // No column can go here at all, so an evaluation the body is owed can only be kept
+                // by the Python UDF, which computes its inputs once in a projection of its own.
+                case None =>
+                  Option.when(mustPreEvaluate(args, option).isEmpty)(
+                    TranspiledUDFParameter.substitute(option, args))
+              }
+              // None from either arm means we can't keep that promise here, so don't transpile.
+              substituted.getOrElse(keepPython)
           }
         } else {
           // We should avoid converting a UDF node where that could break pipelining.
           // For example: (UDF -> UDF -> UDF) is often cheaper than UDF -> Catalyst -> UDF.
-          s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
+          keepPython
         }
       case _ =>
         // Not a TranspiledPythonUDF: recurse down, telling the children whether
         // this node is itself a scalar Python UDF so a transpiled child can
         // preserve the UDF batch pipeline (e.g. an outer UDF that could not be
         // transpiled wrapping one that could).
-        expression.mapChildren(
-          applyExpr(_, parentIsUdf = isScalarPythonUDF(expression)))
+        //
+        // A conditional branch is not treated like a lambda, on purpose: the column stands, which
+        // makes the argument eager, and the interpreted UDF is eager there too. See `transpile.py`.
+        expression.mapChildren(applyExpr(_, parentIsUdf = isScalarPythonUDF(expression),
+          preEvaluate, inLambda || expression.isInstanceOf[LambdaFunction]))
     }
   }
 }

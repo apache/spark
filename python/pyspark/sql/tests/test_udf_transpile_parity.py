@@ -20,12 +20,13 @@ transpilation enabled.
 
 Transpilation is only attempted when both
 ``spark.sql.experimental.optimizer.transpilePyUDFs`` and
-``spark.sql.ansi.enabled`` are true, and it is designed to fall back to
-interpreted Python rather than risk semantic drift. These classes re-run the
-shared UDF mixins under that configuration so we can confirm that turning on the
-experimental feature does not change UDF results compared with the default
-(transpilation off) runs covered by the original concrete classes
-(``UDFTests``, ``UDFCombinationsTests``, ``UnifiedUDFTests``).
+``spark.sql.ansi.enabled`` are true. When either is off, or if transpilation
+fails, we fall back to the regular non-transpiled code path.
+
+These classes re-run the shared UDF mixins under that configuration to confirm
+turning the feature on does not change UDF results. In two cases the transpiled body
+evaluates less than interpreted Python, so if evaluating the input would cause an
+error the transpiled code may succeed where the regular path would not.
 
 Transpilation is currently only supported in regular (non-Connect) Spark, so
 these classes are guarded with ``is_remote_only()`` and are intentionally not
@@ -34,12 +35,10 @@ the transpiler directly live in ``test_udf_transpile_unit.py`` and
 ``test_udf_transpile_hypothesis.py``.
 
 Note on configuration: enabling transpilation requires ANSI mode, so an "on"
-run is unavoidably also an ANSI run. All inherited tests currently pass as-is
-under this configuration, so no per-test overrides are defined here. If a future
-change makes an inherited test diverge purely due to ANSI semantics or because
-transpilation bypasses a Python-side effect (rather than a genuine result
-change), override it here with a documented ``unittest.skip`` rather than
-editing the inherited test body.
+run is unavoidably also an ANSI run.
+
+When an inherited test diverges in an acceptable way, override it here with a
+documented ``unittest.skip`` rather than editing the inherited test body.
 """
 
 import unittest
