@@ -3583,7 +3583,11 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       val cachedTable = newTable("table-id")
       val catalog = mock(classOf[TableCatalog])
       when(catalog.name()).thenReturn("statecat")
-      when(catalog.tableStateOptionKeys()).thenReturn(java.util.Set.of("state"))
+      var tableStateOptionKeyCalls = 0
+      when(catalog.tableStateOptionKeys()).thenAnswer((_: InvocationOnMock) => {
+        tableStateOptionKeyCalls += 1
+        java.util.Set.of("state")
+      })
       var loads = 0
       when(catalog.loadTable(
         any[Identifier],
@@ -3608,11 +3612,16 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       val resolver = new RelationResolution(manager, sharedRelationCache)
 
       def resolveWith(splitSize: String): DataSourceV2Relation = {
+        tableStateOptionKeyCalls = 0
         val unresolved = UnresolvedRelation(Seq("statecat", "tab"), options(splitSize))
-        resolver.resolveRelation(unresolved) match {
+        val resolved = resolver.resolveRelation(unresolved) match {
           case Some(AsDataSourceV2Relation(relation)) => relation
           case other => fail(s"failed to resolve as v2 relation: $other")
         }
+        assert(
+          tableStateOptionKeyCalls == 1,
+          s"expected one table-state option projection, got: $tableStateOptionKeyCalls")
+        resolved
       }
 
       AnalysisContext.withNewAnalysisContext {
