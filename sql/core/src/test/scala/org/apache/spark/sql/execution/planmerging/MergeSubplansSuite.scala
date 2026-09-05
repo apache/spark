@@ -2818,6 +2818,33 @@ class MergeSubplansSuite extends PlanTest {
     comparePlans(Optimize.execute(q.analyze), q.analyze)
   }
 
+  test("SPARK-59248: identical DSv2 scans whose reported ordering is on a pruned column are " +
+    "deduplicated, not fused") {
+    // The two subqueries read the same column and compute the same aggregate, so they are
+    // identical and the identical-plan check should deduplicate them (plan left unchanged). The
+    // table reports an ordering on `b`, which is pruned out of each scan's output (only `a` is
+    // read). Canonicalize must drop that dangling ordering: otherwise the two scans' ordering
+    // attributes carry different exprIds, the identical check fails, and the plans are wrongly
+    // fused into a CTE.
+    val table = new TestV2Table(
+      StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", IntegerType),
+        StructField("c", StringType))),
+      reportedOrderingCols = Seq("b"))
+    val q = testRelation.select(
+      ScalarSubquery(v2ScanReportingOn(table, Seq("a")).groupBy()(sum($"a").as("sum_a"))),
+      ScalarSubquery(v2ScanReportingOn(table, Seq("a")).groupBy()(sum($"a").as("sum_a"))))
+
+    val optimized = Optimize.execute(q.analyze)
+    // Deduplicated, not fused: both subqueries survive and no merged CTE scan is introduced.
+    assert(v2Scans(optimized).length == 2,
+      s"the two identical scans must be deduplicated, not fused into one:\n$optimized")
+    assert(!optimized.isInstanceOf[WithCTE],
+      s"identical subqueries must not be extracted to a merged CTE:\n$optimized")
+    comparePlans(optimized, q.analyze)
+  }
+
   test("SPARK-58549: enforce the required report on the deferred under-Filter scan build") {
     // The above tests fuse scans directly under an Aggregate (no Filter), so they exercise the
     // scan build at the leaf. When the scans sit under an (identical) Filter the build is instead

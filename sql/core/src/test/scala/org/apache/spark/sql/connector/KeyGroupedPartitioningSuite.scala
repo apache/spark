@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.{
   SparkPlan,
   UnionExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
-import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
+import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions.{col, max}
 import org.apache.spark.sql.internal.SQLConf
@@ -2523,6 +2523,233 @@ class KeyGroupedPartitioningSuite
           }
         }
       }
+    }
+  }
+
+  test("SPARK-59248: join key subset of partition keys, extra partition key pruned from the " +
+    "output") {
+    // Both tables are partitioned by (id, data). The join is only on `id`, and `data` is not
+    // selected, so it is column-pruned out of both scan outputs. Without
+    // allowKeysSubsetOfPartitionKeys the pruned `data` key drops the reported partitioning and both
+    // sides shuffle; with it, the partitioning is kept and projected onto `id`, so SPJ triggers.
+    val table1 = "prune_t1"
+    val table2 = "prune_t2"
+    val partition = Array(identity("id"), identity("data"))
+    createTable(table1, columns, partition)
+    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+        "(1, 'aa', cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', cast('2020-01-01' as timestamp)), " +
+        "(2, 'cc', cast('2020-01-01' as timestamp)), " +
+        "(3, 'dd', cast('2020-01-01' as timestamp))")
+
+    createTable(table2, columns, partition)
+    sql(s"INSERT INTO testcat.ns.$table2 VALUES " +
+        "(2, 'bb', cast('2020-01-01' as timestamp)), " +
+        "(2, 'cc', cast('2020-01-01' as timestamp)), " +
+        "(3, 'ee', cast('2020-01-01' as timestamp)), " +
+        "(4, 'ff', cast('2020-01-01' as timestamp))")
+
+    // Selecting only `id` prunes the other partition key `data` (and `ts`) from both scans. The
+    // expected result is the within-`id` cross product (id=2 matches 2 x 2 rows, id=3 matches
+    // 1 x 1).
+    val expected = Seq(Row(2), Row(2), Row(2), Row(2), Row(3))
+    val query =
+      s"""
+         |${selectWithMergeJoinHint("t1", "t2")}
+         |t1.id AS id
+         |FROM testcat.ns.$table1 t1 JOIN testcat.ns.$table2 t2
+         |ON t1.id = t2.id ORDER BY id
+         |""".stripMargin
+
+    Seq(true, false).foreach { allowKeysSubsetOfPartitionKeys =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
+            allowKeysSubsetOfPartitionKeys.toString) {
+        val df = sql(query)
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+        if (allowKeysSubsetOfPartitionKeys) {
+          assert(shuffles.isEmpty, "SPJ should be triggered even though `data` is pruned")
+          assert(groupPartitions.nonEmpty, "GroupPartitionsExec should coalesce on the join key")
+          // The reported partitioning is kept on the scan even though `data` is pruned ...
+          val scans = collectScans(df.queryExecution.executedPlan)
+          assert(scans.nonEmpty)
+          scans.foreach { scan =>
+            assert(scan.keyGroupedPartitioning.isDefined,
+              "partitioning should be kept despite the pruned key")
+            // ... but the physical output partitioning must only reference output columns, so the
+            // pruned column reaches no consumer (shuffle spec, ordering, plan equality).
+            scan.outputPartitioning match {
+              case kp: physical.KeyedPartitioning =>
+                assert(kp.expressions.forall(_.references.subsetOf(scan.outputSet)),
+                  s"partitioning ${kp.expressions} references a column outside ${scan.output}")
+              case other =>
+                fail(s"expected KeyedPartitioning but got $other")
+            }
+          }
+        } else {
+          assert(shuffles.nonEmpty, "SPJ should not be triggered without the config")
+          assert(groupPartitions.isEmpty)
+        }
+        checkAnswer(df, expected)
+      }
+    }
+  }
+
+  test("SPARK-59248: scan reports no partitioning when all partition keys are pruned") {
+    // The table is partitioned by (id, data), but the query selects only `ts`, so both partition
+    // keys are column-pruned out of the scan output. Even with allowKeysSubsetOfPartitionKeys on,
+    // no partition key survives in the output, so the scan must not keep a dangling
+    // KeyedPartitioning and reports no (unknown) partitioning.
+    val table1 = "prune_all_keys"
+    createTable(table1, columns, Array(identity("id"), identity("data")))
+    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+        "(1, 'aa', cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', cast('2020-01-02' as timestamp))")
+
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val df = sql(s"SELECT ts FROM testcat.ns.$table1")
+      checkAnswer(df, Seq(
+        Row(Timestamp.valueOf("2020-01-01 00:00:00")),
+        Row(Timestamp.valueOf("2020-01-02 00:00:00"))))
+      val scans = collectScans(df.queryExecution.executedPlan)
+      assert(scans.length == 1)
+      scans.foreach { scan =>
+        assert(scan.keyGroupedPartitioning.isEmpty,
+          s"no partition key survives in the output, got ${scan.keyGroupedPartitioning}")
+        scan.outputPartitioning match {
+          case _: physical.UnknownPartitioning => // expected: nothing left to partition by
+          case other => fail(s"expected UnknownPartitioning but got $other")
+        }
+      }
+    }
+  }
+
+  test("SPARK-59248: self-join with a pruned partition key keeps plans canonicalizable") {
+    // Same-table join where the extra partition key `data` is pruned from both scan instances. This
+    // exercises canonicalization/plan-equality over scans whose reported partitioning carries a key
+    // that is not in the scan output; results must stay correct and planning must not fail.
+    val table1 = "prune_self"
+    val partition = Array(identity("id"), identity("data"))
+    createTable(table1, columns, partition)
+    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+        "(1, 'aa', cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', cast('2020-01-01' as timestamp)), " +
+        "(2, 'cc', cast('2020-01-01' as timestamp)), " +
+        "(3, 'dd', cast('2020-01-01' as timestamp))")
+
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint("a", "b")}
+           |a.id AS id
+           |FROM testcat.ns.$table1 a JOIN testcat.ns.$table1 b
+           |ON a.id = b.id ORDER BY id
+           |""".stripMargin)
+      assert(collectShuffles(df.queryExecution.executedPlan).isEmpty, "SPJ should be triggered")
+      // id=1 yields 1 row, id=2 yields 2 x 2 = 4 rows, id=3 yields 1 row.
+      checkAnswer(df, Seq(Row(1), Row(2), Row(2), Row(2), Row(2), Row(3)))
+
+      // Both scan instances must survive (no incorrect dedup) and each must report a partitioning
+      // that only references its own output, even though `data` is pruned: this is what keeps the
+      // dangling key from reaching any consumer (shuffle spec, ordering, canonicalized comparison).
+      val scans = collectScans(df.queryExecution.executedPlan)
+      assert(scans.length == 2, s"expected the two self-join scans, got:\n" +
+        s"${df.queryExecution.executedPlan}")
+      scans.foreach { scan =>
+        assert(scan.keyGroupedPartitioning.isDefined,
+          "partitioning should be kept despite the pruned key")
+        scan.outputPartitioning match {
+          case kp: physical.KeyedPartitioning =>
+            assert(kp.expressions.forall(_.references.subsetOf(scan.outputSet)),
+              s"partitioning ${kp.expressions} references a column outside ${scan.output}")
+          case other =>
+            fail(s"expected KeyedPartitioning but got $other")
+        }
+        // Canonicalization must be stable and must not throw with a dangling key present.
+        assert(scan.canonicalized.sameResult(scan.canonicalized))
+      }
+    }
+  }
+
+  test("SPARK-59248: a pruned partition key must not defeat plan reuse") {
+    val table1 = "prune_reuse"
+    val partition = Array(identity("id"), identity("data"))
+    createTable(table1, columns, partition)
+    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+        "(1, 'aa', cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', cast('2020-01-02' as timestamp)), " +
+        "(3, 'dd', cast('2020-01-03' as timestamp))")
+
+    // Self-join on the non-partition column `ts`; the other partition key `data` is pruned from
+    // both scan instances. The two legs are identical subtrees, so Spark reuses one leg's exchange
+    // for the other. With allowKeysSubsetOfPartitionKeys the scan keeps its reported partitioning,
+    // which then references the pruned `data`; that dangling key must not leak into canonicalized
+    // plan comparison and break the reuse.
+    val query =
+      s"""
+         |SELECT a.id AS id1, b.id AS id2
+         |FROM testcat.ns.$table1 a JOIN testcat.ns.$table1 b
+         |ON a.ts = b.ts ORDER BY id1, id2
+         |""".stripMargin
+
+    Seq(true, false).foreach { allowKeysSubsetOfPartitionKeys =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
+            allowKeysSubsetOfPartitionKeys.toString) {
+        val df = sql(query)
+        checkAnswer(df, Seq(Row(1, 1), Row(2, 2), Row(3, 3)))
+        val plan = df.queryExecution.executedPlan
+        val reused = collect(plan) { case r: ReusedExchangeExec => r }
+        val scans = collectScans(plan)
+        assert(scans.length == 1,
+          s"the two identical legs should reuse a single scan " +
+            s"(allowKeysSubsetOfPartitionKeys=$allowKeysSubsetOfPartitionKeys):\n$plan")
+        assert(reused.length == 1,
+          s"expected one reused exchange " +
+            s"(allowKeysSubsetOfPartitionKeys=$allowKeysSubsetOfPartitionKeys):\n$plan")
+      }
+    }
+  }
+
+  test("SPARK-59248: a pruned source-reported ordering must not defeat exchange reuse") {
+    val table1 = "ord_reuse"
+    // Partitioned by `id` (kept in the output) and the source also reports an ordering on `data`.
+    // The self-join prunes `data`, leaving only the reported ordering dangling; that dangling
+    // ordering must not keep the two identical legs from being reused.
+    createTable(table1, columns, Array(identity("id")),
+      Array(sort(column("data"), SortDirection.ASCENDING)))
+    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+        "(1, 'aa', cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', cast('2020-01-02' as timestamp)), " +
+        "(3, 'dd', cast('2020-01-03' as timestamp))")
+
+    val query =
+      s"""
+         |SELECT a.id AS id1, b.id AS id2
+         |FROM testcat.ns.$table1 a JOIN testcat.ns.$table1 b
+         |ON a.ts = b.ts ORDER BY id1, id2
+         |""".stripMargin
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = sql(query)
+      checkAnswer(df, Seq(Row(1, 1), Row(2, 2), Row(3, 3)))
+      val plan = df.queryExecution.executedPlan
+      // The scan still reports the (dangling) ordering; the point is that it does not block reuse.
+      collectScans(plan).foreach { scan =>
+        assert(scan.ordering.exists(_.exists(_.child.references.exists(_.name == "data"))),
+          s"expected the scan to report an ordering on the pruned `data`:\n$plan")
+      }
+      val scans = collectScans(plan)
+      val reused = collect(plan) { case r: ReusedExchangeExec => r }
+      assert(scans.length == 1, s"the two identical legs should reuse a single scan:\n$plan")
+      assert(reused.length == 1, s"expected one reused exchange:\n$plan")
     }
   }
 
