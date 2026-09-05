@@ -610,6 +610,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS =
+    buildConf("spark.sql.optimizer.splitProjectionForExpensiveFilters")
+    .doc("When true, split a projection into several projections with the filters which " +
+      "reference its expensive (UDF, etc.) elements in between, so an expensive element is only " +
+      "evaluated for the rows which survived the filters below it. Costs an extra operator per " +
+      s"split, and only applies when ${AVOID_DOUBLE_FILTER_EVAL.key} is also enabled.")
+    .version("4.4.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS =
     buildConf("spark.sql.experimental.optimizer.transpilePyUDFs")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
@@ -9758,6 +9768,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def charVarcharStandardSemantics: Boolean = getConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS)
 
   def avoidDoubleFilterEval: Boolean = getConf(AVOID_DOUBLE_FILTER_EVAL)
+
+  def splitProjectionForExpensiveFilters: Boolean =
+    getConf(SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS)
 
   def structPredicateDecomposeEnabled: Boolean = getConf(STRUCT_PREDICATE_DECOMPOSE_ENABLED)
 

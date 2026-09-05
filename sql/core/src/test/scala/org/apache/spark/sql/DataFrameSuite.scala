@@ -2808,6 +2808,102 @@ class DataFrameSuite extends SharedSparkSession
     val df = classic.Dataset.ofRows(spark, relation)
     checkAnswer(df.select("b"), Row(2))
   }
+
+  test("SPARK-55014: only evaluate expensive projections for the rows a filter kept") {
+    val magicCalls = sparkContext.longAccumulator("magicCalls")
+    val otherCalls = sparkContext.longAccumulator("otherCalls")
+    val magic = udf((i: Long) => {
+      magicCalls.add(1)
+      i % 2 == 0
+    })
+    val other = udf((i: Long) => {
+      otherCalls.add(1)
+      i % 3 == 0
+    })
+    // A single partition so that the call counts below are exact.
+    def query(): DataFrame = spark.range(0, 30, 1, 1)
+      .select($"id", magic($"id") as "m", other($"id") as "o")
+      .where($"m" && $"o")
+    val expected = Seq(0L, 6L, 12L, 18L, 24L).map(Row(_, true, true))
+
+    // Codegen already defers a projected expression past a filter that does not need it
+    // (CodegenSupport.evaluateRequiredVariables); splitting buys the same saving on the paths
+    // codegen does not cover -- interpreted projections, operators it bails out of, Python UDFs.
+    // Measure with codegen off.
+    Seq(true, false).foreach { split =>
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+        SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString) {
+        magicCalls.reset()
+        otherCalls.reset()
+        // Collect, not checkAnswer, so the plan runs exactly once.
+        assert(query().collect().toSeq === expected)
+        assert(magicCalls.value === 30)
+        // Splitting around the filter on `m` means `other` never sees the odd ids.
+        assert(otherCalls.value === (if (split) 15 else 30))
+      }
+    }
+
+    // However the plan is built, the answer is the same.
+    for (codegen <- Seq(true, false); split <- Seq(true, false)) {
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString,
+        SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString) {
+        checkAnswer(query(), expected)
+      }
+    }
+  }
+
+  test("SPARK-55014: no split when projected expressions share the expensive work") {
+    val calls = sparkContext.longAccumulator("udfCalls")
+    val u = udf((i: Long) => {
+      calls.add(1)
+      i
+    })
+    // x and y share one UDF call: subexpression elimination collapses it in one projection but
+    // cannot reach across a filter, so splitting would re-run it on every row below and again on
+    // every survivor. Leave the projection alone; the count stays at one per input row.
+    def query(): DataFrame = spark.range(0, 30, 1, 1)
+      .select($"id", u($"id") as "x", (u($"id") + 1) as "y")
+      .where($"x" % 2 === 0 && $"y" % 3 === 0)
+
+    Seq(true, false).foreach { codegen =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+        calls.reset()
+        assert(query().collect().length === 5)
+        assert(calls.value === 30)
+      }
+    }
+  }
+
+  test("SPARK-55014: splitting follows the filter's order, not the projection's") {
+    val earlyCalls = sparkContext.longAccumulator("earlyCalls")
+    val lateCalls = sparkContext.longAccumulator("lateCalls")
+    val early = udf((i: Long) => {
+      earlyCalls.add(1)
+      i % 3 == 0
+    })
+    val late = udf((i: Long) => {
+      lateCalls.add(1)
+      i % 2 == 0
+    })
+    // `l` is projected before `e` but filtered on after it. Split order must follow the filter:
+    // the condition order is the only selectivity signal we have, and ordering by the projection
+    // would run `late` over every row and could do more work than not splitting at all.
+    def query(): DataFrame = spark.range(0, 30, 1, 1)
+      .select($"id", late($"id") as "l", early($"id") as "e")
+      .where($"e" && $"l")
+    val expected = Seq(0L, 6L, 12L, 18L, 24L).map(Row(_, true, true))
+
+    withSQLConf(
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> "true") {
+      assert(query().collect().toSeq === expected)
+      assert(earlyCalls.value === 30)
+      // Only the ten ids divisible by three reach `late`.
+      assert(lateCalls.value === 10)
+    }
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
