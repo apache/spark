@@ -23026,6 +23026,37 @@ def is_variant_null(v: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def variant_array_length(v: "ColumnOrName") -> Column:
+    """
+    Returns the number of elements in a variant array. Returns NULL if the input is SQL NULL, a
+    variant null, or any non-array variant value.
+
+    .. versionadded:: 5.0.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+        A column that evaluates to a variant.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an integer column representing the array length, or NULL for non-array variant values
+        Returns a column that evaluates to an integer.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('''[1, 2, 3]''',), ('''{"a": 1}''',), ('null',)], ['json'])
+    >>> df.select(variant_array_length(parse_json(df.json)).alias("r")).collect()
+    [Row(r=3), Row(r=None), Row(r=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function("variant_array_length", _to_java_column(v))
+
+
+@_try_remote_functions
 def is_valid_variant(v: "ColumnOrName") -> Column:
     """
     Check if a variant value is valid. Returns true if the variant is valid, false if it is

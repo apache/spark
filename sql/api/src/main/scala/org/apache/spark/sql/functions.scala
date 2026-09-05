@@ -14427,6 +14427,19 @@ object functions {
   def is_variant_null(v: Column): Column = Column.fn("is_variant_null", v)
 
   /**
+   * Returns the number of elements in a variant array. Returns NULL if the input is SQL NULL, a
+   * variant null, or any non-array variant value.
+   *
+   * @param v
+   *   a variant column. A column that evaluates to a variant.
+   * @group variant_funcs
+   * @since 5.0.0
+   * @return
+   *   Returns a column that evaluates to an integer.
+   */
+  def variant_array_length(v: Column): Column = Column.fn("variant_array_length", v)
+
+  /**
    * Check if a variant value is valid. Returns true if the variant is valid, false if it is
    * malformed, and NULL if the input is NULL.
    *
