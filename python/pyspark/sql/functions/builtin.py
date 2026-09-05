@@ -15802,27 +15802,35 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def decode(col: "ColumnOrName", charset: str) -> Column:
+def decode(col: "ColumnOrName", *args: Union["ColumnOrName", Any]) -> Column:
     """
     Computes the first argument into a string from a binary using the provided character set
-    (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32').
+    (2-argument form), or returns the result matching the first search value in order
+    (3+ argument form, equivalent to Oracle's DECODE / SQL CASE WHEN).
 
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.2.0
+        Added multi-argument CASE WHEN form.
+
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or column name
-        target column to work on.
-    charset : literal string
-        charset to use to decode to.
+    col : :class:`~pyspark.sql.Column` or str
+        The value to decode (binary in 2-arg form, or comparison expression in CASE WHEN form).
+    *args : :class:`~pyspark.sql.Column` or str
+        - 2-arg form: a single charset string (e.g. ``'UTF-8'``).
+        - 3+ arg form: alternating ``search, result`` pairs followed by an optional ``default``.
+          If ``col`` equals ``search``, the corresponding ``result`` is returned.
+          The final value, if unpaired, is the default. Use :func:`lit` to pass literal
+          values (e.g. ``lit(1)``, ``lit("value")``).
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the column for computed results.
+        Decoded string column.
 
     See Also
     --------
@@ -15830,6 +15838,8 @@ def decode(col: "ColumnOrName", charset: str) -> Column:
 
     Examples
     --------
+    Binary decode form:
+
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(b"\x61\x62\x63\x64",)], ["a"])
     >>> df.select("*", sf.decode("a", "UTF-8")).show()
@@ -15838,10 +15848,42 @@ def decode(col: "ColumnOrName", charset: str) -> Column:
     +-------------+----------------+
     |[61 62 63 64]|            abcd|
     +-------------+----------------+
+
+    CASE WHEN form:
+
+    >>> df = spark.createDataFrame([(2,)], ["n"])
+    >>> df.select(sf.decode("n", sf.lit(1), sf.lit("one"), sf.lit(2), sf.lit("two"), sf.lit("other"))).show()  # doctest: +SKIP
+    +-----------------------------------+
+    |decode(n, 1, one, 2, two, other)|
+    +-----------------------------------+
+    |                               two|
+    +-----------------------------------+
+
+    >>> df.select(sf.decode("n", sf.lit(3), sf.lit("three"), sf.lit("fallback"))).show()  # doctest: +SKIP
+    +----------------------------------+
+    |decode(n, 3, three, fallback)|
+    +----------------------------------+
+    |                          fallback|
+    +----------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("decode", _to_java_column(col), _enum_to_value(charset))
+    if len(args) == 0:
+        raise PySparkTypeError(
+            errorClass="NOT_ENOUGH_ARGS",
+            messageParameters={"func_name": "decode", "min_num_args": "1"},
+        )
+    if len(args) == 1:
+        # 2-arg form: binary decode with charset
+        charset = args[0]
+        return _invoke_function("decode", _to_java_column(col), _enum_to_value(charset))
+    else:
+        # 3+ arg form: Oracle-style CASE WHEN decode
+        return _invoke_function(
+            "decode",
+            _to_java_column(col),
+            *[_to_java_column(a) for a in args],
+        )
 
 
 @_try_remote_functions
