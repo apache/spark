@@ -15,26 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.api.metric;
+package org.apache.spark.shuffle.api;
 
 import org.apache.spark.annotation.Private;
+import org.apache.spark.shuffle.api.metric.CustomShuffleTaskMetric;
 
 /**
  * :: Private ::
- * A per-task value for a {@link CustomShuffleMetric}.
+ * A map output writer that reports custom shuffle metrics collected while writing a map task.
  *
  * @since 4.3.0
  */
 @Private
-public interface CustomShuffleTaskMetric {
+public interface ShuffleMapOutputMetricsReporter {
 
   /**
-   * Returns the name of custom shuffle task metric.
+   * The values of the custom shuffle metrics for this map task.
    */
-  String name();
-
-  /**
-   * Returns the value of this custom shuffle task metric.
-   */
-  long value();
+  default CustomShuffleTaskMetric[] currentMetricsValues() {
+    return new CustomShuffleTaskMetric[0];
+  }
 }

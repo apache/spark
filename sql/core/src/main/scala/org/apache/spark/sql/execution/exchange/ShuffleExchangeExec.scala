@@ -634,9 +634,9 @@ object ShuffleExchangeExec {
   }
 
   /**
-   * Create a customized [[ShuffleWriteProcessor]] for SQL which wrap the default metrics reporter
-   * with [[SQLShuffleWriteMetricsReporter]] as new reporter for [[ShuffleWriteProcessor]], and
-   * reports any custom shuffle metrics into `customWriteMetrics`.
+   * Creates a customized [[ShuffleWriteProcessor]] for SQL that wraps the default metrics reporter
+   * with [[SQLShuffleWriteMetricsReporter]] and reports any custom shuffle metrics to
+   * `customWriteMetrics`.
    */
   def createShuffleWriteProcessor(
       metrics: Map[String, SQLMetric],

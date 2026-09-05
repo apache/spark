@@ -21,7 +21,6 @@ import java.io.IOException;
 
 import org.apache.spark.annotation.Private;
 import org.apache.spark.shuffle.api.metadata.MapOutputCommitMessage;
-import org.apache.spark.shuffle.api.metric.CustomShuffleTaskMetric;
 
 /**
  * :: Private ::
@@ -31,7 +30,7 @@ import org.apache.spark.shuffle.api.metric.CustomShuffleTaskMetric;
  * @since 3.0.0
  */
 @Private
-public interface ShuffleMapOutputWriter {
+public interface ShuffleMapOutputWriter extends ShuffleMapOutputMetricsReporter {
 
   /**
    * Creates a writer that can open an output stream to persist bytes targeted for a given reduce
@@ -86,12 +85,4 @@ public interface ShuffleMapOutputWriter {
    * clean up temporary state if necessary.
    */
   void abort(Throwable error) throws IOException;
-
-  /**
-   * The values of the custom shuffle metrics for this map task. Values are surfaced only when the
-   * {@link org.apache.spark.shuffle.ShuffleWriteProcessor} consumes them; otherwise discarded.
-   */
-  default CustomShuffleTaskMetric[] currentMetricsValues() {
-    return new CustomShuffleTaskMetric[0];
-  }
 }

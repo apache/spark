@@ -340,6 +340,24 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   }
 
   @Test
+  public void throwingCustomMetricsGetterDoesNotAbortCommittedOutput() throws Exception {
+    ThrowingCustomMetricExecutorComponents components =
+      new ThrowingCustomMetricExecutorComponents(
+        new LocalDiskShuffleExecutorComponents(conf, blockManager, shuffleBlockResolver));
+    final UnsafeShuffleWriter<Object, Object> writer = createWriter(true, components);
+    final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
+    for (int i = 0; i < NUM_PARTITIONS; i++) {
+      dataToWrite.add(new Tuple2<>(i, i));
+    }
+    writer.write(dataToWrite.iterator());
+    Option<MapStatus> mapStatus = writer.stop(true);
+    assertTrue(mapStatus.isDefined());
+    assertTrue(mergedOutputFile.exists());
+    assertFalse(components.aborted());
+    assertEquals(0, writer.currentMetricsValues().length);
+  }
+
+  @Test
   public void writeWithoutSpilling() throws Exception {
     // In this example, each partition should have exactly one record:
     final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();

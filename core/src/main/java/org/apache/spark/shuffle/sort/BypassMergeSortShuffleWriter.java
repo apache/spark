@@ -45,6 +45,7 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.SparkException;
 import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
+import org.apache.spark.shuffle.api.ShuffleMapOutputMetricsReporter;
 import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShufflePartitionWriter;
 import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
@@ -155,7 +156,7 @@ final class BypassMergeSortShuffleWriter<K, V>
       if (!records.hasNext()) {
         partitionLengths = mapOutputWriter.commitAllPartitions(
           ShuffleChecksumHelper.EMPTY_CHECKSUM_VALUE).getPartitionLengths();
-        customMetricsValues = mapOutputWriter.currentMetricsValues();
+        customMetricsValues = collectCustomMetrics(mapOutputWriter);
         mapStatus = MapStatus$.MODULE$.apply(
           blockManager.shuffleServerId(), partitionLengths, mapId, getAggregatedChecksumValue());
         return;
@@ -221,6 +222,16 @@ final class BypassMergeSortShuffleWriter<K, V>
     return customMetricsValues;
   }
 
+  private CustomShuffleTaskMetric[] collectCustomMetrics(ShuffleMapOutputMetricsReporter writer) {
+    try {
+      return writer.currentMetricsValues();
+    } catch (Exception e) {
+      logger.warn("Failed to collect custom shuffle metrics for mapId {}", e,
+        MDC.of(LogKeys.MAP_ID, mapId));
+      return new CustomShuffleTaskMetric[0];
+    }
+  }
+
   // For test only.
   @VisibleForTesting
   RowBasedChecksum[] getRowBasedChecksums() {
@@ -272,7 +283,7 @@ final class BypassMergeSortShuffleWriter<K, V>
     long[] committedPartitionLengths =
       mapOutputWriter.commitAllPartitions(getChecksumValues(partitionChecksums))
         .getPartitionLengths();
-    customMetricsValues = mapOutputWriter.currentMetricsValues();
+    customMetricsValues = collectCustomMetrics(mapOutputWriter);
     return committedPartitionLengths;
   }
 

@@ -202,6 +202,23 @@ class BypassMergeSortShuffleWriterSuite
     assert(writer.currentMetricsValues() === reported)
   }
 
+  test("throwing custom metrics getter does not abort committed output") {
+    val components = new ThrowingCustomMetricExecutorComponents(shuffleExecutorComponents)
+    val writer = new BypassMergeSortShuffleWriter[Int, Int](
+      blockManager,
+      shuffleHandle,
+      0L, // MapId
+      conf,
+      taskContext.taskMetrics().shuffleWriteMetrics,
+      components)
+    writer.write(Iterator((1, 1), (2, 2), (3, 3)))
+    val mapStatus = writer.stop( /* success = */ true)
+    assert(mapStatus.isDefined)
+    assert(outputFile.exists())
+    assert(!components.aborted)
+    assert(writer.currentMetricsValues().isEmpty)
+  }
+
   test("write empty iterator") {
     val writer = new BypassMergeSortShuffleWriter[Int, Int](
       blockManager,

@@ -21,14 +21,13 @@ import java.io.File;
 import java.io.IOException;
 
 import org.apache.spark.annotation.Private;
-import org.apache.spark.shuffle.api.metric.CustomShuffleTaskMetric;
 
 /**
  * Optional extension for partition writing that is optimized for transferring a single
  * file to the backing store.
  */
 @Private
-public interface SingleSpillShuffleMapOutputWriter {
+public interface SingleSpillShuffleMapOutputWriter extends ShuffleMapOutputMetricsReporter {
 
   /**
    * Transfer a file that contains the bytes of all the partitions written by this map task.
@@ -37,11 +36,4 @@ public interface SingleSpillShuffleMapOutputWriter {
       File mapOutputFile,
       long[] partitionLengths,
       long[] checksums) throws IOException;
-
-  /**
-   * The values of the custom shuffle metrics for this map task.
-   */
-  default CustomShuffleTaskMetric[] currentMetricsValues() {
-    return new CustomShuffleTaskMetric[0];
-  }
 }

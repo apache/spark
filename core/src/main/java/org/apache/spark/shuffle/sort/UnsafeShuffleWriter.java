@@ -55,6 +55,7 @@ import org.apache.spark.serializer.SerializationStream;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
+import org.apache.spark.shuffle.api.ShuffleMapOutputMetricsReporter;
 import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShufflePartitionWriter;
 import org.apache.spark.shuffle.api.SingleSpillShuffleMapOutputWriter;
@@ -293,7 +294,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       long[] emptyPartitionLengths =
         mapWriter.commitAllPartitions(ShuffleChecksumHelper.EMPTY_CHECKSUM_VALUE)
           .getPartitionLengths();
-      customMetricsValues = mapWriter.currentMetricsValues();
+      customMetricsValues = collectCustomMetrics(mapWriter);
       return emptyPartitionLengths;
     } else if (spills.length == 1) {
       Optional<SingleSpillShuffleMapOutputWriter> maybeSingleFileWriter =
@@ -307,7 +308,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         SingleSpillShuffleMapOutputWriter singleFileWriter = maybeSingleFileWriter.get();
         singleFileWriter.transferMapSpillFile(spills[0].file, partitionLengths,
             sorter.getChecksums());
-        customMetricsValues = singleFileWriter.currentMetricsValues();
+        customMetricsValues = collectCustomMetrics(singleFileWriter);
       } else {
         partitionLengths = mergeSpillsUsingStandardWriter(spills);
       }
@@ -355,7 +356,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         mergeSpillsWithFileStream(spills, mapWriter, compressionCodec);
       }
       partitionLengths = mapWriter.commitAllPartitions(sorter.getChecksums()).getPartitionLengths();
-      customMetricsValues = mapWriter.currentMetricsValues();
     } catch (Exception e) {
       try {
         mapWriter.abort(e);
@@ -365,6 +365,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       throw e;
     }
+    customMetricsValues = collectCustomMetrics(mapWriter);
     return partitionLengths;
   }
 
@@ -577,5 +578,15 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @Override
   public CustomShuffleTaskMetric[] currentMetricsValues() {
     return customMetricsValues;
+  }
+
+  private CustomShuffleTaskMetric[] collectCustomMetrics(ShuffleMapOutputMetricsReporter writer) {
+    try {
+      return writer.currentMetricsValues();
+    } catch (Exception e) {
+      logger.warn("Failed to collect custom shuffle metrics for mapId {}", e,
+        MDC.of(LogKeys.MAP_ID, mapId));
+      return new CustomShuffleTaskMetric[0];
+    }
   }
 }

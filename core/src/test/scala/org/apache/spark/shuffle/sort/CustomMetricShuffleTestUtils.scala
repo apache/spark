@@ -86,3 +86,49 @@ private[spark] class CustomMetricReportingMapOutputWriter(
 
   override def currentMetricsValues(): Array[CustomShuffleTaskMetric] = reportedMetrics
 }
+
+/**
+ * Wraps a [[ShuffleExecutorComponents]] so every [[ShuffleMapOutputWriter]] it creates throws from
+ * `currentMetricsValues()` after a successful commit, and records whether `abort` was invoked.
+ * Exposes no single-file writer, so [[UnsafeShuffleWriter]] takes the standard merge path.
+ */
+private[spark] class ThrowingCustomMetricExecutorComponents(delegate: ShuffleExecutorComponents)
+  extends ShuffleExecutorComponents {
+
+  @volatile private var abortInvoked = false
+  def aborted: Boolean = abortInvoked
+
+  override def initializeExecutor(
+      appId: String, execId: String, extraConfigs: java.util.Map[String, String]): Unit =
+    delegate.initializeExecutor(appId, execId, extraConfigs)
+
+  override def createMapOutputWriter(
+      shuffleId: Int, mapTaskId: Long, numPartitions: Int): ShuffleMapOutputWriter =
+    new ThrowingCustomMetricMapOutputWriter(
+      delegate.createMapOutputWriter(shuffleId, mapTaskId, numPartitions),
+      () => abortInvoked = true)
+
+  override def createSingleFileMapOutputWriter(
+      shuffleId: Int, mapId: Long): Optional[SingleSpillShuffleMapOutputWriter] =
+    Optional.empty()
+}
+
+private[spark] class ThrowingCustomMetricMapOutputWriter(
+    delegate: ShuffleMapOutputWriter,
+    onAbort: () => Unit)
+  extends ShuffleMapOutputWriter {
+
+  override def getPartitionWriter(reducePartitionId: Int): ShufflePartitionWriter =
+    delegate.getPartitionWriter(reducePartitionId)
+
+  override def commitAllPartitions(checksums: Array[Long]): MapOutputCommitMessage =
+    delegate.commitAllPartitions(checksums)
+
+  override def abort(error: Throwable): Unit = {
+    onAbort()
+    delegate.abort(error)
+  }
+
+  override def currentMetricsValues(): Array[CustomShuffleTaskMetric] =
+    throw new IllegalStateException("custom metrics unavailable")
+}

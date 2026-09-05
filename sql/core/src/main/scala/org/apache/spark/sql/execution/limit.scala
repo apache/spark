@@ -48,7 +48,7 @@ trait LimitExec extends UnaryExecNode {
 trait ShuffleMetricsSupport { self: SparkPlan =>
   protected lazy val writeMetrics =
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
-  protected lazy val readMetrics =
+  private[sql] lazy val readMetrics =
     SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
   protected def extraReservedMetrics: Map[String, SQLMetric] = Map.empty
   private lazy val reservedMetrics = extraReservedMetrics ++ readMetrics ++ writeMetrics

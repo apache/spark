@@ -62,8 +62,9 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
         context,
         createMetricsReporter(context))
       writer.write(inputs.asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
+      val customMetricsValues = writer.currentMetricsValues()
       val mapStatus = writer.stop(success = true)
-      reportCustomMetrics(writer.currentMetricsValues())
+      reportCustomMetrics(customMetricsValues)
       if (mapStatus.isDefined) {
         // Check if sufficient shuffle mergers are available now for the ShuffleMapTask to push
         if (dep.shuffleMergeAllowed && dep.getMergerLocs.isEmpty) {
