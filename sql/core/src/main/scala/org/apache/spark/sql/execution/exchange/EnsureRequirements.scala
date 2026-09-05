@@ -851,10 +851,11 @@ case class EnsureRequirements(
       joinType: JoinType,
       keyOrdering: Ordering[InternalRowComparableWrapper]): Seq[InternalRowComparableWrapper] = {
     val merged = if (SQLConf.get.getConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED)) {
-      // Rows only match within a key group, so a group no output row can come from is dropped.
-      // Only equi-joins reach here: every SMJ/SHJ takes its keys from `ExtractEquiJoinKeys`, which
-      // needs `joinKeys.nonEmpty`. So Cross matches on its keys like Inner. Which side's rows
-      // survive follows `PushExtraPredicateThroughJoin`, plus LeftSingle.
+      // Rows with matching join keys land in the same key group. If a group is absent from one
+      // side, whether it can produce output depends on which side's unmatched rows the join
+      // preserves. Only equi-joins reach this method, since every SMJ/SHJ takes its keys from
+      // `ExtractEquiJoinKeys`. So a Cross join, e.g. `l CROSS JOIN r ON l.id = r.id`, is treated
+      // like an Inner join: groups absent from either side cannot produce output.
       joinType match {
         // neither side keeps unmatched rows
         case _: InnerLike | LeftSemi =>

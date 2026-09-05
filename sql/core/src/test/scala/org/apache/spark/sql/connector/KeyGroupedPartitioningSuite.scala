@@ -676,12 +676,20 @@ class KeyGroupedPartitioningSuite
   /**
    * Joins `days1` to `years1` and `days2` to `years2`, each reducing both of its sides onto the
    * year key space, then joins the two reduced legs to each other with `joinType`. `leg2First` puts
-   * the second leg on the left of that join. The projection takes the timestamp from whichever side
-   * has it, so an outer join reports the same rows in either order.
+   * the second leg on the left of that join. `leg2Semi` makes the second leg a semi join, with
+   * `years2` on its left so that the leg still projects that side. The projection takes the
+   * timestamp from whichever side has it, so an outer join reports the same rows in either order.
    */
-  private def reducedTsLegJoin(leg2First: Boolean = false, joinType: String = "JOIN"): String = {
+  private def reducedTsLegJoin(
+      leg2First: Boolean = false,
+      leg2Semi: Boolean = false,
+      joinType: String = "JOIN"): String = {
     val leg1 = "SELECT d.ts FROM testcat.ns.days1 d JOIN testcat.ns.years1 y ON y.ts = d.ts"
-    val leg2 = "SELECT y.ts FROM testcat.ns.days2 d JOIN testcat.ns.years2 y ON y.ts = d.ts"
+    val leg2 = if (leg2Semi) {
+      "SELECT y.ts FROM testcat.ns.years2 y LEFT SEMI JOIN testcat.ns.days2 d ON y.ts = d.ts"
+    } else {
+      "SELECT y.ts FROM testcat.ns.days2 d JOIN testcat.ns.years2 y ON y.ts = d.ts"
+    }
     val (left, right) = if (leg2First) (leg2, leg1) else (leg1, leg2)
     s"SELECT coalesce(l.ts, r.ts) AS ts FROM ($left) l $joinType ($right) r ON l.ts = r.ts"
   }
@@ -1178,16 +1186,18 @@ class KeyGroupedPartitioningSuite
         // Both orders, since the side that has no key is the one to leave out of the comparison.
         // And both join types, since the inner join intersects the two key sets to nothing and so
         // has nothing to sort, while the full outer join keeps the other side's keys and sorts them
-        // by the reported types.
-        Seq("JOIN" -> Nil, "FULL OUTER JOIN" -> bothTimestamps).foreach {
-          case (joinType, expected) =>
-            Seq(false, true).foreach { leg2First =>
-              val df = sql(reducedTsLegJoin(leg2First, joinType))
+        // by the reported types. And a semi join emptying the second leg, since SPARK-59199 makes
+        // it intersect like the inner join.
+        for {
+          (joinType, expected) <- Seq("JOIN" -> Nil, "FULL OUTER JOIN" -> bothTimestamps)
+          leg2First <- Seq(false, true)
+          leg2Semi <- Seq(false, true)
+        } {
+          val df = sql(reducedTsLegJoin(leg2First, leg2Semi, joinType))
 
-              checkAnswer(df, expected)
-              assert(collectShuffles(stripAQEPlan(df.queryExecution.executedPlan)).isEmpty,
-                "the two legs are the same pairing, so all three joins are co-partitioned")
-            }
+          checkAnswer(df, expected)
+          assert(collectShuffles(stripAQEPlan(df.queryExecution.executedPlan)).isEmpty,
+            "the two legs are the same pairing, so all three joins are co-partitioned")
         }
       }
     }
