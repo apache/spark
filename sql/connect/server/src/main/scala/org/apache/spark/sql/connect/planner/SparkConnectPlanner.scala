@@ -79,6 +79,7 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
+import org.apache.spark.sql.graphframes.{GraphFrameInternals, GraphFramesConnectUtils}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
@@ -233,6 +234,11 @@ class SparkConnectPlanner(
         // ML Relation
         case proto.Relation.RelTypeCase.ML_RELATION =>
           MLHandler.transformMLRelation(rel.getMlRelation, sessionHolder).logicalPlan
+
+        // Built-in GraphFrames relation.
+        case proto.Relation.RelTypeCase.GRAPH_FRAMES =>
+          GraphFrameInternals.planFromDataFrame(
+            GraphFramesConnectUtils.parseAPICall(rel.getGraphFrames, this))
 
         // Handle plugins for Spark Connect Relation types.
         case proto.Relation.RelTypeCase.EXTENSION =>

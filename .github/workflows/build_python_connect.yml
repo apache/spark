@@ -94,7 +94,7 @@ jobs:
           mv python/pyspark pyspark.back
 
           # Several tests related to catalog requires to run them sequencially, e.g., writing a table in a listener.
-          ./python/run-tests --parallelism=1 --python-executables=python3 --modules pyspark-connect,pyspark-ml-connect
+          ./python/run-tests --parallelism=1 --python-executables=python3 --modules pyspark-connect,pyspark-ml-connect,pyspark-graphframes-connect
           # None of tests are dependent on each other in Pandas API on Spark so run them in parallel
           ./python/run-tests --parallelism=1 --python-executables=python3 --modules pyspark-pandas-connect,pyspark-pandas-slow-connect
 

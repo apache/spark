@@ -541,6 +541,17 @@ mllib = Module(
     ],
 )
 
+graphframes = Module(
+    name="graphframes",
+    dependencies=[graphx, mllib],
+    source_file_regexes=[
+        "graphframes/",
+    ],
+    sbt_test_goals=[
+        "graphframes/test",
+    ],
+)
+
 pipelines = Module(
     name="pipelines",
     dependencies=[sql],
@@ -552,7 +563,7 @@ pipelines = Module(
 
 connect = Module(
     name="connect",
-    dependencies=[hive, avro, protobuf, mllib],
+    dependencies=[hive, avro, protobuf, graphframes, mllib],
     source_file_regexes=[
         "sql/connect",
     ],
@@ -577,7 +588,9 @@ examples = Module(
 pyspark_core = Module(
     name="pyspark-core",
     dependencies=[core],
-    source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing))"],
+    source_file_regexes=[
+        "python/(?!pyspark/(graphframes|ml|mllib|sql|streaming|pandas|resource|testing))"
+    ],
     python_test_goals=[
         # doctests
         "pyspark.conf",
@@ -1355,6 +1368,35 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_scalar",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_grouped_agg",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_window",
+    ],
+)
+
+pyspark_graphframes = Module(
+    name="pyspark-graphframes",
+    dependencies=[pyspark_sql, graphframes],
+    source_file_regexes=[
+        "python/pyspark/graphframes",
+    ],
+    python_test_goals=[
+        "pyspark.graphframes.tests.test_graphframe",
+        "pyspark.graphframes.tests.test_graphframes",
+        "pyspark.graphframes.tests.pg.test_property_graphframe",
+    ],
+)
+
+pyspark_graphframes_connect = Module(
+    name="pyspark-graphframes-connect",
+    dependencies=[pyspark_connect, pyspark_graphframes],
+    source_file_regexes=[
+        "python/pyspark/graphframes/connect",
+        "python/pyspark/graphframes/tests/connect",
+    ],
+    python_test_goals=[
+        "pyspark.graphframes.tests.connect.test_client_imports",
+        "pyspark.graphframes.tests.connect.test_parity_graphframe",
+        "pyspark.graphframes.tests.connect.test_all_algorithms",
+        "pyspark.graphframes.tests.connect.test_upstream_graphframes",
+        "pyspark.graphframes.tests.connect.test_property_graphframe",
     ],
 )
 
