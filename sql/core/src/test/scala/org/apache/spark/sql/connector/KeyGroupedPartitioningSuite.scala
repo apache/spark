@@ -887,8 +887,8 @@ class KeyGroupedPartitioningSuite
 
   test("SPARK-59045: reduced expression is retargeted per KeyedPartitioning") {
     // A chained SPJ's output partitioning reports one `KeyedPartitioning` per join side, but the
-    // reduced expression is derived from the single spec that `createKeyedShuffleSpec` picks
-    // (`collectFirst`). Re-targeting it at each `KeyedPartitioning`'s own key attribute keeps the
+    // reduced expression is derived from the one member `checkKeyGroupCompatible` paired this side
+    // on. Re-targeting it at each `KeyedPartitioning`'s own key attribute keeps the
     // other sides' partitionings intact - otherwise a GROUP BY on the other side's key no longer
     // sees a partitioning on it and the query shuffles (0 shuffles on base and here, 1 if the
     // use-site re-targeting is dropped).
@@ -3198,6 +3198,57 @@ class KeyGroupedPartitioningSuite
           Row(1, "aa", 40.0, 89.0),
           Row(3, "bb", 10.0, 19.5)))
       }
+    }
+  }
+
+  test("SPARK-59080: both sides of the join land on the same collection member") {
+    // `arrive_time` is selected twice under two aliases, so the projected partitioning is a
+    // `PartitioningCollection` whose members cover different numbers of the join keys: one covers
+    // (id, t1), another only id. Each member's spec is projected onto its own subset, so the specs
+    // disagree on `numPartitions`, and asking the collection for one partitioning fails with
+    // "expected all specs in the collection to have the same number of partitions".
+    //
+    // `EnsureRequirements` now resolves the member the two sides agreed on before it asks, so the
+    // keyed side is grouped on both join keys and the shuffled side is laid out on those same keys.
+    val items_partitions = Array(identity("id"), identity("arrive_time"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 'ab', 30.0, cast('2020-01-02' as timestamp)), " +
+      "(3, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(4, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 89.0, cast('2020-01-02' as timestamp)), " +
+      "(3, 19.5, cast('2020-01-01' as timestamp)), " +
+      "(5, 26.0, cast('2023-01-01' as timestamp))")
+
+    withSQLConf(
+      SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+      SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint("i", "p")}
+           |id, t1, t2, i.price AS purchase_price, p.price AS sale_price
+           |FROM (SELECT id, arrive_time AS t1, arrive_time AS t2, price FROM testcat.ns.$items) i
+           |JOIN testcat.ns.$purchases p ON i.id = p.item_id AND i.t1 = p.time
+           |""".stripMargin)
+      val plan = df.queryExecution.executedPlan
+      val positions = collectAllGroupPartitions(plan).flatMap(_.joinKeyPositions)
+      assert(positions === Seq(Seq(0, 1)),
+        "the keyed side must be grouped on both join keys, the finest granularity available")
+      assert(collectAllShuffles(plan).size == 1, "only the unpartitioned side shuffles")
+      checkAnswer(df, Seq(
+        Row(1, java.sql.Timestamp.valueOf("2020-01-01 00:00:00"),
+          java.sql.Timestamp.valueOf("2020-01-01 00:00:00"), 40.0, 42.0),
+        Row(1, java.sql.Timestamp.valueOf("2020-01-02 00:00:00"),
+          java.sql.Timestamp.valueOf("2020-01-02 00:00:00"), 30.0, 89.0),
+        Row(3, java.sql.Timestamp.valueOf("2020-01-01 00:00:00"),
+          java.sql.Timestamp.valueOf("2020-01-01 00:00:00"), 10.0, 19.5)))
     }
   }
 

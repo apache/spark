@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.exchange
 
-import scala.annotation.tailrec
 import scala.collection.immutable.BitSet
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -219,8 +218,9 @@ case class EnsureRequirements(
         } else {
           candidateSpecs
         }
-        // Pick the spec with the best parallelism
-        Some(finalCandidateSpecs.values.maxBy(_.numPartitions))
+        // Pick the spec with the best parallelism. For a collection that is the best any member
+        // offers, since reading one member's count would depend on the enumeration order.
+        Some(finalCandidateSpecs.values.maxBy(_.flatten.map(_.numPartitions).max))
       }
 
       // Check if the following conditions are satisfied:
@@ -247,30 +247,50 @@ case class EnsureRequirements(
         }
       }
 
+      // A `ShuffleSpecCollection` answers `isCompatibleWith` if *any* of its members does, so the
+      // collection alone does not say which member the sides agreed on. The projection pushed into
+      // a compatible child and the partitioning built for a re-shuffled child both have to come
+      // from one member, otherwise the sides end up grouped on different keys, or on a key set the
+      // child does not even have. Pick that member once, preferring the finest when several
+      // qualify. Only the branch that shuffles a child reads these, hence `lazy`.
+      lazy val matchedIndexes = bestSpecOpt.toSeq.flatMap { best =>
+        childrenIndexes.filter(i => best.isCompatibleWith(specs(i)))
+      }
+      lazy val bestMemberOpt = bestSpecOpt.flatMap { best =>
+        val matchedMembers = matchedIndexes.map(i => specs(i).flatten)
+        // No member serving every matched child means there is no layout to align them on, so they
+        // all take the ordinary shuffle. That needs three or more clustered children, since with
+        // two the member that reported the match serves both, and no operator has three today.
+        best.flatten
+          .filter(m => matchedMembers.forall(_.exists(m.isCompatibleWith)))
+          .maxByOption(_.numPartitions)
+      }
+
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
         case ((child, _), idx) if areChildrenCompatible ||
             !childrenIndexes.contains(idx) =>
           child
         case ((child, dist), idx) =>
-          if (bestSpecOpt.isDefined && bestSpecOpt.get.isCompatibleWith(specs(idx))) {
-            // If the child's partitioning is a `PartitioningCollection`, its spec is a
-            // `ShuffleSpecCollection` whose `createPartitioning` delegates to the head spec,
-            // so unwrap to the head spec to stay aligned with the re-shuffled side below.
-            unwrapSpecCollection(bestSpecOpt.get) match {
+          if (bestMemberOpt.isDefined && matchedIndexes.contains(idx)) {
+            // The positions come from this child's own matching member, since they index into its
+            // own partition expressions -- the chosen best member only says which member of it the
+            // two sides agreed on.
+            val bestMember = bestMemberOpt.get
+            specs(idx).flatten.find(bestMember.isCompatibleWith) match {
               // If `areChildrenCompatible` is false, we can still perform SPJ
               // by shuffling the other side based on join keys (see the else case below).
               // Hence we need to ensure that after this call, the outputPartitioning of the
               // partitioned side's BatchScanExec is grouped by join keys to match,
               // and we do that by pushing down the join keys
-              case KeyedShuffleSpec(_, _, Some(joinKeyPositions)) =>
+              case Some(KeyedShuffleSpec(_, _, Some(joinKeyPositions))) =>
                 withJoinKeyPositions(child, joinKeyPositions)
               case _ => child
             }
           } else {
-            val newPartitioning = bestSpecOpt.map { bestSpec =>
+            val newPartitioning = bestMemberOpt.map { bestMember =>
               // Use the best spec to create a new partitioning to re-shuffle this child
               val clustering = dist.asInstanceOf[ClusteredDistribution].clustering
-              bestSpec.createPartitioning(clustering)
+              bestMember.createPartitioning(clustering)
             }.getOrElse {
               // No best spec available, so we create default partitioning from the required
               // distribution
@@ -501,16 +521,28 @@ case class EnsureRequirements(
     var newLeft = left
     var newRight = right
 
-    val specs = Seq(left, right).zip(requiredChildDistribution).map { case (p, d) =>
-      if (!d.isInstanceOf[ClusteredDistribution]) return None
-      val cd = d.asInstanceOf[ClusteredDistribution]
-      val specOpt = createKeyedShuffleSpec(p.outputPartitioning, cd)
-      if (specOpt.isEmpty) return None
-      specOpt.get
-    }
+    val Seq(leftCandidates, rightCandidates) =
+      Seq(left, right).zip(requiredChildDistribution).map { case (p, d) =>
+        if (!d.isInstanceOf[ClusteredDistribution]) return None
+        val cd = d.asInstanceOf[ClusteredDistribution]
+        val specs = createKeyedShuffleSpecs(p.outputPartitioning, cd)
+        if (specs.isEmpty) return None
+        specs
+      }
 
-    val leftSpec = specs.head
-    val rightSpec = specs(1)
+    // Each side may offer several members, and the right one is the one the other side can pair
+    // with, which neither side can tell on its own. So pick the pair rather than a member per side,
+    // and rank the pairs that agree on the keys by the parallelism they offer, which is the same
+    // trade `bestSpecOpt` makes between children just above.
+    val pairs = for (l <- leftCandidates; r <- rightCandidates) yield (l, r)
+    val (leftSpec, rightSpec) = pairs
+      .filter { case (l, r) => l.areKeysCompatible(r) }
+      .maxByOption { case (l, r) => l.numPartitions.max(r.numPartitions) }
+      // Nothing agrees on the keys, so every pair fails the checks below and the method returns
+      // `None` whichever one it reports. `isCompatibleWith` has `areKeysCompatible` as a conjunct,
+      // so no pair is compatible either. Reporting one keeps the `logInfo` below on the path that
+      // used to emit it.
+      .getOrElse(pairs.head)
     val leftPartitioning = leftSpec.partitioning
     val rightPartitioning = rightSpec.partitioning
 
@@ -518,7 +550,7 @@ case class EnsureRequirements(
     // partitionings are not modified (projected) in specs and left and right side partitionings are
     // compatible with each other.
     // Left and right `outputPartitioning` is a `PartitioningCollection` or a `KeyedPartitioning`
-    // otherwise `createKeyedShuffleSpec()` would have returned `None`.
+    // otherwise `createKeyedShuffleSpecs()` would have returned nothing.
     var isCompatible =
       left.outputPartitioning.asInstanceOf[Expression].exists(_ == leftPartitioning) &&
       right.outputPartitioning.asInstanceOf[Expression].exists(_ == rightPartitioning) &&
@@ -683,7 +715,7 @@ case class EnsureRequirements(
               val originalPartitioning =
                 partiallyClusteredChild.outputPartitioning.asInstanceOf[Expression]
               // `outputPartitioning` is either a `PartitioningCollection` or a `KeyedPartitioning`
-              // otherwise `createKeyedShuffleSpec()` would have returned `None`.
+              // otherwise `createKeyedShuffleSpecs()` would have returned nothing.
               val originalKeyedPartitioning =
                 originalPartitioning.collectFirst { case k: KeyedPartitioning => k }.get
               val projectedOriginalPartitionKeys = partiallyClusteredSpec.joinKeyPositions
@@ -779,14 +811,6 @@ case class EnsureRequirements(
     }
   }
 
-  // Unwraps a `ShuffleSpecCollection` (possibly nested) to the spec that its
-  // `createPartitioning` delegates to, i.e. the head spec.
-  @tailrec
-  private def unwrapSpecCollection(spec: ShuffleSpec): ShuffleSpec = spec match {
-    case ShuffleSpecCollection(specs) => unwrapSpecCollection(specs.head)
-    case other => other
-  }
-
   /**
    * Applies join key positions to a plan by wrapping or updating GroupPartitionsExec.
    */
@@ -801,13 +825,15 @@ case class EnsureRequirements(
   }
 
   /**
-   * Tries to create a [[KeyedShuffleSpec]] from the input partitioning and distribution, if the
-   * partitioning is a [[KeyedPartitioning]] (either directly or indirectly), and satisfies the
-   * given distribution.
+   * Every [[KeyedShuffleSpec]] the input partitioning can offer for the given distribution, one per
+   * [[KeyedPartitioning]] in it that satisfies it. A [[PartitioningCollection]] yields one per
+   * member, in member order, and the caller picks. Returning only the first would decide by
+   * enumeration order which member the join is planned on, and only the caller comparing the two
+   * sides knows which member pairs with the other side's.
    */
-  private def createKeyedShuffleSpec(
+  private def createKeyedShuffleSpecs(
       partitioning: Partitioning,
-      distribution: ClusteredDistribution): Option[KeyedShuffleSpec] = {
+      distribution: ClusteredDistribution): Seq[KeyedShuffleSpec] = {
     def tryCreate(partitioning: KeyedPartitioning): Option[KeyedShuffleSpec] = {
       // The config requires all the cluster keys to be covered by the partition keys, to avoid
       // the skew of joining on keys that are coarser than the join keys. Key order and duplicated
@@ -829,10 +855,10 @@ case class EnsureRequirements(
     }
 
     partitioning match {
-      case p: KeyedPartitioning => tryCreate(p)
+      case p: KeyedPartitioning => tryCreate(p).toSeq
       case PartitioningCollection(partitionings) =>
-        partitionings.collectFirst(Function.unlift(createKeyedShuffleSpec(_, distribution)))
-      case _ => None
+        partitionings.flatMap(createKeyedShuffleSpecs(_, distribution))
+      case _ => Nil
     }
   }
 

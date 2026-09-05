@@ -87,9 +87,13 @@ case class GroupPartitionsExec(
                 assert(projectedExpressions.length == exprs.length)
                 projectedExpressions.zip(exprs).map {
                   case (expr, Some(KeyReducer(_, reduced))) =>
-                    // `reduced` was stored from the single spec that `createKeyedShuffleSpec`
-                    // picked (`collectFirst`); re-target it at this `KeyedPartitioning`'s own key
-                    // attribute so that every `KeyedPartitioning` in a collection keeps its own.
+                    // `reduced` was stored from the one member `checkKeyGroupCompatible` paired
+                    // this side on, which need not be the member re-derived here. Sound because
+                    // the members of a `PartitioningCollection` share their `partitionKeys`
+                    // reference and arity, and reducing reads the key values at their own types, so
+                    // every member reduces to the same values. Only the key attribute differs, and
+                    // re-targeting `reduced` at this one is exactly what keeps each
+                    // `KeyedPartitioning` in the collection reporting its own.
                     reduced.withReference(expr.references.head)
                   case (expr, None) => expr
                 }
