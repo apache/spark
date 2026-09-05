@@ -484,24 +484,32 @@ private[spark] class TaskSchedulerImpl(
           availableCpus(i), availableResources(i))
         taskResAssignmentsOpt.foreach { taskResAssignments =>
           try {
+            // The offer's actual registered total cores (if provided) caps the OOM retry cpus at
+            // what the executor can physically run (see spark.task.oomRetryCpusIncrement).
+            val offerTotalCores =
+              Some(shuffledOffers(i).totalCores).filter(_ >= 0)
             val (taskDescOption, didReject, index) =
-              taskSet.resourceOffer(execId, host, maxLocality, taskCpus, taskResAssignments)
+              taskSet.resourceOffer(execId, host, maxLocality, taskCpus, taskResAssignments,
+                availableCpus(i), offerTotalCores)
             noDelayScheduleRejects &= !didReject
             for (task <- taskDescOption) {
-              val (locality, resources) = if (task != null) {
+              // The CPUs actually used may exceed the ResourceProfile's taskCpus when the task is
+              // an OOM retry (see spark.task.oomRetryCpusIncrement); read it from the
+              // TaskDescription so the availableCpus bookkeeping matches what was launched.
+              val (locality, resources, cpusUsed) = if (task != null) {
                 tasks(i) += task
                 addRunningTask(task.taskId, execId, taskSet)
-                (taskSet.taskInfos(task.taskId).taskLocality, task.resources)
+                (taskSet.taskInfos(task.taskId).taskLocality, task.resources, task.cpus)
               } else {
                 assert(taskSet.isBarrier, "TaskDescription can only be null for barrier task")
                 val barrierTask = taskSet.barrierPendingLaunchTasks(index)
                 barrierTask.assignedOfferIndex = i
                 barrierTask.assignedCores = taskCpus
-                (barrierTask.taskLocality, barrierTask.assignedResources)
+                (barrierTask.taskLocality, barrierTask.assignedResources, taskCpus)
               }
 
               minLaunchedLocality = minTaskLocality(minLaunchedLocality, Some(locality))
-              availableCpus(i) = availableCpus(i) - taskCpus
+              availableCpus(i) = availableCpus(i) - cpusUsed
               assert(availableCpus(i).signum >= 0)
               availableResources(i).acquire(resources)
             }

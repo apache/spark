@@ -31,4 +31,13 @@ case class WorkerOffer(
     // when multiple executors are launched on the same host.
     address: Option[String] = None,
     resources: ExecutorResourcesAmounts = ExecutorResourcesAmounts.empty,
-    resourceProfileId: Int = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    resourceProfileId: Int = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
+    // The executor's actual registered total cores (the `--cores` it registered with), which can
+    // be smaller than the cores declared by the ResourceProfile or spark.executor.cores. For
+    // example, Kubernetes OOM recovery deliberately registers a recovered executor with only
+    // spark.task.cpus cores so it runs a single task at a time, and local[N] may use a different N
+    // than spark.executor.cores. Used to cap the OOM retry cpus at what the executor can actually
+    // run, so a retry can never request more cores than exist and become permanently unschedulable
+    // (see spark.task.oomRetryCpusIncrement). Defaults to -1 (unset), which the scheduler treats
+    // as "no known total" (no cap from this field).
+    totalCores: Int = -1)

@@ -19,8 +19,9 @@ package org.apache.spark
 
 import java.io.{IOException, NotSerializableException, ObjectInputStream}
 
+import org.apache.spark.internal.config
 import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
-import org.apache.spark.memory.TestMemoryConsumer
+import org.apache.spark.memory.{SparkOutOfMemoryError, TestMemoryConsumer}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.NonSerializable
 
@@ -262,6 +263,73 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
         throw new LinkageError()
         // scalastyle:on throwerror
       }
+    }
+  }
+
+  test("SPARK-58187: local backend accounts for the increased cpus of an OOM retry") {
+    // With the OOM cpus increment enabled, a retry uses more cpus than spark.task.cpus. The local
+    // backend must charge and refund the task's actual cpus (not the fixed CPUS_PER_TASK), or it
+    // would advertise phantom cores / oversubscribe and the job could deadlock or run extra tasks.
+    // Exercise the real LocalSchedulerBackend end to end: the first attempt of each task OOMs, the
+    // retry needs 2 cpus, and the whole job must still complete.
+    val conf = new SparkConf()
+      .set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(1))
+      .set(config.CPUS_PER_TASK, BigDecimal(1))
+      .set(config.EXECUTOR_CORES, 4)
+    sc = new SparkContext("local[4,2]", "test", conf)
+    FailureSuiteState.clear()
+    val results = sc.makeRDD(1 to 4, 4).map { x =>
+      val failFirstAttempt = FailureSuiteState.synchronized {
+        FailureSuiteState.tasksRun += 1
+        TaskContext.get().attemptNumber() == 0
+      }
+      if (failFirstAttempt) {
+        // scalastyle:off throwerror
+        throw new SparkOutOfMemoryError(
+          "POINTER_ARRAY_OUT_OF_MEMORY", new java.util.HashMap[String, String])
+        // scalastyle:on throwerror
+      }
+      x * x
+    }.collect()
+    assert(results.toSet === Set(1, 4, 9, 16))
+    // Each task runs exactly twice regardless of scheduling order: attempt 0 always OOMs and
+    // attempt 1 always succeeds (maxFailures = 2 caps it there). So the total is a deterministic
+    // 4 * 2 = 8. The exact count is the assertion that matters here: fewer would mean a retry was
+    // lost or deadlocked on a phantom core, more would mean the executor was oversubscribed and
+    // ran a duplicate attempt.
+    FailureSuiteState.synchronized {
+      assert(FailureSuiteState.tasksRun === 8)
+    }
+  }
+
+  test("SPARK-58187: OOM retry is capped at the actual registered cores, not configured cores") {
+    // spark.executor.cores (4) exceeds the local backend's actual total cores (local[2,...] = 2).
+    // With increment 2, base+increment = 3 would exceed the real capacity of 2 and, if capped only
+    // at the configured 4, the retry would be rejected on every offer forever (never launching nor
+    // reaching maxFailures). Capping at the offer's actual registered total (2) lets it complete.
+    val conf = new SparkConf()
+      .set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(2))
+      .set(config.CPUS_PER_TASK, BigDecimal(1))
+      .set(config.EXECUTOR_CORES, 4)
+    sc = new SparkContext("local[2,2]", "test", conf)
+    FailureSuiteState.clear()
+    val results = sc.makeRDD(1 to 2, 2).map { x =>
+      val failFirstAttempt = FailureSuiteState.synchronized {
+        FailureSuiteState.tasksRun += 1
+        TaskContext.get().attemptNumber() == 0
+      }
+      if (failFirstAttempt) {
+        // scalastyle:off throwerror
+        throw new SparkOutOfMemoryError(
+          "POINTER_ARRAY_OUT_OF_MEMORY", new java.util.HashMap[String, String])
+        // scalastyle:on throwerror
+      }
+      x * x
+    }.collect()
+    assert(results.toSet === Set(1, 4))
+    // 2 tasks * 2 attempts = 4; a strand would hang the job (and time out) rather than reach here.
+    FailureSuiteState.synchronized {
+      assert(FailureSuiteState.tasksRun === 4)
     }
   }
 
