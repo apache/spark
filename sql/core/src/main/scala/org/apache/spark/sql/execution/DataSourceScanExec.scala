@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, SinglePartition, UnknownPartitioning}
-import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
+import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap, CharVarcharScanMode}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution
@@ -715,6 +715,9 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
  * @param tableIdentifier Identifier for the table in the metastore.
  * @param disableBucketedScan Disable bucketed scan based on physical query plan, see rule
  *                            [[DisableUnnecessaryBucketedScan]] for details.
+ * @param charVarcharScanMode Analyzed CHAR/VARCHAR scan mode. Compared by
+ *                            sameResult so preserve-only and standard scans are
+ *                            not reused. None means unbound (native ORC types).
  */
 case class FileSourceScanExec(
     @transient override val relation: HadoopFsRelation,
@@ -727,7 +730,8 @@ case class FileSourceScanExec(
     override val dataFilters: Seq[Expression],
     override val tableIdentifier: Option[TableIdentifier],
     override val disableBucketedScan: Boolean = false,
-    override val markedForSingleTaskExecution: Boolean = false)
+    override val markedForSingleTaskExecution: Boolean = false,
+    charVarcharScanMode: Option[CharVarcharScanMode] = None)
   extends FileSourceScanLike {
 
   // Note that some vals referring the file-based relation are lazy intentionally
@@ -752,15 +756,32 @@ case class FileSourceScanExec(
   lazy val inputRDD: RDD[InternalRow] = {
     val options = relation.options +
       (FileFormat.OPTION_RETURNING_BATCH -> supportsColumnar.toString)
-    val readFile: (PartitionedFile) => Iterator[InternalRow] =
-      relation.fileFormat.buildReaderWithPartitionValues(
-        sparkSession = relation.sparkSession,
-        dataSchema = relation.dataSchema,
-        partitionSchema = relation.partitionSchema,
-        requiredSchema = requiredSchema,
-        filters = pushedDownFilters,
-        options = options,
-        hadoopConf = getHadoopConf(relation.sparkSession, relation.options))
+    val hadoopConf = getHadoopConf(relation.sparkSession, relation.options)
+    val readFile: (PartitionedFile) => Iterator[InternalRow] = charVarcharScanMode match {
+      // A bound mode routes through the mode-aware overload regardless of the concrete file
+      // format. Its default implementation bridges the mode across the legacy signature via an
+      // engine-private Hadoop entry and dispatches virtually, so a format subclass (and its
+      // `super` call) observes the analyzed mode instead of defaulting to preserve-native.
+      case Some(mode) =>
+        relation.fileFormat.buildReaderWithPartitionValues(
+          sparkSession = relation.sparkSession,
+          dataSchema = relation.dataSchema,
+          partitionSchema = relation.partitionSchema,
+          requiredSchema = requiredSchema,
+          filters = pushedDownFilters,
+          options = options,
+          hadoopConf = hadoopConf,
+          charVarcharScanMode = mode)
+      case None =>
+        relation.fileFormat.buildReaderWithPartitionValues(
+          sparkSession = relation.sparkSession,
+          dataSchema = relation.dataSchema,
+          partitionSchema = relation.partitionSchema,
+          requiredSchema = requiredSchema,
+          filters = pushedDownFilters,
+          options = options,
+          hadoopConf = hadoopConf)
+    }
 
     val readRDD = if (bucketedScan) {
       createBucketedReadRDD(relation.bucketSpec.get, readFile, dynamicallySelectedPartitions)
@@ -971,7 +992,8 @@ case class FileSourceScanExec(
       QueryPlan.normalizePredicates(dataFilters, output),
       None,
       disableBucketedScan,
-      markedForSingleTaskExecution)
+      markedForSingleTaskExecution,
+      charVarcharScanMode)
   }
 
   override def getStream: Option[SparkDataStream] = stream

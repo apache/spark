@@ -427,16 +427,29 @@ object OrcUtils extends Logging {
    * Given a `StructType` object, this methods converts it to corresponding string representation
    * in ORC.
    */
-  def getOrcSchemaString(dt: DataType): String = dt match {
+  def getOrcSchemaString(dt: DataType): String = {
+    getOrcSchemaString(dt, SQLConf.get.charVarcharStandardSemantics)
+  }
+
+  private def getOrcSchemaString(
+      dt: DataType,
+      charVarcharStandardSemantics: Boolean): String = dt match {
     case s: StructType =>
       val fieldTypes = s.fields.map { f =>
-        s"${quoteIdentifier(f.name)}:${getOrcSchemaString(f.dataType)}"
+        s"${quoteIdentifier(f.name)}:" +
+          s"${getOrcSchemaString(f.dataType, charVarcharStandardSemantics)}"
       }
       s"struct<${fieldTypes.mkString(",")}>"
     case a: ArrayType =>
-      s"array<${getOrcSchemaString(a.elementType)}>"
+      s"array<${getOrcSchemaString(a.elementType, charVarcharStandardSemantics)}>"
     case m: MapType =>
-      s"map<${getOrcSchemaString(m.keyType)},${getOrcSchemaString(m.valueType)}>"
+      s"map<${getOrcSchemaString(m.keyType, charVarcharStandardSemantics)}," +
+        s"${getOrcSchemaString(m.valueType, charVarcharStandardSemantics)}>"
+    // Under standard semantics, keep Spark responsible for CHAR/VARCHAR assignment and scan
+    // checks. Native ORC would truncate or pad before Spark can validate the original value.
+    // Preserve-only mode retains the native constrained schema and its legacy enforcement.
+    case _: CharType | _: VarcharType if charVarcharStandardSemantics =>
+      StringType.catalogString
     case _: DayTimeIntervalType | _: TimestampNTZType => LongType.catalogString
     case _: YearMonthIntervalType => IntegerType.catalogString
     // Framework types (TimeType, nanosecond timestamps) supply their own ORC schema string.
@@ -528,6 +541,9 @@ object OrcUtils extends Logging {
    * @param resultSchema Result data schema created after pruning cols.
    * @param partitionSchema Schema of partitions.
    * @param conf Hadoop Configuration.
+   * @param charVarcharStandardSemantics When true, request physical ORC STRING so Spark can
+   *                                 apply CHAR/VARCHAR length checks. When false, keep native
+   *                                 constrained ORC CHAR/VARCHAR types.
    * @return Returns the result schema as string.
    */
   def orcResultSchemaString(
@@ -535,11 +551,14 @@ object OrcUtils extends Logging {
       dataSchema: StructType,
       resultSchema: StructType,
       partitionSchema: StructType,
-      conf: Configuration): String = {
+      conf: Configuration,
+      charVarcharStandardSemantics: Boolean): String = {
     val resultSchemaString = if (canPruneCols) {
-      OrcUtils.getOrcSchemaString(resultSchema)
+      OrcUtils.getOrcSchemaString(resultSchema, charVarcharStandardSemantics)
     } else {
-      OrcUtils.getOrcSchemaString(StructType(dataSchema.fields ++ partitionSchema.fields))
+      OrcUtils.getOrcSchemaString(
+        StructType(dataSchema.fields ++ partitionSchema.fields),
+        charVarcharStandardSemantics)
     }
     OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
     resultSchemaString

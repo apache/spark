@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -98,7 +99,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   private def createScanBuilder(plan: LogicalPlan) = plan.transform {
     case r: DataSourceV2Relation =>
-      ScanBuilderHolder(r.output, r, r.table.asReadable.newScanBuilder(r.options))
+      val builder = r.table.asReadable.newScanBuilder(r.options)
+      (r.charVarcharScanMode, builder) match {
+        case (Some(mode), supports: SupportsCharVarcharStandardSemantics) =>
+          supports.bindCharVarcharStandardSemantics(mode == CharVarcharScanMode.SparkStandard)
+        case _ =>
+      }
+      ScanBuilderHolder(r.output, r, builder)
   }
 
   private def pushDownFilters(plan: LogicalPlan) = plan.transform {

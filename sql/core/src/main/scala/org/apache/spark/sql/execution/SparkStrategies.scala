@@ -1293,9 +1293,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     val unwrapped = EliminateSubqueryAliases(table)
     unwrapped match {
       // Check specific types before NamedRelation since they extend it
-      case DataSourceV2Relation(_, _, catalog, Some(ident), _, _) =>
+      case DataSourceV2Relation(_, _, catalog, Some(ident), _, _, _) =>
         (catalog.map(_.name()).toSeq ++ ident.asMultipartIdentifier).mkString(".")
-      case LogicalRelation(_, _, Some(catalogTable), _, _) =>
+      case LogicalRelation(_, _, Some(catalogTable), _, _, _) =>
         catalogTable.identifier.unquotedString
       case r: NamedRelation =>
         r.name

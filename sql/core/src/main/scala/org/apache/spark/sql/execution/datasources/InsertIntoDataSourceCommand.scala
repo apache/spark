@@ -45,7 +45,8 @@ case class InsertIntoDataSourceCommand(
 
     // Re-cache all cached plans(including this relation itself, if it's cached) that refer to this
     // data source relation.
-    sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, logicalRelation)
+    sparkSession.sharedState.cacheManager.recacheByV1Relation(
+      sparkSession, logicalRelation.relation)
 
     Seq.empty[Row]
   }

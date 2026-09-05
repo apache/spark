@@ -19,26 +19,35 @@ package org.apache.spark.sql
 
 import scala.util.Try
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkThrowable}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverGuard
 import org.apache.spark.sql.catalyst.expressions.{
-  ArrayJoin, Attribute, Concat, EqualTo, Expression, GreaterThan, Literal, ScalarSubquery,
+  Alias, ArrayJoin, Attribute, Concat, EqualTo, Expression, GreaterThan, Literal, ScalarSubquery,
   StringRPad, StringToMap, Upper
 }
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  Aggregate, Filter, LogicalPlan, OneRowRelation, Project
+}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, InMemoryPartitionTableCatalog}
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, PartitionedFile}
+import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.functions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.SimpleInsertSource
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 // The base trait for char/varchar tests that need to be run with different table implementations.
 trait CharVarcharTestSuite extends QueryTest {
@@ -1725,33 +1734,271 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         sql("DROP TEMPORARY FUNCTION IF EXISTS std_char_param")
         sql("DROP TEMPORARY FUNCTION IF EXISTS std_varchar_param")
       }
+    }
+  }
 
-      // ORC catalog tables stamp the catalyst type so typeof survives write/read.
-      withTable("std_orc") {
-        sql("CREATE TABLE std_orc (c CHAR(5), v VARCHAR(5)) USING orc")
-        sql("INSERT INTO std_orc VALUES ('ab', 'cd')")
-        assert(spark.table("std_orc").schema.map(_.dataType) ===
-          Seq(CharType(5), VarcharType(5)))
-        checkAnswer(
-          sql("SELECT concat('<', c, '>'), concat('<', v, '>') FROM std_orc"),
-          Row("<ab   >", "<cd>"))
-      }
+  test("SPARK-58814: major formats preserve CHAR/VARCHAR schemas and values") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq("parquet", "orc").foreach { format =>
+        Seq("v1" -> format, "v2" -> "").foreach { case (sourceVersion, useV1List) =>
+          withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              val input = spark.range(1).selectExpr(
+                "cast('ab' AS CHAR(4)) AS c",
+                "cast('xy' AS VARCHAR(3)) AS v",
+                "named_struct('c', cast('z' AS CHAR(2))) AS s",
+                "array(cast('q' AS VARCHAR(2))) AS a",
+                "map(cast('k' AS CHAR(2)), cast('v' AS VARCHAR(2))) AS m")
+              input.write.mode("overwrite").format(format).save(path)
 
-      // File-only ORC inference recovers the catalyst type stamped on write.
-      withTempPath { dir =>
-        val path = dir.getCanonicalPath
-        spark.range(1).selectExpr("cast('ab' AS CHAR(4)) AS c")
-          .write.mode("overwrite").orc(path)
-        val orcDf = spark.read.orc(path)
-        assert(orcDf.schema.head.dataType === CharType(4))
-        checkAnswer(orcDf.selectExpr("concat('<', c, '>')"), Row("<ab  >"))
-        // Reading with first-class types off replaces CHAR with STRING even if the
-        // file was stamped under standardSemantics.
-        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
-          val readOff = spark.read.orc(path)
-          assert(readOff.schema.head.dataType === StringType)
+              val vectorizedReaderModes = if (format == "orc") Seq(true, false) else Seq(true)
+              vectorizedReaderModes.foreach { vectorizedReaderEnabled =>
+                withSQLConf(
+                    SQLConf.ORC_VECTORIZED_READER_ENABLED.key ->
+                      vectorizedReaderEnabled.toString) {
+                  val readBack = spark.read.format(format).load(path)
+                  assert(DataType.equalsIgnoreNullability(readBack.schema, input.schema),
+                    s"$format $sourceVersion lost CHAR/VARCHAR schema")
+                  checkAnswer(
+                    readBack.selectExpr(
+                      "concat('<', c, '>')",
+                      "v",
+                      "concat('<', s.c, '>')",
+                      "a",
+                      "m"),
+                    Row("<ab  >", "xy", "<z >", Seq("q"), Map("k " -> "v")))
+
+                  withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+                    val readOff = spark.read.format(format).load(path)
+                    assert(DataType.equalsIgnoreNullability(
+                      readOff.schema,
+                      CharVarcharUtils.replaceCharVarcharWithString(input.schema)))
+                  }
+                  withSQLConf(
+                      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+                      SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+                    assert(DataType.equalsIgnoreNullability(
+                      spark.read.format(format).load(path).schema,
+                      input.schema))
+                  }
+                }
+              }
+            }
+          }
         }
       }
+
+      Seq("parquet", "orc", "csv").foreach { format =>
+        Seq("v1" -> format, "v2" -> "").foreach { case (sourceVersion, useV1List) =>
+          withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+            withTempPath { dir =>
+              Seq("ab").toDF("c").write.format(format).save(dir.getCanonicalPath)
+              val charDf = spark.read.schema("c CHAR(4)").format(format)
+                .load(dir.getCanonicalPath)
+              checkAnswer(charDf.selectExpr("concat('<', c, '>')"), Row("<ab  >"))
+            }
+            withTempPath { dir =>
+              Seq("abcdef").toDF("c").write.format(format).save(dir.getCanonicalPath)
+              Seq("CHAR", "VARCHAR").foreach { typ =>
+                withClue(s"$format $sourceVersion $typ: ") {
+                  val forgedMetadata = new MetadataBuilder()
+                    .putBoolean("__CHAR_VARCHAR_STANDARD_SEMANTICS", false)
+                    .build()
+                  val readSchema = StructType(Seq(
+                    StructField("c", CatalystSqlParser.parseDataType(s"$typ(4)"),
+                      metadata = forgedMetadata)))
+                  val readDf = spark.read.schema(readSchema)
+                    .option("__charVarcharStandardSemantics", "false")
+                    .format(format)
+                    .load(dir.getCanonicalPath)
+                  checkError(
+                    exception = intercept[SparkRuntimeException] {
+                      readDf.collect()
+                    },
+                    condition = "EXCEED_LIMIT_LENGTH",
+                    parameters = Map("limit" -> "4"))
+                }
+              }
+            }
+
+            val table = s"std_${format}_${sourceVersion}_assignment"
+            withTable(table) {
+              sql(s"CREATE TABLE $table (c CHAR(4), v VARCHAR(4)) USING $format")
+              sql(s"INSERT INTO $table VALUES ('ab', 'xy')")
+              assert(spark.table(table).schema.map(_.dataType) ===
+                Seq(CharType(4), VarcharType(4)))
+              checkAnswer(
+                sql(s"SELECT concat('<', c, '>'), v FROM $table"),
+                Row("<ab  >", "xy"))
+              checkError(
+                exception = intercept[SparkRuntimeException] {
+                  sql(s"INSERT INTO $table VALUES ('abcde', 'xy')").collect()
+                },
+                condition = "EXCEED_LIMIT_LENGTH",
+                parameters = Map("limit" -> "4"))
+            }
+          }
+        }
+      }
+
+      Seq("v1" -> "orc", "v2" -> "").foreach { case (sourceVersion, useV1List) =>
+        Seq(true, false).foreach { vectorizedReaderEnabled =>
+          withSQLConf(
+              SQLConf.USE_V1_SOURCE_LIST.key -> useV1List,
+              SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorizedReaderEnabled.toString) {
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              spark.range(1).selectExpr(
+                "named_struct('c', 'abcdef') AS s",
+                "array('abcdef') AS a",
+                "map('abcdef', 'ok') AS mk",
+                "map('ok', 'abcdef') AS mv")
+                .write.mode("overwrite").orc(path)
+              val readBack = spark.read.schema(
+                """s STRUCT<c: CHAR(4)>,
+                  |a ARRAY<VARCHAR(4)>,
+                  |mk MAP<CHAR(4), VARCHAR(4)>,
+                  |mv MAP<CHAR(4), VARCHAR(4)>""".stripMargin).orc(path)
+              Seq("s.c", "a", "mk", "mv").foreach { field =>
+                withClue(
+                    s"ORC $sourceVersion vectorized=$vectorizedReaderEnabled $field: ") {
+                  checkError(
+                    exception = intercept[SparkRuntimeException] {
+                      readBack.selectExpr(field).collect()
+                    },
+                    condition = "EXCEED_LIMIT_LENGTH",
+                    parameters = Map("limit" -> "4"))
+                }
+              }
+            }
+            withSQLConf(
+                SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+              withTempPath { dir =>
+                val path = dir.getCanonicalPath
+                Seq("abcdef").toDF("v").write.mode("overwrite").orc(path)
+                val forgedMetadata = new MetadataBuilder()
+                  .putBoolean("__CHAR_VARCHAR_STANDARD_SEMANTICS", true)
+                  .build()
+                val readSchema = StructType(Seq(
+                  StructField("v", VarcharType(4), metadata = forgedMetadata)))
+                val readBack = spark.read.schema(readSchema)
+                  .option("__charVarcharStandardSemantics", "true")
+                  .orc(path)
+                assert(readBack.schema.head.dataType === VarcharType(4))
+                checkAnswer(readBack, Row("abcd"))
+              }
+              withTempPath { dir =>
+                val path = dir.getCanonicalPath
+                // Bypass CAST conversion so native ORC owns preserve-only padding/truncation.
+                val input = Dataset.ofRows(spark, Project(Seq(
+                  Alias(Literal(UTF8String.fromString("ab"), CharType(4)), "c")(),
+                  Alias(Literal(UTF8String.fromString("abcdef"), VarcharType(4)), "v")()),
+                  OneRowRelation()))
+                input.write.mode("overwrite").orc(path)
+                val readBack = spark.read.orc(path)
+                assert(readBack.schema.map(_.dataType) === Seq(CharType(4), VarcharType(4)))
+                checkAnswer(readBack, Row("ab  ", "abcd"))
+              }
+            }
+
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              Seq("abcdef").toDF("v").write.mode("overwrite").orc(path)
+              val table = "std_orc_view_source"
+              val view = "std_orc_view"
+              withTable(table) {
+                withView(view) {
+                  sql(s"CREATE TABLE $table (v VARCHAR(4)) USING orc LOCATION '$path'")
+                  sql(s"CREATE VIEW $view AS SELECT v FROM $table")
+                  // Keep first-class output enabled in the caller so this isolates whether ORC
+                  // honors the standard semantics captured while resolving the view body.
+                  withSQLConf(
+                      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+                    withClue(
+                        s"ORC view $sourceVersion vectorized=$vectorizedReaderEnabled: ") {
+                      checkError(
+                        exception = intercept[SparkRuntimeException] {
+                          sql(s"SELECT * FROM $view").collect()
+                        },
+                        condition = "EXCEED_LIMIT_LENGTH",
+                        parameters = Map("limit" -> "4"))
+                    }
+                  }
+                }
+              }
+            }
+
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              Seq("abcdef").toDF("v").write.mode("overwrite").orc(path)
+              val table = "preserve_orc_view_source"
+              val view = "preserve_orc_view"
+              withTable(table) {
+                withView(view) {
+                  withSQLConf(
+                      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+                      SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+                    sql(s"CREATE TABLE $table (v VARCHAR(4)) USING orc LOCATION '$path'")
+                    sql(s"CREATE VIEW $view AS SELECT v FROM $table")
+                  }
+                  withClue(
+                      s"ORC view $sourceVersion vectorized=$vectorizedReaderEnabled: ") {
+                    checkAnswer(sql(s"SELECT * FROM $view"), Row("abcd"))
+                  }
+                }
+              }
+            }
+
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              Seq("abcdef").toDF("v").write.mode("overwrite").orc(path)
+              val table = "orc_scan_cache_reuse"
+              withTable(table) {
+                sql(s"CREATE TABLE $table (v VARCHAR(4)) USING orc LOCATION '$path'")
+                val preservePlan = withSQLConf(
+                    SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                    SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+                    SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+                  spark.table(table).queryExecution.sparkPlan
+                }
+                val standardPlan = spark.table(table).queryExecution.sparkPlan
+                withClue(
+                    s"ORC sameResult $sourceVersion " +
+                      s"vectorized=$vectorizedReaderEnabled: ") {
+                  assert(!preservePlan.sameResult(standardPlan))
+                }
+                withSQLConf(
+                    SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                    SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+                    SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+                  sql(s"CACHE TABLE $table")
+                  checkAnswer(sql(s"SELECT * FROM $table"), Row("abcd"))
+                }
+                withClue(
+                    s"ORC cache $sourceVersion vectorized=$vectorizedReaderEnabled: ") {
+                  val df = sql(s"SELECT * FROM $table")
+                  assert(
+                    !df.queryExecution.sparkPlan.exists(
+                      _.isInstanceOf[InMemoryTableScanExec]),
+                    "preserve-only cache must not satisfy a standard-semantics scan")
+                  checkError(
+                    exception = intercept[SparkRuntimeException] {
+                      df.collect()
+                    },
+                    condition = "EXCEED_LIMIT_LENGTH",
+                    parameters = Map("limit" -> "4"))
+                }
+              }
+            }
+          }
+        }
+      }
+
       // First-class types off: CAST CHAR is STRING before the writer, so ORC does not stamp CHAR.
       withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
         withTempPath { dir =>
@@ -1759,17 +2006,6 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           spark.range(1).selectExpr("cast('ab' AS CHAR(4)) AS c")
             .write.mode("overwrite").orc(path)
           assert(spark.read.orc(path).schema.head.dataType === StringType)
-        }
-      }
-      // preserveCharVarcharTypeInfo also keeps first-class types, so write still stamps CHAR.
-      withSQLConf(
-          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
-          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
-        withTempPath { dir =>
-          val path = dir.getCanonicalPath
-          spark.range(1).selectExpr("cast('ab' AS CHAR(4)) AS c")
-            .write.mode("overwrite").orc(path)
-          assert(spark.read.orc(path).schema.head.dataType === CharType(4))
         }
       }
       // ORC stamps collated unbounded STRING as plain "string"; the inferred type is the
@@ -1853,7 +2089,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         }
       }
 
-      // JSON / CSV keep a user-specified CHAR/VARCHAR schema under the flag.
+      // JSON has no embedded schema, so a user-specified schema supplies the logical type.
       withTempPath { dir =>
         val path = dir.getCanonicalPath
         spark.range(1).selectExpr("cast(id AS STRING) AS c").write.mode("overwrite")
@@ -1861,13 +2097,6 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         val jsonDf = spark.read.schema("c CHAR(5)").json(s"$path/json")
         assert(jsonDf.schema.head.dataType === CharType(5))
         checkAnswer(jsonDf.selectExpr("concat('<', c, '>')"), Row("<0    >"))
-
-        spark.range(1).selectExpr("cast(id AS STRING) AS c").write.mode("overwrite")
-          .option("header", "true").csv(s"$path/csv")
-        val csvDf = spark.read.schema("c VARCHAR(5)").option("header", "true")
-          .csv(s"$path/csv")
-        assert(csvDf.schema.head.dataType === VarcharType(5))
-        checkAnswer(csvDf, Row("0"))
       }
     }
   }
@@ -2119,6 +2348,22 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("standard semantics does not add options to non-ORC V2 relations") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val relation = spark.read
+        .schema("id CHAR(5)")
+        .option("expected", "value")
+        .format(classOf[SchemaRequiredDataSource].getName)
+        .load()
+        .queryExecution
+        .analyzed
+        .collectFirst { case relation: DataSourceV2Relation => relation }
+        .get
+      assert(relation.options.size() === 1)
+      assert(relation.options.get("expected") === "value")
+    }
+  }
+
   test("invalidate char/varchar in udf's result type") {
     checkError(
       exception = intercept[AnalysisException] {
@@ -2204,6 +2449,66 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58814: OrcFileFormat subclasses keep public reader dispatch") {
+    import testImplicits._
+    val formatName = classOf[TrackingOrcFileFormat].getName
+    // A delegating subclass overrides the public seven-argument reader and calls `super`. That
+    // `super` call must retain the analyzed scan mode bridged across the legacy signature, so a
+    // standard-semantics scan cannot be silently downgraded to native preserve behavior. Cover
+    // both the row and vectorized ORC readers.
+    Seq(true, false).foreach { vectorizedReaderEnabled =>
+      withSQLConf(
+          SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorizedReaderEnabled.toString) {
+        // In-length value: assert the subclass override actually runs under both bound modes.
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          Seq("ab").toDF("v").write.mode("overwrite").orc(path)
+          val boundModes = Seq(
+            Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true"),
+            Seq(
+              SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+              SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+              SQLConf.READ_SIDE_CHAR_PADDING.key -> "false"))
+          boundModes.foreach { extraConf =>
+            TrackingOrcFileFormat.publicReaderCalls = 0
+            withSQLConf(extraConf: _*) {
+              spark.read.format(formatName).schema("v VARCHAR(4)").load(path).collect()
+              assert(TrackingOrcFileFormat.publicReaderCalls > 0,
+                s"subclass reader override was skipped for $extraConf " +
+                  s"(vectorized=$vectorizedReaderEnabled)")
+            }
+          }
+        }
+        // Over-length value: SparkStandard must observe the original value and raise
+        // EXCEED_LIMIT_LENGTH; PreserveNative keeps native ORC truncation.
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          Seq("abcdef").toDF("v").write.mode("overwrite").orc(path)
+          withClue(s"SparkStandard vectorized=$vectorizedReaderEnabled: ") {
+            withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+              checkError(
+                exception = intercept[SparkRuntimeException] {
+                  spark.read.format(formatName).schema("v VARCHAR(4)").load(path).collect()
+                },
+                condition = "EXCEED_LIMIT_LENGTH",
+                parameters = Map("limit" -> "4"))
+            }
+          }
+          withClue(s"PreserveNative vectorized=$vectorizedReaderEnabled: ") {
+            withSQLConf(
+                SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+                SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+              checkAnswer(
+                spark.read.format(formatName).schema("v VARCHAR(4)").load(path),
+                Row("abcd"))
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-59001: text datasource accepts CHAR/VARCHAR as a string family type") {
     Seq("text", "").foreach { useV1SourceList =>
       withSQLConf(
@@ -2226,6 +2531,27 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       }
     }
   }
+}
+
+class TrackingOrcFileFormat extends OrcFileFormat {
+  override def shortName(): String = "tracking-orc"
+
+  override def buildReaderWithPartitionValues(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[org.apache.spark.sql.sources.Filter],
+      options: Map[String, String],
+      hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
+    TrackingOrcFileFormat.publicReaderCalls += 1
+    super.buildReaderWithPartitionValues(
+      sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
+  }
+}
+
+object TrackingOrcFileFormat {
+  @volatile var publicReaderCalls: Int = 0
 }
 
 class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSparkSession {

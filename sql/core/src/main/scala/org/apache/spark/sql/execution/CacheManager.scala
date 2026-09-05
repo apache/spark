@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
@@ -258,14 +259,14 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       case LogicalRelationWithTable(_, Some(catalogTable)) =>
         isSameName(name, catalogTable.identifier.nameParts, resolver)
 
-      case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, timeTravelSpec) =>
+      case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, timeTravelSpec, _) =>
         val nameInCache = v2Ident.toQualifiedNameParts(catalog)
         isSameName(name, nameInCache, resolver) && (includeTimeTravel || timeTravelSpec.isEmpty)
 
       case v: View =>
         isSameName(name, v.desc.identifier.nameParts, resolver)
 
-      case HiveTableRelation(catalogTable, _, _, _, _) =>
+      case HiveTableRelation(catalogTable, _, _, _, _, _) =>
         isSameName(name, catalogTable.identifier.nameParts, resolver)
 
       case _ => false
@@ -346,6 +347,18 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   def recacheByPlan(spark: SparkSession, plan: LogicalPlan): Unit = {
     val normalized = QueryExecution.normalize(spark, plan)
     recacheByCondition(spark, _.plan.exists(_.sameResult(normalized)))
+  }
+
+  /**
+   * Re-caches every entry whose plan contains a [[LogicalRelation]] for `relation`.
+   * Unlike [[recacheByPlan]], this ignores CHAR/VARCHAR scan-mode identity so a V1 write
+   * invalidates preserve-only, standard, and unbound cache entries for that BaseRelation.
+   */
+  def recacheByV1Relation(spark: SparkSession, relation: BaseRelation): Unit = {
+    recacheByCondition(spark, cd => cd.plan.exists {
+      case logical: LogicalRelation => logical.relation == relation
+      case _ => false
+    })
   }
 
   /**
