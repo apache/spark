@@ -1,0 +1,20 @@
+================================================================================================
+RTM vs MBM Kafka window aggregation latency
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1161-aws-fips
+Intel(R) Xeon(R) 6975P-C
+
+Kafka-to-Kafka window aggregation e2e latency in milliseconds
+RTM trigger=RealTime(5m) MBM trigger=ProcessingTime(0ms)
+modeOrder=RTM,MBM observationWindow=1800s warmupFiltered=600s recordsPerSecond=1000
+master=local-cluster[3, 5, 2048] inputPartitions=5 shufflePartitions=5
+stateStore=RocksDB checkpointFormatVersion=2 changelogCheckpointing=true trackTotalNumberOfRows=false
+workload=groupBy(window=1 minute,key).count, keys=1000; native aggregate-update samples, not a per-input distribution; MBM may coalesce updates within a micro-batch
+
+Mode   obsBatch   produced sourceRows   sinkRows    samples   tailMs         p0        p50        p90        p95        p99       p100
+--------------------------------------------------------------------------------------------------------------------------------------
+RTM           5    1799959    1799959    1799959    1199950        0       34.0      103.0      126.0      131.0      139.0      467.0
+MBM        5846    1799997    1799997    1799909    1199993        0      231.0      441.0      563.0      581.0      610.0      756.0
+
+Percentile ratio omitted: RTM and MBM may emit different native sample populations.
