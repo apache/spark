@@ -25,7 +25,7 @@ import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, TableSummary}
@@ -227,6 +227,18 @@ class JDBCTableCatalogSuite extends SharedSparkSession {
       }
       checkErrorTableNotFound(e, expected)
     }
+  }
+
+  test("SPARK-58945: H2 renameTable reports source table when it is missing") {
+    val e = intercept[NoSuchTableException] {
+      tableCatalog.renameTable(
+        Identifier.of(Array("test"), "not_existing_table"),
+        Identifier.of(Array("test"), "dst_table"))
+    }
+    checkErrorTableNotFoundWithSearchPath(
+      e,
+      "`test`.`not_existing_table`",
+      searchPath = "not available")
   }
 
   test("create a table") {

@@ -291,6 +291,14 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a is not distinct from b", $"a" <=> $"b")
   }
 
+  test("invalid semi-structured extract path") {
+    checkError(
+      exception = parseException("c:['']"),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'['']'", "hint" -> ""),
+      queryContext = Array(ExpectedContext("c:['']", 0, 5)))
+  }
+
   test("binary arithmetic expressions") {
     // Simple operations
     assertEqual("a * b", $"a" * $"b")

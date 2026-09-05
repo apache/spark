@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{CursorReference, UnresolvedCur
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_CURSOR
+import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -35,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
  * 3. Looks up the cursor definition from the scripting context
  * 4. Fails early if cursor is not found
  */
-class ResolveCursors extends Rule[LogicalPlan] {
+class ResolveCursors extends Rule[LogicalPlan] with DataTypeErrorsBase {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
     _.containsPattern(UNRESOLVED_CURSOR)) {
@@ -82,7 +83,7 @@ class ResolveCursors extends Rule[LogicalPlan] {
         // Cursors are only allowed within SQL scripts
         throw new AnalysisException(
           errorClass = "CURSOR_OUTSIDE_SCRIPT",
-          messageParameters = Map("cursorName" -> nameParts.mkString(".")))
+          messageParameters = Map("cursorName" -> toSQLId(nameParts)))
       }
 
     // Use the SqlScriptingExecutionContextExtension API for cursor lookup
