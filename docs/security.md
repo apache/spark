@@ -184,7 +184,7 @@ Unlike the other SSL settings for the UI, the RPC SSL is *not* automatically ena
 upgrading Spark versions.
 
 On Kubernetes, the passwords used by RPC SSL are propagated to executor pods using environment
-variables, the same way as the authentication mechanics described under [Kubernetes](#Kubernetes)
+variables, the same way as the authentication mechanics described under [Kubernetes](#kubernetes)
 above. As with the authentication secret, any user who can list pods in the namespace can read
 them, so access control rules should be properly set up or alternatively these passwords should
 be supplied using `spark.kubernetes.executor.secretKeyRef`, for example
