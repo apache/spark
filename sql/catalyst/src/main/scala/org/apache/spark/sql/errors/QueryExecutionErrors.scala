@@ -45,7 +45,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.plans.physical.KeyReducer
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
-import org.apache.spark.sql.catalyst.util.{sideBySide, CharsetProvider, DateTimeUtils, FailFastMode, IntervalUtils, MapData}
+import org.apache.spark.sql.catalyst.util.{sideBySide, CharsetProvider, DateTimeUtils, FailFastMode, MapData}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -2779,21 +2779,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "operation" ->
           s"create a TIMESTAMP from ${toSQLValue(value, valueType)} $unit since the epoch"),
-      context = Array.empty,
-      summary = "")
-  }
-
-  def timeAddIntervalOverflowError(
-      time: Long,
-      timePrecision: Int,
-      interval: Long,
-      intervalEndField: Byte): ArithmeticException = {
-    val i = toSQLValue(IntervalUtils.microsToDuration(interval),
-      DayTimeIntervalType(intervalEndField))
-    val t = toSQLValue(DateTimeUtils.nanosToLocalTime(time), TimeType(timePrecision))
-    new SparkArithmeticException(
-      errorClass = "DATETIME_OVERFLOW",
-      messageParameters = Map("operation" -> s"add $i to the time value $t"),
       context = Array.empty,
       summary = "")
   }
