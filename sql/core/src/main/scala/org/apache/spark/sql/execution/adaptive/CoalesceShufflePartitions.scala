@@ -23,7 +23,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{ShufflePartitionSpec, SparkPlan, UnaryExecNode, UnionExec}
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, ShuffleExchangeLike, ShuffleOrigin}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNearestByJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -190,12 +190,14 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
     case _: CartesianProductExec => false
     case _: BroadcastHashJoinExec => false
     case _: BroadcastNestedLoopJoinExec => false
+    case _: BroadcastNearestByJoinExec => false
     case _ => true
   }
 
   private def isExplodingJoin(p: SparkPlan): Boolean = p match {
     case _: BroadcastNestedLoopJoinExec => true
     case _: CartesianProductExec => true
+    case _: BroadcastNearestByJoinExec => true
     case _ => false
   }
 
