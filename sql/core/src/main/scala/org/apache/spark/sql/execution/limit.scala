@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.metric.{SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
+import org.apache.spark.sql.execution.metric.{CustomShuffleMetrics, SQLMetric, SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
 import org.apache.spark.sql.execution.python.HybridRowQueue
 import org.apache.spark.util.collection.Utils
 
@@ -39,13 +39,33 @@ trait LimitExec extends UnaryExecNode {
 }
 
 /**
+ * Shuffle read/write metric plumbing for operators that shuffle via
+ * [[ShuffleExchangeExec.prepareShuffleDependency]]. Publishes the built-in read/write metrics plus
+ * collision-filtered plugin metrics (`customWriteMetrics`) through `metrics`. Operators with
+ * additional Spark-owned metrics reserve those names against plugin collisions via
+ * [[extraReservedMetrics]].
+ */
+trait ShuffleMetricsSupport { self: SparkPlan =>
+  protected lazy val writeMetrics =
+    SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
+  private[sql] lazy val readMetrics =
+    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
+  protected def extraReservedMetrics: Map[String, SQLMetric] = Map.empty
+  private lazy val reservedMetrics = extraReservedMetrics ++ readMetrics ++ writeMetrics
+  protected lazy val customWriteMetrics =
+    CustomShuffleMetrics.createFilteredMetrics(sparkContext, reservedMetrics.keySet)
+  override lazy val metrics = reservedMetrics ++ customWriteMetrics
+}
+
+/**
  * Take the first `limit` elements, collect them to a single partition and then to drop the
  * first `offset` elements.
  *
  * This operator will be used when a logical `Limit` and/or `Offset` operation is the final operator
  * in an logical plan, which happens when the user is collecting results back to the driver.
  */
-case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) extends LimitExec {
+case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0)
+  extends LimitExec with ShuffleMetricsSupport {
   assert(limit >= 0 || (limit == -1 && offset > 0))
 
   override def output: Seq[Attribute] = child.output
@@ -62,11 +82,6 @@ case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) 
     }
   }
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
-  private lazy val writeMetrics =
-    SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
-  private lazy val readMetrics =
-    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
-  override lazy val metrics = readMetrics ++ writeMetrics
   protected override def doExecute(): RDD[InternalRow] = {
     val childRDD = child.execute()
     if (childRDD.getNumPartitions == 0 || limit == 0) {
@@ -86,7 +101,8 @@ case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) 
             child.output,
             SinglePartition,
             serializer,
-            writeMetrics),
+            writeMetrics,
+            customWriteMetrics),
           readMetrics)
       }
       if (limit >= 0) {
@@ -118,18 +134,14 @@ case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) 
  * This operator will be used when a logical `Tail` operation is the final operator in an
  * logical plan, which happens when the user is collecting results back to the driver.
  */
-case class CollectTailExec(limit: Int, child: SparkPlan) extends LimitExec {
+case class CollectTailExec(limit: Int, child: SparkPlan)
+  extends LimitExec with ShuffleMetricsSupport {
   assert(limit >= 0)
 
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = child.executeTail(limit)
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
-  private lazy val writeMetrics =
-    SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
-  private lazy val readMetrics =
-    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
-  override lazy val metrics = readMetrics ++ writeMetrics
   protected override def doExecute(): RDD[InternalRow] = {
     val childRDD = child.execute()
     if (childRDD.getNumPartitions == 0 || limit == 0) {
@@ -145,7 +157,8 @@ case class CollectTailExec(limit: Int, child: SparkPlan) extends LimitExec {
             child.output,
             SinglePartition,
             serializer,
-            writeMetrics),
+            writeMetrics,
+            customWriteMetrics),
           readMetrics)
       }
       singlePartitionRDD.mapPartitionsInternal(takeRight)
@@ -312,7 +325,7 @@ case class TakeOrderedAndProjectExec(
     sortOrder: Seq[SortOrder],
     projectList: Seq[NamedExpression],
     child: SparkPlan,
-    offset: Int = 0) extends OrderPreservingUnaryExecNode {
+    offset: Int = 0) extends OrderPreservingUnaryExecNode with ShuffleMetricsSupport {
 
   override def output: Seq[Attribute] = {
     projectList.map(_.toAttribute)
@@ -338,12 +351,6 @@ case class TakeOrderedAndProjectExec(
 
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
 
-  private lazy val writeMetrics =
-    SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
-  private lazy val readMetrics =
-    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
-  override lazy val metrics = readMetrics ++ writeMetrics
-
   protected override def doExecute(): RDD[InternalRow] = {
     val orderingSatisfies = SortOrder.orderingSatisfies(child.outputOrdering, sortOrder)
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
@@ -368,7 +375,8 @@ case class TakeOrderedAndProjectExec(
             child.output,
             SinglePartition,
             serializer,
-            writeMetrics),
+            writeMetrics,
+            customWriteMetrics),
           readMetrics)
       }
       singlePartitionRDD.mapPartitionsWithIndexInternal { (idx, iter) =>

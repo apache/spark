@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.scheduler._
+import org.apache.spark.shuffle.api.metric.CustomShuffleMetric
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
@@ -209,30 +210,41 @@ class SQLAppStatusListener(
     val accumIds = exec.metrics.map(_.accumulatorId).toSet
 
     val metricAggregationMap = new mutable.HashMap[String, (Array[Long], Array[Long]) => String]()
+
+    // Loads the custom metric class (once per class name) and returns an aggregation method that
+    // delegates to its aggregateTaskMetrics. Shared by the DSv2 and shuffle custom-metric paths.
+    // Falls back to "N/A" if the class can't be loaded, e.g. on a history server that does not
+    // have the custom metric class on its classpath.
+    def customMetricAggMethod(
+        className: String,
+        loadMetric: => Array[Long] => String): (Array[Long], Array[Long]) => String = {
+      metricAggregationMap.getOrElseUpdate(className, {
+        try {
+          val aggregate = loadMetric
+          (metrics: Array[Long], _: Array[Long]) => aggregate(metrics)
+        } catch {
+          case NonFatal(e) =>
+            logWarning(log"Unable to load custom metric object for class " +
+              log"`${MDC(CLASS_NAME, className)}`. Please make sure that the custom metric " +
+              log"class is in the classpath and it has 0-arg constructor.", e)
+            (_: Array[Long], _: Array[Long]) => "N/A"
+        }
+      })
+    }
+
     val metricAggregationMethods = exec.metrics.map { m =>
-      val optClassName = CustomMetrics.parseV2CustomMetricType(m.metricType)
-      val metricAggMethod = optClassName.map { className =>
-        if (metricAggregationMap.contains(className)) {
-          metricAggregationMap(className)
-        } else {
-          // Try to initiate custom metric object
-          try {
-            val metric = Utils.loadExtensions(classOf[CustomMetric], Seq(className), conf).head
-            val method =
-              (metrics: Array[Long], _: Array[Long]) => metric.aggregateTaskMetrics(metrics)
-            metricAggregationMap.put(className, method)
-            method
-          } catch {
-            case NonFatal(e) =>
-              logWarning(log"Unable to load custom metric object for class " +
-                log"`${MDC(CLASS_NAME, className)}`. Please make sure that the custom metric " +
-                log"class is in the classpath and it has 0-arg constructor.", e)
-              // Cannot initialize custom metric object, we might be in history server that does
-              // not have the custom metric class.
-              val defaultMethod = (_: Array[Long], _: Array[Long]) => "N/A"
-              metricAggregationMap.put(className, defaultMethod)
-              defaultMethod
-          }
+      val metricAggMethod = CustomMetrics.parseV2CustomMetricType(m.metricType).map { className =>
+        customMetricAggMethod(className, {
+          val metric = Utils.loadExtensions(classOf[CustomMetric], Seq(className), conf).head
+          metrics => metric.aggregateTaskMetrics(metrics)
+        })
+      }.orElse {
+        CustomShuffleMetrics.parseMetricType(m.metricType).map { className =>
+          customMetricAggMethod(className, {
+            val metric =
+              Utils.loadExtensions(classOf[CustomShuffleMetric], Seq(className), conf).head
+            metrics => metric.aggregateTaskMetrics(metrics)
+          })
         }
       }.getOrElse(
         // Built-in SQLMetric

@@ -27,6 +27,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProcessor}
+import org.apache.spark.shuffle.api.metric.CustomShuffleTaskMetric
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{
@@ -39,7 +40,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics, SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
+import org.apache.spark.sql.execution.metric.{CustomShuffleMetrics, SQLMetric, SQLMetrics, SQLShuffleWriteMetricsReporter}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.util.{MutablePair, ThreadUtils}
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordComparator}
@@ -193,16 +194,12 @@ case class ShuffleExchangeExec(
     shuffleOrigin: ShuffleOrigin = ENSURE_REQUIREMENTS,
     advisoryPartitionSize: Option[Long] = None,
     pipelined: Boolean = false)
-  extends ShuffleExchangeLike {
+  extends ShuffleExchangeLike with ShuffleMetricsSupport {
 
-  private lazy val writeMetrics =
-    SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
-  private[sql] lazy val readMetrics =
-    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
-  override lazy val metrics = Map(
+  override protected def extraReservedMetrics: Map[String, SQLMetric] = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
     "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions")
-  ) ++ readMetrics ++ writeMetrics
+  )
 
   override def nodeName: String = "Exchange"
 
@@ -265,6 +262,7 @@ case class ShuffleExchangeExec(
         outputPartitioning,
         serializer,
         writeMetrics,
+        customWriteMetrics,
         pipelined)
       metrics("numPartitions").set(dep.partitioner.numPartitions)
       val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
@@ -349,6 +347,18 @@ object ShuffleExchangeExec {
     }
   }
 
+  /** Backward-compatible overload for callers that do not report custom shuffle metrics. */
+  def prepareShuffleDependency(
+      rdd: RDD[InternalRow],
+      outputAttributes: Seq[Attribute],
+      newPartitioning: Partitioning,
+      serializer: Serializer,
+      writeMetrics: Map[String, SQLMetric])
+    : ShuffleDependency[Int, InternalRow, InternalRow] = {
+    prepareShuffleDependency(
+      rdd, outputAttributes, newPartitioning, serializer, writeMetrics, Map.empty)
+  }
+
   /**
    * Returns a [[ShuffleDependency]] that will partition rows of its child based on
    * the partitioning scheme defined in `newPartitioning`. Those partitions of
@@ -360,6 +370,7 @@ object ShuffleExchangeExec {
       newPartitioning: Partitioning,
       serializer: Serializer,
       writeMetrics: Map[String, SQLMetric],
+      customWriteMetrics: Map[String, SQLMetric],
       pipelined: Boolean = false)
     : ShuffleDependency[Int, InternalRow, InternalRow] = {
     val part: Partitioner = newPartitioning match {
@@ -600,14 +611,14 @@ object ShuffleExchangeExec {
           rddWithPartitionIds,
           new PartitionIdPassthrough(part.numPartitions),
           serializer,
-          shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics),
+          shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics, customWriteMetrics),
           rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize))
       } else {
         new ShuffleDependency[Int, InternalRow, InternalRow](
           rddWithPartitionIds,
           new PartitionIdPassthrough(part.numPartitions),
           serializer,
-          shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics),
+          shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics, customWriteMetrics),
           rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize),
           _checksumMismatchFullRetryEnabled = SQLConf.get.shuffleChecksumMismatchFullRetryEnabled,
           checksumMismatchQueryLevelRollbackEnabled =
@@ -617,15 +628,28 @@ object ShuffleExchangeExec {
     dependency
   }
 
-  /**
-   * Create a customized [[ShuffleWriteProcessor]] for SQL which wrap the default metrics reporter
-   * with [[SQLShuffleWriteMetricsReporter]] as new reporter for [[ShuffleWriteProcessor]].
-   */
+  /** Backward-compatible overload for callers that do not report custom shuffle metrics. */
   def createShuffleWriteProcessor(metrics: Map[String, SQLMetric]): ShuffleWriteProcessor = {
+    createShuffleWriteProcessor(metrics, Map.empty)
+  }
+
+  /**
+   * Creates a customized [[ShuffleWriteProcessor]] for SQL that wraps the default metrics reporter
+   * with [[SQLShuffleWriteMetricsReporter]] and reports any custom shuffle metrics to
+   * `customWriteMetrics`.
+   */
+  def createShuffleWriteProcessor(
+      metrics: Map[String, SQLMetric],
+      customWriteMetrics: Map[String, SQLMetric]): ShuffleWriteProcessor = {
     new ShuffleWriteProcessor {
       override protected def createMetricsReporter(
           context: TaskContext): ShuffleWriteMetricsReporter = {
         new SQLShuffleWriteMetricsReporter(context.taskMetrics().shuffleWriteMetrics, metrics)
+      }
+
+      override protected def reportCustomMetrics(
+          metricsValues: Array[CustomShuffleTaskMetric]): Unit = {
+        CustomShuffleMetrics.updateMetrics(metricsValues, customWriteMetrics)
       }
     }
   }

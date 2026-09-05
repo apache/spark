@@ -18,11 +18,12 @@
 package org.apache.spark.shuffle.sort
 
 import org.apache.spark._
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, LogKeys}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleWriter}
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
-import org.apache.spark.shuffle.api.ShuffleExecutorComponents
+import org.apache.spark.shuffle.api.{ShuffleExecutorComponents, ShuffleMapOutputMetricsReporter}
+import org.apache.spark.shuffle.api.metric.CustomShuffleTaskMetric
 import org.apache.spark.shuffle.checksum.RowBasedChecksum
 import org.apache.spark.util.collection.ExternalSorter
 
@@ -48,6 +49,8 @@ private[spark] class SortShuffleWriter[K, V, C](
   private var mapStatus: MapStatus = null
 
   private var partitionLengths: Array[Long] = _
+
+  private var customMetricsValues: Array[CustomShuffleTaskMetric] = Array.empty
 
   def getRowBasedChecksums: Array[RowBasedChecksum] = {
     if (sorter != null) {
@@ -84,8 +87,21 @@ private[spark] class SortShuffleWriter[K, V, C](
       dep.shuffleId, mapId, dep.partitioner.numPartitions)
     sorter.writePartitionedMapOutput(dep.shuffleId, mapId, mapOutputWriter, writeMetrics)
     partitionLengths = mapOutputWriter.commitAllPartitions(sorter.getChecksums).getPartitionLengths
+    customMetricsValues = collectCustomMetrics(mapOutputWriter)
     mapStatus =
       MapStatus(blockManager.shuffleServerId, partitionLengths, mapId, getAggregatedChecksumValue)
+  }
+
+  private def collectCustomMetrics(
+      writer: ShuffleMapOutputMetricsReporter): Array[CustomShuffleTaskMetric] = {
+    try {
+      writer.currentMetricsValues()
+    } catch {
+      case e: Exception =>
+        logWarning(log"Failed to collect custom shuffle metrics for mapId " +
+          log"${MDC(LogKeys.MAP_ID, mapId)}", e)
+        Array.empty
+    }
   }
 
   /** Close this writer, passing along whether the map completed */
@@ -112,6 +128,8 @@ private[spark] class SortShuffleWriter[K, V, C](
   }
 
   override def getPartitionLengths(): Array[Long] = partitionLengths
+
+  override def currentMetricsValues(): Array[CustomShuffleTaskMetric] = customMetricsValues
 }
 
 private[spark] object SortShuffleWriter {

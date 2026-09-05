@@ -30,7 +30,7 @@ import org.apache.spark.shuffle.api.metadata.MapOutputCommitMessage;
  * @since 3.0.0
  */
 @Private
-public interface ShuffleMapOutputWriter {
+public interface ShuffleMapOutputWriter extends ShuffleMapOutputMetricsReporter {
 
   /**
    * Creates a writer that can open an output stream to persist bytes targeted for a given reduce
