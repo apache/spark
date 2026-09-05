@@ -234,6 +234,36 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-38983: grouping functions in boolean expressions report type mismatch") {
+    Seq(
+      courseSales.cube("course", "year"),
+      courseSales.rollup("course", "year"),
+      courseSales.groupingSets(
+        Seq(Seq(Column("course"), Column("year")), Seq()),
+        Column("course"),
+        Column("year"))
+    ).foreach { groupedData =>
+      Seq(
+        (grouping("course"), "\"TINYINT\""),
+        (grouping_id("course", "year"), "\"BIGINT\"")
+      ).foreach { case (groupingExpr, leftType) =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            groupedData.agg(groupingExpr && lit(true)).collect()
+          },
+          condition = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+          parameters = Map(
+            "left" -> leftType,
+            "right" -> "\"BOOLEAN\"",
+            "sqlExpr" -> "\"\\(.+ AND true\\)\""),
+          matchPVals = true,
+          queryContext = Array(ExpectedContext(
+            fragment = "amp$amp",
+            callSitePattern = getCurrentClassCallSitePattern)))
+      }
+    }
+  }
+
   test("grouping/grouping_id inside window function") {
     checkAnswer(
       courseSales.cube("course", "year")
