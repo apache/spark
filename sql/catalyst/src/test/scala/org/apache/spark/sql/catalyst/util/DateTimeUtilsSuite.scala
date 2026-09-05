@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianMicros
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLConf
-import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.types.{Decimal, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
@@ -900,6 +900,74 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     val expectedMonth = DateTimeUtils.stringToTimestamp(
       UTF8String.fromString("2024-04-01T00:00:00-07:00"), la).get
     assert(DateTimeUtils.truncTimestamp(apr, DateTimeUtils.TRUNC_TO_MONTH, la) === expectedMonth)
+  }
+
+  test("SPARK-57769: truncTimestamp date-level units at a fall-back overlap") {
+    // Europe/Berlin observed its first DST in 1916: clocks went back from 01:00 CEST
+    // (+02:00) to 00:00 CET (+01:00) on 1916-10-01, so the local time 1916-10-01 00:00
+    // (the truncated MONTH/WEEK boundary) is an overlap that exists at both +02:00 and
+    // +01:00. The fast path resolves that midnight with the source timestamp's offset,
+    // while the slow path always picks the earliest valid offset (+02:00 CEST).
+    val berlin = getZoneId("Europe/Berlin")
+    // Source is 1916-10-15, well after the transition, so its offset is +01:00 CET.
+    val src = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("1916-10-15T12:00:00+01:00"), berlin).get
+    // Default (new) behavior: the truncated midnight reuses the source offset (+01:00).
+    val expectedDefault = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("1916-10-01T00:00:00+01:00"), berlin).get
+    // Legacy behavior: the earliest valid offset (+02:00 CEST) is always used.
+    val expectedLegacy = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("1916-10-01T00:00:00+02:00"), berlin).get
+    // MONTH truncation of the 1916-10-15 source lands on 1916-10-01, the overlap day.
+    // (WEEK truncates to Monday 1916-10-09, which is not on the overlap, so it is not
+    // affected and is covered by the QUARTER/YEAR Azores case below.)
+    assert(expectedDefault !== expectedLegacy)
+    withSQLConf(SQLConf.LEGACY_TIMESTAMP_TRUNCATE_OVERLAP_EARLIEST.key -> "false") {
+      assert(DateTimeUtils.truncTimestamp(src, DateTimeUtils.TRUNC_TO_MONTH, berlin)
+        === expectedDefault)
+    }
+    withSQLConf(SQLConf.LEGACY_TIMESTAMP_TRUNCATE_OVERLAP_EARLIEST.key -> "true") {
+      assert(DateTimeUtils.truncTimestamp(src, DateTimeUtils.TRUNC_TO_MONTH, berlin)
+        === expectedLegacy)
+    }
+
+    // Determinism: a second source whose offset is +02:00 CEST (an instant sitting in
+    // the overlap itself) truncates to the +02:00 boundary under the fast path. Under
+    // the default behavior the two October sources therefore disagree, while the legacy
+    // behavior maps both to the same instant (so GROUP BY date_trunc is stable).
+    val srcInOverlap = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("1916-10-01T00:30:00+02:00"), berlin).get
+    withSQLConf(SQLConf.LEGACY_TIMESTAMP_TRUNCATE_OVERLAP_EARLIEST.key -> "false") {
+      assert(DateTimeUtils.truncTimestamp(srcInOverlap, DateTimeUtils.TRUNC_TO_MONTH, berlin)
+        === expectedLegacy)
+      assert(DateTimeUtils.truncTimestamp(src, DateTimeUtils.TRUNC_TO_MONTH, berlin)
+        !== DateTimeUtils.truncTimestamp(srcInOverlap, DateTimeUtils.TRUNC_TO_MONTH, berlin))
+    }
+    withSQLConf(SQLConf.LEGACY_TIMESTAMP_TRUNCATE_OVERLAP_EARLIEST.key -> "true") {
+      assert(DateTimeUtils.truncTimestamp(src, DateTimeUtils.TRUNC_TO_MONTH, berlin)
+        === DateTimeUtils.truncTimestamp(srcInOverlap, DateTimeUtils.TRUNC_TO_MONTH, berlin))
+    }
+
+    // Atlantic/Azores switched from LMT (-01:54:32) to -02:00 at 1912-01-01 00:00, so the
+    // YEAR/MONTH boundary 1912-01-01 00:00 is an overlap between the two offsets (a 328s
+    // difference). The fast path uses the source offset (-02:00), the slow path the
+    // earliest (-01:54:32 LMT).
+    val azores = getZoneId("Atlantic/Azores")
+    val azSrc = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("1912-01-15T12:00:00-02:00"), azores).get
+    // Build the expected instants directly: the LMT offset (-01:54:32) has sub-minute
+    // precision that the timestamp string parser does not accept.
+    val azDefault = instantToMicros(Instant.parse("1912-01-01T02:00:00Z"))
+    val azLegacy = instantToMicros(Instant.parse("1912-01-01T01:54:32Z"))
+    assert(azDefault !== azLegacy)
+    for (level <- Seq(DateTimeUtils.TRUNC_TO_YEAR, DateTimeUtils.TRUNC_TO_MONTH)) {
+      withSQLConf(SQLConf.LEGACY_TIMESTAMP_TRUNCATE_OVERLAP_EARLIEST.key -> "false") {
+        assert(DateTimeUtils.truncTimestamp(azSrc, level, azores) === azDefault)
+      }
+      withSQLConf(SQLConf.LEGACY_TIMESTAMP_TRUNCATE_OVERLAP_EARLIEST.key -> "true") {
+        assert(DateTimeUtils.truncTimestamp(azSrc, level, azores) === azLegacy)
+      }
+    }
   }
 
   test("truncTimestamp at Pacific/Apia after the 2011 calendar shift") {
