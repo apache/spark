@@ -182,6 +182,29 @@ public class VariantBuilder {
     return builder.result();
   }
 
+  // Return a new variant keeping only the substructures at `paths`. A kept object field stays
+  // nested under its parent objects; kept array elements are compacted into a new array in their
+  // original order. Missing keys, out-of-range indices, and type mismatches are skipped, dropping
+  // any parent left with nothing. The top-level object/array shape is preserved (possibly empty);
+  // a scalar, variant null, or root `$` returns v unchanged.
+  public static Variant pickAtPaths(Variant v, List<PathSegment[]> paths) {
+    return pickAtPaths(v, buildPickTree(paths));
+  }
+
+  public static PickNode buildPickTree(List<PathSegment[]> paths) {
+    PickNode root = new PickNode();
+    for (PathSegment[] path : paths) {
+      root.add(path, 0);
+    }
+    return root;
+  }
+
+  public static Variant pickAtPaths(Variant v, PickNode tree) {
+    VariantBuilder builder = new VariantBuilder(false);
+    builder.pickImplTopLevel(v.value, v.metadata, v.pos, tree);
+    return builder.result();
+  }
+
   // Build the variant metadata from `dictionaryKeys` and return the variant result.
   public Variant result() {
     int numKeys = dictionaryKeys.size();
@@ -955,6 +978,125 @@ public class VariantBuilder {
     } else {
       // Scalars and standalone variant nulls are appended unchanged.
       appendVariantImpl(value, metadata, pos);
+    }
+  }
+
+  // A node in the keep-tree built from `variant_pick`'s JSONPaths. It records whether a path
+  // terminates here (keep everything below), else which object keys / array indices to descend
+  // into. Holds only strings and ints, so it is `Serializable` for whole-stage codegen.
+  public static final class PickNode implements java.io.Serializable {
+    // A path terminates here: keep the whole value, subsuming any deeper paths under this node.
+    private boolean keepAll = false;
+    // Lazily created; a node may hold both maps when paths disagree on the container type, and
+    // only the map matching the actual value is used.
+    private HashMap<String, PickNode> objectChildren = null;
+    private HashMap<Integer, PickNode> arrayChildren = null;
+
+    // Insert the path suffix `path[depth..]` under this node.
+    private void add(PathSegment[] path, int depth) {
+      // A broader path already keeps everything here, so any deeper path is subsumed.
+      if (keepAll) {
+        return;
+      }
+      if (depth == path.length) {
+        keepAll = true;
+        // Drop children from narrower paths added earlier; keepAll subsumes them.
+        objectChildren = null;
+        arrayChildren = null;
+        return;
+      }
+      PathSegment seg = path[depth];
+      PickNode child;
+      if (seg instanceof ObjectKeySegment) {
+        if (objectChildren == null) {
+          objectChildren = new HashMap<>();
+        }
+        child = objectChildren.computeIfAbsent(((ObjectKeySegment) seg).key, k -> new PickNode());
+      } else {
+        if (arrayChildren == null) {
+          arrayChildren = new HashMap<>();
+        }
+        child = arrayChildren.computeIfAbsent(((ArrayIndexSegment) seg).index, k -> new PickNode());
+      }
+      child.add(path, depth + 1);
+    }
+  }
+
+  // Top-level entry for `pickAtPaths`: an object or array input yields a (possibly empty) object
+  // or array; a scalar, variant null, or root `$` (`keepAll`) keeps the value unchanged.
+  private void pickImplTopLevel(byte[] value, byte[] metadata, int pos, PickNode root) {
+    checkIndex(pos, value.length);
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    if (root.keepAll || (basicType != OBJECT && basicType != ARRAY)) {
+      appendVariantImpl(value, metadata, pos);
+    } else {
+      pickImpl(value, metadata, pos, root);
+    }
+  }
+
+  // Append the substructures of the value at `pos` selected by `node`, and return whether anything
+  // was appended. A caller drops a field or element whose pick produced nothing by resetting
+  // `writePos`, so unmatched paths (missing keys, out-of-range indices, or type mismatches) leave
+  // no trace. A dictionary key is registered only for a field that is actually kept.
+  private boolean pickImpl(byte[] value, byte[] metadata, int pos, PickNode node) {
+    checkIndex(pos, value.length);
+    if (node.keepAll) {
+      appendVariantImpl(value, metadata, pos);
+      return true;
+    }
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    if (basicType == OBJECT) {
+      return handleObject(
+          value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+        ArrayList<FieldEntry> fields = new ArrayList<>();
+        int start = writePos;
+        // No object-key children here: skip the whole scan and its per-field key lookups.
+        if (node.objectChildren != null) {
+          for (int i = 0; i < size; ++i) {
+            int id = readUnsigned(value, idStart + idSize * i, idSize);
+            String fieldKey = getMetadataKey(metadata, id);
+            PickNode child = node.objectChildren.get(fieldKey);
+            if (child != null) {
+              int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+              int fieldStart = writePos;
+              int fieldOffset = writePos - start;
+              if (pickImpl(value, metadata, dataStart + offset, child)) {
+                fields.add(new FieldEntry(fieldKey, addKey(fieldKey), fieldOffset));
+              } else {
+                writePos = fieldStart;
+              }
+            }
+          }
+        }
+        finishWritingObject(start, fields);
+        return !fields.isEmpty();
+      });
+    } else if (basicType == ARRAY) {
+      return handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) -> {
+        ArrayList<Integer> offsets = new ArrayList<>();
+        int start = writePos;
+        // No array-index children here: skip the whole element scan.
+        if (node.arrayChildren != null) {
+          for (int i = 0; i < size; ++i) {
+            PickNode child = node.arrayChildren.get(i);
+            if (child != null) {
+              int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+              int elementStart = writePos;
+              int elementOffset = writePos - start;
+              if (pickImpl(value, metadata, dataStart + offset, child)) {
+                offsets.add(elementOffset);
+              } else {
+                writePos = elementStart;
+              }
+            }
+          }
+        }
+        finishWritingArray(start, offsets);
+        return !offsets.isEmpty();
+      });
+    } else {
+      // The value is a scalar but the node still has segments to follow: nothing matches.
+      return false;
     }
   }
 

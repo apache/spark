@@ -617,6 +617,7 @@ VARIANT Functions
     variant_from_arrays
     variant_from_entries
     variant_strip_nulls
+    variant_pick
     variant_get
     variant_insert
     try_variant_insert

@@ -276,6 +276,23 @@ object VariantExpressionEvalUtils {
     new VariantVal(out.getValue, out.getMetadata)
   }
 
+  def parsePickPath(path: UTF8String): Array[VariantBuilder.PathSegment] =
+    toJavaSegments(parseVariantPath(path.toString, "variant_pick", allowRoot = true))
+
+  def pickAtPaths(
+      input: VariantVal,
+      paths: java.util.List[Array[VariantBuilder.PathSegment]]): VariantVal = {
+    val v = new Variant(input.getValue, input.getMetadata)
+    val out = VariantBuilder.pickAtPaths(v, paths)
+    new VariantVal(out.getValue, out.getMetadata)
+  }
+
+  def pickAtPaths(input: VariantVal, tree: VariantBuilder.PickNode): VariantVal = {
+    val v = new Variant(input.getValue, input.getMetadata)
+    val out = VariantBuilder.pickAtPaths(v, tree)
+    new VariantVal(out.getValue, out.getMetadata)
+  }
+
   /** Cast a Spark value from `dataType` into the variant type. */
   def castToVariant(input: Any, dataType: DataType): VariantVal = {
     // Enforce strict check because it is illegal for input struct/map/variant to contain duplicate
