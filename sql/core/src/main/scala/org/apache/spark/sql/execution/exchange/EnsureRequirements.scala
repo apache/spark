@@ -615,7 +615,7 @@ case class EnsureRequirements(
               log"join type '${MDC(LogKeys.JOIN_TYPE, joinType)}'")
           } else {
             // The pre-alignment plan of each side and the grouping this rule inserted over it,
-            // read once: the statistics and the original partition keys below come from the
+            // are read once: the statistics and the original partition keys below come from the
             // plan, the positions projecting them from the grouping.
             val leftGrouping = innermostGroupPartition(left)
             val rightGrouping = innermostGroupPartition(right)
@@ -642,8 +642,8 @@ case class EnsureRequirements(
                    |""".stripMargin)
               leftLink.get.stats.sizeInBytes < rightLink.get.stats.sizeInBytes
             } else {
-              // As a simple heuristic, we pick the side with fewer number of partitions to
-              // apply the grouping & replication of partitions. The counts read the
+              // As a simple heuristic, we pick the side with fewer partitions to apply the
+              // grouping & replication of partitions. The counts read the
               // pre-alignment plans, for the same reason the statistics do: on a re-run both
               // aligned reports hold the same number of keys, so comparing them decides nothing.
               // This also changes a first pass, which compared the aligned report's distinct
@@ -760,9 +760,9 @@ case class EnsureRequirements(
    *
    * The descent only traverses a `GroupPartitionsExec` and a *local* `SortExec`. That bound is a
    * decision, not an omission: a `GroupPartitionsExec` hidden behind any other node belongs to a
-   * different operator, and reusing it would move that operator's alignment. Instrumenting the
-   * descent over `KeyGroupedPartitioningSuite`, the non-`SortExec` shapes hiding a node are
-   * `Project > SortMergeJoin > Sort > GroupPartitions` and `Project > Filter > Window >
+   * different operator, and reusing it would move that operator's alignment. Instrumentation of
+   * the descent over `KeyGroupedPartitioningSuite` found these non-`SortExec` shapes hiding a
+   * node: `Project > SortMergeJoin > Sort > GroupPartitions` and `Project > Filter > Window >
    * WindowGroupLimit > GroupPartitions`, where refusing to descend is right every time. A global
    * `SortExec` also stops the descent: it requires `OrderedDistribution`, which a
    * `KeyedPartitioning` can satisfy (behind `spark.sql.sources.v2.bucketing.sorting.enabled`)
@@ -772,8 +772,9 @@ case class EnsureRequirements(
   private def innermostGroupPartition(
       plan: SparkPlan): Option[(GroupPartitionsExec, SparkPlan => SparkPlan)] = plan match {
     case g: GroupPartitionsExec =>
-      // A grouping over another grouping is one this rule added in an earlier pass: keep the
-      // descent below it and drop this one.
+      // When groupings stack, the outer one is the wrap this invocation's distribution step
+      // just added; the one below is inherited from an earlier pass and owns the alignment to
+      // preserve. Keep the descent below the outer node and drop it.
       innermostGroupPartition(g.child).orElse(Some((g, identity[SparkPlan])))
     case s: SortExec if !s.global =>
       innermostGroupPartition(s.child).map { case (g, rebuild) =>
