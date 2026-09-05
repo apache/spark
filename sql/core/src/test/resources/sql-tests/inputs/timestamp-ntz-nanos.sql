@@ -284,6 +284,32 @@ SELECT unix_nanos(TIMESTAMP_NTZ '1960-01-01 00:00:00.000000001');
 -- NULL nanosecond timestamp.
 SELECT unix_nanos(NULL :: timestamp_ntz(9));
 
+-- SPARK-57819: months_between over nanosecond-precision TIMESTAMP_NTZ. A nanos operand is
+-- reduced to its epochMicros, so the result always matches the microsecond-only result and the
+-- nanosWithinMicro remainder never affects it. NTZ is zone-independent.
+SELECT months_between(TIMESTAMP_NTZ '1997-02-28 10:30:00', TIMESTAMP_NTZ '1996-10-30 00:00:00');
+SELECT months_between(TIMESTAMP_NTZ '1997-02-28 10:30:00',
+    TIMESTAMP_NTZ '1996-10-30 00:00:00', false);
+SELECT months_between('1997-02-28 10:30:00.000000000' :: timestamp_ntz(9),
+    '1996-10-30 00:00:00.000000000' :: timestamp_ntz(9), false);
+-- Same pair, with a non-zero nanosWithinMicro remainder on one side: the result is unchanged
+-- from the remainder=0 case above.
+SELECT months_between('1997-02-28 10:30:00.000000500' :: timestamp_ntz(9),
+    '1996-10-30 00:00:00.000000000' :: timestamp_ntz(9), false);
+SELECT months_between('1997-02-28 10:30:00.000000500' :: timestamp_ntz(9),
+    '1996-10-30 00:00:00.000000000' :: timestamp_ntz(9));
+-- A nanos operand paired with a plain (microsecond) TIMESTAMP_NTZ operand: both are in the
+-- TIMESTAMP_NTZ family, so both are evaluated in UTC and the result matches the all-micros case
+-- above even though the session zone is not UTC.
+SELECT months_between('1997-02-28 10:30:00.000000000' :: timestamp_ntz(9),
+    TIMESTAMP_NTZ '1996-10-30 00:00:00');
+-- A nanos operand paired with a microsecond TIMESTAMP_LTZ operand: the zone is derived from the
+-- first operand's family, mirroring the existing SubtractTimestamps convention.
+SELECT months_between('1997-02-28 10:30:00.000000000' :: timestamp_ntz(9),
+    TIMESTAMP_LTZ '1996-10-30 00:00:00 UTC');
+-- NULL nanosecond timestamp.
+SELECT months_between(CAST(NULL AS timestamp_ntz(9)), TIMESTAMP_NTZ '1996-10-30 00:00:00');
+
 -- SPARK-57454: implicit type coercion / widening over nanosecond TIMESTAMP_NTZ(p). The resolved
 -- common type itself is unit-tested in TypeCoercionSuite / AnsiTypeCoercionSuite, and the operator
 -- wiring (schema and boolean outcomes for UNION/coalesce/CASE/IN/comparison) in
