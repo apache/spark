@@ -235,8 +235,8 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     } else if (message instanceof StreamResponse resp) {
       Pair<String, StreamCallback> entry = streamCallbacks.poll();
       if (entry != null) {
-        // Guard against a desynced callback queue before using the polled callback. Under correct
-        // operation this is always a no-op; see verifyStreamCallbackMatches.
+        // Assert the FIFO ordering invariant (response streamId == head-of-queue callback's
+        // streamId) before using the polled callback; see verifyStreamCallbackMatches.
         verifyStreamCallbackMatches(entry, resp.streamId, "response");
         StreamCallback callback = entry.getRight();
         if (resp.byteCount > 0) {
@@ -272,8 +272,8 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     } else if (message instanceof StreamFailure resp) {
       Pair<String, StreamCallback> entry = streamCallbacks.poll();
       if (entry != null) {
-        // Same guard as the StreamResponse branch: verify the polled callback is the one this
-        // failure is for before routing it. Under correct operation this is always a no-op.
+        // Same invariant check as the StreamResponse branch before routing this failure to the
+        // polled callback.
         verifyStreamCallbackMatches(entry, resp.streamId, "failure");
         StreamCallback callback = entry.getRight();
         try {
@@ -291,24 +291,21 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   }
 
   /**
-   * Verifies that the callback polled from the head of the FIFO {@link #streamCallbacks} queue is
-   * the one this stream response/failure is for, by comparing the callback's registered streamId
-   * with the streamId carried by the response.
+   * Asserts the FIFO ordering invariant for stream responses: the streamId carried by this
+   * response/failure must equal the streamId of the callback at the head of the
+   * {@link #streamCallbacks} queue. Responses to {@code StreamRequest}s are matched to callbacks by
+   * {@code poll()} order (see SPARK-11265), which is correct only if the server answers requests in
+   * the order the client sent them; this verifies that invariant before the polled callback is
+   * used. The check cannot false-fire: the client registers each callback under the exact streamId
+   * it requested, so a matching response always finds its callback at the head of the queue.
    *
-   * <p>Under correct operation this equality always holds and the method is a no-op: responses to
-   * {@code StreamRequest}s arrive on a single connection in the order the client sent them (see
-   * SPARK-11265), and the client registers each callback under the exact streamId it requested, so
-   * the head of the queue always corresponds to the next response. A mismatch is therefore not
-   * reachable by any normal client/server interaction; it could only be produced by memory or
-   * hardware corruption (e.g. a bit flip in the streamId or a corrupted queue). This is a defensive
-   * check that turns such corruption -- which would otherwise silently deliver the wrong block's
-   * bytes to a reader -- into a loud, retriable failure.
-   *
-   * <p>On a mismatch it fails the polled callback under its own streamId (so its caller does not
-   * hang waiting for a response it will never correctly receive; {@code poll()} has already removed
-   * it from the queue) and throws {@link IllegalStateException}, which propagates to Netty's
-   * {@code exceptionCaught} so the connection is torn down and its remaining outstanding requests
-   * are re-fetched in order on a fresh channel.
+   * <p>If the invariant does not hold the callback queue is desynced -- delivering this response
+   * would route the wrong block's bytes to the callback. It fails the polled callback under its own
+   * streamId (so its caller does not hang waiting for a response it will never correctly receive;
+   * {@code poll()} has already removed it from the queue) and throws {@link IllegalStateException},
+   * which propagates to Netty's {@code exceptionCaught} so the connection is torn down and its
+   * remaining outstanding requests are re-fetched in order on a fresh channel. This turns a silent
+   * wrong-block delivery into a loud, retriable failure.
    */
   private void verifyStreamCallbackMatches(
       Pair<String, StreamCallback> entry, String responseStreamId, String kind) {
@@ -316,21 +313,19 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       return;
     }
     // Log at the detection site, in the structured MDC form used throughout this file, so this
-    // otherwise-silent guard is directly greppable ("desynced") for incidence analysis, independent
-    // of the generic connection-exception log the thrown IllegalStateException produces downstream.
+    // otherwise-silent condition is directly greppable ("desynced") for incidence analysis,
+    // independent of the generic connection-exception log the thrown IllegalStateException produces
+    // downstream.
     logger.error("Stream callback queue desynced: received streamId {} does not match the head of "
-        + "the callback queue from {}. This is unreachable under correct operation and may "
-        + "indicate memory or hardware corruption; failing the connection to avoid delivering the "
-        + "wrong block.",
+        + "the callback queue from {}; failing the connection to avoid delivering the wrong block.",
       MDC.of(LogKeys.STREAM_ID, responseStreamId),
       MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
     // Full detail (both streamIds) goes on the exception that fails the callback and tears down the
     // connection.
     String msg = String.format(
       "Stream callback queue desynced: %s streamId %s does not match the head of the callback "
-        + "queue (streamId %s) from %s. This is unreachable under correct operation and may "
-        + "indicate memory or hardware corruption; failing the connection to avoid delivering the "
-        + "wrong block.", kind, responseStreamId, entry.getLeft(), getRemoteAddress(channel));
+        + "queue (streamId %s) from %s; failing the connection to avoid delivering the wrong "
+        + "block.", kind, responseStreamId, entry.getLeft(), getRemoteAddress(channel));
     try {
       entry.getRight().onFailure(entry.getLeft(), new IOException(msg));
     } catch (IOException ioe) {
