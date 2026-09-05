@@ -148,7 +148,8 @@ private[sql] class AvroFileFormat extends FileFormat
             avroFilters,
             parsedOptions.useStableIdForUnionType,
             parsedOptions.stableIdPrefixForUnionType,
-            parsedOptions.recursiveFieldMaxDepth)
+            parsedOptions.recursiveFieldMaxDepth,
+            dataSchema = Some(dataSchema))
           override val stopPosition = file.start + file.length
 
           override def hasNext: Boolean = hasNextRow
