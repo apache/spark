@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 4.4 to 5.0
+
+- Since Spark 5.0, the Spark Thrift Server refuses to start when `hive.server2.enable.doAs` is `true` and `hive.server2.authentication` verifies user identities (anything other than `NONE`/`NOSASL`). It impersonates the connecting user for Hive metastore calls, but queries and the storage access they perform still run as the server's own service identity, so storage-level permissions are checked against the service principal rather than the connecting user (SPARK-5159). Spark 4.4 logs a warning for the same configuration. To restore the previous behavior, set `spark.sql.hive.thriftServer.allowIneffectiveDoAs` to `true`. Setting `hive.server2.enable.doAs` to `false` also starts the server, but note that it stops impersonating metastore calls as well, so it is not a no-op.
+
 ## Upgrading from Spark SQL 4.3 to 4.4
 
 - Since Spark 4.4, the optimizer rule `SimplifyCaseConversionExpressions` no longer simplifies mixed case conversions `LOWER(UPPER(str))` to `LOWER(str)` or `UPPER(LOWER(str))` to `UPPER(str)`. This preserves standard Unicode case mapping semantics for non-ASCII characters such as Latin small letter dotless i (`ı` U+0131) and micro sign (`µ` U+00B5).
