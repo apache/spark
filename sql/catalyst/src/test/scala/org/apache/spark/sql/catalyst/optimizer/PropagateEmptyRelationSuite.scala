@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal, UnspecifiedFrame}
 import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, LocalRelation, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -172,7 +172,11 @@ class PropagateEmptyRelationSuite extends PlanTest {
       (RightOuter,
         Some(Project(Seq(Literal(null).cast(IntegerType).as("a"), $"b"), testRelation2)
           .analyze)),
-      (FullOuter, None),
+      (FullOuter,
+        Some(Union(
+          Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1),
+          Project(Seq(Literal(null).cast(IntegerType).as("a"), $"b"), testRelation2))
+          .analyze)),
       (LeftAnti, Some(testRelation1)),
       (LeftSemi, Some(LocalRelation($"a".int)))
     )
