@@ -4840,6 +4840,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val WINDOW_REORDER_ENABLED =
+    buildConf("spark.sql.optimizer.windowReorder.enabled")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("When true, a stack of adjacent Window operators connected by transparent " +
+        "projections is reordered, grouping windows that share a partition spec so that " +
+        "the number of inserted exchanges (shuffles) and sorts is minimized. Windows are " +
+        "grouped by the minimal partition spec their partition spec contains (or by " +
+        "their exact partition spec under " +
+        "`spark.sql.requireAllClusterKeysForDistribution`). When false, only adjacent " +
+        "window pairs with compatible partitions are transposed.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val WINDOW_SEGMENT_TREE_ENABLED =
     buildConf("spark.sql.window.segmentTree.enabled")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
