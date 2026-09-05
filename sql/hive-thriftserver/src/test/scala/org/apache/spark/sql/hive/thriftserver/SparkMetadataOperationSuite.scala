@@ -20,10 +20,10 @@ package org.apache.spark.sql.hive.thriftserver
 import java.sql.{DatabaseMetaData, ResultSet, SQLFeatureNotSupportedException}
 
 import org.apache.hive.common.util.HiveVersionInfo
-import org.apache.hive.service.cli.HiveSQLException
 
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.connector.catalog.DelegatingCatalogExtension
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -51,24 +51,36 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       dbs.foreach( db => statement.execute(s"CREATE DATABASE IF NOT EXISTS $db"))
       val metaData = statement.getConnection.getMetaData
 
-      Seq("", "%", null, ".*", "_*", "_%", ".%") foreach { pattern =>
+      Seq("", "%", null, "_%") foreach { pattern =>
         checkResult(metaData.getSchemas(null, pattern), dbs ++ dbDflts)
       }
 
-      Seq("db%", "db*") foreach { pattern =>
+      Seq("db%") foreach { pattern =>
         checkResult(metaData.getSchemas(null, pattern), dbs)
       }
 
-      Seq("db_", "db.") foreach { pattern =>
+      // Only '_' is a single-char wildcard per JDBC spec; '.' is now treated as a literal
+      // and matches nothing (no database is literally named "db.").
+      Seq("db_") foreach { pattern =>
         checkResult(metaData.getSchemas(null, pattern), dbs.take(2))
       }
 
       checkResult(metaData.getSchemas(null, "db1"), Seq("db1"))
       checkResult(metaData.getSchemas(null, "db_not_exist"), Seq.empty)
 
-      val e = intercept[HiveSQLException](metaData.getSchemas(null, "*"))
-      assert(e.getCause.getMessage ===
-        "Error operating GET_SCHEMAS Dangling meta character '*' near index 0\n*\n^")
+      // Regex metacharacters are now treated as literals per JDBC spec:
+      // '*' is NOT a JDBC wildcard and must not throw or act as a regex quantifier.
+      checkResult(metaData.getSchemas(null, "*"), Seq.empty)
+      // 'db*' is a literal -- no schema named "db*" exists.
+      checkResult(metaData.getSchemas(null, "db*"), Seq.empty)
+      // '.*' is a literal -- no schema named ".*" exists.
+      checkResult(metaData.getSchemas(null, ".*"), Seq.empty)
+      // 'db.' is a literal -- no schema named "db." exists.
+      checkResult(metaData.getSchemas(null, "db."), Seq.empty)
+      // '_*' is treated as: '_' (single-char wildcard) + '*' (literal); no schema matches.
+      checkResult(metaData.getSchemas(null, "_*"), Seq.empty)
+      // '.%' is treated as: '.' (literal) + '%' (any substring wildcard); no schema matches.
+      checkResult(metaData.getSchemas(null, ".%"), Seq.empty)
     }
   }
 
@@ -833,6 +845,31 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
     }
   }
 
+  test("SPARK-57518: getSchemas for spark_catalog lists namespaces via SupportsNamespaces " +
+      "and includes global_temp") {
+    withDatabase("test_schema_db") { statement =>
+      statement.execute("CREATE DATABASE IF NOT EXISTS test_schema_db")
+      val metaData = statement.getConnection.getMetaData
+
+      val rs = metaData.getSchemas(null, "%")
+      val schemas = scala.collection.mutable.ArrayBuffer.empty[(String, String)]
+      while (rs.next()) {
+        schemas += ((rs.getString("TABLE_SCHEM"), rs.getString("TABLE_CATALOG")))
+      }
+      // The session catalog (V2SessionCatalog) goes through SupportsNamespaces.listNamespaces()
+      // and still returns the global_temp pseudo-namespace.
+      assert(schemas.exists(_._1 == "default"),
+        "default namespace should be listed via SupportsNamespaces")
+      assert(schemas.exists(_._1 == "test_schema_db"),
+        "created database should be listed via SupportsNamespaces")
+      assert(schemas.exists(_._1 == "global_temp"),
+        "global_temp pseudo-namespace should still appear for spark_catalog")
+      schemas.foreach { case (_, cat) =>
+        assert(cat === "spark_catalog")
+      }
+    }
+  }
+
   test("SPARK-57518: getTables returns TABLE_CAT with current catalog name") {
     withJdbcStatement("dsv2_table") { statement =>
       statement.execute("CREATE TABLE dsv2_table(id INT, name STRING)")
@@ -941,5 +978,67 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       // Switch back so withJdbcStatement's DROP TABLE cleanup targets spark_catalog.
       statement.execute("USE spark_catalog")
     }
+  }
+
+  test("SPARK-57518: getSchemas with custom spark_catalog override lists via " +
+      "SupportsNamespaces, not V1 SessionCatalog") {
+    // Regression test: override spark_catalog with a CatalogExtension whose
+    // listNamespaces() returns namespaces DIFFERENT from what SessionCatalog.listDatabases
+    // would return. This proves the code lists via the current catalog's SupportsNamespaces
+    // interface, not the V1 SessionCatalog. If the old special-case (SessionCatalog.listDatabases)
+    // were restored, this test would FAIL because the custom namespaces would not appear.
+    withJdbcStatement() { statement =>
+      // Set the custom catalog BEFORE any operation that would trigger catalog resolution.
+      statement.execute(
+        "SET spark.sql.catalog.spark_catalog=" +
+          "org.apache.spark.sql.hive.thriftserver.CustomNamespaceCatalog")
+
+      val metaData = statement.getConnection.getMetaData
+      val rs = metaData.getSchemas(null, "%")
+      val schemas = scala.collection.mutable.ArrayBuffer.empty[String]
+      while (rs.next()) {
+        schemas += rs.getString("TABLE_SCHEM")
+        assert(rs.getString("TABLE_CATALOG") === "spark_catalog")
+      }
+      // The custom catalog returns exactly ["custom_ns1", "custom_ns2", "global_temp"].
+      // "global_temp" is included in listNamespaces() so the dedup logic should NOT add
+      // a second one.
+      assert(schemas.contains("custom_ns1"),
+        "custom_ns1 from custom catalog's listNamespaces() must appear")
+      assert(schemas.contains("custom_ns2"),
+        "custom_ns2 from custom catalog's listNamespaces() must appear")
+      assert(schemas.contains("global_temp"),
+        "global_temp from custom catalog's listNamespaces() must appear")
+      assert(schemas.count(_ == "global_temp") == 1,
+        "global_temp must appear exactly once (dedup)")
+      // "default" should NOT appear because the custom catalog does not list it --
+      // proving we're NOT falling through to SessionCatalog.listDatabases.
+      assert(!schemas.contains("default"),
+        "default must NOT appear -- proves listing comes from the custom catalog, " +
+        "not V1 SessionCatalog")
+    }
+  }
+}
+
+/**
+ * A custom CatalogExtension for testing that overrides listNamespaces() to return
+ * a fixed set of namespaces different from what SessionCatalog.listDatabases returns.
+ * This is used by the regression test to prove that getSchemas lists namespaces via
+ * the catalog's SupportsNamespaces interface, not the V1 SessionCatalog.
+ */
+class CustomNamespaceCatalog extends DelegatingCatalogExtension {
+  override def listNamespaces(): Array[Array[String]] = {
+    // Return custom namespaces that do NOT include "default" -- this is the key
+    // differentiator from what SessionCatalog.listDatabases would return.
+    // Include "global_temp" to verify the dedup logic.
+    Array(
+      Array("custom_ns1"),
+      Array("custom_ns2"),
+      Array("global_temp")
+    )
+  }
+
+  override def listNamespaces(namespace: Array[String]): Array[Array[String]] = {
+    Array.empty
   }
 }
