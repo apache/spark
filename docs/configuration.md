@@ -1024,6 +1024,12 @@ Apart from these, the following properties are also available, and may be useful
     will be searched for in the local maven repo, then maven central and finally any additional remote
     repositories given by the command-line option <code>--repositories</code>. For more details, see
     <a href="submitting-applications.html#advanced-dependency-management">Advanced Dependency Management</a>.
+    <p/>
+    When fetching these artifacts, Spark identifies itself to remote repositories with a
+    <code>User-Agent</code> of the form
+    <code>Apache-Spark/&lt;spark-version&gt; (Apache-Ivy/&lt;ivy-version&gt;)</code>, by setting the
+    <code>http.agent</code> system property if it is not already set. Set
+    <code>-Dhttp.agent=...</code> to override it.
   </td>
   <td>1.5.0</td>
 </tr>
