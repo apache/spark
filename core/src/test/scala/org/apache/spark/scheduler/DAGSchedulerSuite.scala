@@ -1083,7 +1083,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         } else {
           verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec")
         }
-        intercept[MetadataFetchFailedException] {
+        intercept[FetchFailedException] {
           mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0)
         }
       } else {
