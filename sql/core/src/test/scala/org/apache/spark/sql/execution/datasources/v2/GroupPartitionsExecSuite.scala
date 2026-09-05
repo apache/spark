@@ -22,11 +22,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyedPartitioning, KeyedShuffleSpec, KeyReducer, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
-import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer}
+import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer, DaysFunctionWithToYearsReducerWithLongResult, DaysToYearsReducerWithLongResult, YearsFunctionWithToYearsReducerWithLongResult}
 import org.apache.spark.sql.execution.{DummySparkPlan, LeafExecNode, SafeForKWayMerge}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{DateType, IntegerType, LongType}
 
 class GroupPartitionsExecSuite extends SharedSparkSession {
 
@@ -96,6 +96,31 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
         assert(kp.expressions.head === reducedExpr, "the unreduced position keeps its marker")
         assert(!kp.expressionsDescribeKeys)
       case other => fail(s"Expected KeyedPartitioning, got $other")
+    }
+  }
+
+  test("SPARK-59187: a reduce's result types reach the reported partitioning with no key left") {
+    // A both-sides reduce is the shape whose reported expression cannot carry the key type. The
+    // reduce lands on `LongType` and the expression it marks stays `DateType`, so the two are told
+    // apart only by what the partitioning carries. `EnsureRequirements` refuses the same divergence
+    // from a one-side reduce, so that shape would not be a plan.
+    val daysExpr = TransformExpression(DaysFunctionWithToYearsReducerWithLongResult, Seq(exprA))
+    val yearsExpr = TransformExpression(YearsFunctionWithToYearsReducerWithLongResult, Seq(exprA))
+    val markedExpr = daysExpr.reducedTogetherWith(yearsExpr)
+    val child = DummySparkPlan(outputPartitioning =
+      KeyedPartitioning(Seq(daysExpr), Seq(row(1), row(2))))
+    val reducers = Some(Seq(Some(KeyReducer(DaysToYearsReducerWithLongResult(), markedExpr))))
+
+    // With keys and without, since the second is the case no key row can answer.
+    Seq(None, Some(Seq.empty[(InternalRowComparableWrapper, Int)])).foreach { expected =>
+      GroupPartitionsExec(child, expectedPartitionKeys = expected, reducers = reducers)
+        .outputPartitioning match {
+        case kp: KeyedPartitioning =>
+          assert(!kp.expressionsDescribeKeys, "test setup: the reported expression is marked")
+          assert(kp.expressionDataTypes === Seq(DateType), "the marked `days` transform's own type")
+          assert(kp.keyDataTypes === Seq(LongType), "but the keys hold what the reducer produced")
+        case other => fail(s"Expected KeyedPartitioning, got $other")
+      }
     }
   }
 

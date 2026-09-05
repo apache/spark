@@ -572,6 +572,14 @@ case class CoalescedNullAwareHashPartitioning(
  *                      comparison and grouping. One per partition. Typically in sorted order when
  *                      produced by a data source or `GroupPartitionsExec`, but this is not
  *                      guaranteed after projection. May contain duplicates when ungrouped.
+ * @param keyDataTypes The types the `partitionKeys` rows were built with, one per expression.
+ *                     Anything reading those rows takes its types from here, and it answers even
+ *                     where there is no row to read. A copy that changes the expressions leaves the
+ *                     rows alone, so it leaves these alone too. Of the copies that do replace the
+ *                     row list, `project` passes new types, `concat` requires the children to agree
+ *                     on them, and `toGrouped` and `PartitioningCollection.fromPartitionings` reuse
+ *                     rows that already carry these types. See `expressionDataTypes` for the two
+ *                     ways the two lists come apart.
  * @param isGrouped Whether partition keys are unique (no duplicates). Computed on first
  *                  creation, then preserved through copy operations to avoid recomputation.
  * @param isCollapsed Whether a projection or a reduction mapped keys that were distinct in the
@@ -582,53 +590,55 @@ case class CoalescedNullAwareHashPartitioning(
 case class KeyedPartitioning(
     expressions: Seq[Expression],
     @transient partitionKeys: Seq[InternalRowComparableWrapper],
+    keyDataTypes: Seq[DataType],
     isGrouped: Boolean,
     isCollapsed: Boolean) extends Expression with Partitioning with Unevaluable {
   override val numPartitions = partitionKeys.length
+
+  // The keys carry their own types, so the field can be checked against the thing it describes
+  // rather than argued about. One key is enough: `concat` is the only copy that mixes rows from
+  // several partitionings, and it checks all of them.
+  require(keyDataTypes.length == expressions.length,
+    "A KeyedPartitioning must have one key data type per partition expression")
+  require(partitionKeys.headOption.forall(_.dataTypes == keyDataTypes),
+    "A KeyedPartitioning's keyDataTypes must be the types its partitionKeys were built with")
 
   override def children: Seq[Expression] = expressions
   override def nullable: Boolean = false
   override def dataType: DataType = IntegerType
 
+  /**
+   * Drops the `keyDataTypes`, so that `explain` shows what it showed before the field existed. They
+   * are the types of the keys printed beside them, which adds nothing a reader of a plan wants.
+   */
+  override protected def stringArgs: Iterator[Any] =
+    Iterator(expressions, partitionKeys, isGrouped, isCollapsed)
+
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): KeyedPartitioning =
     copy(expressions = newChildren)
 
-  /** Need not be what the `partitionKeys` rows hold. See `keyDataTypes`. */
+  /**
+   * The types the partition expressions produce. Not what the `partitionKeys` rows hold, whenever
+   * the expressions have stopped describing the keys, which happens in two ways.
+   *
+   * A join that reduced both sides' keys onto a key space no transform names leaves a marked
+   * expression whose type can be anything, see `expressionsDescribeKeys`. A one-side reduce keeps
+   * the two lists equal, because the expression the partitioning then reports is the target
+   * transform and `EnsureRequirements` refuses a reducer whose result type disagrees with it.
+   *
+   * `KeyedShuffleSpec.createPartitioning` is the other way. It puts the other child's expressions
+   * over these keys, so a struct field can be named differently on the two sides.
+   *
+   * `ShuffleExchangeExec` is the one reader that takes this over `keyDataTypes`, at both of its
+   * sites. It types rows it has just evaluated the expressions into, so those types are the ones
+   * that fit, and its two sites have to agree with each other. `expressionsDescribeKeys` is what
+   * keeps them sound, by refusing a partitioning whose expressions no longer place a row where its
+   * keys say it belongs.
+   */
   @transient lazy val expressionDataTypes: Seq[DataType] = expressions.map(_.dataType)
 
-  /**
-   * The types the `partitionKeys` rows were built with. Anything reading those rows should take its
-   * types from here. It is a driver-side value, since `partitionKeys` is `@transient`.
-   *
-   * They differ from the `expressionDataTypes` in two cases. A join that reduced both sides' keys
-   * onto a key space no transform names leaves a marked expression whose type can be anything, see
-   * `expressionsDescribeKeys`. A one-side reduce keeps them equal, because the expression the
-   * partitioning then reports is the target transform and `EnsureRequirements` refuses a reducer
-   * whose result type disagrees with it. `KeyedShuffleSpec.createPartitioning` is the other case.
-   * It puts the other child's expressions over these keys with no reducer in sight, so a struct
-   * field can be named differently on the two sides. With no key at all the expressions are all
-   * there is, and there is no row to read or to place.
-   *
-   * The two cases can meet, and then the fallback is not truthful. A marked partitioning can end up
-   * with no key, for instance when `v2BucketingPartitionFilterEnabled` intersects two sides that
-   * hold disjoint keys, and this then reports the un-reduced transform's type. What it reports is a
-   * fact about the key rows, so with no key row there is no fact, and a caller must not hold the
-   * fallback against a real answer. The reduced-types comparison in `EnsureRequirements` leaves out
-   * a marked side that has no key for that reason (SPARK-59176). An unmarked one still answers,
-   * since its expressions describe the keys it would have had, and stays in the comparison.
-   *
-   * `ShuffleExchangeExec` is the one reader that stays on `expressionDataTypes`. It evaluates the
-   * expressions to place the other child's rows, and it runs on executors, where this value is not
-   * available. `expressionsDescribeKeys` is what keeps that site sound.
-   *
-   * Only the first key's types are read, and nothing enforces that the rest match. SPARK-59187 is
-   * to carry the types on the partitioning instead of sampling a key row.
-   */
-  @transient lazy val keyDataTypes: Seq[DataType] =
-    partitionKeys.headOption.map(_.dataTypes).getOrElse(expressionDataTypes)
-
-  /** Driver-side, like the `keyDataTypes` it comes from. */
+  /** The ordering is compiled, so it is rebuilt after deserialization. */
   @transient lazy val keyRowOrdering =
     KeyedPartitioning.groupedKeyRowOrdering(keyDataTypes)
 
@@ -662,7 +672,7 @@ case class KeyedPartitioning(
       // from. Two different source keys landing on one projected key is the collapse, and it is
       // also what makes the projected keys non-unique, so the walk stops at the first one. The
       // source keys are never hashed, only compared where a projected key repeats.
-      val projectedKeys = projectKeys(positions)._2
+      val (projectedDataTypes, projectedKeys) = projectKeys(positions)
       val sourceOf =
         mutable.HashMap.empty[InternalRowComparableWrapper, InternalRowComparableWrapper]
       var collapses = false
@@ -679,6 +689,7 @@ case class KeyedPartitioning(
       copy(
         expressions = positions.map(expressions),
         partitionKeys = projectedKeys,
+        keyDataTypes = projectedDataTypes,
         isGrouped = !collapses && sourceOf.size == projectedKeys.length,
         isCollapsed = isCollapsed || collapses)
     }
@@ -691,8 +702,8 @@ case class KeyedPartitioning(
   }
 
   /**
-   * Projects this partitioning's expressions by selecting only the specified positions.
-   * Returns the projected expressions and their data types together with the projected keys.
+   * Projects this partitioning's partition keys by selecting only the specified positions.
+   * Returns the types the projected keys were built with, and the projected keys.
    */
   def projectKeys(positions: Seq[Int]): (Seq[DataType], Seq[InternalRowComparableWrapper]) =
     KeyedPartitioning.projectKeys(partitionKeys, keyDataTypes, positions)
@@ -719,7 +730,7 @@ case class KeyedPartitioning(
 
   /**
    * Reduces this partitioning's partition keys by applying the given reducers.
-   * Returns the reduced keys and their data types.
+   * Returns the types the reduced keys were built with, and the reduced keys.
    */
   def reduceKeys(
       reducers: Seq[Option[KeyReducer]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) =
@@ -825,7 +836,8 @@ object KeyedPartitioning {
     val comparablePartitionKeys = partitionKeys.map(comparableKeyWrapperFactory)
     val isGrouped = comparablePartitionKeys.distinct.size == comparablePartitionKeys.size
     // Built from scratch, so it is the layout everything else is compared against.
-    new KeyedPartitioning(expressions, comparablePartitionKeys, isGrouped, isCollapsed = false)
+    new KeyedPartitioning(
+      expressions, comparablePartitionKeys, dataTypes, isGrouped, isCollapsed = false)
   }
 
   /**
@@ -835,9 +847,16 @@ object KeyedPartitioning {
    *
    * Keys repeating across children is not a collapse. Only a child's own collapse carries over,
    * since such a key still stands for several finer-grained ones in the concatenation.
+   *
+   * This is the one place that mixes key rows from several partitionings, so it is the one place
+   * where the children's `keyDataTypes` have to be checked rather than carried. The caller compares
+   * the children's expressions, and equal expressions do not by themselves mean equal key types: a
+   * reduce leaves a partitioning whose keys are typed by the reducer.
    */
   def concat(kps: Seq[KeyedPartitioning]): KeyedPartitioning = {
     val concatenatedKeys = kps.flatMap(_.partitionKeys)
+    require(kps.forall(_.keyDataTypes == kps.head.keyDataTypes),
+      "Concatenated KeyedPartitionings must agree on keyDataTypes")
     kps.head.copy(
       partitionKeys = concatenatedKeys,
       // A child that has duplicates of its own puts them in the concatenation too, which answers
@@ -1074,6 +1093,12 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
    * unmarked one. They cannot disagree. The members share one key list, so they describe one
    * reduce, and a reduce that marks one side's expressions marks the other's in the same step,
    * while a one-side reduce marks neither.
+   *
+   * `keyDataTypes` is not in it either, for a different reason. The members share one key list, and
+   * a wrapper compares its types before its values, so structurally equal keys force equal types.
+   * That leaves only members whose key list is empty, where the types describe nothing and cannot
+   * be read wrong. `KeyedPartitioning`'s own constructor is where the field is checked, against the
+   * keys it describes.
    */
   private def checkKeyedPartitioningInvariant(): Unit = {
     firstKeyedPartitioning.foreach { first =>
