@@ -4200,6 +4200,22 @@ Push-based shuffle helps improve the reliability and performance of spark shuffl
   </td>
   <td>3.2.0</td>
 </tr>
+<tr>
+  <td><code>spark.shuffle.push.server.mergedShuffleChecksum.enabled</code></td>
+  <td><code>true</code></td>
+  <td>
+    Whether the external shuffle service calculates the checksum of every chunk of a merged shuffle partition while it merges the pushed blocks. The checksums are stored next to the merged shuffle data and are only used to diagnose the cause of a corrupted shuffle chunk, in the same way <code>spark.shuffle.checksum.enabled</code> is used for the shuffle blocks that are not merged. Diagnosing a corrupted shuffle chunk additionally requires <code>spark.shuffle.checksum.enabled</code> to be set in the application reading the chunk.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.push.server.mergedShuffleChecksum.algorithm</code></td>
+  <td><code>ADLER32</code></td>
+  <td>
+    The algorithm used to calculate the checksums of the merged shuffle chunks. Currently, it supports <code>ADLER32</code>, <code>CRC32</code> and <code>CRC32C</code>. The reducer calculates the checksum of a corrupted chunk with <code>spark.shuffle.checksum.algorithm</code>, so the corruption of a merged shuffle chunk can only be diagnosed when the two configurations match. An unsupported algorithm only disables the calculation of the checksums instead of failing the merge of the pushed blocks.
+  </td>
+  <td>4.4.0</td>
+</tr>
 </table>
 
 ### Client side configuration options
