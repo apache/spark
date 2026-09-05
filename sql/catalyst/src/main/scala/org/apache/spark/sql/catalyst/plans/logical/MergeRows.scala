@@ -31,7 +31,16 @@ case class MergeRows(
     notMatchedBySourceInstructions: Seq[Instruction],
     checkCardinality: Boolean,
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode with SupportsNonDeterministicExpression {
+
+  // Each WHEN-clause output projection is evaluated exactly once per produced output row:
+  // - Interpreted path (MergeRowsExec lines 579-590): first matching instruction evaluates
+  //   projection.apply(row) then returns — no subsequent instruction fires for that row.
+  // - Codegen path (MergeRowsExec lines 237-249): condition checked, if true: consume
+  //   projection then return.
+  // Carrying a non-deterministic action expression (e.g. uuid(), rand()) is therefore
+  // execution-safe — same rationale as operators already in CheckAnalysis's allowlist.
+  override def allowNonDeterministicExpression: Boolean = true
 
   override lazy val producedAttributes: AttributeSet = {
     AttributeSet(output.filterNot(attr => inputSet.contains(attr)))
