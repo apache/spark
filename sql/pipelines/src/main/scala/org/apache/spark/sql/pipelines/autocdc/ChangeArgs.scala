@@ -64,6 +64,15 @@ object ColumnSelection {
   case class ExcludeColumns(columns: Seq[UnqualifiedColumnName])
       extends ColumnSelection
 
+  /** Extracts the explicitly named columns, or `Nil` when the selection is `None`. */
+  def namedColumns(
+      selection: Option[ColumnSelection]): Seq[UnqualifiedColumnName] =
+    selection match {
+      case None => Nil
+      case Some(IncludeColumns(cols)) => cols
+      case Some(ExcludeColumns(cols)) => cols
+    }
+
   /**
    * Applies [[ColumnSelection]] to a [[StructType]] and returns the filtered schema. Field order
    * follows the original schema; only matching fields are retained in the returned schema.
@@ -186,6 +195,13 @@ object ScdType {
  *                               which has no run concept and therefore no history-tracking columns.
  *                               See the "run of upsert events" concept in the `Scd2BatchProcessor`
  *                               scaladoc for the precise definition of a run.
+ * @param ignoreNullSelection    Selects the columns whose nulls are treated as declined
+ *                               authorship rather than authored nulls. None means ignore-null
+ *                               is off completely. An empty include list is rejected; an empty
+ *                               exclude list selects every eligible column. Eligible columns
+ *                               are those surviving the column selection that are neither keys
+ *                               nor columns whose names start with the reserved AutoCDC prefix.
+ *                               Naming a struct selects every leaf beneath it.
  */
 case class ChangeArgs(
     keys: Seq[UnqualifiedColumnName],
@@ -193,10 +209,12 @@ case class ChangeArgs(
     storedAsScdType: ScdType,
     deleteCondition: Option[Column] = None,
     columnSelection: Option[ColumnSelection] = None,
-    trackHistorySelection: Option[ColumnSelection] = None
+    trackHistorySelection: Option[ColumnSelection] = None,
+    ignoreNullSelection: Option[ColumnSelection] = None
 ) {
   ChangeArgs.validateNonEmptyKeys(keys)
   ChangeArgs.validateTrackHistoryOnlyForScd2(storedAsScdType, trackHistorySelection)
+  ChangeArgs.validateNonEmptyIgnoreNullIncludeList(ignoreNullSelection)
 }
 
 object ChangeArgs {
@@ -229,6 +247,22 @@ object ChangeArgs {
       throw SparkException.internalError(
         "trackHistorySelection must be None under SCD1; it has no history-tracking columns."
       )
+    }
+  }
+
+  /**
+   * Rejects an empty ignore-null include list; "ignore-null off" is spelled
+   * as None.
+   */
+  private def validateNonEmptyIgnoreNullIncludeList(
+      ignoreNullSelection: Option[ColumnSelection]): Unit = {
+    ignoreNullSelection match {
+      case Some(ColumnSelection.IncludeColumns(columns)) if columns.isEmpty =>
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_IGNORE_NULL_EMPTY_COLUMN_LIST",
+          messageParameters = Map.empty
+        )
+      case _ => ()
     }
   }
 }

@@ -263,6 +263,8 @@ class AutoCdcMergeFlow(
 
   requireReservedPrefixAbsentInSourceColumns()
   requireReservedFrameworkColumnsAbsentInSourceColumns()
+  requireKeysAbsentInIgnoreNullSelection()
+  requireReservedPrefixAbsentInIgnoreNullSelection()
 
   def changeArgs: ChangeArgs = flow.changeArgs
 
@@ -277,6 +279,7 @@ class AutoCdcMergeFlow(
     // AutoCDC flows require all key columns to be present in the user-selected source schema,
     // so that they survive into the target table where SCD reconciliation needs them.
     requireKeysPresentInSelectedSchema(selectedSchema)
+    requireIgnoreNullColumnsInSelectedSchema(selectedSchema)
     selectedSchema
   }
 
@@ -402,6 +405,7 @@ class AutoCdcMergeFlow(
           F.lit(null).cast(sequencingType).as(Scd2BatchProcessor.endAtColName)
         val emptyCdcMetadataCol: Column = Scd2BatchProcessor.constructCdcMetadataCol(
           recordStartAt = F.lit(null),
+          versionMap = F.lit(null),
           sequencingType = sequencingType
         ).as(AutoCdcReservedNames.cdcMetadataColName)
 
@@ -409,29 +413,23 @@ class AutoCdcMergeFlow(
     }
   }
 
-  /**
-   * Validate that the resolved source dataframe for the AutoCDC flow does not contain any column
-   * names that use the reserved Spark AutoCDC prefix.
-   */
-  private def requireReservedPrefixAbsentInSourceColumns(): Unit = {
-    val resolver = effectiveResolver
+  /** Whether `name` starts with [[AutoCdcReservedNames.prefix]], honoring case sensitivity. */
+  private def nameHasReservedPrefix(name: String): Boolean = {
     val reservedPrefix = AutoCdcReservedNames.prefix
+    name.length >= reservedPrefix.length &&
+      effectiveResolver(name.substring(0, reservedPrefix.length), reservedPrefix)
+  }
 
-    def nameContainsReservedPrefix(name: String): Boolean = {
-      name.length >= reservedPrefix.length && resolver(
-        name.substring(0, reservedPrefix.length),
-        reservedPrefix
-      )
-    }
-
-    df.schema.fieldNames.find(nameContainsReservedPrefix).foreach { conflictingColumnName =>
+  /** Rejects any source column whose name uses the reserved AutoCDC prefix. */
+  private def requireReservedPrefixAbsentInSourceColumns(): Unit = {
+    df.schema.fieldNames.find(nameHasReservedPrefix).foreach { conflictingColumnName =>
       throw new AnalysisException(
         errorClass = "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT",
         messageParameters = Map(
-          "caseSensitivity" -> CaseSensitivityLabels.of(resolver),
+          "caseSensitivity" -> CaseSensitivityLabels.of(effectiveResolver),
           "columnName" -> conflictingColumnName,
           "schemaName" -> "changeDataFeed",
-          "reservedColumnNamePrefix" -> reservedPrefix
+          "reservedColumnNamePrefix" -> AutoCdcReservedNames.prefix
         )
       )
     }
@@ -488,6 +486,62 @@ class AutoCdcMergeFlow(
           messageParameters = Map(
             "caseSensitivity" -> CaseSensitivityLabels.of(resolver),
             "keyColumnName" -> missingKey.name
+          )
+        )
+      }
+  }
+
+  /** Rejects any ignore-null column that is also a key column. */
+  private def requireKeysAbsentInIgnoreNullSelection(): Unit = {
+    val resolver = effectiveResolver
+    ColumnSelection.namedColumns(changeArgs.ignoreNullSelection).foreach { column =>
+      if (changeArgs.keys.exists(key => resolver(key.name, column.name))) {
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_IGNORE_NULL_SELECTION_CONTAINS_KEY_COLUMN",
+          messageParameters = Map(
+            "flowName" -> identifier.unquotedString,
+            "caseSensitivity" -> CaseSensitivityLabels.of(resolver),
+            "columnName" -> column.name,
+            "keyColumnNames" -> changeArgs.keys.map(_.name).mkString(", ")
+          )
+        )
+      }
+    }
+  }
+
+  /** Rejects any ignore-null column whose name uses the reserved prefix. */
+  private def requireReservedPrefixAbsentInIgnoreNullSelection(): Unit = {
+    ColumnSelection.namedColumns(changeArgs.ignoreNullSelection)
+      .find(col => nameHasReservedPrefix(col.name))
+      .foreach { column =>
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_IGNORE_NULL_CANNOT_SELECT_RESERVED_COLUMN",
+          messageParameters = Map(
+            "flowName" -> identifier.unquotedString,
+            "caseSensitivity" -> CaseSensitivityLabels.of(effectiveResolver),
+            "columnName" -> column.name,
+            "reservedColumnNamePrefix" -> AutoCdcReservedNames.prefix
+          )
+        )
+      }
+  }
+
+  /**
+   * Validate every column named by [[ChangeArgs.ignoreNullSelection]] is present in the
+   * user-selected schema.
+   */
+  private def requireIgnoreNullColumnsInSelectedSchema(
+      selectedSchema: StructType): Unit = {
+    val resolver = effectiveResolver
+    ColumnSelection.namedColumns(changeArgs.ignoreNullSelection)
+      .find(col => !selectedSchema.fieldNames.exists(resolver(_, col.name)))
+      .foreach { missing =>
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_IGNORE_NULL_COLUMN_NOT_IN_OUTPUT_COLUMNS",
+          messageParameters = Map(
+            "flowName" -> identifier.unquotedString,
+            "caseSensitivity" -> CaseSensitivityLabels.of(resolver),
+            "columnName" -> missing.name
           )
         )
       }
