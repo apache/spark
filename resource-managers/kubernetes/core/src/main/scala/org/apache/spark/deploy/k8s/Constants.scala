@@ -121,6 +121,8 @@ object Constants {
     "spark.kubernetes.executor.hadoopConfigMapName"
 
   // Kerberos Configuration
+  val KRB_CONFIG_MAP_NAME =
+    "spark.kubernetes.executor.krbConfigMapName"
   val KERBEROS_DT_SECRET_NAME =
     "spark.kubernetes.kerberos.dt-secret-name"
   val KERBEROS_DT_SECRET_KEY =

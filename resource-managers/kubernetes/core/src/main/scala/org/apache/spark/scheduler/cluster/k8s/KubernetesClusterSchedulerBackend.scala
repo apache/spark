@@ -16,6 +16,8 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import java.io.File
+import java.nio.file.Files
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -99,6 +101,35 @@ private[spark] class KubernetesClusterSchedulerBackend(
   }
 
   /**
+   * Publishes the krb5 ConfigMap name into [[KRB_CONFIG_MAP_NAME]] so executor pods can mount it.
+   * Cluster mode already has it set by the driver step; client mode creates or reuses it here.
+   */
+  private[k8s] def setUpExecutorKrb5ConfigMap(driverPod: Option[Pod]): Unit = {
+    // Already set by the driver feature step (cluster mode), nothing to do.
+    if (conf.getOption(KRB_CONFIG_MAP_NAME).isEmpty) {
+      conf.get(KUBERNETES_KERBEROS_KRB5_CONFIG_MAP) match {
+        case Some(existingMap) =>
+          // User supplied an existing ConfigMap, just publish its name to executors.
+          conf.set(KRB_CONFIG_MAP_NAME, existingMap)
+        case None =>
+          conf.get(KUBERNETES_KERBEROS_KRB5_FILE).foreach { localPath =>
+            val file = new File(localPath)
+            val configMapName = KubernetesClientUtils
+              .configMapName(s"spark-krb5-${KubernetesUtils.uniqueID()}")
+            val labels =
+              Map(SPARK_APP_ID_LABEL -> applicationId(),
+                SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE)
+            val configMap = KubernetesClientUtils.buildConfigMap(
+              configMapName, Map(file.getName -> Files.readString(file.toPath)), labels)
+            KubernetesUtils.addOwnerReference(driverPod.orNull, Seq(configMap))
+            kubernetesClient.configMaps().inNamespace(namespace).resource(configMap).create()
+            conf.set(KRB_CONFIG_MAP_NAME, configMapName)
+          }
+      }
+    }
+  }
+
+  /**
    * Get an application ID associated with the job.
    * This returns the string value of spark.app.id if set, otherwise
    * a generated Kubernetes app ID.
@@ -115,6 +146,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     // allocation is asynchronous (background thread pool), so requesting executors first
     // can race with ConfigMap creation, causing transient "configmap ... not found" mounts.
     if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
+      setUpExecutorKrb5ConfigMap(podAllocator.driverPod)
       setUpExecutorConfigMap(podAllocator.driverPod)
     }
     val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
