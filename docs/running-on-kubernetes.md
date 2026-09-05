@@ -651,6 +651,18 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.clusterDomain</code></td>
+  <td><code>cluster.local</code></td>
+  <td>
+    The cluster domain name used to construct the fully-qualified driver service hostname.
+    The driver's <code>spark.driver.host</code> is set to
+    <code>&lt;service&gt;.&lt;namespace&gt;.svc.&lt;clusterDomain&gt;.</code>
+    (with a trailing dot to force absolute DNS resolution).
+    Override this when your cluster uses a non-default domain (e.g. <code>example.com</code>).
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.container.image</code></td>
   <td><code>(none)</code></td>
   <td>

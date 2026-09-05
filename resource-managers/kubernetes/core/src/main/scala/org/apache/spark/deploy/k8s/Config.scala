@@ -178,6 +178,15 @@ private[spark] object Config extends Logging {
       .stringConf
       .createWithDefault("default")
 
+  val KUBERNETES_CLUSTER_DOMAIN =
+    ConfigBuilder("spark.kubernetes.clusterDomain")
+      .doc("The cluster domain name used to construct the fully-qualified driver service " +
+        "hostname. The driver's spark.driver.host is set to " +
+        "<service>.<namespace>.svc.<clusterDomain>.")
+      .version("4.4.0")
+      .stringConf
+      .createWithDefault("cluster.local")
+
   val CONTAINER_IMAGE =
     ConfigBuilder("spark.kubernetes.container.image")
       .doc("Container image to use for Spark containers. Individual container types " +
