@@ -306,7 +306,8 @@ class SparkConnectPlanner(
       case proto.Catalog.CatTypeCase.CACHE_TABLE => transformCacheTable(catalog.getCacheTable)
       case proto.Catalog.CatTypeCase.UNCACHE_TABLE =>
         transformUncacheTable(catalog.getUncacheTable)
-      case proto.Catalog.CatTypeCase.CLEAR_CACHE => transformClearCache()
+      case proto.Catalog.CatTypeCase.CLEAR_CACHE =>
+        transformClearCache(catalog.getClearCache)
       case proto.Catalog.CatTypeCase.REFRESH_TABLE =>
         transformRefreshTable(catalog.getRefreshTable)
       case proto.Catalog.CatTypeCase.REFRESH_BY_PATH =>
@@ -4303,8 +4304,9 @@ class SparkConnectPlanner(
     emptyLocalRelation
   }
 
-  private def transformClearCache(): LogicalPlan = {
-    session.catalog.clearCache()
+  private def transformClearCache(clearCache: proto.ClearCache): LogicalPlan = {
+    val allSessions = !clearCache.hasAllSessions || clearCache.getAllSessions
+    session.catalog.clearCache(allSessions)
     emptyLocalRelation
   }
 
