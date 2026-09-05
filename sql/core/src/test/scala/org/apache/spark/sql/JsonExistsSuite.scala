@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.expressions.{JsonExists, JsonExistsBehavior, Literal}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.BooleanType
 
@@ -31,8 +32,42 @@ class JsonExistsSuite extends QueryTest with SharedSparkSession {
   private val doc =
     """{"id":7,"addr":{"city":"NYC"},"score":null,"tags":["x","y"]}"""
 
+  test("plain call goes through routine resolution and can be shadowed via SET PATH") {
+    // `json_exists` is now a registered built-in, so `withUserDefinedFunction`'s cleanup assertion
+    // does not fit; drop the temporary routine explicitly instead.
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_exists(a STRING, b STRING) RETURNS BOOLEAN " +
+          "RETURN false")
+        sql("SET PATH = system.session, system.builtin")
+        // A plain call is an ordinary function call, so the temporary routine (returning false)
+        // shadows the built-in predicate, which would return true for a present path.
+        checkAnswer(sql(s"SELECT json_exists('$doc', '$$.addr.city')"), Row(false))
+        checkAnswer(sql(s"SELECT json_exists(*, '$$.addr.city') FROM VALUES ('$doc') AS t(j)"),
+          Row(false))
+        // The clause-bearing form is not a function call, so it stays the built-in predicate.
+        checkAnswer(sql(s"SELECT json_exists('$doc', '$$.addr.city' TRUE ON ERROR)"), Row(true))
+        assert(sql(s"SELECT json_exists('$doc', '$$.addr.city' TRUE ON ERROR)")
+          .queryExecution.analyzed.expressions.exists(_.exists(_.isInstanceOf[JsonExists])))
+        // A constructor source is still a clause-free outer call, so the temporary routine shadows
+        // it instead of letting the built-in predicate run.
+        checkAnswer(sql(s"SELECT json_exists(json_array(1, 2, 3), '$$[0]')"), Row(false))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_exists")
+      }
+    }
+  }
+
   test("returns BOOLEAN") {
     assert(sql(s"SELECT json_exists('$doc', '$$.id')").schema.head.dataType === BooleanType)
+  }
+
+  test("qualified plain JSON_EXISTS resolves to the built-in predicate") {
+    checkAnswer(sql(s"SELECT builtin.json_exists('$doc', '$$.addr.city')"), Row(true))
+    checkAnswer(sql(s"SELECT system.builtin.json_exists('$doc', '$$.addr.city')"), Row(true))
   }
 
   test("path present -> true, absent -> false") {
@@ -111,11 +146,14 @@ class JsonExistsSuite extends QueryTest with SharedSparkSession {
 
   test("sql escapes a quoted path literal so the rendering re-parses") {
     // A bracket-quoted path contains single quotes; the `sql` rendering must escape them, otherwise
-    // it would emit invalid SQL such as JSON_EXISTS('{}', '$['a']['b']').
+    // it would emit invalid SQL such as JSON_EXISTS('{}', '$['a']['b']'). The plain rendering has
+    // no clause, so it routes through function resolution; analyze it to recover the built-in and
+    // confirm the path survived escaping.
     val e = JsonExists(Literal("{}"), "$['a']['b']", JsonExistsBehavior.False)
-    val parsed = spark.sessionState.sqlParser.parseExpression(e.sql)
-    assert(parsed.isInstanceOf[JsonExists])
-    assert(parsed.asInstanceOf[JsonExists].path === "$['a']['b']")
+    val jsonExists = sql(s"SELECT ${e.sql}").queryExecution.analyzed.expressions
+      .flatMap(_.collect { case j: JsonExists => j })
+    assert(jsonExists.length == 1)
+    assert(jsonExists.head.path === "$['a']['b']")
   }
 
   test("lax wildcard [*]: true iff the array has elements; auto-wraps a non-array") {

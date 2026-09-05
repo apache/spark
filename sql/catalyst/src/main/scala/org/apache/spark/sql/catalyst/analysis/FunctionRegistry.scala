@@ -1025,8 +1025,30 @@ object FunctionRegistry {
     expression[SchemaOfJson]("schema_of_json"),
     expression[LengthOfJsonArray]("json_array_length"),
     expression[JsonObjectKeys]("json_object_keys"),
-    expression[JsonTypeof]("json_typeof")
+    expression[JsonTypeof]("json_typeof"),
+    // Built-in forms of the SQL:2016 JSON constructor and path functions, resolved for plain calls
+    // that carry no SQL/JSON clauses (the dedicated grammar handles clause-bearing syntax). The
+    // names must stay in sync with `routedJsonConstructorNames` below.
+    expressionBuilder("json_value", JsonValueExpressionBuilder),
+    expressionBuilder("json_query", JsonQueryExpressionBuilder),
+    expressionBuilder("json_exists", JsonExistsExpressionBuilder),
+    expressionBuilder("json_array", JsonArrayExpressionBuilder)
   )
+
+  /**
+   * Names of the clause-free SQL/JSON constructor/path functions that `AstBuilder` routes through
+   * function resolution. This is the shared list backing the star guard in
+   * [[FunctionResolution.resolvesToStarDisallowedJsonConstructor]], which derives its set from here
+   * so a newly routed constructor/path function is covered automatically. It is NOT a single source
+   * of truth for the whole feature: two sibling lists still need a matching manual entry when a
+   * constructor/path function is added or removed --
+   *   1. the `expressionBuilder(...)` registrations in [[jsonExpressions]] above (each needs its
+   *      concrete builder's `ClassTag` to read the `ExpressionInfo` annotation, so it can't be
+   *      generated from this set), and
+   *   2. the routed grammar branches in `AstBuilder`.
+   */
+  val routedJsonConstructorNames: Set[String] =
+    Set("json_value", "json_query", "json_exists", "json_array")
 
   private def variantExpressions: Seq[FunctionRegistryEntry] = Seq(
     // Variant

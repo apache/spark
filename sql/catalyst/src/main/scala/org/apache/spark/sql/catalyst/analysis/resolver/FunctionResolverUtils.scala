@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{
   FunctionResolution,
   ResolvedStar,
@@ -25,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedFunction,
   UnresolvedStar
 }
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
@@ -57,18 +56,32 @@ trait FunctionResolverUtils {
    */
   protected def handleStarInArguments(
       unresolvedFunction: UnresolvedFunction): UnresolvedFunction = {
-    val functionContainsStarInArguments = unresolvedFunction.arguments.exists {
+    val functionContainsDirectStarInArguments = unresolvedFunction.arguments.exists {
       case _: Star => true
       case _ => false
     }
 
-    if (!functionContainsStarInArguments) {
+    // Whether the call resolves to the builtin `count` (distinct-agnostic). This owner probe can
+    // hit an external FunctionCatalog.functionExists lookup on a persistent-first SQL PATH, so
+    // compute it once and reuse it for both the count(*) normalization and the count(tbl.*) guard.
+    // Lazy so the non-star and JSON-constructor paths never pay for it.
+    lazy val resolvesToCountBuiltin =
+      functionResolution.functionNameResolvesToBuiltin(unresolvedFunction.nameParts, "count")
+
+    if (functionContainsDirectStarInArguments &&
+        functionResolution.resolvesToStarDisallowedJsonConstructor(unresolvedFunction.nameParts)) {
+      // Only a bare `*` argument is rejected in a JSON constructor; a star nested in another
+      // expression (json_array(array(*))) is expanded there and count(*) is rewritten to count(1),
+      // so both stay valid arguments.
+      throw QueryCompilationErrors.invalidStarUsageError(
+        s"expression `${unresolvedFunction.prettyName}`", extractStar(unresolvedFunction.arguments))
+    } else if (!functionContainsDirectStarInArguments) {
       unresolvedFunction
-    } else if (isNonDistinctCount(unresolvedFunction) &&
-      hasSingleSimpleStarArgument(unresolvedFunction)) {
+    } else if (!unresolvedFunction.isDistinct && resolvesToCountBuiltin &&
+        hasSingleSimpleStarArgument(unresolvedFunction)) {
       normalizeCountExpression(unresolvedFunction)
     } else {
-      assertSingleTableStarNotInCountFunction(unresolvedFunction)
+      assertSingleTableStarNotInCountFunction(unresolvedFunction, resolvesToCountBuiltin)
       unresolvedFunction.copy(
         arguments = expressionResolver.expandStarExpressions(unresolvedFunction.arguments)
       )
@@ -92,31 +105,8 @@ trait FunctionResolverUtils {
       case _ => false
     }
 
-  /**
-   * Method used to determine whether the given function is non-distinct `count` function,
-   * with optional normalization.
-   */
-  private def isNonDistinctCount(unresolvedFunction: UnresolvedFunction): Boolean = {
-    !unresolvedFunction.isDistinct &&
-      isCount(unresolvedFunction) &&
-      !isUnqualifiedCountShadowedByTemp(unresolvedFunction)
-  }
-
-  /**
-   * Keep single-pass behavior aligned with fixed-point: when PATH puts system.session before
-   * system.builtin and a temp `count` exists, unqualified `count(*)` must not be rewritten to
-   * `count(1)`.
-   */
-  private def isUnqualifiedCountShadowedByTemp(unresolvedFunction: UnresolvedFunction): Boolean = {
-    unresolvedFunction.nameParts.length == 1 &&
-      functionResolution.isSessionBeforeBuiltinInPath &&
-      functionResolution.catalogManager.v1SessionCatalog
-        .isTemporaryFunction(FunctionIdentifier(unresolvedFunction.nameParts.head))
-  }
-
-  private def isCount(unresolvedFunction: UnresolvedFunction): Boolean = {
-    FunctionResolution.isUnqualifiedOrBuiltinFunctionName(unresolvedFunction.nameParts, "count")
-  }
+  private def extractStar(expressions: Seq[Expression]): Seq[Star] =
+    expressions.collect { case s: Star => s }
 
   /**
    * Method used to replace the `count(*)` function with `count(1)` function. Resolution of the
@@ -127,7 +117,6 @@ trait FunctionResolverUtils {
   private def normalizeCountExpression(
       unresolvedFunction: UnresolvedFunction): UnresolvedFunction = {
     unresolvedFunction.copy(
-      nameParts = Seq("count"),
       arguments = Seq(Literal(1)),
       filter = unresolvedFunction.filter
     )
@@ -139,9 +128,10 @@ trait FunctionResolverUtils {
    * See [[handleStarInArguments]]
    */
   private def assertSingleTableStarNotInCountFunction(
-      unresolvedFunction: UnresolvedFunction): Unit = {
+      unresolvedFunction: UnresolvedFunction,
+      resolvesToCountBuiltin: Boolean): Unit = {
     if (!conf.allowStarWithSingleTableIdentifierInCount &&
-      isCount(unresolvedFunction) &&
+      resolvesToCountBuiltin &&
       unresolvedFunction.arguments.length == 1) {
       unresolvedFunction.arguments.head match {
         case star: UnresolvedStar if scopes.current.isStarQualifiedByTable(star) =>

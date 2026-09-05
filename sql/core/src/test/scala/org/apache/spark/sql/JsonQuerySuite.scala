@@ -34,6 +34,36 @@ class JsonQuerySuite extends QueryTest with SharedSparkSession {
   private val doc =
     """{"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}"""
 
+  test("plain call goes through routine resolution and can be shadowed via SET PATH") {
+    // `json_query` is now a registered built-in, so `withUserDefinedFunction`'s cleanup assertion
+    // does not fit; drop the temporary routine explicitly instead.
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_query(a STRING, b STRING) RETURNS STRING " +
+          "RETURN 'shadowed'")
+        sql("SET PATH = system.session, system.builtin")
+        // A plain call is an ordinary function call, so the temporary routine shadows the
+        // built-in function.
+        checkAnswer(sql(s"SELECT json_query('$doc', '$$.addr')"), Row("shadowed"))
+        checkAnswer(sql(s"SELECT json_query(*, '$$.addr') FROM VALUES ('$doc') AS t(j)"),
+          Row("shadowed"))
+        // The clause-bearing form is not a function call, so it stays the built-in function.
+        checkAnswer(
+          sql(s"SELECT json_query('$doc', '$$.tags' WITH ARRAY WRAPPER)"), Row("""[["x","y"]]"""))
+        assert(sql(s"SELECT json_query('$doc', '$$.tags' WITH ARRAY WRAPPER)")
+          .queryExecution.analyzed.expressions.exists(_.exists(_.isInstanceOf[JsonQuery])))
+        // A constructor source is still a clause-free outer call, so the temporary routine shadows
+        // it instead of letting the built-in function run.
+        checkAnswer(sql(s"SELECT json_query(json_array(1, 2, 3), '$$')"), Row("shadowed"))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_query")
+      }
+    }
+  }
+
   test("extract an object or array as verbatim JSON text") {
     checkAnswer(sql(s"SELECT json_query('$doc', '$$.addr')"), Row("""{"city":"NYC"}"""))
     checkAnswer(sql(s"SELECT json_query('$doc', '$$.tags')"), Row("""["x","y"]"""))
@@ -41,6 +71,12 @@ class JsonQuerySuite extends QueryTest with SharedSparkSession {
 
   test("default RETURNING type is STRING") {
     assert(sql(s"SELECT json_query('$doc', '$$.addr')").schema.head.dataType === StringType)
+  }
+
+  test("qualified plain JSON_QUERY resolves to the built-in function") {
+    checkAnswer(sql(s"SELECT builtin.json_query('$doc', '$$.addr')"), Row("""{"city":"NYC"}"""))
+    checkAnswer(
+      sql(s"SELECT system.builtin.json_query('$doc', '$$.addr')"), Row("""{"city":"NYC"}"""))
   }
 
   test("RETURNING VARCHAR/CHAR is normalized to STRING and does not truncate") {

@@ -18,9 +18,11 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkRuntimeException
+import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{Cast, Collate, JsonArray, JsonConstructorNullBehavior, JsonQuery, JsonQueryBehavior, JsonQueryQuotes, JsonQueryWrapper, Literal, ResolvedCollation}
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{CharType, GeographyType, GeometryType, IntegerType, MapType, StringType, VarcharType}
@@ -154,6 +156,18 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
       Row("[[1]]"))
   }
 
+  test("a function-style string() cast detaches implicit FORMAT JSON like CAST(... AS STRING)") {
+    // A user cast to STRING quotes the fragment (detaches implicit FORMAT JSON). The function-style
+    // alias string(x) is exactly CAST(x AS STRING) and must behave identically: `isImplicitlyJson`
+    // does not look through a `Cast`, so the element is quoted, not spliced.
+    checkAnswer(sql("SELECT JSON_ARRAY(CAST(JSON_ARRAY(1) AS STRING))"), Row("""["[1]"]"""))
+    checkAnswer(sql("SELECT JSON_ARRAY(string(JSON_ARRAY(1)))"), Row("""["[1]"]"""))
+    // The equivalence also holds through the routed path for other JSON-producing children.
+    checkAnswer(
+      sql("""SELECT JSON_ARRAY(string(JSON_QUERY('{"a":{"x":1}}', '$.a')))"""),
+      Row("""["{\"x\":1}"]"""))
+  }
+
   test("explicit FORMAT JSON splices a string verbatim; a plain string is quoted") {
     // A plain string element is quoted and escaped like any other string value...
     checkAnswer(sql("""SELECT JSON_ARRAY('[1,2]')"""), Row("""["[1,2]"]"""))
@@ -216,6 +230,18 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql("SELECT JSON_ARRAY(JSON_ARRAY(1, 2) COLLATE UTF8_LCASE, 3)"),
       Row("[[1,2],3]"))
+  }
+
+  test("a nested constructor wrapped in redundant parentheses is still spliced raw") {
+    // Parentheses produce a ParenthesizedExpressionContext that AstBuilder unwraps to the inner
+    // Catalyst expression directly (no wrapper node). The implicit FORMAT JSON must be seen through
+    // that parser context (as through Collate above), so the inner array is spliced ([[1]]), not
+    // treated as a plain string and quoted (["[1]"]).
+    checkAnswer(sql("SELECT JSON_ARRAY((JSON_ARRAY(1)))"), Row("[[1]]"))
+    checkAnswer(sql("SELECT JSON_ARRAY((JSON_ARRAY(1, 2)), 3)"), Row("[[1,2],3]"))
+    checkAnswer(
+      sql("""SELECT JSON_ARRAY((JSON_QUERY('{"a":{"x":1}}', '$.a')))"""),
+      Row("""[{"x":1}]"""))
   }
 
   test("a nested JSON_QUERY is spliced under KEEP QUOTES and quoted under OMIT QUOTES") {
@@ -466,18 +492,272 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("plain call goes through routine resolution and can be shadowed via SET PATH") {
+    // `withUserDefinedFunction` is unusable here: its cleanup asserts the name no longer resolves,
+    // but `json_array` is now a registered built-in, so drop the temporary routine explicitly.
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_array(a INT, b STRING) RETURNS STRING " +
+          "RETURN 'shadowed'")
+        sql("CREATE TEMPORARY FUNCTION json_value(a STRING, b STRING) RETURNS STRING " +
+          "RETURN 'shadowed'")
+        sql("CREATE TEMPORARY FUNCTION json_query(a STRING, b STRING) RETURNS STRING " +
+          "RETURN 'shadowed'")
+        sql("CREATE TEMPORARY FUNCTION json_exists(a STRING, b STRING) RETURNS BOOLEAN " +
+          "RETURN false")
+        sql("SET PATH = system.session, system.builtin")
+        // A plain call is an ordinary function call, so the temporary routine (ahead of
+        // system.builtin on the path) shadows the built-in constructor.
+        checkAnswer(sql("SELECT json_array(1, 'x')"), Row("shadowed"))
+        checkAnswer(sql("SELECT json_array(*) FROM VALUES (1, 'x') AS t(a, b)"), Row("shadowed"))
+        // The clause-bearing form is not a function call, so it stays the built-in constructor.
+        checkAnswer(sql("SELECT json_array('x' NULL ON NULL)"), Row("""["x"]"""))
+        // Nested JSON-producing children stay on the direct-construction path, so they are not
+        // shadowed. This preserves JSON_ARRAY's parse-time splice decisions.
+        checkAnswer(sql("SELECT json_array(json_array(1))"), Row("[[1]]"))
+        checkAnswer(
+          sql("""SELECT json_array(json_query('{"a":{"x":1}}', '$.a'))"""),
+          Row("""[{"x":1}]"""))
+        // Plain scalar and predicate children are still ordinary function calls. Use an explicit
+        // outer NULL clause to keep the parent on the direct path while the children are shadowed.
+        checkAnswer(
+          sql("""SELECT json_array(json_value('{"a":"x"}', '$.a') NULL ON NULL)"""),
+          Row("""["shadowed"]"""))
+        checkAnswer(
+          sql("""SELECT json_array(json_exists('{"a":1}', '$.a') NULL ON NULL)"""),
+          Row("[false]"))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_array")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_value")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_query")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_exists")
+      }
+    }
+  }
+
+  test("qualified plain JSON_ARRAY resolves to the built-in constructor") {
+    checkAnswer(sql("SELECT builtin.json_array(1, 'x')"), Row("""[1,"x"]"""))
+    checkAnswer(sql("SELECT system.builtin.json_array(1, 'x')"), Row("""[1,"x"]"""))
+  }
+
+  test("a nested JSON constructor through a routed JSON_ARRAY call is quoted, not spliced") {
+    // A routed (plain or qualified) call carries no lexical FORMAT JSON, so a nested JSON
+    // constructor argument is treated as a plain value and quoted, unlike the JSON_ARRAY(...)
+    // grammar which splices it (see the unqualified `json_array(json_array(1))` -> `[[1]]` cases
+    // above). A nested constructor reaches the routed builder only via a qualified outer call:
+    // an unqualified nested constructor stays on the direct grammar path. Splicing through a
+    // routed call is left as a follow-up.
+    checkAnswer(sql("SELECT builtin.json_array(json_array(1))"), Row("""["[1]"]"""))
+    checkAnswer(sql("SELECT system.builtin.json_array(json_array(1))"), Row("""["[1]"]"""))
+    checkAnswer(sql("SELECT builtin.json_array(json_array(1), 2)"), Row("""["[1]",2]"""))
+    checkAnswer(
+      sql("""SELECT builtin.json_array(json_query('{"a":{"x":1}}', '$.a'))"""),
+      Row("""["{\"x\":1}"]"""))
+  }
+
+  test("invalid: a bare star argument in plain JSON_ARRAY is not expanded") {
+    Seq("json_array", "builtin.json_array", "system.builtin.json_array").foreach { func =>
+      val e = intercept[AnalysisException] {
+        sql(s"SELECT $func(*) FROM VALUES (1, 'x') AS t(a, b)").collect()
+      }
+      assert(e.getCondition == "INVALID_USAGE_OF_STAR_OR_REGEX", s"for $func(*)")
+    }
+  }
+
+  test("invalid: a bare star argument in clause-bearing JSON_ARRAY is not expanded") {
+    val e = intercept[AnalysisException] {
+      sql("SELECT json_array(* NULL ON NULL) FROM VALUES (1, 'x') AS t(a, b)").collect()
+    }
+    assert(e.getCondition == "INVALID_USAGE_OF_STAR_OR_REGEX")
+  }
+
+  test("JSON_ARRAY expands a star nested in a sibling constructor (array(*))") {
+    // Only a bare `*` element is rejected. A star nested in `array(...)` belongs to that call and
+    // is expanded there, exactly as `array(array(*))` would, then JSON_ARRAY wraps the result.
+    checkAnswer(
+      sql("SELECT json_array(array(*)) FROM VALUES (1, 2) AS t(a, b)"),
+      Row("[[1,2]]"))
+    // Clause-bearing form (a direct-construction JsonArray node) behaves the same.
+    checkAnswer(
+      sql("SELECT json_array(array(*) NULL ON NULL) FROM VALUES (1, 2) AS t(a, b)"),
+      Row("[[1,2]]"))
+    // Alongside count(*): the array's star expands, count(*) is rewritten, neither is rejected.
+    checkAnswer(
+      sql("SELECT json_array(count(*), array(max(a))) FROM VALUES (1), (2) AS t(a)"),
+      Row("[2,[2]]"))
+  }
+
+  test("single-pass: JSON_ARRAY expands a star nested in array(*)") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      Seq(
+        "SELECT json_array(array(*)) FROM VALUES (1, 2) AS t(a, b)",
+        "SELECT json_array(array(*) NULL ON NULL) FROM VALUES (1, 2) AS t(a, b)"
+      ).foreach { query =>
+        // Analyze only: the single-pass analyzer cannot execute every operator, so assert the
+        // nested star is neither rejected nor left unexpanded rather than running it.
+        val analyzed = sql(query).queryExecution.analyzed
+        assert(analyzed.resolved, s"for $query")
+        assert(!analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[Star]))),
+          s"star should not survive analysis for $query")
+      }
+    }
+  }
+
+  test("single-pass rejects a bare star in plain and clause-bearing JSON_ARRAY built-ins") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      Seq(
+        "SELECT json_array(*) FROM VALUES (1, 'x') AS t(a, b)",
+        "SELECT json_array(* NULL ON NULL) FROM VALUES (1, 'x') AS t(a, b)"
+      ).foreach { query =>
+        val e = intercept[AnalysisException] {
+          spark.sql(query).queryExecution.analyzed
+        }
+        assert(e.getCondition == "INVALID_USAGE_OF_STAR_OR_REGEX", s"for $query")
+      }
+    }
+  }
+
+  test("JSON_ARRAY accepts count(*): it is normalized to count(1), not star-expanded") {
+    // count(*) is rewritten to count(1) rather than star-expanded, so it stays a valid aggregate
+    // argument to the JSON_ARRAY built-in. The star pre-check must not reject the nested star.
+    checkAnswer(
+      sql("SELECT json_array(count(*)) FROM VALUES (1), (2), (3) AS t(a)"),
+      Row("[3]"))
+    // Alongside another aggregate argument.
+    checkAnswer(
+      sql("SELECT json_array(count(*), max(a)) FROM VALUES (1), (2), (3) AS t(a)"),
+      Row("[3,3]"))
+    // The clause-bearing form (a direct-construction JsonArray node) accepts it too.
+    checkAnswer(
+      sql("SELECT json_array(count(*) NULL ON NULL) FROM VALUES (1), (2), (3) AS t(a)"),
+      Row("[3]"))
+    // Qualified built-in references resolve to the same built-in and behave the same.
+    checkAnswer(
+      sql("SELECT builtin.json_array(count(*)) FROM VALUES (1), (2), (3) AS t(a)"),
+      Row("[3]"))
+  }
+
+  test("single-pass: JSON_ARRAY accepts count(*)") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      Seq(
+        "SELECT json_array(count(*)) FROM VALUES (1), (2), (3) AS t(a)",
+        "SELECT json_array(count(*) NULL ON NULL) FROM VALUES (1), (2), (3) AS t(a)"
+      ).foreach { query =>
+        // Analyze only: the single-pass analyzer cannot execute every operator, so we assert the
+        // query resolves without INVALID_USAGE_OF_STAR_OR_REGEX rather than running it.
+        val analyzed = sql(query).queryExecution.analyzed
+        assert(analyzed.resolved, s"for $query")
+        assert(!analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[Star]))),
+          s"star should not survive analysis for $query")
+      }
+    }
+  }
+
+  test("invalid: a bare star next to count(*) is still rejected in JSON_ARRAY") {
+    // count(*) is excluded from the star check, but a bare `*` element still would be expanded and
+    // must be rejected, even when it sits next to a count(*).
+    Seq(false, true).foreach { singlePass =>
+      withSQLConf(
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString) {
+        val e = intercept[AnalysisException] {
+          sql("SELECT json_array(count(*), *) FROM VALUES (1, 'x') AS t(a, b)")
+            .queryExecution.analyzed
+        }
+        assert(e.getCondition == "INVALID_USAGE_OF_STAR_OR_REGEX", s"singlePass=$singlePass")
+      }
+    }
+  }
+
+  test("plain JSON_ARRAY with star can be shadowed by a persistent function in PATH") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      withDatabase("path_json_array") {
+        sql("CREATE DATABASE path_json_array")
+        sql("CREATE FUNCTION path_json_array.json_array(a INT, b STRING) RETURNS STRING " +
+          "RETURN 'persistent'")
+        try {
+          sql("SET PATH = spark_catalog.path_json_array, system.builtin")
+          checkAnswer(
+            sql("SELECT json_array(*) FROM VALUES (1, 'x') AS t(a, b)"),
+            Row("persistent"))
+        } finally {
+          sql("SET PATH = DEFAULT_PATH")
+          sql("DROP FUNCTION IF EXISTS path_json_array.json_array")
+        }
+      }
+    }
+  }
+
+  test("two-part builtin JSON_ARRAY respects persistentCatalogFirst before rejecting star") {
+    withDatabase("builtin") {
+      sql("CREATE DATABASE builtin")
+      sql("CREATE FUNCTION builtin.json_array(a INT, b STRING) RETURNS STRING " +
+        "RETURN 'persistent'")
+      try {
+        val query = "SELECT builtin.json_array(*) FROM VALUES (1, 'x') AS t(a, b)"
+        withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "false") {
+          val e = intercept[AnalysisException] {
+            sql(query).collect()
+          }
+          assert(e.getCondition == "INVALID_USAGE_OF_STAR_OR_REGEX")
+        }
+        withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
+          checkAnswer(sql(query), Row("persistent"))
+        }
+      } finally {
+        sql("DROP FUNCTION IF EXISTS builtin.json_array")
+      }
+    }
+  }
+
+  test("view-context shadow probe expands identifiers through the view's frozen catalog") {
+    // The shadow probe must mirror `resolveFunctionCandidate`'s identifier expansion. A permanent
+    // view freezes its creation catalog (spark_catalog). When the view is read while a different
+    // catalog is current, the star pre-check for `builtin.json_array(*)` must resolve `builtin`
+    // under the view's frozen catalog -- not the reader's current catalog -- so the persistent
+    // `spark_catalog.builtin.json_array` shadows the built-in and the star is NOT rejected.
+    // Probing the reader's current catalog (the pre-fix behavior) misses the persistent function
+    // and wrongly rejects the star.
+    withSQLConf(
+      "spark.sql.catalog.other_cat" -> classOf[InMemoryCatalog].getName,
+      SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
+      withDatabase("builtin") {
+        sql("CREATE DATABASE builtin")
+        sql("CREATE FUNCTION builtin.json_array(a INT, b STRING) RETURNS STRING " +
+          "RETURN 'persistent'")
+        try {
+          sql("SET CATALOG spark_catalog")
+          sql("CREATE VIEW spark_catalog.default.json_array_shadow_view AS " +
+            "SELECT builtin.json_array(*) AS r FROM VALUES (1, 'x') AS t(a, b)")
+          // Read the view while a different catalog is current: resolution must still find the
+          // persistent function under the view's frozen spark_catalog.
+          sql("SET CATALOG other_cat")
+          checkAnswer(
+            sql("SELECT r FROM spark_catalog.default.json_array_shadow_view"),
+            Row("persistent"))
+        } finally {
+          sql("SET CATALOG spark_catalog")
+          sql("DROP VIEW IF EXISTS spark_catalog.default.json_array_shadow_view")
+          sql("DROP FUNCTION IF EXISTS builtin.json_array")
+        }
+      }
+    }
+  }
+
   test("default collation recurses into a nested JSON_ARRAY value") {
-    // The rule casts each DefaultStringProducingExpression, recursing through a nested constructor
-    // (the flat cases above only cover a top-level constructor). This CTAS runs the default
-    // analyzer (single-pass included). Confirm the schema collation and that raw splicing still
-    // produces well-formed nested JSON at runtime.
+    // Col a (parser-built nested, direct grammar path) and col b (flat routed built-in) both
+    // recolor to the table default collation.
     withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
       withTable("t") {
         sql(
           """CREATE TABLE t DEFAULT COLLATION UTF8_LCASE AS
-            |SELECT json_array(json_array(1)) AS a""".stripMargin)
+            |SELECT json_array(json_array(1)) AS a,
+            |       builtin.json_array(1) AS b""".stripMargin)
         assert(spark.table("t").schema("a").dataType === StringType("UTF8_LCASE"))
-        checkAnswer(spark.table("t"), Row("[[1]]"))
+        assert(spark.table("t").schema("b").dataType === StringType("UTF8_LCASE"))
+        checkAnswer(spark.table("t"), Row("[[1]]", "[1]"))
       }
     }
   }
