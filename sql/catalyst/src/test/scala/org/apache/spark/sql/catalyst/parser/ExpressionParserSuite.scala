@@ -286,7 +286,7 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("c:['']"),
       condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'[''']'", "hint" -> ""))
+      parameters = Map("error" -> "'['']'", "hint" -> ""))
   }
 
   test("binary arithmetic expressions") {
