@@ -174,8 +174,6 @@ case object PhysicalCalendarIntervalType extends PhysicalCalendarIntervalType
  *
  * Storage layout is identical to [[PhysicalTimestampLTZNanosType]]; both types exist so the
  * NTZ/LTZ distinction propagates through the physical-type system to consumers that need it.
- *
- * Hash is not implemented yet and will be added in a follow-up issue.
  */
 class PhysicalTimestampNTZNanosType() extends PhysicalDataType {
   override private[sql] type InternalType = TimestampNanosVal
@@ -192,8 +190,6 @@ case object PhysicalTimestampNTZNanosType extends PhysicalTimestampNTZNanosType
  *
  * Storage layout is identical to [[PhysicalTimestampNTZNanosType]]; both types exist so the
  * NTZ/LTZ distinction propagates through the physical-type system to consumers that need it.
- *
- * Hash is not implemented yet and will be added in a follow-up issue.
  */
 class PhysicalTimestampLTZNanosType() extends PhysicalDataType {
   override private[sql] type InternalType = TimestampNanosVal
