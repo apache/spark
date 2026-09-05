@@ -1135,6 +1135,15 @@ object PartitioningCollection {
   }
 
   /**
+   * The number of partitions of the keyed members of `partitioning`, if it has any. A
+   * collection requires all of its members to agree on the count, keyed or not, so the answer
+   * is `partitioning.numPartitions` whenever a keyed member exists; the representative only
+   * decides whether there is one.
+   */
+  private[sql] def numKeyedPartitions(partitioning: Partitioning): Option[Int] =
+    representativeOf(partitioning).map(_.numPartitions)
+
+  /**
    * Builds a [[PartitioningCollection]], unifying the `partitionKeys` reference across all
    * [[KeyedPartitioning]]s (including those in nested collections). Use this when combining
    * independently-computed partitionings (e.g. join `outputPartitioning`) where
