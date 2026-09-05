@@ -71,7 +71,7 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.connect.group import GroupedData
-from pyspark.sql.connect.logging import logger
+from pyspark.sql.connect.logging import getLogger
 from pyspark.sql.connect.merge import MergeIntoWriter
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
@@ -109,6 +109,9 @@ if TYPE_CHECKING:
     from pyspark.sql.metrics import ExecutionInfo
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
     from pyspark.sql.plot import PySparkPlotAccessor
+
+
+logger = getLogger(__name__)
 
 
 class DataFrame(ParentDataFrame):
