@@ -598,6 +598,206 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("TimeType column statistics collection and precisions") {
+    val table = "time_stats_table"
+    withTable(table) {
+      // Test all precisions (0-9) with NULL handling
+      sql(s"""
+        CREATE TABLE $table (
+          id INT,
+          time_p0 TIME(0),
+          time_p1 TIME(1),
+          time_p2 TIME(2),
+          time_p3 TIME(3),
+          time_p4 TIME(4),
+          time_p5 TIME(5),
+          time_p6 TIME(6),
+          time_p7 TIME(7),
+          time_p8 TIME(8),
+          time_p9 TIME(9)
+        ) USING parquet
+      """)
+
+      sql(s"""
+        INSERT INTO $table VALUES
+          (1,
+           CAST(TIME '08:30:00' AS TIME(0)),
+           CAST(TIME '08:30:00.1' AS TIME(1)),
+           CAST(TIME '08:30:00.12' AS TIME(2)),
+           CAST(TIME '08:30:00.123' AS TIME(3)),
+           CAST(TIME '08:30:00.1234' AS TIME(4)),
+           CAST(TIME '08:30:00.12345' AS TIME(5)),
+           CAST(TIME '08:30:00.123456' AS TIME(6)),
+           CAST(TIME '08:30:00.1234567' AS TIME(7)),
+           CAST(TIME '08:30:00.12345678' AS TIME(8)),
+           CAST(TIME '08:30:00.123456789' AS TIME(9))),
+          (2,
+           CAST(TIME '17:45:30' AS TIME(0)),
+           CAST(TIME '17:45:30.9' AS TIME(1)),
+           CAST(TIME '17:45:30.98' AS TIME(2)),
+           CAST(TIME '17:45:30.987' AS TIME(3)),
+           CAST(TIME '17:45:30.9876' AS TIME(4)),
+           CAST(TIME '17:45:30.98765' AS TIME(5)),
+           CAST(TIME '17:45:30.987654' AS TIME(6)),
+           CAST(TIME '17:45:30.9876543' AS TIME(7)),
+           CAST(TIME '17:45:30.98765432' AS TIME(8)),
+           CAST(TIME '17:45:30.987654321' AS TIME(9))),
+          (3,
+           CAST(TIME '12:00:00' AS TIME(0)),
+           CAST(TIME '12:00:00.5' AS TIME(1)),
+           CAST(TIME '12:00:00.5' AS TIME(2)),
+           CAST(TIME '12:00:00.5' AS TIME(3)),
+           CAST(TIME '12:00:00.5' AS TIME(4)),
+           CAST(TIME '12:00:00.5' AS TIME(5)),
+           CAST(TIME '12:00:00.5' AS TIME(6)),
+           CAST(TIME '12:00:00.5' AS TIME(7)),
+           CAST(TIME '12:00:00.5' AS TIME(8)),
+           CAST(TIME '12:00:00.5' AS TIME(9))),
+          (4, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
+      """)
+
+      sql(s"""ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS
+        time_p0, time_p1, time_p2, time_p3, time_p4, time_p5, time_p6,
+        time_p7, time_p8, time_p9""")
+
+      val catalogTable = getCatalogTable(table)
+
+      val expectedMins = Map(
+        0 -> "08:30:00",
+        1 -> "08:30:00.1",
+        2 -> "08:30:00.12",
+        3 -> "08:30:00.123",
+        4 -> "08:30:00.1234",
+        5 -> "08:30:00.12345",
+        6 -> "08:30:00.123456",
+        7 -> "08:30:00.1234567",
+        8 -> "08:30:00.12345678",
+        9 -> "08:30:00.123456789"
+      )
+      val expectedMaxs = Map(
+        0 -> "17:45:30",
+        1 -> "17:45:30.9",
+        2 -> "17:45:30.98",
+        3 -> "17:45:30.987",
+        4 -> "17:45:30.9876",
+        5 -> "17:45:30.98765",
+        6 -> "17:45:30.987654",
+        7 -> "17:45:30.9876543",
+        8 -> "17:45:30.98765432",
+        9 -> "17:45:30.987654321"
+      )
+
+      for (precision <- 0 to 9) {
+        val col = s"time_p$precision"
+        val stats = catalogTable.stats.get.colStats(col)
+
+        // Verify basic statistics
+        assert(stats.distinctCount.isDefined, s"Distinct count should be defined for $col")
+        assert(stats.min.isDefined, s"Min should be defined for $col")
+        assert(stats.max.isDefined, s"Max should be defined for $col")
+        assert(stats.nullCount == Some(1), s"Null count should be 1 for $col")
+        assert(stats.avgLen == Some(8), s"Avg length should be 8 bytes for $col")
+        assert(stats.maxLen == Some(8), s"Max length should be 8 bytes for $col")
+
+        // Verify exact min/max values for each precision
+        val minStr = stats.min.get.asInstanceOf[String]
+        val maxStr = stats.max.get.asInstanceOf[String]
+        assert(minStr == expectedMins(precision), s"Wrong min for $col: $minStr")
+        assert(maxStr == expectedMaxs(precision), s"Wrong max for $col: $maxStr")
+
+        // Test plan stats conversion for ALL precisions
+        val planStat = stats.toPlanStat(col, TimeType(precision))
+        assert(planStat.min.isDefined, s"Plan stat min should be defined for $col")
+        assert(planStat.max.isDefined, s"Plan stat max should be defined for $col")
+        assert(planStat.min.get.isInstanceOf[Long],
+          s"Min should be Long (nanoseconds) for $col")
+        assert(planStat.max.get.isInstanceOf[Long],
+          s"Max should be Long (nanoseconds) for $col")
+
+        // Test round-trip conversion for ALL precisions
+        val catalogStat = planStat.toCatalogColumnStat(col, TimeType(precision))
+        assert(catalogStat.min == stats.min,
+          s"Min should round-trip correctly for $col")
+        assert(catalogStat.max == stats.max,
+          s"Max should round-trip correctly for $col")
+        assert(catalogStat.nullCount == stats.nullCount,
+          s"Null count should round-trip correctly for $col")
+      }
+    }
+  }
+
+  test("TimeType statistics with edge cases") {
+    val table = "time_edge_cases"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (id INT, time_val TIME) USING parquet")
+      sql(s"""
+        INSERT INTO $table VALUES
+          (1, TIME '00:00:00'),
+          (2, TIME '23:59:59.999999'),
+          (3, TIME '12:00:00'),
+          (4, NULL)
+      """)
+
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS time_val")
+
+      val stats = getCatalogTable(table).stats.get.colStats("time_val")
+      assert(stats.min.isDefined, "Min should be defined for edge case times")
+      assert(stats.max.isDefined, "Max should be defined for edge case times")
+      assert(stats.nullCount == Some(1), "Should handle null values")
+
+      // Verify midnight and end-of-day are handled correctly
+      val minStr = stats.min.get.asInstanceOf[String]
+      val maxStr = stats.max.get.asInstanceOf[String]
+      assert(minStr.startsWith("00:00:00"), s"Min should be midnight, got: $minStr")
+      assert(maxStr.startsWith("23:59:59"), s"Max should be end-of-day, got: $maxStr")
+    }
+  }
+
+  test("TimeType statistics with all null values") {
+    val table = "time_all_nulls"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (id INT, time_col TIME) USING parquet")
+      sql(s"INSERT INTO $table VALUES (1, NULL), (2, NULL), (3, NULL)")
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS time_col")
+
+      val stats = getCatalogTable(table).stats.get.colStats("time_col")
+      assert(stats.nullCount == Some(3), "Null count should be 3")
+      assert(stats.distinctCount.isDefined, "Distinct count should be defined")
+      assert(stats.distinctCount.get == 0, "Distinct count should be 0 for all-null column")
+      // For all-null columns, min and max are not computed (None)
+      assert(stats.min.isEmpty, "Min should be None for all-null column")
+      assert(stats.max.isEmpty, "Max should be None for all-null column")
+    }
+  }
+
+  test("TimeType column statistics histogram") {
+    val table = "time_histogram_test"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (time_col TIME(6)) USING parquet")
+      sql(s"""INSERT INTO $table VALUES
+        (TIME '08:00:00.000001'),
+        (TIME '12:00:00.000000'),
+        (TIME '18:00:00.000001'),
+        (TIME '20:00:00.000000'),
+        (NULL)""")
+      withSQLConf(
+        SQLConf.HISTOGRAM_ENABLED.key -> "true",
+        SQLConf.HISTOGRAM_NUM_BINS.key -> "2") {
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS time_col")
+        val stats = getCatalogTable(table).stats.get.colStats("time_col")
+        assert(stats.histogram.isDefined, "Histogram should be generated for TIME column")
+        val hgm = stats.histogram.get
+        assert(hgm.bins.length == 2, "Should have 2 bins")
+      }
+      // Histogram disabled: should produce None
+      withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> "false") {
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS time_col")
+        val stats = getCatalogTable(table).stats.get.colStats("time_col")
+        assert(stats.histogram.isEmpty, "Histogram should be None when disabled")
+      }
+    }
+  }
+
   private def getStatAttrNames(tableName: String): Set[String] = {
     val queryStats = spark.table(tableName).queryExecution.optimizedPlan.stats.attributeStats
     queryStats.map(_._1.name).toSet
