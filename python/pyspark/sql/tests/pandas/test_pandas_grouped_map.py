@@ -1553,6 +1553,17 @@ class ApplyInPandasTests(ApplyInPandasTestsMixin, ReusedSQLTestCase):
     pass
 
 
+class ApplyInPandasWithOutputBatchSlicingTests(ApplyInPandasTests):
+    @classmethod
+    def setUpClass(cls):
+        ApplyInPandasTests.setUpClass()
+        # Deliberately tiny so every non-trivial group's output batch is first pre-split on the
+        # worker and then byte-accurately sliced on the JVM. Re-running the suite through both
+        # stages checks they compose without changing results.
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.workerOutputBatchMaxBytes", "128")
+        cls.spark.conf.set("spark.sql.execution.arrow.maxBytesPerOutputBatch", "128")
+
+
 if __name__ == "__main__":
     from pyspark.testing import main
 
