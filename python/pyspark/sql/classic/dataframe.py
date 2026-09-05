@@ -1040,9 +1040,15 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                 _cols.append(c)  # type: ignore[arg-type]
         return self._jseq(_cols, _to_java_column)
 
-    def describe(self, *cols: Union[str, List[str]]) -> ParentDataFrame:
-        if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]  # type: ignore[assignment]
+    @overload
+    def describe(self, *cols: str) -> ParentDataFrame: ...
+
+    @overload
+    def describe(self, __cols: Sequence[str]) -> ParentDataFrame: ...
+
+    def describe(self, *cols: Union[str, Sequence[str]]) -> ParentDataFrame:
+        if len(cols) == 1 and not isinstance(cols[0], str) and isinstance(cols[0], Sequence):
+            cols = tuple(cols[0])
         jdf = self._jdf.describe(self._jseq(cols))
         return DataFrame(jdf, self.sparkSession)
 
@@ -1123,11 +1129,11 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def selectExpr(self, *expr: str) -> ParentDataFrame: ...
 
     @overload
-    def selectExpr(self, *expr: List[str]) -> ParentDataFrame: ...
+    def selectExpr(self, __expr: Sequence[str]) -> ParentDataFrame: ...
 
-    def selectExpr(self, *expr: Union[str, List[str]]) -> ParentDataFrame:
-        if len(expr) == 1 and isinstance(expr[0], list):
-            expr = expr[0]  # type: ignore[assignment]
+    def selectExpr(self, *expr: Union[str, Sequence[str]]) -> ParentDataFrame:
+        if len(expr) == 1 and not isinstance(expr[0], str) and isinstance(expr[0], Sequence):
+            expr = tuple(expr[0])
         jdf = self._jdf.selectExpr(self._jseq(expr))
         return DataFrame(jdf, self.sparkSession)
 
