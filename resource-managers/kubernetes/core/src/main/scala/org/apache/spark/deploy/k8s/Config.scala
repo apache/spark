@@ -383,8 +383,10 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME =
     ConfigBuilder(s"$KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX.serviceAccountName")
-      .doc("Service account that is used when running the executor pod." +
-        "If this parameter is not setup, the fallback logic will use the driver's service account.")
+      .doc("Service account that is used when running the executor pod. " +
+        "If this parameter is not setup, the fallback logic will use the value of " +
+        "spark.kubernetes.authenticate.driver.serviceAccountName. Both are ignored when the " +
+        "executor pod template already names a non-empty service account.")
       .version("3.1.0")
       .stringConf
       .createOptional
