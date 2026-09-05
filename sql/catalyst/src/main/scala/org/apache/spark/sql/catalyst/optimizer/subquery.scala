@@ -140,6 +140,12 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  private def exprsContainUncorrelatedInSubquery(exprs: Seq[Expression]): Boolean = {
+    exprs.exists(_.exists {
+      case in: InSubquery => !in.query.isCorrelated
+      case _ => false
+    })
+  }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(EXISTS_SUBQUERY, LIST_SUBQUERY)) {
@@ -311,9 +317,12 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     // pulled up into the Project node. These expressions use attributes
     // (_aggregateexpression#20L and _aggregateexpression#21L) to refer to the aggregations
     // which are still performed in the Aggregate node (sum(col2#18) and sum(col3#19)).
+    // Also split global aggregates with uncorrelated INs: first(exists) is NULL on empty input.
     case p @ PhysicalAggregation(
         groupingExpressions, aggregateExpressions, resultExpressions, child)
-        if exprsContainsAggregateInSubquery(p.expressions) =>
+        if exprsContainsAggregateInSubquery(p.expressions) ||
+          (groupingExpressions.isEmpty &&
+            exprsContainUncorrelatedInSubquery(resultExpressions)) =>
       val aggExprs = aggregateExpressions.map(
         ae => Alias(ae, "_aggregateexpression")(ae.resultId))
       val aggExprIds = aggExprs.map(_.exprId).toSet
