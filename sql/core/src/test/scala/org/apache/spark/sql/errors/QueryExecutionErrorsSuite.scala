@@ -29,6 +29,7 @@ import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
+import org.junit.jupiter.api.Assertions.{assertEquals, assertNotNull, assertNull}
 import org.mockito.Mockito.{mock, spy, when}
 import org.scalatest.time.SpanSugar._
 
@@ -48,33 +49,15 @@ import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProv
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.execution.streaming.checkpointing.{
-  FileSystemBasedCheckpointFileManager,
-  HDFSMetadataLog}
-import org.apache.spark.sql.execution.vectorized.{
-  ColumnVectorUtils,
-  ConstantColumnVector,
-  MutableColumnarRow,
-  OnHeapColumnVector,
-  WritableColumnVector}
+import org.apache.spark.sql.execution.streaming.checkpointing.{FileSystemBasedCheckpointFileManager, HDFSMetadataLog}
+import org.apache.spark.sql.execution.vectorized.{ColumnVectorUtils, ConstantColumnVector, MutableColumnarRow, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{
-  ArrayType,
-  BooleanType,
-  DataType,
-  DecimalType,
-  IntegerType,
-  LongType,
-  MetadataBuilder,
-  ObjectType,
-  StructField,
-  StructType,
-  TimestampNTZNanosType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, DecimalType, IntegerType, LongType, MetadataBuilder, ObjectType, StructField, StructType, TimestampNTZNanosType}
 import org.apache.spark.sql.vectorized.ColumnarArray
 import org.apache.spark.sql.vectorized.ColumnVector
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
@@ -1454,6 +1437,35 @@ class QueryExecutionErrorsSuite
       parameters = Map("dataType" -> "PhysicalCalendarIntervalType"))
   }
 
+
+  test("SPARK-49634: Numeric value out of range") {
+    def assertSingleRow(result: DataFrame, expectedValue: Option[BigDecimal]): Unit = {
+      val actualResult = result.collect()
+      assertEquals(1, actualResult.length)
+      val row = actualResult.head
+      assertNotNull(row)
+      assertEquals(1, row.length)
+      expectedValue match {
+        case Some(expectedValue: BigDecimal) =>
+          assertEquals(expectedValue.toString(), row.get(0).toString)
+        case None => assertNull(row.get(0))
+      }
+    }
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val query = "select cast('123.45' as decimal(4, 2)) as row0"
+
+      val actualResult = spark.sql(query)
+      assertSingleRow(actualResult, Option.empty)
+    }
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val query_successful = "select cast('123.45' as decimal(5,2)) as row0"
+
+      val result = spark.sql(query_successful)
+      assertSingleRow(result, Option(BigDecimal("123.45")))
+    }
+  }
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {
