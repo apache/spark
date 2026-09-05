@@ -2659,29 +2659,14 @@ class DynamicPartitionPruningV1SuiteAEOn extends DynamicPartitionPruningV1Suite
 }
 
 abstract class DynamicPartitionPruningV2Suite extends DynamicPartitionPruningDataSourceSuiteBase {
+  import testImplicits._
+
   override protected def runAnalyzeColumnCommands: Boolean = false
 
   override protected def initState(): Unit = {
     spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
     spark.conf.set("spark.sql.defaultCatalog", "testcat")
   }
-}
-
-class DynamicPartitionPruningV2SuiteAEOff extends DynamicPartitionPruningV2Suite
-  with DisableAdaptiveExecutionSuite
-
-class DynamicPartitionPruningV2SuiteAEOn extends DynamicPartitionPruningV2Suite
-  with EnableAdaptiveExecutionSuite
-
-abstract class DynamicPartitionPruningV2FilterSuite
-    extends DynamicPartitionPruningV2Suite {
-
-  override protected def initState(): Unit = {
-    super.initState()
-    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableWithV2FilterCatalog].getName)
-  }
-
-  import testImplicits._
 
   private def collectFactScan(df: DataFrame): BatchScanExec = {
     val scans = collectWithSubqueries(df.queryExecution.executedPlan) {
@@ -2743,6 +2728,21 @@ abstract class DynamicPartitionPruningV2FilterSuite
             s"got ${scan.filteredPartitions.flatten.size} of ${scan.inputPartitions.size}")
       }
     }
+  }
+}
+
+class DynamicPartitionPruningV2SuiteAEOff extends DynamicPartitionPruningV2Suite
+  with DisableAdaptiveExecutionSuite
+
+class DynamicPartitionPruningV2SuiteAEOn extends DynamicPartitionPruningV2Suite
+  with EnableAdaptiveExecutionSuite
+
+abstract class DynamicPartitionPruningV2FilterSuite
+    extends DynamicPartitionPruningV2Suite {
+
+  override protected def initState(): Unit = {
+    super.initState()
+    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableWithV2FilterCatalog].getName)
   }
 }
 
