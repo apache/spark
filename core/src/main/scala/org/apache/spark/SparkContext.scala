@@ -421,6 +421,7 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       setLogLevel(level)
     }
+    Utils.setLoggerLevels(_conf)
     _conf.validateSettings()
     _conf.set("spark.app.startTime", startTime.toString)
 
