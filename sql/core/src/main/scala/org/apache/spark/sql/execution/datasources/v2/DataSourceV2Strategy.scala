@@ -38,7 +38,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Dependency, Depend
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
-import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream, SupportsRealTimeMode}
 import org.apache.spark.sql.connector.write.{V1Write, Write}
@@ -975,6 +975,8 @@ private[sql] object DataSourceV2Strategy extends Logging {
     case TrueLiteral => None
     case in: InSubqueryExec if in.isResultUnavailable =>
       None
+    case in: InSubqueryExec if in.values().exists(_.isEmpty) =>
+      Some(new AlwaysFalse())
     case in @ InSubqueryExec(PushableColumnAndNestedColumn(name), _, _, _, _, _) =>
       val values = in.values().getOrElse {
         throw SparkException.internalError(
