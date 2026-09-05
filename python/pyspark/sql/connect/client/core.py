@@ -694,6 +694,16 @@ class PlanObservedMetrics(ObservedMetrics):
         }
 
 
+_ExecutePlanResponseItem = Union[
+    "pa.RecordBatch",
+    StructType,
+    PlanMetrics,
+    PlanObservedMetrics,
+    Dict[str, Any],
+    any_pb2.Any,
+]
+
+
 class AnalyzeResult:
     def __init__(
         self,
@@ -1447,9 +1457,11 @@ class SparkConnectClient(object):
 
     def execute_command_as_iterator(
         self, command: pb2.Command, observations: Optional[Dict[str, Observation]] = None
-    ) -> Iterator[Dict[str, Any]]:
+    ) -> Iterator[_ExecutePlanResponseItem]:
         """
-        Execute given command. Similar to execute_command, but the value is returned using yield.
+        Execute given command, yielding each decoded response as it arrives.
+
+        Callers are responsible for handling the response types relevant to their command.
         """
         if logger.isEnabledFor(logging.DEBUG):
             # inside an if statement to not incur a performance cost converting proto to string
@@ -1459,16 +1471,7 @@ class SparkConnectClient(object):
             )
         req = self._execute_plan_request_with_metadata()
         self._set_command_in_plan(req.plan, command)
-        for response in self._execute_and_fetch_as_iterator(req, observations or {}):
-            if isinstance(response, dict):
-                yield response
-            else:
-                raise PySparkValueError(
-                    errorClass="UNKNOWN_RESPONSE",
-                    messageParameters={
-                        "response": str(response),
-                    },
-                )
+        yield from self._execute_and_fetch_as_iterator(req, observations or {})
 
     def same_semantics(self, plan: pb2.Plan, other: pb2.Plan) -> bool:
         """
@@ -1749,15 +1752,7 @@ class SparkConnectClient(object):
         req: pb2.ExecutePlanRequest,
         observations: Dict[str, Observation],
         progress: Optional["Progress"] = None,
-    ) -> Iterator[
-        Union[
-            "pa.RecordBatch",
-            StructType,
-            PlanMetrics,
-            PlanObservedMetrics,
-            Dict[str, Any],
-        ]
-    ]:
+    ) -> Iterator[_ExecutePlanResponseItem]:
         if logger.isEnabledFor(logging.DEBUG):
             # inside an if statement to not incur a performance cost converting proto to string
             # when not at debug log level.
@@ -1772,16 +1767,7 @@ class SparkConnectClient(object):
 
         def handle_response(
             b: pb2.ExecutePlanResponse,
-        ) -> Iterator[
-            Union[
-                "pa.RecordBatch",
-                StructType,
-                PlanMetrics,
-                PlanObservedMetrics,
-                Dict[str, Any],
-                any_pb2.Any,
-            ]
-        ]:
+        ) -> Iterator[_ExecutePlanResponseItem]:
             nonlocal num_records
             # The session ID is the local session ID and should match what we expect.
             self._verify_response_integrity(b)
@@ -2014,7 +2000,7 @@ class SparkConnectClient(object):
                     raise PySparkValueError(
                         errorClass="UNKNOWN_RESPONSE",
                         messageParameters={
-                            "response": response,
+                            "response": str(response),
                         },
                     )
 
