@@ -134,7 +134,9 @@ class WindowSegmentTreeAllowlistSuite
       assert(seg == 0, s"Should not use segment tree (got $seg frames)")
       df.collect().toSeq
     }
-    val naiveResult = withSQLConf(SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "false") {
+    val naiveResult = withSQLConf(
+      SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "false",
+      SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false") {
       buildDf().collect().toSeq
     }
     QueryTest.sameRows(naiveResult, segTreeResult, isSorted = false).foreach { err =>
