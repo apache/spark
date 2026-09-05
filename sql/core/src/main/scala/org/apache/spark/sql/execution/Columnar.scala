@@ -206,7 +206,9 @@ case class ColumnarToRowExec(child: SparkPlan)
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    Seq(child.executeColumnar().asInstanceOf[RDD[InternalRow]]) // Hack because of type erasure
+    // SPARK-59114: We are in the ColumnToRowExec node, which implies that the underlying child
+    // should always return and RDD of ColumnarBatch (assuming batch is supported by the scan)
+     Seq(child.executeColumnar().asInstanceOf[RDD[InternalRow]]) // Hack because of type erasure
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): ColumnarToRowExec =

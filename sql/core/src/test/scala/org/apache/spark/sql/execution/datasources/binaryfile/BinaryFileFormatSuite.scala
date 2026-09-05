@@ -278,7 +278,8 @@ class BinaryFileFormatSuite extends SharedSparkSession {
         requiredSchema = schema,
         filters = filters,
         options = Map.empty,
-        hadoopConf = spark.sessionState.newHadoopConf())
+        hadoopConf = spark.sessionState.newHadoopConf(),
+        strictlyColumnar = false)
       val partitionedFile = mock(classOf[PartitionedFile])
       when(partitionedFile.toPath).thenReturn(fileStatus.getPath)
       assert(reader(partitionedFile).nonEmpty === expected,
@@ -304,7 +305,8 @@ class BinaryFileFormatSuite extends SharedSparkSession {
       requiredSchema = requiredSchema,
       filters = Seq.empty,
       options = Map.empty,
-      hadoopConf = spark.sessionState.newHadoopConf()
+      hadoopConf = spark.sessionState.newHadoopConf(),
+      strictlyColumnar = false
     )
     val partitionedFile = mock(classOf[PartitionedFile])
     when(partitionedFile.toPath).thenReturn(new Path(file.toURI))
