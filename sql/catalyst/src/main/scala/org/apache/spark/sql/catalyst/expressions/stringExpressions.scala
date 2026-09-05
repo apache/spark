@@ -1096,9 +1096,16 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
 
 object Overlay {
 
+  // `pos - 1` and `pos + length` overflow for positions near the ends of the `int` range,
+  // which turns an empty slice into the whole input and duplicates it around the
+  // replacement. Compute them as `long` and saturate into the `int` range instead, which
+  // is how `substring` already treats out-of-range positions.
+  private def clamp(value: Long): Int =
+    math.max(Int.MinValue.toLong, math.min(Int.MaxValue.toLong, value)).toInt
+
   def calculate(input: UTF8String, replace: UTF8String, pos: Int, len: Int): UTF8String = {
     val builder = new UTF8StringBuilder
-    builder.append(input.substringSQL(1, pos - 1))
+    builder.append(input.substringSQL(1, clamp(pos.toLong - 1)))
     builder.append(replace)
     // If you specify length, it must be a positive whole number or zero.
     // Otherwise it will be ignored.
@@ -1108,7 +1115,7 @@ object Overlay {
     } else {
       replace.numChars
     }
-    builder.append(input.substringSQL(pos + length, Int.MaxValue))
+    builder.append(input.substringSQL(clamp(pos.toLong + length), Int.MaxValue))
     builder.build()
   }
 
@@ -1121,8 +1128,8 @@ object Overlay {
     } else {
       replace.length
     }
-    ByteArray.concat(ByteArray.subStringSQL(input, 1, pos - 1),
-      replace, ByteArray.subStringSQL(input, pos + length, Int.MaxValue))
+    ByteArray.concat(ByteArray.subStringSQL(input, 1, clamp(pos.toLong - 1)),
+      replace, ByteArray.subStringSQL(input, clamp(pos.toLong + length), Int.MaxValue))
   }
 }
 
