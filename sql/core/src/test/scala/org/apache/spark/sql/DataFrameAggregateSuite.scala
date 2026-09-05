@@ -989,7 +989,7 @@ class DataFrameAggregateSuite extends SharedSparkSession
       condition = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
       parameters = Map(
         "functionName" -> "`collect_set`",
-        "dataType" -> "\"MAP\" or \"COLLATED STRING\"",
+        "dataType" -> "\"MAP\"",
         "sqlExpr" -> "\"collect_set(b)\""
       ),
       context = ExpectedContext(

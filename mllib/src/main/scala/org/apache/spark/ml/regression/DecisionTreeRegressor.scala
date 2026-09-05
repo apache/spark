@@ -218,26 +218,33 @@ class DecisionTreeRegressionModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
+    val localRootNode = rootNode
 
     var predictionColNames = Seq.empty[String]
     var predictionColumns = Seq.empty[Column]
 
     if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf { features: Vector => predict(features) }
+      val predictUDF = udf { features: Vector =>
+        localRootNode.predictImpl(features).prediction
+      }
       predictionColNames :+= $(predictionCol)
       predictionColumns :+= predictUDF(col($(featuresCol)))
         .as($(predictionCol), outputSchema($(predictionCol)).metadata)
     }
 
     if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
-      val predictVarianceUDF = udf { features: Vector => predictVariance(features) }
+      val predictVarianceUDF = udf { features: Vector =>
+        localRootNode.predictImpl(features).impurityStats.calculate()
+      }
       predictionColNames :+= $(varianceCol)
       predictionColumns :+= predictVarianceUDF(col($(featuresCol)))
         .as($(varianceCol), outputSchema($(varianceCol)).metadata)
     }
 
     if ($(leafCol).nonEmpty) {
-      val leafUDF = udf { features: Vector => predictLeaf(features) }
+      val leafUDF = udf { features: Vector =>
+        DecisionTreeModel.predictLeaf(features, localRootNode)
+      }
       predictionColNames :+= $(leafCol)
       predictionColumns :+= leafUDF(col($(featuresCol)))
         .as($(leafCol), outputSchema($(leafCol)).metadata)
@@ -345,7 +352,7 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
     require(oldModel.algo == OldAlgo.Regression,
       s"Cannot convert non-regression DecisionTreeModel (old API) to" +
         s" DecisionTreeRegressionModel (new API).  Algo is: ${oldModel.algo}")
-    val rootNode = Node.withLeafIndices(Node.fromOld(oldModel.topNode, categoricalFeatures))
+    val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtr")
     new DecisionTreeRegressionModel(uid, rootNode, numFeatures)
   }

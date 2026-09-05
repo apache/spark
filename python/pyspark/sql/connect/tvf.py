@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from pyspark.errors import PySparkValueError
 from pyspark.sql.tvf import TableValuedFunction as PySparkTableValuedFunction
@@ -116,8 +116,8 @@ class TableValuedFunction:
 
     def _fn(self, name: str, *args: "Column") -> "DataFrame":
         from pyspark.sql.connect.dataframe import DataFrame
-        from pyspark.sql.connect.plan import UnresolvedTableValuedFunction
         from pyspark.sql.connect.functions.builtin import _to_col
+        from pyspark.sql.connect.plan import UnresolvedTableValuedFunction
 
         return DataFrame(
             UnresolvedTableValuedFunction(name, [_to_col(arg) for arg in args]), self._sparkSession
@@ -139,8 +139,9 @@ def _test() -> None:
         sys.exit(0)
 
     import doctest
-    from pyspark.sql import SparkSession as PySparkSession
+
     import pyspark.sql.connect.tvf
+    from pyspark.sql import SparkSession as PySparkSession
 
     globs = pyspark.sql.connect.tvf.__dict__.copy()
 

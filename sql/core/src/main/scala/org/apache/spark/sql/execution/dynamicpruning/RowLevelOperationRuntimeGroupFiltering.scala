@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, DynamicPruningExpression, Expression, InSubquery, ListQuery, PredicateHelper, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, DynamicPruningExpression, Expression, InSubquery, ListQuery, NamedExpression, PredicateHelper, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.optimizer.RewritePredicateSubquery
 import org.apache.spark.sql.catalyst.planning.{DeltaBasedRowLevelOperation, GroupBasedRowLevelOperation}
@@ -26,10 +26,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPl
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{REPLACE_DATA, WRITE_DELTA}
 import org.apache.spark.sql.connector.expressions.NamedReference
-import org.apache.spark.sql.connector.read.{Scan, SupportsRuntimeV2Filtering}
+import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, DataSourceV2Relation, DataSourceV2ScanRelation, ExtractV2Scan}
-import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -55,32 +54,22 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
       _.containsAnyPattern(REPLACE_DATA, WRITE_DELTA)) {
     case GroupBasedRowLevelOperation(replaceData, _, Some(cond),
-        ExtractV2Scan(scan: SupportsRuntimeV2Filtering))
-        if canInjectGroupFilters(cond, scan.filterAttributes) =>
-      injectGroupFilters(replaceData, cond, scan, scan.filterAttributes)
-
-    case GroupBasedRowLevelOperation(replaceData, _, Some(cond),
-        ExtractV2Scan(scan: SupportsRuntimeCatalystFiltering))
-        if canInjectGroupFilters(cond, scan.filterAttributes()) =>
-      injectGroupFilters(replaceData, cond, scan, scan.filterAttributes())
+        r: DataSourceV2ScanRelation)
+        if canInjectGroupFilters(cond, r) =>
+      injectGroupFilters(replaceData, cond, r.scan, r.declaredRuntimeFilterAttrs)
 
     case DeltaBasedRowLevelOperation(writeDelta, _, Some(cond),
-        ExtractV2Scan(scan: SupportsRuntimeV2Filtering))
-        if canInjectGroupFilters(cond, scan.filterAttributes) =>
-      injectGroupFilters(writeDelta, cond, scan, scan.filterAttributes)
-
-    case DeltaBasedRowLevelOperation(writeDelta, _, Some(cond),
-        ExtractV2Scan(scan: SupportsRuntimeCatalystFiltering))
-        if canInjectGroupFilters(cond, scan.filterAttributes()) =>
-      injectGroupFilters(writeDelta, cond, scan, scan.filterAttributes())
+        r: DataSourceV2ScanRelation)
+        if canInjectGroupFilters(cond, r) =>
+      injectGroupFilters(writeDelta, cond, r.scan, r.declaredRuntimeFilterAttrs)
   }
 
   private def canInjectGroupFilters(
       cond: Expression,
-      filterAttrs: Array[NamedReference]): Boolean = {
+      scanRelation: DataSourceV2ScanRelation): Boolean = {
     conf.runtimeRowLevelOperationGroupFilterEnabled &&
       cond != TrueLiteral &&
-      filterAttrs.nonEmpty
+      scanRelation.runtimeFilterAttrs.nonEmpty
   }
 
   private def injectGroupFilters(
@@ -97,8 +86,9 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
         val relation = r.relation.copy(table = originalTable)
         val matchingRowsPlan = buildMatchingRowsPlan(write, relation, cond)
         val filterAttrsSeq = filterAttrs.toImmutableArraySeq
-        val buildKeys = V2ExpressionUtils.resolveRefs[Attribute](filterAttrsSeq, matchingRowsPlan)
-        val pruningKeys = V2ExpressionUtils.resolveRefs[Attribute](filterAttrsSeq, r)
+        val buildKeys =
+          V2ExpressionUtils.resolveRefs[NamedExpression](filterAttrsSeq, matchingRowsPlan)
+        val pruningKeys = V2ExpressionUtils.resolveRefs[NamedExpression](filterAttrsSeq, r)
         Filter(buildDynamicPruningCond(matchingRowsPlan, buildKeys, pruningKeys), r)
     }
     // optimize subqueries to rewrite them as joins and trigger job planning
@@ -143,13 +133,19 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
 
   private def buildDynamicPruningCond(
       matchingRowsPlan: LogicalPlan,
-      buildKeys: Seq[Attribute],
-      pruningKeys: Seq[Attribute]): Expression = {
+      buildKeys: Seq[NamedExpression],
+      pruningKeys: Seq[NamedExpression]): Expression = {
     assert(buildKeys.nonEmpty && pruningKeys.nonEmpty)
 
-    val buildQuery = Aggregate(buildKeys, buildKeys, matchingRowsPlan)
+    def unalias(expr: NamedExpression): Expression = expr match {
+      case alias: Alias => alias.child
+      case other => other
+    }
+
+    val buildQuery = Aggregate(buildKeys.map(unalias), buildKeys, matchingRowsPlan)
     DynamicPruningExpression(
-      InSubquery(pruningKeys, ListQuery(buildQuery, numCols = buildQuery.output.length)))
+      InSubquery(pruningKeys.map(unalias),
+        ListQuery(buildQuery, numCols = buildQuery.output.length)))
   }
 
   private def buildTableToScanAttrMap(

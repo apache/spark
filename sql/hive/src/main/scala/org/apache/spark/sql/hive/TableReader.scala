@@ -242,7 +242,7 @@ class HadoopTableReader(
     }.toSeq
 
     // Even if we don't use any partitions, we still need an empty RDD
-    if (hivePartitionRDDs.size == 0) {
+    if (hivePartitionRDDs.isEmpty) {
       new EmptyRDD[InternalRow](sparkSession.sparkContext)
     } else {
       new UnionRDD(hivePartitionRDDs(0).context, hivePartitionRDDs)

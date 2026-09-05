@@ -16,7 +16,7 @@
 #
 
 import sys
-from typing import Any, Dict, Optional, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
@@ -182,10 +182,11 @@ class RuntimeConfig:
 
 
 def _test() -> None:
-    import os
     import doctest
-    from pyspark.sql.session import SparkSession
+    import os
+
     import pyspark.sql.conf
+    from pyspark.sql.session import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

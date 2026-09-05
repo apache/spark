@@ -17,10 +17,10 @@
 
 package org.apache.spark.network.server;
 
+import java.security.SecureRandom;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -79,9 +79,9 @@ public class OneForOneStreamManager extends StreamManager {
   }
 
   public OneForOneStreamManager() {
-    // For debugging purposes, start with a random stream id to help identifying different streams.
-    // This does not need to be globally unique, only unique to this class.
-    nextStreamId = new AtomicLong((long) new Random().nextInt(Integer.MAX_VALUE) * 1000);
+    // Start from a base drawn uniformly from the non-negative long range. Stream ids are handed
+    // out sequentially from this base.
+    nextStreamId = new AtomicLong(new SecureRandom().nextLong() & Long.MAX_VALUE);
     streams = new ConcurrentHashMap<>();
   }
 
@@ -165,16 +165,21 @@ public class OneForOneStreamManager extends StreamManager {
 
   @Override
   public void checkAuthorization(TransportClient client, long streamId) {
-    if (client.getClientId() != null) {
-      StreamState state = streams.get(streamId);
-      JavaUtils.checkArgument(state != null, "Unknown stream ID.");
-      if (!client.getClientId().equals(state.appId)) {
-        throw new SecurityException(String.format(
-          "Client %s not authorized to read stream %d (app %s).",
-          client.getClientId(),
-          streamId,
-          state.appId));
-      }
+    StreamState state = streams.get(streamId);
+    JavaUtils.checkArgument(state != null, "Unknown stream ID.");
+    if (client.getClientId() != null && !client.getClientId().equals(state.appId)) {
+      throw new SecurityException(String.format(
+        "Client %s not authorized to read stream %d (app %s).",
+        client.getClientId(),
+        streamId,
+        state.appId));
+    }
+    // Streams are registered to (and documented as only readable from) exactly one client
+    // connection. Enforce that binding for every request.
+    if (state.associatedChannel != null && state.associatedChannel != client.getChannel()) {
+      throw new SecurityException(String.format(
+        "Channel not authorized to read stream %d: streams may only be read from the " +
+          "connection that registered them.", streamId));
     }
   }
 

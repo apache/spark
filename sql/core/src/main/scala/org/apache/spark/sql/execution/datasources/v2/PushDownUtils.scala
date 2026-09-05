@@ -212,8 +212,11 @@ object PushDownUtils extends Logging {
         // filters whose translation was not already accepted in the first pass.  (See SPARK-55596)
         // Only candidates whose referenced columns are declared in filterAttributes() are eligible.
         val partPredicatesPushed = filterableScan.supportsIterativePushdown() && {
-          val filterAttrs = V2ExpressionUtils.resolveAttributeRefs(
-            filterableScan.filterAttributes(), output)
+          val filterAttrs = V2ExpressionUtils.resolveDataSourceRuntimeFilterRefs(
+            filterableScan.filterAttributes(),
+            output,
+            "filterAttributes()",
+            filterableScan.getClass.getName)
           val pushed = filterableScan.pushedPredicates().toSet
           val candidates = runtimeFilters.filter { f =>
             !filtersToTranslated.get(f).exists(pushed.contains) &&
@@ -313,7 +316,7 @@ object PushDownUtils extends Logging {
 
           val inputMap = k.partitionKeys.groupBy(identity).view.mapValues(_.size)
           val comparableKeyWrapperFactory = InternalRowComparableWrapper
-            .getInternalRowComparableWrapperFactory(k.expressionDataTypes)
+            .getInternalRowComparableWrapperFactory(k.keyDataTypes)
           val filteredMap = newPartitions.groupBy(
             p => comparableKeyWrapperFactory(p.asInstanceOf[HasPartitionKey].partitionKey())
           )

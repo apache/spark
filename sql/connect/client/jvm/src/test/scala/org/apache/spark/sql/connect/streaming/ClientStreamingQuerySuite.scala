@@ -555,6 +555,8 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     // Remove the listener, length should be 1.
     spark.streams.removeListener(listener)
     assert(spark.streams.listListeners().length == 0)
+    // Wait for the executionThread to complete. See SPARK-58000.
+    Thread.sleep(5000)
   }
 
   test("listener events") {
@@ -617,7 +619,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
           .sql(s"select * from $tableName")
           .collect()
           .toSeq
-        assert(rows.size > 0)
+        assert(rows.nonEmpty)
         assert(rows.map(_.getLong(1)).sum > 0)
         logInfo(s"Rows in $tableName: $rows")
       }
@@ -660,7 +662,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
           .sql(s"select * from $tableName")
           .collect()
           .toSeq
-        assert(rows.size > 0)
+        assert(rows.nonEmpty)
         assert(rows.map(_.getLong(1)).sum > 0)
         logInfo(s"Rows in $tableName: $rows")
       }

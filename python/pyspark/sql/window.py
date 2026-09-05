@@ -18,16 +18,17 @@
 # mypy: disable-error-code="empty-body"
 
 import sys
-from typing import Sequence, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Sequence, Union
 
 from pyspark.sql.utils import dispatch_window_method
 from pyspark.util import (
-    JVM_LONG_MIN,
     JVM_LONG_MAX,
+    JVM_LONG_MIN,
 )
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+
     from pyspark.sql._typing import ColumnOrName
 
 __all__ = ["Window", "WindowSpec"]

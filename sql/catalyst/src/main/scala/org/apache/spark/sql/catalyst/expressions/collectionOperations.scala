@@ -1430,11 +1430,9 @@ case class Reverse(child: Expression)
       BinaryType,
       ArrayType))
 
-  // Reversing a string transforms its content, so a CHAR/VARCHAR input yields plain STRING (R1).
-  // Array and binary inputs are unaffected. ImplicitTypeCasts already promotes the string branch
-  // (its promotion looks inside a TypeCollection), so this covers the paths that do not go
-  // through implicit casting, such as an expression built directly.
-  override def dataType: DataType = StringHelper.transformingStringResultType(child.dataType)
+  // Reversing a string transforms its content, so ImplicitTypeCasts promotes CHAR/VARCHAR to
+  // STRING. Array and binary inputs are unaffected.
+  override def dataType: DataType = child.dataType
 
   private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
 
@@ -2513,10 +2511,9 @@ case class ArrayJoin(
     }
   }
 
-  // The joined result concatenates every element plus delimiters, so it must not inherit the
-  // element's CHAR/VARCHAR length constraint (R1).
+  // After ImplicitTypeCasts, array elements that were CHAR/VARCHAR are STRING.
   override def dataType: DataType =
-    StringHelper.transformingStringResultType(array.dataType.asInstanceOf[ArrayType].elementType)
+    array.dataType.asInstanceOf[ArrayType].elementType
 
   override def prettyName: String = "array_join"
 
@@ -3203,7 +3200,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     if (children.isEmpty) {
       StringType
     } else {
-      StringHelper.transformingStringResultType(super.dataType)
+      super.dataType
     }
   }
 
@@ -3430,7 +3427,7 @@ case class Flatten(child: Expression) extends UnaryExpression
         throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
           prettyName, numberOfElements)
       }
-      val flattenedData = new Array(numberOfElements.toInt)
+      val flattenedData = new Array[Any](numberOfElements.toInt)
       var position = 0
       for (ad <- arrayData) {
         val arr = ad.toObjectArray(elementType)
@@ -3631,7 +3628,7 @@ case class Sequence(
       val physicalDataType = PhysicalDataType(iType)
       type T = physicalDataType.InternalType
       val integral = PhysicalIntegralType.integral(iType)
-      val ct = ClassTag[T](physicalDataType.tag.mirror.runtimeClass(physicalDataType.tag.tpe))
+      val ct = physicalDataType.tag
       new IntegralSequenceImpl[T](iType)(ct, integral.asInstanceOf[Integral[T]])
 
     case TimestampType | TimestampNTZType =>

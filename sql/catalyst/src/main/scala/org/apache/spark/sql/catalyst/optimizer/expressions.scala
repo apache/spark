@@ -830,13 +830,30 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
         case endsWith(postfix) =>
           Some(EndsWith(input, Literal.create(postfix, input.dataType)))
         // 'a%a' pattern is basically same with 'a%' && '%a'.
-        // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
+        // However, the additional length condition is required to prevent 'a' match 'a%a'.
         case startsAndEndsWith(prefix, postfix) =>
-          Some(And(GreaterThanOrEqual(Length(input),
-            Literal.create(prefix.codePointCount(0, prefix.length)
-              + postfix.codePointCount(0, postfix.length))),
-          And(StartsWith(input, Literal.create(prefix, input.dataType)),
-            EndsWith(input, Literal.create(postfix, input.dataType)))))
+          // The length guard only rejects inputs too short to hold both the prefix and the
+          // suffix. When the collation matches raw bytes (supportsBinaryEquality),
+          // StartsWith/EndsWith pin the literal bytes of the prefix and suffix, so a
+          // byte-length guard (OctetLength, O(1) via the stored numBytes) accepts exactly the
+          // same inputs as the code-point guard and is cheaper. Otherwise the anchors are
+          // collation-aware (LIKE reaches this only for UTF8_LCASE) and can match a code point
+          // whose UTF-8 length differs from the pattern's -- a single multibyte code point
+          // could then satisfy both anchors and clear the byte guard -- so the code-point
+          // (Length) guard must be kept for correctness.
+          val lengthGuard = input.dataType match {
+            case st: StringType if st.supportsBinaryEquality =>
+              GreaterThanOrEqual(OctetLength(input),
+                Literal.create(UTF8String.fromString(prefix).numBytes
+                  + UTF8String.fromString(postfix).numBytes))
+            case _ =>
+              GreaterThanOrEqual(Length(input),
+                Literal.create(prefix.codePointCount(0, prefix.length)
+                  + postfix.codePointCount(0, postfix.length)))
+          }
+          Some(And(lengthGuard,
+            And(StartsWith(input, Literal.create(prefix, input.dataType)),
+              EndsWith(input, Literal.create(postfix, input.dataType)))))
         case contains(infix) =>
           Some(Contains(input, Literal.create(infix, input.dataType)))
         case equalTo(str) =>
@@ -1158,6 +1175,8 @@ object FoldablePropagation extends Rule[LogicalPlan] {
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
     _.containsPattern(CAST), ruleId) {
+    // Annotated STRING (flag off) is not unconstrained STRING. Dropping CAST(... AS STRING)
+    // would hide the type change. First-class CHAR/VARCHAR already fail e.dataType == StringType.
     case c @ Cast(e: NamedExpression, StringType, _, _)
       if e.dataType == StringType && e.metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY) => c
     case Cast(e, dataType, _, _) if e.dataType == dataType => e
@@ -1182,8 +1201,13 @@ object SimplifyCasts extends Rule[LogicalPlan] {
 
 
 /**
- * Removes the inner case conversion expressions that are unnecessary because
- * the inner conversion is overwritten by the outer one.
+ * Removes redundant same-case conversion expressions (e.g. UPPER(UPPER(x)) or LOWER(LOWER(x)))
+ * that are unnecessary because the case conversion operation is idempotent.
+ *
+ * Note: Cross-case conversions (UPPER(LOWER(x)) or LOWER(UPPER(x))) are NOT simplified
+ * because they are not semantics-preserving for some Unicode characters
+ * (e.g. U+0131 LATIN SMALL LETTER DOTLESS I, where LOWER(UPPER(U+0131)) yields 'i'
+ * while LOWER(U+0131) leaves the character unchanged).
  */
 object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
@@ -1191,8 +1215,6 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
     case q: LogicalPlan => q.transformExpressionsUpWithPruning(
       _.containsPattern(UPPER_OR_LOWER), ruleId) {
       case Upper(Upper(child)) => Upper(child)
-      case Upper(Lower(child)) => Upper(child)
-      case Lower(Upper(child)) => Lower(child)
       case Lower(Lower(child)) => Lower(child)
     }
   }

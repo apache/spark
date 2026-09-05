@@ -30,10 +30,9 @@ import org.apache.spark.udf.worker.{
   Cancel, DirectWorker, LocalTcpConnection, ProcessCallable, UDFProtoCommunicationPattern,
   UDFWorkerProperties, UDFWorkerSpecification, UnixDomainSocket, WorkerCapabilities,
   WorkerConnectionSpec, WorkerEnvironment}
-import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerHandle, WorkerSecurityScope,
-  WorkerSession}
+import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerSecurityScope, WorkerSession}
 import org.apache.spark.udf.worker.core.direct.{DirectWorkerException, DirectWorkerProcess,
-  DirectWorkerTimeoutException}
+  DirectWorkerTimeoutException, UnixDomainSocketEndpointDirectory}
 
 /**
  * Tests for [[DirectWorkerDispatcher]] process lifecycle: spawning workers
@@ -133,6 +132,16 @@ class DirectWorkerDispatcherSuite
     case sfc: SocketFileConnection => sfc.socketPath
     case other => fail(
       s"Expected SocketFileConnection, got ${other.getClass.getSimpleName}")
+  }
+
+  private def awaitThreadWaiting(thread: Thread, description: String): Unit = {
+    val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10)
+    while (thread.isAlive && thread.getState != Thread.State.WAITING &&
+        System.nanoTime() < deadline) {
+      Thread.sleep(10)
+    }
+    assert(thread.getState == Thread.State.WAITING,
+      s"$description did not enter the lifecycle barrier; state=${thread.getState}")
   }
 
   test("creates a worker and session") {
@@ -324,26 +333,30 @@ class DirectWorkerDispatcherSuite
     }
   }
 
-  test("close racing with in-flight createSession does not leak the worker") {
-    // The acquire-before-publish + post-publish closed re-check pattern in
-    // createSession is designed for this race: thread A is mid-spawn when
-    // thread B calls close(). Thread A must either throw IllegalStateException
-    // (post-publish check caught the close) or receive a session whose worker
-    // is reaped by close()'s iteration. No orphan process or socket file
-    // should remain in either case.
+  test("close racing with newSession construction does not return a torn-down session") {
+    // close() must wait for thread A to construct the session, then make the
+    // final publication check reject it before tearing down dispatcher state.
     val readyLatch = new java.util.concurrent.CountDownLatch(1)
     val releaseLatch = new java.util.concurrent.CountDownLatch(1)
     val capturedWorkers =
       new java.util.concurrent.ConcurrentLinkedQueue[DirectWorkerProcess]()
+    val transportClosed = new java.util.concurrent.atomic.AtomicBoolean(false)
     val racing = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner)) {
-      override protected def afterWorkerRegistered(worker: DirectWorkerProcess): Unit = {
+      override protected def newSession(worker: DirectWorkerProcess): WorkerSession = {
+        val session = super.newSession(worker)
         capturedWorkers.add(worker)
         readyLatch.countDown()
-        // Block here so dispatcher.close() runs while createSession is in
-        // flight. Use a generous wait so a slow CI doesn't time out.
+        // Block after construction but before returning the session so close
+        // starts in the interval covered by the final publication check.
         if (!releaseLatch.await(30, java.util.concurrent.TimeUnit.SECONDS)) {
           fail("releaseLatch never fired -- test orchestration broken")
         }
+        session
+      }
+
+      override protected def closeTransport(): Unit = {
+        transportClosed.set(true)
+        super.closeTransport()
       }
     }
     try {
@@ -359,15 +372,17 @@ class DirectWorkerDispatcherSuite
       }, "createSession-racer")
       createThread.start()
 
-      // Wait for thread A to have published the worker and entered the
-      // blocking override.
+      // Wait for thread A to construct the session and enter the blocking
+      // override before returning it to createSession.
       assert(readyLatch.await(10, java.util.concurrent.TimeUnit.SECONDS),
-        "createSession thread never reached afterWorkerRegistered")
+        "createSession thread never constructed the session")
 
       val closeThread = new Thread(() => racing.close(), "close-racer")
       closeThread.start()
-      // Give close() time to flip `closed` and iterate workers.
-      Thread.sleep(200)
+      awaitThreadWaiting(closeThread, "close thread")
+      assert(closeThread.isAlive, "close should wait for the in-flight createSession")
+      assert(!transportClosed.get(),
+        "transport cleanup must not run while createSession is in flight")
 
       // Now release the in-flight createSession.
       releaseLatch.countDown()
@@ -384,18 +399,11 @@ class DirectWorkerDispatcherSuite
 
       outcome.get() match {
         case Left(e: IllegalStateException) =>
-          // Contractually allowed, but unreachable with this orchestration:
-          // readyLatch only fires after createSession has cleared both
-          // `closed` checks, so B's close cannot flip `closed` in time for
-          // A to observe it. Kept defensive so a future internal change
-          // that introduces a new window is still covered.
           assert(e.getMessage.contains("closed"),
             s"expected dispatcher-closed error, got: ${e.getMessage}")
         case Left(other) =>
           fail(s"unexpected exception from racing createSession: $other")
-        case Right(_) =>
-          // close() iterated the published worker and tore it down; the
-          // returned session points at a worker that should now be dead.
+        case Right(_) => fail("createSession should fail when close wins during newSession")
       }
 
       // Whichever path won, the worker must not still be running and the
@@ -413,6 +421,150 @@ class DirectWorkerDispatcherSuite
       releaseLatch.countDown()
       racing.close()
     }
+  }
+
+  test("close waits for an in-flight worker release before transport cleanup") {
+    val connectionCloseStarted = new java.util.concurrent.CountDownLatch(1)
+    val allowConnectionClose = new java.util.concurrent.CountDownLatch(1)
+    val transportClosed = new java.util.concurrent.atomic.AtomicBoolean(false)
+    val errors = new java.util.concurrent.ConcurrentLinkedQueue[Throwable]()
+    val racing = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner)) {
+      override protected def newConnection(address: String): WorkerConnection =
+        new SocketFileConnection(address) {
+          override def close(): Unit = {
+            connectionCloseStarted.countDown()
+            if (!allowConnectionClose.await(30, java.util.concurrent.TimeUnit.SECONDS)) {
+              throw new IllegalStateException("allowConnectionClose never fired")
+            }
+            super.close()
+          }
+        }
+
+      override protected def closeTransport(): Unit = {
+        transportClosed.set(true)
+        super.closeTransport()
+      }
+    }
+    try {
+      val session = racing.createSession(None)
+      val worker = workerProcess(session)
+      val releaseThread = new Thread(() => {
+        try session.close(emptyCancel) catch {
+          case t: Throwable => errors.add(t)
+        }
+      }, "session-release-racer")
+      releaseThread.start()
+
+      assert(connectionCloseStarted.await(10, java.util.concurrent.TimeUnit.SECONDS),
+        "session release never started closing the worker connection")
+
+      val closeThread = new Thread(() => {
+        try racing.close() catch {
+          case t: Throwable => errors.add(t)
+        }
+      }, "dispatcher-close-racer")
+      closeThread.start()
+      awaitThreadWaiting(closeThread, "dispatcher close thread")
+
+      assert(closeThread.isAlive, "dispatcher close should wait for worker release")
+      assert(!transportClosed.get(),
+        "transport cleanup must wait for worker release teardown")
+
+      allowConnectionClose.countDown()
+      releaseThread.join(10000)
+      closeThread.join(10000)
+
+      assert(!releaseThread.isAlive, "session release thread did not finish")
+      assert(!closeThread.isAlive, "dispatcher close thread did not finish")
+      assert(errors.isEmpty,
+        s"unexpected close errors: ${errors.toArray.mkString(", ")}")
+      assert(transportClosed.get(), "dispatcher close should clean up transport state")
+      assert(!worker.process.isAlive, "worker process should be terminated")
+    } finally {
+      allowConnectionClose.countDown()
+      racing.close()
+    }
+  }
+
+  test("interrupted close completes cleanup before restoring the interrupt") {
+    val cleanupMarker = Files.createTempFile("interrupted-close-cleanup", ".txt").toFile
+    cleanupMarker.delete()
+    val env = WorkerEnvironment.newBuilder()
+      .setEnvironmentCleanup(ProcessCallable.newBuilder()
+        .addCommand("bash").addCommand("-c")
+        .addCommand(s"sleep 0.2; touch ${cleanupMarker.getAbsolutePath}").build())
+      .build()
+    val workerRegistered = new java.util.concurrent.CountDownLatch(1)
+    val releaseCreation = new java.util.concurrent.CountDownLatch(1)
+    val racing = new TestDirectWorkerDispatcher(specWithEnv(env = env)) {
+      override protected def afterWorkerRegistered(worker: DirectWorkerProcess): Unit = {
+        workerRegistered.countDown()
+        if (!releaseCreation.await(30, java.util.concurrent.TimeUnit.SECONDS)) {
+          fail("releaseCreation never fired -- test orchestration broken")
+        }
+      }
+    }
+
+    val createOutcome =
+      new java.util.concurrent.atomic.AtomicReference[Either[Throwable, WorkerSession]]()
+    val closeError = new java.util.concurrent.atomic.AtomicReference[Throwable]()
+    val closeWasInterrupted = new java.util.concurrent.atomic.AtomicBoolean(false)
+    val createThread = new Thread(() => {
+      try {
+        createOutcome.set(Right(racing.createSession(None)))
+      } catch {
+        case t: Throwable => createOutcome.set(Left(t))
+      }
+    }, "interrupted-close-create")
+    val closeThread = new Thread(() => {
+      try {
+        racing.close()
+      } catch {
+        case t: Throwable => closeError.set(t)
+      } finally {
+        closeWasInterrupted.set(Thread.currentThread().isInterrupted)
+      }
+    }, "interrupted-close")
+
+    try {
+      createThread.start()
+      assert(workerRegistered.await(10, java.util.concurrent.TimeUnit.SECONDS),
+        "createSession thread never registered its worker")
+
+      closeThread.start()
+      awaitThreadWaiting(closeThread, "interrupted close thread")
+      closeThread.interrupt()
+      assert(closeThread.isAlive, "close should keep waiting after interruption")
+      assert(!cleanupMarker.exists(),
+        "environment cleanup must not run while createSession is in flight")
+
+      releaseCreation.countDown()
+      createThread.join(10000)
+      closeThread.join(10000)
+      assert(!createThread.isAlive, "createSession thread did not finish")
+      assert(!closeThread.isAlive, "close thread did not finish")
+      assert(closeError.get() == null,
+        s"close should not fail after interruption: ${closeError.get()}")
+      assert(cleanupMarker.exists(), "environment cleanup should complete before close returns")
+      assert(closeWasInterrupted.get(), "close should restore the interrupt flag after cleanup")
+      createOutcome.get() match {
+        case Left(e: IllegalStateException) =>
+          assert(e.getMessage.contains("closed"),
+            s"expected dispatcher-closed error, got: ${e.getMessage}")
+        case Left(other) => fail(s"unexpected exception from createSession: $other")
+        case Right(_) => fail("createSession should fail when close wins")
+      }
+    } finally {
+      releaseCreation.countDown()
+      racing.close()
+      cleanupMarker.delete()
+    }
+  }
+
+  test("uses the kqueue UDS path limit on BSD") {
+    assert(UnixDomainSocketEndpointDirectory.maxPathBytesForOs("Linux") == 107)
+    assert(UnixDomainSocketEndpointDirectory.maxPathBytesForOs("Mac OS X") == 103)
+    assert(UnixDomainSocketEndpointDirectory.maxPathBytesForOs("FreeBSD") == 103)
   }
 
   test("worker-provided graceful timeout is capped at the engine-side maximum") {
@@ -509,9 +661,7 @@ class DirectWorkerDispatcherSuite
     var capturedWorker: DirectWorkerProcess = null
     val failingDispatcher =
       new TestDirectWorkerDispatcher(specWithRunner(defaultRunner)) {
-        override protected def newSession(
-            workerHandle: WorkerHandle,
-            connection: WorkerConnection): WorkerSession =
+        override protected def newSession(worker: DirectWorkerProcess): WorkerSession =
           throw new RuntimeException("session creation failed")
         override protected def afterWorkerRegistered(w: DirectWorkerProcess): Unit = {
           capturedWorker = w
