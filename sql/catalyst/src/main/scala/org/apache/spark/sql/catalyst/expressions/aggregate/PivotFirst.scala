@@ -86,22 +86,27 @@ case class PivotFirst(
 
   override val dataType: DataType = ArrayType(valueDataType)
 
-  private val usesTreeMap: Boolean = !TypeUtils.typeWithProperEquals(pivotColumn.dataType)
-
-  val pivotIndex: Map[Any, Int] = if (usesTreeMap) {
-    TreeMap(pivotColumnValues.zipWithIndex: _*)(
-      TypeUtils.getInterpretedOrdering(pivotColumn.dataType))
-  } else {
-    HashMap(pivotColumnValues.zipWithIndex: _*)
+  private val usesTreeMap: Boolean = pivotColumn.dataType match {
+    case FloatType | DoubleType => true
+    case other => !TypeUtils.typeWithProperEquals(other)
   }
 
-  // Null-safe lookup into pivotIndex. When pivotIndex is a TreeMap, its comparison-based lookup
-  // throws NPE on null keys. Returning -1 for null is safe on the TreeMap path because null can
-  // never be a TreeMap key (insertion would also NPE), so it can never match any pivot value.
-  // Otherwise, pivotIndex is a HashMap that handles null keys safely via hash-based lookup.
-  private def findPivotIndex(key: Any): Int = key match {
-    case null if usesTreeMap => -1
-    case _ => pivotIndex.getOrElse(key, -1)
+  private def nullSafeOrdering(pivotType: DataType): Ordering[Any] = {
+    val ordering = TypeUtils.getInterpretedOrdering(pivotType)
+    (x: Any, y: Any) =>
+      if (x == null) {
+        if (y == null) 0 else -1
+      } else if (y == null) {
+        1
+      } else {
+        ordering.compare(x, y)
+      }
+  }
+
+  val pivotIndex: Map[Any, Int] = if (usesTreeMap) {
+    TreeMap(pivotColumnValues.zipWithIndex: _*)(nullSafeOrdering(pivotColumn.dataType))
+  } else {
+    HashMap(pivotColumnValues.zipWithIndex: _*)
   }
 
   val indexSize = pivotIndex.size
@@ -111,7 +116,7 @@ case class PivotFirst(
   override def update(mutableAggBuffer: InternalRow, inputRow: InternalRow): Unit = {
     val pivotColValue = pivotColumn.eval(inputRow)
     // We ignore rows whose pivot column value is not in the list of pivot column values.
-    val index = findPivotIndex(pivotColValue)
+    val index = pivotIndex.getOrElse(pivotColValue, -1)
     if (index >= 0) {
       val value = valueColumn.eval(inputRow)
       if (value != null) {
