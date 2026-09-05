@@ -508,6 +508,75 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     }
   }
 
+  test("SPARK-58217: cast decimal to timestamp overflow with ansi on") {
+    val largeDecimal = Literal(
+      Decimal(new java.math.BigDecimal("99999999999999999999")), DecimalType(38, 0))
+    checkErrorInExpression[SparkArithmeticException](
+      cast(largeDecimal, TimestampType),
+      "CAST_OVERFLOW",
+      Map(
+        "value" -> "99999999999999999999BD",
+        "sourceType" -> "\"DECIMAL(38,0)\"",
+        "targetType" -> "\"TIMESTAMP\"",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+      ))
+
+    val negativeDecimal = Literal(Decimal(
+      new java.math.BigDecimal("-99999999999999999999"), 38, 0))
+    checkErrorInExpression[SparkArithmeticException](
+      cast(negativeDecimal, TimestampType),
+      "CAST_OVERFLOW",
+      Map(
+        "value" -> "-99999999999999999999BD",
+        "sourceType" -> "\"DECIMAL(38,0)\"",
+        "targetType" -> "\"TIMESTAMP\"",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+      ))
+
+    Seq(
+      ("9223372036854.775808", "9223372036854.775808BD"),
+      ("-9223372036854.775809", "-9223372036854.775809BD")
+    ).foreach { case (value, formattedValue) =>
+      val boundaryDecimal = Literal(Decimal(
+        new java.math.BigDecimal(value), 19, 6))
+      checkErrorInExpression[SparkArithmeticException](
+        cast(boundaryDecimal, TimestampType),
+        "CAST_OVERFLOW",
+        Map(
+          "value" -> formattedValue,
+          "sourceType" -> "\"DECIMAL(19,6)\"",
+          "targetType" -> "\"TIMESTAMP\"",
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+        ))
+    }
+
+    Seq(
+      ("9223372036854.7758075", Long.MaxValue),
+      ("-9223372036854.7758085", Long.MinValue)
+    ).foreach { case (value, expected) =>
+      val boundaryDecimal = Literal(Decimal(new java.math.BigDecimal(value), 20, 7))
+      checkEvaluation(cast(boundaryDecimal, TimestampType), expected)
+    }
+
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      val extremeScale = -500000000
+      val extremeType = DecimalType(1, extremeScale)
+      val extremeDecimal = Literal(Decimal(1L, 1, extremeScale), extremeType)
+      checkErrorInExpression[SparkArithmeticException](
+        cast(extremeDecimal, TimestampType),
+        "CAST_OVERFLOW",
+        Map(
+          "value" -> "1E+500000000BD",
+          "sourceType" -> "\"DECIMAL(1,-500000000)\"",
+          "targetType" -> "\"TIMESTAMP\"",
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+        ))
+
+      val zero = Literal(Decimal(0L, 1, extremeScale), extremeType)
+      checkEvaluation(cast(zero, TimestampType), 0L)
+    }
+  }
+
   private def castOverflowErrMsg(v: Any, from: DataType, to: DataType): String = {
     s"The value ${toSQLValue(v, from)} of the type ${toSQLType(from)} cannot be " +
     s"cast to ${toSQLType(to)} due to an overflow."
