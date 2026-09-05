@@ -2009,6 +2009,37 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-59251: Parquet readers reject incompatible primitive type conversions consistently") {
+    val cases = Seq(
+      ("required int32 c (DATE);", DecimalType(10, 0),
+        (record: SimpleGroup) => record.add(0, 1)),
+      ("required fixed_len_byte_array(4) c;", StringType,
+        (record: SimpleGroup) =>
+          record.add(0, Binary.fromConstantByteArray(Array[Byte](1, 2, 3, 4)))))
+
+    cases.foreach { case (column, readType, writeValue) =>
+      val parquetSchema = MessageTypeParser.parseMessageType(
+        s"message root {\n  $column\n}")
+      val readSchema = new StructType().add("c", readType)
+
+      withTempDir { dir =>
+        val path = new Path(s"${dir.getCanonicalPath}/incompatible.parquet")
+        val writer = createParquetWriter(parquetSchema, path)
+        val record = new SimpleGroup(parquetSchema)
+        writeValue(record)
+        writer.write(record)
+        writer.close()
+
+        withAllParquetReaders {
+          val error = intercept[SparkException] {
+            spark.read.schema(readSchema).parquet(path.toString).collect()
+          }
+          assert(error.getCondition === "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH")
+        }
+      }
+    }
+  }
+
   test("SPARK-55444: vectorized read rejects an incompatible encoding requested as TimeType") {
     // TimeTypeParquetOps.getVectorUpdater returns None for any encoding other than INT64
     // TIME(MICROS/NANOS), so the vectorized factory falls through to a clean
