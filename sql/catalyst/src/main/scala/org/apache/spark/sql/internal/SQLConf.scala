@@ -1253,6 +1253,23 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SHUFFLE_ROW_CHECKSUM_FAIL_ON_INVALID_ROW =
+    buildConf("spark.sql.shuffle.orderIndependentChecksum.failOnInvalidRow")
+      .internal()
+      .doc("Controls what the shuffle order-independent (row-based) checksum does when it " +
+        "detects, before reading a row, an UnsafeRow whose backing memory cannot be safely " +
+        "hashed: a null baseObject that points into the first memory page, an out-of-bounds " +
+        "on-heap offset, or a negative size. When true (default), it logs the row's context " +
+        "(stage/partition/task/ordinal and pointer state) and fails the task with a descriptive " +
+        "error. This replaces the process crash (SIGSEGV) the unchecked read caused before, so " +
+        "it never increases query failures for a genuinely bad row while making it debuggable. " +
+        "Set to false only as a safety valve -- to log and disable that partition's checksum " +
+        "instead of failing -- if a validator false positive is ever observed. The invalid " +
+        "pointer is never dereferenced in either mode.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
     buildConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize")
       .internal()
@@ -8917,6 +8934,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def shuffleChecksumMismatchQueryLevelRollbackEnabled: Boolean =
     getConf(SHUFFLE_CHECKSUM_MISMATCH_QUERY_LEVEL_ROLLBACK_ENABLED)
+
+  def shuffleRowChecksumFailOnInvalidRow: Boolean =
+    getConf(SHUFFLE_ROW_CHECKSUM_FAIL_ON_INVALID_ROW)
 
   def allowCollationsInMapKeys: Boolean = getConf(ALLOW_COLLATIONS_IN_MAP_KEYS)
 

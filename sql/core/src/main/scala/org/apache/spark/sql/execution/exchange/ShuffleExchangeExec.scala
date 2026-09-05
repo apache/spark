@@ -601,14 +601,16 @@ object ShuffleExchangeExec {
           new PartitionIdPassthrough(part.numPartitions),
           serializer,
           shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics),
-          rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize))
+          rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(
+            checksumSize, SQLConf.get.shuffleRowChecksumFailOnInvalidRow))
       } else {
         new ShuffleDependency[Int, InternalRow, InternalRow](
           rddWithPartitionIds,
           new PartitionIdPassthrough(part.numPartitions),
           serializer,
           shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics),
-          rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize),
+          rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(
+            checksumSize, SQLConf.get.shuffleRowChecksumFailOnInvalidRow),
           _checksumMismatchFullRetryEnabled = SQLConf.get.shuffleChecksumMismatchFullRetryEnabled,
           checksumMismatchQueryLevelRollbackEnabled =
             SQLConf.get.shuffleChecksumMismatchQueryLevelRollbackEnabled)
