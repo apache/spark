@@ -38,10 +38,12 @@ import org.apache.spark.util.Utils
 
 /**
  * Test suite for Spark Throwables.
+ * It validates both source error-condition definitions and generated runtime resources.
  * To re-generate the error class file, run:
  * {{{
  *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \
- *     "core/testOnly *SparkThrowableSuite -- -t \"Error conditions are correctly formatted\""
+ *     "core/testOnly org.apache.spark.SparkThrowableSuite \
+ *       -- -t \"Error conditions are correctly formatted\""
  * }}}
  */
 class SparkThrowableSuite extends SparkFunSuite {
