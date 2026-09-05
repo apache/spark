@@ -110,6 +110,23 @@ class SparkFiles:
         {'.../test.py'}
         """
         path = os.path.join(SparkFiles.getRootDirectory(), filename)
+        # In local mode, `SparkContext.addFile` places files directly under the root directory
+        # rather than under the job-specific artifact directory used by session isolation. When a
+        # non-default job artifact UUID is active, the worker root directory is the job-specific
+        # directory, so fall back to its parent (the actual root directory) so that files added
+        # through `SparkContext.addFile` remain resolvable. This is scoped to local mode and a
+        # non-default UUID to preserve session isolation semantics on real executors. See
+        # SPARK-53478.
+        if (
+            cls._is_running_on_worker
+            and not os.path.exists(path)
+            and os.environ.get("SPARK_LOCAL_MODE", "false") == "true"
+            and os.environ.get("SPARK_JOB_ARTIFACT_UUID", "default") != "default"
+        ):
+            parent_dir = os.path.dirname(SparkFiles.getRootDirectory())
+            parent_path = os.path.join(parent_dir, filename)
+            if os.path.exists(parent_path):
+                return os.path.abspath(parent_path)
         return os.path.abspath(path)
 
     @classmethod
