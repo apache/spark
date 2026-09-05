@@ -64,6 +64,10 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
   /**
    * `AdaptiveSparkPlanHelper.collect` descends through AQE wrappers and query stages;
    * `SparkPlan.collect` stops at them, since both are `LeafExecNode`s.
+   *
+   * Stricter than `unionInsideWSCG` on purpose: `w.find` also matches a union that an
+   * `InputAdapter` left inside the stage unfused, and the callers here assert on `metrics`, which
+   * an unfused union does not register.
    */
   private def fusedUnions(df: DataFrame): Seq[UnionExec] =
     collect(df.queryExecution.executedPlan) {
@@ -73,8 +77,8 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
 
   /**
    * A cached aggregate, so the union's children read an `InMemoryTableScanExec`. The caller needs
-   * the cache unmaterialized; `withTempView` uncaches this plan on the way out, so nothing is left
-   * for the next caller to trip over.
+   * the cache unmaterialized; `withTempView` drops the view on the way out, and `dropTempView`
+   * uncaches this view's plan.
    */
   private def cacheAggregateView(view: String): Unit = {
     spark.range(0, 200, 1, 4)
@@ -671,7 +675,9 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     // fix the crash and leave the other half broken: a fused union concatenates its children's
     // partitions, so claiming their `HashPartitioning` would let a parent satisfy a clustered
     // distribution from an RDD that does not have it.
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
       withTempView("v") {
         cacheAggregateView("v")
         val df = spark.sql("SELECT k, abs(s) AS s FROM v UNION ALL SELECT k, s FROM v")
@@ -696,9 +702,10 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     // `spark.sql.unionOutputPartitioning` is read where the plain-union decision is latched, not on
     // every `outputPartitioning` call, so a plan executes by the partitioning it was planned
     // against. Reading it per call let the parent aggregate lose its exchange at planning and get a
-    // plain concatenation at execution, reporting each group twice. The `collect()` stays outside
-    // the block that planned the DataFrame on purpose: `executedPlan` is memoized on first read,
-    // and moving it back inside makes both phases see the same conf.
+    // plain concatenation at execution, reporting each group twice. The `checkAnswer` below stays
+    // outside the block that planned the DataFrame on purpose: the plan is forced inside that
+    // block and `executedPlan` is memoized, so the two phases see different confs. Asserting
+    // inside it, or dropping the second `withSQLConf`, makes the test pass without testing this.
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val left = spark.range(0, 20, 1, 2).selectExpr("id % 5 AS k")
       val right = spark.range(20, 40, 1, 2).selectExpr("id % 5 AS k")
@@ -709,8 +716,10 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         val plan = df.queryExecution.executedPlan
         val unions = plan.collect { case u: UnionExec => u }
         assert(unions.size == 1)
-        assert(!unions.head.isPlainUnion,
-          "this shape must report a concrete partitioning, or the test exercises nothing")
+        // Not asserted through `isPlainUnion`: that call latches the decision, which would warm
+        // a field-based implementation's memo and hide the regression this test is for. The
+        // exchange count below proves the union reported a concrete partitioning, without
+        // touching the node.
         assert(plan.collect { case s: ShuffleExchangeExec => s }.size == 2,
           "only the two repartitions may shuffle; the aggregate's exchange must have been elided")
         df
