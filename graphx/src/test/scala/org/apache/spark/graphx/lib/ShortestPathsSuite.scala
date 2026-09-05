@@ -40,4 +40,22 @@ class ShortestPathsSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("directed and undirected shortest paths") {
+    withSpark { sc =>
+      val graph = Graph.fromEdges(sc.parallelize(Seq(Edge(1L, 2L, 1))), defaultValue = 1)
+      val landmarks = Seq(1L)
+
+      val directed = ShortestPaths.run(graph, landmarks, isDirected = true)
+        .vertices.collect().map { case (id, distances) => id -> distances.toMap }.toMap
+      val defaultDirection = ShortestPaths.run(graph, landmarks)
+        .vertices.collect().map { case (id, distances) => id -> distances.toMap }.toMap
+      val undirected = ShortestPaths.run(graph, landmarks, isDirected = false)
+        .vertices.collect().map { case (id, distances) => id -> distances.toMap }.toMap
+
+      assert(directed === Map(1L -> Map(1L -> 0), 2L -> Map.empty[Long, Int]))
+      assert(defaultDirection === directed)
+      assert(undirected === Map(1L -> Map(1L -> 0), 2L -> Map(1L -> 1)))
+    }
+  }
+
 }

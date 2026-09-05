@@ -723,9 +723,9 @@ messages remaining.
 > messaging function.  These constraints allow additional optimization within GraphX.
 
 The following is the type signature of the [Pregel operator][GraphOps.pregel] as well as a *sketch*
-of its implementation (note: to avoid stackOverflowError due to long lineage chains, pregel support periodically
-checkpoint graph and messages by setting "spark.graphx.pregel.checkpointInterval" to a positive number,
-say 10. And set checkpoint directory as well using SparkContext.setCheckpointDir(directory: String)):
+of its implementation (note: Pregel supports periodically checkpointing the graph by setting
+"spark.graphx.pregel.checkpointInterval" to a positive number, say 10. Message RDDs are not
+checkpointed. Set a checkpoint directory using SparkContext.setCheckpointDir(directory: String)):
 
 {% highlight scala %}
 class GraphOps[VD, ED] {
