@@ -591,6 +591,40 @@ class KeyGroupedPartitioningSuite
       "JOIN testcat.ns.bucket8 b8 ON b12.id = b8.id " +
       s"JOIN testcat.ns.bucket$third b ON b12.id = b.id")
 
+  /**
+   * Creates `items` and `purchases` identity-partitioned on the join key, each reporting a
+   * two-column ordering. Keys 1 and 2 sit on two splits per side, so a join over them makes
+   * `GroupPartitionsExec` coalesce. Rows are inserted so that concatenating a key's splits violates
+   * the reported ordering, which is what a k-way merge has to repair.
+   */
+  private def createOrderedIdTables(): Unit = {
+    val itemOrdering = Array(
+      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(FieldReference("arrive_time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(items, itemsColumns, Array(identity("id")), itemOrdering)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(2, 'cc', 30.0, cast('2023-06-15' as timestamp)), " +
+      "(1, 'bb', 20.0, cast('2022-03-10' as timestamp)), " +
+      "(3, 'dd', 40.0, cast('2024-01-01' as timestamp)), " +
+      "(1, 'aa', 10.0, cast('2021-05-20' as timestamp)), " +
+      "(2, 'ee', 50.0, cast('2025-09-01' as timestamp))")
+
+    val purchaseOrdering = Array(
+      sort(FieldReference("item_id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(FieldReference("time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(purchases, purchasesColumns, Array(identity("item_id")), purchaseOrdering)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(2, 50.0, cast('2025-09-01' as timestamp)), " +
+      "(1, 10.0, cast('2021-05-20' as timestamp)), " +
+      "(3, 40.0, cast('2024-01-01' as timestamp)), " +
+      "(2, 30.0, cast('2023-06-15' as timestamp)), " +
+      "(1, 20.0, cast('2022-03-10' as timestamp))")
+  }
+
+  /** What a join of the `createOrderedIdTables` tables on both ordering columns returns. */
+  private val orderedIdJoinRows =
+    Seq(Row(1, "aa"), Row(1, "bb"), Row(2, "cc"), Row(2, "ee"), Row(3, "dd"))
+
   /** The `(id, ts)` rows the `withReducedTsJoinLegs` tables are filled from, one per year. */
   private val row2020 = "(0, cast('2020-01-01' as timestamp))"
   private val row2021 = "(1, cast('2021-01-03' as timestamp))"
@@ -4124,10 +4158,10 @@ class KeyGroupedPartitioningSuite
            |""".stripMargin)
       val simpleAndExtendedKeyword =
         "GroupPartitions JoinKeyPositions: [0] ExpectedPartitionKeys: 2 " +
-        "Reducers: [BucketReducer(2)] DistributePartitions: false"
+        "Reducers: [BucketReducer(2)] DistributePartitions: false SortedMerge: false"
       val formattedKeyword =
         "Arguments: JoinKeyPositions: [0], ExpectedPartitionKeys: 2, " +
-        "Reducers: [BucketReducer(2)], DistributePartitions: false"
+        "Reducers: [BucketReducer(2)], DistributePartitions: false, SortedMerge: false"
       checkKeywordsExistsInExplain(df, SimpleMode, simpleAndExtendedKeyword)
       checkKeywordsExistsInExplain(df, ExtendedMode, simpleAndExtendedKeyword)
       checkKeywordsExistsInExplain(df, FormattedMode, formattedKeyword)
@@ -4601,32 +4635,9 @@ class KeyGroupedPartitioningSuite
   }
 
   test("SPARK-56549: k-way merge enabled only when parent requires ordering") {
-    // Both tables are partitioned by id/item_id and report a two-column ordering.
-    // Key 1 appears on two splits on each side, so GroupPartitionsExec must coalesce.
-    //
     // Dynamic gate: with the config enabled, k-way merge must be activated only when the parent
     // actually requires ordering (SMJ), and must stay off when the parent does not (hash join).
-    val itemOrdering = Array(
-      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
-      sort(FieldReference("arrive_time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
-    createTable(items, itemsColumns, Array(identity("id")), itemOrdering)
-    sql(s"INSERT INTO testcat.ns.$items VALUES " +
-      "(2, 'cc', 30.0, cast('2023-06-15' as timestamp)), " +
-      "(1, 'bb', 20.0, cast('2022-03-10' as timestamp)), " +
-      "(3, 'dd', 40.0, cast('2024-01-01' as timestamp)), " +
-      "(1, 'aa', 10.0, cast('2021-05-20' as timestamp)), " +
-      "(2, 'ee', 50.0, cast('2025-09-01' as timestamp))")
-
-    val purchaseOrdering = Array(
-      sort(FieldReference("item_id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
-      sort(FieldReference("time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
-    createTable(purchases, purchasesColumns, Array(identity("item_id")), purchaseOrdering)
-    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
-      "(2, 50.0, cast('2025-09-01' as timestamp)), " +
-      "(1, 10.0, cast('2021-05-20' as timestamp)), " +
-      "(3, 40.0, cast('2024-01-01' as timestamp)), " +
-      "(2, 30.0, cast('2023-06-15' as timestamp)), " +
-      "(1, 20.0, cast('2022-03-10' as timestamp))")
+    createOrderedIdTables()
 
     withSQLConf(
         SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
@@ -4638,7 +4649,7 @@ class KeyGroupedPartitioningSuite
            |FROM testcat.ns.$items i
            |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
            |""".stripMargin)
-      checkAnswer(hashDf, Seq(Row(1, "aa"), Row(1, "bb"), Row(2, "cc"), Row(2, "ee"), Row(3, "dd")))
+      checkAnswer(hashDf, orderedIdJoinRows)
       val hashPlan = hashDf.queryExecution.executedPlan
       assert(collect(hashPlan) { case j: ShuffledHashJoinExec => j }.nonEmpty,
         "expected ShuffledHashJoinExec")
@@ -4660,7 +4671,7 @@ class KeyGroupedPartitioningSuite
            |FROM testcat.ns.$items i
            |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
            |""".stripMargin)
-      checkAnswer(smjDf, Seq(Row(1, "aa"), Row(1, "bb"), Row(2, "cc"), Row(2, "ee"), Row(3, "dd")))
+      checkAnswer(smjDf, orderedIdJoinRows)
       val smjPlan = smjDf.queryExecution.executedPlan
       assert(collectAllShuffles(smjPlan).isEmpty, "should not shuffle for compatible partitioning")
       val smjCoalescing =
@@ -4671,6 +4682,63 @@ class KeyGroupedPartitioningSuite
           "sort-merge join requires ordering: enableSortedMerge must be true")
         assert(gp.execute().isInstanceOf[SortedMergeCoalescedRDD[_]],
           "sort-merge join requires ordering: must use SortedMergeCoalescedRDD")
+      }
+    }
+  }
+
+  test("SPARK-59279: a planned k-way merge survives a later config change") {
+    // The plan is built with the config on, so the k-way merge delivers the child's full ordering
+    // and EnsureRequirements adds no SortExec below the sort-merge join. Turning the config off
+    // afterwards must not change what the already planned node does. If it did, the join would read
+    // concatenated partitions as if they were still sorted and silently drop rows.
+    //
+    // Both AQE modes are covered, because a fresh node instance is minted at a different point in
+    // each. Without AQE, `CollapseCodegenStages` puts a `WholeStageCodegenExec` under this node
+    // during `prepareForExecution`. With AQE, the wrappers go in when the result stage is created,
+    // which is after the flip below.
+    createOrderedIdTables()
+
+    Seq(true, false).foreach { aqeEnabled =>
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString,
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+          SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+        val df = sql(
+          s"""
+             |${selectWithMergeJoinHint("i", "p")}
+             |i.id, i.name
+             |FROM testcat.ns.$items i
+             |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
+             |""".stripMargin)
+        // Force the plan without executing it, so the k-way merge is decided under this config.
+        val plan = df.queryExecution.executedPlan
+        assert(collectAllShuffles(plan).isEmpty, "should not shuffle for compatible partitioning")
+        val coalescing =
+          collectAllGroupPartitions(plan).filter(_.groupedPartitions.exists(_._2.size > 1))
+        assert(coalescing.nonEmpty, "expected coalescing GroupPartitionsExec")
+        coalescing.foreach { gp =>
+          assert(gp.enableSortedMerge,
+            "sort-merge join requires ordering: enableSortedMerge must be true")
+        }
+        val smjs = collect(plan) { case j: SortMergeJoinExec => j }
+        assert(smjs.nonEmpty, "expected SortMergeJoinExec")
+        assert(smjs.flatMap(_.children).forall(c => collect(c) { case s: SortExec => s }.isEmpty),
+          "the k-way merge satisfies the ordering, so no SortExec should be added")
+
+        // Flip only the ordering config. The plan above is already committed.
+        withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "false") {
+          checkAnswer(df, orderedIdJoinRows)
+          // Re-collected, because under AQE `executedPlan` only reaches the final plan's nodes
+          // once the query has run.
+          val executed =
+            collectAllGroupPartitions(df.queryExecution.executedPlan)
+              .filter(_.groupedPartitions.exists(_._2.size > 1))
+          assert(executed.nonEmpty, "expected coalescing GroupPartitionsExec")
+          executed.foreach { gp =>
+            assert(gp.execute().isInstanceOf[SortedMergeCoalescedRDD[_]],
+              "the planned k-way merge must not be dropped by a config change")
+          }
+        }
       }
     }
   }
