@@ -70,7 +70,30 @@ object MimaExcludes {
     // [SPARK-57987] Add desc field to the SQL REST API Node case class
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.apply"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.copy"),
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.sql.Node$")
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.sql.Node$"),
+    // [SPARK-50698][SQL] Refactor CreateUserDefinedFunctionCommand to extend from UnaryRunnableCommand
+    ProblemFilters.exclude[MissingTypesProblem](
+      "org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand"),
+    ProblemFilters.exclude[DirectMissingMethodProblem](
+      "org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand.apply"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand.apply"),
+    ProblemFilters.exclude[MissingTypesProblem](
+      "org.apache.spark.sql.execution.command.CreateSQLFunctionCommand"),
+    ProblemFilters.exclude[DirectMissingMethodProblem](
+      "org.apache.spark.sql.execution.command.CreateSQLFunctionCommand.apply"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.sql.execution.command.CreateSQLFunctionCommand.apply"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.sql.execution.command.CreateSQLFunctionCommand.copy"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.sql.execution.command.CreateSQLFunctionCommand.this"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem](
+      "org.apache.spark.sql.execution.command.CreateSQLFunctionCommand.copy$default$1"),
+    ProblemFilters.exclude[MissingClassProblem](
+      "org.apache.spark.sql.catalyst.plans.logical.CreateUserDefinedFunction"),
+    ProblemFilters.exclude[MissingClassProblem](
+      "org.apache.spark.sql.catalyst.plans.logical.CreateUserDefinedFunction$")
   )
 
   // Exclude rules for 4.2.x from 4.1.0

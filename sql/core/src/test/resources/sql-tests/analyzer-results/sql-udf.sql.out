@@ -2,7 +2,8 @@
 -- !query
 CREATE FUNCTION foo1a0() RETURNS INT RETURN 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1a0, INT, 1, false, false, false, false
+CreateSQLFunctionCommand INT, 1, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1a0
 
 
 -- !query
@@ -39,7 +40,8 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE FUNCTION foo1a1(a INT) RETURNS INT RETURN 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1a1, a INT, INT, 1, false, false, false, false
+CreateSQLFunctionCommand a INT, INT, 1, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1a1
 
 
 -- !query
@@ -76,7 +78,8 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE FUNCTION foo1a2(a INT, b INT, c INT, d INT) RETURNS INT RETURN 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1a2, a INT, b INT, c INT, d INT, INT, 1, false, false, false, false
+CreateSQLFunctionCommand a INT, b INT, c INT, d INT, INT, 1, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1a2
 
 
 -- !query
@@ -90,7 +93,8 @@ Project [spark_catalog.default.foo1a2(a#x, b#x, c#x, d#x) AS spark_catalog.defau
 -- !query
 CREATE FUNCTION foo1b0() RETURNS TABLE (c1 INT) RETURN SELECT 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1b0, c1 INT, SELECT 1, true, false, false, false
+CreateSQLFunctionCommand c1 INT, SELECT 1, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1b0
 
 
 -- !query
@@ -107,7 +111,8 @@ Project [c1#x]
 -- !query
 CREATE FUNCTION foo1b1(a INT) RETURNS TABLE (c1 INT) RETURN SELECT 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1b1, a INT, c1 INT, SELECT 1, true, false, false, false
+CreateSQLFunctionCommand a INT, c1 INT, SELECT 1, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1b1
 
 
 -- !query
@@ -124,7 +129,8 @@ Project [c1#x]
 -- !query
 CREATE FUNCTION foo1b2(a INT, b INT, c INT, d INT) RETURNS TABLE(c1 INT) RETURN SELECT 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1b2, a INT, b INT, c INT, d INT, c1 INT, SELECT 1, true, false, false, false
+CreateSQLFunctionCommand a INT, b INT, c INT, d INT, c1 INT, SELECT 1, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1b2
 
 
 -- !query
@@ -170,7 +176,8 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT NULL) RETURNS INT RETURN a
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1d1, a INT DEFAULT NULL, INT, a, false, false, false, true
+CreateSQLFunctionCommand a INT DEFAULT NULL, INT, a, false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1d1
 
 
 -- !query
@@ -184,7 +191,8 @@ Project [spark_catalog.default.foo1d1(a#x) AS spark_catalog.default.foo1d1(5)#x,
 -- !query
 CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT 10) RETURNS INT RETURN a
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1d1, a INT DEFAULT 10, INT, a, false, false, false, true
+CreateSQLFunctionCommand a INT DEFAULT 10, INT, a, false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1d1
 
 
 -- !query
@@ -198,7 +206,8 @@ Project [spark_catalog.default.foo1d1(a#x) AS spark_catalog.default.foo1d1(5)#x,
 -- !query
 CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT length(substr(current_database(), 1, 1))) RETURNS INT RETURN a
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1d1, a INT DEFAULT length(substr(current_database(), 1, 1)), INT, a, false, false, false, true
+CreateSQLFunctionCommand a INT DEFAULT length(substr(current_database(), 1, 1)), INT, a, false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1d1
 
 
 -- !query
@@ -213,7 +222,8 @@ Project [spark_catalog.default.foo1d1(a#x) AS spark_catalog.default.foo1d1(5)#x,
 CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT '5' || length(substr(current_database(), 1, 1)))
   RETURNS INT RETURN a
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1d1, a INT DEFAULT '5' || length(substr(current_database(), 1, 1)), INT, a, false, false, false, true
+CreateSQLFunctionCommand a INT DEFAULT '5' || length(substr(current_database(), 1, 1)), INT, a, false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1d1
 
 
 -- !query
@@ -227,7 +237,8 @@ Project [spark_catalog.default.foo1d1(a#x) AS spark_catalog.default.foo1d1(5)#x,
 -- !query
 CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT RAND()::INT) RETURNS INT RETURN a
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1d1, a INT DEFAULT RAND()::INT, INT, a, false, false, false, true
+CreateSQLFunctionCommand a INT DEFAULT RAND()::INT, INT, a, false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1d1
 
 
 -- !query
@@ -278,7 +289,8 @@ org.apache.spark.sql.AnalysisException
 CREATE OR REPLACE FUNCTION foo1d2(a INT, b INT DEFAULT 7, c INT DEFAULT 8, d INT DEFAULT 9 COMMENT 'test')
   RETURNS STRING RETURN a || ' ' || b || ' ' || c || ' ' || d
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1d2, a INT, b INT DEFAULT 7, c INT DEFAULT 8, d INT DEFAULT 9 COMMENT 'test', STRING, a || ' ' || b || ' ' || c || ' ' || d, false, false, false, true
+CreateSQLFunctionCommand a INT, b INT DEFAULT 7, c INT DEFAULT 8, d INT DEFAULT 9 COMMENT 'test', STRING, a || ' ' || b || ' ' || c || ' ' || d, false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1d2
 
 
 -- !query
@@ -370,7 +382,8 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE OR REPLACE TEMPORARY FUNCTION foo1d3(a INT DEFAULT 7 COMMENT 'hello') RETURNS INT RETURN a
 -- !query analysis
-CreateSQLFunctionCommand foo1d3, a INT DEFAULT 7 COMMENT 'hello', INT, a, false, true, false, true
+CreateSQLFunctionCommand a INT DEFAULT 7 COMMENT 'hello', INT, a, false, true, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1d3
 
 
 -- !query
@@ -404,13 +417,15 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE OR REPLACE FUNCTION foo1d4(a INT, b INT DEFAULT 3) RETURNS INT RETURN a + b
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1d4, a INT, b INT DEFAULT 3, INT, a + b, false, false, false, true
+CreateSQLFunctionCommand a INT, b INT DEFAULT 3, INT, a + b, false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1d4
 
 
 -- !query
 CREATE OR REPLACE FUNCTION foo1d5(a INT, b INT DEFAULT foo1d4(6)) RETURNS INT RETURN a + b
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1d5, a INT, b INT DEFAULT foo1d4(6), INT, a + b, false, false, false, true
+CreateSQLFunctionCommand a INT, b INT DEFAULT foo1d4(6), INT, a + b, false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1d5
 
 
 -- !query
@@ -425,7 +440,8 @@ Project [spark_catalog.default.foo1d5(a#x, b#x) AS spark_catalog.default.foo1d5(
 -- !query
 CREATE OR REPLACE FUNCTION foo1d5(a INT, b INT) RETURNS INT RETURN a + foo1d4(b)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1d5, a INT, b INT, INT, a + foo1d4(b), false, false, false, true
+CreateSQLFunctionCommand a INT, b INT, INT, a + foo1d4(b), false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1d5
 
 
 -- !query
@@ -440,7 +456,8 @@ Project [spark_catalog.default.foo1d5(a#x, b#x) AS spark_catalog.default.foo1d5(
 -- !query
 CREATE OR REPLACE FUNCTION foo1d6(a INT, b INT DEFAULT 7) RETURNS TABLE(a INT, b INT) RETURN SELECT a, b
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1d6, a INT, b INT DEFAULT 7, a INT, b INT, SELECT a, b, true, false, false, true
+CreateSQLFunctionCommand a INT, b INT DEFAULT 7, a INT, b INT, SELECT a, b, true, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1d6
 
 
 -- !query
@@ -589,7 +606,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 CREATE FUNCTION foo2a2() RETURNS TABLE(c1 INT, c2 INT) RETURN SELECT 1, 2
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo2a2, c1 INT, c2 INT, SELECT 1, 2, true, false, false, false
+CreateSQLFunctionCommand c1 INT, c2 INT, SELECT 1, 2, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2a2
 
 
 -- !query
@@ -606,7 +624,8 @@ Project [c1#x, c2#x]
 -- !query
 CREATE FUNCTION foo2a4() RETURNS TABLE(c1 INT, c2 INT, c3 INT, c4 INT) RETURN SELECT 1, 2, 3, 4
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo2a4, c1 INT, c2 INT, c3 INT, c4 INT, SELECT 1, 2, 3, 4, true, false, false, false
+CreateSQLFunctionCommand c1 INT, c2 INT, c3 INT, c4 INT, SELECT 1, 2, 3, 4, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2a4
 
 
 -- !query
@@ -716,7 +735,8 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE FUNCTION foo41() RETURNS INT RETURN SELECT 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo41, INT, SELECT 1, false, false, false, false
+CreateSQLFunctionCommand INT, SELECT 1, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo41
 
 
 -- !query
@@ -735,7 +755,8 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE FUNCTION foo51() RETURNS INT RETURN (SELECT a FROM VALUES(1), (2) AS T(a))
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo51, INT, (SELECT a FROM VALUES(1), (2) AS T(a)), false, false, false, false
+CreateSQLFunctionCommand INT, (SELECT a FROM VALUES(1), (2) AS T(a)), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo51
 
 
 -- !query
@@ -752,7 +773,8 @@ Project [spark_catalog.default.foo51() AS spark_catalog.default.foo51()#x]
 -- !query
 CREATE FUNCTION foo52() RETURNS INT RETURN (SELECT 1 FROM VALUES(1) WHERE 1 = 0)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo52, INT, (SELECT 1 FROM VALUES(1) WHERE 1 = 0), false, false, false, false
+CreateSQLFunctionCommand INT, (SELECT 1 FROM VALUES(1) WHERE 1 = 0), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo52
 
 
 -- !query
@@ -769,7 +791,8 @@ Project [spark_catalog.default.foo52() AS spark_catalog.default.foo52()#x]
 -- !query
 CREATE FUNCTION foo6c(` a` INT, a INT, `a b` INT) RETURNS INT RETURN 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo6c, ` a` INT, a INT, `a b` INT, INT, 1, false, false, false, false
+CreateSQLFunctionCommand ` a` INT, a INT, `a b` INT, INT, 1, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo6c
 
 
 -- !query
@@ -783,7 +806,8 @@ Project [spark_catalog.default.foo6c( a#x, a#x, a b#x) AS spark_catalog.default.
 -- !query
 CREATE FUNCTION foo6d() RETURNS TABLE(` a` INT, a INT, `a b` INT) RETURN SELECT 1, 2, 3
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo6d, ` a` INT, a INT, `a b` INT, SELECT 1, 2, 3, true, false, false, false
+CreateSQLFunctionCommand ` a` INT, a INT, `a b` INT, SELECT 1, 2, 3, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo6d
 
 
 -- !query
@@ -803,7 +827,8 @@ SELECT 'Foo.a: ' || a ||  ' Foo.a: ' || foo7a.a
        || ' T.b: ' ||  b || ' Foo.b: ' || foo7a.b
        || ' T.c: ' || c || ' T.c: ' || t.c FROM VALUES('t.b', 't.c') AS T(b, c)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo7a, a STRING, b STRING, c STRING, STRING, SELECT 'Foo.a: ' || a ||  ' Foo.a: ' || foo7a.a
+CreateSQLFunctionCommand a STRING, b STRING, c STRING, STRING, SELECT 'Foo.a: ' || a ||  ' Foo.a: ' || foo7a.a
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo7a
        || ' T.b: ' ||  b || ' Foo.b: ' || foo7a.b
        || ' T.c: ' || c || ' T.c: ' || t.c FROM VALUES('t.b', 't.c') AS T(b, c), false, false, false, false
 
@@ -825,7 +850,8 @@ SELECT CONCAT('Foo.a: ', a), CONCAT('Foo.b: ', foo7at.b), CONCAT('T.b: ', b),
        CONCAT('Foo.c: ', foo7at.c), CONCAT('T.c: ', c)
 FROM VALUES ('t.b', 't.c') AS T(b, c)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo7at, a STRING, b STRING, c STRING, a STRING, b STRING, c STRING, d STRING, e STRING, SELECT CONCAT('Foo.a: ', a), CONCAT('Foo.b: ', foo7at.b), CONCAT('T.b: ', b),
+CreateSQLFunctionCommand a STRING, b STRING, c STRING, a STRING, b STRING, c STRING, d STRING, e STRING, SELECT CONCAT('Foo.a: ', a), CONCAT('Foo.b: ', foo7at.b), CONCAT('T.b: ', b),
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo7at
        CONCAT('Foo.c: ', foo7at.c), CONCAT('T.c: ', c)
 FROM VALUES ('t.b', 't.c') AS T(b, c), true, false, false, false
 
@@ -845,7 +871,8 @@ Project [a#x, b#x, c#x, d#x, e#x]
 -- !query
 CREATE FUNCTION foo9a(a BOOLEAN) RETURNS BOOLEAN RETURN NOT a
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo9a, a BOOLEAN, BOOLEAN, NOT a, false, false, false, false
+CreateSQLFunctionCommand a BOOLEAN, BOOLEAN, NOT a, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo9a
 
 
 -- !query
@@ -875,7 +902,8 @@ Project [spark_catalog.default.foo9a(a#x) AS spark_catalog.default.foo9a(Nonsens
 -- !query
 CREATE FUNCTION foo9b(a BYTE) RETURNS BYTE RETURN CAST(a AS SHORT) + 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo9b, a BYTE, BYTE, CAST(a AS SHORT) + 1, false, false, false, false
+CreateSQLFunctionCommand a BYTE, BYTE, CAST(a AS SHORT) + 1, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo9b
 
 
 -- !query
@@ -905,7 +933,8 @@ Project [spark_catalog.default.foo9b(a#x) AS spark_catalog.default.foo9b(128)#x]
 -- !query
 CREATE FUNCTION foo9c(a SHORT) RETURNS SHORT RETURN CAST(a AS INTEGER) + 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo9c, a SHORT, SHORT, CAST(a AS INTEGER) + 1, false, false, false, false
+CreateSQLFunctionCommand a SHORT, SHORT, CAST(a AS INTEGER) + 1, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo9c
 
 
 -- !query
@@ -935,7 +964,8 @@ Project [spark_catalog.default.foo9c(a#x) AS spark_catalog.default.foo9c(32768)#
 -- !query
 CREATE FUNCTION foo9d(a INTEGER) RETURNS INTEGER RETURN CAST(a AS BIGINT) + 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo9d, a INTEGER, INTEGER, CAST(a AS BIGINT) + 1, false, false, false, false
+CreateSQLFunctionCommand a INTEGER, INTEGER, CAST(a AS BIGINT) + 1, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo9d
 
 
 -- !query
@@ -965,7 +995,8 @@ Project [spark_catalog.default.foo9d(a#x) AS spark_catalog.default.foo9d((214748
 -- !query
 CREATE FUNCTION foo9e(a BIGINT) RETURNS BIGINT RETURN CAST(a AS DECIMAL(20, 0)) + 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo9e, a BIGINT, BIGINT, CAST(a AS DECIMAL(20, 0)) + 1, false, false, false, false
+CreateSQLFunctionCommand a BIGINT, BIGINT, CAST(a AS DECIMAL(20, 0)) + 1, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo9e
 
 
 -- !query
@@ -995,7 +1026,8 @@ Project [spark_catalog.default.foo9e(a#xL) AS spark_catalog.default.foo9e((92233
 -- !query
 CREATE FUNCTION foo9f(a DECIMAL( 5, 2 )) RETURNS DECIMAL (5, 2) RETURN CAST(a AS DECIMAL(6, 2)) + 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo9f, a DECIMAL( 5, 2 ), DECIMAL (5, 2), CAST(a AS DECIMAL(6, 2)) + 1, false, false, false, false
+CreateSQLFunctionCommand a DECIMAL( 5, 2 ), DECIMAL (5, 2), CAST(a AS DECIMAL(6, 2)) + 1, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo9f
 
 
 -- !query
@@ -1025,7 +1057,8 @@ Project [spark_catalog.default.foo9f(a#x) AS spark_catalog.default.foo9f((999 + 
 -- !query
 CREATE FUNCTION foo9g(a FLOAT, b String) RETURNS FLOAT RETURN b || CAST(a AS String)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo9g, a FLOAT, b String, FLOAT, b || CAST(a AS String), false, false, false, false
+CreateSQLFunctionCommand a FLOAT, b String, FLOAT, b || CAST(a AS String), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo9g
 
 
 -- !query
@@ -1055,7 +1088,8 @@ Project [spark_catalog.default.foo9g(a#x, b#x) AS spark_catalog.default.foo9g(12
 -- !query
 CREATE FUNCTION foo9h(a DOUBLE, b String) RETURNS DOUBLE RETURN b || CAST(a AS String)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo9h, a DOUBLE, b String, DOUBLE, b || CAST(a AS String), false, false, false, false
+CreateSQLFunctionCommand a DOUBLE, b String, DOUBLE, b || CAST(a AS String), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo9h
 
 
 -- !query
@@ -1095,7 +1129,8 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE FUNCTION foo9j(a STRING, b STRING) RETURNS STRING RETURN a || b
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo9j, a STRING, b STRING, STRING, a || b, false, false, false, false
+CreateSQLFunctionCommand a STRING, b STRING, STRING, a || b, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo9j
 
 
 -- !query
@@ -1117,7 +1152,8 @@ Project [spark_catalog.default.foo9j(a#x, b#x) AS spark_catalog.default.foo9j(12
 -- !query
 CREATE FUNCTION foo9l(a DATE, b INTERVAL) RETURNS DATE RETURN a + b
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo9l, a DATE, b INTERVAL, DATE, a + b, false, false, false, false
+CreateSQLFunctionCommand a DATE, b INTERVAL, DATE, a + b, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo9l
 
 
 -- !query
@@ -1210,7 +1246,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 CREATE FUNCTION foo9m(a TIMESTAMP, b INTERVAL) RETURNS TIMESTAMP RETURN a + b
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo9m, a TIMESTAMP, b INTERVAL, TIMESTAMP, a + b, false, false, false, false
+CreateSQLFunctionCommand a TIMESTAMP, b INTERVAL, TIMESTAMP, a + b, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo9m
 
 
 -- !query
@@ -1282,7 +1319,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 CREATE FUNCTION foo9n(a ARRAY<INTEGER>) RETURNS ARRAY<INTEGER> RETURN a
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo9n, a ARRAY<INTEGER>, ARRAY<INTEGER>, a, false, false, false, false
+CreateSQLFunctionCommand a ARRAY<INTEGER>, ARRAY<INTEGER>, a, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo9n
 
 
 -- !query
@@ -1304,7 +1342,8 @@ Project [spark_catalog.default.foo9n(a#x) AS spark_catalog.default.foo9n(from_js
 -- !query
 CREATE FUNCTION foo9o(a MAP<STRING, INTEGER>) RETURNS MAP<STRING, INTEGER> RETURN a
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo9o, a MAP<STRING, INTEGER>, MAP<STRING, INTEGER>, a, false, false, false, false
+CreateSQLFunctionCommand a MAP<STRING, INTEGER>, MAP<STRING, INTEGER>, a, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo9o
 
 
 -- !query
@@ -1326,7 +1365,8 @@ Project [spark_catalog.default.foo9o(a#x) AS spark_catalog.default.foo9o(entries
 -- !query
 CREATE FUNCTION foo9p(a STRUCT<a1: INTEGER, a2: STRING>) RETURNS STRUCT<a1: INTEGER, a2: STRING> RETURN a
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo9p, a STRUCT<a1: INTEGER, a2: STRING>, STRUCT<a1: INTEGER, a2: STRING>, a, false, false, false, false
+CreateSQLFunctionCommand a STRUCT<a1: INTEGER, a2: STRING>, STRUCT<a1: INTEGER, a2: STRING>, a, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo9p
 
 
 -- !query
@@ -1348,7 +1388,8 @@ Project [spark_catalog.default.foo9p(a#x) AS spark_catalog.default.foo9p(from_js
 -- !query
 CREATE FUNCTION foo9q(a ARRAY<STRUCT<a1: INT, a2: STRING>>) RETURNS ARRAY<STRUCT<a1: INT, a2: STRING>> RETURN a
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo9q, a ARRAY<STRUCT<a1: INT, a2: STRING>>, ARRAY<STRUCT<a1: INT, a2: STRING>>, a, false, false, false, false
+CreateSQLFunctionCommand a ARRAY<STRUCT<a1: INT, a2: STRING>>, ARRAY<STRUCT<a1: INT, a2: STRING>>, a, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo9q
 
 
 -- !query
@@ -1378,7 +1419,8 @@ Project [spark_catalog.default.foo9q(a#x) AS spark_catalog.default.foo9q(from_js
 -- !query
 CREATE FUNCTION foo9r(a ARRAY<MAP<STRING, INT>>) RETURNS ARRAY<MAP<STRING, INT>> RETURN a
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo9r, a ARRAY<MAP<STRING, INT>>, ARRAY<MAP<STRING, INT>>, a, false, false, false, false
+CreateSQLFunctionCommand a ARRAY<MAP<STRING, INT>>, ARRAY<MAP<STRING, INT>>, a, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo9r
 
 
 -- !query
@@ -1400,13 +1442,15 @@ Project [spark_catalog.default.foo9r(a#x) AS spark_catalog.default.foo9r(from_js
 -- !query
 CREATE OR REPLACE FUNCTION foo1_10(a INT) RETURNS INT RETURN a + 2
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1_10, a INT, INT, a + 2, false, false, false, true
+CreateSQLFunctionCommand a INT, INT, a + 2, false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1_10
 
 
 -- !query
 CREATE OR REPLACE FUNCTION bar1_10(b INT) RETURNS STRING RETURN foo1_10(TRY_CAST(b AS STRING))
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.bar1_10, b INT, STRING, foo1_10(TRY_CAST(b AS STRING)), false, false, false, true
+CreateSQLFunctionCommand b INT, STRING, foo1_10(TRY_CAST(b AS STRING)), false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.bar1_10
 
 
 -- !query
@@ -1421,7 +1465,8 @@ Project [spark_catalog.default.bar1_10(b#x) AS spark_catalog.default.bar1_10(3)#
 -- !query
 CREATE OR REPLACE FUNCTION foo1_11a() RETURN 42
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1_11a, , 42, false, false, false, true
+CreateSQLFunctionCommand , 42, false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1_11a
 
 
 -- !query
@@ -1435,7 +1480,8 @@ Project [spark_catalog.default.foo1_11a() AS spark_catalog.default.foo1_11a()#x]
 -- !query
 CREATE OR REPLACE FUNCTION foo1_11b() RETURN 'hello world'
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1_11b, , 'hello world', false, false, false, true
+CreateSQLFunctionCommand , 'hello world', false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1_11b
 
 
 -- !query
@@ -1449,7 +1495,8 @@ Project [spark_catalog.default.foo1_11b() AS spark_catalog.default.foo1_11b()#x]
 -- !query
 CREATE OR REPLACE FUNCTION foo1_11c(a INT, b INT) RETURN a + b
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1_11c, a INT, b INT, , a + b, false, false, false, true
+CreateSQLFunctionCommand a INT, b INT, , a + b, false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1_11c
 
 
 -- !query
@@ -1463,7 +1510,8 @@ Project [spark_catalog.default.foo1_11c(a#x, b#x) AS spark_catalog.default.foo1_
 -- !query
 CREATE OR REPLACE FUNCTION foo1_11d(a DOUBLE, b INT) RETURN a * b + 1.5
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1_11d, a DOUBLE, b INT, , a * b + 1.5, false, false, false, true
+CreateSQLFunctionCommand a DOUBLE, b INT, , a * b + 1.5, false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1_11d
 
 
 -- !query
@@ -1477,7 +1525,8 @@ Project [spark_catalog.default.foo1_11d(a#x, b#x) AS spark_catalog.default.foo1_
 -- !query
 CREATE OR REPLACE FUNCTION foo1_11e(a INT) RETURN a > 10
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1_11e, a INT, , a > 10, false, false, false, true
+CreateSQLFunctionCommand a INT, , a > 10, false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1_11e
 
 
 -- !query
@@ -1491,7 +1540,8 @@ Project [spark_catalog.default.foo1_11e(a#x) AS spark_catalog.default.foo1_11e(1
 -- !query
 CREATE OR REPLACE FUNCTION foo1_11f(d DATE) RETURN d + INTERVAL '1' DAY
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1_11f, d DATE, , d + INTERVAL '1' DAY, false, false, false, true
+CreateSQLFunctionCommand d DATE, , d + INTERVAL '1' DAY, false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1_11f
 
 
 -- !query
@@ -1503,7 +1553,8 @@ SELECT foo1_11f(DATE '2024-01-01')
 -- !query
 CREATE OR REPLACE FUNCTION foo1_11g(n INT) RETURN ARRAY(1, 2, n)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1_11g, n INT, , ARRAY(1, 2, n), false, false, false, true
+CreateSQLFunctionCommand n INT, , ARRAY(1, 2, n), false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1_11g
 
 
 -- !query
@@ -1517,7 +1568,8 @@ Project [spark_catalog.default.foo1_11g(n#x) AS spark_catalog.default.foo1_11g(5
 -- !query
 CREATE OR REPLACE FUNCTION foo1_11h(a INT, b STRING) RETURN STRUCT(a, b)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1_11h, a INT, b STRING, , STRUCT(a, b), false, false, false, true
+CreateSQLFunctionCommand a INT, b STRING, , STRUCT(a, b), false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1_11h
 
 
 -- !query
@@ -1531,7 +1583,8 @@ Project [spark_catalog.default.foo1_11h(a#x, b#x) AS spark_catalog.default.foo1_
 -- !query
 CREATE OR REPLACE FUNCTION foo1_11i(x INT) RETURN (SELECT x * 2)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1_11i, x INT, , (SELECT x * 2), false, false, false, true
+CreateSQLFunctionCommand x INT, , (SELECT x * 2), false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1_11i
 
 
 -- !query
@@ -1545,7 +1598,8 @@ Project [spark_catalog.default.foo1_11i(x#x) AS spark_catalog.default.foo1_11i(5
 -- !query
 CREATE OR REPLACE FUNCTION foo1_11j(s STRING) RETURN UPPER(s)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1_11j, s STRING, , UPPER(s), false, false, false, true
+CreateSQLFunctionCommand s STRING, , UPPER(s), false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1_11j
 
 
 -- !query
@@ -1559,7 +1613,8 @@ Project [spark_catalog.default.foo1_11j(s#x) AS spark_catalog.default.foo1_11j(h
 -- !query
 CREATE OR REPLACE FUNCTION foo1_11k(a INT, b STRING) RETURN CONCAT(CAST(a AS STRING), '_', b)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1_11k, a INT, b STRING, , CONCAT(CAST(a AS STRING), '_', b), false, false, false, true
+CreateSQLFunctionCommand a INT, b STRING, , CONCAT(CAST(a AS STRING), '_', b), false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1_11k
 
 
 -- !query
@@ -1573,7 +1628,8 @@ Project [spark_catalog.default.foo1_11k(a#x, b#x) AS spark_catalog.default.foo1_
 -- !query
 CREATE OR REPLACE FUNCTION foo1_11l() RETURNS TABLE RETURN SELECT 1 as id, 'hello' as name
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1_11l, TABLE, SELECT 1 as id, 'hello' as name, true, false, false, true
+CreateSQLFunctionCommand TABLE, SELECT 1 as id, 'hello' as name, true, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1_11l
 
 
 -- !query
@@ -1590,7 +1646,8 @@ Project [id#x, name#x]
 -- !query
 CREATE OR REPLACE FUNCTION foo1_11m(a INT, b STRING) RETURNS TABLE RETURN SELECT a * 2 as doubled, UPPER(b) as upper_name
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1_11m, a INT, b STRING, TABLE, SELECT a * 2 as doubled, UPPER(b) as upper_name, true, false, false, true
+CreateSQLFunctionCommand a INT, b STRING, TABLE, SELECT a * 2 as doubled, UPPER(b) as upper_name, true, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1_11m
 
 
 -- !query
@@ -1607,7 +1664,8 @@ Project [doubled#x, upper_name#x]
 -- !query
 CREATE OR REPLACE FUNCTION foo1_11n(arr ARRAY<INT>) RETURNS TABLE RETURN SELECT size(arr) as array_size, arr[0] as first_element
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1_11n, arr ARRAY<INT>, TABLE, SELECT size(arr) as array_size, arr[0] as first_element, true, false, false, true
+CreateSQLFunctionCommand arr ARRAY<INT>, TABLE, SELECT size(arr) as array_size, arr[0] as first_element, true, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1_11n
 
 
 -- !query
@@ -1624,7 +1682,8 @@ Project [array_size#x, first_element#x]
 -- !query
 CREATE OR REPLACE FUNCTION foo1_11o(id INT, name STRING) RETURNS TABLE RETURN SELECT STRUCT(id, name) as person_info, id + 100 as modified_id
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo1_11o, id INT, name STRING, TABLE, SELECT STRUCT(id, name) as person_info, id + 100 as modified_id, true, false, false, true
+CreateSQLFunctionCommand id INT, name STRING, TABLE, SELECT STRUCT(id, name) as person_info, id + 100 as modified_id, true, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo1_11o
 
 
 -- !query
@@ -1641,7 +1700,8 @@ Project [person_info#x, modified_id#x]
 -- !query
 CREATE FUNCTION foo2_1a(a INT) RETURNS INT RETURN a
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo2_1a, a INT, INT, a, false, false, false, false
+CreateSQLFunctionCommand a INT, INT, a, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2_1a
 
 
 -- !query
@@ -1655,7 +1715,8 @@ Project [spark_catalog.default.foo2_1a(a#x) AS spark_catalog.default.foo2_1a(5)#
 -- !query
 CREATE FUNCTION foo2_1b(a INT, b INT) RETURNS INT RETURN a + b
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo2_1b, a INT, b INT, INT, a + b, false, false, false, false
+CreateSQLFunctionCommand a INT, b INT, INT, a + b, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2_1b
 
 
 -- !query
@@ -1669,7 +1730,8 @@ Project [spark_catalog.default.foo2_1b(a#x, b#x) AS spark_catalog.default.foo2_1
 -- !query
 CREATE FUNCTION foo2_1c(a INT, b INT) RETURNS INT RETURN 10 * (a + b) + 100 * (a -b)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo2_1c, a INT, b INT, INT, 10 * (a + b) + 100 * (a -b), false, false, false, false
+CreateSQLFunctionCommand a INT, b INT, INT, 10 * (a + b) + 100 * (a -b), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2_1c
 
 
 -- !query
@@ -1683,7 +1745,8 @@ Project [spark_catalog.default.foo2_1c(a#x, b#x) AS spark_catalog.default.foo2_1
 -- !query
 CREATE FUNCTION foo2_1d(a INT, b INT) RETURNS INT RETURN ABS(a) - LENGTH(CAST(b AS VARCHAR(10)))
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo2_1d, a INT, b INT, INT, ABS(a) - LENGTH(CAST(b AS VARCHAR(10))), false, false, false, false
+CreateSQLFunctionCommand a INT, b INT, INT, ABS(a) - LENGTH(CAST(b AS VARCHAR(10))), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2_1d
 
 
 -- !query
@@ -1697,7 +1760,8 @@ Project [spark_catalog.default.foo2_1d(a#x, b#x) AS spark_catalog.default.foo2_1
 -- !query
 CREATE FUNCTION foo2_2a(a INT) RETURNS INT RETURN SELECT a
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo2_2a, a INT, INT, SELECT a, false, false, false, false
+CreateSQLFunctionCommand a INT, INT, SELECT a, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2_2a
 
 
 -- !query
@@ -1711,7 +1775,8 @@ Project [spark_catalog.default.foo2_2a(a#x) AS spark_catalog.default.foo2_2a(5)#
 -- !query
 CREATE FUNCTION foo2_2b(a INT) RETURNS INT RETURN 1 + (SELECT a)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo2_2b, a INT, INT, 1 + (SELECT a), false, false, false, false
+CreateSQLFunctionCommand a INT, INT, 1 + (SELECT a), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2_2b
 
 
 -- !query
@@ -1770,7 +1835,8 @@ SELECT a FROM (VALUES 1) AS V(c1) WHERE c1 = 2
 UNION ALL
 SELECT a + 1 FROM (VALUES 1) AS V(c1)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo2_2e, a INT, INT, SELECT a FROM (VALUES 1) AS V(c1) WHERE c1 = 2
+CreateSQLFunctionCommand a INT, INT, SELECT a FROM (VALUES 1) AS V(c1) WHERE c1 = 2
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2_2e
 UNION ALL
 SELECT a + 1 FROM (VALUES 1) AS V(c1), false, false, false, false
 
@@ -1781,7 +1847,8 @@ SELECT a FROM (VALUES 1) AS V(c1)
 EXCEPT
 SELECT a + 1 FROM (VALUES 1) AS V(a)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo2_2f, a INT, INT, SELECT a FROM (VALUES 1) AS V(c1)
+CreateSQLFunctionCommand a INT, INT, SELECT a FROM (VALUES 1) AS V(c1)
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2_2f
 EXCEPT
 SELECT a + 1 FROM (VALUES 1) AS V(a), false, false, false, false
 
@@ -1792,7 +1859,8 @@ SELECT a FROM (VALUES 1) AS V(c1)
 INTERSECT
 SELECT a FROM (VALUES 1) AS V(a)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo2_2g, a INT, INT, SELECT a FROM (VALUES 1) AS V(c1)
+CreateSQLFunctionCommand a INT, INT, SELECT a FROM (VALUES 1) AS V(c1)
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2_2g
 INTERSECT
 SELECT a FROM (VALUES 1) AS V(a), false, false, false, false
 
@@ -1891,7 +1959,8 @@ DropTableCommand `spark_catalog`.`default`.`V2`, true, true, false
 -- !query
 CREATE FUNCTION foo2_3(a INT, b INT) RETURNS INT RETURN a + b
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo2_3, a INT, b INT, INT, a + b, false, false, false, false
+CreateSQLFunctionCommand a INT, b INT, INT, a + b, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2_3
 
 
 -- !query
@@ -1951,7 +2020,8 @@ Project [spark_catalog.default.foo2_3(a#x, b#x) AS spark_catalog.default.foo2_3(
 CREATE FUNCTION foo2_4a(a ARRAY<STRING>) RETURNS STRING RETURN
 SELECT array_sort(a, (i, j) -> rank[i] - rank[j])[0] FROM (SELECT MAP('a', 1, 'b', 2) rank)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo2_4a, a ARRAY<STRING>, STRING, SELECT array_sort(a, (i, j) -> rank[i] - rank[j])[0] FROM (SELECT MAP('a', 1, 'b', 2) rank), false, false, false, false
+CreateSQLFunctionCommand a ARRAY<STRING>, STRING, SELECT array_sort(a, (i, j) -> rank[i] - rank[j])[0] FROM (SELECT MAP('a', 1, 'b', 2) rank), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2_4a
 
 
 -- !query
@@ -1970,7 +2040,8 @@ Project [spark_catalog.default.foo2_4a(a#x) AS spark_catalog.default.foo2_4a(arr
 CREATE FUNCTION foo2_4b(m MAP<STRING, STRING>, k STRING) RETURNS STRING RETURN
 SELECT v || ' ' || v FROM (SELECT upper(m[k]) AS v)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo2_4b, m MAP<STRING, STRING>, k STRING, STRING, SELECT v || ' ' || v FROM (SELECT upper(m[k]) AS v), false, false, false, false
+CreateSQLFunctionCommand m MAP<STRING, STRING>, k STRING, STRING, SELECT v || ' ' || v FROM (SELECT upper(m[k]) AS v), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2_4b
 
 
 -- !query
@@ -2035,43 +2106,50 @@ CreateViewCommand `spark_catalog`.`default`.`ta`, [(x,None)], VALUES ARRAY(1, 2,
 -- !query
 CREATE FUNCTION foo3_1a(a DOUBLE, b DOUBLE) RETURNS DOUBLE RETURN a * b
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_1a, a DOUBLE, b DOUBLE, DOUBLE, a * b, false, false, false, false
+CreateSQLFunctionCommand a DOUBLE, b DOUBLE, DOUBLE, a * b, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_1a
 
 
 -- !query
 CREATE FUNCTION foo3_1b(x INT) RETURNS INT RETURN x
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_1b, x INT, INT, x, false, false, false, false
+CreateSQLFunctionCommand x INT, INT, x, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_1b
 
 
 -- !query
 CREATE FUNCTION foo3_1c(x INT) RETURNS INT RETURN SELECT x
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_1c, x INT, INT, SELECT x, false, false, false, false
+CreateSQLFunctionCommand x INT, INT, SELECT x, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_1c
 
 
 -- !query
 CREATE FUNCTION foo3_1d(x INT) RETURNS INT RETURN (SELECT SUM(c2) FROM t2 WHERE c1 = x)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_1d, x INT, INT, (SELECT SUM(c2) FROM t2 WHERE c1 = x), false, false, false, false
+CreateSQLFunctionCommand x INT, INT, (SELECT SUM(c2) FROM t2 WHERE c1 = x), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_1d
 
 
 -- !query
 CREATE FUNCTION foo3_1e() RETURNS INT RETURN foo3_1d(0)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_1e, INT, foo3_1d(0), false, false, false, false
+CreateSQLFunctionCommand INT, foo3_1d(0), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_1e
 
 
 -- !query
 CREATE FUNCTION foo3_1f() RETURNS INT RETURN SELECT SUM(c2) FROM t2 WHERE c1 = 0
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_1f, INT, SELECT SUM(c2) FROM t2 WHERE c1 = 0, false, false, false, false
+CreateSQLFunctionCommand INT, SELECT SUM(c2) FROM t2 WHERE c1 = 0, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_1f
 
 
 -- !query
 CREATE FUNCTION foo3_1g(x INT) RETURNS INT RETURN SELECT (SELECT x)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_1g, x INT, INT, SELECT (SELECT x), false, false, false, false
+CreateSQLFunctionCommand x INT, INT, SELECT (SELECT x), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_1g
 
 
 -- !query
@@ -3150,13 +3228,15 @@ Project [c2#x, r#x]
 -- !query
 CREATE FUNCTION foo3_1x(x STRUCT<a: INT, b: INT>) RETURNS INT RETURN x.a + x.b
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_1x, x STRUCT<a: INT, b: INT>, INT, x.a + x.b, false, false, false, false
+CreateSQLFunctionCommand x STRUCT<a: INT, b: INT>, INT, x.a + x.b, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_1x
 
 
 -- !query
 CREATE FUNCTION foo3_1y(x ARRAY<INT>) RETURNS INT RETURN aggregate(x, BIGINT(0), (x, y) -> x + y)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_1y, x ARRAY<INT>, INT, aggregate(x, BIGINT(0), (x, y) -> x + y), false, false, false, false
+CreateSQLFunctionCommand x ARRAY<INT>, INT, aggregate(x, BIGINT(0), (x, y) -> x + y), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_1y
 
 
 -- !query
@@ -3217,7 +3297,8 @@ Project [spark_catalog.default.foo3_1y(x#x) AS spark_catalog.default.foo3_1y(x)#
 -- !query
 CREATE FUNCTION foo3_2a() RETURNS INT RETURN FLOOR(RAND() * 6) + 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_2a, INT, FLOOR(RAND() * 6) + 1, false, false, false, false
+CreateSQLFunctionCommand INT, FLOOR(RAND() * 6) + 1, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_2a
 
 
 -- !query
@@ -3242,7 +3323,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 CREATE FUNCTION foo3_2b1(x INT) RETURNS BOOLEAN RETURN x IN (SELECT 1)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_2b1, x INT, BOOLEAN, x IN (SELECT 1), false, false, false, false
+CreateSQLFunctionCommand x INT, BOOLEAN, x IN (SELECT 1), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_2b1
 
 
 -- !query
@@ -3263,7 +3345,8 @@ Project [c1#x, c2#x]
 -- !query
 CREATE FUNCTION foo3_2b2(x INT) RETURNS INT RETURN IF(x IN (SELECT 1), 1, 0)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_2b2, x INT, INT, IF(x IN (SELECT 1), 1, 0), false, false, false, false
+CreateSQLFunctionCommand x INT, INT, IF(x IN (SELECT 1), 1, 0), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_2b2
 
 
 -- !query
@@ -3297,7 +3380,8 @@ Project [spark_catalog.default.foo3_2b2(x#x) AS spark_catalog.default.foo3_2b2(c
 -- !query
 CREATE FUNCTION foo3_2b3(x INT) RETURNS BOOLEAN RETURN x IN (SELECT c1 FROM t2)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_2b3, x INT, BOOLEAN, x IN (SELECT c1 FROM t2), false, false, false, false
+CreateSQLFunctionCommand x INT, BOOLEAN, x IN (SELECT c1 FROM t2), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_2b3
 
 
 -- !query
@@ -3321,7 +3405,8 @@ Project [c1#x, c2#x]
 -- !query
 CREATE FUNCTION foo3_2b4(x INT) RETURNS BOOLEAN RETURN x NOT IN (SELECT c2 FROM t2 WHERE x = c1)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_2b4, x INT, BOOLEAN, x NOT IN (SELECT c2 FROM t2 WHERE x = c1), false, false, false, false
+CreateSQLFunctionCommand x INT, BOOLEAN, x NOT IN (SELECT c2 FROM t2 WHERE x = c1), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_2b4
 
 
 -- !query
@@ -3380,13 +3465,15 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 CREATE FUNCTION foo3_2b5(x INT) RETURNS BOOLEAN RETURN x IN (SELECT x WHERE x = 1)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_2b5, x INT, BOOLEAN, x IN (SELECT x WHERE x = 1), false, false, false, false
+CreateSQLFunctionCommand x INT, BOOLEAN, x IN (SELECT x WHERE x = 1), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_2b5
 
 
 -- !query
 CREATE FUNCTION foo3_2c1(x INT) RETURNS BOOLEAN RETURN EXISTS(SELECT 1)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_2c1, x INT, BOOLEAN, EXISTS(SELECT 1), false, false, false, false
+CreateSQLFunctionCommand x INT, BOOLEAN, EXISTS(SELECT 1), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_2c1
 
 
 -- !query
@@ -3407,7 +3494,8 @@ Project [c1#x, c2#x]
 -- !query
 CREATE FUNCTION foo3_2c2(x INT) RETURNS BOOLEAN RETURN NOT EXISTS(SELECT * FROM t2 WHERE c1 = x)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_2c2, x INT, BOOLEAN, NOT EXISTS(SELECT * FROM t2 WHERE c1 = x), false, false, false, false
+CreateSQLFunctionCommand x INT, BOOLEAN, NOT EXISTS(SELECT * FROM t2 WHERE c1 = x), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_2c2
 
 
 -- !query
@@ -3432,7 +3520,8 @@ Project [c1#x, c2#x]
 -- !query
 CREATE FUNCTION foo3_2d1(x INT) RETURNS INT RETURN SELECT (SELECT x)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_2d1, x INT, INT, SELECT (SELECT x), false, false, false, false
+CreateSQLFunctionCommand x INT, INT, SELECT (SELECT x), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_2d1
 
 
 -- !query
@@ -3472,7 +3561,8 @@ SELECT CASE WHEN occurrences IS NULL OR size(occurrences) = 0
        ELSE sort_array(diffs)[0].id END AS id
 FROM t
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_2e1, occurrences ARRAY<STRUCT<start_time: TIMESTAMP, occurrence_id: STRING>>,
+CreateSQLFunctionCommand occurrences ARRAY<STRUCT<start_time: TIMESTAMP, occurrence_id: STRING>>,
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_2e1
     instance_start_time TIMESTAMP, STRING, WITH t AS (
     SELECT transform(occurrences, x -> named_struct(
         'diff', abs(unix_millis(x.start_time) - unix_millis(instance_start_time)),
@@ -3512,19 +3602,22 @@ SetCommand (spark.sql.ansi.enabled,Some(true))
 -- !query
 CREATE FUNCTION foo3_3a(x INT) RETURNS DOUBLE RETURN 1 / x
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_3a, x INT, DOUBLE, 1 / x, false, false, false, false
+CreateSQLFunctionCommand x INT, DOUBLE, 1 / x, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_3a
 
 
 -- !query
 CREATE FUNCTION foo3_3at(x INT) RETURNS TABLE (a DOUBLE) RETURN SELECT 1 / x
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_3at, x INT, a DOUBLE, SELECT 1 / x, true, false, false, false
+CreateSQLFunctionCommand x INT, a DOUBLE, SELECT 1 / x, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_3at
 
 
 -- !query
 CREATE TEMPORARY FUNCTION foo3_3b(x INT) RETURNS DOUBLE RETURN 1 / x
 -- !query analysis
-CreateSQLFunctionCommand foo3_3b, x INT, DOUBLE, 1 / x, false, true, false, false
+CreateSQLFunctionCommand x INT, DOUBLE, 1 / x, false, true, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_3b
 
 
 -- !query
@@ -3563,19 +3656,22 @@ Project [a#x]
 -- !query
 CREATE OR REPLACE FUNCTION foo3_3a(x INT) RETURNS DOUBLE RETURN 1 / x
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_3a, x INT, DOUBLE, 1 / x, false, false, false, true
+CreateSQLFunctionCommand x INT, DOUBLE, 1 / x, false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_3a
 
 
 -- !query
 CREATE OR REPLACE FUNCTION foo3_3at(x INT) RETURNS TABLE (a DOUBLE) RETURN SELECT 1 / x
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_3at, x INT, a DOUBLE, SELECT 1 / x, true, false, false, true
+CreateSQLFunctionCommand x INT, a DOUBLE, SELECT 1 / x, true, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_3at
 
 
 -- !query
 CREATE OR REPLACE TEMPORARY FUNCTION foo3_3b(x INT) RETURNS DOUBLE RETURN 1 / x
 -- !query analysis
-CreateSQLFunctionCommand foo3_3b, x INT, DOUBLE, 1 / x, false, true, false, true
+CreateSQLFunctionCommand x INT, DOUBLE, 1 / x, false, true, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_3b
 
 
 -- !query
@@ -3608,25 +3704,29 @@ Project [a#x]
 -- !query
 CREATE FUNCTION foo3_3c() RETURNS INT RETURN CAST('a' AS INT)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_3c, INT, CAST('a' AS INT), false, false, false, false
+CreateSQLFunctionCommand INT, CAST('a' AS INT), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_3c
 
 
 -- !query
 CREATE FUNCTION foo3_3ct() RETURNS TABLE (a INT) RETURN SELECT CAST('a' AS INT)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_3ct, a INT, SELECT CAST('a' AS INT), true, false, false, false
+CreateSQLFunctionCommand a INT, SELECT CAST('a' AS INT), true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_3ct
 
 
 -- !query
 CREATE FUNCTION foo3_3d() RETURNS INT RETURN 'a' + 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_3d, INT, 'a' + 1, false, false, false, false
+CreateSQLFunctionCommand INT, 'a' + 1, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_3d
 
 
 -- !query
 CREATE FUNCTION foo3_3dt() RETURNS TABLE (a INT) RETURN SELECT 'a' + 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_3dt, a INT, SELECT 'a' + 1, true, false, false, false
+CreateSQLFunctionCommand a INT, SELECT 'a' + 1, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_3dt
 
 
 -- !query
@@ -3720,49 +3820,57 @@ ResetCommand spark.sql.ansi.enabled
 -- !query
 CREATE FUNCTION foo3_4a(x INT) RETURNS INT RETURN 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_4a, x INT, INT, 1, false, false, false, false
+CreateSQLFunctionCommand x INT, INT, 1, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_4a
 
 
 -- !query
 CREATE FUNCTION foo3_4b(x INT) RETURNS INT RETURN foo3_4a(x)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_4b, x INT, INT, foo3_4a(x), false, false, false, false
+CreateSQLFunctionCommand x INT, INT, foo3_4a(x), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_4b
 
 
 -- !query
 CREATE FUNCTION foo3_4c(x INT) RETURNS INT RETURN foo3_4b(x)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_4c, x INT, INT, foo3_4b(x), false, false, false, false
+CreateSQLFunctionCommand x INT, INT, foo3_4b(x), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_4c
 
 
 -- !query
 CREATE FUNCTION foo3_4d(x INT) RETURNS INT RETURN (SELECT foo3_4c(x))
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_4d, x INT, INT, (SELECT foo3_4c(x)), false, false, false, false
+CreateSQLFunctionCommand x INT, INT, (SELECT foo3_4c(x)), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_4d
 
 
 -- !query
 CREATE FUNCTION foo3_4e(x INT) RETURNS TABLE(a INT) RETURN SELECT foo3_4a(x)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_4e, x INT, a INT, SELECT foo3_4a(x), true, false, false, false
+CreateSQLFunctionCommand x INT, a INT, SELECT foo3_4a(x), true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_4e
 
 
 -- !query
 CREATE FUNCTION foo3_4f(x INT) RETURNS TABLE(b INT) RETURN SELECT * FROM foo3_4e(x)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_4f, x INT, b INT, SELECT * FROM foo3_4e(x), true, false, false, false
+CreateSQLFunctionCommand x INT, b INT, SELECT * FROM foo3_4e(x), true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_4f
 
 
 -- !query
 CREATE OR REPLACE TEMP FUNCTION foo3_4g(x INT) RETURN x + 1
 -- !query analysis
-CreateSQLFunctionCommand foo3_4g, x INT, , x + 1, false, true, false, true
+CreateSQLFunctionCommand x INT, , x + 1, false, true, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_4g
 
 
 -- !query
 CREATE OR REPLACE TEMP FUNCTION foo3_4h(x INT) RETURN foo3_4g(x) + 1
 -- !query analysis
-CreateSQLFunctionCommand foo3_4h, x INT, , foo3_4g(x) + 1, false, true, false, true
+CreateSQLFunctionCommand x INT, , foo3_4g(x) + 1, false, true, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_4h
 
 
 -- !query
@@ -3880,19 +3988,22 @@ CreateViewCommand `t`, VALUES (0) t(a), false, false, LocalTempView, UNSUPPORTED
 -- !query
 CREATE TEMPORARY FUNCTION foo3_5a(x INT) RETURNS INT RETURN x
 -- !query analysis
-CreateSQLFunctionCommand foo3_5a, x INT, INT, x, false, true, false, false
+CreateSQLFunctionCommand x INT, INT, x, false, true, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_5a
 
 
 -- !query
 CREATE TEMPORARY FUNCTION foo3_5b(x INT) RETURNS INT RETURN (SELECT SUM(a) FROM t)
 -- !query analysis
-CreateSQLFunctionCommand foo3_5b, x INT, INT, (SELECT SUM(a) FROM t), false, true, false, false
+CreateSQLFunctionCommand x INT, INT, (SELECT SUM(a) FROM t), false, true, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_5b
 
 
 -- !query
 CREATE TEMPORARY FUNCTION foo3_5c(x INT) RETURNS TABLE (a INT) RETURN SELECT a FROM t
 -- !query analysis
-CreateSQLFunctionCommand foo3_5c, x INT, a INT, SELECT a FROM t, true, true, false, false
+CreateSQLFunctionCommand x INT, a INT, SELECT a FROM t, true, true, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_5c
 
 
 -- !query
@@ -3962,31 +4073,36 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE FUNCTION foo3_12a(x INT) RETURNS INT CONTAINS SQL RETURN x
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_12a, x INT, INT, x, true, false, false, false, false
+CreateSQLFunctionCommand x INT, INT, x, true, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_12a
 
 
 -- !query
 CREATE FUNCTION foo3_12b(x INT) RETURNS INT READS SQL DATA RETURN x
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_12b, x INT, INT, x, false, false, false, false, false
+CreateSQLFunctionCommand x INT, INT, x, false, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_12b
 
 
 -- !query
 CREATE FUNCTION foo3_12c(x INT) RETURNS INT CONTAINS SQL RETURN (SELECT x)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_12c, x INT, INT, (SELECT x), true, false, false, false, false
+CreateSQLFunctionCommand x INT, INT, (SELECT x), true, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_12c
 
 
 -- !query
 CREATE FUNCTION foo3_12d(x INT) RETURNS INT CONTAINS SQL RETURN (SELECT COUNT(*) FROM range(0, 3))
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_12d, x INT, INT, (SELECT COUNT(*) FROM range(0, 3)), true, false, false, false, false
+CreateSQLFunctionCommand x INT, INT, (SELECT COUNT(*) FROM range(0, 3)), true, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_12d
 
 
 -- !query
 CREATE FUNCTION foo3_12e(x INT) RETURNS INT CONTAINS SQL RETURN (SELECT COUNT(*) FROM VALUES (0, 1))
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_12e, x INT, INT, (SELECT COUNT(*) FROM VALUES (0, 1)), true, false, false, false, false
+CreateSQLFunctionCommand x INT, INT, (SELECT COUNT(*) FROM VALUES (0, 1)), true, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_12e
 
 
 -- !query
@@ -4022,31 +4138,36 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE FUNCTION foo3_12g(x INT) RETURNS TABLE (a INT, b INT) CONTAINS SQL RETURN SELECT x, x + 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_12g, x INT, a INT, b INT, SELECT x, x + 1, true, true, false, false, false
+CreateSQLFunctionCommand x INT, a INT, b INT, SELECT x, x + 1, true, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_12g
 
 
 -- !query
 CREATE FUNCTION foo3_12h(x INT) RETURNS TABLE (a INT, b INT) READS SQL DATA RETURN SELECT x, x + 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_12h, x INT, a INT, b INT, SELECT x, x + 1, false, true, false, false, false
+CreateSQLFunctionCommand x INT, a INT, b INT, SELECT x, x + 1, false, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_12h
 
 
 -- !query
 CREATE FUNCTION foo3_12i(x INT) RETURNS TABLE (a INT, b INT) CONTAINS SQL RETURN SELECT * FROM VALUES (0, 1)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_12i, x INT, a INT, b INT, SELECT * FROM VALUES (0, 1), true, true, false, false, false
+CreateSQLFunctionCommand x INT, a INT, b INT, SELECT * FROM VALUES (0, 1), true, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_12i
 
 
 -- !query
 CREATE FUNCTION foo3_12j(x INT) RETURNS TABLE (a INT, b INT) CONTAINS SQL RETURN SELECT id, id + 1 FROM RANGE(3)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_12j, x INT, a INT, b INT, SELECT id, id + 1 FROM RANGE(3), true, true, false, false, false
+CreateSQLFunctionCommand x INT, a INT, b INT, SELECT id, id + 1 FROM RANGE(3), true, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_12j
 
 
 -- !query
 CREATE FUNCTION foo3_12k(x INT) RETURNS TABLE (a INT, b INT) RETURN SELECT c1, c2 FROM t1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_12k, x INT, a INT, b INT, SELECT c1, c2 FROM t1, true, false, false, false
+CreateSQLFunctionCommand x INT, a INT, b INT, SELECT c1, c2 FROM t1, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_12k
 
 
 -- !query
@@ -4130,13 +4251,15 @@ DropTable false, false
 -- !query
 CREATE FUNCTION foo3_14a() RETURNS INT RETURN 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_14a, INT, 1, false, false, false, false
+CreateSQLFunctionCommand INT, 1, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_14a
 
 
 -- !query
 CREATE FUNCTION foo3_14b() RETURNS TABLE (a INT) RETURN SELECT 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_14b, a INT, SELECT 1, true, false, false, false
+CreateSQLFunctionCommand a INT, SELECT 1, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_14b
 
 
 -- !query
@@ -4182,25 +4305,29 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE FUNCTION foo4_0() RETURNS TABLE (x INT) RETURN SELECT 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo4_0, x INT, SELECT 1, true, false, false, false
+CreateSQLFunctionCommand x INT, SELECT 1, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo4_0
 
 
 -- !query
 CREATE FUNCTION foo4_1(x INT) RETURNS TABLE (a INT) RETURN SELECT x
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo4_1, x INT, a INT, SELECT x, true, false, false, false
+CreateSQLFunctionCommand x INT, a INT, SELECT x, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo4_1
 
 
 -- !query
 CREATE FUNCTION foo4_2(x INT) RETURNS TABLE (a INT) RETURN SELECT c2 FROM t2 WHERE c1 = x
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo4_2, x INT, a INT, SELECT c2 FROM t2 WHERE c1 = x, true, false, false, false
+CreateSQLFunctionCommand x INT, a INT, SELECT c2 FROM t2 WHERE c1 = x, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo4_2
 
 
 -- !query
 CREATE FUNCTION foo4_3(x INT) RETURNS TABLE (a INT, cnt INT) RETURN SELECT c1, COUNT(*) FROM t2 WHERE c1 = x GROUP BY c1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo4_3, x INT, a INT, cnt INT, SELECT c1, COUNT(*) FROM t2 WHERE c1 = x GROUP BY c1, true, false, false, false
+CreateSQLFunctionCommand x INT, a INT, cnt INT, SELECT c1, COUNT(*) FROM t2 WHERE c1 = x GROUP BY c1, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo4_3
 
 
 -- !query
