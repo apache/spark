@@ -623,6 +623,31 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertEqual(call_tracker["release_session"], 1)
         self.assertEqual(call_tracker["close"], 1)
 
+    def test_on_exit_does_not_call_when_session_released(self):
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        client._release_session_on_exit = True
+        client._session_released = True
+
+        call_tracker = {"cleanup_ml_cache": 0, "release_session": 0, "close": 0}
+
+        def mock_cleanup_ml_cache():
+            call_tracker["cleanup_ml_cache"] += 1
+
+        def mock_release_session():
+            call_tracker["release_session"] += 1
+
+        def mock_close():
+            call_tracker["close"] += 1
+
+        client._cleanup_ml_cache = mock_cleanup_ml_cache
+        client.release_session = mock_release_session
+        client.close = mock_close
+        client._on_exit()
+
+        self.assertEqual(call_tracker["cleanup_ml_cache"], 0)
+        self.assertEqual(call_tracker["release_session"], 0)
+        self.assertEqual(call_tracker["close"], 0)
+
     def test_on_exit_does_not_call_when_release_disabled(self):
         """Test _on_exit does nothing when _release_session_on_exit is False."""
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
@@ -964,6 +989,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
         client.release_session()
         self.assertEqual(mock.captured_timeouts["ReleaseSession"], 44.0)
+        self.assertTrue(client._session_released)
 
         client._get_operation_statuses()
         self.assertEqual(mock.captured_timeouts["GetStatus"], 55.0)
