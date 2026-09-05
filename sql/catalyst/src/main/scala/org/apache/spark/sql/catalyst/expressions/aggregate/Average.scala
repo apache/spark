@@ -57,10 +57,10 @@ case class Average(
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("avg")
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType))
+    Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType, AnyTimeType))
 
   override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForAnsiIntervalOrNumericType(child)
+    TypeUtils.checkForAnsiIntervalOrNumericOrTimeType(child)
 
   override def nullable: Boolean = true
 
@@ -74,6 +74,8 @@ case class Average(
       DecimalType.bounded(p + 4, s + 4)
     case _: YearMonthIntervalType => YearMonthIntervalType()
     case _: DayTimeIntervalType => DayTimeIntervalType()
+    // The average of a TIME column is a TIME value with the same precision.
+    case t: TimeType => t
     case _ => DoubleType
   }
 
@@ -81,6 +83,8 @@ case class Average(
     case _ @ DecimalType.Fixed(p, s) => DecimalType.bounded(p + 10, s)
     case _: YearMonthIntervalType => YearMonthIntervalType()
     case _: DayTimeIntervalType => DayTimeIntervalType()
+    // TIME is stored as a `Long` number of nanoseconds, so accumulate the sum as `LongType`.
+    case _: TimeType => LongType
     case _ => DoubleType
   }
 
@@ -122,15 +126,26 @@ case class Average(
     case _: DayTimeIntervalType =>
       If(EqualTo(count, Literal(0L)),
         Literal(null, DayTimeIntervalType()), DivideDTInterval(sum, count))
+    case t: TimeType =>
+      If(EqualTo(count, Literal(0L)),
+        Literal(null, t), TimeDivide(sum, count, t))
     case _ =>
       Divide(sum.cast(resultType), count.cast(resultType), EvalMode.LEGACY)
+  }
+
+  // Convert the child value to the sum's data type before accumulating. For TIME, a regular cast
+  // to `LongType` is lossy (it truncates to whole seconds), so reinterpret the underlying `Long`
+  // nanoseconds without changing the value instead.
+  private def childToSum: Expression = child.dataType match {
+    case _: TimeType => PreciseTimestampConversion(child, child.dataType, LongType)
+    case _ => child.cast(sumDataType)
   }
 
   override lazy val updateExpressions: Seq[Expression] = Seq(
     /* sum = */
     add(
       sum,
-      coalesce(child.cast(sumDataType), Literal.default(sumDataType))),
+      coalesce(childToSum, Literal.default(sumDataType))),
     /* count = */ If(child.isNull, count, count + 1L)
   )
 
