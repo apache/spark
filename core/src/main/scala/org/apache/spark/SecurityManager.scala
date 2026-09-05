@@ -362,7 +362,12 @@ private[spark] class SecurityManager(
         false
 
       case _ =>
-        require(sparkConf.contains(SPARK_AUTH_SECRET_CONF),
+        // In standalone cluster mode, spark-submit strips SPARK_AUTH_SECRET_CONF from the
+        // SparkConf before sending the driver-launch request to the master, and the master
+        // instead delivers the secret to the driver process via the ENV_AUTH_SECRET env var.
+        // Accept either source here — getSecretKey() already reads both. See SPARK-25078.
+        require(sparkConf.contains(SPARK_AUTH_SECRET_CONF) ||
+          sparkConf.getenv(ENV_AUTH_SECRET) != null,
           s"A secret key must be specified via the $SPARK_AUTH_SECRET_CONF config.")
         return
     }
