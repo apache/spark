@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   AsOfTimestamp, AsOfVersion, TimeTravelSpec, UnresolvedRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, LongType, MapType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class CatalogV2UtilSuite extends SparkFunSuite {
@@ -273,6 +273,59 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     val existing = viewWithDependencies(None)
     val rebuilt = CatalogV2Util.viewInfoBuilderFrom(existing).build()
     assert(rebuilt.viewDependencies() === null)
+  }
+
+  test("SPARK-59188: add a column to a struct nested in an array of arrays") {
+    val schema = new StructType()
+      .add("col", ArrayType(ArrayType(new StructType().add("x", IntegerType))))
+    val changed = CatalogV2Util.applySchemaChanges(
+      schema,
+      Seq(TableChange.addColumn(Array("col", "element", "element", "y"), DoubleType)),
+      None,
+      "ALTER TABLE")
+    val expected = new StructType()
+      .add("col", ArrayType(ArrayType(
+        new StructType().add("x", IntegerType).add("y", DoubleType))))
+    assert(changed === expected)
+  }
+
+  test("SPARK-59188: update a column type in a struct nested in a map of arrays") {
+    val schema = new StructType()
+      .add("col", MapType(StringType, ArrayType(new StructType().add("x", IntegerType))))
+    val changed = CatalogV2Util.applySchemaChanges(
+      schema,
+      Seq(TableChange.updateColumnType(Array("col", "value", "element", "x"), LongType)),
+      None,
+      "ALTER TABLE")
+    val expected = new StructType()
+      .add("col", MapType(StringType, ArrayType(new StructType().add("x", LongType))))
+    assert(changed === expected)
+  }
+
+  test("SPARK-59188: update the key type of a map nested in an array") {
+    val schema = new StructType()
+      .add("col", ArrayType(MapType(IntegerType, StringType)))
+    val changed = CatalogV2Util.applySchemaChanges(
+      schema,
+      Seq(TableChange.updateColumnType(Array("col", "element", "key"), LongType)),
+      None,
+      "ALTER TABLE")
+    val expected = new StructType()
+      .add("col", ArrayType(MapType(LongType, StringType)))
+    assert(changed === expected)
+  }
+
+  test("SPARK-59188: an invalid path below a nested collection still fails") {
+    val schema = new StructType()
+      .add("col", ArrayType(ArrayType(IntegerType)))
+    val e = intercept[SparkIllegalArgumentException] {
+      CatalogV2Util.applySchemaChanges(
+        schema,
+        Seq(TableChange.addColumn(Array("col", "element", "missing", "y"), DoubleType)),
+        None,
+        "ALTER TABLE")
+    }
+    assert(e.getMessage.contains("missing"))
   }
 
   private def viewWithDependencies(dependencies: Option[DependencyList]): View = {
