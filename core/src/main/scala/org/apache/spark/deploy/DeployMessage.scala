@@ -19,6 +19,7 @@ package org.apache.spark.deploy
 
 import scala.collection.immutable.List
 
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.ExecutorState.ExecutorState
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
 import org.apache.spark.deploy.master.DriverState.DriverState
@@ -292,6 +293,29 @@ private[deploy] object DeployMessages {
 
     def uri: String = "spark://" + host + ":" + port
     def restUri: Option[String] = restPort.map { p => "spark://" + host + ":" + p }
+
+    // Must be called before sending the response so writeReplace redacts secrets.
+    // If unset, writeReplace returns this object unredacted.
+    @transient private var _conf: SparkConf = _
+
+    private[deploy] def withConf(conf: SparkConf): this.type = {
+      _conf = conf
+      this
+    }
+
+    private def writeReplace(): Any = {
+      if (_conf == null) {
+        this
+      } else {
+        MasterStateResponse(
+          host, port, restPort, workers,
+          activeApps.map(_.redactedCopy(_conf)),
+          completedApps.map(_.redactedCopy(_conf)),
+          activeDrivers.map(_.redactedCopy(_conf)),
+          completedDrivers.map(_.redactedCopy(_conf)),
+          status)
+      }
+    }
   }
 
   //  WorkerWebUI to Worker

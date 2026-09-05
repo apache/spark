@@ -19,6 +19,7 @@ package org.apache.spark.deploy.master
 
 import java.util.Date
 
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.DriverDescription
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.util.Utils
@@ -55,4 +56,13 @@ private[deploy] class DriverInfo(
   def withResources(r: Map[String, ResourceInformation]): Unit = _resources = r
 
   def resources: Map[String, ResourceInformation] = _resources
+
+  // Any future non-transient field added to DriverInfo must be copied here
+  // to avoid silently dropping it from the serialized (redacted) form.
+  private[deploy] def redactedCopy(conf: SparkConf): DriverInfo = {
+    val redactedDesc = desc.copy(command = desc.command.redactedCopy(conf))
+    val copy = new DriverInfo(startTime, id, redactedDesc, submitDate)
+    copy.withResources(_resources)
+    copy
+  }
 }

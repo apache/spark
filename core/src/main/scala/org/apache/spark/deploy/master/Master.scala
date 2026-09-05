@@ -519,7 +519,7 @@ private[deploy] class Master(
       context.reply(MasterStateResponse(
         address.host, address.port, restServerBoundPort,
         workers.toArray, apps.toArray, completedApps.toArray,
-        drivers.toArray, completedDrivers.toArray, state))
+        drivers.toArray, completedDrivers.toArray, state).withConf(conf))
 
     case RequestReadyz =>
       context.reply(state != RecoveryState.STANDBY)
