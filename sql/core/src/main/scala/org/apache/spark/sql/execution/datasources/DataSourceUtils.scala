@@ -29,7 +29,6 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkException, SparkUpgradeException}
 import org.apache.spark.sql.{sources, SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
-import org.apache.spark.sql.avro.{AvroFileFormat, AvroOptions}
 import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper}
@@ -174,14 +173,12 @@ object DataSourceUtils extends PredicateHelper {
    * Two things put a V1 file source here. Its parser may resolve or validate a column against the
    * set of columns it was asked for, which lets a wider read drop or rewrite rows that the narrower
    * one returned: CSV, JSON and XML build their parser from the required schema and take `mode` and
-   * the corrupt-record column from it, and Avro under `positionalFieldMatching` pairs a column with
-   * the Avro field at its position in that schema. SPARK-59108 proposes removing that at the root;
-   * the Avro arm of `hasProjectionSensitiveParser` can go once that fix is on this branch. Or the
-   * read is not strict: under `ignoreCorruptFiles` a failure in a column only the wider read
-   * touches is swallowed together with the rest of that file's rows, whatever the format.
-   * `ignoreMissingFiles` has no such mechanism, since a missing file is skipped whatever is
-   * projected; it is here to match `FileSourceOptions.hasStrictFileReads`, the same predicate the
-   * reader and the cache-repeatability check in `InMemoryRelation` use.
+   * the corrupt-record column from it. Or the read is not strict: under `ignoreCorruptFiles` a
+   * failure in a column only the wider read touches is swallowed together with the rest of that
+   * file's rows, whatever the format. `ignoreMissingFiles` has no such mechanism, since a missing
+   * file is skipped whatever is projected; it is here to match
+   * `FileSourceOptions.hasStrictFileReads`, the same predicate the reader and the
+   * cache-repeatability check in `InMemoryRelation` use.
    *
    * Callers that widen a read need this. Subplan merging is one: top-level column pruning for a V1
    * file source happens in physical planning, from the attributes referenced above the relation, so
@@ -191,19 +188,12 @@ object DataSourceUtils extends PredicateHelper {
   private[sql] def isProjectionSensitiveRead(relation: BaseRelation): Boolean = relation match {
     case hs: HadoopFsRelation =>
       !new FileSourceOptions(hs.options).hasStrictFileReads ||
-        hasProjectionSensitiveParser(hs.fileFormat, hs.options)
+        hasProjectionSensitiveParser(hs.fileFormat)
     case _ => false
   }
 
-  private def hasProjectionSensitiveParser(
-      fileFormat: FileFormat, options: Map[String, String]): Boolean = fileFormat match {
+  private def hasProjectionSensitiveParser(fileFormat: FileFormat): Boolean = fileFormat match {
     case _: CSVFileFormat | _: JsonFileFormat | _: XmlFileFormat => true
-    // Read the option off the map rather than through `AvroOptions`, whose constructor resolves
-    // `avroSchemaUrl` and would do I/O here, and read it leniently so a malformed value still
-    // fails where Avro reports it rather than here.
-    case _: AvroFileFormat =>
-      CaseInsensitiveMap(options).get(AvroOptions.POSITIONAL_FIELD_MATCHING)
-        .exists("true".equalsIgnoreCase)
     case _ => false
   }
 
