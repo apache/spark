@@ -329,6 +329,15 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Substring(bytes, -4, 2), Array[Byte](1, 2))
     checkEvaluation(Substring(bytes, -5, 2), Array[Byte](1))
     checkEvaluation(Substring(bytes, -8, 2), Array.empty[Byte])
+
+    // SPARK-58708: the end offset must be computed without overflowing, so that a binary
+    // input behaves like the string input tested above. Before the fix these returned a
+    // byte array much longer than the input, zero-padded by `Arrays.copyOfRange`.
+    checkEvaluation(Substring(bytes, -1207959552, -1207959552), Array.empty[Byte])
+    checkEvaluation(Substring(bytes, -2147483647, Int.MinValue), Array.empty[Byte])
+    checkEvaluation(Substring(bytes, Int.MinValue, 2), Array.empty[Byte])
+    checkEvaluation(Substring(bytes, 1, Int.MaxValue), Array[Byte](1, 2, 3, 4))
+    checkEvaluation(Substring(bytes, Int.MinValue, Int.MaxValue), Array[Byte](1, 2, 3))
   }
 
   test("string substring_index function") {
@@ -1241,6 +1250,21 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     GenerateUnsafeProjection.generate(StringRPad(Literal("\"quote"), s2, Literal("\"quote")) :: Nil)
     checkEvaluation(StringRPad(Literal("hi"), Literal(5)), "hi   ")
     checkEvaluation(StringRPad(Literal("hi"), Literal(1)), "h")
+
+    // SPARK-58708: a non-positive length returns the empty value rather than reaching the
+    // allocation. The string overloads already did; the binary ones threw
+    // NegativeArraySizeException, which is not a SparkThrowable.
+    val bin = Literal(Array[Byte](1, 2))
+    val binPad = Literal(Array[Byte](3, 4))
+    val emptyBinPad = Literal(Array[Byte]())
+    Seq(0, -1, -100, Int.MinValue).foreach { len =>
+      checkEvaluation(StringLPad(Literal("hi"), Literal(len), Literal("??")), "")
+      checkEvaluation(StringRPad(Literal("hi"), Literal(len), Literal("??")), "")
+      checkEvaluation(BinaryPad("lpad", bin, Literal(len), binPad), Array.empty[Byte])
+      checkEvaluation(BinaryPad("rpad", bin, Literal(len), binPad), Array.empty[Byte])
+      checkEvaluation(BinaryPad("lpad", bin, Literal(len), emptyBinPad), Array.empty[Byte])
+      checkEvaluation(BinaryPad("rpad", bin, Literal(len), emptyBinPad), Array.empty[Byte])
+    }
   }
 
   test("PadExpressionBuilderBase") {

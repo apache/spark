@@ -1482,6 +1482,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    *   ('hi', 1, '??') =&gt; 'h'
    */
   public UTF8String rpad(int len, UTF8String pad) {
+    // If the requested length is not positive, the result is empty. This is also what the
+    // `spaces <= 0` branch below computes, but it has to be checked up front: for
+    // `len == Integer.MIN_VALUE` the subtraction wraps to a positive value and the padding
+    // branch is taken instead.
+    if (len <= 0) return EMPTY_UTF8;
     int spaces = len - this.numChars(); // number of char need to pad
     if (spaces <= 0 || pad.numBytes() == 0) {
       // no padding at all, return the substring of the current string
@@ -1516,6 +1521,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    *   ('hi', 1, '??') =&gt; 'h'
    */
   public UTF8String lpad(int len, UTF8String pad) {
+    // If the requested length is not positive, the result is empty. This is also what the
+    // `spaces <= 0` branch below computes, but it has to be checked up front: for
+    // `len == Integer.MIN_VALUE` the subtraction wraps to a positive value and the padding
+    // branch is taken instead.
+    if (len <= 0) return EMPTY_UTF8;
     int spaces = len - this.numChars(); // number of char need to pad
     if (spaces <= 0 || pad.numBytes() == 0) {
       // no padding at all, return the substring of the current string
