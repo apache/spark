@@ -21,6 +21,7 @@ import java.util.Locale
 
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.core.JsonGenerator
 import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize}
 import org.json4s._
 import org.json4s.JsonAST.JValue
@@ -31,7 +32,7 @@ import org.apache.spark.{SparkClassNotFoundException, SparkIllegalArgumentExcept
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.SqlApiAnalysis
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
-import org.apache.spark.sql.catalyst.util.{CollationFactory, StringConcat}
+import org.apache.spark.sql.catalyst.util.{CollationFactory, DataTypeJsonUtils, StringConcat}
 import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.internal.SqlApiConf
@@ -66,8 +67,12 @@ abstract class DataType extends AbstractDataType {
 
   private[sql] def jsonValue: JValue = typeName
 
+  private[sql] def writeJsonTo(generator: JsonGenerator): Unit = {
+    generator.writeString(typeName)
+  }
+
   /** The compact JSON representation of this data type. */
-  def json: String = compact(render(jsonValue))
+  def json: String = DataTypeJsonUtils.toJson(this)
 
   /** The pretty (i.e. indented) JSON representation of this data type. */
   def prettyJson: String = pretty(render(jsonValue))
