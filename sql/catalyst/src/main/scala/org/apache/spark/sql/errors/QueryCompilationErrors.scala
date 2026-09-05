@@ -1197,7 +1197,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def addColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1052",
+      errorClass = "ADD_COLUMN_NOT_NULL_UNSUPPORTED",
       messageParameters = Map.empty)
   }
 

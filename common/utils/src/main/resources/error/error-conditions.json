@@ -1,4 +1,10 @@
 {
+  "ADD_COLUMN_NOT_NULL_UNSUPPORTED" : {
+    "message" : [
+      "ADD COLUMN with v1 tables cannot specify NOT NULL."
+    ],
+    "sqlState" : "0A000"
+  },
   "ADD_DEFAULT_UNSUPPORTED" : {
     "message" : [
       "Failed to execute <statementType> command because DEFAULT values are not supported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."
@@ -10233,11 +10239,6 @@
   "_LEGACY_ERROR_TEMP_1050" : {
     "message" : [
       "Can only star expand struct data types. Attribute: `<attributes>`."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1052" : {
-    "message" : [
-      "ADD COLUMN with v1 tables cannot specify NOT NULL."
     ]
   },
   "_LEGACY_ERROR_TEMP_1059" : {
