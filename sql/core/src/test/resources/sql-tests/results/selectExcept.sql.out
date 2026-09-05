@@ -494,3 +494,63 @@ SELECT T.* FROM v1, LATERAL (SELECT  COALESCE(v1.*)) AS T(x)
 struct<x:int>
 -- !query output
 1
+
+
+-- !query
+CREATE TEMPORARY VIEW nullable_struct AS SELECT * FROM VALUES
+  (0, CAST(NULL AS STRUCT<a: INT, b: INT, s2: STRUCT<c: INT, d: INT>>)),
+  (1, named_struct("a", 1, "b", 11, "s2", CAST(NULL AS STRUCT<c: INT, d: INT>))),
+  (2, named_struct("a", 2, "b", 22, "s2", named_struct("c", 222, "d", 2222)))
+AS nullable_struct(id, data)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * EXCEPT (data.a) FROM nullable_struct
+-- !query schema
+struct<id:int,data:struct<b:int,s2:struct<c:int,d:int>>>
+-- !query output
+0	NULL
+1	{"b":11,"s2":null}
+2	{"b":22,"s2":{"c":222,"d":2222}}
+
+
+-- !query
+SELECT id, data IS NULL FROM (SELECT * EXCEPT (data.a) FROM nullable_struct)
+-- !query schema
+struct<id:int,(data IS NULL):boolean>
+-- !query output
+0	true
+1	false
+2	false
+
+
+-- !query
+SELECT id, data IS NULL, data.s2 IS NULL FROM (SELECT * EXCEPT (data.s2.c) FROM nullable_struct)
+-- !query schema
+struct<id:int,(data IS NULL):boolean,(data.s2 IS NULL):boolean>
+-- !query output
+0	true	true
+1	false	true
+2	false	false
+
+
+-- !query
+SELECT data.* EXCEPT (s2.c) FROM nullable_struct
+-- !query schema
+struct<a:int,b:int,s2:struct<d:int>>
+-- !query output
+1	11	NULL
+2	22	{"d":2222}
+NULL	NULL	NULL
+
+
+-- !query
+DROP VIEW nullable_struct
+-- !query schema
+struct<>
+-- !query output
+
