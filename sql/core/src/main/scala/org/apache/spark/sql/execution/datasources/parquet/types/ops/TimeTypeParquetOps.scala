@@ -90,12 +90,18 @@ case class TimeTypeParquetOps(t: TimeType) extends ParquetTypeOps {
 
   override def newConverter(
       parquetType: Type,
+      updater: ParentContainerUpdater): Converter with HasParentContainerUpdater =
+    newConverterInternal(parquetType, updater)
+
+  private def newConverterInternal(
+      parquetType: Type,
       updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
     // Framework-first dispatch in ParquetRowConverter routes here whenever the
     // requested Spark type is TimeType, regardless of the actual Parquet encoding.
     // Without this guard, files whose column is raw INT64, INT64 TIMESTAMP(MICROS),
     // INT32 TIME(MILLIS), etc. would silently decode as microsToNanos(value) and
-    // produce wrong results.
+    // produce wrong results. Mirrors the inline guard
+    // that existed in ParquetRowConverter before the framework dispatch.
     TimeTypeParquetOps.requireCompatibleParquetType(t, parquetType)
     val fileStoresNanos = TimeTypeParquetOps.isNanosTime(parquetType)
     val precision = t.precision
@@ -150,11 +156,23 @@ private[ops] object TimeTypeParquetOps {
     override val logicalTypeAnnotation: LogicalTypeAnnotation =
       LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS)
 
-    override def acceptsValue(value: Any): Boolean = value.isInstanceOf[LocalTime]
+    override def acceptsValue(value: Any): Boolean =
+      value.isInstanceOf[LocalTime] && isMicrosResolution(value.asInstanceOf[LocalTime])
 
     override protected def toLong(value: Any): JLong =
       value.asInstanceOf[LocalTime].getLong(MICRO_OF_DAY)
   }
+
+  /**
+   * Whether a LocalTime filter literal is exactly representable in the on-disk MICROS unit, i.e.
+   * it has no sub-microsecond (nanosecond) component. TimeType is held internally as nanos-of-day,
+   * so a filter literal can be finer-grained than a TIME(MICROS) column; [[filterOps]] would
+   * truncate it to micros and push a bound that skips matching rows (e.g. `t < 12:00:00.000000001`
+   * truncates to `t < 12:00:00`, wrongly pruning a row at exactly 12:00:00; `!=` has the symmetric
+   * false-negative). Sub-microsecond literals are therefore not pushed down; the read falls back to
+   * a full scan, which is always correct.
+   */
+  private def isMicrosResolution(value: LocalTime): Boolean = value.getNano % 1000 == 0
 
   /**
    * Whether the Parquet field is an INT64 TIME(NANOS) column. The isAdjustedToUTC flag is

@@ -1923,6 +1923,15 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
           val expected = (0 until numRecords).map { _ => lt }.toDF()
           checkAnswer(df, expected)
         }
+        withSQLConf(SQLConf.PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ.key -> "true") {
+          withAllParquetReaders {
+            val df = spark.read.parquet(tablePath.toString)
+            assertResult(df.schema) { new StructType().add("time_micros", TimeType()) }
+            val lt = LocalTime.of(23, 59, 59, 123456000)
+            val expected = (0 until numRecords).map { _ => lt }.toDF()
+            checkAnswer(df, expected)
+          }
+        }
       }
     }
   }
@@ -2079,6 +2088,30 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
           checkAnswer(df, expected)
         }
       }
+    }
+  }
+
+  test("Read TimeType for the logical TIME type with isAdjustedToUTC=true throws by default") {
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 time_micros(TIME(MICROS,true));
+        |}""".stripMargin)
+
+    withTempDir { dir =>
+      val tablePath = new Path(s"${dir.getCanonicalPath}/times.parquet")
+      val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = false)
+      val record = new SimpleGroup(schema)
+      record.add(0, localTime(12, 0, 0, 0) / DateTimeConstants.NANOS_PER_MICROS)
+      writer.write(record)
+      writer.close
+
+      checkError(
+        exception = intercept[org.apache.spark.sql.AnalysisException] {
+          spark.read.parquet(tablePath.toString).collect()
+        },
+        condition = "PARQUET_TYPE_ILLEGAL",
+        parameters = Map("parquetType" -> "INT64 (TIME(MICROS,true))")
+      )
     }
   }
 

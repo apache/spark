@@ -66,7 +66,9 @@ class ParquetToSparkSchemaConverter(
     val ignoreVariantAnnotation: Boolean =
       SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.defaultValue.get,
     val respectUnknownTypeAnnotation: Boolean =
-      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.defaultValue.get) {
+      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.defaultValue.get,
+    val timeIsAdjustedToUTC: Boolean =
+      SQLConf.PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ.defaultValue.get) {
 
   def this(conf: SQLConf) = this(
     assumeBinaryIsString = conf.isParquetBinaryAsString,
@@ -77,8 +79,8 @@ class ParquetToSparkSchemaConverter(
     timestampNanosTypesEnabled = conf.timestampNanosTypesEnabled,
     useFieldId = conf.parquetFieldIdReadEnabled,
     ignoreVariantAnnotation = conf.parquetIgnoreVariantAnnotation,
-    respectUnknownTypeAnnotation =
-      conf.parquetReaderRespectUnknownTypeAnnotation)
+    respectUnknownTypeAnnotation = conf.parquetReaderRespectUnknownTypeAnnotation,
+    timeIsAdjustedToUTC = conf.parquetTimeTypeAllowIsAdjustedToUtcRead)
 
   def this(conf: Configuration) = this(
     assumeBinaryIsString = conf.get(SQLConf.PARQUET_BINARY_AS_STRING.key).toBoolean,
@@ -94,7 +96,10 @@ class ParquetToSparkSchemaConverter(
       SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.defaultValue.get),
     respectUnknownTypeAnnotation = conf.getBoolean(
       SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.key,
-      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.defaultValue.get))
+      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.defaultValue.get),
+    timeIsAdjustedToUTC = conf.getBoolean(
+      SQLConf.PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ.key,
+      SQLConf.PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ.defaultValue.get))
 
   /**
    * Converts Parquet [[MessageType]] `parquetSchema` to a Spark SQL [[StructType]].
@@ -340,7 +345,8 @@ class ParquetToSparkSchemaConverter(
               TimestampNTZNanosType(TimestampNTZNanosType.NANOS_PRECISION)
             }
           case time: TimeLogicalTypeAnnotation
-            if time.getUnit == TimeUnit.MICROS && !time.isAdjustedToUTC =>
+            if time.getUnit == TimeUnit.MICROS &&
+              (!time.isAdjustedToUTC || timeIsAdjustedToUTC) =>
             TimeType(TimeType.MICROS_PRECISION)
           case time: TimeLogicalTypeAnnotation
             if time.getUnit == TimeUnit.NANOS && !time.isAdjustedToUTC =>
