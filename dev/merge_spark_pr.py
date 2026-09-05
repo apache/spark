@@ -779,6 +779,7 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
 
     git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, pick_ref, pick_branch_name))
     git.run("git checkout %s" % pick_branch_name)
+    pick_head = git.run("git rev-parse HEAD").strip()
 
     try:
         git.run(
@@ -796,18 +797,21 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
         continue_maybe(msg, True)
         msg = "Okay, please fix any conflicts and 'git add' conflicting files... Finished?"
         continue_maybe(msg, True)
-        # Important to use `scissors` and `--edit` otherwise git will strip lines starting with `#`
-        # when calling `--continue`. See: https://github.com/apache/spark/pull/58214
-        git.run(
-            [
-                "git",
-                "-c",
-                "commit.cleanup=scissors",
-                "cherry-pick",
-                "--continue",
-                "--edit",
-            ]
-        )
+        if git.run("git rev-parse HEAD").strip() == pick_head:
+            # Important to use `scissors` and `--edit` otherwise git will strip lines starting
+            # with `#` when calling `--continue`. See: https://github.com/apache/spark/pull/58214
+            git.run(
+                [
+                    "git",
+                    "-c",
+                    "commit.cleanup=scissors",
+                    "cherry-pick",
+                    "--continue",
+                    "--edit",
+                ]
+            )
+        else:
+            print("Cherry-pick already completed manually; continuing with the backport.")
 
     continue_maybe(
         "Pick complete (local ref %s). Push to %s?" % (pick_branch_name, PUSH_REMOTE_NAME)
