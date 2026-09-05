@@ -16,6 +16,9 @@
  */
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
@@ -109,6 +112,52 @@ public interface ViewCatalog extends CatalogPlugin {
    * @throws NoSuchViewException if no view exists at {@code ident}
    */
   View replaceView(Identifier ident, View info) throws NoSuchViewException;
+
+  /**
+   * Apply a set of {@link ViewChange changes} to a view in the catalog.
+   * <p>
+   * Implementations may reject the requested changes. If any change is rejected, none of the
+   * changes should be applied to the view. The requested changes must be applied in order.
+   * <p>
+   * The default implementation loads the latest view metadata, applies the changes, and calls
+   * {@link #replaceView}. Catalogs should override this method if they can apply the changes in a
+   * single atomic operation.
+   *
+   * @param ident a view identifier
+   * @param changes changes to apply to the view
+   * @return updated metadata for the view
+   * @throws NoSuchViewException if the view does not exist
+   * @throws IllegalArgumentException if any change is rejected by the implementation
+   *
+   * @since 5.0.0
+   */
+  default View alterView(Identifier ident, ViewChange... changes) throws NoSuchViewException {
+    invalidateView(ident);
+    View current = loadView(ident);
+    Map<String, String> properties = new HashMap<>(current.properties());
+    for (ViewChange change : changes) {
+      if (change instanceof ViewChange.SetProperty set) {
+        properties.put(set.property(), set.value());
+      } else if (change instanceof ViewChange.RemoveProperty remove) {
+        properties.remove(remove.property());
+      } else {
+        throw new IllegalArgumentException("Unsupported view change: " + change);
+      }
+    }
+
+    View updated = new View.Builder()
+        .withColumns(current.columns())
+        .withProperties(properties)
+        .withQueryText(current.queryText())
+        .withCurrentCatalog(current.currentCatalog())
+        .withCurrentNamespace(current.currentNamespace())
+        .withSqlConfigs(current.sqlConfigs())
+        .withSchemaMode(current.schemaMode())
+        .withQueryColumnNames(current.queryColumnNames())
+        .withViewDependencies(current.viewDependencies())
+        .build();
+    return replaceView(ident, updated);
+  }
 
   /**
    * Create a view if one does not exist at {@code ident}, or atomically replace it if one does.

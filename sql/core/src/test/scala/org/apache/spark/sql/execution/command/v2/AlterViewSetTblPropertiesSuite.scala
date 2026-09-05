@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
+import org.apache.spark.sql.connector.catalog.ViewChange
 import org.apache.spark.sql.execution.command
 
 /**
@@ -32,5 +34,40 @@ class AlterViewSetTblPropertiesSuite
     sql(s"ALTER VIEW $view SET TBLPROPERTIES ('k' = 'v')")
     val stored = viewCatalog.getStoredView(Array(namespace), "v2_set_view_info")
     assert(stored.properties.get("k") == "v")
+    assert(viewCatalog.getLastViewChanges === Seq(ViewChange.setProperty("k", "v")))
+  }
+
+  test("V2: catalog IllegalArgumentException is converted to a structured error") {
+    val view = s"$catalog.$namespace.v2_set_view_rejected"
+    createView(view)
+    viewCatalog.failAlterViewWith(new IllegalArgumentException("set rejected"))
+    try {
+      checkError(
+        exception = intercept[SparkException] {
+          sql(s"ALTER VIEW $view SET TBLPROPERTIES ('k' = 'v')")
+        },
+        condition = "UNSUPPORTED_VIEW_CHANGE",
+        parameters = Map("message" -> "set rejected"))
+    } finally {
+      viewCatalog.clearAlterViewFailure()
+    }
+  }
+
+  test("V2: catalog SparkThrowable is preserved") {
+    val view = s"$catalog.$namespace.v2_set_view_spark_error"
+    createView(view)
+    viewCatalog.failAlterViewWith(new SparkIllegalArgumentException(
+      errorClass = "UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
+      messageParameters = Map("saveMode" -> "TEST")))
+    try {
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          sql(s"ALTER VIEW $view SET TBLPROPERTIES ('k' = 'v')")
+        },
+        condition = "UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
+        parameters = Map("saveMode" -> "TEST"))
+    } finally {
+      viewCatalog.clearAlterViewFailure()
+    }
   }
 }

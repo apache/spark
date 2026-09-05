@@ -41,6 +41,8 @@ class InMemoryRelationCatalog extends RelationCatalog with SupportsNamespaces {
     new ConcurrentHashMap[(Seq[String], String), Relation]()
   private val namespaces =
     new ConcurrentHashMap[Seq[String], util.Map[String, String]]()
+  @volatile private var lastViewChanges: Seq[ViewChange] = Seq.empty
+  @volatile private var alterViewFailure: IllegalArgumentException = _
 
   override def loadRelation(ident: Identifier): Relation = {
     val key = (ident.namespace().toSeq, ident.name())
@@ -122,6 +124,14 @@ class InMemoryRelationCatalog extends RelationCatalog with SupportsNamespaces {
     }
     store.put(key, info)
     info
+  }
+
+  override def alterView(ident: Identifier, changes: ViewChange*): View = {
+    lastViewChanges = changes
+    if (alterViewFailure != null) {
+      throw alterViewFailure
+    }
+    super.alterView(ident, changes: _*)
   }
 
   override def dropView(ident: Identifier): Boolean = {
@@ -232,6 +242,19 @@ class InMemoryRelationCatalog extends RelationCatalog with SupportsNamespaces {
       case _ => throw new IllegalStateException(
         s"stored entry at ${namespace.mkString(".")}.$name is not a view")
     }
+  }
+
+  /** Returns the changes from the most recent alterView call. */
+  def getLastViewChanges: Seq[ViewChange] = lastViewChanges
+
+  /** Configures a failure for alterView. */
+  def failAlterViewWith(failure: IllegalArgumentException): Unit = {
+    alterViewFailure = failure
+  }
+
+  /** Clears a configured alterView failure. */
+  def clearAlterViewFailure(): Unit = {
+    alterViewFailure = null
   }
 
   // CatalogPlugin --------------------------------------------------------------------
