@@ -336,13 +336,13 @@ class PandasGroupedOpsMixin:
         elements and process them. On the other hand, the user function is not strictly required to
         iterate through all elements in the iterator if it intends to read a part of data.
 
-        The `outputStructType` should be a :class:`StructType` describing the schema of all
+        The `outputStructType` should be a :class:`~pyspark.sql.types.StructType` describing the schema of all
         elements in the returned value, `pandas.DataFrame`. The column labels of all elements in
         returned `pandas.DataFrame` must either match the field names in the defined schema if
         specified as strings, or match the field data types by position if not strings,
         e.g. integer indices.
 
-        The `stateStructType` should be :class:`StructType` describing the schema of the
+        The `stateStructType` should be :class:`~pyspark.sql.types.StructType` describing the schema of the
         user-defined state. The value of the state will be presented as a tuple, as well as the
         update should be performed with the tuple. The corresponding Python types for
         :class:DataType are supported. Please refer to the page
@@ -450,7 +450,7 @@ class PandasGroupedOpsMixin:
         The `statefulProcessor` should be a Python class that implements the interface defined in
         :class:`StatefulProcessor`.
 
-        The `outputStructType` should be a :class:`StructType` describing the schema of all
+        The `outputStructType` should be a :class:`~pyspark.sql.types.StructType` describing the schema of all
         elements in the returned value, `pandas.DataFrame`. The column labels of all elements in
         returned `pandas.DataFrame` must either match the field names in the defined schema if
         specified as strings, or match the field data types by position if not strings,
@@ -465,14 +465,14 @@ class PandasGroupedOpsMixin:
         ----------
         statefulProcessor : :class:`pyspark.sql.streaming.stateful_processor.StatefulProcessor`
             Instance of StatefulProcessor whose functions will be invoked by the operator.
-        outputStructType : :class:`pyspark.sql.types.DataType` or str
+        outputStructType : :class:`~pyspark.sql.types.DataType` or str
             The type of the output records. The value can be either a
-            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+            :class:`~pyspark.sql.types.DataType` object or a DDL-formatted type string.
         outputMode : str
             The output mode of the stateful processor.
         timeMode : str
             The time mode semantics of the stateful processor for timers and TTL.
-        initialState : :class:`pyspark.sql.GroupedData`
+        initialState : :class:`~pyspark.sql.GroupedData`
             Optional. The grouped dataframe as initial states used for initialization
             of state variables in the first batch.
 
@@ -586,7 +586,7 @@ class PandasGroupedOpsMixin:
         The `statefulProcessor` should be a Python class that implements the interface defined in
         :class:`StatefulProcessor`.
 
-        The `outputStructType` should be a :class:`StructType` describing the schema of all
+        The `outputStructType` should be a :class:`~pyspark.sql.types.StructType` describing the schema of all
         elements in the returned value, `Row`. The column labels of all elements in
         returned `Row` must either match the field names in the defined schema.
 
@@ -598,14 +598,14 @@ class PandasGroupedOpsMixin:
         ----------
         statefulProcessor : :class:`pyspark.sql.streaming.stateful_processor.StatefulProcessor`
             Instance of StatefulProcessor whose functions will be invoked by the operator.
-        outputStructType : :class:`pyspark.sql.types.DataType` or str
+        outputStructType : :class:`~pyspark.sql.types.DataType` or str
             The type of the output records. The value can be either a
-            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+            :class:`~pyspark.sql.types.DataType` object or a DDL-formatted type string.
         outputMode : str
             The output mode of the stateful processor.
         timeMode : str
             The time mode semantics of the stateful processor for timers and TTL.
-        initialState : :class:`pyspark.sql.GroupedData`
+        initialState : :class:`~pyspark.sql.GroupedData`
             Optional. The grouped dataframe as initial states used for initialization
             of state variables in the first batch.
 
@@ -783,7 +783,7 @@ class PandasGroupedOpsMixin:
         are passed together in the `pyarrow.Table` or `pyarrow.RecordBatch`, and the returned
         `pyarrow.Table` or iterator of `pyarrow.RecordBatch` are combined as a :class:`DataFrame`.
 
-        The `schema` should be a :class:`StructType` describing the schema of the returned
+        The `schema` should be a :class:`~pyspark.sql.types.StructType` describing the schema of the returned
         `pyarrow.Table` or `pyarrow.RecordBatch`. The column labels of the returned `pyarrow.Table`
         or `pyarrow.RecordBatch` must either match the field names in the defined schema if
         specified as strings, or match the field data types by position if not strings, e.g.
@@ -803,9 +803,9 @@ class PandasGroupedOpsMixin:
             `pyarrow.RecordBatch`. Additionally, each form can take a tuple of grouping keys
             as the first argument, with the `pyarrow.Table` or iterator of `pyarrow.RecordBatch`
             as the second argument.
-        schema : :class:`pyspark.sql.types.DataType` or str
+        schema : :class:`~pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
-            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+            :class:`~pyspark.sql.types.DataType` object or a DDL-formatted type string.
 
         Examples
         --------
@@ -1001,7 +1001,7 @@ class PandasCogroupedOps:
         `pandas.DataFrame` to the user-function and the returned `pandas.DataFrame` are combined as
         a :class:`DataFrame`.
 
-        The `schema` should be a :class:`StructType` describing the schema of the returned
+        The `schema` should be a :class:`~pyspark.sql.types.StructType` describing the schema of the returned
         `pandas.DataFrame`. The column labels of the returned `pandas.DataFrame` must either match
         the field names in the defined schema if specified as strings, or match the
         field data types by position if not strings, e.g. integer indices.
@@ -1018,9 +1018,9 @@ class PandasCogroupedOps:
             a Python native function that takes two `pandas.DataFrame`\\s, and
             outputs a `pandas.DataFrame`, or that takes one tuple (grouping keys) and two
             ``pandas.DataFrame``\\s, and outputs a ``pandas.DataFrame``.
-        schema : :class:`pyspark.sql.types.DataType` or str
+        schema : :class:`~pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
-            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+            :class:`~pyspark.sql.types.DataType` object or a DDL-formatted type string.
 
         Examples
         --------
@@ -1104,7 +1104,7 @@ class PandasCogroupedOps:
         `pyarrow.Table` to the user-function and the returned `pyarrow.Table` are combined as
         a :class:`DataFrame`.
 
-        The `schema` should be a :class:`StructType` describing the schema of the returned
+        The `schema` should be a :class:`~pyspark.sql.types.StructType` describing the schema of the returned
         `pyarrow.Table`. The column labels of the returned `pyarrow.Table` must either match
         the field names in the defined schema if specified as strings, or match the
         field data types by position if not strings, e.g. integer indices.
@@ -1118,9 +1118,9 @@ class PandasCogroupedOps:
             a Python native function that takes two `pyarrow.Table`\\s, and
             outputs a `pyarrow.Table`, or that takes one tuple (grouping keys) and two
             ``pyarrow.Table``\\s, and outputs a ``pyarrow.Table``.
-        schema : :class:`pyspark.sql.types.DataType` or str
+        schema : :class:`~pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
-            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+            :class:`~pyspark.sql.types.DataType` object or a DDL-formatted type string.
 
         Examples
         --------

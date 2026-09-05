@@ -340,17 +340,52 @@ def col(col: str) -> Column:
     :class:`~pyspark.sql.Column`
         the corresponding column instance.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.column`
+
     Examples
     --------
+    >>> from pyspark.sql.functions import col
     >>> col('x')
-    Column<'x'>
-    >>> column('x')
     Column<'x'>
     """
     return _invoke_function("col", col)
 
 
-column = col
+@_try_remote_functions
+@_with_origin
+def column(col: str) -> Column:
+    """
+    Returns a :class:`~pyspark.sql.Column` based on the given column name.
+    An alias of :func:`col`.
+
+    .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
+
+    Parameters
+    ----------
+    col : column name
+        the name for the column
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the corresponding column instance.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.col`
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import column
+    >>> column('x')
+    Column<'x'>
+    """
+    return _invoke_function("col", col)
 
 
 @_try_remote_functions
@@ -577,6 +612,11 @@ def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     right : :class:`~pyspark.sql.Column` or column name
         A column that evaluates to a numeric, interval, date, timestamp, or time.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a long.
+
     Examples
     --------
     Example 1: Integer plus Integer.
@@ -658,6 +698,15 @@ def try_avg(col: "ColumnOrName") -> Column:
     col : :class:`~pyspark.sql.Column` or column name
         A column that evaluates to a numeric or interval.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a double.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.avg`
+
     Examples
     --------
     Example 1: Calculating the average age
@@ -719,6 +768,11 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     right : :class:`~pyspark.sql.Column` or column name
         divisor.
         A column that evaluates to a numeric.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a double.
 
     Examples
     --------
@@ -836,6 +890,11 @@ def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
         multiplier.
         A column that evaluates to a numeric or interval.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a numeric.
+
     Examples
     --------
     Example 1: Integer multiplied by Integer.
@@ -899,6 +958,11 @@ def try_subtract(left: "ColumnOrName", right: "ColumnOrName") -> Column:
         A column that evaluates to a numeric, interval, date, timestamp, or time.
     right : :class:`~pyspark.sql.Column` or column name
         A column that evaluates to a numeric, interval, date, timestamp, or time.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a numeric.
 
     Examples
     --------
@@ -980,6 +1044,15 @@ def try_sum(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         A column that evaluates to a numeric or interval.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a numeric.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.sum`
 
     Examples
     --------
@@ -1689,6 +1762,7 @@ def sum(col: "ColumnOrName") -> Column:
 
     See Also
     --------
+    :meth:`pyspark.sql.functions.try_sum`
     :meth:`pyspark.sql.functions.min`
     :meth:`pyspark.sql.functions.max`
     :meth:`pyspark.sql.functions.avg`
@@ -1754,6 +1828,7 @@ def avg(col: "ColumnOrName") -> Column:
 
     See Also
     --------
+    :meth:`pyspark.sql.functions.try_avg`
     :meth:`pyspark.sql.functions.min`
     :meth:`pyspark.sql.functions.max`
     :meth:`pyspark.sql.functions.sum`
@@ -3085,6 +3160,11 @@ def e() -> Column:
 
     .. versionadded:: 3.5.0
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a double.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -3408,6 +3488,11 @@ def pi() -> Column:
     """Returns Pi.
 
     .. versionadded:: 3.5.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a double.
 
     Examples
     --------
@@ -4442,7 +4527,7 @@ def desc_nulls_last(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def stddev(col: "ColumnOrName") -> Column:
     """
-    Aggregate function: alias for stddev_samp.
+    Aggregate function: alias for :func:`stddev_samp`.
 
     .. versionadded:: 1.6.0
 
@@ -4486,7 +4571,7 @@ def stddev(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def std(col: "ColumnOrName") -> Column:
     """
-    Aggregate function: alias for stddev_samp.
+    Aggregate function: alias for :func:`stddev_samp`.
 
     .. versionadded:: 3.5.0
 
@@ -4613,7 +4698,7 @@ def stddev_pop(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def variance(col: "ColumnOrName") -> Column:
     """
-    Aggregate function: alias for var_samp
+    Aggregate function: alias for :func:`var_samp`.
 
     .. versionadded:: 1.6.0
 
@@ -4937,6 +5022,11 @@ def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     x : :class:`~pyspark.sql.Column` or column name
         the independent variable.
         A column that evaluates to a numeric.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a long.
 
     See Also
     --------
@@ -5398,6 +5488,11 @@ def regr_sxy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     x : :class:`~pyspark.sql.Column` or column name
         the independent variable.
         A column that evaluates to a numeric.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a double.
 
     See Also
     --------
@@ -6571,6 +6666,10 @@ def pow(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) 
         the base rased to the power the argument.
         Returns a column that evaluates to a double.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.power`
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -7372,7 +7471,7 @@ def countDistinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
 
 @_try_remote_functions
 def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
-    """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
+    """Returns a new :class:`~pyspark.sql.Column` for distinct count of ``col`` or ``cols``.
 
     .. versionadded:: 3.2.0
 
@@ -7468,6 +7567,10 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     -------
     :class:`~pyspark.sql.Column`
         first value of the group.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.first_value`
 
     Examples
     --------
@@ -7827,6 +7930,10 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     :class:`~pyspark.sql.Column`
         last value of the group.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.last_value`
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -7873,7 +7980,7 @@ def monotonically_increasing_id() -> Column:
     -----
     The function is non-deterministic because its result depends on partition IDs.
 
-    As an example, consider a :class:`DataFrame` with two partitions, each with 3 records.
+    As an example, consider a :class:`~DataFrame` with two partitions, each with 3 records.
     This expression would return the following IDs:
     0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
 
@@ -7911,7 +8018,7 @@ def monotonically_increasing_id() -> Column:
 def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """Returns col1 if it is not NaN, or col2 if col1 is NaN.
 
-    Both inputs should be floating point columns (:class:`DoubleType` or :class:`FloatType`).
+    Both inputs should be floating point columns (:class:`~pyspark.sql.types.DoubleType` or :class:`~pyspark.sql.types.FloatType`).
 
     .. versionadded:: 1.6.0
 
@@ -7932,6 +8039,11 @@ def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         value from first column or second if first is NaN .
         Returns a column of the same type as the first input.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.nvl`
+    :meth:`pyspark.sql.functions.nvl2`
 
     Examples
     --------
@@ -9822,7 +9934,7 @@ def ntile(n: int) -> Column:
 @_try_remote_functions
 def curdate() -> Column:
     """
-    Returns the current date at the start of query evaluation as a :class:`DateType` column.
+    Returns the current date at the start of query evaluation as a :class:`~pyspark.sql.types.DateType` column.
     All calls of current_date within the same query return the same value.
 
     .. versionadded:: 3.5.0
@@ -9855,7 +9967,7 @@ def curdate() -> Column:
 @_try_remote_functions
 def current_date() -> Column:
     """
-    Returns the current date at the start of query evaluation as a :class:`DateType` column.
+    Returns the current date at the start of query evaluation as a :class:`~pyspark.sql.types.DateType` column.
     All calls of current_date within the same query return the same value.
 
     .. versionadded:: 1.5.0
@@ -9903,6 +10015,11 @@ def current_timezone() -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.convert_timezone`
+    :meth:`pyspark.sql.functions.now`
+    :meth:`pyspark.sql.functions.curdate`
+    :meth:`pyspark.sql.functions.current_date`
+    :meth:`pyspark.sql.functions.localtimestamp`
+    :meth:`pyspark.sql.functions.current_time`
 
     Examples
     --------
@@ -9942,7 +10059,7 @@ def current_time(precision: int) -> Column: ...
 @_try_remote_functions
 def current_time(precision: Optional[int] = None) -> Column:
     """
-    Returns the current time at the start of query evaluation as a :class:`TimeType` column. All
+    Returns the current time at the start of query evaluation as a :class:`~pyspark.sql.types.TimeType` column. All
     calls of current_time within the same query return the same value.
 
     .. versionadded:: 4.1.0
@@ -9960,8 +10077,12 @@ def current_time(precision: Optional[int] = None) -> Column:
 
     See Also
     --------
+    :meth:`pyspark.sql.functions.now`
+    :meth:`pyspark.sql.functions.curdate`
     :meth:`pyspark.sql.functions.current_date`
+    :meth:`pyspark.sql.functions.localtimestamp`
     :meth:`pyspark.sql.functions.current_timestamp`
+    :meth:`pyspark.sql.functions.current_timezone`
 
     Examples
     --------
@@ -9994,7 +10115,7 @@ def current_time(precision: Optional[int] = None) -> Column:
 @_try_remote_functions
 def current_timestamp() -> Column:
     """
-    Returns the current timestamp at the start of query evaluation as a :class:`TimestampType`
+    Returns the current timestamp at the start of query evaluation as a :class:`~pyspark.sql.types.TimestampType`
     column. All calls of current_timestamp within the same query return the same value.
 
     .. versionadded:: 1.5.0
@@ -10013,6 +10134,8 @@ def current_timestamp() -> Column:
     :meth:`pyspark.sql.functions.curdate`
     :meth:`pyspark.sql.functions.current_date`
     :meth:`pyspark.sql.functions.localtimestamp`
+    :meth:`pyspark.sql.functions.current_time`
+    :meth:`pyspark.sql.functions.current_timezone`
 
     Examples
     --------
@@ -10121,7 +10244,7 @@ def date_format(date: "ColumnOrName", format: str) -> Column:
     date : :class:`~pyspark.sql.Column` or column name
         input column of values to format.
         A column that evaluates to a timestamp or time.
-    format: literal string
+    format : literal string
         format to use to represent datetime values.
         A column that evaluates to a string.
 
@@ -10231,9 +10354,15 @@ def year(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.hour`
     :meth:`pyspark.sql.functions.minute`
     :meth:`pyspark.sql.functions.second`
-    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.weekofyear`
+    :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.weekday`
+    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.extract`
     :meth:`pyspark.sql.functions.date_part`
+    :meth:`pyspark.sql.functions.monthname`
 
     Examples
     --------
@@ -10324,9 +10453,15 @@ def quarter(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.hour`
     :meth:`pyspark.sql.functions.minute`
     :meth:`pyspark.sql.functions.second`
-    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.weekofyear`
+    :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.weekday`
+    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.extract`
     :meth:`pyspark.sql.functions.date_part`
+    :meth:`pyspark.sql.functions.monthname`
 
     Examples
     --------
@@ -10417,10 +10552,15 @@ def month(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.hour`
     :meth:`pyspark.sql.functions.minute`
     :meth:`pyspark.sql.functions.second`
-    :meth:`pyspark.sql.functions.monthname`
-    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.weekofyear`
+    :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.weekday`
+    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.extract`
     :meth:`pyspark.sql.functions.date_part`
+    :meth:`pyspark.sql.functions.monthname`
 
     Examples
     --------
@@ -10506,10 +10646,21 @@ def dayofweek(col: "ColumnOrName") -> Column:
 
     See Also
     --------
+    :meth:`pyspark.sql.functions.year`
+    :meth:`pyspark.sql.functions.quarter`
+    :meth:`pyspark.sql.functions.month`
     :meth:`pyspark.sql.functions.day`
-    :meth:`pyspark.sql.functions.dayofyear`
-    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.hour`
+    :meth:`pyspark.sql.functions.minute`
+    :meth:`pyspark.sql.functions.second`
     :meth:`pyspark.sql.functions.weekofyear`
+    :meth:`pyspark.sql.functions.weekday`
+    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.dayofyear`
+    :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.date_part`
+    :meth:`pyspark.sql.functions.monthname`
 
     Examples
     --------
@@ -10588,10 +10739,21 @@ def dayofmonth(col: "ColumnOrName") -> Column:
 
     See Also
     --------
+    :meth:`pyspark.sql.functions.year`
+    :meth:`pyspark.sql.functions.quarter`
+    :meth:`pyspark.sql.functions.month`
     :meth:`pyspark.sql.functions.day`
-    :meth:`pyspark.sql.functions.dayofyear`
-    :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.hour`
+    :meth:`pyspark.sql.functions.minute`
+    :meth:`pyspark.sql.functions.second`
     :meth:`pyspark.sql.functions.weekofyear`
+    :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.weekday`
+    :meth:`pyspark.sql.functions.dayofyear`
+    :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.date_part`
+    :meth:`pyspark.sql.functions.monthname`
 
     Returns
     -------
@@ -10685,14 +10847,15 @@ def day(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.hour`
     :meth:`pyspark.sql.functions.minute`
     :meth:`pyspark.sql.functions.second`
-    :meth:`pyspark.sql.functions.dayname`
-    :meth:`pyspark.sql.functions.dayofyear`
-    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.weekofyear`
     :meth:`pyspark.sql.functions.dayofweek`
-    :meth:`pyspark.sql.functions.extract`
-    :meth:`pyspark.sql.functions.datepart`
-    :meth:`pyspark.sql.functions.date_part`
     :meth:`pyspark.sql.functions.weekday`
+    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.dayofyear`
+    :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.date_part`
+    :meth:`pyspark.sql.functions.monthname`
 
     Examples
     --------
@@ -10777,11 +10940,22 @@ def dayofyear(col: "ColumnOrName") -> Column:
 
     See Also
     --------
+    :meth:`pyspark.sql.functions.year`
+    :meth:`pyspark.sql.functions.quarter`
+    :meth:`pyspark.sql.functions.month`
     :meth:`pyspark.sql.functions.day`
-    :meth:`pyspark.sql.functions.dayofyear`
-    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.hour`
+    :meth:`pyspark.sql.functions.minute`
+    :meth:`pyspark.sql.functions.second`
     :meth:`pyspark.sql.functions.weekofyear`
     :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.weekday`
+    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.dayofyear`
+    :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.date_part`
+    :meth:`pyspark.sql.functions.monthname`
 
     Examples
     --------
@@ -10875,9 +11049,15 @@ def hour(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.minute`
     :meth:`pyspark.sql.functions.second`
-    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.weekofyear`
+    :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.weekday`
+    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.extract`
     :meth:`pyspark.sql.functions.date_part`
+    :meth:`pyspark.sql.functions.monthname`
 
     Examples
     --------
@@ -10953,9 +11133,15 @@ def minute(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.hour`
     :meth:`pyspark.sql.functions.second`
-    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.weekofyear`
+    :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.weekday`
+    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.extract`
     :meth:`pyspark.sql.functions.date_part`
+    :meth:`pyspark.sql.functions.monthname`
 
     Returns
     -------
@@ -11043,9 +11229,15 @@ def second(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.hour`
     :meth:`pyspark.sql.functions.minute`
-    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.weekofyear`
+    :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.weekday`
+    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.extract`
     :meth:`pyspark.sql.functions.date_part`
+    :meth:`pyspark.sql.functions.monthname`
 
     Examples
     --------
@@ -11120,10 +11312,21 @@ def weekofyear(col: "ColumnOrName") -> Column:
 
     See Also
     --------
-    :meth:`pyspark.sql.functions.weekday`
+    :meth:`pyspark.sql.functions.year`
+    :meth:`pyspark.sql.functions.quarter`
+    :meth:`pyspark.sql.functions.month`
+    :meth:`pyspark.sql.functions.day`
+    :meth:`pyspark.sql.functions.hour`
+    :meth:`pyspark.sql.functions.minute`
+    :meth:`pyspark.sql.functions.second`
     :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.weekday`
     :meth:`pyspark.sql.functions.dayofmonth`
     :meth:`pyspark.sql.functions.dayofyear`
+    :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.date_part`
+    :meth:`pyspark.sql.functions.monthname`
 
     Examples
     --------
@@ -11205,11 +11408,21 @@ def weekday(col: "ColumnOrName") -> Column:
 
     See Also
     --------
+    :meth:`pyspark.sql.functions.year`
+    :meth:`pyspark.sql.functions.quarter`
+    :meth:`pyspark.sql.functions.month`
     :meth:`pyspark.sql.functions.day`
+    :meth:`pyspark.sql.functions.hour`
+    :meth:`pyspark.sql.functions.minute`
+    :meth:`pyspark.sql.functions.second`
     :meth:`pyspark.sql.functions.weekofyear`
     :meth:`pyspark.sql.functions.dayofweek`
-    :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.dayofyear`
+    :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.date_part`
+    :meth:`pyspark.sql.functions.monthname`
 
     Examples
     --------
@@ -11374,7 +11587,21 @@ def dayname(col: "ColumnOrName") -> Column:
 
     See Also
     --------
+    :meth:`pyspark.sql.functions.year`
+    :meth:`pyspark.sql.functions.quarter`
+    :meth:`pyspark.sql.functions.month`
     :meth:`pyspark.sql.functions.day`
+    :meth:`pyspark.sql.functions.hour`
+    :meth:`pyspark.sql.functions.minute`
+    :meth:`pyspark.sql.functions.second`
+    :meth:`pyspark.sql.functions.weekofyear`
+    :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.weekday`
+    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.dayofyear`
+    :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.date_part`
     :meth:`pyspark.sql.functions.monthname`
 
     Examples
@@ -11466,8 +11693,14 @@ def extract(field: Column, source: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.hour`
     :meth:`pyspark.sql.functions.minute`
     :meth:`pyspark.sql.functions.second`
+    :meth:`pyspark.sql.functions.weekofyear`
+    :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.weekday`
+    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.date_part`
+    :meth:`pyspark.sql.functions.monthname`
 
     Examples
     --------
@@ -11523,8 +11756,14 @@ def date_part(field: Column, source: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.hour`
     :meth:`pyspark.sql.functions.minute`
     :meth:`pyspark.sql.functions.second`
-    :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.weekofyear`
+    :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.weekday`
+    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.date_part`
+    :meth:`pyspark.sql.functions.monthname`
 
     Examples
     --------
@@ -11562,12 +11801,12 @@ def datepart(field: Column, source: "ColumnOrName") -> Column:
         selects which part of the source should be extracted, and supported string values
         are as same as the fields of the equivalent function `extract`.
     source : :class:`~pyspark.sql.Column` or column name
-        a date, time, timestamp, or interval column from where `field` should be extracted.
+        a date, time, timestamp or interval column from where `field` should be extracted.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a part of the date/timestamp or interval source.
+        a part of the date, time, timestamp or interval source.
         Returns a column whose type depends on the field to extract, e.g. an integer
         for ``YEAR`` and a decimal for ``SECOND``.
 
@@ -12121,9 +12360,9 @@ def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool 
 
 @_try_remote_functions
 def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
-    """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.DateType`
+    """Converts a :class:`~pyspark.sql.Column` into :class:`~pyspark.sql.types.DateType`
     using the optionally specified format. Specify formats according to `datetime pattern`_.
-    By default, it follows casting rules to :class:`pyspark.sql.types.DateType` if the format
+    By default, it follows casting rules to :class:`~pyspark.sql.types.DateType` if the format
     is omitted. Equivalent to ``col.cast("date")``.
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
@@ -12138,14 +12377,14 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     col : :class:`~pyspark.sql.Column` or column name
         input column of values to convert.
         A column that evaluates to a string, date, or timestamp.
-    format: literal string, optional
+    format : literal string, optional
         format to use to convert date values.
         A column that evaluates to a string.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        date value as :class:`pyspark.sql.types.DateType` type.
+        date value as :class:`~pyspark.sql.types.DateType` type.
         Returns a column that evaluates to a date.
 
     See Also
@@ -12198,14 +12437,14 @@ def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     col : :class:`~pyspark.sql.Column` or column name
         input column of values to convert.
         A column that evaluates to a string, date, or timestamp.
-    format: literal string, optional
+    format : literal string, optional
         format to use to convert date values.
         A column that evaluates to a string.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        date value as :class:`pyspark.sql.types.DateType` type.
+        date value as :class:`~pyspark.sql.types.DateType` type.
         Returns a column that evaluates to a date.
 
     See Also
@@ -12496,9 +12735,9 @@ def to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column: ...
 
 @_try_remote_functions
 def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
-    """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.TimeType` using the
+    """Converts a :class:`~pyspark.sql.Column` into :class:`~pyspark.sql.types.TimeType` using the
     optionally specified format. Specify formats according to `datetime pattern`_. By default, it
-    follows casting rules to :class:`pyspark.sql.types.TimeType` if the format is omitted.
+    follows casting rules to :class:`~pyspark.sql.types.TimeType` if the format is omitted.
     Equivalent to ``col.cast("time")``.
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
@@ -12510,14 +12749,14 @@ def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Col
     str : :class:`~pyspark.sql.Column` or column name
         string to be parsed to time.
         A column that evaluates to a string.
-    format: :class:`~pyspark.sql.Column` or column name, optional
+    format : :class:`~pyspark.sql.Column` or column name, optional
         time format pattern to follow.
         A column that evaluates to a string.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        time value as :class:`pyspark.sql.types.TimeType` type.
+        time value as :class:`~pyspark.sql.types.TimeType` type.
         Returns a column that evaluates to a time.
 
     See Also
@@ -12565,9 +12804,9 @@ def to_timestamp(col: "ColumnOrName", format: str) -> Column: ...
 
 @_try_remote_functions
 def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
-    """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.TimestampType`
+    """Converts a :class:`~pyspark.sql.Column` into :class:`~pyspark.sql.types.TimestampType`
     using the optionally specified format. Specify formats according to `datetime pattern`_.
-    By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
+    By default, it follows casting rules to :class:`~pyspark.sql.types.TimestampType` if the format
     is omitted. Equivalent to ``col.cast("timestamp")``.
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
@@ -12582,14 +12821,14 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     col : :class:`~pyspark.sql.Column` or column name
         column values to convert.
         A column that evaluates to a string, date, timestamp, or numeric.
-    format: literal string, optional
+    format : literal string, optional
         format to use to convert timestamp values.
         A column that evaluates to a string.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        timestamp value as :class:`pyspark.sql.types.TimestampType` type.
+        timestamp value as :class:`~pyspark.sql.types.TimestampType` type.
         Returns a column that evaluates to a timestamp.
 
     See Also
@@ -12644,9 +12883,9 @@ def try_to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column: ...
 
 @_try_remote_functions
 def try_to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
-    """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.TimeType` using the
+    """Converts a :class:`~pyspark.sql.Column` into :class:`~pyspark.sql.types.TimeType` using the
     optionally specified format. Specify formats according to `datetime pattern`_. By default, it
-    follows casting rules to :class:`pyspark.sql.types.TimeType` if the format is omitted.
+    follows casting rules to :class:`~pyspark.sql.types.TimeType` if the format is omitted.
     Equivalent to ``col.cast("time")``. The function always returns null on an invalid input.
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
@@ -12658,14 +12897,14 @@ def try_to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) ->
     str : :class:`~pyspark.sql.Column` or column name
         string to be parsed to time.
         A column that evaluates to a string.
-    format: :class:`~pyspark.sql.Column` or column name, optional
+    format : :class:`~pyspark.sql.Column` or column name, optional
         time format pattern to follow.
         A column that evaluates to a string.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        time value as :class:`pyspark.sql.types.TimeType` type.
+        time value as :class:`~pyspark.sql.types.TimeType` type.
         Returns a column that evaluates to a time.
 
     See Also
@@ -12728,9 +12967,14 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
     col : :class:`~pyspark.sql.Column` or column name
         column values to convert.
         A column that evaluates to a string, date, timestamp, or numeric.
-    format: literal string, optional
+    format : literal string, optional
         format to use to convert timestamp values.
         A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a timestamp.
 
     See Also
     --------
@@ -12794,6 +13038,20 @@ def xpath(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.5.0
 
+    Parameters
+    ----------
+    xml: :class:`~pyspark.sql.Column` or column name
+        column with xml values.
+        A column that evaluates to a string.
+    path: literal string
+        xpath to extract
+        A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to an array.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -12829,6 +13087,20 @@ def xpath_boolean(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     Returns true if the XPath expression evaluates to true, or if a matching node is found.
 
     .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    xml: :class:`~pyspark.sql.Column` or column name
+        column with xml values.
+        A column that evaluates to a string.
+    path: literal string
+        xpath to extract
+        A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a boolean.
 
     Examples
     --------
@@ -12866,6 +13138,20 @@ def xpath_double(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.5.0
 
+    Parameters
+    ----------
+    xml: :class:`~pyspark.sql.Column` or column name
+        column with xml values.
+        A column that evaluates to a string.
+    path: literal string
+        xpath to extract
+        A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to an array of string.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -12901,6 +13187,20 @@ def xpath_number(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     or NaN if a match is found but the value is non-numeric.
 
     .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    xml: :class:`~pyspark.sql.Column` or column name
+        column with xml values.
+        A column that evaluates to a string.
+    path: literal string
+        xpath to extract
+        A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a double.
 
     Examples
     --------
@@ -12939,6 +13239,20 @@ def xpath_float(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.5.0
 
+    Parameters
+    ----------
+    xml: :class:`~pyspark.sql.Column` or column name
+        column with xml values.
+        A column that evaluates to a string.
+    path: literal string
+        xpath to extract
+        A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a float.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -12974,6 +13288,20 @@ def xpath_int(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     or a match is found but the value is non-numeric.
 
     .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    xml: :class:`~pyspark.sql.Column` or column name
+        column with xml values.
+        A column that evaluates to a string.
+    path: literal string
+        xpath to extract
+        A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a integer.
 
     Examples
     --------
@@ -13011,6 +13339,21 @@ def xpath_long(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.5.0
 
+
+    Parameters
+    ----------
+    xml: :class:`~pyspark.sql.Column` or column name
+        column with xml values.
+        A column that evaluates to a string.
+    path: literal string
+        xpath to extract
+        A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a long.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -13047,6 +13390,20 @@ def xpath_short(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.5.0
 
+    Parameters
+    ----------
+    xml: :class:`~pyspark.sql.Column` or column name
+        column with xml values.
+        A column that evaluates to a string.
+    path: literal string
+        xpath to extract
+        A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a short.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -13081,6 +13438,20 @@ def xpath_string(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     Returns the text contents of the first xml node that matches the XPath expression.
 
     .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    xml: :class:`~pyspark.sql.Column` or column name
+        column with xml values.
+        A column that evaluates to a string.
+    path: literal string
+        xpath to extract
+        A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
 
     Examples
     --------
@@ -14088,7 +14459,7 @@ def window(
     [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
     the order of months are not supported.
 
-    The time column must be of :class:`pyspark.sql.types.TimestampType`.
+    The time column must be of :class:`~pyspark.sql.types.TimestampType`.
 
     Durations are provided as strings, e.g. '1 second', '1 day 12 hours', '2 minutes'. Valid
     interval strings are 'week', 'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
@@ -14099,7 +14470,7 @@ def window(
     past the hour, e.g. 12:15-13:15, 13:15-14:15... provide `startTime` as `15 minutes`.
 
     The output column will be a struct called 'window' by default with the nested columns 'start'
-    and 'end', where 'start' and 'end' will be of :class:`pyspark.sql.types.TimestampType`.
+    and 'end', where 'start' and 'end' will be of :class:`~pyspark.sql.types.TimestampType`.
 
     .. versionadded:: 2.0.0
 
@@ -14262,7 +14633,7 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     It could also be a Column which can be evaluated to gap duration dynamically based on the
     input row.
     The output column will be a struct called 'session_window' by default with the nested columns
-    'start' and 'end', where 'start' and 'end' will be of :class:`pyspark.sql.types.TimestampType`.
+    'start' and 'end', where 'start' and 'end' will be of :class:`~pyspark.sql.types.TimestampType`.
 
     .. versionadded:: 3.2.0
 
@@ -14350,6 +14721,11 @@ def to_unix_timestamp(
         format to use to convert UNIX timestamp values.
         A column that evaluates to a string.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a long.
+
     See Also
     --------
     :meth:`pyspark.sql.functions.to_date`
@@ -14425,6 +14801,11 @@ def to_timestamp_ltz(
         format to use to convert type `TimestampType` timestamp values.
         A column that evaluates to a string.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a timestamp.
+
     See Also
     --------
     :meth:`pyspark.sql.functions.to_date`
@@ -14498,6 +14879,11 @@ def to_timestamp_ntz(
         format to use to convert type `TimestampNTZType` timestamp values.
         A column that evaluates to a string.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a timestamp_ntz.
+
     See Also
     --------
     :meth:`pyspark.sql.functions.to_date`
@@ -14560,10 +14946,19 @@ def current_catalog() -> Column:
 
     .. versionadded:: 3.5.0
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
+
     See Also
     --------
-    :meth:`pyspark.sql.functions.current_database`
+    :meth:`pyspark.sql.functions.user`
+    :meth:`pyspark.sql.functions.current_user`
+    :meth:`pyspark.sql.functions.session_user`
     :meth:`pyspark.sql.functions.current_schema`
+    :meth:`pyspark.sql.functions.current_database`
+    :meth:`pyspark.sql.functions.current_path`
 
     Examples
     --------
@@ -14584,11 +14979,19 @@ def current_path() -> Column:
 
     .. versionadded:: 4.2.0
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
+
     See Also
     --------
+    :meth:`pyspark.sql.functions.user`
+    :meth:`pyspark.sql.functions.current_user`
+    :meth:`pyspark.sql.functions.session_user`
     :meth:`pyspark.sql.functions.current_catalog`
-    :meth:`pyspark.sql.functions.current_database`
     :meth:`pyspark.sql.functions.current_schema`
+    :meth:`pyspark.sql.functions.current_database`
 
     Examples
     --------
@@ -14609,10 +15012,19 @@ def current_database() -> Column:
 
     .. versionadded:: 3.5.0
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
+
     See Also
     --------
+    :meth:`pyspark.sql.functions.user`
+    :meth:`pyspark.sql.functions.current_user`
+    :meth:`pyspark.sql.functions.session_user`
     :meth:`pyspark.sql.functions.current_catalog`
     :meth:`pyspark.sql.functions.current_schema`
+    :meth:`pyspark.sql.functions.current_path`
 
     Examples
     --------
@@ -14633,10 +15045,19 @@ def current_schema() -> Column:
 
     .. versionadded:: 3.5.0
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
+
     See Also
     --------
+    :meth:`pyspark.sql.functions.user`
+    :meth:`pyspark.sql.functions.current_user`
+    :meth:`pyspark.sql.functions.session_user`
     :meth:`pyspark.sql.functions.current_catalog`
     :meth:`pyspark.sql.functions.current_database`
+    :meth:`pyspark.sql.functions.current_path`
 
     Examples
     --------
@@ -14657,10 +15078,19 @@ def current_user() -> Column:
 
     .. versionadded:: 3.5.0
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
+
     See Also
     --------
     :meth:`pyspark.sql.functions.user`
     :meth:`pyspark.sql.functions.session_user`
+    :meth:`pyspark.sql.functions.current_catalog`
+    :meth:`pyspark.sql.functions.current_schema`
+    :meth:`pyspark.sql.functions.current_database`
+    :meth:`pyspark.sql.functions.current_path`
 
     Examples
     --------
@@ -14680,6 +15110,11 @@ def user() -> Column:
     """Returns the current database.
 
     .. versionadded:: 3.5.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
 
     See Also
     --------
@@ -14705,6 +15140,11 @@ def session_user() -> Column:
 
     .. versionadded:: 4.0.0
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
+
     See Also
     --------
     :meth:`pyspark.sql.functions.user`
@@ -14726,7 +15166,7 @@ def session_user() -> Column:
 @_try_remote_functions
 def uuid(seed: Optional[Union[Column, int]] = None) -> Column:
     """Returns an universally unique identifier (UUID) string.
-    The value is returned as a canonical UUID 36-character string.
+    The value is returned as a canonical UUIDv4 36-character string.
 
     .. versionadded:: 4.1.0
 
@@ -14734,6 +15174,11 @@ def uuid(seed: Optional[Union[Column, int]] = None) -> Column:
     ----------
     seed : :class:`~pyspark.sql.Column` or int
         Optional random number seed to use.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
 
     Examples
     --------
@@ -16228,6 +16673,8 @@ def instr(
     :meth:`pyspark.sql.functions.substr`
     :meth:`pyspark.sql.functions.substring`
     :meth:`pyspark.sql.functions.substring_index`
+    :meth:`pyspark.sql.functions.position`
+    :meth:`pyspark.sql.Column.substr`
 
     Examples
     --------
@@ -16518,6 +16965,7 @@ def substring(
     :meth:`pyspark.sql.functions.locate`
     :meth:`pyspark.sql.functions.substr`
     :meth:`pyspark.sql.functions.substring_index`
+    :meth:`pyspark.sql.functions.position`
     :meth:`pyspark.sql.Column.substr`
 
     Examples
@@ -16620,6 +17068,7 @@ def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
     :meth:`pyspark.sql.functions.locate`
     :meth:`pyspark.sql.functions.substr`
     :meth:`pyspark.sql.functions.substring`
+    :meth:`pyspark.sql.functions.position`
     :meth:`pyspark.sql.Column.substr`
 
     Examples
@@ -16760,7 +17209,7 @@ def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
         a string.
         A column that evaluates to a string.
     str : :class:`~pyspark.sql.Column` or column name
-        a Column of :class:`pyspark.sql.types.StringType`.
+        a Column of :class:`~pyspark.sql.types.StringType`.
         A column that evaluates to a string.
     pos : int, optional
         start position (zero based).
@@ -16783,6 +17232,7 @@ def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
     :meth:`pyspark.sql.functions.substr`
     :meth:`pyspark.sql.functions.substring`
     :meth:`pyspark.sql.functions.substring_index`
+    :meth:`pyspark.sql.functions.position`
     :meth:`pyspark.sql.Column.substr`
 
     Examples
@@ -17937,9 +18387,9 @@ def bin(col: "ColumnOrName") -> Column:
 
 @_try_remote_functions
 def hex(col: "ColumnOrName") -> Column:
-    """Computes hex value of the given column, which could be :class:`pyspark.sql.types.StringType`,
-    :class:`pyspark.sql.types.BinaryType`, :class:`pyspark.sql.types.IntegerType` or
-    :class:`pyspark.sql.types.LongType`.
+    """Computes hex value of the given column, which could be :class:`~pyspark.sql.types.StringType`,
+    :class:`~pyspark.sql.types.BinaryType`, :class:`~pyspark.sql.types.IntegerType` or
+    :class:`~pyspark.sql.types.LongType`.
 
     .. versionadded:: 1.5.0
 
@@ -18230,6 +18680,10 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
         replaced value.
         Returns a column that evaluates to a string.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.replace`
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -18268,6 +18722,11 @@ def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> C
         format to use to convert binary values.
         A column that evaluates to a string. Must be a constant.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a binary.
+
     See Also
     --------
     :meth:`pyspark.sql.functions.try_to_binary`
@@ -18278,14 +18737,14 @@ def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> C
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("abc",)], ["e"])
-    >>> df.select(sf.try_to_binary(df.e, sf.lit("utf-8")).alias('r')).collect()
+    >>> df.select(sf.to_binary(df.e, sf.lit("utf-8")).alias('r')).collect()
     [Row(r=b'abc')]
 
     Example 2: Convert string to a timestamp without encoding specified
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("414243",)], ["e"])
-    >>> df.select(sf.try_to_binary(df.e).alias('r')).collect()
+    >>> df.select(sf.to_binary(df.e).alias('r')).collect()
     [Row(r=b'ABC')]
     """
     if format is not None:
@@ -18316,7 +18775,7 @@ def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     'PR': Only allowed at the end of the format string; specifies that the result string
     will be wrapped by angle brackets if the input value is negative.
     If `col` is a datetime, `format` shall be a valid datetime pattern, see
-    <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Patterns</a>.
+    `Datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.
     If `col` is a binary, it is converted to a string in one of the formats:
     'base64': a base 64 string.
     'hex': a string in the hexadecimal format.
@@ -18333,6 +18792,11 @@ def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
         format to use to convert char values.
         A column that evaluates to a string. Must be a constant when ``col`` is numeric
         or binary.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
 
     Examples
     --------
@@ -18365,7 +18829,7 @@ def to_varchar(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     'PR': Only allowed at the end of the format string; specifies that the result string
     will be wrapped by angle brackets if the input value is negative.
     If `col` is a datetime, `format` shall be a valid datetime pattern, see
-    <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Patterns</a>.
+    `Datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.
     If `col` is a binary, it is converted to a string in one of the formats:
     'base64': a base 64 string.
     'hex': a string in the hexadecimal format.
@@ -18382,6 +18846,11 @@ def to_varchar(col: "ColumnOrName", format: "ColumnOrName") -> Column:
         format to use to convert char values.
         A column that evaluates to a string. Must be a constant when ``col`` is numeric
         or binary.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
 
     Examples
     --------
@@ -18426,6 +18895,11 @@ def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
         format to use to convert number values.
         A column that evaluates to a string. Must be a constant.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a numeric.
+
     See Also
     --------
     :meth:`pyspark.sql.functions.try_to_number`
@@ -18460,6 +18934,11 @@ def replace(
         A column of string, If `replace` is not specified or is an empty string,
         nothing replaces the string that is removed from `str`.
         A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
 
     Examples
     --------
@@ -18498,6 +18977,11 @@ def split_part(src: "ColumnOrName", delimiter: "ColumnOrName", partNum: "ColumnO
     partNum : :class:`~pyspark.sql.Column` or column name
         The requested part of the split (1-based).
         A column that evaluates to an integer.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
 
     See Also
     --------
@@ -18612,6 +19096,10 @@ def try_parse_url(
     :class:`~pyspark.sql.Column`
         A new column of strings, each representing the value of the extracted part from the URL.
         Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.parse_url`
 
     Examples
     --------
@@ -18733,6 +19221,10 @@ def parse_url(
         A new column of strings, each representing the value of the extracted part from the URL.
         Returns a column that evaluates to a string.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.try_parse_url`
+
     Examples
     --------
     Example 1: Extracting the query part from a URL
@@ -18826,6 +19318,11 @@ def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     cols : :class:`~pyspark.sql.Column` or str
         column names or :class:`~pyspark.sql.Column`\\s to be used in formatting
         Each a column of any type.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
 
     See Also
     --------
@@ -18948,6 +19445,10 @@ def try_url_decode(str: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         A new column of strings, each representing the decoded string.
         Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.url_decode`
 
     Examples
     --------
@@ -19078,6 +19579,11 @@ def position(
         The start position.
         A column that evaluates to an integer.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a integer.
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -19123,6 +19629,11 @@ def endswith(str: "ColumnOrName", suffix: "ColumnOrName") -> Column:
         The suffix to test for.
         A column that evaluates to a string or binary.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a boolean.
+
     Examples
     --------
     >>> df = spark.createDataFrame([("Spark SQL", "Spark",)], ["a", "b"])
@@ -19163,6 +19674,11 @@ def startswith(str: "ColumnOrName", prefix: "ColumnOrName") -> Column:
         The prefix to test for.
         A column that evaluates to a string or binary.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a boolean.
+
     Examples
     --------
     >>> df = spark.createDataFrame([("Spark SQL", "Spark",)], ["a", "b"])
@@ -19199,6 +19715,16 @@ def char(col: "ColumnOrName") -> Column:
         Input column or strings.
         A column that evaluates to a long.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.chr`
+    :meth:`pyspark.sql.functions.ascii`
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -19227,6 +19753,11 @@ def btrim(str: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
     trim : :class:`~pyspark.sql.Column` or str, optional
         The trim string characters to trim, the default value is a single space.
         A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
 
     Examples
     --------
@@ -19258,6 +19789,11 @@ def char_length(str: "ColumnOrName") -> Column:
     str : :class:`~pyspark.sql.Column` or str
         Input column or strings.
         A column that evaluates to a string or binary.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a integer.
 
     See Also
     --------
@@ -19292,6 +19828,11 @@ def character_length(str: "ColumnOrName") -> Column:
         Input column or strings.
         A column that evaluates to a string or binary.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a integer.
+
     See Also
     --------
     :meth:`pyspark.sql.functions.char_length`
@@ -19323,6 +19864,16 @@ def chr(n: "ColumnOrName") -> Column:
     n : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
         A column that evaluates to a long.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.char`
+    :meth:`pyspark.sql.functions.ascii`
 
     Examples
     --------
@@ -19362,6 +19913,11 @@ def try_to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) 
     format : :class:`~pyspark.sql.Column` or str, optional
         format to use to convert binary values.
         A column that evaluates to a string. Must be a constant.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a binary.
 
     See Also
     --------
@@ -19423,6 +19979,11 @@ def try_to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
         format to use to convert number values.
         A column that evaluates to a string. Must be a constant.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a numeric.
+
     See Also
     --------
     :meth:`pyspark.sql.functions.to_number`
@@ -19477,6 +20038,11 @@ def contains(left: "ColumnOrName", right: "ColumnOrName") -> Column:
         The value to find; may be NULL.
         A column that evaluates to a string or binary.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a boolean.
+
     Examples
     --------
     >>> df = spark.createDataFrame([("Spark SQL", "Spark")], ['a', 'b'])
@@ -19514,6 +20080,10 @@ def elt(*inputs: "ColumnOrName") -> Column:
     inputs : :class:`~pyspark.sql.Column` or str
         Input columns or strings.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+
     Examples
     --------
     >>> df = spark.createDataFrame([(1, "scala", "java")], ['a', 'b', 'c'])
@@ -19543,6 +20113,11 @@ def find_in_set(str: "ColumnOrName", str_array: "ColumnOrName") -> Column:
     str_array : :class:`~pyspark.sql.Column` or str
         The comma-delimited list.
         A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a integer.
 
     Examples
     --------
@@ -19586,6 +20161,11 @@ def like(
         If an escape character precedes a special symbol or another escape character, the
         following character is matched literally. It is invalid to escape any other character.
         A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a boolean.
 
     See Also
     --------
@@ -19647,6 +20227,11 @@ def ilike(
         following character is matched literally. It is invalid to escape any other character.
         A column that evaluates to a string.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a boolean.
+
     See Also
     --------
     :meth:`pyspark.sql.functions.like`
@@ -19686,6 +20271,11 @@ def lcase(str: "ColumnOrName") -> Column:
         Input column or strings.
         A column that evaluates to a string.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
+
     See Also
     --------
     :meth:`pyspark.sql.functions.lower`
@@ -19717,6 +20307,11 @@ def ucase(str: "ColumnOrName") -> Column:
     str : :class:`~pyspark.sql.Column` or str
         Input column or strings.
         A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
 
     See Also
     --------
@@ -19754,6 +20349,15 @@ def left(str: "ColumnOrName", len: "ColumnOrName") -> Column:
         Input column or strings, the leftmost `len`.
         A column that evaluates to an integer.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.right`
+
     Examples
     --------
     >>> df = spark.createDataFrame([("Spark SQL", 3,)], ['a', 'b'])
@@ -19779,6 +20383,15 @@ def right(str: "ColumnOrName", len: "ColumnOrName") -> Column:
     len : :class:`~pyspark.sql.Column` or str
         Input column or strings, the rightmost `len`.
         A column that evaluates to an integer.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.left`
 
     Examples
     --------
@@ -19868,6 +20481,16 @@ def collate(col: "ColumnOrName", collation: str) -> Column:
     -------
     :class:`~pyspark.sql.Column`
         A new column of string type, where each value has the specified collation.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.collation`
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("abc",)], ["c"])
+    >>> df.select(sf.collate(df.c, 'SYSTEM.BUILTIN.UTF8_BINARY').alias('r')).collect()
+    [Row(r='abc')]
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -22590,6 +23213,11 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
         string representation of given JSON object value.
         Returns a column that evaluates to a string.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.parse_json`
+    :meth:`pyspark.sql.functions.json_tuple`
+
     Examples
     --------
     Example 1: Extract a json object from json string
@@ -22665,6 +23293,11 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
         a new row for each given field value from json object
         Returns a column that evaluates to a string.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.parse_json`
+    :meth:`pyspark.sql.functions.get_json_object`
+
     Examples
     --------
     >>> data = [("1", '''{"f1": "value1", "f2": "value2"}'''), ("2", '''{"f1": "value12"}''')]
@@ -22690,8 +23323,8 @@ def from_json(
     options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     """
-    Parses a column containing a JSON string into a :class:`MapType` with :class:`StringType`
-    as keys type, :class:`StructType` or :class:`ArrayType` with
+    Parses a column containing a JSON string into a :class:`~pyspark.sql.types.MapType` with :class:`~pyspark.sql.types.StringType`
+    as keys type, :class:`~pyspark.sql.types.StructType` or :class:`~pyspark.sql.types.ArrayType` with
     the specified schema. Returns `null`, in the case of an unparsable string.
 
     .. versionadded:: 2.1.0
@@ -22704,7 +23337,7 @@ def from_json(
     col : :class:`~pyspark.sql.Column` or str
         A column that evaluates to a string.
         a column or column name in JSON format
-    schema : :class:`StructType`, :class:`ArrayType`, :class:`MapType`, or str
+    schema : :class:`~pyspark.sql.types.StructType`, :class:`~pyspark.sql.types.ArrayType`, :class:`~pyspark.sql.types.MapType`, or str
         a StructType, ArrayType of StructType, MapType, or Python string literal with a DDL-formatted string
         A column that evaluates to a string, or a DDL-formatted type string, or a DataType.
         to use when parsing the json column
@@ -22813,7 +23446,7 @@ def try_parse_json(
     col: "ColumnOrName",
 ) -> Column:
     """
-    Parses a column containing a JSON string into a :class:`VariantType`. Returns None if a string
+    Parses a column containing a JSON string into a :class:`~pyspark.sql.types.VariantType`. Returns None if a string
     contains an invalid JSON value.
 
     .. versionadded:: 4.0.0
@@ -22829,6 +23462,10 @@ def try_parse_json(
     :class:`~pyspark.sql.Column`
         a new column of VariantType.
         Returns a column that evaluates to a variant.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.parse_json`
 
     Examples
     --------
@@ -22966,7 +23603,7 @@ def parse_json(
     col: "ColumnOrName",
 ) -> Column:
     """
-    Parses a column containing a JSON string into a :class:`VariantType`. Throws exception if a
+    Parses a column containing a JSON string into a :class:`~pyspark.sql.types.VariantType`. Throws exception if a
     string represents an invalid JSON value.
 
     .. versionadded:: 4.0.0
@@ -22982,6 +23619,13 @@ def parse_json(
     :class:`~pyspark.sql.Column`
         a new column of VariantType.
         Returns a column that evaluates to a variant.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.try_parse_json`
+    :meth:`pyspark.sql.functions.parse_json`
+    :meth:`pyspark.sql.functions.get_json_object`
+    :meth:`pyspark.sql.functions.json_tuple`
 
     Examples
     --------
@@ -23572,6 +24216,10 @@ def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) ->
         a column of `targetType` representing the extracted result
         Returns a column of the type given by `targetType`.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.try_variant_get`
+
     Examples
     --------
     >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }''', 'path': '$.a'} ])
@@ -23622,6 +24270,10 @@ def try_variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str
     :class:`~pyspark.sql.Column`
         a column of `targetType` representing the extracted result
         Returns a column of the type given by `targetType`.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.variant_get`
 
     Examples
     --------
@@ -23710,8 +24362,8 @@ def schema_of_variant_agg(v: "ColumnOrName") -> Column:
 @_try_remote_functions
 def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> Column:
     """
-    Converts a column containing a :class:`StructType`, :class:`ArrayType`, :class:`MapType`
-    or a :class:`VariantType` into a JSON string. Throws an exception, in the case of an unsupported type.
+    Converts a column containing a :class:`~pyspark.sql.types.StructType`, :class:`~pyspark.sql.types.ArrayType`, :class:`~pyspark.sql.types.MapType`
+    or a :class:`~pyspark.sql.types.VariantType` into a JSON string. Throws an exception, in the case of an unsupported type.
 
     .. versionadded:: 2.1.0
 
@@ -23858,7 +24510,7 @@ def schema_of_json(json: Union[Column, str], options: Optional[Mapping[str, str]
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a string representation of a :class:`StructType` parsed from given JSON.
+        a string representation of a :class:`~pyspark.sql.types.StructType` parsed from given JSON.
         Returns a column that evaluates to a string.
 
     Examples
@@ -24003,7 +24655,7 @@ def from_xml(
     col : :class:`~pyspark.sql.Column` or str
         A column that evaluates to a string.
         a column or column name in XML format
-    schema : :class:`StructType`, :class:`~pyspark.sql.Column` or str
+    schema : :class:`~pyspark.sql.types.StructType`, :class:`~pyspark.sql.Column` or str
         a StructType, Column or Python string literal with a DDL-formatted string
         A column that evaluates to a string, or a DDL-formatted type string, or a DataType.
         to use when parsing the Xml column
@@ -24034,7 +24686,7 @@ def from_xml(
     >>> df.select(sf.from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=1))]
 
-    Example 2: Parsing XML with a :class:`StructType` schema
+    Example 2: Parsing XML with a :class:`~pyspark.sql.types.StructType` schema
 
     >>> import pyspark.sql.functions as sf
     >>> from pyspark.sql.types import StructType, LongType
@@ -24048,7 +24700,7 @@ def from_xml(
     |            {1}|
     +---------------+
 
-    Example 3: Parsing XML with :class:`ArrayType` in schema
+    Example 3: Parsing XML with :class:`~pyspark.sql.types.ArrayType` in schema
 
     >>> import pyspark.sql.functions as sf
     >>> data = [(1, '<p><a>1</a><a>2</a></p>')]
@@ -24126,7 +24778,7 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Mapping[str, str]] 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a string representation of a :class:`StructType` parsed from given XML.
+        a string representation of a :class:`~pyspark.sql.types.StructType` parsed from given XML.
         Returns a column that evaluates to a string.
 
     Examples
@@ -24204,7 +24856,7 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Mapping[str, str]] 
 @_try_remote_functions
 def to_xml(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> Column:
     """
-    Converts a column containing a :class:`StructType` into a XML string.
+    Converts a column containing a :class:`~pyspark.sql.types.StructType` into a XML string.
     Throws an exception, in the case of an unsupported type.
 
     .. versionadded:: 4.0.0
@@ -24225,7 +24877,7 @@ def to_xml(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a XML string converted from given :class:`StructType`.
+        a XML string converted from given :class:`~pyspark.sql.types.StructType`.
         Returns a column that evaluates to a string.
 
     Examples
@@ -24281,7 +24933,7 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Mapping[str, str]] 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        A string representation of a :class:`StructType` parsed from the given CSV.
+        A string representation of a :class:`~pyspark.sql.types.StructType` parsed from the given CSV.
         Returns a column that evaluates to a string.
 
     Examples
@@ -24349,7 +25001,7 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Mapping[str, str]] 
 @_try_remote_functions
 def to_csv(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> Column:
     """
-    CSV Function: Converts a column containing a :class:`StructType` into a CSV string.
+    CSV Function: Converts a column containing a :class:`~pyspark.sql.types.StructType` into a CSV string.
     Throws an exception, in the case of an unsupported type.
 
     .. versionadded:: 3.0.0
@@ -24373,7 +25025,7 @@ def to_csv(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        A CSV string converted from the given :class:`StructType`.
+        A CSV string converted from the given :class:`~pyspark.sql.types.StructType`.
         Returns a column that evaluates to a string.
 
     Examples
@@ -24460,6 +25112,12 @@ def size(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         length of the array/map.
         Returns a column that evaluates to an integer.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.size`
+    :meth:`pyspark.sql.functions.array_size`
+    :meth:`pyspark.sql.functions.cardinality`
 
     Examples
     --------
@@ -24764,6 +25422,11 @@ def cardinality(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         length of the array/map.
         Returns a column that evaluates to an integer.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.size`
+    :meth:`pyspark.sql.functions.array_size`
 
     Examples
     --------
@@ -26885,7 +27548,7 @@ def years(col: "ColumnOrName") -> Column:
     -----
     This function can be used only in combination with
     :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
-    method of the `DataFrameWriterV2`.
+    method of the :class:`~DataFrameWriterV2`.
 
     """
     from pyspark.sql.functions import partitioning
@@ -26929,7 +27592,7 @@ def months(col: "ColumnOrName") -> Column:
     -----
     This function can be used only in combination with
     :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
-    method of the `DataFrameWriterV2`.
+    method of the :class:`~DataFrameWriterV2`.
 
     """
     from pyspark.sql.functions import partitioning
@@ -26973,7 +27636,7 @@ def days(col: "ColumnOrName") -> Column:
     -----
     This function can be used only in combination with
     :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
-    method of the `DataFrameWriterV2`.
+    method of the :class:`~DataFrameWriterV2`.
 
     """
     from pyspark.sql.functions import partitioning
@@ -27017,7 +27680,7 @@ def hours(col: "ColumnOrName") -> Column:
     -----
     This function can be used only in combination with
     :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
-    method of the `DataFrameWriterV2`.
+    method of the :class:`~DataFrameWriterV2`.
 
     """
     from pyspark.sql.functions import partitioning
@@ -27595,6 +28258,11 @@ def time_from_seconds(col: "ColumnOrName") -> Column:
         Seconds since midnight (0 to 86399.999999).
         A column that evaluates to a numeric.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a time.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -27621,6 +28289,11 @@ def time_from_millis(col: "ColumnOrName") -> Column:
     col : :class:`~pyspark.sql.Column` or column name
         Milliseconds since midnight (0 to 86399999).
         A column that evaluates to an integral.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a time.
 
     Examples
     --------
@@ -27649,6 +28322,11 @@ def time_from_micros(col: "ColumnOrName") -> Column:
         Microseconds since midnight (0 to 86399999999).
         A column that evaluates to an integral.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a time.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -27674,6 +28352,15 @@ def time_to_seconds(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         TIME value to convert.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a numeric.
 
     Examples
     --------
@@ -27701,6 +28388,10 @@ def time_to_millis(col: "ColumnOrName") -> Column:
     col : :class:`~pyspark.sql.Column` or column name
         TIME value to convert.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -27726,6 +28417,10 @@ def time_to_micros(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         TIME value to convert.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
 
     Examples
     --------
@@ -28900,7 +29595,7 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     -----
     This function can be used only in combination with
     :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
-    method of the `DataFrameWriterV2`.
+    method of the :class:`~DataFrameWriterV2`.
 
     """
     from pyspark.sql.functions import partitioning
@@ -28930,28 +29625,35 @@ def st_asbinary(geo: "ColumnOrName", endianness: Optional["ColumnOrName"] = None
         The optional endianness of the output WKB, 'NDR' for little-endian (default) or 'XDR' for
         big-endian.
 
-    Examples
-    --------
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
 
+    Examples
+    -------
     Example 1: Getting WKB from GEOGRAPHY.
+
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb')))).collect()
     [Row(hex(st_asbinary(st_geogfromwkb(wkb), NDR))='0101000000000000000000F03F0000000000000040')]
 
     Example 2: Getting WKB from GEOMETRY.
+
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb')))).collect()
     [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0), NDR))='0101000000000000000000F03F0000000000000040')]
 
     Example 3: Getting WKB (little-endian) from GEOGRAPHY.
+
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb'), 'NDR'))).collect()
     [Row(hex(st_asbinary(st_geogfromwkb(wkb), NDR))='0101000000000000000000F03F0000000000000040')]
 
     Example 4: Getting WKB (big-endian) from GEOMETRY.
+
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb'), 'XDR'))).collect()
@@ -28975,6 +29677,11 @@ def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
     wkb : :class:`~pyspark.sql.Column` or str
         A BINARY value in WKB format, representing a GEOGRAPHY value.
         A column that evaluates to a binary.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
 
     Examples
     --------
@@ -29002,6 +29709,11 @@ def st_geomfromwkb(
     srid : :class:`~pyspark.sql.Column` or int, optional
         The optional SRID value of the geometry. Default is 0.
         A column that evaluates to an integer.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
 
     Examples
     --------
@@ -29031,16 +29743,22 @@ def st_setsrid(geo: "ColumnOrName", srid: Union["ColumnOrName", int]) -> Column:
     srid : :class:`~pyspark.sql.Column` or int
         An INTEGER representing the new SRID of the geospatial value.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a integer.
+
     Examples
     --------
-
     Example 1: Setting the SRID on GEOGRAPHY with SRID from another column.
+
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'), 4326)], ['wkb', 'srid'])  # noqa
     >>> df.select(sf.st_srid(sf.st_setsrid(sf.st_geogfromwkb('wkb'), 'srid'))).collect()
     [Row(st_srid(st_setsrid(st_geogfromwkb(wkb), srid))=4326)]
 
     Example 2: Setting the SRID on GEOMETRY with SRID as an integer literal.
+
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.st_srid(sf.st_setsrid(sf.st_geomfromwkb('wkb'), 4326))).collect()
@@ -29062,16 +29780,22 @@ def st_srid(geo: "ColumnOrName") -> Column:
     geo : :class:`~pyspark.sql.Column` or str
         A geospatial value, either a GEOGRAPHY or a GEOMETRY.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a integer.
+
     Examples
     --------
-
     Example 1: Getting the SRID of GEOGRAPHY.
+
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.st_srid(sf.st_geogfromwkb('wkb'))).collect()
     [Row(st_srid(st_geogfromwkb(wkb))=4326)]
 
     Example 2: Getting the SRID of GEOMETRY.
+
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.st_srid(sf.st_geomfromwkb('wkb'))).collect()
@@ -31930,6 +32654,14 @@ def ifnull(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     col1 : :class:`~pyspark.sql.Column` or str
     col2 : :class:`~pyspark.sql.Column` or str
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.nullif`
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -31955,6 +32687,11 @@ def isnotnull(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a booalean.
 
     See Also
     --------
@@ -31999,6 +32736,11 @@ def equal_null(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     col2 : :class:`~pyspark.sql.Column` or column name
         A column of any orderable type.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a booalean.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -32036,6 +32778,14 @@ def nullif(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     col2 : :class:`~pyspark.sql.Column` or column name
         A column of any orderable type.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.ifnull`
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -32070,6 +32820,10 @@ def nullifzero(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         A column that evaluates to a numeric.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
 
     Examples
     --------
@@ -32106,8 +32860,13 @@ def nvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     col1 : :class:`~pyspark.sql.Column` or column name
     col2 : :class:`~pyspark.sql.Column` or column name
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+
     See Also
     --------
+    :meth:`pyspark.sql.functions.nanvl`
     :meth:`pyspark.sql.functions.nvl2`
 
     Examples
@@ -32146,8 +32905,13 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
     col2 : :class:`~pyspark.sql.Column` or column name
     col3 : :class:`~pyspark.sql.Column` or column name
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+
     See Also
     --------
+    :meth:`pyspark.sql.functions.nanvl`
     :meth:`pyspark.sql.functions.nvl`
 
     Examples
@@ -32183,6 +32947,10 @@ def zeroifnull(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
 
     Examples
     --------
@@ -32704,6 +33472,11 @@ def sha(col: "ColumnOrName") -> Column:
     col : :class:`~pyspark.sql.Column` or column name
         A column that evaluates to a binary.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
+
     See Also
     --------
     :meth:`pyspark.sql.functions.sha1`
@@ -32728,6 +33501,11 @@ def input_file_block_length() -> Column:
     Returns the length of the block being read, or -1 if not available.
 
     .. versionadded:: 3.5.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a long.
 
     See Also
     --------
@@ -32761,6 +33539,11 @@ def input_file_block_start() -> Column:
     Returns the start offset of the block being read, or -1 if not available.
 
     .. versionadded:: 3.5.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a long.
 
     See Also
     --------
@@ -32802,6 +33585,10 @@ def reflect(*cols: "ColumnOrName") -> Column:
         and the second element should be a Column representing literal string for the method name,
         and the remaining are input arguments (Columns or column names) to the Java method.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+
     See Also
     --------
     :meth:`pyspark.sql.functions.java_method`
@@ -32836,6 +33623,10 @@ def java_method(*cols: "ColumnOrName") -> Column:
         the first element should be a Column representing literal string for the class name,
         and the second element should be a Column representing literal string for the method name,
         and the remaining are input arguments (Columns or column names) to the Java method.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
 
     See Also
     --------
@@ -32935,6 +33726,11 @@ def version() -> Column:
 
     .. versionadded:: 3.5.0
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -32958,6 +33754,11 @@ def typeof(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
 
     Examples
     --------
@@ -33042,6 +33843,11 @@ def bitmap_bit_position(col: "ColumnOrName") -> Column:
         The input column.
         A column that evaluates to a long.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a long.
+
     See Also
     --------
     :meth:`pyspark.sql.functions.bitmap_bucket_number`
@@ -33075,6 +33881,11 @@ def bitmap_bucket_number(col: "ColumnOrName") -> Column:
     col : :class:`~pyspark.sql.Column` or column name
         The input column.
         A column that evaluates to a long.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a long.
 
     See Also
     --------
@@ -33111,6 +33922,11 @@ def bitmap_construct_agg(col: "ColumnOrName") -> Column:
         The input column will most likely be bitmap_bit_position().
         A column that evaluates to a long.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a binary.
+
     See Also
     --------
     :meth:`pyspark.sql.functions.bitmap_bit_position`
@@ -33146,6 +33962,11 @@ def bitmap_count(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         The input bitmap.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a long.
 
     See Also
     --------
@@ -33364,6 +34185,15 @@ def bitmap_or_agg(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.5.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The input column should be bitmaps created from bitmap_construct_agg().
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+
     See Also
     --------
     :meth:`pyspark.sql.functions.bitmap_bit_position`
@@ -33371,11 +34201,6 @@ def bitmap_or_agg(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.bitmap_construct_agg`
     :meth:`pyspark.sql.functions.bitmap_count`
     :meth:`pyspark.sql.functions.bitmap_and_agg`
-
-    Parameters
-    ----------
-    col : :class:`~pyspark.sql.Column` or column name
-        The input column should be bitmaps created from bitmap_construct_agg().
 
     Examples
     --------
@@ -33642,10 +34467,10 @@ def udf(
         .. versionchanged:: 4.1.0
            Supports vectorized function by specifiying the type hints.
 
-    returnType : :class:`pyspark.sql.types.DataType` or str, optional
+    returnType : :class:`~pyspark.sql.types.ArrayType` or str, optional
         the return type of the user-defined function. The value can be either a
-        :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
-        Defaults to :class:`StringType`.
+        :class:`~pyspark.sql.types.ArrayType` object or a DDL-formatted type string.
+        Defaults to :class:`~pyspark.sql.types.StringType`.
     useArrow : bool, optional
         whether to use Arrow to optimize the (de)serialization. When it is None, the
         Spark config "spark.sql.execution.pythonUDF.arrow.enabled" takes effect.
@@ -33821,9 +34646,9 @@ def udtf(
     ----------
     cls : class, optional
         the Python user-defined table function handler class.
-    returnType : :class:`pyspark.sql.types.StructType` or str, optional
+    returnType : :class:`~pyspark.sql.types.StructType` or str, optional
         the return type of the user-defined table function. The value can be either a
-        :class:`pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
+        :class:`~pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
         If None, the handler class must provide `analyze` static method.
     useArrow : bool, optional
         whether to use Arrow to optimize the (de)serializations. When it's set to None, the
@@ -33866,12 +34691,12 @@ def udtf(
     The `analyze` static method should take arguments:
 
     - The number and order of arguments are the same as the UDTF inputs
-    - Each argument is a :class:`pyspark.sql.udtf.AnalyzeArgument`, containing:
+    - Each argument is a :class:`~pyspark.sql.udtf.AnalyzeArgument`, containing:
       - dataType: DataType
       - value: Any: the calculated value if the argument is foldable; otherwise None
       - isTable: bool: True if the argument is a table argument
 
-    and return a :class:`pyspark.sql.udtf.AnalyzeResult`, containing.
+    and return a :class:`~pyspark.sql.udtf.AnalyzeResult`, containing.
 
     - schema: StructType
 
@@ -33988,9 +34813,9 @@ def arrow_udtf(
     ----------
     cls : class, optional
         the Python user-defined table function handler class.
-    returnType : :class:`pyspark.sql.types.StructType` or str, optional
+    returnType : :class:`~pyspark.sql.types.StructType` or str, optional
         the return type of the user-defined table function. The value can be either a
-        :class:`pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
+        :class:`~pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
 
     Examples
     --------

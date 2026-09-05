@@ -883,7 +883,7 @@ class SparkSession(SparkConversionMixin):
 
         Returns
         -------
-        :class:`pyspark.sql.conf.RuntimeConfig`
+        :class:`~pyspark.sql.conf.RuntimeConfig`
 
         Examples
         --------
@@ -1445,14 +1445,14 @@ class SparkSession(SparkConversionMixin):
 
         Parameters
         ----------
-        data : :class:`RDD` or iterable
+        data : :class:`~pyspark.RDD` or iterable
             an RDD of any kind of SQL data representation (:class:`Row`,
             :class:`tuple`, ``int``, ``boolean``, ``dict``, etc.), or :class:`list`,
             :class:`pandas.DataFrame`, :class:`numpy.ndarray`, or :class:`pyarrow.Table`.
-        schema : :class:`pyspark.sql.types.DataType`, str or list, optional
-            a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
+        schema : :class:`~pyspark.sql.types.DataType`, str or list, optional
+            a :class:`~pyspark.sql.types.DataType` or a datatype string or a list of
             column names, default is None. The data type string format equals to
-            :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
+            :class:`~pyspark.sql.types.DataType.simpleString`, except that top level struct type can
             omit the ``struct<>``.
 
             When ``schema`` is a list of column names, the type of each column
@@ -1462,16 +1462,16 @@ class SparkSession(SparkConversionMixin):
             from ``data``, which should be an RDD of either :class:`Row`,
             :class:`namedtuple`, or :class:`dict`.
 
-            When ``schema`` is :class:`pyspark.sql.types.DataType` or a datatype string, it must
+            When ``schema`` is :class:`~pyspark.sql.types.DataType` or a datatype string, it must
             match the real data, or an exception will be thrown at runtime. If the given schema is
-            not :class:`pyspark.sql.types.StructType`, it will be wrapped into a
-            :class:`pyspark.sql.types.StructType` as its only field, and the field name will be
+            not :class:`~pyspark.sql.types.StructType`, it will be wrapped into a
+            :class:`~pyspark.sql.types.StructType` as its only field, and the field name will be
             "value". Each record will also be wrapped into a tuple, which can be converted to row
             later.
         samplingRatio : float, optional
             the sample ratio of rows used for inferring. The first few rows will be used
             if ``samplingRatio`` is ``None``. This option is effective only when the input is
-            :class:`RDD`.
+            :class:`~pyspark.RDD`.
         verifySchema : bool, optional
             verify data types of every row against schema. Enabled by default.
             When the input is :class:`pyarrow.Table` or when the input class is
@@ -1740,8 +1740,8 @@ class SparkSession(SparkConversionMixin):
 
         Parameters
         ----------
-        schema : :class:`StructType` or str
-            a :class:`StructType` or a DDL-formatted string that describes the schema.
+        schema : :class:`~pyspark.sql.types.StructType` or str
+            a :class:`~pyspark.sql.types.StructType` or a DDL-formatted string that describes the schema.
 
         Returns
         -------
