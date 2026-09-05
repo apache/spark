@@ -1,5 +1,5 @@
--- End-to-end coverage for parse_sql (SPARK-58738).
--- Returns compact JSON for parse-only statement analysis via SparkSqlParser.
+-- End-to-end coverage for parse_sql (SPARK-59255).
+-- Returns a compact JSON array for parse-only SQL batch analysis via SparkSqlParser.
 -- Off by default while the JSON contract is still evolving.
 --SET spark.sql.function.parseSql.enabled=true
 
@@ -10,11 +10,24 @@ SELECT parse_sql(NULL);
 SELECT parse_sql('SELECT a, b FROM t');
 SELECT parse_sql('SELECT db.my_func(a), count(b) FROM cat.ns.t1 JOIN t2');
 
+-- batches with and without a final delimiter
+--QUERY-DELIMITER-START
+SELECT parse_sql('select 1; select 2');
+--QUERY-DELIMITER-END
+--QUERY-DELIMITER-START
+SELECT parse_sql('select 1; select 2;');
+--QUERY-DELIMITER-END
+
+-- a failing statement does not prevent later statements from being parsed
+--QUERY-DELIMITER-START
+SELECT parse_sql('SELECT 1; SELEC 2; SELECT 3');
+--QUERY-DELIMITER-END
+
 -- JSON-path access over one shared successful parse result
 SELECT
-  get_json_object(result, '$.statement_identifier') AS statement_identifier,
-  get_json_object(result, '$.source_table_references[0][0]') AS first_table,
-  get_json_object(result, '$.select_list[1].name[0]') AS second_column
+  get_json_object(result, '$[0].statement_identifier') AS statement_identifier,
+  get_json_object(result, '$[0].source_table_references[0][0]') AS first_table,
+  get_json_object(result, '$[0].select_list[1].name[0]') AS second_column
 FROM (SELECT parse_sql('SELECT a, b FROM t') AS result);
 
 -- DML
@@ -93,9 +106,9 @@ SELECT parse_sql('SELEC FROM t');
 
 -- JSON-path access over one shared parse result
 SELECT
-  get_json_object(result, '$.parse_success') AS parse_success,
-  get_json_object(result, '$.error.errorClass') AS error_class,
-  get_json_object(result, '$.error.queryContext[0].fragment') AS fragment
+  get_json_object(result, '$[0].parse_success') AS parse_success,
+  get_json_object(result, '$[0].error.errorClass') AS error_class,
+  get_json_object(result, '$[0].error.queryContext[0].fragment') AS fragment
 FROM (SELECT parse_sql('SELEC FROM t') AS result);
 
 -- full multiline parse-time validation error, including context and location
@@ -107,10 +120,10 @@ SELECT parse_sql(
 
 -- JSON-path access over one shared multiline parse result
 SELECT
-  get_json_object(result, '$.error.errorClass') AS error_class,
-  get_json_object(result, '$.error.line') AS line,
-  get_json_object(result, '$.error.position') AS position,
-  get_json_object(result, '$.error.queryContext[0].startIndex') AS start_index
+  get_json_object(result, '$[0].error.errorClass') AS error_class,
+  get_json_object(result, '$[0].error.line') AS line,
+  get_json_object(result, '$[0].error.position') AS position,
+  get_json_object(result, '$[0].error.queryContext[0].startIndex') AS start_index
 FROM (
   SELECT parse_sql(
 'SELECT *
@@ -143,10 +156,12 @@ SELECT parse_sql(
 -- JSON-path access over one shared scripting parse result
 --QUERY-DELIMITER-START
 SELECT
-  get_json_object(result, '$.error.errorClass') AS error_class,
-  get_json_object(result, '$.error.line') AS line,
-  get_json_object(result, '$.error.position') AS position,
-  get_json_object(result, '$.error.queryContext[0].fragment') AS fragment
+  get_json_object(result, '$[1].start') AS start,
+  get_json_object(result, '$[1].length') AS length,
+  get_json_object(result, '$[1].error.errorClass') AS error_class,
+  get_json_object(result, '$[1].error.line') AS line,
+  get_json_object(result, '$[1].error.position') AS position,
+  get_json_object(result, '$[1].error.queryContext[0].fragment') AS fragment
 FROM (
   SELECT parse_sql(
 'BEGIN
@@ -169,10 +184,10 @@ SELECT parse_sql(
 -- JSON-path access over one shared scripting validation result
 --QUERY-DELIMITER-START
 SELECT
-  get_json_object(result, '$.error.errorClass') AS error_class,
-  get_json_object(result, '$.error.line') AS line,
-  get_json_object(result, '$.error.position') AS position,
-  get_json_object(result, '$.error.queryContext[0].fragment') AS fragment
+  get_json_object(result, '$[0].error.errorClass') AS error_class,
+  get_json_object(result, '$[0].error.line') AS line,
+  get_json_object(result, '$[0].error.position') AS position,
+  get_json_object(result, '$[0].error.queryContext[0].fragment') AS fragment
 FROM (
   SELECT parse_sql(
 'BEGIN
