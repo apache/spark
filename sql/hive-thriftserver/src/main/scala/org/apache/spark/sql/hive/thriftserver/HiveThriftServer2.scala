@@ -23,12 +23,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.hadoop.hive.common.ServerUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hive.service.auth.HiveAuthFactory.AuthTypes
 import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
 import org.apache.hive.service.server.HiveServer2
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.CONFIG
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.hive.HiveUtils
@@ -105,6 +107,28 @@ object HiveThriftServer2 extends Logging {
     }
   }
 
+  // Sessions are impersonated for metastore calls, but queries run as the service identity
+  // (SPARK-5159), so storage ACLs are checked against the wrong principal. Auth types that never
+  // establish a user identity have nothing to impersonate, so they are exempt.
+  private[thriftserver] def warnIfIneffectiveDoAs(hiveConf: HiveConf): Unit = {
+    val authType = hiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION)
+    val unverifiedAuthTypes = Seq(AuthTypes.NONE, AuthTypes.NOSASL).map(_.getAuthName)
+    // Constant on the left: authType is null when explicitly set empty, and this must not NPE.
+    val authVerifiesUser = !unverifiedAuthTypes.exists(_.equalsIgnoreCase(authType))
+    if (authVerifiesUser && hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS)) {
+      logWarning(log"${MDC(CONFIG, ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname)} is set to true, " +
+        log"but the Spark Thrift Server impersonates the connecting user only for Hive " +
+        log"metastore calls: queries and the storage access they perform still run as the " +
+        log"server's own service identity, so storage permissions are checked against the " +
+        log"service principal rather than the connecting user (SPARK-5159). That can expose " +
+        log"data the connecting user is not authorized to read. Setting it to false silences " +
+        log"this, but note that it stops impersonating metastore calls too, so it is not a " +
+        log"no-op (and unsetting it does not help -- Hive's own default is true). Spark 5.0 " +
+        log"is expected to refuse to start on this configuration; set " +
+        log"spark.sql.hive.thriftServer.allowIneffectiveDoAs=true there to keep it running.")
+    }
+  }
+
   def main(args: Array[String]): Unit = {
     // If the arguments contains "-h" or "--help", print out the usage and exit.
     if (args.contains("-h") || args.contains("--help")) {
@@ -154,6 +178,7 @@ private[hive] class HiveThriftServer2(sparkSession: SparkSession)
   private val started = new AtomicBoolean(false)
 
   override def init(hiveConf: HiveConf): Unit = {
+    HiveThriftServer2.warnIfIneffectiveDoAs(hiveConf)
     val sparkSqlCliService = new SparkSQLCLIService(this, sparkSession)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)
