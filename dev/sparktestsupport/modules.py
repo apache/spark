@@ -614,20 +614,6 @@ pyspark_core = Module(
         "pyspark.tests.test_worker",
         "pyspark.tests.test_stage_sched",
         "pyspark.tests.test_zero_copy_byte_stream",
-        # unittests for upstream projects
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_cast",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_default",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_non_default",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_type_inference",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_default",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_non_default",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_dataframe_from_pandas",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_ignore_timezone",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_coercion",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_inference",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_table_cast",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_table_to_pandas",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_type_coercion",
     ],
 )
 
@@ -926,20 +912,32 @@ pyspark_ml = Module(
     ],
 )
 
-pyspark_install = Module(
-    name="pyspark-install",
+pyspark_scheduled = Module(
+    name="pyspark-scheduled",
     dependencies=[],
     source_file_regexes=[
-        # Python package tests will be triggered with this module
+        # This module contains tests that are not sensitive to pyspark code changes.
+        # We run these on scheduled CIs and pre-merge CIs, not post-merge CIs.
         # Any changes in python/ should trigger this module
-        # This module won't be executed for post-commit CIs so it's cheap
         "python/",
-        "python/pyspark/install.py",
-        "python/pyspark/tests/test_install_spark.py",
     ],
     python_test_goals=[
         "pyspark.tests.test_import_spark",
         "pyspark.tests.test_install_spark",
+        # unittests for upstream projects
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_cast",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_default",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_non_default",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_type_inference",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_default",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_non_default",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_dataframe_from_pandas",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_ignore_timezone",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_coercion",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_inference",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_table_cast",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_table_to_pandas",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_type_coercion",
     ],
 )
 

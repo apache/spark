@@ -107,11 +107,11 @@ jobs:
       id: set-outputs
       run: |
         if [ -z "${{ inputs.jobs }}" ]; then
-          pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark') and not m.name.startswith('pyspark-pandas') and not m.name == 'pyspark-install'))"`
+          pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark') and not m.name.startswith('pyspark-pandas') and not m.name == 'pyspark-scheduled'))"`
           pyspark_pandas_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark-pandas')))"`
           pyspark=`./dev/is-changed.py -m $pyspark_modules`
           pandas=`./dev/is-changed.py -m $pyspark_pandas_modules`
-          pyspark_install=`./dev/is-changed.py -m pyspark-install`
+          pyspark_scheduled=`./dev/is-changed.py -m pyspark-scheduled`
           pyspark_connect_old_client="$pyspark"
           if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
             yarn=`./dev/is-changed.py -m yarn`
@@ -155,7 +155,7 @@ jobs:
             docs=true
             java25=true
           else
-            pyspark_install=false
+            pyspark_scheduled=false
             pyspark_connect_old_client=false
             pandas=false
             yarn=false
@@ -177,7 +177,7 @@ jobs:
               \"build-core-utils\": \"$build_core_utils\",
               \"pyspark\": \"$pyspark\",
               \"pyspark-pandas\": \"$pandas\",
-              \"pyspark-install\": \"$pyspark_install\",
+              \"pyspark-scheduled\": \"$pyspark_scheduled\",
               \"pyspark-connect-old-client\": \"$pyspark_connect_old_client\",
               \"sparkr\": \"$sparkr\",
               \"tpcds-1g\": \"$tpcds\",
@@ -543,7 +543,7 @@ jobs:
         fromJson(needs.precondition.outputs.required).build == 'true' ||
         fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
         fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true' ||
-        fromJson(needs.precondition.outputs.required).pyspark-install == 'true' ||
+        fromJson(needs.precondition.outputs.required).pyspark-scheduled == 'true' ||
         fromJson(needs.precondition.outputs.required).sparkr == 'true' ||
         fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true' ||
         fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true' ||
@@ -635,7 +635,7 @@ jobs:
           - >-
             pyspark-connect-old-client
           - >-
-            pyspark-install
+            pyspark-scheduled
           - >-
             pyspark-pandas
           - >-
@@ -650,8 +650,8 @@ jobs:
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-streaming, pyspark-structured-streaming, pyspark-structured-streaming-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-connect-old-client != 'true' &&  'pyspark-connect-old-client'}}
-          # pyspark-install is very slow so we only run it when it's changed or explicity requested
-          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-install != 'true' && 'pyspark-install' }}
+          # pyspark-scheduled will only run when explicitly requested, it contains tests that are not sensitive to pyspark code changes.
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-scheduled != 'true' && 'pyspark-scheduled' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-slow' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect' }}
@@ -737,7 +737,7 @@ jobs:
       run: |
         export SKIP_SCALA_BUILD=true
         echo "Reusing precompiled artifact, skipping local SBT build."
-        if [[ "$MODULES_TO_TEST" == *"pyspark-install"* ]]; then
+        if [[ "$MODULES_TO_TEST" == *"pyspark-scheduled"* ]]; then
           export SKIP_PACKAGING=false
           echo "Python Packaging Tests Enabled!"
         fi
