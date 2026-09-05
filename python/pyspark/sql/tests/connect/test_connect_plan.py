@@ -54,7 +54,10 @@ if should_test_connect:
         WriteOperation,
     )
     from pyspark.sql.connect.readwriter import DataFrameReader
-    from pyspark.sql.connect.types import pyspark_types_to_proto_types
+    from pyspark.sql.connect.types import (
+        proto_schema_to_pyspark_data_type,
+        pyspark_types_to_proto_types,
+    )
     from pyspark.sql.types import (
         ArrayType,
         DoubleType,
@@ -63,6 +66,8 @@ if should_test_connect:
         StringType,
         StructField,
         StructType,
+        TimestampLTZNanosType,
+        TimestampNTZNanosType,
     )
 
 
@@ -817,6 +822,50 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         )
         new_plan = df.to(schema)._plan.to_proto(self.connect)
         self.assertEqual(pyspark_types_to_proto_types(schema), new_plan.root.to_schema.schema)
+
+    def test_timestamp_nanos_datatype_conversion(self):
+        # SPARK-57462: the nanosecond timestamp types round-trip through the DataType proto.
+        for dt in [
+            TimestampNTZNanosType(7),
+            TimestampNTZNanosType(8),
+            TimestampNTZNanosType(9),
+            TimestampLTZNanosType(7),
+            TimestampLTZNanosType(8),
+            TimestampLTZNanosType(9),
+        ]:
+            with self.subTest(dt=repr(dt)):
+                self.assertEqual(
+                    dt, proto_schema_to_pyspark_data_type(pyspark_types_to_proto_types(dt))
+                )
+
+        schema = StructType(
+            [
+                StructField("ntz", TimestampNTZNanosType(9), True),
+                StructField("arr", ArrayType(TimestampLTZNanosType(7), True), False),
+                StructField(
+                    "map",
+                    MapType(TimestampNTZNanosType(8), TimestampLTZNanosType(9), True),
+                    True,
+                ),
+            ]
+        )
+        self.assertEqual(
+            schema, proto_schema_to_pyspark_data_type(pyspark_types_to_proto_types(schema))
+        )
+
+        # `precision` is optional on the wire; types.proto documents 9 as the default.
+        self.assertEqual(
+            TimestampNTZNanosType(9),
+            proto_schema_to_pyspark_data_type(
+                proto.DataType(timestamp_ntz_nanos=proto.DataType.TimestampNTZNanos())
+            ),
+        )
+        self.assertEqual(
+            TimestampLTZNanosType(9),
+            proto_schema_to_pyspark_data_type(
+                proto.DataType(timestamp_ltz_nanos=proto.DataType.TimestampLTZNanos())
+            ),
+        )
 
     def test_write_operation(self):
         wo = WriteOperation(self.connect.readTable("name")._plan)

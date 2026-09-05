@@ -77,6 +77,26 @@ if TYPE_CHECKING:
 metadata_key = b"SPARK::metadata::json"
 
 
+def _reject_timestamp_nanos_conversion(schema: DataType) -> None:
+    """Raise if ``schema`` involves a nanosecond timestamp type, for Arrow/pandas value paths.
+
+    The Arrow / pandas value conversion for :class:`TimestampNTZNanosType` /
+    :class:`TimestampLTZNanosType` is not implemented yet (planned follow-up). Rather than let these
+    paths silently mis-handle the value (wrong time zone for LTZ, or a leaked ``pandas.Timestamp``),
+    fail deterministically here, consistent with :func:`to_arrow_type`, which already rejects these
+    types with the same error condition and reports the offending leaf type.
+    """
+    from pyspark.errors import PySparkTypeError
+    from pyspark.sql.types import _first_timestamp_nanos_type
+
+    offending = _first_timestamp_nanos_type(schema)
+    if offending is not None:
+        raise PySparkTypeError(
+            errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+            messageParameters={"data_type": str(offending)},
+        )
+
+
 def to_arrow_metadata(metadata: Optional[Dict[str, Any]] = None) -> Optional[Dict[bytes, bytes]]:
     if metadata is not None and len(metadata) > 0:
         return {metadata_key: json.dumps(metadata).encode("utf-8")}

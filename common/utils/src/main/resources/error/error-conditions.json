@@ -8193,6 +8193,12 @@
     ],
     "sqlState" : "42K0E"
   },
+  "TIMESTAMP_NANOS_PYTHON_MAP_KEY" : {
+    "message" : [
+      "Cannot convert a map with <type> keys to Python. Python `datetime.datetime` is microsecond-resolution and cannot represent the sub-microsecond digits, so two distinct nanosecond keys can collapse to a single entry. Avoid nanosecond-precision timestamp types as map keys on the Python conversion path."
+    ],
+    "sqlState" : "22000"
+  },
   "TRAILING_COMMA_IN_SELECT" : {
     "message" : [
       "Trailing comma detected in SELECT clause. Remove the trailing comma before the FROM clause."

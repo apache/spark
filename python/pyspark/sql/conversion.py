@@ -32,6 +32,7 @@ from pyspark.sql.pandas.types import (
 )
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import (
+    AnyTimestampNanoType,
     ArrayType,
     BinaryType,
     BooleanType,
@@ -542,6 +543,11 @@ class LocalDataToArrowConversion:
         elif isinstance(dataType, (TimestampType, TimestampNTZType)):
             # Always truncate
             return True
+        elif isinstance(dataType, AnyTimestampNanoType):
+            # Needs a converter so _create_converter is built (and eagerly rejects) for every
+            # direct caller -- Arrow UDF return values, Python data-source writes -- not only the
+            # LocalDataToArrowConversion.convert path.
+            return True
         elif isinstance(dataType, DecimalType):
             # Convert Decimal('NaN') to None
             # Rescale Decimal values
@@ -594,6 +600,18 @@ class LocalDataToArrowConversion:
                 return None
             else:
                 return lambda value: value
+
+        if isinstance(dataType, AnyTimestampNanoType):
+            # SPARK-57462: the Arrow-based value path for the nanosecond timestamp types is a
+            # pending follow-up. Reject eagerly, when the converter is built, so building a
+            # DataFrame from Arrow / returning nanoseconds from an Arrow UDF fails deterministically
+            # rather than mis-encoding the value. Consistent with to_arrow_type.
+            from pyspark.errors import PySparkTypeError
+
+            raise PySparkTypeError(
+                errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                messageParameters={"data_type": str(dataType)},
+            )
 
         if isinstance(dataType, NullType):
 
@@ -1177,6 +1195,11 @@ class ArrowTableToRowsConversion:
         elif isinstance(dataType, (TimestampType, TimestampNTZType)):
             # Always remove the time zone info for now
             return True
+        elif isinstance(dataType, AnyTimestampNanoType):
+            # Needs a converter so _create_converter is built (and eagerly rejects) for every
+            # direct caller -- Connect collect, batched Arrow UDF inputs, foreachPartition, and
+            # Python data-source reads -- not only the ArrowTableToRowsConversion.convert path.
+            return True
         elif isinstance(dataType, UserDefinedType):
             return True
         elif isinstance(dataType, VariantType):
@@ -1211,6 +1234,19 @@ class ArrowTableToRowsConversion:
                 return None
             else:
                 return lambda value: value
+
+        if isinstance(dataType, AnyTimestampNanoType):
+            # SPARK-57462: the Arrow-based value path for the nanosecond timestamp types is a
+            # pending follow-up. Reject eagerly, when the converter is built (all callers build
+            # converters up front), so it is not data-dependent and cannot leak a raw
+            # Arrow-derived value (a nanosecond-precision, possibly timezone-aware
+            # pandas.Timestamp). Consistent with to_arrow_type, which already rejects these types.
+            from pyspark.errors import PySparkTypeError
+
+            raise PySparkTypeError(
+                errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                messageParameters={"data_type": str(dataType)},
+            )
 
         if isinstance(dataType, NullType):
             return lambda value: None
