@@ -259,7 +259,7 @@ case class GroupPartitionsExec(
   @transient private lazy val identityGrouping: Boolean =
     !grouping.keysRewritten &&
       grouping.partitions.size == child.outputPartitioning.numPartitions &&
-      grouping.partitions.zipWithIndex.forall {
+      grouping.partitions.iterator.zipWithIndex.forall {
         case ((_, Seq(single)), outputIndex) => single == outputIndex
         case _ => false
       }
