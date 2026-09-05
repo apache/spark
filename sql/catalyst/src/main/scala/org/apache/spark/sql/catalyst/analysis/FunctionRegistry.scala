@@ -1018,6 +1018,14 @@ object FunctionRegistry {
     expression[BitmapXorAgg]("bitmap_xor_agg")
   )
 
+  private def ipv4Expressions: Seq[FunctionRegistryEntry] = Seq(
+    // ipv4 functions
+    expression[InetAton]("inet_aton"),
+    expression[InetNtoa]("inet_ntoa"),
+    expression[TryInetAton]("try_inet_aton"),
+    expression[TryInetNtoa]("try_inet_ntoa")
+  )
+
   private def jsonExpressions: Seq[FunctionRegistryEntry] = Seq(
     // json
     expression[StructsToJson]("to_json"),
@@ -1131,6 +1139,7 @@ object FunctionRegistry {
     comparisonExpressions,
     bitwiseExpressions,
     bitmapExpressions,
+    ipv4Expressions,
     jsonExpressions,
     variantExpressions,
     spatialExpressions,

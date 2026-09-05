@@ -678,6 +678,8 @@ Misc Functions
     current_schema
     current_user
     hmac
+    inet_aton
+    inet_ntoa
     input_file_block_length
     input_file_block_start
     input_file_name
@@ -688,6 +690,8 @@ Misc Functions
     session_user
     spark_partition_id
     try_aes_decrypt
+    try_inet_aton
+    try_inet_ntoa
     try_reflect
     typeof
     user
