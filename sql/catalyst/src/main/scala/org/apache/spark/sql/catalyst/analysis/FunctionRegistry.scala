@@ -1009,6 +1009,7 @@ object FunctionRegistry {
     expression[BitmapBitPosition]("bitmap_bit_position"),
     expression[BitmapConstructAgg]("bitmap_construct_agg"),
     expression[BitmapCount]("bitmap_count"),
+    expression[BitmapContains]("bitmap_contains"),
     expression[BitmapAnd]("bitmap_and"),
     expression[BitmapOr]("bitmap_or"),
     expression[BitmapAndNot]("bitmap_andnot"),

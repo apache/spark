@@ -2264,6 +2264,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     binary.select(fn.bitmap_count(fn.col("bytes")))
   }
 
+  test("function bitmap_contains") {
+    binary.select(fn.bitmap_contains(fn.col("bytes"), fn.lit(0L)))
+  }
+
   test("function bitmap_or_agg") {
     binary.select(fn.bitmap_or_agg(fn.col("bytes")))
   }
