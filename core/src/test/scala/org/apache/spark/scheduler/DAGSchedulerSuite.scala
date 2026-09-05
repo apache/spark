@@ -6807,9 +6807,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("pipelined shuffle: a job mixing a pipelined and a regular shuffle is rejected up front") {
-    // A job must be either all-regular or all-pipelined, not a mix. A consumer
-    // depending on BOTH a pipelined producer AND a regular producer is a mixed job and must be
-    // rejected up front (before any stage is submitted), leaving no scheduler state behind.
+    // A consumer depending on BOTH a pipelined producer AND an UNMATERIALIZED regular producer
+    // is an unsupported mix and must be rejected up front (before any stage is submitted),
+    // leaving no scheduler state behind. (A fully-MATERIALIZED regular prefix is the supported
+    // exception -- see the materialized-prefix test below.)
     val pipelinedProducerRdd = new MyRDD(sc, 2, Nil)
     val pipelinedDep = new PipelinedShuffleDependency(pipelinedProducerRdd, new HashPartitioner(2))
     val regularProducerRdd = new MyRDD(sc, 2, Nil)
@@ -6831,11 +6832,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("pipelined shuffle: a regular-shuffle prefix feeding a pipelined producer is rejected") {
-    // Also mixed: a regular shuffle in the PREFIX that feeds a pipelined producer
-    // (regularRoot --regular--> producer(pipelined) --pipelined--> consumer). Rather than treat
-    // the regular edge as an ordinary external input to the group and support a mid-DAG regular
-    // prefix, a pipelined job rejects ANY regular shuffle up front (the supported shape is
-    // scan-of-files --pipelined--> stateful, with no upstream shuffle).
+    // An UNMATERIALIZED regular shuffle in the PREFIX that feeds a pipelined producer
+    // (regularRoot --regular--> producer(pipelined) --pipelined--> consumer) is rejected: the
+    // prefix stage would have to run while gang-admitted producers hold slots blocked on
+    // transport backpressure, which admission does not account for. Once the prefix is
+    // MATERIALIZED the same shape is accepted (see the materialized-prefix test below).
     val regularRoot = new MyRDD(sc, 2, Nil)
     val regularDep = new ShuffleDependency(regularRoot, new HashPartitioner(2))
     val producerRdd = new MyRDD(sc, 2, List(regularDep), tracker = mapOutputTracker)
@@ -6853,6 +6854,201 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       s"expected a mixed-job rejection, got: ${failure.get().getMessage}")
     assert(taskSets.isEmpty, "no stage should be submitted for a rejected mixed job")
     assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: a fully-materialized regular prefix below the suffix is accepted") {
+    // The materialized-prefix mixed shape (the one adaptive execution produces: prior jobs
+    // materialize the prefix stages, the final job runs the pipelined tail). First job
+    // materializes the regular shuffle; the second job's pipelined producer reads that
+    // materialized output, so the prefix stage is skipped and only the gang runs. The prefix's
+    // map side (2) and reduce side (3) are deliberately asymmetric: materialization
+    // completeness must be measured in MAP outputs, and a symmetric count would hide a check
+    // against the wrong side.
+    val regularRoot = new MyRDD(sc, 2, Nil)
+    val regularDep = new ShuffleDependency(regularRoot, new HashPartitioner(3))
+    val prefixReader = new MyRDD(sc, 3, List(regularDep), tracker = mapOutputTracker)
+    submit(prefixReader, Array(0, 1, 2))
+    completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 3)
+    complete(taskSets(1), Seq((Success, 1), (Success, 2), (Success, 3)))
+    assert(results === Map(0 -> 1, 1 -> 2, 2 -> 3))
+    results.clear()
+    val taskSetsBefore = taskSets.size
+
+    // producer(reads materialized regular) --[pipelined]--> consumer (result stage).
+    val producerRdd = new MyRDD(sc, 3, List(regularDep), tracker = mapOutputTracker)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+
+    // Not rejected; the prefix stage is available (not resubmitted); producer and consumer
+    // gang-run concurrently.
+    assert(taskSets.size === taskSetsBefore + 2,
+      s"expected producer and consumer submitted concurrently, got ${taskSets.size} task sets")
+    assert(scheduler.runningStages.exists(_.rdd eq producerRdd))
+    assert(scheduler.runningStages.exists(_.rdd eq consumerRdd))
+    assert(!scheduler.runningStages.exists(_.rdd eq regularRoot),
+      "the materialized prefix stage must not re-run")
+
+    completeShuffleMapStageSuccessfully(taskSets(taskSetsBefore).stageId, 0, 2)
+    complete(taskSets(taskSetsBefore + 1), Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: losing a materialized prefix's output mid-group aborts the whole " +
+      "group, not a lone prefix resubmit") {
+    // The materialized-prefix mixed shape does not need a slot to re-run its prefix -- but if the
+    // prefix's shuffle output is LOST while the gang is running (FetchFailed / executor loss), a
+    // base-scheduler lone-stage resubmit of the prefix would deadlock: the gang holds all slots
+    // (producers blocked on backpressure), leaving no slot for the prefix to recompute into. This
+    // is the one FetchFailed path where the failing consumer reads OUTSIDE its group (the external
+    // prefix), which the group-internal FetchFailed test does not exercise. It must still route to
+    // a whole-group abort, because isPipelinedGroupMember keys off the FAILING STAGE (the pipelined
+    // producer reading the prefix is a group member) regardless of which shuffle's fetch failed.
+    val regularRoot = new MyRDD(sc, 2, Nil)
+    val regularDep = new ShuffleDependency(regularRoot, new HashPartitioner(3))
+    val prefixReader = new MyRDD(sc, 3, List(regularDep), tracker = mapOutputTracker)
+    submit(prefixReader, Array(0, 1, 2))
+    completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 3)
+    complete(taskSets(1), Seq((Success, 1), (Success, 2), (Success, 3)))
+    results.clear()
+    val taskSetsBefore = taskSets.size
+
+    // producer(reads the materialized regular prefix) --[pipelined]--> consumer (result stage).
+    val producerRdd = new MyRDD(sc, 3, List(regularDep), tracker = mapOutputTracker)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    assert(taskSets.size === taskSetsBefore + 2, "producer and consumer gang-submitted")
+    val producerTs = taskSets(taskSetsBefore)
+    val taskSetsBeforeFetchFailure = taskSets.size
+
+    // The pipelined PRODUCER task fails fetching the EXTERNAL materialized prefix (regularDep),
+    // not the pipelined shuffle. Its output for mapIndex 0 was placed on hostA by
+    // completeShuffleMapStageSuccessfully.
+    runEvent(makeCompletionEvent(
+      producerTs.tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), regularDep.shuffleId, 0L, 0, 0, "ignored"),
+      null))
+
+    // Whole-group abort: the job fails, and no lone stage (neither the pipelined producer nor the
+    // materialized prefix's map stage) is resubmitted into the slot-starved gang.
+    scheduler.resubmitFailedStages()
+    assert(failure != null,
+      "losing a materialized prefix's output under a running gang must fail the job")
+    assert(taskSets.size === taskSetsBeforeFetchFailure,
+      "no lone stage may be resubmitted after the group is aborted")
+    assert(!scheduler.runningStages.exists(_.rdd eq regularRoot),
+      "the prefix's map stage must not be resubmitted in isolation into the gang's held slots")
+    sc.listenerBus.waitUntilEmpty()
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: an all-pipelined group with no regular prefix classifies identically " +
+      "under the materialized-prefix relaxation (a previously-valid shape is unchanged)") {
+    // The prefix relaxation (classifyJobShuffleShape) keys purely off dependency TYPE, so it is
+    // open to any PipelinedShuffleDependency. But the materialized-prefix mixed shape it newly
+    // admits is produced only by adaptive execution; an all-pipelined job (no regular boundary)
+    // never hits the relaxed path, so it classifies identically before and after the relaxation
+    // -- the relaxation is a strict superset that leaves every previously-valid shape unchanged.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+
+    // Accepted and gang-scheduled exactly like the pre-relaxation all-pipelined path: producer and
+    // consumer submitted concurrently, no rejection, no materialized-prefix machinery engaged.
+    assert(taskSets.size === 2,
+      s"all-pipelined job must gang-submit producer + consumer, got ${taskSets.size} task sets")
+    assert(scheduler.runningStages.exists(_.rdd eq producerRdd))
+    assert(scheduler.runningStages.exists(_.rdd eq consumerRdd))
+
+    complete(taskSets.head, Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+    val consumerTs = taskSets.find { ts =>
+      scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd
+    }.get
+    complete(consumerTs, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: a non-mixed job is classified by the cheap kinds pre-pass") {
+    // classifyJobShuffleShape runs on EVERY job submission, including on deployments that never
+    // enable this feature, so a non-mixed job must not pay the precise (RDD, belowRegular)-keyed
+    // walk that only a pipelined/regular MIX needs.
+    //
+    // This is a COST property, not a behavioral one: for a non-mixed job both paths return the same
+    // shape, so no assertion on the result can distinguish them. What is pinned here instead is the
+    // contract the pre-pass rests on -- the kinds pre-pass alone determines the answer for a
+    // non-mixed graph -- for each of the three non-mixed shapes. If a future change makes the
+    // shape depend on the precise walk for these graphs, these equalities break.
+    def shapeOf(rdd: MyRDD): (Boolean, Boolean, Boolean) = {
+      val sh = scheduler.classifyJobShuffleShape(rdd)
+      (sh.hasPipelined, sh.hasUnmaterializedRegularBoundary, sh.hasPipelinedBelowRegular)
+    }
+
+    // (1) all-regular, boundary unmaterialized: not a mix -> nothing to report.
+    val regularDep = new ShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val overRegular = new MyRDD(sc, 2, List(regularDep), tracker = mapOutputTracker)
+    assert(scheduler.classifyJobShuffleKinds(overRegular) === (false, true))
+    assert(shapeOf(overRegular) === (false, false, false))
+
+    // (2) all-pipelined: not a mix -> hasPipelined only.
+    val pipelinedDep = new PipelinedShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val overPipelined = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    assert(scheduler.classifyJobShuffleKinds(overPipelined) === (true, false))
+    assert(shapeOf(overPipelined) === (true, false, false))
+
+    // (3) no shuffle at all.
+    val noShuffle = new MyRDD(sc, 2, Nil)
+    assert(scheduler.classifyJobShuffleKinds(noShuffle) === (false, false))
+    assert(shapeOf(noShuffle) === (false, false, false))
+
+    // And the MIX still gets the precise answer (the expensive walk does run when it matters):
+    // a pipelined dep below an unmaterialized regular boundary must be detected.
+    val deepPipelined =
+      new PipelinedShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val belowRegular = new MyRDD(sc, 2, List(deepPipelined), tracker = mapOutputTracker)
+    val regularOverPipelined = new ShuffleDependency(belowRegular, new HashPartitioner(2))
+    val mixed = new MyRDD(sc, 2, List(regularOverPipelined), tracker = mapOutputTracker)
+    assert(scheduler.classifyJobShuffleKinds(mixed) === (true, true), "this graph IS a mix")
+    val mixedShape = scheduler.classifyJobShuffleShape(mixed)
+    assert(mixedShape.hasPipelinedBelowRegular,
+      "the precise walk must still detect a pipelined dependency below a regular boundary")
+    assert(mixedShape.isUnsupportedMix, "and such a job must be rejected as an unsupported mix")
+  }
+
+  test("pipelined shuffle: a manager that does not consume the live-reduce hint gets no hint") {
+    // The scheduler's live-reduce-partition hint and per-run epoch exist for a transport whose
+    // writer PARKS on a partition nobody drains (the in-process channel's bounded queue). The RPC
+    // streaming transport -- the default `spark.shuffle.manager.incremental`, and what Real-Time
+    // Mode runs on -- reads neither property, so a pipelined job on it must be left exactly as it
+    // is without this feature: no cloned Properties, no epoch, no live set, and no partial-read
+    // abort whose remedy (disabling the batch SQL flag) does not even apply to it.
+    assert(!sc.env.pipelinedShuffleManager.supportsLiveReducePartitionHints,
+      "precondition: the default incremental manager does not consume the hint")
+
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    // A PARTIAL read (one of two result partitions) is the shape that would compute and stamp the
+    // hint -- and, if unmappable, abort the stage.
+    submit(consumerRdd, Array(0))
+
+    assert(taskSets.nonEmpty, "the pipelined group should have been submitted")
+    taskSets.foreach { ts =>
+      val props = Option(ts.properties)
+      assert(props.forall(p =>
+        p.getProperty(SparkContext.SPARK_PIPELINED_RUN_EPOCH) == null),
+        s"no epoch may be stamped for a manager that does not consume it (stage ${ts.stageId})")
+      assert(props.forall(p =>
+        p.getProperty(SparkContext.SPARK_PIPELINED_LIVE_REDUCE_PARTITIONS) == null),
+        s"no live-reduce set may be stamped for such a manager (stage ${ts.stageId})")
+    }
+    // And the job was not aborted by the partial-read fail-fast path.
+    assert(failure == null, s"the job must not be aborted; got: $failure")
   }
 
   test("pipelined shuffle: deep chain A->B->C is submitted fully concurrently") {

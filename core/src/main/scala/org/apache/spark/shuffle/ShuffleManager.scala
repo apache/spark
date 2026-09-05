@@ -129,7 +129,56 @@ private[spark] trait BlockingShuffleManager extends ShuffleManager {
  * has no [[ShuffleBlockResolver]]. [[org.apache.spark.shuffle.streaming.StreamingShuffleManager]]
  * is the built-in implementation.
  */
-private[spark] trait PipelinedShuffleManager extends ShuffleManager
+private[spark] trait PipelinedShuffleManager extends ShuffleManager {
+  /**
+   * Whether this manager relies on a `StreamingShuffleOutputTracker` to discover writer task
+   * locations. The RPC streaming transport needs it (writers publish their host/port; readers
+   * look them up to open connections). An in-process transport that finds writer and reader
+   * within the same JVM does not, and returns false so `SparkEnv` skips creating the tracker
+   * and the scheduler skips registering the shuffle with it. Defaults to true so the built-in
+   * streaming manager is unaffected.
+   */
+  def usesStreamingShuffleOutputTracker: Boolean = true
+
+  /**
+   * Whether this manager's writer hands record OBJECTS to a concurrently-running consumer, so
+   * each record must be detached from any producer-reused buffer before `write` sees it (for a
+   * SQL row: `InternalRow.copy()`, done by the SQL layer's write processor). A transport that
+   * serializes records promptly -- the RPC streaming manager -- detaches by serializing and
+   * must NOT pay an extra per-row copy on its hot path; that is the default. The in-process
+   * channel transport shares object references across threads and overrides this to true.
+   */
+  def requiresDetachedRecords: Boolean = false
+
+  /**
+   * Whether this manager's writer consumes the driver's live-reduce-partition hint -- the set of
+   * reduce partitions a partial read (LIMIT / executeTake) will actually drain, stamped into the
+   * producer's task properties as `SPARK_PIPELINED_LIVE_REDUCE_PARTITIONS`, plus the per-run epoch
+   * `SPARK_PIPELINED_RUN_EPOCH` that keys its rendezvous.
+   *
+   * Only a transport whose writer would BLOCK on a partition nobody drains needs the hint: the
+   * in-process channel hands batches across a bounded queue, so feeding a reader-less partition
+   * fills it and parks the writer forever. A transport that does not block that way (the RPC
+   * streaming shuffle, whose writer never reads either property) returns false, and the scheduler
+   * then skips computing and stamping the hint entirely -- leaving the Real-Time Mode path exactly
+   * as it is without this feature, rather than paying for a hint nobody reads and risking an abort
+   * whose remedy does not apply to it.
+   */
+  def supportsLiveReducePartitionHints: Boolean = false
+
+  /**
+   * Whether this manager currently holds driver-side cleanup state for `shuffleId`.
+   *
+   * A manager that keeps NO output tracker (an in-process transport) has its shuffles in neither
+   * output tracker, so the `ContextCleaner` cannot tell one of them apart from an already-cleaned
+   * regular shuffle by tracker membership; it asks here instead, and only frees what a manager
+   * actually holds. Answer from the state that would leak -- not from a registration record, which
+   * an unregister-before-run sequence drops while the state itself is recreated lazily when the job
+   * finally runs. Defaults to false: a manager whose shuffles ARE in an output tracker is found
+   * that way and never needs this.
+   */
+  def holdsShuffle(shuffleId: Int): Boolean = false
+}
 
 /**
  * Utility companion object to create a ShuffleManager given a spark configuration.

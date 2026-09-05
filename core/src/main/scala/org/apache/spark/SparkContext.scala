@@ -3458,6 +3458,21 @@ object SparkContext extends Logging {
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
   private[spark] val SPARK_JOB_GROUP_ID = "spark.jobGroup.id"
   private[spark] val SPARK_JOB_INTERRUPT_ON_CANCEL = "spark.job.interruptOnCancel"
+  // Comma-separated live reduce-partition ids for a pipelined job (SPARK-57399): the reduce
+  // partitions this job actually reads. Attached to a pipelined PRODUCER stage's task
+  // properties so the in-process channel writer can drop records routed to partitions no
+  // consumer will drain (e.g. LIMIT/executeTake reads only a subset), which would otherwise
+  // fill their bounded queues and deadlock the writer. Absent = every partition is live.
+  private[spark] val SPARK_PIPELINED_LIVE_REDUCE_PARTITIONS =
+    "spark.pipelined.liveReducePartitions"
+  // Per-run epoch for a pipelined job (SPARK-57399), set to the jobId. Attached to the job's
+  // properties so BOTH the producer (writer) and consumer (reader) tasks of the one gang read
+  // the same value, and keys the in-process channel rendezvous per run: a re-run of the same
+  // shuffleId (a RangePartitioner sample job then the main job; executeTake batches; a classic
+  // Dataset re-executing a reused plan) gets a fresh epoch, so its queues are physically
+  // separate from the previous run's leftovers rather than relying on clearing shared state.
+  // Absent = epoch 0 (the core-RDD test path that never re-runs a shuffleId).
+  private[spark] val SPARK_PIPELINED_RUN_EPOCH = "spark.pipelined.runEpoch"
   private[spark] val SPARK_JOB_TAGS = "spark.job.tags"
   private[spark] val SPARK_SCHEDULER_POOL = "spark.scheduler.pool"
   private[spark] val RDD_SCOPE_KEY = "spark.rdd.scope"
