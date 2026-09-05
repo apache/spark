@@ -337,6 +337,23 @@ object WindowExpression {
     e.find(_.isInstanceOf[WindowExpression]).isDefined
   }
 
+  private[sql] def distinctAggregateChildren(function: AggregateFunction): Seq[Expression] = {
+    function.children.filterNot(_.foldable).map {
+      case sortOrder: SortOrder => sortOrder.child
+      case expression => expression
+    }.distinctBy(_.canonicalized)
+  }
+
+  private[sql] def isSupportedDistinctAggregate(
+      function: AggregateFunction,
+      frame: WindowFrame): Boolean = {
+    !function.isInstanceOf[PythonUDAF] && (frame match {
+      case SpecifiedWindowFrame(_, UnboundedPreceding, _) =>
+        RowOrdering.isOrderable(distinctAggregateChildren(function))
+      case _ => false
+    })
+  }
+
   def expressionToIngnoreNulls(e: Expression, source: String): Boolean = e match {
     case BooleanLiteral(ignoreNulls) => ignoreNulls
     case _ => throw QueryCompilationErrors.invalidIgnoreNullsParameter(source, e)
