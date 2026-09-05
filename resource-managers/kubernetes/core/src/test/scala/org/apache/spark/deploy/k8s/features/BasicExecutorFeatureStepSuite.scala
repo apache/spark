@@ -24,7 +24,7 @@ import com.google.common.net.InternetDomainName
 import io.fabric8.kubernetes.api.model._
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite, SparkIllegalArgumentException, SSLOptions}
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SecretVolumeUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -417,6 +417,118 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
+  test("SSL RPC password propagation") {
+    val conf = baseConf.clone()
+      .set("spark.ssl.rpc.enabled", "true")
+      .set("spark.ssl.rpc.keyStorePassword", "keyStorePass")
+      .set("spark.ssl.rpc.keyPassword", "keyPass")
+      .set("spark.ssl.rpc.privateKeyPassword", "privateKeyPass")
+      .set("spark.ssl.rpc.trustStorePassword", "trustStorePass")
+
+    val step = new BasicExecutorFeatureStep(KubernetesTestConf.createExecutorConf(sparkConf = conf),
+      new SecurityManager(conf), defaultProfile)
+
+    val executor = step.configurePod(SparkPod.initialPod())
+    checkEnv(executor, conf, Map(
+      SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> "keyStorePass",
+      SSLOptions.ENV_RPC_SSL_KEY_PASSWORD -> "keyPass",
+      SSLOptions.ENV_RPC_SSL_PRIVATE_KEY_PASSWORD -> "privateKeyPass",
+      SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
+  }
+
+  test("SSL RPC passwords shouldn't propagate if RPC SSL is disabled") {
+    val conf = baseConf.clone()
+      .set("spark.ssl.rpc.enabled", "false")
+      .set("spark.ssl.rpc.keyStorePassword", "keyStorePass")
+      .set("spark.ssl.rpc.trustStorePassword", "trustStorePass")
+
+    val step = new BasicExecutorFeatureStep(KubernetesTestConf.createExecutorConf(sparkConf = conf),
+      new SecurityManager(conf), defaultProfile)
+
+    val executor = step.configurePod(SparkPod.initialPod())
+    SSLOptions.SPARK_RPC_SSL_PASSWORD_ENVS.foreach { env =>
+      assert(!KubernetesFeaturesTestUtils.containerHasEnvVar(executor.container, env))
+    }
+  }
+
+  test("SSL RPC passwords shouldn't override an explicit secretKeyRef") {
+    val conf = baseConf.clone()
+      .set("spark.ssl.rpc.enabled", "true")
+      .set("spark.ssl.rpc.keyStorePassword", "keyStorePass")
+      .set("spark.ssl.rpc.trustStorePassword", "trustStorePass")
+
+    val step = new BasicExecutorFeatureStep(
+      KubernetesTestConf.createExecutorConf(
+        sparkConf = conf,
+        secretEnvNamesToKeyRefs = Map(
+          SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> "rpc-secret:keystore-password")),
+      new SecurityManager(conf), defaultProfile)
+
+    val executor = step.configurePod(SparkPod.initialPod())
+    checkEnv(executor, conf, Map(
+      SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
+  }
+
+  test("SSL RPC passwords shouldn't override an explicit spark.executorEnv entry") {
+    val conf = baseConf.clone()
+      .set("spark.ssl.rpc.enabled", "true")
+      .set("spark.ssl.rpc.keyStorePassword", "keyStorePass")
+      .set("spark.ssl.rpc.trustStorePassword", "trustStorePass")
+      .set(s"spark.executorEnv.${SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD}", "userKeyStorePass")
+
+    val step = new BasicExecutorFeatureStep(KubernetesTestConf.createExecutorConf(sparkConf = conf),
+      new SecurityManager(conf), defaultProfile)
+
+    val executor = step.configurePod(SparkPod.initialPod())
+    checkEnv(executor, conf, Map(
+      SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> "userKeyStorePass",
+      SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
+  }
+
+  test("SSL RPC passwords shouldn't override an env var predefined on the pod template") {
+    val conf = baseConf.clone()
+      .set("spark.ssl.rpc.enabled", "true")
+      .set("spark.ssl.rpc.keyStorePassword", "keyStorePass")
+      .set("spark.ssl.rpc.trustStorePassword", "trustStorePass")
+
+    val step = new BasicExecutorFeatureStep(KubernetesTestConf.createExecutorConf(sparkConf = conf),
+      new SecurityManager(conf), defaultProfile)
+
+    val templatePod = SparkPod.initialPod()
+    val templateContainer = new ContainerBuilder(templatePod.container)
+      .addNewEnv()
+        .withName(SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD)
+        .withNewValueFrom()
+          .withNewSecretKeyRef()
+            .withKey("keystore-password")
+            .withName("rpc-secret")
+            .endSecretKeyRef()
+          .endValueFrom()
+        .endEnv()
+      .build()
+
+    val executor = step.configurePod(SparkPod(templatePod.pod, templateContainer))
+    checkEnv(executor, conf, Map(
+      SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> null,
+      SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
+  }
+
+  test("SSL RPC passwords inherited from the global spark.ssl.* namespace propagate") {
+    val conf = baseConf.clone()
+      .set("spark.ssl.enabled", "true")
+      .set("spark.ssl.keyStorePassword", "globalKeyStorePass")
+      .set("spark.ssl.trustStorePassword", "globalTrustStorePass")
+      .set("spark.ssl.rpc.enabled", "true")
+
+    val step = new BasicExecutorFeatureStep(KubernetesTestConf.createExecutorConf(sparkConf = conf),
+      new SecurityManager(conf), defaultProfile)
+
+    val executor = step.configurePod(SparkPod.initialPod())
+    checkEnv(executor, conf, Map(
+      SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> "globalKeyStorePass",
+      SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "globalTrustStorePass"))
+  }
+
   test("SPARK-32661 test executor offheap memory") {
     baseConf.set(MEMORY_OFFHEAP_ENABLED, true)
     baseConf.set("spark.memory.offHeap.size", "42m")
@@ -775,6 +887,10 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     val extraJavaOptsEnvs = extraJavaOpts.zipWithIndex.map { case (opt, ind) =>
       s"$ENV_JAVA_OPT_PREFIX${ind + extraJavaOptsStart}" -> opt
     }.toMap
+
+    val duplicateEnvNames = executorPod.container.getEnv.asScala
+      .groupBy(_.getName).filter(_._2.size > 1).keys
+    assert(duplicateEnvNames.isEmpty, s"duplicate env names: ${duplicateEnvNames.mkString(", ")}")
 
     val containerEnvs = executorPod.container.getEnv.asScala.map {
       x => (x.getName, x.getValue)
