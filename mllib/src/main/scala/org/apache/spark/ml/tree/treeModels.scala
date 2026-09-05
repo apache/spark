@@ -169,6 +169,16 @@ private[spark] trait TreeEnsembleModel[M <: DecisionTreeModel] {
 
 private[ml] object TreeEnsembleModel {
 
+  private[ml] def predictLeaf(features: Vector, rootNodes: Array[Node]): Vector = {
+    val indices = Array.ofDim[Double](rootNodes.length)
+    var i = 0
+    while (i < rootNodes.length) {
+      indices(i) = DecisionTreeModel.predictLeaf(features, rootNodes(i))
+      i += 1
+    }
+    Vectors.dense(indices)
+  }
+
   /**
    * Given a tree ensemble model, compute the importance of each feature.
    * This generalizes the idea of "Gini" importance to other losses,
