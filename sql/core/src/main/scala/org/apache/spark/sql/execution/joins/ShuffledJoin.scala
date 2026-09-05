@@ -20,7 +20,13 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, LeftAnti, LeftExistence, LeftOuter, LeftSingle, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.internal.SQLConf
+
+private[sql] object ShuffledJoinTags {
+  val UNMATCHABLE_ROW_GUARD: TreeNodeTag[Unit] =
+    TreeNodeTag[Unit]("unmatchable_row_join_guard")
+}
 
 /**
  * Holds common logic for join operators by shuffling two child relations
@@ -48,6 +54,9 @@ trait ShuffledJoin extends JoinCodegenSupport {
       preservedSideHasNullableKeys
   }
 
+  private lazy val hasUnmatchableRowGuard: Boolean =
+    leftKeys.exists(_.getTagValue(ShuffledJoinTags.UNMATCHABLE_ROW_GUARD).isDefined)
+
   override def nodeName: String = {
     if (isSkewJoin) super.nodeName + "(skew=true)" else super.nodeName
   }
@@ -59,6 +68,13 @@ trait ShuffledJoin extends JoinCodegenSupport {
       // We re-arrange the shuffle partitions to deal with skew join, and the new children
       // partitioning doesn't satisfy `ClusteredDistribution`.
       UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
+    } else if (canSpreadNullJoinKeys && hasUnmatchableRowGuard) {
+      // Use every physical join key. In particular, a planner-added nullable guard key must not
+      // be dropped in favor of an existing partitioning on only the original equi-join keys.
+      ClusteredDistribution(
+        leftKeys, requireAllClusterKeys = true, allowNullKeySpreading = true) ::
+        ClusteredDistribution(
+          rightKeys, requireAllClusterKeys = true, allowNullKeySpreading = true) :: Nil
     } else if (canSpreadNullJoinKeys) {
       ClusteredDistribution(leftKeys, allowNullKeySpreading = true) ::
         ClusteredDistribution(rightKeys, allowNullKeySpreading = true) :: Nil
