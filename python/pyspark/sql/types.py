@@ -3066,9 +3066,10 @@ def _first_timestamp_nanos_map_key_type(dt: DataType) -> Optional["DataType"]:
     if isinstance(dt, MapType):
         if _has_type(dt.keyType, AnyTimestampNanoType):
             return dt.keyType
-        return _first_timestamp_nanos_map_key_type(
-            dt.keyType
-        ) or _first_timestamp_nanos_map_key_type(dt.valueType)
+        # The check above already proves the whole key subtree carries no nanosecond type (so a map
+        # nested inside the key can't have a nanosecond key either); only the value type may still
+        # contain such a map.
+        return _first_timestamp_nanos_map_key_type(dt.valueType)
     elif isinstance(dt, ArrayType):
         return _first_timestamp_nanos_map_key_type(dt.elementType)
     elif isinstance(dt, StructType):
