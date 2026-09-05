@@ -194,6 +194,9 @@ abstract class InMemoryBaseTable(
   private val allowUnsupportedTransforms =
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
 
+  private val simulatePartialColumnPruning = properties
+    .getOrDefault(InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING, "false").toBoolean
+
   private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
   private val autoSchemaEvolution = properties.getOrDefault("auto-schema-evolution", "true")
     .toBoolean
@@ -572,10 +575,21 @@ abstract class InMemoryBaseTable(
       // them by their logical (original) names, not their current names.
       val schemaNames = tableSchema.map(_.name).toSet
       val prunedFields = requiredSchema.filter {
-        case MetadataStructFieldWithLogicalName(f, name) => metadataColumnNames.contains(name)
+        case MetadataStructFieldWithLogicalName(_, name) => metadataColumnNames.contains(name)
         case f => schemaNames.contains(f.name)
       }
-      schema = StructType(prunedFields)
+      schema = if (simulatePartialColumnPruning) {
+        // Prune the metadata columns as required, but report every data column back from
+        // `Scan.readSchema()` regardless of what was required.
+        StructType(tableSchema ++ prunedFields.filter(isRequiredMetadataField))
+      } else {
+        StructType(prunedFields)
+      }
+    }
+
+    private def isRequiredMetadataField(field: StructField): Boolean = field match {
+      case MetadataStructFieldWithLogicalName(_, name) => metadataColumnNames.contains(name)
+      case _ => false
     }
 
     override def pushFilters(filters: Array[Filter]): Array[Filter] = {
@@ -1053,6 +1067,13 @@ object InMemoryBaseTable {
 
   // SQL conf key that enables column ID assignment
   val ASSIGN_COLUMN_IDS = "spark.sql.test.inMemoryTable.assignColumnIds"
+
+  // Test table property that simulates a connector which accepts a required schema but only
+  // partially applies it: every data column is reported from Scan.readSchema() while the required
+  // metadata columns are still pruned. `SupportsPushDownRequiredColumns` permits partial pruning of
+  // data columns; dropping the required metadata columns is not permitted, since
+  // `SupportsMetadataColumns` makes the read schema the only channel that delivers them.
+  val SIMULATE_PARTIAL_COLUMN_PRUNING = "simulate-partial-column-pruning"
 
   /**
    * Assigns fresh IDs to any top-level column or nested struct field that does not already
