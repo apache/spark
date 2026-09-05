@@ -33,6 +33,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import org.apache.spark.SparkConf;
+import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
@@ -968,5 +969,44 @@ public class UnsafeExternalSorterSuite {
 
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testLoserTreeMergeWithSpillsAndInMemory() throws Exception {
+    SparkConf loserConf = new SparkConf()
+        .set(package$.MODULE$.UNSAFE_SORTER_SPILL_MERGER_USE_LOSER_TREE(), true);
+    SparkEnv env = mock(SparkEnv.class);
+    when(env.conf()).thenReturn(loserConf);
+    SparkEnv.set(env);
+    try {
+      final UnsafeExternalSorter sorter = newSorter();
+      // spill 1: {5, 8, 9}
+      insertNumber(sorter, 5);
+      insertNumber(sorter, 9);
+      insertNumber(sorter, 8);
+      sorter.spill();
+      // spill 2: {1, 3, 7}
+      insertNumber(sorter, 7);
+      insertNumber(sorter, 1);
+      insertNumber(sorter, 3);
+      sorter.spill();
+      // in-memory: {2, 4, 6}
+      insertNumber(sorter, 4);
+      insertNumber(sorter, 6);
+      insertNumber(sorter, 2);
+
+      UnsafeSorterIterator iter = sorter.getSortedIterator();
+      for (int i = 1; i <= 9; i++) {
+        iter.loadNext();
+        assertEquals(i, iter.getKeyPrefix());
+        assertEquals(i, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+      }
+      assertFalse(iter.hasNext());
+
+      sorter.cleanupResources();
+      assertSpillFilesWereCleanedUp();
+    } finally {
+      SparkEnv.set(null);
+    }
   }
 }
