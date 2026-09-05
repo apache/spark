@@ -356,4 +356,24 @@ class LimitPushdownSuite extends PlanTest {
       comparePlans(Optimize.execute(originalQuery2), originalQuery2)
     }
   }
+
+  test("SPARK-58385: keep a global limit whose limit expression is not a literal") {
+    // The child limit is `Add(1, 1)`, which is still unfolded when LimitPushDown runs, so its
+    // `maxRowsPerPartition` is None. That must not be read as "the child has no cap": the global
+    // limit has to survive, otherwise a global cap of 2 rows degrades to a per-partition one.
+    Seq(Cross, Inner).foreach { joinType =>
+      val originalQuery = x.join(y.limit(Add(1, 1)), joinType).limit(4)
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val correctAnswer = Limit(4, LocalLimit(4, x).join(Limit(2, y), joinType)).analyze
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("SPARK-58385: keep a global limit with a non-literal limit expression under Union") {
+    val unionQuery = Union(testRelation, testRelation2.limit(Add(1, 1))).limit(4)
+    val optimized = Optimize.execute(unionQuery.analyze)
+    val correctAnswer =
+      Limit(4, Union(LocalLimit(4, testRelation), Limit(2, testRelation2))).analyze
+    comparePlans(optimized, correctAnswer)
+  }
 }
