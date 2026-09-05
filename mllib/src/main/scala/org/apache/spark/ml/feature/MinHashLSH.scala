@@ -25,9 +25,11 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{SQLDataTypes, Vector, Vectors}
-import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.param.shared.HasSeed
+import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
+import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasSeed}
 import org.apache.spark.ml.util._
+import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.functions.{col, size}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SizeEstimator
 
@@ -49,10 +51,21 @@ import org.apache.spark.util.SizeEstimator
 class MinHashLSHModel private[ml](
     override val uid: String,
     private[ml] val randCoefficients: Array[(Int, Int)])
-  extends LSHModel[MinHashLSHModel] {
+  extends LSHModel[MinHashLSHModel] with HasHandleInvalid {
 
   // For ml connect only
   private[ml] def this() = this("", Array.empty)
+
+  /** @group param */
+  @Since("5.0.0")
+  override val handleInvalid: Param[String] = new Param[String](
+    this,
+    "handleInvalid",
+    "how to handle invalid entries. Options are skip (which will filter out " +
+      "rows with bad values), error (which will throw an error), or keep (returns empty vector array).",
+    ParamValidators.inArray(Array("error", "skip", "keep")))
+
+  setDefault(handleInvalid, "error")
 
   private[spark] override def estimatedSize: Long = {
     var size = estimateMatadataSize
@@ -69,14 +82,28 @@ class MinHashLSHModel private[ml](
   @Since("2.4.0")
   override def setOutputCol(value: String): this.type = super.set(outputCol, value)
 
+  /** @group setParam */
+  @Since("5.0.0")
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
+
   @Since("2.1.0")
   override protected[ml] def hashFunction(elems: Vector): Array[Vector] = {
-    MinHashLSHModel.hashFunction(elems, randCoefficients)
+    MinHashLSHModel.hashFunction(elems, randCoefficients, $(handleInvalid))
   }
 
   override protected[ml] def createTransformFunc: Vector => Array[Vector] = {
     val localRandCoefficients = randCoefficients
-    elems => MinHashLSHModel.hashFunction(elems, localRandCoefficients)
+    val localHandleInvalid = $(handleInvalid)
+    elems => MinHashLSHModel.hashFunction(elems, localRandCoefficients, localHandleInvalid)
+  }
+
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    val res = super.transform(dataset)
+    if ($(handleInvalid) == "skip") {
+      res.filter(size(col($(outputCol))) > 0)
+    } else {
+      res
+    }
   }
 
   @Since("2.1.0")
@@ -166,7 +193,8 @@ class MinHashLSHModel private[ml](
  * <a href="https://en.wikipedia.org/wiki/MinHash">Wikipedia on MinHash</a>
  */
 @Since("2.1.0")
-class MinHashLSH(override val uid: String) extends LSH[MinHashLSHModel] with HasSeed {
+class MinHashLSH(override val uid: String)
+  extends LSH[MinHashLSHModel] with HasSeed with HasHandleInvalid {
 
   @Since("2.1.0")
   override def setInputCol(value: String): this.type = super.setInputCol(value)
@@ -177,6 +205,19 @@ class MinHashLSH(override val uid: String) extends LSH[MinHashLSHModel] with Has
   @Since("2.1.0")
   override def setNumHashTables(value: Int): this.type = super.setNumHashTables(value)
 
+  /** @group param */
+  @Since("5.0.0")
+  override val handleInvalid: Param[String] = new Param[String](
+    this,
+    "handleInvalid",
+    "how to handle invalid entries. Options are skip (which will filter out " +
+      "rows with bad values), error (which will throw an error), or keep (returns empty vector array).",
+    ParamValidators.inArray(Array("error", "skip", "keep")))
+
+  /** @group setParam */
+  @Since("5.0.0")
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
+
   @Since("2.1.0")
   def this() = {
     this(Identifiable.randomUID("mh-lsh"))
@@ -185,6 +226,8 @@ class MinHashLSH(override val uid: String) extends LSH[MinHashLSHModel] with Has
   /** @group setParam */
   @Since("2.1.0")
   def setSeed(value: Long): this.type = set(seed, value)
+
+  setDefault(handleInvalid, "error")
 
   @Since("2.1.0")
   override protected[ml] def createRawLSHModel(inputDim: Int): MinHashLSHModel = {
@@ -221,15 +264,27 @@ object MinHashLSHModel extends MLReadable[MinHashLSHModel] {
 
   private def hashFunction(
       elems: Vector,
-      randCoefficients: Array[(Int, Int)]): Array[Vector] = {
-    require(elems.nonZeroIterator.nonEmpty, "Must have at least 1 non zero entry.")
-    val hashValues = randCoefficients.map { case (a, b) =>
-      elems.nonZeroIterator.map { case (i, _) =>
-        ((1L + i) * a + b) % MinHashLSH.HASH_PRIME
-      }.min.toDouble
+      randCoefficients: Array[(Int, Int)],
+      handleInvalid: String = "error"): Array[Vector] = {
+    if (elems.nonZeroIterator.isEmpty) {
+      handleInvalid match {
+        case "error" =>
+          require(elems.nonZeroIterator.nonEmpty, "Must have at least 1 non zero entry.")
+          Array.empty[Vector]
+        case "keep" | "skip" =>
+          Array.empty[Vector]
+        case _ =>
+          throw new IllegalArgumentException(s"Invalid handleInvalid mode: $handleInvalid")
+      }
+    } else {
+      val hashValues = randCoefficients.map { case (a, b) =>
+        elems.nonZeroIterator.map { case (i, _) =>
+          ((1L + i) * a + b) % MinHashLSH.HASH_PRIME
+        }.min.toDouble
+      }
+      // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
+      hashValues.map(Vectors.dense(_))
     }
-    // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
-    hashValues.map(Vectors.dense(_))
   }
 
   private[ml] case class Data(randCoefficients: Array[Int])
