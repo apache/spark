@@ -263,9 +263,29 @@ object SparkBuild extends PomBuild {
     scalaStyleOnTest := cachedScalaStyle(Test).value
   )
 
+  private def isTruthy(value: String): Boolean = {
+    Set("1", "true", "yes").contains(value.toLowerCase(Locale.ROOT))
+  }
+
+  private val scalaInitializationCheckEnabled =
+    Properties.envOrNone("SPARK_SCALA_CHECKINIT").exists(isTruthy) ||
+      Properties.propOrNone("spark.scala.checkinit").exists(isTruthy)
+
+  private val scalaInitializationCheckOptions =
+    if (scalaInitializationCheckEnabled) {
+      Seq(
+        // Detect reads of uninitialized vals, such as eager trait initializers. Disable
+        // specialization in this validation mode because Scala 2.13.18's -Xcheckinit
+        // instrumentation can fail during specialization-generated constructor phases.
+        "-Xcheckinit",
+        "-no-specialization")
+    } else {
+      Seq.empty
+    }
+
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     (Compile / scalacOptions) ++= {
-      Seq(
+      scalaInitializationCheckOptions ++ Seq(
         // replace -Xfatal-warnings with fine-grained configuration, since 2.13.2
         // verbose warning on deprecation, error on all others
         // see `scalac -Wconf:help` for details
@@ -293,7 +313,8 @@ object SparkBuild extends PomBuild {
         // SPARK-49937 ban call the method `SparkThrowable#getErrorClass`
         "-Wconf:cat=deprecation&msg=method getErrorClass in trait SparkThrowable is deprecated:e"
       )
-    }
+    },
+    (Test / scalacOptions) ++= scalaInitializationCheckOptions
   )
 
   lazy val sharedSettings = checkJavaVersionSettings ++
