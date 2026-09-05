@@ -330,8 +330,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     ShuffleChecksumBlockId checksumBlockId =
       new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
     String checksumAlgorithm = conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM());
-    String checksumFileName = ShuffleChecksumHelper.getChecksumFileName(
-      checksumBlockId.name(), checksumAlgorithm);
+    String checksumFileName = checksumBlockId.name();
     File checksumFile = new File(tempDir, checksumFileName);
     File dataFile = new File(tempDir, "data");
     File indexFile = new File(tempDir, "index");
@@ -361,8 +360,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     ShuffleChecksumBlockId checksumBlockId =
       new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
     String checksumAlgorithm = conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM());
-    String checksumFileName = ShuffleChecksumHelper.getChecksumFileName(
-      checksumBlockId.name(), checksumAlgorithm);
+    String checksumFileName = checksumBlockId.name();
     File checksumFile = new File(tempDir, checksumFileName);
     File dataFile = new File(tempDir, "data");
     File indexFile = new File(tempDir, "index");
