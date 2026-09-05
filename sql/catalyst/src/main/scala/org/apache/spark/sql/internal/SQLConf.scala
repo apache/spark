@@ -6965,6 +6965,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN =
+    buildConf("spark.sql.legacy.jdbc.roundIntegralCastPushdown.enabled")
+      .internal()
+      .doc("When true, a cast from a fractional type to an integral type that is pushed down to " +
+        "a JDBC data source is not wrapped in the dialect's truncating function, so the result " +
+        "follows the database's own cast semantics (the legacy behavior). Databases that round " +
+        "such casts then return different results than Spark, which truncates toward zero.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_JDBC_TIME_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.jdbc.timeMapping.enabled")
       .internal()
@@ -9120,6 +9132,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyMsSqlServerDatetimeOffsetMappingEnabled: Boolean =
     getConf(LEGACY_MSSQLSERVER_DATETIMEOFFSET_MAPPING_ENABLED)
+
+  def legacyJdbcRoundIntegralCastPushdown: Boolean =
+    getConf(LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN)
 
   def legacyMySqlBitArrayMappingEnabled: Boolean =
     getConf(LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED)

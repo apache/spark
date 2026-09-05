@@ -77,6 +77,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
 
   override val catalogName: String = "mysql"
   override val db = new MySQLDatabaseOnDocker
+  override def roundsIntegralCast: Boolean = true
 
   case class JdbcClientTypes(INTEGER: String, STRING: String)
 

@@ -50,6 +50,9 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  // Oracle rounds half away from zero when casting to an integral type.
+  override def truncateFractionalValue(expr: String): String = s"TRUNC($expr)"
+
   override def isObjectNotFoundException(e: SQLException): Boolean = {
     e.getMessage.contains("ORA-00942") ||
       e.getMessage.contains("ORA-39165")

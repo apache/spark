@@ -442,7 +442,17 @@ abstract class JdbcDialect extends Serializable with Logging {
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
       val databaseTypeDefinition =
         getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
-      s"CAST($expr AS $databaseTypeDefinition)"
+      // Spark truncates toward zero when casting a fractional value to an integral type, but many
+      // databases round instead, so a pushed down cast can return a different result than Spark.
+      // Dialects for such databases override `truncateFractionalValue` to truncate the value first.
+      val castedExpr = if (exprDataType.isInstanceOf[FractionalType] &&
+        dataType.isInstanceOf[IntegralType] &&
+        !SQLConf.get.legacyJdbcRoundIntegralCastPushdown) {
+        truncateFractionalValue(expr)
+      } else {
+        expr
+      }
+      s"CAST($castedExpr AS $databaseTypeDefinition)"
     }
 
     override def visitSQLFunction(funcName: String, inputs: Array[Expression]): String = {
@@ -524,6 +534,17 @@ abstract class JdbcDialect extends Serializable with Logging {
       }
     }
   }
+
+  /**
+   * Truncates `expr` toward zero, so that a cast from a fractional type to an integral type that
+   * is pushed down matches Spark, which truncates rather than rounds. Dialects for databases that
+   * round such casts override this with the database's truncating function. The default returns
+   * `expr` unchanged, for databases whose cast already truncates like Spark.
+   * @param expr The SQL string of the value being cast.
+   * @return The SQL string to cast instead of `expr`.
+   */
+  @Since("4.3.0")
+  def truncateFractionalValue(expr: String): String = expr
 
   /**
    * Returns whether the database supports function.
