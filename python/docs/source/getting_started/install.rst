@@ -83,6 +83,13 @@ Supported values in ``PYSPARK_HADOOP_VERSION`` are:
 
 Note that this installation of PySpark with/without a specific Hadoop version is experimental. It can change or be removed between minor releases.
 
+.. note::
+
+   Use ``pyspark`` or ``pyspark[connect]`` for a full PySpark installation.
+   Use ``pyspark-connect`` when you want Spark Connect to be the default mode.
+   Use ``pyspark-client`` when you only need the pure Python Spark Connect client
+   for connecting to a remote Spark server.
+
 
 Making Spark Connect the default
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
