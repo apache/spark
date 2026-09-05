@@ -1186,6 +1186,23 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59252: a planned scan keeps the partitioning it was planned with") {
+    createBucketedIdTable("l4", 4)
+    createBucketedIdTable("r4", 4)
+
+    val df = sql("SELECT l.id FROM testcat.ns.l4 l JOIN testcat.ns.r4 r ON l.id = r.id")
+    val plan = stripAQEPlan(df.queryExecution.executedPlan)
+    // The planner committed to the key-grouped layout: it dropped both shuffles and put a
+    // `GroupPartitionsExec` on each side. Those nodes ask their child for the partitioning again at
+    // execution, so the scan has to keep answering what it was planned with.
+    assert(collectShuffles(plan).isEmpty)
+    assert(collectGroupPartitions(plan).size == 2)
+
+    withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "false") {
+      checkAnswer(df, (0 until 12).map(i => Row(i.toLong)))
+    }
+  }
+
   test("partitioned join: join with two partition keys and matching & sorted partitions") {
     val items_partitions = Array(bucket(8, "id"), days("arrive_time"))
     createTable(items, itemsColumns, items_partitions)
