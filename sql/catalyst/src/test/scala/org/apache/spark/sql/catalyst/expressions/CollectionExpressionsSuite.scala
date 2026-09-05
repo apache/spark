@@ -2649,6 +2649,29 @@ class CollectionExpressionsSuite
       Seq[Int](4, 5)))
     checkEvaluation(ArrayDistinct(c4), Seq[Seq[Int]](null, Seq[Int](1, 2), Seq[Int](3, 4),
       Seq[Int](4, 5)))
+
+    val structType = StructType(Seq(StructField("a", IntegerType, nullable = true)))
+    val d0 = Literal.create(Seq(create_row(1), create_row(2), create_row(1), create_row(2)),
+      ArrayType(structType))
+    val d1 = Literal.create(Seq(null, create_row(2), null, create_row(2)),
+      ArrayType(structType))
+    checkEvaluation(ArrayDistinct(d0), Seq(create_row(1), create_row(2)))
+    checkEvaluation(ArrayDistinct(d1), Seq(null, create_row(2)))
+
+    val nestedStructType = ArrayType(ArrayType(structType))
+    val e0 = Literal.create(Seq(
+      Seq(create_row(1), create_row(2)),
+      Seq(create_row(3)),
+      Seq(create_row(1), create_row(2))),
+      nestedStructType)
+    val e1 = Literal.create(Seq(
+      Seq(create_row(1), create_row(2)),
+      Seq(create_row(4))),
+      nestedStructType)
+    checkEvaluation(ArrayDistinct(e0),
+      Seq(Seq(create_row(1), create_row(2)), Seq(create_row(3))))
+    checkEvaluation(ArrayDistinct(e1),
+      Seq(Seq(create_row(1), create_row(2)), Seq(create_row(4))))
   }
 
   test("Array Union") {
@@ -2739,6 +2762,29 @@ class CollectionExpressionsSuite
     assert(ArrayUnion(a00, a02).dataType.asInstanceOf[ArrayType].containsNull)
     assert(ArrayUnion(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
     assert(ArrayUnion(a20, a22).dataType.asInstanceOf[ArrayType].containsNull)
+
+    val structType = StructType(Seq(StructField("a", IntegerType, nullable = true)))
+    val structArray0 = Literal.create(Seq(create_row(1), create_row(2), null),
+      ArrayType(structType))
+    val structArray1 = Literal.create(Seq(create_row(2), create_row(3), null),
+      ArrayType(structType))
+    checkEvaluation(ArrayUnion(structArray0, structArray1),
+      Seq(create_row(1), create_row(2), null, create_row(3)))
+
+    val nestedStructType = ArrayType(ArrayType(structType))
+    val nestedStructArray0 = Literal.create(Seq(
+      Seq(create_row(1), create_row(2)),
+      Seq(create_row(3))),
+      nestedStructType)
+    val nestedStructArray1 = Literal.create(Seq(
+      Seq(create_row(1), create_row(2)),
+      Seq(create_row(3), create_row(4))),
+      nestedStructType)
+    checkEvaluation(ArrayUnion(nestedStructArray0, nestedStructArray1), Seq(
+      Seq(create_row(1), create_row(2)),
+      Seq(create_row(3)),
+      Seq(create_row(3), create_row(4))
+    ))
   }
 
   test("Shuffle") {
@@ -2923,6 +2969,29 @@ class CollectionExpressionsSuite
     assert(ArrayExcept(a04, a05).dataType.asInstanceOf[ArrayType].containsNull)
     assert(ArrayExcept(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
     assert(ArrayExcept(a24, a22).dataType.asInstanceOf[ArrayType].containsNull)
+
+    val structType = StructType(Seq(StructField("a", IntegerType, nullable = true)))
+    val structArray0 = Literal.create(Seq(create_row(1), create_row(2), null, create_row(1)),
+      ArrayType(structType))
+    val structArray1 = Literal.create(Seq(create_row(2), create_row(3), null),
+      ArrayType(structType))
+    checkEvaluation(ArrayExcept(structArray0, structArray1), Seq(create_row(1)))
+    checkEvaluation(ArrayExcept(structArray1, structArray0), Seq(create_row(3)))
+
+    val nestedStructType = ArrayType(ArrayType(structType))
+    val nestedStructArray0 = Literal.create(Seq(
+      Seq(create_row(1), create_row(2)),
+      Seq(create_row(3)),
+      Seq(create_row(1), create_row(2))),
+      nestedStructType)
+    val nestedStructArray1 = Literal.create(Seq(
+      Seq(create_row(3)),
+      Seq(create_row(4))),
+      nestedStructType)
+    checkEvaluation(ArrayExcept(nestedStructArray0, nestedStructArray1),
+      Seq(Seq(create_row(1), create_row(2))))
+    checkEvaluation(ArrayExcept(nestedStructArray1, nestedStructArray0),
+      Seq(Seq(create_row(4))))
   }
 
   test("Array Except - null handling") {
@@ -3191,6 +3260,29 @@ class CollectionExpressionsSuite
     assert(ArrayIntersect(a04, a05).dataType.asInstanceOf[ArrayType].containsNull)
     assert(ArrayIntersect(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
     assert(ArrayIntersect(a23, a24).dataType.asInstanceOf[ArrayType].containsNull)
+
+    val structType = StructType(Seq(StructField("a", IntegerType, nullable = true)))
+    val structArray0 = Literal.create(Seq(create_row(1), create_row(2), null, create_row(1)),
+      ArrayType(structType))
+    val structArray1 = Literal.create(Seq(create_row(2), create_row(3), null),
+      ArrayType(structType))
+    checkEvaluation(ArrayIntersect(structArray0, structArray1), Seq(create_row(2), null))
+    checkEvaluation(ArrayIntersect(structArray1, structArray0), Seq(create_row(2), null))
+
+    val nestedStructType = ArrayType(ArrayType(structType))
+    val nestedStructArray0 = Literal.create(Seq(
+      Seq(create_row(1), create_row(2)),
+      Seq(create_row(3)),
+      Seq(create_row(1), create_row(2))),
+      nestedStructType)
+    val nestedStructArray1 = Literal.create(Seq(
+      Seq(create_row(3)),
+      Seq(create_row(4))),
+      nestedStructType)
+    checkEvaluation(ArrayIntersect(nestedStructArray0, nestedStructArray1),
+      Seq(Seq(create_row(3))))
+    checkEvaluation(ArrayIntersect(nestedStructArray1, nestedStructArray0),
+      Seq(Seq(create_row(3))))
   }
 
   test("Array Intersect - null handling") {
@@ -3221,6 +3313,35 @@ class CollectionExpressionsSuite
       Literal.create(Seq(1d, 2d), ArrayType(DoubleType, false)),
       Literal.create(Seq(1d, null), ArrayType(DoubleType))),
       Seq(1d))
+  }
+
+  test("Array set operations normalize nested floating-point values") {
+    val structType = StructType(Seq(StructField("value", DoubleType)))
+    val arrayType = ArrayType(structType, containsNull = false)
+    val nonCanonicalNaN = java.lang.Double.longBitsToDouble(0x7ff0000000000001L)
+    val anotherNonCanonicalNaN = java.lang.Double.longBitsToDouble(0x7ff0000000000002L)
+
+    def row(value: Double): InternalRow = create_row(value)
+    def array(values: Double*): Literal = Literal.create(values.map(row), arrayType)
+
+    checkEvaluation(
+      ArrayDistinct(array(-0.0, 0.0, nonCanonicalNaN, anotherNonCanonicalNaN, 1.0)),
+      Seq(row(-0.0), row(Double.NaN), row(1.0)))
+    checkEvaluation(
+      ArrayUnion(
+        array(-0.0, nonCanonicalNaN),
+        array(0.0, anotherNonCanonicalNaN, 1.0)),
+      Seq(row(-0.0), row(Double.NaN), row(1.0)))
+    checkEvaluation(
+      ArrayIntersect(
+        array(-0.0, nonCanonicalNaN, 1.0),
+        array(0.0, anotherNonCanonicalNaN, 2.0)),
+      Seq(row(-0.0), row(Double.NaN)))
+    checkEvaluation(
+      ArrayExcept(
+        array(-0.0, nonCanonicalNaN, 1.0),
+        array(0.0, anotherNonCanonicalNaN)),
+      Seq(row(1.0)))
   }
 
   test("SPARK-31980: Start and end equal in month range") {
