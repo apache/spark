@@ -2207,6 +2207,37 @@ package object config {
       .version("4.2.0")
       .fallbackConf(Network.NETWORK_TIMEOUT)
 
+  // Both TTLs below are in seconds when given without a unit, matching the pre-2.0
+  // `spark.cleaner.ttl` they restore, and both refuse anything under 10 minutes: the TTL has to
+  // outlast the longest gap between uses and the longest stage runtime, and a value below that
+  // reclaims blocks a running job still needs.
+  private[spark] val CLEANER_TTL_MINIMUM_SECONDS = 600L
+
+  private[spark] val CLEANER_TTL_RDD =
+    ConfigBuilder("spark.cleaner.ttl.rdd")
+      .doc("Add a TTL for RDD cache blocks (broadcast blocks are not TTL-cleaned; shuffle blocks " +
+        "use spark.cleaner.ttl.shuffle). By default blocks are only removed after GC on the " +
+        "driver, which will not happen for DataFrames or RDDs at the global scope. Interpreted " +
+        "as seconds when no unit is given, and must be at least 10 minutes. Must be set before " +
+        "starting the SparkContext.")
+      .version("4.4.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= CLEANER_TTL_MINIMUM_SECONDS,
+        "The RDD block TTL must be at least 10 minutes.")
+      .createOptional
+
+  private[spark] val CLEANER_TTL_SHUFFLE =
+    ConfigBuilder("spark.cleaner.ttl.shuffle")
+      .doc("Add a TTL for shuffle blocks. By default blocks are only removed after GC on the " +
+        "driver, which will not happen for DataFrames or RDDs at the global scope. Interpreted " +
+        "as seconds when no unit is given, and must be at least 10 minutes. Must be set before " +
+        "starting the SparkContext.")
+      .version("4.4.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= CLEANER_TTL_MINIMUM_SECONDS,
+        "The shuffle block TTL must be at least 10 minutes.")
+      .createOptional
+
   private[spark] val EXECUTOR_LOGS_ROLLING_STRATEGY =
     ConfigBuilder("spark.executor.logs.rolling.strategy")
       .version("1.1.0")

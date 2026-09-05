@@ -232,7 +232,9 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _eventLogger: Option[EventLoggingListener] = None
   private var _driverLogger: Option[DriverLogger] = None
   private var _executorAllocationManager: Option[ExecutorAllocationManager] = None
-  private var _cleaner: Option[ContextCleaner] = None
+  // @volatile because the TTL cleaner threads read it from their reap closures, and it is assigned
+  // after those closures are published.
+  @volatile private var _cleaner: Option[ContextCleaner] = None
   private var _listenerBusStarted: Boolean = false
   private var _jars: Seq[String] = _
   private var _files: Seq[String] = _
@@ -321,6 +323,13 @@ class SparkContext(config: SparkConf) extends Logging {
     val map: ConcurrentMap[Int, RDD[_]] = new MapMaker().weakValues().makeMap[Int, RDD[_]]()
     map.asScala
   }
+
+  // The RDD TTL cleaner must never reap a locally checkpointed RDD: local checkpointing truncates
+  // lineage, so its cache blocks are the only copy of the data. Asked of the RDD itself rather than
+  // tracked alongside; a reaped id is gone from persistentRdds, which is the same answer.
+  private[spark] def isLocallyCheckpointedRdd(rddId: Int): Boolean =
+    persistentRdds.get(rddId).exists(_.isLocallyCheckpointed)
+
   def statusTracker: SparkStatusTracker = _statusTracker
 
   private[spark] def progressBar: Option[ConsoleProgressBar] = _progressBar
@@ -659,6 +668,43 @@ class SparkContext(config: SparkConf) extends Logging {
     _shuffleDriverComponents = ShuffleDataIOUtils.loadShuffleDataIO(_conf).driver()
     _shuffleDriverComponents.initializeApplication().asScala.foreach { case (k, v) =>
       _conf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k, v)
+    }
+
+    // Wire up the TTL cleaners: they live in SparkEnv components built before the pieces they need
+    // (ShuffleDriverComponents, the ContextCleaner and this SparkContext) exist.
+    _env.mapOutputTracker match {
+      case mapOutputTrackerMaster: MapOutputTrackerMaster =>
+        // Read once, not per reap, like the other TTL configs.
+        val blockingShuffleRemoval = _conf.get(CLEANER_REFERENCE_TRACKING_BLOCKING_SHUFFLE)
+        // Together these mirror the tail of ContextCleaner.doCleanupShuffle: delete the files, and
+        // (after the tracker has unregistered the shuffle) notify the listeners so shuffle-tracking
+        // dynamic allocation can release an executor that only held this shuffle.
+        mapOutputTrackerMaster.shuffleFileRemover = Some { shuffleId =>
+          _shuffleDriverComponents.removeShuffle(shuffleId, blockingShuffleRemoval)
+        }
+        mapOutputTrackerMaster.shuffleCleanedNotifier = Some { shuffleId =>
+          _cleaner.foreach(_.notifyShuffleCleaned(shuffleId))
+        }
+      case _ =>
+    }
+    _env.blockManagerMasterEndpoint.foreach { endpoint =>
+      endpoint.rddReapable = rddId => !isLocallyCheckpointedRdd(rddId)
+      // Reap through the same entry point the GC-driven cleanup uses; unpersistRDD is the fallback
+      // when reference tracking is off. Both free the blocks without resetting the RDD's storage
+      // level (the cleaner only has an id), so a later action re-caches it -- but both also drop
+      // the RDD from persistentRdds, and RDD.persist only re-registers on the way out of
+      // StorageLevel.NONE, so a reaped RDD stops appearing in getPersistentRDDs.
+      endpoint.rddReaper = { rddId =>
+        // Re-check the veto here, not just in rddReapable: an RDD can be locally checkpointed
+        // between the cleaner's check and this call, and reaping one destroys the only copy of its
+        // data. This narrows that window to the read below.
+        if (!isLocallyCheckpointedRdd(rddId)) {
+          _cleaner match {
+            case Some(contextCleaner) => contextCleaner.doCleanupRDD(rddId, blocking = false)
+            case None => unpersistRDD(rddId, blocking = false)
+          }
+        }
+      }
     }
 
     if (_conf.get(UI_REVERSE_PROXY)) {
@@ -2605,6 +2651,19 @@ class SparkContext(config: SparkConf) extends Logging {
       ShutdownHookManager.removeShutdownHook(_shutdownHookRef)
     }
 
+    // Before the ContextCleaner, the listener bus and the shuffle driver components below, all of
+    // which a reap in flight would use. Their own owners (SparkEnv, the endpoint's onStop) stop
+    // them too, but not until the very end of the teardown.
+    if (_env != null) {
+      Utils.tryLogNonFatalError {
+        _env.blockManagerMasterEndpoint.foreach(_.ttlCleaner.foreach(_.stop()))
+        _env.mapOutputTracker match {
+          case mapOutputTrackerMaster: MapOutputTrackerMaster =>
+            mapOutputTrackerMaster.ttlCleaner.foreach(_.stop())
+          case _ =>
+        }
+      }
+    }
     if (listenerBus != null) {
       Utils.tryLogNonFatalError {
         postApplicationEnd(exitCode)
