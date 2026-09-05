@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.time.{Instant, LocalDateTime}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.truncateNanosWithinMicroToPrecision
 // castToImpl: `spark.createDataFrame` is typed as the public sql.DataFrame, but `showString` is a
 // classic-only method; this implicit narrows the receiver to classic.Dataset for that call.
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
@@ -135,11 +136,6 @@ abstract class TimestampNanosRenderingSuiteBase extends QueryTest with SharedSpa
   // remainder floored to the type precision. Two values sharing epochMicros are distinguishable.
   // ==========================================================================================
   // .000000123 floors to 100ns at p=7, 120ns at p=8, 123ns at p=9; .000000999 -> 900 / 990 / 999.
-  private def flooredNano(base: Int, p: Int): Int = p match {
-    case 7 => base / 100 * 100
-    case 8 => base / 10 * 10
-    case 9 => base
-  }
 
   test("collect() over nanosecond TIMESTAMP_NTZ preserves the precision-floored remainder") {
     Seq(7, 8, 9).foreach { p =>
@@ -148,9 +144,13 @@ abstract class TimestampNanosRenderingSuiteBase extends QueryTest with SharedSpa
         "2020-01-01T00:00:00.000000999",
         null), p)
       val got = df.collect().map(r => Option(r.getAs[LocalDateTime]("c")).map(_.getNano)).toSet
-      assert(got === Set(Some(flooredNano(123, p)), Some(flooredNano(999, p)), None))
+      assert(got === Set(
+        Some(truncateNanosWithinMicroToPrecision(123, p)),
+        Some(truncateNanosWithinMicroToPrecision(999, p)),
+        None))
       // The two non-null values share epochMicros yet stay distinct at every supported precision.
-      assert(flooredNano(123, p) != flooredNano(999, p))
+      assert(truncateNanosWithinMicroToPrecision(123, p) !=
+        truncateNanosWithinMicroToPrecision(999, p))
     }
   }
 
@@ -161,7 +161,10 @@ abstract class TimestampNanosRenderingSuiteBase extends QueryTest with SharedSpa
         "2020-01-01T00:00:00.000000999Z",
         null), p)
       val got = df.collect().map(r => Option(r.getAs[Instant]("c")).map(_.getNano)).toSet
-      assert(got === Set(Some(flooredNano(123, p)), Some(flooredNano(999, p)), None))
+      assert(got === Set(
+        Some(truncateNanosWithinMicroToPrecision(123, p)),
+        Some(truncateNanosWithinMicroToPrecision(999, p)),
+        None))
     }
   }
 }
