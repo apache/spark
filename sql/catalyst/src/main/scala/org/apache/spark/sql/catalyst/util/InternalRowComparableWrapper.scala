@@ -115,6 +115,9 @@ object InternalRowComparableWrapper {
     new InternalRowComparableWrapper(partitionRow, partitionExpression.map(_.dataType))
   }
 
+  /** The cached ordering a wrapper of these `dataTypes` compares its rows with in `equals`. */
+  def orderingFor(dataTypes: Seq[DataType]): BaseOrdering = orderingCache.get(dataTypes)
+
   /** Creates a shared factory method for a given row schema to avoid excessive cache lookups. */
   def getInternalRowComparableWrapperFactory(
       dataTypes: Seq[DataType]): InternalRow => InternalRowComparableWrapper = {
