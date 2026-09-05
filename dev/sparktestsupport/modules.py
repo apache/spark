@@ -615,6 +615,7 @@ pyspark_core = Module(
         "pyspark.tests.test_stage_sched",
         "pyspark.tests.test_zero_copy_byte_stream",
         # unittests for upstream projects
+        "pyspark.tests.upstream.pandas.test_pandas_api_types",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_cast",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_default",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_non_default",
