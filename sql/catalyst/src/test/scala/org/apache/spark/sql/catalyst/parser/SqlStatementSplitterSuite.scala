@@ -101,6 +101,17 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
     assert(result.partialStatement.isEmpty)
   }
 
+  test("source positions trim Spark SQL Unicode whitespace") {
+    val sql = "\u00A0SELECT 1\u00A0;"
+    val result = SqlStatementSplitter.splitWithPositions(sql, identity)
+    val complete = result.completeStatements.head
+    assert(complete.statement == "SELECT 1")
+    assert(complete.start == 1)
+    assert(complete.length == 8)
+    assert(sql.substring(complete.start, complete.start + complete.length) ==
+      complete.statement)
+  }
+
   // ----------------------------------------------------------------------------------
   // Error tolerance (mirrors Trino behavior)
   // ----------------------------------------------------------------------------------

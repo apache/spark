@@ -43,9 +43,10 @@ import org.apache.spark.sql.execution.datasources.CreateTempViewUsing
  * executors without a session, so only the stock parser is available under
  * distributed eval.
  *
- * Every statement object includes its 1-based `start` in the original batch
- * and its `length`, excluding surrounding whitespace and the terminating
- * semicolon. On success it also includes `parse_success`, the statement
+ * Every statement object includes its 1-based UTF-16 code-unit `start` in the
+ * original batch and its UTF-16 code-unit `length`, excluding surrounding
+ * whitespace and the terminating semicolon. On success it also includes
+ * `parse_success`, the statement
  * identifier/code (ISO/IEC 9075-2:2023 Table 39), and omits unused optional
  * fields (`target_table_references`, `source_table_references`,
  * `function_references`, `select_list`, `parameter_markers`) when empty. On

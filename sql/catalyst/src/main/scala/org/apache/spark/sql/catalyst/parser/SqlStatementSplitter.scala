@@ -156,6 +156,11 @@ object SqlStatementSplitter {
     require(sqlText != null, "sqlText must not be null")
     require(validationPreprocess != null, "validationPreprocess must not be null")
 
+    // CodePointCharStream token offsets count Unicode code points, while
+    // String offsets and lengths count UTF-16 code units. Map once so each
+    // token-boundary lookup is O(1) rather than rescanning the prefix.
+    val toUtf16 = utf16Offsets(sqlText)
+
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(sqlText)))
     lexer.removeErrorListeners()
     val tokenStream = new CommonTokenStream(lexer)
@@ -191,11 +196,7 @@ object SqlStatementSplitter {
     val conf = SqlApiConf.get
 
     def appendToken(token: Token): Unit = {
-      if (buffer.isEmpty) {
-        // CodePointCharStream token offsets count Unicode code points, while
-        // String offsets and lengths count UTF-16 code units.
-        bufferStart = sqlText.offsetByCodePoints(0, token.getStartIndex)
-      }
+      if (buffer.isEmpty) bufferStart = toUtf16(token.getStartIndex)
       buffer.append(token.getText)
     }
 
@@ -207,12 +208,11 @@ object SqlStatementSplitter {
 
     def positionedStatement(terminator: String): Option[PositionedSqlStatement] = {
       val raw = buffer.toString
-      val statement = raw.trim
+      val (leadingWhitespace, statement) = trimSqlWhitespace(raw)
       if (statement.isEmpty) {
         None
       } else {
-        val leadingWhitespace = raw.indexOf(statement)
-        assert(bufferStart >= 0 && leadingWhitespace >= 0)
+        assert(bufferStart >= 0)
         Some(PositionedSqlStatement(
           statement,
           terminator,
@@ -254,7 +254,8 @@ object SqlStatementSplitter {
         while (!parsedOk && !failedNonEof && d < delimiterPositions.length) {
           val candidateEnd = delimiterPositions(d)
           tryParseRegion(
-            sqlText, tokenStream, startIdx, candidateEnd, validationPreprocess, conf) match {
+            sqlText, toUtf16, tokenStream, startIdx, candidateEnd,
+            validationPreprocess, conf) match {
             case ParsedOk =>
               parsedOk = true
               matchedDelimIdx = candidateEnd
@@ -359,7 +360,7 @@ object SqlStatementSplitter {
    * region) as a complete top-level Spark SQL statement.
    *
    * The region is extracted from the original source by converting ANTLR's
-   * Unicode code-point token offsets to UTF-16 String offsets.
+   * Unicode code-point token offsets through a one-time UTF-16 map.
    * `validationPreprocess` is applied to it, and the result is re-lexed and
    * parsed with a fresh [[SqlBaseParser]]. This isolation means the splitter's
    * parser sees a sub-stream whose EOF lands right after the trailing `;`, so
@@ -384,6 +385,7 @@ object SqlStatementSplitter {
    */
   private def tryParseRegion(
       sqlText: String,
+      toUtf16: Array[Int],
       stream: CommonTokenStream,
       startIdx: Int,
       endIdx: Int,
@@ -391,9 +393,9 @@ object SqlStatementSplitter {
       conf: SqlApiConf): ParseOutcome = {
     val firstTok = stream.get(startIdx)
     val lastTok = stream.get(endIdx)
-    val regionStart = sqlText.offsetByCodePoints(0, firstTok.getStartIndex)
+    val regionStart = toUtf16(firstTok.getStartIndex)
     // Token.getStopIndex is inclusive, substring's upper bound is exclusive.
-    val regionEnd = sqlText.offsetByCodePoints(0, lastTok.getStopIndex + 1)
+    val regionEnd = toUtf16(lastTok.getStopIndex + 1)
     val original = sqlText.substring(regionStart, regionEnd)
     val preprocessed = validationPreprocess(original)
 
@@ -458,6 +460,45 @@ object SqlStatementSplitter {
 
     parser.removeErrorListeners()
     parser.setErrorHandler(new BailErrorStrategy)
+  }
+
+  /**
+   * Maps each Unicode code-point index to a UTF-16 code-unit offset. The last
+   * entry is `sqlText.length`, so an inclusive ANTLR stop index converts with
+   * `toUtf16(stopIndex + 1)`.
+   */
+  private def utf16Offsets(sqlText: String): Array[Int] = {
+    val cuLen = sqlText.length
+    val offsets = new Array[Int](sqlText.codePointCount(0, cuLen) + 1)
+    var cu = 0
+    var cp = 0
+    while (cu < cuLen) {
+      offsets(cp) = cu
+      cu += Character.charCount(sqlText.codePointAt(cu))
+      cp += 1
+    }
+    offsets(cp) = cuLen
+    offsets
+  }
+
+  // Spark SQL WS token (SqlBaseLexer): ASCII space plus Unicode spaces the
+  // lexer hides. String.trim only strips characters <= U+0020.
+  // Hex literals keep the source ASCII (Scala unicode escapes are still non-ASCII).
+  private def isSqlWhitespace(c: Char): Boolean = c.toInt match {
+    case 0x20 | 0x09 | 0x0A | 0x0C | 0x0D | 0x0B | 0xA0 | 0x1680 |
+         0x2000 | 0x2001 | 0x2002 | 0x2003 | 0x2004 | 0x2005 |
+         0x2006 | 0x2007 | 0x2008 | 0x2009 | 0x200A | 0x2028 |
+         0x202F | 0x205F | 0x3000 => true
+    case _ => false
+  }
+
+  /** Trim lexer whitespace; return (leading UTF-16 count, trimmed text). */
+  private def trimSqlWhitespace(s: String): (Int, String) = {
+    var start = 0
+    var end = s.length
+    while (start < end && isSqlWhitespace(s.charAt(start))) start += 1
+    while (end > start && isSqlWhitespace(s.charAt(end - 1))) end -= 1
+    (start, s.substring(start, end))
   }
 
   /** Returns the index of the next non-hidden, non-EOF token at or after `from`, or -1. */

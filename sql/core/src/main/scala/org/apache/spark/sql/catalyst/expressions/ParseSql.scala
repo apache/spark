@@ -37,11 +37,13 @@ import org.apache.spark.unsafe.types.UTF8String
  * User-facing parse errors become JSON; unexpected internal failures propagate.
  */
 // scalastyle:off line.size.limit
+// scalastyle:off nonascii
 @ExpressionDescription(
   usage = """_FUNC_(sqlStmt) - Splits `sqlStmt` into SQL statements, parses each with
-    the stock Spark SQL parser, and returns a JSON array describing them (1-based start
-    and length, parse success, Table 39 statement identifier/code, target and source
-    table references for lineage, select-list column names, and parameter markers).
+    the stock Spark SQL parser, and returns a JSON array describing them (1-based
+    UTF-16 code-unit `start` and UTF-16 code-unit `length`, parse success, Table 39
+    statement identifier/code, target and source table references for lineage,
+    select-list column names, and parameter markers).
     Statement length excludes surrounding whitespace and the terminating semicolon.
     Session parser extensions are not applied.
     Requires spark.sql.function.parseSql.enabled=true. On syntax / parse error returns JSON
@@ -57,11 +59,14 @@ import org.apache.spark.unsafe.types.UTF8String
     Examples:
       > SELECT _FUNC_('SELECT 1;SELECT 2');
        [{"start":1,"length":8,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"select_list":[{"name":[]}]},{"start":10,"length":8,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"select_list":[{"name":[]}]}]
+      > SELECT get_json_object(_FUNC_('SELECT ''😀'';SELECT 2'), '$[1].start');
+       13
       > SELECT get_json_object(_FUNC_('SELEC'), '$[0].error.errorClass');
        PARSE_SYNTAX_ERROR
   """,
   group = "misc_funcs",
   since = "4.4.0")
+// scalastyle:on nonascii
 // scalastyle:on line.size.limit
 case class ParseSql(child: Expression)
   extends UnaryExpression
