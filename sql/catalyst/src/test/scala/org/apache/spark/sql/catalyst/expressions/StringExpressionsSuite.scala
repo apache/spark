@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
+import java.util.IllegalFormatConversionException
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
@@ -1056,6 +1057,47 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(FormatString(Literal("\"quote"), Literal("\"quote")) :: Nil)
+  }
+
+  test("FormatString with decimal arguments") {
+    checkEvaluation(FormatString(Literal("%f"), Literal(Decimal("1.5"))), "1.500000")
+    checkEvaluation(FormatString(Literal("%.2f"), Literal(Decimal("1234.5"))), "1234.50")
+    checkEvaluation(FormatString(Literal("%,.2f"), Literal(Decimal("1234.5"))), "1,234.50")
+    checkEvaluation(FormatString(Literal("%e"), Literal(Decimal("1.5"))), "1.500000e+00")
+    checkEvaluation(FormatString(Literal("%g"), Literal(Decimal("1.5"))), "1.50000")
+
+    // %a is not supported for decimals: Formatter accepts it only for float and double.
+    checkExceptionInExpression[IllegalFormatConversionException](
+      FormatString(Literal("%a"), Literal(Decimal("1.5"))), "a != java.math.BigDecimal")
+
+    // Not routed through a double, so digits beyond double precision survive.
+    checkEvaluation(
+      FormatString(Literal("%.20f"), Literal(Decimal("0.10000000000000000001"))),
+      "0.10000000000000000001")
+
+    // %s is unchanged, because Decimal.toString already delegates to the same BigDecimal string.
+    checkEvaluation(FormatString(Literal("%s"), Literal(Decimal(12, 18, 10))), "1.2E-9")
+
+    // %h hashes whatever object reaches Formatter, so it pins the conversion down: this is
+    // java.math.BigDecimal.hashCode (31 * unscaledValue + scale, scale sensitive), not
+    // Decimal.hashCode, which follows Double hashing and would print 3fc00000 here.
+    checkEvaluation(FormatString(Literal("%h"), Literal(Decimal("1.50"))), "122c")
+
+    checkEvaluation(
+      FormatString(Literal("%f"), Literal.create(null, DecimalType(10, 2))), "null")
+
+    checkExceptionInExpression[IllegalFormatConversionException](
+      FormatString(Literal("%f"), Literal(1)), "f != java.lang.Integer")
+  }
+
+  test("FormatString with a decimal-backed UDT argument") {
+    // The generated row accessors use the UDT's underlying sqlType, so codegen sees a Decimal
+    // just like interpreted evaluation does. Both paths must convert it.
+    val udt = new DecimalWrapperUDT
+    val arg = Literal.create(udt.serialize(DecimalWrapper(Decimal("1.5"))), udt)
+    checkEvaluation(FormatString(Literal("%f"), arg), "1.500000")
+    checkEvaluation(FormatString(Literal("%s"), arg), "1.5")
+    checkEvaluation(FormatString(Literal("%f"), Literal.create(null, udt)), "null")
   }
 
   test("SPARK-22603: FormatString should not generate codes beyond 64KB") {
@@ -2373,4 +2415,18 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "functionName" -> "`normalize`",
         "form" -> "'NFE'"))
   }
+}
+
+private case class DecimalWrapper(d: Decimal)
+
+private class DecimalWrapperUDT extends UserDefinedType[DecimalWrapper] {
+  override def sqlType: DataType = DecimalType(10, 2)
+
+  override def serialize(obj: DecimalWrapper): Any = obj.d
+
+  override def deserialize(datum: Any): DecimalWrapper = datum match {
+    case d: Decimal => DecimalWrapper(d)
+  }
+
+  override def userClass: Class[DecimalWrapper] = classOf[DecimalWrapper]
 }
