@@ -565,8 +565,8 @@ def sqrt(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     """
-    Returns the sum of `left`and `right` and the result is null on overflow.
-    The acceptable input types are the same with the `+` operator.
+    Returns the sum of `left` and `right` and the result is null on overflow.
+    The acceptable input types are the same as for the `+` operator.
 
     .. versionadded:: 3.5.0
 
@@ -823,7 +823,7 @@ def try_mod(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     """
     Returns `left`*`right` and the result is null on overflow. The acceptable input types are the
-    same with the `*` operator.
+    same as for the `*` operator.
 
     .. versionadded:: 3.5.0
 
@@ -13241,7 +13241,7 @@ def next_day(date: "ColumnOrName", dayOfWeek: str) -> Column:
     dayOfWeek : literal string
         day of the week, case-insensitive, accepts:
         "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
-        A column that evaluates to a string.
+        A literal string representing the day of the week.
 
     Returns
     -------
@@ -13336,7 +13336,7 @@ def from_unixtime(timestamp: "ColumnOrName", format: str = "yyyy-MM-dd HH:mm:ss"
         A column that evaluates to a long.
     format : literal string, optional
         format to use to convert to (default: yyyy-MM-dd HH:mm:ss).
-        A column that evaluates to a string.
+        A literal string representing the datetime format.
 
     Returns
     -------
