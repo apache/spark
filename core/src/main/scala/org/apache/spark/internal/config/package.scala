@@ -2985,6 +2985,27 @@ package object config {
       .doubleConf
       .createWithDefault(1.0)
 
+  private[spark] val STALE_PUSH_FALLBACK_ENABLED =
+    ConfigBuilder("spark.shuffle.push.stale.fallback.enabled")
+      .doc("When true, mark partitions with stale push data so reducers fallback to " +
+        "unmerged blocks. Default false to keep detection observational only: duplicate map " +
+        "attempts are always reported (logged), but reducer fallback must be explicitly " +
+        "enabled. When enabled, fallback marking applies to indeterminate stages only unless " +
+        "spark.shuffle.push.stale.detectAllStages.enabled is also true.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val STALE_PUSH_DETECT_ALL_STAGES_ENABLED =
+    ConfigBuilder("spark.shuffle.push.stale.detectAllStages.enabled")
+      .doc("Stale-push detection is always reported for every duplicate map attempt; this flag " +
+        "only gates reducer fallback scope. When false (default), fallback marking (if enabled " +
+        "by spark.shuffle.push.stale.fallback.enabled) applies to indeterminate stages only; " +
+        "when true, to all map stages regardless of determinism.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val JAR_IVY_REPO_PATH =
     ConfigBuilder("spark.jars.ivy")
       .doc("Path to specify the Ivy user directory, used for the local Ivy cache and " +

@@ -138,6 +138,29 @@ private class ShuffleStatus(
   }
 
   /**
+   * Clear all stale pushed partition indexes. Called when the entire shuffle's map outputs are
+   * invalidated for a retry (e.g. barrier stage retry or indeterminate-stage rollback), so stale
+   * marks from the previous attempt do not carry over to the retried attempt's fresh push data.
+   */
+  def clearStaleMapIndexes(): Unit = withWriteLock {
+    staleMapIndexes.clear()
+  }
+
+  /**
+   * Check whether any stale pushed map index intersects the given chunk bitmap, without returning
+   * a defensive copy of the stale set. Called from PushBasedFetchHelper on the reduce side for
+   * chunk-level stale-data detection.
+   */
+  def intersectsStaleMapIndexes(bitmap: RoaringBitmap): Boolean = withReadLock {
+    val it = staleMapIndexes.iterator()
+    var found = false
+    while (!found && it.hasNext) {
+      found = bitmap.contains(it.next())
+    }
+    found
+  }
+
+  /**
    * MergeStatus for each shuffle partition when push-based shuffle is enabled. The index of the
    * array is the shuffle partition id (reduce id). Each value in the array is the MergeStatus for
    * a shuffle partition, or null if not available. When push-based shuffle is enabled, this array
@@ -779,6 +802,13 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   def getStaleMapIndexes(shuffleId: Int): Set[Int]
 
   /**
+   * Check whether any stale pushed map index for the given shuffle is contained in the bitmap,
+   * without returning a defensive copy of the stale set. Called from PushBasedFetchHelper on the
+   * reduce side for chunk-level stale-data detection.
+   */
+  def intersectsStaleMapIndexes(shuffleId: Int, bitmap: RoaringBitmap): Boolean
+
+  /**
    * Deletes map output status information for the specified shuffle stage.
    */
   def unregisterShuffle(shuffleId: Int): Unit
@@ -982,6 +1012,9 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatus.removeOutputsByFilter(x => true)
     shuffleStatus.removeMergeResultsByFilter(x => true)
     shuffleStatus.removeShuffleMergerLocations()
+    // Reset stale-push marks: the shuffle's outputs are being invalidated for a retry, so marks
+    // from the previous attempt must not carry over to the retried attempt's fresh push data.
+    shuffleStatus.clearStaleMapIndexes()
     incrementEpoch()
   }
 
@@ -1386,6 +1419,10 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.get(shuffleId).map(_.getStaleMapIndexes).getOrElse(Set.empty)
   }
 
+  override def intersectsStaleMapIndexes(shuffleId: Int, bitmap: RoaringBitmap): Boolean = {
+    shuffleStatuses.get(shuffleId).exists(_.intersectsStaleMapIndexes(bitmap))
+  }
+
   override def stop(): Unit = {
     mapOutputTrackerMasterMessages.offer(PoisonPill)
     threadpool.shutdown()
@@ -1450,6 +1487,22 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         val result = new java.util.HashSet[Int](dupSet) // defensive copy
         result.asScala
       case None => Set.empty[Int]
+    }
+  }
+
+  /**
+   * Check whether any stale pushed map index for the given shuffle is contained in the bitmap,
+   * inspecting the published snapshot without returning a defensive copy. Avoids the O(S) copy
+   * that getStaleMapIndexes would do per chunk on the reducer fetch path.
+   */
+  def intersectsStaleMapIndexes(shuffleId: Int, bitmap: RoaringBitmap): Boolean = {
+    staleMapIndexes.get(shuffleId).exists { dupSet =>
+      val it = dupSet.iterator()
+      var found = false
+      while (!found && it.hasNext) {
+        found = bitmap.contains(it.next())
+      }
+      found
     }
   }
 
