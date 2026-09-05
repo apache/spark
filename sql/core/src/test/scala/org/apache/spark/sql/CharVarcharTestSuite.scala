@@ -845,6 +845,22 @@ trait CharVarcharTestSuite extends QueryTest {
 class BasicCharVarcharTestSuite extends SharedSparkSession {
   import testImplicits._
 
+  private def assertParseExceedLimit(query: String): Unit = {
+    val e = intercept[SparkException] { sql(query).collect() }
+    val cause = e.getCause match {
+      case r: SparkRuntimeException => r
+      case other =>
+        Option(other).flatMap(t => Option(t.getCause)).getOrElse(other) match {
+          case r: SparkRuntimeException => r
+          case _ => fail(s"expected EXCEED_LIMIT_LENGTH cause, got: $e")
+        }
+    }
+    checkError(
+      exception = cause,
+      condition = "EXCEED_LIMIT_LENGTH",
+      parameters = Map("limit" -> "5"))
+  }
+
   test("user-specified schema in cast") {
     def assertNoCharType(df: DataFrame): Unit = {
       checkAnswer(df, Row("0"))
@@ -2239,37 +2255,31 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assert(jsonVarcharType.head.dataType === VarcharType(5))
       checkAnswer(jsonVarchar, Row(Row("ab")))
 
-      checkError(
-        exception = intercept[SparkRuntimeException] {
-          sql("""SELECT from_json('{"a": "abcdef"}', 'a VARCHAR(5)')""").collect()
-        },
-        condition = "EXCEED_LIMIT_LENGTH",
-        parameters = Map("limit" -> "5")
-      )
+      // Default PERMISSIVE mode turns length failures into a null record.
+      checkAnswer(
+        sql("""SELECT from_json('{"a": "abcdef"}', 'a VARCHAR(5)')"""),
+        Row(Row(null)))
+      assertParseExceedLimit(
+        """SELECT from_json('{"a": "abcdef"}', 'a VARCHAR(5)', map('mode', 'FAILFAST'))""")
 
       checkAnswer(
         sql("""SELECT from_json('{"ab": 1}', 'MAP<CHAR(4), INT>')"""),
         Row(Map("ab  " -> 1)))
 
       checkAnswer(sql("SELECT from_csv('str', 'a CHAR(5)')"), Row(Row("str  ")))
-      checkError(
-        exception = intercept[SparkRuntimeException] {
-          sql("SELECT from_csv('abcdef', 'a VARCHAR(5)')").collect()
-        },
-        condition = "EXCEED_LIMIT_LENGTH",
-        parameters = Map("limit" -> "5")
-      )
+      checkAnswer(sql("SELECT from_csv('abcdef', 'a VARCHAR(5)')"), Row(Row(null)))
+      assertParseExceedLimit(
+        "SELECT from_csv('abcdef', 'a VARCHAR(5)', map('mode', 'FAILFAST'))")
 
       checkAnswer(
         sql("SELECT from_xml('<ROW><a>str</a></ROW>', 'a CHAR(5)')"),
         Row(Row("str  ")))
-      checkError(
-        exception = intercept[SparkRuntimeException] {
-          sql("SELECT from_xml('<ROW><a>abcdef</a></ROW>', 'a VARCHAR(5)')").collect()
-        },
-        condition = "EXCEED_LIMIT_LENGTH",
-        parameters = Map("limit" -> "5")
-      )
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><a>abcdef</a></ROW>', 'a VARCHAR(5)')"),
+        Row(Row(null)))
+      assertParseExceedLimit(
+        "SELECT from_xml('<ROW><a>abcdef</a></ROW>', 'a VARCHAR(5)', " +
+          "map('mode', 'FAILFAST'))")
       checkAnswer(
         sql("SELECT from_xml('<ROW><m><ab>1</ab></m></ROW>', 'm MAP<CHAR(4), INT>')"),
         Row(Row(Map("ab  " -> 1))))
