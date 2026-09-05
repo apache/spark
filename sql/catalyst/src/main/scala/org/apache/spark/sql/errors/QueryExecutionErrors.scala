@@ -582,7 +582,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def unableToCreateDatabaseAsFailedToCreateDirectoryError(
       dbDefinition: CatalogDatabase, e: IOException): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2033",
+      errorClass = "UNABLE_TO_CREATE_DATABASE_DIRECTORY",
       messageParameters = Map(
         "name" -> dbDefinition.name,
         "locationUri" -> dbDefinition.locationUri.toString()),
