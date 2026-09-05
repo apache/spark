@@ -187,7 +187,8 @@ class JacksonParser(
   private def makeMapRootConverter(mt: MapType): JsonParser => Iterable[InternalRow] = {
     val fieldConverter = makeConverter(mt.valueType)
     (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, mt) {
-      case START_OBJECT => Some(InternalRow(convertMap(parser, fieldConverter)))
+      case START_OBJECT =>
+        Some(InternalRow(convertMap(parser, fieldConverter, mt.keyType)))
     }
   }
 
@@ -302,7 +303,7 @@ class JacksonParser(
           }
       }
 
-    case _: StringType => (parser: JsonParser) => {
+    case dt: StringType => (parser: JsonParser) => {
       // This must be enabled if we will retrieve the bytes directly from the raw content:
       val oldFeature = parser.getFeatureMask
       val featureToAdd = JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION.getMask
@@ -356,7 +357,7 @@ class JacksonParser(
       // to be reset. This ensures that every feature is restored to its previous
       // state as defined by `oldFeature`.
       parser.overrideStdFeatures(oldFeature, ~0)
-      result
+      CharVarcharUtils.applyTextParseSemantics(result, dt)
     }
 
     case TimestampType =>
@@ -480,7 +481,7 @@ class JacksonParser(
     case mt: MapType =>
       val valueConverter = makeConverter(mt.valueType)
       (parser: JsonParser) => parseJsonToken[MapData](parser, dataType) {
-        case START_OBJECT => convertMap(parser, valueConverter)
+        case START_OBJECT => convertMap(parser, valueConverter, mt.keyType)
       }
 
     case udt: UserDefinedType[_] =>
@@ -617,13 +618,15 @@ class JacksonParser(
    */
   private def convertMap(
       parser: JsonParser,
-      fieldConverter: ValueConverter): MapData = {
+      fieldConverter: ValueConverter,
+      keyType: DataType): MapData = {
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
     var badRecordException: Option[Throwable] = None
 
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
-      keys += UTF8String.fromString(parser.currentName)
+      keys += CharVarcharUtils.applyTextParseSemantics(
+        UTF8String.fromString(parser.currentName), keyType)
       try {
         values += fieldConverter.apply(parser)
       } catch {
