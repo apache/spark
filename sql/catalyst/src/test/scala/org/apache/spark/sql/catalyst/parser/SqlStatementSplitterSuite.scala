@@ -86,7 +86,7 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
   }
 
   test("source positions use UTF-16 offsets for supplementary characters") {
-    val emoji = "\uD83D\uDE00"
+    val emoji = new String(Character.toChars(0x1F600))
     val sql = s"SELECT '$emoji$emoji'; SELECT 2;"
     val result = SqlStatementSplitter.splitWithPositions(sql, identity)
 
@@ -102,7 +102,8 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
   }
 
   test("source positions trim Spark SQL Unicode whitespace") {
-    val sql = "\u00A0SELECT 1\u00A0;"
+    val nbsp = 0xA0.toChar
+    val sql = s"${nbsp}SELECT 1$nbsp;"
     val result = SqlStatementSplitter.splitWithPositions(sql, identity)
     val complete = result.completeStatements.head
     assert(complete.statement == "SELECT 1")

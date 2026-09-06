@@ -95,7 +95,7 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(commentStatements.map(_ \ "start") ===
       Seq(JInt(1), JInt(sqlWithDroppedComment.lastIndexOf("SELECT 2") + 1)))
 
-    val emoji = "\uD83D\uDE00"
+    val emoji = new String(Character.toChars(0x1F600))
     val unicodeSql = s"SELECT '$emoji$emoji'; SELECT 2;"
     val unicodeStatements = objs(unicodeSql)
     val spans = unicodeStatements.map { statement =>
@@ -108,10 +108,11 @@ class ParseSqlResultSuite extends SparkFunSuite {
       unicodeSql.substring(start - 1, start - 1 + length)
     } === Seq(s"SELECT '$emoji$emoji'", "SELECT 2"))
 
-    val nbspSql = "\u00A0SELECT 1\u00A0;"
-    val nbsp = objs(nbspSql).head
-    val JInt(nbspStart) = nbsp \ "start"
-    val JInt(nbspLength) = nbsp \ "length"
+    val nbsp = 0xA0.toChar
+    val nbspSql = s"${nbsp}SELECT 1$nbsp;"
+    val nbspStmt = objs(nbspSql).head
+    val JInt(nbspStart) = nbspStmt \ "start"
+    val JInt(nbspLength) = nbspStmt \ "length"
     assert((nbspStart.toInt, nbspLength.toInt) === (2, 8))
     assert(nbspSql.substring(nbspStart.toInt - 1, nbspStart.toInt - 1 + nbspLength.toInt) ===
       "SELECT 1")
