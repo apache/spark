@@ -22,6 +22,7 @@ Run with:
 """
 # $example on$
 from pyspark.ml.feature import Imputer
+
 # $example off$
 from pyspark.sql import SparkSession
 

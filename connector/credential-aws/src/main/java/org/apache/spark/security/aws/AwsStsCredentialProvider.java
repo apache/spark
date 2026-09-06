@@ -154,7 +154,6 @@ public class AwsStsCredentialProvider implements CredentialProvider {
    * @param roleSessionName the session name (may be null for default)
    * @param durationSeconds the credential duration in seconds (may be null)
    */
-  // Visible for testing only.
   AwsStsCredentialProvider(StsClient stsClient, String roleArn, String roleSessionName,
       Integer durationSeconds) {
     this.config = new ResolvedConfig(roleArn, roleSessionName, durationSeconds,
@@ -298,7 +297,6 @@ public class AwsStsCredentialProvider implements CredentialProvider {
    * Returns the resolved configuration for testing purposes.
    * Package-private visibility allows test assertions on resolved region/endpoint.
    */
-  // Visible for testing only.
   ResolvedConfig resolvedConfig() {
     return config;
   }
@@ -412,6 +410,13 @@ public class AwsStsCredentialProvider implements CredentialProvider {
       return Duration.ofSeconds(cfg.durationSeconds);
     }
     return Duration.ofMinutes(15);
+  }
+
+  @Override
+  public Map<String, String> additionalSparkProperties() {
+    return Map.of(
+        "spark.hadoop.fs.s3a.aws.credentials.provider",
+        "org.apache.spark.security.aws.SparkOidcAwsCredentialsProvider");
   }
 
   /**

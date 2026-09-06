@@ -225,7 +225,7 @@ class DataFrameJoinSuite extends SharedSparkSession
       spark.range(10e10.toLong)
         .join(spark.range(10e10.toLong), "id")
         .queryExecution.executedPlan
-    assert(plan1.collect { case p: BroadcastHashJoinExec => p }.size == 0)
+    assert(plan1.collect { case p: BroadcastHashJoinExec => p }.isEmpty)
 
     // now with a hint it should be broadcasted
     val plan2 =

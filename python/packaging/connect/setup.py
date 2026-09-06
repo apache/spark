@@ -22,12 +22,13 @@
 # cd python/packaging/connect
 # python setup.py sdist
 
-import sys
-from setuptools import setup
-import os
-from shutil import copyfile, copytree, rmtree
 import glob
+import os
+import sys
 from pathlib import Path
+from shutil import copyfile, copytree, rmtree
+
+from setuptools import setup
 
 if (
     # When we package, the parent directory 'connect' dir

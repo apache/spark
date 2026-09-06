@@ -264,6 +264,18 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     )
   }
 
+  private object ResolvedHigherOrderFunctionWithExternalUDF {
+    def unapply(expression: Expression): Option[(HigherOrderFunction, Expression)] = {
+      expression match {
+        case hof: HigherOrderFunction if hof.resolved =>
+          hof.functions.iterator.flatMap(_.collectFirst {
+            case udf: ExternalUserDefinedFunction => udf
+          }).take(1).toSeq.headOption.map(udf => (hof, udf))
+        case _ => None
+      }
+    }
+  }
+
   private def containsUnsupportedLCA(e: Expression, operator: LogicalPlan): Boolean = {
     e.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE) && operator.expressions.exists {
       case a: Alias
@@ -307,7 +319,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     // We should inline all CTE relations to restore the original plan shape, as the analysis check
     // may need to match certain plan shapes. For dangling CTE relations, they will still be kept
     // in the original `WithCTE` node, as we need to perform analysis check for them as well.
-    val inlineCTE = InlineCTE(alwaysInline = true, keepDanglingRelations = true)
+    val inlineCTE = InlineCTE(alwaysInline = true, keepDanglingRelations = true, isAnalysis = true)
     val inlinedPlan: LogicalPlan = try {
       inlineCTE(plan)
     } catch {
@@ -363,11 +375,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     plan.foreachUp {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
-      case leaf: LeafNode if !SQLConf.get.preserveCharVarcharTypeInfo &&
-        leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
+      case leaf: LeafNode
+          if !SQLConf.get.charVarcharFirstClassTypes &&
+            leaf.output.exists(attr => CharVarcharUtils.hasCharVarchar(attr.dataType)) =>
         throw SparkException.internalError(
           s"Logical plan should not have output of char/varchar type when " +
-            s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is false: " + leaf)
+            s"${SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key} and " +
+            s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} are both false: " + leaf)
 
       case u: UnresolvedNamespace =>
         u.schemaNotFound(u.multipartIdentifier)
@@ -525,6 +539,11 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             hof.failAnalysis(
               errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
               messageParameters = Map("funcName" -> toSQLExpr(u)))
+
+          case ResolvedHigherOrderFunctionWithExternalUDF(hof, udf) =>
+            hof.failAnalysis(
+              errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_EXTERNAL_UDF",
+              messageParameters = Map("funcName" -> toSQLExpr(udf)))
 
           // If an attribute can't be resolved as a map key of string type, either the key should be
           // surrounded with single quotes, or there is a typo in the attribute name.

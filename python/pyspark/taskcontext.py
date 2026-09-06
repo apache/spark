@@ -15,12 +15,12 @@
 # limitations under the License.
 #
 from decimal import Decimal
-from typing import Any, ClassVar, Type, TypeVar, Dict, List, Optional, Union, cast
+from typing import Any, ClassVar, Dict, List, Optional, Type, TypeVar, Union, cast
 
-from pyspark.util import local_connect_and_auth
-from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
 from pyspark.errors import PySparkRuntimeError
 from pyspark.resource import ResourceInformation
+from pyspark.serializers import UTF8Deserializer, read_int, write_int, write_with_length
+from pyspark.util import local_connect_and_auth
 
 T = TypeVar("T", bound="TaskContext")
 
@@ -548,6 +548,7 @@ class BarrierTaskInfo:
 def _test() -> None:
     import doctest
     import sys
+
     from pyspark.sql import SparkSession
 
     globs = globals().copy()

@@ -34,8 +34,8 @@ import org.apache.spark.util.NonFateSharingCache
 class InternalRowComparableWrapper private (
     val row: InternalRow,
     val dataTypes: Seq[DataType],
-    val structType: StructType,
-    val ordering: BaseOrdering) {
+    @transient private var _structType: StructType,
+    @transient private var _ordering: BaseOrdering) extends Serializable {
 
   /**
    * Previous constructor for binary compatibility. Prefer using
@@ -48,6 +48,22 @@ class InternalRowComparableWrapper private (
     dataTypes,
     InternalRowComparableWrapper.structTypeCache.get(dataTypes),
     InternalRowComparableWrapper.orderingCache.get(dataTypes))
+
+  // `structType` and `ordering` cannot cross the wire (the ordering may be generated code), so
+  // they are transient and re-derived from the shared caches on first use after deserialization.
+  def structType: StructType = {
+    if (_structType == null) {
+      _structType = InternalRowComparableWrapper.structTypeCache.get(dataTypes)
+    }
+    _structType
+  }
+
+  def ordering: BaseOrdering = {
+    if (_ordering == null) {
+      _ordering = InternalRowComparableWrapper.orderingCache.get(dataTypes)
+    }
+    _ordering
+  }
 
   override def hashCode(): Int = Murmur3HashFunction.hash(
     row,

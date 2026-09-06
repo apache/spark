@@ -1027,7 +1027,7 @@ class SparkConnectPlanner(
         sortOrder: Seq[SortOrder]): UntypedKeyValueGroupedDataset = {
       val analyzed = session.sessionState.executePlan(logicalPlan).analyzed
 
-      assertPlan(groupingExprs.size() >= 1)
+      assertPlan(!groupingExprs.isEmpty)
       val dummyFunc = TypedScalaUdf(groupingExprs.get(0), None)
       val groupExprs = groupingExprs.asScala.toSeq.drop(1).map(expr => transformExpression(expr))
 
@@ -2201,6 +2201,15 @@ class SparkConnectPlanner(
     createUserDefinedPythonFunction(fun)
       .builder(fun.getArgumentsList.asScala.map(transformExpression).toSeq) match {
       case udaf: PythonUDAF => udaf.toAggregateExpression()
+      case agg: PythonAggregate =>
+        // The two-stage incremental aggregation operators do not implement DISTINCT. The SQL path
+        // rejects it in FunctionResolution, but a Connect aggregate is already resolved and skips
+        // that guard, so reject `is_distinct` here rather than silently dropping it and returning a
+        // non-distinct result.
+        if (fun.getIsDistinct) {
+          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(agg.name, "DISTINCT")
+        }
+        agg.toAggregateExpression()
       case other => other
     }
   }
@@ -2214,7 +2223,9 @@ class SparkConnectPlanner(
       func = function,
       dataType = transformDataType(udf.getOutputType),
       pythonEvalType = udf.getEvalType,
-      udfDeterministic = fun.getDeterministic)
+      udfDeterministic = fun.getDeterministic,
+      // Set only for incremental Python aggregators (see PythonAggregate).
+      bufferType = if (udf.hasBufferType) transformDataType(udf.getBufferType) else null)
   }
 
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
@@ -2659,7 +2670,7 @@ class SparkConnectPlanner(
           // This relies on the assumption that a KVGDS always requires the head to be a Typed UDF.
           // This is the case for datasets created via groupByKey,
           // and also via RelationalGroupedDS#as, as the first is a dummy UDF currently.
-          if rel.getGroupingExpressionsList.size() >= 1 &&
+          if !rel.getGroupingExpressionsList.isEmpty &&
             isTypedScalaUdfExpr(rel.getGroupingExpressionsList.get(0)) =>
         transformKeyValueGroupedAggregate(rel)
       case _ =>
@@ -3946,13 +3957,16 @@ class SparkConnectPlanner(
       name -> new TaskResourceRequest(res.getResourceName, res.getAmount)
     }.toMap
 
-    // Create ResourceProfile add add it to ResourceProfileManager
-    val profile = if (ereqs.isEmpty) {
+    // Create the ResourceProfile and register it, reusing an already-registered profile with
+    // equal resources if one exists so that equivalent profiles share a single id (and thus
+    // can reuse the same executors instead of triggering new allocations).
+    val newProfile = if (ereqs.isEmpty) {
       new TaskResourceProfile(treqs)
     } else {
       new ResourceProfile(ereqs, treqs)
     }
-    session.sparkContext.resourceProfileManager.addResourceProfile(profile)
+    val profile =
+      session.sparkContext.resourceProfileManager.getOrAddEquivalentProfile(newProfile)
 
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(

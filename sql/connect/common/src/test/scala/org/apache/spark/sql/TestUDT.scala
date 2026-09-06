@@ -14,28 +14,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.udf.worker.core
 
-import java.io.File
+package org.apache.spark.sql
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.types.{ArrayType, DataType, DoubleType, SQLUserDefinedType, UserDefinedType}
 
-/**
- * :: Experimental ::
- * A [[WorkerConnection]] over a Unix domain socket. Owns the socket
- * path and removes the socket file on [[close]]. Subclasses provide the
- * protocol-specific channel (e.g. gRPC over UDS) and may override
- * [[close]] to add transport-level shutdown -- they should call
- * `super.close()` to ensure the socket file is removed.
- *
- * [[close]] is idempotent: deleting an already-removed file is a no-op.
- */
-@Experimental
-abstract class UnixSocketWorkerConnection(val socketPath: String)
-  extends WorkerConnection {
+object TestUDT {
 
-  override def close(): Unit = {
-    val f = new File(socketPath)
-    if (f.exists()) f.delete()
+  @SQLUserDefinedType(udt = classOf[NewArrayUDT])
+  private[sql] class NewArray(val values: Array[Double]) extends Serializable
+
+  private[sql] class NewArrayUDT extends UserDefinedType[NewArray] {
+
+    override def sqlType: DataType = ArrayType(DoubleType, containsNull = false)
+
+    override def serialize(obj: NewArray): Any = obj.values
+
+    override def deserialize(datum: Any): NewArray = {
+      datum match {
+        case values: Array[_] =>
+          new NewArray(values.map(_.asInstanceOf[Double]))
+      }
+    }
+
+    override def userClass: Class[NewArray] = classOf[NewArray]
   }
 }

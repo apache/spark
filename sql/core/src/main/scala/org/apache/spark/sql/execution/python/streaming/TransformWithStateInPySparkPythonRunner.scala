@@ -31,6 +31,7 @@ import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonFunction, PythonWorkerUtils, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Python.{PYTHON_UNIX_DOMAIN_SOCKET_DIR, PYTHON_UNIX_DOMAIN_SOCKET_ENABLED}
+import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.{BasicPythonArrowOutput, PythonArrowInput, PythonUDFRunner}
@@ -251,6 +252,15 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
       "grouping_key_schema" -> groupingKeySchema.json,
       "state_server_socket_port" ->
         (if (isUnixDomainSock) stateServerSocketPath else stateServerSocketPort.toString)
+    ) ++ (
+      // Share the state server secret with the Python worker, the same scheme
+      // BasePythonRunner uses for its barrier-server secret. Unix domain sockets need
+      // no secret: they rely on filesystem permissions.
+      if (isUnixDomainSock) {
+        Map.empty
+      } else {
+        Map("state_server_auth_secret" -> stateServerAuthHelper.secret)
+      }
     )
 
   override protected val largeVarTypes: Boolean = sqlConf.arrowUseLargeVarTypes
@@ -268,7 +278,8 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
       new TransformWithStateInPySparkStateServer(stateServerSocket, processorHandle,
         groupingKeySchema,
         sqlConf.arrowTransformWithStateInPySparkMaxStateRecordsPerBatch,
-        batchTimestampMs, eventTimeWatermarkForEviction))
+        batchTimestampMs, eventTimeWatermarkForEviction,
+        authHelper = stateServerAuthHelper))
 
     context.addTaskCompletionListener[Unit] { _ =>
       logInfo(log"completion listener called")
@@ -320,6 +331,9 @@ class TransformWithStateInPySparkPythonPreInitRunner(
       PythonWorkerUtils.writeUTF(stateServerSocketPath, dataOut)
     } else {
       dataOut.writeInt(stateServerSocketPort)
+      // The driver-side Python worker presents this secret when connecting to the state
+      // server (same protocol as SocketAuthHelper).
+      PythonWorkerUtils.writeUTF(stateServerAuthHelper.secret, dataOut)
     }
     PythonWorkerUtils.writeUTF(groupingKeySchema.json, dataOut)
     dataOut.flush()
@@ -333,10 +347,10 @@ class TransformWithStateInPySparkPythonPreInitRunner(
 
   override def stop(): Unit = {
     super.stop()
-    closeServerSocketChannelSilently(stateServerSocket)
     if (daemonThread != null) {
       daemonThread.interrupt()
     }
+    closeServerSocketChannelSilently(stateServerSocket)
   }
 
   private def startStateServer(): Unit = {
@@ -347,7 +361,8 @@ class TransformWithStateInPySparkPythonPreInitRunner(
         try {
           new TransformWithStateInPySparkStateServer(stateServerSocket, processorHandleImpl,
             groupingKeySchema,
-            sqlConf.arrowTransformWithStateInPySparkMaxStateRecordsPerBatch).run()
+            sqlConf.arrowTransformWithStateInPySparkMaxStateRecordsPerBatch,
+            authHelper = stateServerAuthHelper).run()
         } catch {
           case e: Exception =>
             throw new SparkException("TransformWithStateInPySpark state server " +
@@ -367,6 +382,10 @@ class TransformWithStateInPySparkPythonPreInitRunner(
  */
 trait TransformWithStateInPySparkPythonRunnerUtils extends Logging {
   protected val isUnixDomainSock: Boolean = SparkEnv.get.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED)
+  // Per-runner secret used to verify the Python worker's connection to the TCP state
+  // server, the same scheme BasePythonRunner uses for its barrier server.
+  protected lazy val stateServerAuthHelper: SocketAuthHelper = new SocketAuthHelper(
+    SparkEnv.get.conf)
   protected var stateServerSocketPort: Int = -1
   protected var stateServerSocketPath: String = null
   protected var stateServerSocket: ServerSocketChannel = null

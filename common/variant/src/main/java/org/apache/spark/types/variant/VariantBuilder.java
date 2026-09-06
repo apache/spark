@@ -376,7 +376,7 @@ public class VariantBuilder {
     } else {
       id = dictionaryKeys.size();
       dictionary.put(key, id);
-      dictionaryKeys.add(key.getBytes(StandardCharsets.UTF_8));
+      dictionaryKeys.add(encodeKey(key));
     }
     return id;
   }
@@ -994,6 +994,7 @@ public class VariantBuilder {
     final String key;
     final int id;
     final int offset;
+    private byte[] keyBytes;
 
     public FieldEntry(String key, int id, int offset) {
       this.key = key;
@@ -1005,9 +1006,16 @@ public class VariantBuilder {
       return new FieldEntry(key, id, newOffset);
     }
 
+    private byte[] keyBytes() {
+      if (keyBytes == null) {
+        keyBytes = encodeKey(key);
+      }
+      return keyBytes;
+    }
+
     @Override
     public int compareTo(FieldEntry other) {
-      return key.compareTo(other.key);
+      return compareKeys(keyBytes(), other.keyBytes());
     }
   }
 

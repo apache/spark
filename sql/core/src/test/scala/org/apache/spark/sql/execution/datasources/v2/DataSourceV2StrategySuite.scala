@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
+import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, VariantGet => V2VariantGet}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
@@ -1031,6 +1032,25 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       // expression will be converted to V2 expressions, but not folded
       checkV2Conversion(expr,
         new GeneralScalarExpression("ABS", Array(LiteralValue(-5, IntegerType))))
+    }
+  }
+
+  test("SPARK-58428: translating an expression that failed to evaluate does not loop forever") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // `coalesce(c, 1 div 0) = 1`. Constant folding defers the divide by zero error because the
+      // failing expression sits in a conditional branch, so it is tagged FAILED_TO_EVALUATE and
+      // left as is. `div` returns BIGINT, so `c` is LONG to keep the `coalesce` inputs equal.
+      val c = AttributeReference("c", LongType)()
+      val predicate =
+        EqualTo(Coalesce(Seq(c, IntegralDivide(Literal(1), Literal(0)))), Literal(1L))
+      val folded = ConstantFolding.constantFolding(predicate)
+      assert(
+        folded.exists(_.containsTag(ConstantFolding.FAILED_TO_EVALUATE)),
+        "expected the divide by zero branch to be tagged FAILED_TO_EVALUATE")
+
+      // Translating such an expression used to recurse forever. Note that a regression hangs
+      // this test instead of failing it, as the recursion is in tail position.
+      assert(new V2ExpressionBuilder(folded, isPredicate = true).build().isEmpty)
     }
   }
 

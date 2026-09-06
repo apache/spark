@@ -559,19 +559,6 @@ object SparkConnectService extends Logging {
 
     listenerBus.post(eventBuilder(bindingAddress))
   }
-
-  def extractErrorMessage(st: Throwable): String = {
-    val message = Utils.abbreviate(st.getMessage, 2048)
-    convertNullString(message)
-  }
-
-  def convertNullString(str: String): String = {
-    if (str != null) {
-      str
-    } else {
-      ""
-    }
-  }
 }
 
 /**

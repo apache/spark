@@ -19,28 +19,28 @@ import json
 
 import numpy as np
 
-from pyspark.sql import functions as sf
-from pyspark.ml.linalg import Vectors
 from pyspark.ml.classification import (
     LinearSVC,
     LinearSVCSummary,
     LinearSVCTrainingSummary,
 )
-from pyspark.ml.regression import (
-    LinearRegression,
-    LinearRegressionSummary,
-    LinearRegressionTrainingSummary,
-)
 from pyspark.ml.clustering import (
     LDA,
+    DistributedLDAModel,
     LDAModel,
     LocalLDAModel,
-    DistributedLDAModel,
 )
 from pyspark.ml.fpm import (
     FPGrowth,
     FPGrowthModel,
 )
+from pyspark.ml.linalg import Vectors
+from pyspark.ml.regression import (
+    LinearRegression,
+    LinearRegressionSummary,
+    LinearRegressionTrainingSummary,
+)
+from pyspark.sql import functions as sf
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 

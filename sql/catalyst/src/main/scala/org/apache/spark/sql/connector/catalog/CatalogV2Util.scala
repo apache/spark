@@ -36,6 +36,8 @@ import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, LiteralValue, Transform}
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, MapType, Metadata, MetadataBuilder, StructField, StructType}
@@ -491,9 +493,8 @@ private[sql] object CatalogV2Util {
     val stateKeys = catalog.asTableCatalog.tableStateOptionKeys.asScala
       .map(_.toLowerCase(Locale.ROOT))
       .toSet
-    val projected = options.entrySet.asScala.collect {
-      case entry if stateKeys.contains(entry.getKey.toLowerCase(Locale.ROOT)) =>
-        entry.getKey -> entry.getValue
+    val projected = options.asCaseSensitiveMap().asScala.collect {
+      case (key, value) if stateKeys.contains(key.toLowerCase(Locale.ROOT)) => key -> value
     }.toMap
     new CaseInsensitiveStringMap(projected.asJava)
   }
@@ -517,6 +518,52 @@ private[sql] object CatalogV2Util {
     val context = new TableContext(timeTravel, parseWritePrivileges(writePrivilegesString))
     val stateOptions = extractTableStateOptions(catalog, options)
     catalog.asTableCatalog.loadTable(ident, context, stateOptions)
+  }
+
+  /**
+   * Loads a table for a write, forwarding the required privileges and only the write options that
+   * the catalog declares may affect table state. The complete option map remains on the write
+   * relation for write planning.
+   */
+  def loadTableForV2Write(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      writePrivileges: Set[TableWritePrivilege],
+      options: CaseInsensitiveStringMap): Table = {
+    rejectTimeTravelOptionsForWrite(catalog, ident, options)
+    loadTableForWrite(catalog, ident, writePrivileges, options)
+  }
+
+  /**
+   * Loads a table for a write without validating the complete write option map. This is used by
+   * callers that must inspect whether the loaded table falls back to V1 before applying V2-only
+   * option validation.
+   */
+  def loadTableForWrite(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      writePrivileges: Set[TableWritePrivilege],
+      options: CaseInsensitiveStringMap): Table = {
+    val context = new TableContext(null, writePrivileges.asJava)
+    val stateOptions = extractTableStateOptions(catalog, options)
+    catalog.asTableCatalog.loadTable(ident, context, stateOptions)
+  }
+
+  def rejectTimeTravelOptionsForWrite(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      options: CaseInsensitiveStringMap): Unit = {
+    if (containsTimeTravelOptions(options)) {
+      throw QueryCompilationErrors.timeTravelUnsupportedError(
+        toSQLId(ident.toQualifiedNameParts(catalog)))
+    }
+  }
+
+  def containsTimeTravelOptions(options: CaseInsensitiveStringMap): Boolean = {
+    val conf = SQLConf.get
+    Seq(
+      conf.getConf(SQLConf.TIME_TRAVEL_TIMESTAMP_KEY),
+      conf.getConf(SQLConf.TIME_TRAVEL_VERSION_KEY)).exists(options.containsKey)
   }
 
   /**

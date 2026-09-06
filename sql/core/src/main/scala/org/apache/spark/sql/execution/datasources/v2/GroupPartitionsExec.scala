@@ -25,9 +25,9 @@ import org.apache.spark.rdd.{CoalescedRDD, PartitionCoalescer, PartitionGroup, R
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
-import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, Partitioning}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.physical.{IdentityReducer, KeyedPartitioning, KeyReducer, Partitioning}
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
-import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.execution.{SafeForKWayMerge, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
@@ -41,9 +41,12 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  * storage-partitioned joins to align partitions from different sides of the join.
  *
  * @param child The child plan providing bucketed/partitioned input
- * @param joinKeyPositions Optional projection to select a subset of the partitioning key
- *                         for join compatibility (e.g., when join keys are a subset of
- *                         partition keys)
+ * @param joinKeyPositions Optional projection selecting a subset of the partitioning key positions,
+ *                         so that partitions sharing the projected key are coalesced. Used whenever
+ *                         the operation's keys are a subset of the partition keys, either the join
+ *                         keys of a storage-partitioned join or the `PARTITION BY` and grouping
+ *                         keys of a single-child operator. The name is historical, the projection
+ *                         is not join-specific.
  * @param expectedPartitionKeys Optional sequence of expected partition key values and their
  *                              split counts
  * @param reducers Optional reducers to apply to partition keys for grouping compatibility
@@ -59,7 +62,7 @@ case class GroupPartitionsExec(
     child: SparkPlan,
     @transient joinKeyPositions: Option[Seq[Int]] = None,
     @transient expectedPartitionKeys: Option[Seq[(InternalRowComparableWrapper, Int)]] = None,
-    @transient reducers: Option[Seq[Option[Reducer[_, _]]]] = None,
+    @transient reducers: Option[Seq[Option[KeyReducer]]] = None,
     @transient distributePartitions: Boolean = false,
     @transient enableSortedMerge: Boolean = false
   ) extends UnaryExecNode {
@@ -68,21 +71,63 @@ case class GroupPartitionsExec(
     child.outputPartitioning match {
       case p: Partitioning with Expression =>
         // There can be multiple `KeyedPartitioning`s in an output partitioning of a join, but they
-        // can only differ in `expressions`; their `partitionKeys` reference is shared (enforced by
-        // `PartitioningCollection`), so `groupedPartitions` is computed only once.
-        val partitionKeys = groupedPartitions.map(_._1)
+        // can only differ in `expressions`. Their `partitionKeys` reference and `isCollapsed` flag
+        // are shared (enforced by `PartitioningCollection`), so the grouping is computed once.
+        // When reducers are applied, the stored reduced expressions are re-targeted at each
+        // `KeyedPartitioning`'s own key attribute and reported instead of the original ones. Their
+        // data types match the reduced partition keys for the identity-vs-transform and
+        // single-side-transform reducers; for the both-sides-reduce shape no single transform
+        // describes the keys (see `KeyedShuffleSpec.reducersBothWays`).
+        val partitionKeys = grouping.partitions.map(_._1)
         p.transform {
           case k: KeyedPartitioning =>
             val projectedExpressions = joinKeyPositions.fold(k.expressions)(_.map(k.expressions))
-            KeyedPartitioning(projectedExpressions, partitionKeys, isGrouped = isGrouped)
+            val effectiveExpressions = reducers match {
+              case Some(exprs) =>
+                assert(projectedExpressions.length == exprs.length)
+                projectedExpressions.zip(exprs).map {
+                  case (expr, Some(KeyReducer(_, reduced))) =>
+                    // `reduced` was stored from the single spec that `createKeyedShuffleSpec`
+                    // picked (`collectFirst`); re-target it at this `KeyedPartitioning`'s own key
+                    // attribute so that every `KeyedPartitioning` in a collection keeps its own.
+                    reduced.withReference(expr.references.head)
+                  case (expr, None) => expr
+                }
+              case None => projectedExpressions
+            }
+            KeyedPartitioning(
+              effectiveExpressions, partitionKeys, grouping.isGrouped, grouping.isCollapsed)
         }.asInstanceOf[Partitioning]
       case o => o
     }
   }
 
-  /**
-   * Aligns partitions based on `expectedPartitionKeys` and clustering mode.
-   */
+  override def doCanonicalize(): SparkPlan = {
+    // `KeyReducer` is a plain case class, not an `Expression`, so plan canonicalization does not
+    // normalize the exprIds inside it. Normalize them positionally here: `reducedExpression` may
+    // reference the other join side's key, which this node's child does not output, so both it
+    // and the identity reducer's transform are normalized against their own references. Without
+    // this, structurally identical SPJ subtrees with value-equal reducers stop comparing equal
+    // once reducers are applied, and exchange/subquery reuse silently stops deduplicating them.
+    val canonicalized = super.doCanonicalize().asInstanceOf[GroupPartitionsExec]
+    canonicalized.copy(reducers = canonicalized.reducers.map { reducerSeqs =>
+      reducerSeqs.map { keyReducerOpt =>
+        keyReducerOpt.map { keyReducer =>
+          val reducer = keyReducer.reducer match {
+            case r: IdentityReducer => r.copy(transform = QueryPlan.normalizeExpressions(
+              r.transform, r.transform.references.toSeq).asInstanceOf[TransformExpression])
+            case other => other
+          }
+          keyReducer.copy(
+            reducer = reducer,
+            reducedExpression = QueryPlan.normalizeExpressions(keyReducer.reducedExpression,
+              keyReducer.reducedExpression.references.toSeq).asInstanceOf[TransformExpression])
+        }
+      }
+    })
+  }
+
+  /** Aligns partitions based on `expectedPartitionKeys` and clustering mode. */
   private def alignToExpectedKeys(keyMap: Map[InternalRowComparableWrapper, Seq[Int]]) = {
     var isGrouped = true
     val alignedPartitions = expectedPartitionKeys.get.flatMap { case (key, numSplits) =>
@@ -101,12 +146,14 @@ case class GroupPartitionsExec(
   }
 
   /**
-   * Groups and sorts partitions by their keys in ascending order.
+   * Groups and sorts partitions by their keys in ascending order. The sort must match
+   * `KeyedPartitioning.toGrouped`, which is why both use
+   * `KeyedPartitioning.groupedKeyRowOrdering` -- see its documentation for the contract.
    */
   private def groupAndSortByKeys(
       keyMap: Map[InternalRowComparableWrapper, Seq[Int]],
       dataTypes: Seq[DataType]) = {
-    val keyOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
+    val keyOrdering = KeyedPartitioning.groupedKeyRowOrdering(dataTypes)
     keyMap.toSeq.sorted(keyOrdering.on((t: (InternalRowComparableWrapper, _)) => t._1.row))
   }
 
@@ -117,15 +164,14 @@ case class GroupPartitionsExec(
    * 3. Grouping input partition indices by their (possibly projected/reduced) keys
    * 4. Sorting or distributing based on whether partial clustering is enabled
    *
-   * Returns a tuple of (partitions, isGrouped) where:
-   * - partitions: sequence of (partitionKey, inputPartitionIndices) pairs representing
-   *   how input partitions should be grouped together
-   * - isGrouped: whether the output partitioning is grouped (no duplicates in partition keys)
+   * `isCollapsed` says whether the output stands for more than one of the child's partition keys.
+   * Two things set it: the child's own flag, and a merge this node performs.
    */
-  @transient private lazy val groupedPartitionsTuple = {
-    // There must be a `KeyedPartitioning` in child's output partitioning as a
-    // `GroupPartitionsExec` node is added to a plan only in that case.
-    val keyedPartitioning = child.outputPartitioning
+  @transient private lazy val grouping: PartitionGrouping = {
+    // There must be a `KeyedPartitioning` in the child's output partitioning, as a
+    // `GroupPartitionsExec` node is added to a plan only in that case. Any member will do, see
+    // `outputPartitioning` above.
+    val childKp = child.outputPartitioning
       .asInstanceOf[Partitioning with Expression]
       .collectFirst { case k: KeyedPartitioning => k }
       .getOrElse(
@@ -134,8 +180,8 @@ case class GroupPartitionsExec(
     // Project partition keys if join key positions are specified
     val (projectedDataTypes, projectedKeys) =
       joinKeyPositions.fold(
-        (keyedPartitioning.expressionDataTypes, keyedPartitioning.partitionKeys)
-      )(keyedPartitioning.projectKeys)
+        (childKp.keyDataTypes, childKp.partitionKeys)
+      )(childKp.projectKeys)
 
     // Reduce keys if reducers are specified
     val (reducedDataTypes, reducedKeys) = reducers.fold((projectedDataTypes, projectedKeys))(
@@ -143,17 +189,38 @@ case class GroupPartitionsExec(
 
     val keyToPartitionIndices = reducedKeys.zipWithIndex.groupMap(_._1)(_._2)
 
-    if (expectedPartitionKeys.isDefined) {
+    val (partitions, isGrouped) = if (expectedPartitionKeys.isDefined) {
       alignToExpectedKeys(keyToPartitionIndices)
     } else {
       (groupAndSortByKeys(keyToPartitionIndices, reducedDataTypes), true)
     }
+
+    // Both cheap terms come first, so the scan below runs only where a merge is possible. A
+    // grouping that left the keys as they are groups the child's own key values, and one of those
+    // groups can only ever cover the one key it was built from.
+    val keysChanged =
+      joinKeyPositions.exists(_.length < childKp.expressions.length) || reducers.isDefined
+    val isCollapsed = childKp.isCollapsed || keysChanged && {
+      // The groups this node keeps are the ones that can merge keys of the child, and asking the
+      // child's keys rather than its partitions is what tells such a merge from a source that
+      // reports several splits per key.
+      val keptGroups = expectedPartitionKeys match {
+        case Some(expected) => expected.view.flatMap { case (key, _) =>
+          keyToPartitionIndices.get(key)
+        }
+        case None => keyToPartitionIndices.values.view
+      }
+      val childKeys = childKp.partitionKeys.toArray
+      keptGroups.exists { group =>
+        val first = childKeys(group.head)
+        group.tail.exists(childKeys(_) != first)
+      }
+    }
+    PartitionGrouping(partitions, isGrouped, isCollapsed)
   }
 
   @transient lazy val groupedPartitions: Seq[(InternalRowComparableWrapper, Seq[Int])] =
-    groupedPartitionsTuple._1
-
-  @transient lazy val isGrouped: Boolean = groupedPartitionsTuple._2
+    grouping.partitions
 
   @transient private lazy val hasCoalescing: Boolean = groupedPartitions.exists(_._2.size > 1)
 
@@ -324,7 +391,7 @@ case class GroupPartitionsExec(
     }.iterator
     val expectedStr = expectedPartitionKeys.map(ks => s"ExpectedPartitionKeys: ${ks.size}")
     val reducersStr = reducers.map { seq =>
-      val names = seq.map(_.map(_.displayName()).getOrElse("identity"))
+      val names = seq.map(_.map(_.reducer.displayName()).getOrElse("identity"))
       s"Reducers: ${truncatedString(names, "[", ", ", "]", joinKeyMaxFields)}"
     }
     val distributeStr = Iterator(s"DistributePartitions: $distributePartitions")
@@ -332,6 +399,12 @@ case class GroupPartitionsExec(
 
   }
 }
+
+/** What a [[GroupPartitionsExec]] computes once and reports from several members. */
+private case class PartitionGrouping(
+    partitions: Seq[(InternalRowComparableWrapper, Seq[Int])],
+    isGrouped: Boolean,
+    isCollapsed: Boolean)
 
 /**
  * A PartitionCoalescer that groups partitions according to a pre-computed grouping plan.

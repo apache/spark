@@ -57,7 +57,6 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    CredentialProviderLoader.resetForTesting()
     tokenFile = File.createTempFile("oidc-token-", ".jwt")
     tokenFile.deleteOnExit()
     writeTokenFile("fake.jwt.token.workload")
@@ -67,7 +66,6 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
     try {
       if (tokenFile != null) tokenFile.delete()
     } finally {
-      CredentialProviderLoader.resetForTesting()
       super.afterEach()
     }
   }

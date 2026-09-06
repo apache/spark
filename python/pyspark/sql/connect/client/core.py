@@ -22,114 +22,112 @@ __all__ = [
 ]
 
 import atexit
-from dataclasses import dataclass, fields
-
-import pyspark
-from pyspark.sql.connect.proto.base_pb2 import FetchErrorDetailsResponse
-
 import concurrent.futures
-import logging
-import threading
-import os
 import copy
+import logging
+import os
 import platform
-import urllib.parse
-import uuid
 import sys
+import threading
 import time
 import traceback
+import urllib.parse
+import uuid
 import weakref
+from dataclasses import dataclass, fields
 from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
     Iterable,
     Iterator,
-    Optional,
-    Any,
-    Union,
     List,
-    Tuple,
-    Dict,
-    Set,
-    NoReturn,
     Mapping,
-    cast,
-    TYPE_CHECKING,
+    NoReturn,
+    Optional,
+    Set,
+    Tuple,
     Type,
+    Union,
+    cast,
 )
-
-import pandas as pd
-import pyarrow as pa
 
 import google.protobuf.message
-from grpc_status import rpc_status
 import grpc
-from google.protobuf import text_format, any_pb2
+import pandas as pd
+import pyarrow as pa
+from google.protobuf import any_pb2, text_format
 from google.rpc import error_details_pb2
+from grpc_status import rpc_status
 
-from pyspark.util import is_remote_only, disable_gc
-from pyspark.accumulators import SpecialAccumulatorIds, pickleSer
-from pyspark.version import __version__
-from pyspark.traceback_utils import CallSite
-from pyspark.resource.information import ResourceInformation
-from pyspark.sql.metrics import MetricValue, PlanMetrics, ExecutionInfo, ObservedMetrics
-from pyspark.sql.connect.client.artifact import ArtifactManager
-from pyspark.sql.connect.logging import logger
-from pyspark.sql.connect.profiler import ConnectProfilerCollector
-from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
-from pyspark.sql.connect.client.retries import (
-    RetryPolicy,
-    Retrying,
-    DefaultPolicy,
-    DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
-)
-from pyspark.sql.connect.conversion import (
-    storage_level_to_proto,
-    proto_to_storage_level,
-    proto_to_remote_cached_dataframe,
-)
+import pyspark
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
-from pyspark.errors.exceptions.connect import (
-    convert_exception,
-    convert_observation_errors,
-    SparkConnectException,
-    SparkConnectGrpcException,
-)
-from pyspark.sql.connect.expressions import (
-    LiteralExpression,
-    PythonUDF,
-    CommonInlineUserDefinedFunction,
-    JavaUDF,
-)
-from pyspark.sql.connect.plan import (
-    CommonInlineUserDefinedTableFunction,
-    CommonInlineUserDefinedDataSource,
-    PythonUDTF,
-    PythonDataSource,
-)
-from pyspark.sql.connect.observation import Observation
-from pyspark.sql.connect.utils import get_python_ver
-from pyspark.sql.pandas.types import from_arrow_schema
-from pyspark.sql.pandas.conversion import _convert_arrow_table_to_pandas
-from pyspark.sql.types import DataType, StructType
-from pyspark.util import PythonEvalType
-from pyspark.storagelevel import StorageLevel
+from pyspark.accumulators import SpecialAccumulatorIds, pickleSer
 from pyspark.errors import (
     PySparkAssertionError,
     PySparkNotImplementedError,
     PySparkValueError,
 )
+from pyspark.errors.exceptions.connect import (
+    SparkConnectException,
+    SparkConnectGrpcException,
+    convert_exception,
+    convert_observation_errors,
+)
+from pyspark.resource.information import ResourceInformation
+from pyspark.sql.connect.client.artifact import ArtifactManager
+from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
+from pyspark.sql.connect.client.retries import (
+    DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
+    DefaultPolicy,
+    Retrying,
+    RetryPolicy,
+)
+from pyspark.sql.connect.conversion import (
+    proto_to_remote_cached_dataframe,
+    proto_to_storage_level,
+    storage_level_to_proto,
+)
+from pyspark.sql.connect.expressions import (
+    CommonInlineUserDefinedFunction,
+    JavaUDF,
+    LiteralExpression,
+    PythonUDF,
+)
+from pyspark.sql.connect.logging import logger
+from pyspark.sql.connect.observation import Observation
+from pyspark.sql.connect.plan import (
+    CommonInlineUserDefinedDataSource,
+    CommonInlineUserDefinedTableFunction,
+    PythonDataSource,
+    PythonUDTF,
+)
+from pyspark.sql.connect.profiler import ConnectProfilerCollector
+from pyspark.sql.connect.proto.base_pb2 import FetchErrorDetailsResponse
 from pyspark.sql.connect.shell.progress import Progress, ProgressHandler, from_proto
+from pyspark.sql.connect.utils import get_python_ver
+from pyspark.sql.metrics import ExecutionInfo, MetricValue, ObservedMetrics, PlanMetrics
+from pyspark.sql.pandas.conversion import _convert_arrow_table_to_pandas
+from pyspark.sql.pandas.types import from_arrow_schema
+from pyspark.sql.types import DataType, StructType
+from pyspark.storagelevel import StorageLevel
+from pyspark.traceback_utils import CallSite
+from pyspark.util import PythonEvalType, disable_gc, is_remote_only
+from pyspark.version import __version__
 
 if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo
     from google.rpc.status_pb2 import Status
+
     from pyspark.sql.connect._typing import DataTypeOrString
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.datasource import DataSource
 
 
 PYSPARK_ROOT = os.path.dirname(pyspark.__file__)
+_OPERATION_ID_METADATA_KEY = "spark-connect-operation-id"
 
 
 @dataclass(frozen=True)
@@ -143,8 +141,16 @@ class RpcDeadlines:
     Note on ``reattachable_execute_plan`` and ``reattach_execute``: these timeouts apply to each
     individual gRPC stream segment, not to the overall query execution lifetime. When a deadline
     fires, the server-side operation continues running; the client opens a new ReattachExecute
-    stream to resume receiving results. Non-reattachable ExecutePlan has no deadline because a
-    timeout there would kill the execution with no recovery path.
+    stream to resume receiving results. Non-reattachable query ExecutePlan calls have no deadline
+    because a timeout there would kill the execution with no recovery path.
+
+    Note on ``release_relation``: the RemoveRemoteCachedRelation cleanup command is sent over a
+    blocking, non-reattachable ExecutePlan call issued from
+    :meth:`CachedRemoteRelation.__del__`. Unlike a query ExecutePlan, a timeout here does not kill
+    any recoverable execution -- it only abandons a best-effort cache eviction that the server also
+    performs independently -- so this call is given a bounded deadline. Without it the finalizer
+    can block forever if the release response is never delivered, which (on the foreachBatch
+    Connect path) stalls the streaming query indefinitely.
     """
 
     reattachable_execute_plan: Optional[float] = 10 * 60  # 10 min
@@ -158,6 +164,7 @@ class RpcDeadlines:
     clone_session: Optional[float] = 10 * 60  # 10 min
     get_status: Optional[float] = 10 * 60  # 10 min
     fetch_error_details: Optional[float] = 10 * 60  # 10 min
+    release_relation: Optional[float] = 60  # 1 min; short: per-batch finalizer
 
     def __post_init__(self) -> None:
         for field in fields(self):
@@ -188,6 +195,7 @@ class RpcDeadlines:
             clone_session=None,
             get_status=None,
             fetch_error_details=None,
+            release_relation=None,
         )
 
 
@@ -887,6 +895,16 @@ class SparkConnectClient(object):
             if isinstance(connection, ChannelBuilder)
             else DefaultChannelBuilder(connection, channel_options)
         )
+        metadata = list(self._builder.metadata())
+        if any(key.lower() == _OPERATION_ID_METADATA_KEY for key, _ in metadata):
+            logger.warning(
+                "Connection option %s is ignored because Spark Connect sets it for each "
+                "ExecutePlan request.",
+                _OPERATION_ID_METADATA_KEY,
+            )
+        artifact_manager_metadata = [
+            (key, value) for key, value in metadata if key.lower() != _OPERATION_ID_METADATA_KEY
+        ]
         self._user_id = None
         self._retry_policies: List[RetryPolicy] = []
 
@@ -927,7 +945,7 @@ class SparkConnectClient(object):
             self._user_id,
             self._session_id,
             self._channel,
-            self._builder.metadata(),
+            artifact_manager_metadata,
             add_artifacts_timeout=self._rpc_deadlines.add_artifacts,
             artifact_status_timeout=self._rpc_deadlines.artifact_status,
         )
@@ -1081,6 +1099,7 @@ class SparkConnectClient(object):
         name: Optional[str] = None,
         eval_type: int = PythonEvalType.SQL_BATCHED_UDF,
         deterministic: bool = True,
+        buffer_type: Optional["DataType"] = None,
     ) -> str:
         """
         Create a temporary UDF in the session catalog on the other side. We generate a
@@ -1096,6 +1115,8 @@ class SparkConnectClient(object):
             eval_type=eval_type,
             func=function,
             python_ver="%d.%d" % sys.version_info[:2],
+            # Set for the incremental aggregator (see pyspark.sql.aggregator).
+            buffer_type=buffer_type,
         )
 
         # construct a CommonInlineUserDefinedFunction
@@ -1654,7 +1675,7 @@ class SparkConnectClient(object):
                 with attempt:
                     resp = self._stub.AnalyzePlan(
                         req,
-                        metadata=self._builder.metadata(),
+                        metadata=self._builder_metadata(),
                         timeout=self._rpc_deadlines.analyze_plan,
                     )
                     self._verify_response_integrity(resp)
@@ -1690,7 +1711,7 @@ class SparkConnectClient(object):
                     req,
                     self._stub,
                     self._retrying,
-                    self._builder.metadata(),
+                    self._execute_plan_metadata(req.operation_id),
                     reattachable_execute_plan_timeout=self._rpc_deadlines.reattachable_execute_plan,
                     reattach_execute_timeout=self._rpc_deadlines.reattach_execute,
                 )
@@ -1704,10 +1725,24 @@ class SparkConnectClient(object):
                 for attempt in self._retrying():
                     with attempt:
                         with disable_gc():
-                            for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
+                            for b in self._stub.ExecutePlan(
+                                req, metadata=self._execute_plan_metadata(req.operation_id)
+                            ):
                                 handle_response(b)
         except Exception as error:
             self._handle_error(error, req.operation_id)
+
+    def _builder_metadata(self) -> List[Tuple[str, str]]:
+        return [
+            (key, value)
+            for key, value in self._builder.metadata()
+            if key.lower() != _OPERATION_ID_METADATA_KEY
+        ]
+
+    def _execute_plan_metadata(self, operation_id: str) -> List[Tuple[str, str]]:
+        metadata = self._builder_metadata()
+        metadata.append((_OPERATION_ID_METADATA_KEY, operation_id))
+        return metadata
 
     def _execute_and_fetch_as_iterator(
         self,
@@ -1732,7 +1767,6 @@ class SparkConnectClient(object):
         for hook in self._session_hooks:
             req = hook.on_execute_plan(req)
             req.operation_id = operation_id
-
         num_records = 0
         arrow_batch_chunks_to_assemble: List[bytes] = []
 
@@ -1907,7 +1941,7 @@ class SparkConnectClient(object):
                     req,
                     self._stub,
                     self._retrying,
-                    self._builder.metadata(),
+                    self._execute_plan_metadata(req.operation_id),
                     reattachable_execute_plan_timeout=self._rpc_deadlines.reattachable_execute_plan,
                     reattach_execute_timeout=self._rpc_deadlines.reattach_execute,
                 )
@@ -1922,7 +1956,9 @@ class SparkConnectClient(object):
                     with attempt:
                         with disable_gc():
                             it = iter(
-                                self._stub.ExecutePlan(req, metadata=self._builder.metadata())
+                                self._stub.ExecutePlan(
+                                    req, metadata=self._execute_plan_metadata(req.operation_id)
+                                )
                             )
                         while True:
                             try:
@@ -2064,7 +2100,7 @@ class SparkConnectClient(object):
                     with disable_gc():
                         resp = self._stub.Config(
                             req,
-                            metadata=self._builder.metadata(),
+                            metadata=self._builder_metadata(),
                             timeout=self._rpc_deadlines.config,
                         )
                     self._verify_response_integrity(resp)
@@ -2110,7 +2146,7 @@ class SparkConnectClient(object):
                 with attempt:
                     resp = self._stub.Interrupt(
                         req,
-                        metadata=self._builder.metadata(),
+                        metadata=self._builder_metadata(),
                         timeout=self._rpc_deadlines.interrupt,
                     )
                     self._verify_response_integrity(resp)
@@ -2126,7 +2162,7 @@ class SparkConnectClient(object):
                 with attempt:
                     resp = self._stub.Interrupt(
                         req,
-                        metadata=self._builder.metadata(),
+                        metadata=self._builder_metadata(),
                         timeout=self._rpc_deadlines.interrupt,
                     )
                     self._verify_response_integrity(resp)
@@ -2142,7 +2178,7 @@ class SparkConnectClient(object):
                 with attempt:
                     resp = self._stub.Interrupt(
                         req,
-                        metadata=self._builder.metadata(),
+                        metadata=self._builder_metadata(),
                         timeout=self._rpc_deadlines.interrupt,
                     )
                     self._verify_response_integrity(resp)
@@ -2162,7 +2198,7 @@ class SparkConnectClient(object):
                 with attempt:
                     resp = self._stub.ReleaseSession(
                         req,
-                        metadata=self._builder.metadata(),
+                        metadata=self._builder_metadata(),
                         timeout=self._rpc_deadlines.release_session,
                     )
                     self._verify_response_integrity(resp)
@@ -2218,7 +2254,7 @@ class SparkConnectClient(object):
                 with attempt:
                     resp = self._stub.GetStatus(
                         req,
-                        metadata=self._builder.metadata(),
+                        metadata=self._builder_metadata(),
                         timeout=self._rpc_deadlines.get_status,
                     )
                     self._verify_response_integrity(resp)
@@ -2257,7 +2293,7 @@ class SparkConnectClient(object):
         spark_job_tags_sep = ","
         if tag is None:
             raise PySparkValueError(
-                errorClass="CANNOT_BE_NONE", message_paramters={"arg_name": "Spark Connect tag"}
+                errorClass="CANNOT_BE_NONE", messageParameters={"arg_name": "Spark Connect tag"}
             )
         if spark_job_tags_sep in tag:
             raise PySparkValueError(
@@ -2354,7 +2390,7 @@ class SparkConnectClient(object):
         try:
             return self._stub.FetchErrorDetails(
                 req,
-                metadata=self._builder.metadata(),
+                metadata=self._builder_metadata(),
                 timeout=self._rpc_deadlines.fetch_error_details,
             )
         except grpc.RpcError:
@@ -2773,7 +2809,7 @@ class SparkConnectClient(object):
             with attempt:
                 response: pb2.CloneSessionResponse = self._stub.CloneSession(
                     request,
-                    metadata=self._builder.metadata(),
+                    metadata=self._builder_metadata(),
                     timeout=self._rpc_deadlines.clone_session,
                 )
 

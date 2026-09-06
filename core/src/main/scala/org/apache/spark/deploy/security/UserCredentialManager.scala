@@ -61,7 +61,16 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 private[spark] class UserCredentialManager(
     sparkConf: SparkConf,
     tokenIngestor: TokenIngestor,
-    onCredentialsUpdate: (Long, Array[Byte]) => Unit) extends Logging {
+    onCredentialsUpdate: (Long, Array[Byte]) => Unit,
+    credentialProviderLoader: CredentialProviderLoader)
+  extends Logging {
+
+  def this(
+      sparkConf: SparkConf,
+      tokenIngestor: TokenIngestor,
+      onCredentialsUpdate: (Long, Array[Byte]) => Unit) = {
+    this(sparkConf, tokenIngestor, onCredentialsUpdate, new CredentialProviderLoader())
+  }
 
   private val safetyMargin = sparkConf.get(SECURITY_OIDC_RENEWAL_SAFETY_MARGIN)
   private val minInterval = sparkConf.get(SECURITY_OIDC_RENEWAL_MIN_INTERVAL)
@@ -112,7 +121,7 @@ private[spark] class UserCredentialManager(
       log"${MDC(LogKeys.PRINCIPAL, ctx.getPrincipal)} " +
       log"(issuer: ${MDC(LogKeys.URI, ctx.getIssuer)})")
 
-    val (credentials, earliestExpiry) = resolveCredentials(ctx)
+    val (credentials, earliestExpiry, activeProviders) = resolveCredentials(ctx)
     val serialized = UserCredentialManager.serializeUserCredentials(credentials)
     val version = credentialVersion.incrementAndGet()
 
@@ -131,25 +140,70 @@ private[spark] class UserCredentialManager(
 
     logInfo(log"Credential acquisition successful. Next renewal in " +
       log"${MDC(LogKeys.TIME_UNITS, UIUtils.formatDuration(renewalDelay))}.")
+
+    // Apply additional Spark properties declared by active providers.
+    // Only providers that successfully resolved credentials contribute properties.
+    // This allows provider modules to wire executor-side configuration
+    // (e.g., fs.s3a.aws.credentials.provider) without core having
+    // vendor-specific knowledge. Properties are only set if the user
+    // has not already configured them explicitly.
+    for (provider <- activeProviders) {
+      try {
+        val props = provider.additionalSparkProperties()
+        if (props != null) {
+          props.forEach { (key, value) =>
+            if (!sparkConf.contains(key)) {
+              sparkConf.set(key, value)
+              logInfo(log"Auto-configured ${MDC(LogKeys.CONFIG, key)} from " +
+                log"${MDC(LogKeys.CLASS_NAME, provider.getClass.getName)}")
+            } else {
+              logDebug(log"Skipped ${MDC(LogKeys.CONFIG, key)} from " +
+                log"${MDC(LogKeys.CLASS_NAME, provider.getClass.getName)} " +
+                log"(already configured)")
+            }
+          }
+        }
+      } catch {
+        case scala.util.control.NonFatal(e) =>
+          logWarning(log"Failed to apply additionalSparkProperties from " +
+            log"${MDC(LogKeys.CLASS_NAME, provider.getClass.getName)}. " +
+            log"Skipping.", e)
+      }
+    }
+
     (version, serialized)
   }
 
   def stop(): Unit = {
+    var interrupted = false
     if (renewalExecutor != null) {
       renewalExecutor.shutdownNow()
+      try {
+        if (!renewalExecutor.awaitTermination(
+            UserCredentialManager.RENEWAL_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+          logWarning(log"Timed out waiting for credential renewal to stop; " +
+            log"closing credential providers while renewal may still be running.")
+        }
+      } catch {
+        case e: InterruptedException =>
+          interrupted = true
+          logWarning(log"Interrupted while waiting for credential renewal to stop.", e)
+      }
     }
     // Close all initialized credential providers to release resources (e.g., HTTP clients).
-    // CredentialProviderLoader.closeAll() operates on global static state, which is safe
-    // because Spark enforces a single SparkContext (and thus a single UserCredentialManager)
-    // per JVM.
+    // This loader belongs to this manager, so closing it cannot affect a later SparkContext.
     try {
-      CredentialProviderLoader.closeAll()
+      credentialProviderLoader.closeAll()
     } catch {
       case e: InterruptedException =>
-        Thread.currentThread().interrupt()
+        interrupted = true
         logWarning(log"Interrupted while closing credential providers during shutdown.", e)
       case NonFatal(e) =>
         logWarning(log"Error closing credential providers during shutdown.", e)
+    } finally {
+      if (interrupted) {
+        Thread.currentThread().interrupt()
+      }
     }
   }
 
@@ -170,7 +224,7 @@ private[spark] class UserCredentialManager(
         log"${MDC(LogKeys.PRINCIPAL, ctx.getPrincipal)} " +
         log"(issuer: ${MDC(LogKeys.URI, ctx.getIssuer)})")
 
-      val (credentials, earliestExpiry) = resolveCredentials(ctx)
+      val (credentials, earliestExpiry, _) = resolveCredentials(ctx)
       val serialized = UserCredentialManager.serializeUserCredentials(credentials)
       val version = credentialVersion.incrementAndGet()
 
@@ -222,15 +276,16 @@ private[spark] class UserCredentialManager(
    * @return Tuple of (UserCredentials, earliest expiry across all service credentials)
    */
   private def resolveCredentials(
-      ctx: UserContext): (UserCredentials, Option[Instant]) = {
+      ctx: UserContext): (UserCredentials, Option[Instant], Seq[CredentialProvider]) = {
     val schemes = discoverSchemes()
 
     val credentialMap = new mutable.HashMap[String, ServiceCredential]()
+    val activeProviders = new mutable.ArrayBuffer[CredentialProvider]()
     var earliestExpiry: Option[Instant] = None
 
     for (scheme <- schemes) {
       try {
-        val providerOpt = CredentialProviderLoader.providerFor(scheme, credentialConfMap)
+        val providerOpt = credentialProviderLoader.providerFor(scheme, credentialConfMap)
         if (providerOpt.isPresent) {
           val provider = providerOpt.get()
           // Use a synthetic target URI with just the scheme for initial resolution.
@@ -245,6 +300,7 @@ private[spark] class UserCredentialManager(
               log"returned null; skipping.")
           } else {
             credentialMap.put(scheme, credential)
+            activeProviders += provider
 
             val expiry = credential.getExpiresAt
             if (expiry != null) {
@@ -271,7 +327,7 @@ private[spark] class UserCredentialManager(
           "Check that providers are on the classpath and configured correctly.")
     }
 
-    (new UserCredentials(credentialMap.asJava), earliestExpiry)
+    (new UserCredentials(credentialMap.asJava), earliestExpiry, activeProviders.toSeq)
   }
 
   /**
@@ -306,7 +362,7 @@ private[spark] class UserCredentialManager(
       // available on the classpath by probing CredentialProviderLoader.
       // This covers both built-in providers (e.g., connector/credential-aws for "s3a")
       // and third-party providers registered via ServiceLoader.
-      CredentialProviderLoader.discoverAllSchemes().asScala.toSet
+      credentialProviderLoader.discoverAllSchemes().asScala.toSet
     }
   }
 
@@ -381,6 +437,8 @@ private[spark] class UserCredentialManager(
 }
 
 private[spark] object UserCredentialManager {
+
+  private val RENEWAL_SHUTDOWN_TIMEOUT_SECONDS = 10L
 
   /**
    * Synthetic authority used in target URIs for scheme-based provider resolution.

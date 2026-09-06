@@ -432,7 +432,7 @@ class PlanMergingSuite extends SharedSparkSession
               "Missing or unexpected ReusedSubqueryExec in the plan")
           } else {
             assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
-            assert(reusedSubqueryIds.size == 0,
+            assert(reusedSubqueryIds.isEmpty,
               "Missing or unexpected ReusedSubqueryExec in the plan")
           }
         }

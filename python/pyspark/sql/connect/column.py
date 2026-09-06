@@ -17,46 +17,44 @@
 import datetime
 import decimal
 import warnings
-
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Union,
     Optional,
     Tuple,
+    Union,
 )
 
-from pyspark.sql.column import Column as ParentColumn
+import pyspark.sql.connect.proto as proto
 from pyspark.errors import (
-    PySparkTypeError,
     PySparkAttributeError,
+    PySparkTypeError,
     PySparkValueError,
+)
+from pyspark.errors.utils import with_origin_to_class
+from pyspark.sql.column import Column as ParentColumn
+from pyspark.sql.connect.expressions import (
+    CaseWhen,
+    CastExpression,
+    DropField,
+    Expression,
+    LiteralExpression,
+    SortOrder,
+    SubqueryExpression,
+    UnresolvedExtractValue,
+    UnresolvedFunction,
+    WindowExpression,
+    WithField,
 )
 from pyspark.sql.types import DataType
 from pyspark.sql.utils import enum_to_value
 
-import pyspark.sql.connect.proto as proto
-from pyspark.sql.connect.expressions import (
-    Expression,
-    UnresolvedFunction,
-    UnresolvedExtractValue,
-    LiteralExpression,
-    CaseWhen,
-    SortOrder,
-    SubqueryExpression,
-    CastExpression,
-    WindowExpression,
-    WithField,
-    DropField,
-)
-from pyspark.errors.utils import with_origin_to_class
-
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
-        LiteralType,
         DateTimeLiteral,
         DecimalLiteral,
+        LiteralType,
     )
     from pyspark.sql.connect.client import SparkConnectClient
     from pyspark.sql.connect.window import WindowSpec
@@ -635,11 +633,12 @@ class Column(ParentColumn):
 
 
 def _test() -> None:
+    import doctest
     import os
     import sys
-    import doctest
-    from pyspark.sql import SparkSession as PySparkSession
+
     import pyspark.sql.column
+    from pyspark.sql import SparkSession as PySparkSession
 
     globs = pyspark.sql.column.__dict__.copy()
     globs["spark"] = (

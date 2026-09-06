@@ -354,6 +354,22 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
         Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))),
         Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))))
     }
+
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(2))
+      val collatedChar = Literal.create("ab", CharType(2, "UTF8_LCASE"))
+      val collatedString = StringType("UTF8_LCASE")
+      Seq(TypeCoercion.ConcatCoercion, AnsiTypeCoercion.ConcatCoercion).foreach { r =>
+        ruleTest(r,
+          Concat(Seq(charLit, charLit)),
+          Concat(Seq(Cast(charLit, StringType), Cast(charLit, StringType))))
+        ruleTest(r,
+          Concat(Seq(collatedChar, collatedChar)),
+          Concat(Seq(
+            Cast(collatedChar, collatedString),
+            Cast(collatedChar, collatedString))))
+      }
+    }
   }
 
   test("type coercion for Elt") {
@@ -407,6 +423,23 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
       ruleTest(rule,
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))),
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))))
+    }
+
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(5))
+      val collatedChar = Literal.create("ab", CharType(5, "UTF8_LCASE"))
+      val collatedString = StringType("UTF8_LCASE")
+      Seq(TypeCoercion.EltCoercion, AnsiTypeCoercion.EltCoercion).foreach { r =>
+        ruleTest(r,
+          Elt(Seq(Literal(1), charLit, charLit)),
+          Elt(Seq(Literal(1), Cast(charLit, StringType), Cast(charLit, StringType))))
+        ruleTest(r,
+          Elt(Seq(Literal(1), collatedChar, collatedChar)),
+          Elt(Seq(
+            Literal(1),
+            Cast(collatedChar, collatedString),
+            Cast(collatedChar, collatedString))))
+      }
     }
   }
 
@@ -1083,6 +1116,34 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     ruleTest(TypeCoercion.ImplicitTypeCasts,
       NumericTypeUnaryExpression(Literal.create(null, NullType)),
       NumericTypeUnaryExpression(Literal.create(null, DoubleType)))
+
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(2))
+      ruleTest(TypeCoercion.ImplicitTypeCasts,
+        Upper(charLit),
+        Upper(Cast(charLit, StringType)))
+    }
+  }
+
+  test("coerce JsonTuple children without the NullType rewrite") {
+    val json = Literal("""{"a":1}""")
+    val nullField = Literal.create(null, NullType)
+    val intField = Literal(1)
+
+    // JsonTuple keeps its own NON_STRING_TYPE check, so these stay for checkInputDataTypes.
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
+      JsonTuple(Seq(json, nullField)),
+      JsonTuple(Seq(json, nullField)))
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
+      JsonTuple(Seq(json, intField)),
+      JsonTuple(Seq(json, intField)))
+
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(2))
+      ruleTest(TypeCoercion.ImplicitTypeCasts,
+        JsonTuple(Seq(charLit, charLit)),
+        JsonTuple(Seq(Cast(charLit, StringType), Cast(charLit, StringType))))
+    }
   }
 
   test("cast NullType for binary operators") {
