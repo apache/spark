@@ -2423,10 +2423,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(cache.offsetSeconds(t + 1) === after)
     assert(cache.offsetSeconds(t - 1) === before)
 
-    // (c) `epochSec` exactly on the transition instant exercises the `hi - 1` anchor: looking up
-    // `t` builds a window whose lower bound is `previousTransition(hi - 1) == t`, so the following
-    // lookup of `t - 1` must reset to the previous offset. A naive `previousTransition(t)` anchor
-    // would make the window span the transition and wrongly return `after` for `t - 1`.
+    // (c) `epochSec` exactly on the transition instant: `floorIndex(t)` selects the window that
+    // STARTS at `t`, so looking up `t` builds `[t, next)` and the following lookup of `t - 1`
+    // must miss and reset to the previous offset. An off-by-one in the floor search would make
+    // the window span the transition and wrongly return `after` for `t - 1`.
     val cache2 = new ZoneOffsetCache(zid)
     assert(cache2.offsetSeconds(t) === after)
     assert(cache2.offsetSeconds(t - 1) === before)
@@ -2461,7 +2461,11 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       val rules = zid.getRules
       val cache = new ZoneOffsetCache(zid)
       val secs = scala.collection.mutable.ArrayBuffer.empty[Long]
-      // A couple of points before the first transition, and one beyond the 2200 horizon.
+      // Points on both sides of the materialized table: before its 1600 start (resolved via the
+      // rules, exercising the left edge), between the start and the zone's first transition, and
+      // beyond the 2200 horizon.
+      secs += Instant.parse("1500-06-01T00:00:00Z").getEpochSecond
+      secs += Instant.parse("1599-12-31T23:59:59Z").getEpochSecond
       secs += Instant.parse("1700-06-01T00:00:00Z").getEpochSecond
       secs += Instant.parse("2260-06-01T00:00:00Z").getEpochSecond
       // Every transition instant and +/- 1s (boundary cases).
@@ -2574,12 +2578,14 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     // date-level truncation must resolve to the earlier of the two instants -- the atStartOfDay
     // convention the pre-fast-path implementation used -- for every input in the period, so that
     // date_trunc stays deterministic per period. Cases: a Jan 1 overlap (Tokyo 1888, the LMT
-    // fall-back), a 1st-of-month overlap (Havana 2015), and a quarter-start overlap (Berlin 1916).
+    // fall-back), a 1st-of-month overlap (Havana 2015), a quarter-start overlap (Berlin 1916),
+    // and a Monday-midnight overlap (Jerusalem 2001, DST ending at midnight before a Monday).
     val cases = Seq(
       // (zone, level, earlier midnight epoch-sec, later midnight epoch-sec)
       ("Asia/Tokyo", DateTimeUtils.TRUNC_TO_YEAR, -2587713539L, -2587712400L),
       ("America/Havana", DateTimeUtils.TRUNC_TO_MONTH, 1446350400L, 1446354000L),
-      ("Europe/Berlin", DateTimeUtils.TRUNC_TO_QUARTER, -1680487200L, -1680483600L))
+      ("Europe/Berlin", DateTimeUtils.TRUNC_TO_QUARTER, -1680487200L, -1680483600L),
+      ("Asia/Jerusalem", DateTimeUtils.TRUNC_TO_WEEK, 1001278800L, 1001282400L))
     for ((zone, level, earlierSec, laterSec) <- cases) {
       val zid = getZoneId(zone)
       val expected = Math.multiplyExact(earlierSec, MICROS_PER_SECOND)

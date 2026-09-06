@@ -588,9 +588,20 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * `cache`, which memoizes it over the constant-offset interval around the last lookup, so for
    * temporally clustered data the per-row transition-array binary search collapses to two
    * comparisons. Truncation then runs in the shifted-local frame, and the result is shifted back
-   * to UTC micros. Falls back to [[truncTimestampSlow]] when the offset at the candidate truncated
-   * instant differs from the offset at `micros` (DST/historical transition spans the candidate;
-   * SPARK-30766/30857) or on arithmetic overflow.
+   * to UTC micros.
+   *
+   * The arithmetic result is rejected -- and the row re-resolved through the zone -- when it
+   * cannot be exact:
+   *   - MINUTE/HOUR/DAY fall back to [[truncTimestampSlow]] when the offset at the candidate
+   *     truncated instant differs from the offset at `micros` (a DST/historical transition spans
+   *     the candidate; SPARK-30766/30857).
+   *   - WEEK/MONTH/QUARTER/YEAR additionally fall back when the candidate sits in the fall-back
+   *     overlap at its window's start, where the truncated local midnight occurs twice: the
+   *     arithmetic candidate is the later of the two instants while the reference resolution
+   *     picks the earlier (SPARK-57769). These levels resolve the fallback by mapping the
+   *     already-truncated local day through [[daysToMicros]] (`atStartOfDay` semantics) instead
+   *     of re-deriving it via [[truncTimestampSlow]].
+   *   - Any level falls back to [[truncTimestampSlow]] on arithmetic overflow.
    *
    * Sub-minute LMT offsets (e.g. America/Los_Angeles -07:52:58 pre-1883, see
    * SPARK-33404) and 30/45-minute offsets (Asia/Kolkata +05:30, Asia/Kathmandu +05:45)
@@ -1442,14 +1453,16 @@ object DateTimeUtils extends SparkDateTimeUtils {
  * A zone's transition schedule as primitive arrays: the sorted epoch-second transition instants
  * (`transSec`) and the UTC offset (in seconds) in effect on each window `[transSec(i),
  * transSec(i + 1))` (`offAfter(i)`); `offBefore0` is the offset before the first transition. Built
- * once per zone from the historical transitions plus rule-generated ones up to `horizonSec` (beyond
- * that the rules are consulted directly). Immutable and shared read-only across tasks via
- * [[ZoneOffsetCache.tableFor]].
+ * once per zone from the transitions in `[startSec, horizonSec)` -- historical plus
+ * rule-generated; outside that range on either side the rules are consulted directly rather than
+ * assuming the table's edge windows extend indefinitely. Immutable and shared read-only across
+ * tasks via [[ZoneOffsetCache.tableFor]].
  */
 private[util] final class ZoneTransitionTable(
     val transSec: Array[Long],
     val offAfter: Array[Int],
     val offBefore0: Int,
+    val startSec: Long,
     val horizonSec: Long) {
 
   /** Largest `i` with `transSec(i) <= epochSec`, or -1 when before the first transition. */
@@ -1501,7 +1514,8 @@ object ZoneOffsetCache {
     if (!seen) {
       before0 = rules.getOffset(tableStart).getTotalSeconds
     }
-    new ZoneTransitionTable(secs.toArray, offs.toArray, before0, tableHorizon.getEpochSecond)
+    new ZoneTransitionTable(secs.toArray, offs.toArray, before0, tableStart.getEpochSecond,
+      tableHorizon.getEpochSecond)
   }
 }
 
@@ -1560,7 +1574,8 @@ class ZoneOffsetCache(val zoneId: ZoneId) {
     }
     if (isFixedOffset) {
       fixedOffsetSec
-    } else if (epochSec >= table.horizonSec || table.transSec.length == 0) {
+    } else if (epochSec < table.startSec || epochSec >= table.horizonSec ||
+        table.transSec.length == 0) {
       rules.getOffset(Instant.ofEpochSecond(epochSec)).getTotalSeconds.toLong
     } else {
       val idx = table.floorIndex(epochSec)
@@ -1587,15 +1602,17 @@ class ZoneOffsetCache(val zoneId: ZoneId) {
     if (isFixedOffset) {
       // Unreachable in practice: the caller skips the guard for fixed-offset zones.
       fixedOffsetSec == offsetSec
-    } else if (epochSec >= table.horizonSec || table.transSec.length == 0) {
-      // Beyond the materialized table: defer to the fallback rather than re-derive the window and
+    } else if (epochSec < table.startSec || epochSec >= table.horizonSec ||
+        table.transSec.length == 0) {
+      // Outside the materialized table: defer to the fallback rather than re-derive the window and
       // its overlap from the rules -- that derivation would allocate about as much as the fallback.
       false
     } else {
       val idx = table.floorIndex(epochSec)
       if (idx < 0) {
-        // Before the first transition: no preceding window, so no overlap to fall into.
-        table.offBefore0.toLong == offsetSec
+        // Between the table's start and its first transition, the enclosing window began before
+        // the table, so its start (and any overlap there) is not materialized: stay conservative.
+        false
       } else {
         val off = table.offAfter(idx).toLong
         val prev = (if (idx == 0) table.offBefore0 else table.offAfter(idx - 1)).toLong
@@ -1620,8 +1637,9 @@ class ZoneOffsetCache(val zoneId: ZoneId) {
       hi = Long.MaxValue
       ambiguousUntil = lo
       fixedOffsetSec
-    } else if (epochSec >= table.horizonSec || table.transSec.length == 0) {
-      // Beyond the materialized range (or a zone with no transitions): resolve via the rules.
+    } else if (epochSec < table.startSec || epochSec >= table.horizonSec ||
+        table.transSec.length == 0) {
+      // Outside the materialized range (or a zone with no transitions): resolve via the rules.
       val instant = Instant.ofEpochSecond(epochSec)
       val nextT = rules.nextTransition(instant)
       if (nextT == null) {
@@ -1640,9 +1658,13 @@ class ZoneOffsetCache(val zoneId: ZoneId) {
       // In range: one binary search gives the enclosing window's start, end, and offset.
       val idx = table.floorIndex(epochSec)
       if (idx < 0) {
-        lo = Long.MinValue
+        // Between the table's start and its first transition. The offset is offBefore0 throughout
+        // (the true window extends back past the table's start), but the window installed here is
+        // clipped to the table so lookups before it re-resolve via the rules, and it is marked
+        // conservatively because its true start is not materialized.
+        lo = table.startSec
         hi = table.transSec(0)
-        ambiguousUntil = lo
+        ambiguousUntil = hi
         table.offBefore0.toLong
       } else {
         lo = table.transSec(idx)

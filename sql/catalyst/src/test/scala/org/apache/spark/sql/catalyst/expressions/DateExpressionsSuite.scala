@@ -949,6 +949,31 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57769: TruncTimestamp picks the earlier instant at a DST fall-back overlap") {
+    // When a fall-back overlap covers the truncated period-start midnight, every timestamp in the
+    // period must truncate to the earlier of the two midnight instants (the atStartOfDay
+    // convention). Exercised at the expression level so both the interpreted and the codegen path
+    // (with its per-task ZoneOffsetCache mutable state) are locked in. Epoch seconds below are the
+    // two instants sharing the period-start local midnight in each zone.
+    val cases = Seq(
+      // (zone, level, earlier midnight epoch-sec, later midnight epoch-sec)
+      ("America/Havana", "MONTH", 1446350400L, 1446354000L),
+      ("Europe/Berlin", "QUARTER", -1680487200L, -1680483600L),
+      ("Asia/Jerusalem", "WEEK", 1001278800L, 1001282400L))
+    for ((zone, fmt, earlierSec, laterSec) <- cases) {
+      val expected = Math.multiplyExact(earlierSec, MICROS_PER_SECOND)
+      // The later midnight itself (the previously-wrong case) and a row further into the period.
+      Seq(laterSec, laterSec + 86400).foreach { s =>
+        checkEvaluation(
+          TruncTimestamp(
+            Literal.create(fmt, StringType),
+            Literal.create(Math.multiplyExact(s, MICROS_PER_SECOND), TimestampType),
+            timeZoneId = Some(zone)),
+          expected)
+      }
+    }
+  }
+
   test("TruncTimestamp of Long.MinValue overflows with ArithmeticException") {
     withDefaultTimeZone(UTC) {
       // Long.MinValue is the smallest representable timestamp value (in micros). Truncating it
