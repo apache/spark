@@ -2793,6 +2793,89 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59285: two legs whose struct field names differ are still co-partitioned") {
+    // Both legs prune to nothing, and their key spaces differ only in a struct field name, which
+    // `identity` carries into the key type. A reduce cannot bridge that, since there is no reducer
+    // between two attributes, so calling the two sides incompatible leaves nowhere to go: the join
+    // must keep taking them as one layout.
+    withTable("p1", "p2", "p3", "p4") {
+      createTable("p1", Array(Column.create("id", structA)), Array(identity("id")))
+      sql("INSERT INTO testcat.ns.p1 VALUES (named_struct('a', 1))")
+      createTable("p2", Array(Column.create("id", structA)), Array(identity("id")))
+      sql("INSERT INTO testcat.ns.p2 VALUES (named_struct('a', 2))")
+      createTable("p3", Array(Column.create("k", structB)), Array(identity("k")))
+      sql("INSERT INTO testcat.ns.p3 VALUES (named_struct('b', 1))")
+      createTable("p4", Array(Column.create("k", structB)), Array(identity("k")))
+      sql("INSERT INTO testcat.ns.p4 VALUES (named_struct('b', 2))")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+        val df = sql(
+          """SELECT leg1.id, leg2.k FROM
+            |  (SELECT p1.id AS id FROM testcat.ns.p1 JOIN testcat.ns.p2 ON p1.id = p2.id) leg1
+            |  JOIN
+            |  (SELECT p3.k AS k FROM testcat.ns.p3 JOIN testcat.ns.p4 ON p3.k = p4.k) leg2
+            |  ON leg1.id = leg2.k
+            |""".stripMargin)
+        assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+          "the two legs are taken as one layout, so neither is shuffled")
+        checkAnswer(df, Nil)
+      }
+    }
+  }
+
+  test("SPARK-59285: two sides whose partitions were all pruned are not one layout") {
+    // Both legs prune to no partition at all, and they describe key spaces of different types:
+    // `identity(id)` gives `LongType` keys, `bucket(4, id)` gives `IntegerType` ones. Key rows are
+    // compared at their types, but two empty lists compare equal whatever they describe, so the
+    // join over the two legs used to declare them co-partitioned on that alone and report both
+    // partitionings as alternative descriptions of one layout. It reduces the identity side onto
+    // the bucket key space instead, which is what the two sides actually share.
+    //
+    // The FULL OUTER join above brings `t5`'s keys in, so the `GroupPartitionsExec` below it lays
+    // out real `IntegerType` key rows over that partitioning. That is what makes a member claiming
+    // `LongType` keys harmful rather than merely untidy.
+    val cols = Array(Column.create("id", LongType), Column.create("v", StringType))
+    withTable("t1", "t2", "t3", "t4", "t5") {
+      createTable("t1", cols, Array(identity("id")))
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 'a1')")
+      createTable("t2", cols, Array(identity("id")))
+      sql("INSERT INTO testcat.ns.t2 VALUES (2, 'b2')")
+      createTable("t3", cols, Array(bucket(4, "id")))
+      sql("INSERT INTO testcat.ns.t3 VALUES (1, 'c1')")
+      createTable("t4", cols, Array(bucket(4, "id")))
+      sql("INSERT INTO testcat.ns.t4 VALUES (2, 'd2')")
+      createTable("t5", cols, Array(bucket(4, "id")))
+      sql("INSERT INTO testcat.ns.t5 VALUES (3, 'e3')")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        val df = sql(
+          """SELECT legs.id1, legs.id2, t5.id AS id5
+            |FROM (
+            |  SELECT leg1.id AS id1, leg2.id AS id2
+            |  FROM (SELECT t1.id AS id FROM testcat.ns.t1 JOIN testcat.ns.t2 ON t1.id = t2.id) leg1
+            |  JOIN (SELECT t3.id AS id FROM testcat.ns.t3 JOIN testcat.ns.t4 ON t3.id = t4.id) leg2
+            |  ON leg1.id = leg2.id
+            |) legs
+            |FULL OUTER JOIN testcat.ns.t5 ON legs.id2 = t5.id
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+        assert(!plan.exists { p =>
+          keyedPartitioningsOf(Seq(p)).map(_.keyDataTypes).distinct.size > 1
+        }, "no node reports two key spaces as one layout")
+        assert(ValidateRequirements.validate(plan), "and the plan it does report holds up")
+
+        checkAnswer(df, Seq(Row(null, null, 3L)))
+      }
+    }
+  }
+
   test("SPARK-59054: shuffle one side: partition transform collapsing -0.0 and 0.0") {
     withFunction(UnboundSignedZerosFunction) {
       // `signed_zeros` maps id 1 to -0.0 and id 2 to 0.0: two partition keys that are equal
@@ -7750,7 +7833,7 @@ class KeyGroupedPartitioningSuite
     val keys = Seq(InternalRow(1), InternalRow(2))
     def markedExchange(e: AttributeReference): ShuffleExchangeExec =
       ShuffleExchangeExec(
-        KeyedPartitioning(Seq(e), keys).copy(mayContainUnknownPartitionKeys = true),
+        KeyedPartitioning(Seq(e), keys).withLayout(_.copy(mayContainUnknownPartitionKeys = true)),
         new LocalTableScanExec(Seq(e), Nil, None, false))
     def keylessExchange(e: AttributeReference): ShuffleExchangeExec =
       ShuffleExchangeExec(physical.HashPartitioning(Seq(e), keys.length),
@@ -7782,7 +7865,7 @@ class KeyGroupedPartitioningSuite
     val attrB = AttributeReference("b", IntegerType)()
     val keys = Seq(InternalRow(1), InternalRow(2))
     def markedKP(e: AttributeReference): KeyedPartitioning =
-      KeyedPartitioning(Seq(e), keys).copy(mayContainUnknownPartitionKeys = true)
+      KeyedPartitioning(Seq(e), keys).withLayout(_.copy(mayContainUnknownPartitionKeys = true))
     def markedExchange(e: AttributeReference): ShuffleExchangeExec =
       ShuffleExchangeExec(markedKP(e), new LocalTableScanExec(Seq(e), Nil, None, false))
     def plainExchange(e: AttributeReference): ShuffleExchangeExec =

@@ -98,15 +98,15 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
    * achievable granularity. Positions that cannot be expressed in the output are dropped.
    *
    * The resulting [[KeyedPartitioning]]s are the cross-product of the per-position alternatives
-   * restricted to the projectable positions. All share the same `partitionKeys` object (projected
-   * to the same subset of positions), preserving the invariant required by
+   * restricted to the projectable positions. All share the same `KeyLayout` object (projected to
+   * the same subset of positions), preserving the invariant required by
    * [[PartitioningCollection]].
    */
   private def projectKeyedPartitionings(
       kps: Seq[KeyedPartitioning]): LazyList[KeyedPartitioning] = {
     if (kps.isEmpty) return LazyList.empty
-    // All input KPs share the same `partitionKeys` reference and matching arity by the
-    // [[PartitioningCollection]] invariant (the only producer of multi-KP inputs here).
+    // All input KPs have matching arity by the [[PartitioningCollection]] invariant (the only
+    // producer of multi-KP inputs here).
     val numPositions = kps.head.expressions.length
 
     val alternativesPerPosition: IndexedSeq[LazyList[Expression]] =
@@ -136,20 +136,16 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
 
     if (projectablePositions.isEmpty) return LazyList.empty
 
-    // `PartitioningCollection` requires its members to agree on the marker, so the head
-    // represents them all.
-    val mayContainUnknownPartitionKeys = kps.head.mayContainUnknownPartitionKeys
-
     // Dropping a key position coarsens the declared set, which an unknown-keyed claim cannot
-    // survive.
-    if (projectablePositions.length < numPositions && mayContainUnknownPartitionKeys) {
+    // survive. The members share one layout, so the head answers for the marker.
+    if (projectablePositions.length < numPositions && kps.head.mayContainUnknownPartitionKeys) {
       return LazyList.empty
     }
 
-    // All input KPs share the same partitionKeys and flags by invariant, so the first one
-    // projects the keys for every combination below; only the expressions differ. The marker
-    // rides the copies unchanged: the guard above turned away the one shape that could not, a
-    // narrowing projection of a marked collection.
+    // All input KPs share one layout by invariant, so the first one projects it for every
+    // combination below. Only the expressions differ, and the marker rides the copies unchanged:
+    // the guard above turned away the one shape that could not, a narrowing projection of a marked
+    // collection.
     val projected = kps.head.project(projectablePositions)
 
     // Cross-product the per-position alternatives to produce all concrete KPs.

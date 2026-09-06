@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.physical.{IdentityReducer, KeyedPartitioning, KeyReducer, Partitioning, PartitioningCollection, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{IdentityReducer, KeyedPartitioning, KeyLayout, KeyReducer, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.execution.{SafeForKWayMerge, SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -78,30 +78,35 @@ case class GroupPartitionsExec(
     child.outputPartitioning match {
       case p: Partitioning with Expression =>
         // There can be multiple `KeyedPartitioning`s in an output partitioning of a join, but they
-        // can only differ in `expressions`. Their `partitionKeys` reference and `isCollapsed` flag
-        // are shared (enforced by `PartitioningCollection`), so the grouping is computed once.
+        // can only differ in `expressions`, since they share one `KeyLayout` (enforced by
+        // `PartitioningCollection`). So the grouping is computed once, and the layout it describes
+        // is shared by the members below.
         // When reducers are applied, the stored reduced expressions are re-targeted at each
         // `KeyedPartitioning`'s own key attribute and reported instead of the original ones. Their
         // data types match the reduced partition keys for the identity-vs-transform and
         // single-side-transform reducers; for the both-sides-reduce shape no single transform
-        // describes the keys (see `KeyedShuffleSpec.reducersBothWays`).
+        // describes the keys, so the reduce marks it (see `KeyedShuffleSpec.reducersBothWays`).
         //
-        // A marked claim pins undeclared rows to hash(key) % numPartitions (see
-        // `KeyedPartitioning.mayContainUnknownPartitionKeys`). Only an identity grouping keeps
-        // that relationship: a reorder, a coalesce, or a resize moves those rows, and a
-        // projection or reduction rewrites the keys the claim speaks for (see
-        // `identityGrouping`). Clearing only the marker would misreport the undeclared rows
-        // that remain, so give up the keyed partitioning at the physical output count (one per
-        // group, padding included) that a parent's `PartitioningCollection` requires for
-        // uniformity. The give-up deliberately under-reports: the node still physically groups
-        // the partitions but no longer claims a keyed layout, so a join planned over it does
-        // not see its required distribution satisfied and a plan containing it does not pass
-        // `ValidateRequirements`. `identityGrouping` is a lazy val, so repeated
-        // `outputPartitioning` calls scan it at most once.
-        if (PartitioningCollection.keyedMarkerOf(p).contains(true) && !identityGrouping) {
+        // A marked claim pins undeclared rows to hash(key) % numPartitions (see [[KeyLayout]]'s
+        // `mayContainUnknownPartitionKeys`). Only an identity grouping keeps that relationship: a
+        // reorder, a coalesce, or a resize moves those rows, and a projection or reduction rewrites
+        // the keys the claim speaks for (see `identityGrouping`). Clearing only the marker would
+        // misreport the undeclared rows that remain, so give up the keyed partitioning at the
+        // physical output count (one per group, padding included) that a parent's
+        // `PartitioningCollection` requires for uniformity. The give-up deliberately under-reports:
+        // the node still physically groups the partitions but no longer claims a keyed layout, so a
+        // join planned over it does not see its required distribution satisfied and a plan
+        // containing it does not pass `ValidateRequirements`. `identityGrouping` is a lazy val, so
+        // repeated `outputPartitioning` calls scan it at most once.
+        val marked = PartitioningCollection.keyedMarkerOf(p).contains(true)
+        if (marked && !identityGrouping) {
           UnknownPartitioning(grouping.partitions.size)
         } else {
-          val partitionKeys = grouping.partitions.map(_._1)
+          // One instance for every member, so they share it by reference. The marker comes from the
+          // child rather than from the grouping, and the guard above is what lets it carry over.
+          val layout =
+            if (marked) grouping.layout.copy(mayContainUnknownPartitionKeys = true)
+            else grouping.layout
           p.transform {
             case k: KeyedPartitioning =>
               val projectedExpressions = joinKeyPositions.fold(k.expressions)(_.map(k.expressions))
@@ -119,9 +124,7 @@ case class GroupPartitionsExec(
                   }
                 case None => projectedExpressions
               }
-              KeyedPartitioning(
-                effectiveExpressions, partitionKeys, grouping.isGrouped, grouping.isCollapsed,
-                mayContainUnknownPartitionKeys = k.mayContainUnknownPartitionKeys)
+              KeyedPartitioning(effectiveExpressions, layout)
           }.asInstanceOf[Partitioning]
         }
       case o => o
@@ -279,7 +282,7 @@ case class GroupPartitionsExec(
         group.tail.exists(childKeys(_) != first)
       }
     }
-    PartitionGrouping(partitions, isGrouped, isCollapsed, keysRewritten,
+    PartitionGrouping(partitions, reducedDataTypes, isGrouped, isCollapsed, keysRewritten,
       numPrunedPartitions, numReplicatedPartitionReads)
   }
 
@@ -567,17 +570,24 @@ case class GroupPartitionsExec(
 }
 
 /**
- * What a [[GroupPartitionsExec]] computes once and reports from several members. The last two
- * fields count the alignment's effect on the reads of the child's splits (see
+ * What a [[GroupPartitionsExec]] computes once and reports from several members: which of the
+ * child's partitions each of its own is built from, and the layout that describes them. The last
+ * two fields count the alignment's effect on the reads of the child's splits (see
  * `alignToExpectedKeys`), and are 0 outside the alignment path.
  */
 private case class PartitionGrouping(
     partitions: Seq[(InternalRowComparableWrapper, Seq[Int])],
+    dataTypes: Seq[DataType],
     isGrouped: Boolean,
     isCollapsed: Boolean,
     keysRewritten: Boolean,
     numPrunedPartitions: Int,
-    numReplicatedPartitionReads: Int)
+    numReplicatedPartitionReads: Int) {
+
+  /** Built once, so every member of a [[PartitioningCollection]] is given the same instance. */
+  lazy val layout: KeyLayout =
+    KeyLayout(partitions.map(_._1), dataTypes, isGrouped, isCollapsed)
+}
 
 /**
  * A PartitionCoalescer that groups partitions according to a pre-computed grouping plan.

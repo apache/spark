@@ -531,14 +531,14 @@ class ProjectedOrderingAndPartitioningSuite
     // See the `PartitioningCollection` class doc for why a collapsed member marks the others.
     val collection = PartitioningCollection.fromPartitionings(Seq(
       KeyedPartitioning(Seq(x), keys),
-      KeyedPartitioning(Seq(y), keys).copy(isCollapsed = true)))
+      KeyedPartitioning(Seq(y), keys).withLayout(_.copy(isCollapsed = true))))
     assert(allCollapsed(collection), "a collapsed member must mark the whole collection")
 
     // Nested collections are normalized too, so a collapsed sibling reaches into them.
     val nested = PartitioningCollection.fromPartitionings(Seq(
       PartitioningCollection.fromPartitionings(Seq(
         KeyedPartitioning(Seq(x), keys), KeyedPartitioning(Seq(y), keys))),
-      KeyedPartitioning(Seq(z), keys).copy(isCollapsed = true)))
+      KeyedPartitioning(Seq(z), keys).withLayout(_.copy(isCollapsed = true))))
     assert(allCollapsed(nested),
       "a collapsed sibling must mark the members of a nested collection")
   }

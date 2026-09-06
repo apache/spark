@@ -547,7 +547,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         keys: Seq[Int],
         hasUnknown: Boolean = false): KeyedShuffleSpec = KeyedShuffleSpec(
       KeyedPartitioning(Seq(a), keys.map(k => InternalRow(k)))
-        .copy(mayContainUnknownPartitionKeys = hasUnknown), distribution)
+        .withLayout(_.copy(mayContainUnknownPartitionKeys = hasUnknown)), distribution)
 
     // A partitioning with unknown partition keys (e.g. a side re-shuffled onto a keyed layout by
     // `KeyedShuffleSpec.createPartitioning`) only guarantees co-location for its declared keys, so
@@ -602,12 +602,12 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         keys: Seq[Long],
         hasUnknown: Boolean = false): KeyedShuffleSpec = KeyedShuffleSpec(
       KeyedPartitioning(Seq(bucket(4, a)), keys.map(k => InternalRow(k)))
-        .copy(mayContainUnknownPartitionKeys = hasUnknown), distribution)
+        .withLayout(_.copy(mayContainUnknownPartitionKeys = hasUnknown)), distribution)
     def keyedSpec(
         keys: Seq[Long],
         hasUnknown: Boolean = false): KeyedShuffleSpec = KeyedShuffleSpec(
       KeyedPartitioning(Seq(a), keys.map(k => InternalRow(k)))
-        .copy(mayContainUnknownPartitionKeys = hasUnknown), distribution)
+        .withLayout(_.copy(mayContainUnknownPartitionKeys = hasUnknown)), distribution)
 
     // `isExpressionCompatible` admits an identity-vs-transform pair when compatible transforms
     // are allowed, but then the two sides' partition keys live in different domains: raw values
@@ -636,7 +636,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     val a = $"a".int
     val b = $"b".int
     val marked = KeyedPartitioning(Seq(a, b), Seq(InternalRow(1, 2), InternalRow(3, 4)))
-      .copy(mayContainUnknownPartitionKeys = true)
+      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
     withSQLConf(
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
@@ -682,7 +682,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         KeyedPartitioning(
           Seq(TransformExpression(fn, Seq(a), Some(numBuckets))),
           Seq(InternalRow(0L), InternalRow(1L)))
-          .copy(mayContainUnknownPartitionKeys = hasUnknown),
+          .withLayout(_.copy(mayContainUnknownPartitionKeys = hasUnknown)),
         ClusteredDistribution(Seq(a)))
 
     // `allowCompatibleTransforms` lets a differing-bucket-count pair through

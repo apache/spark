@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, JoinType, LeftAnti, LeftExistence, LeftOuter, LeftSingle, RightOuter}
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, KeyedPartitioning, KeyLayout, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -106,9 +106,15 @@ trait ShuffledJoin extends JoinCodegenSupport {
       partitionings.map {
         case partitioning: Partitioning with Expression
             if PartitioningCollection.keyedMarkerOf(partitioning).contains(true) =>
+          // One cleared layout for the whole input, because a collection's members must share the
+          // layout by reference. They already share one, so the first member's answers for all.
+          var cleared: KeyLayout = null
           partitioning.transform {
             case k: KeyedPartitioning if k.mayContainUnknownPartitionKeys =>
-              k.copy(mayContainUnknownPartitionKeys = false)
+              if (cleared == null) {
+                cleared = k.layout.copy(mayContainUnknownPartitionKeys = false)
+              }
+              k.copy(layout = cleared)
           }.asInstanceOf[Partitioning]
         case p => p
       }

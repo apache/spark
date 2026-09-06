@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, RowOrdering, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -104,11 +104,13 @@ trait DataSourceV2ScanExecBase
     keyGroupedPartitioning match {
       case Some(exprs) if conf.v2BucketingEnabled && KeyedPartitioning.supportsExpressions(exprs) &&
           inputPartitions.nonEmpty && inputPartitions.forall(_.isInstanceOf[HasPartitionKey]) =>
-        val dataTypes = exprs.map(_.dataType)
-        val rowOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
-        val partitionKeys =
-          inputPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey()).sorted(rowOrdering)
-        Some(KeyedPartitioning(exprs, partitionKeys))
+        // `sortKeys` rather than sorting here, so the ordering and the type list come off the one
+        // factory that also wraps the keys, instead of this deriving a second ordering over the
+        // same schema.
+        Some(KeyedPartitioning(
+          exprs,
+          inputPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey()),
+          sortKeys = true))
       case _ => None
     }
   }
