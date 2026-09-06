@@ -27,6 +27,7 @@ import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -78,6 +79,15 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
   extends PartitionEvaluatorFactory[ColumnarBatch, ColumnarBatch] {
+
+  private val checkedOutput = childOutput ++ output.drop(childOutput.length).map { attr =>
+    CharVarcharUtils.stringLengthCheck(attr, attr.dataType)
+  }
+  private val hasCharVarcharOutput =
+    output.drop(childOutput.length).exists(attr => CharVarcharUtils.hasCharVarchar(attr.dataType))
+  private val physicalOutputSchema = CharVarcharUtils
+    .replaceCharVarcharWithStringForPhysicalType(outputSchema)
+    .asInstanceOf[StructType]
 
   override def createEvaluator()
       : PartitionEvaluator[ColumnarBatch, ColumnarBatch] =
@@ -137,10 +147,12 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
           StructField(s"_$i", dt)
         }.toArray)
 
-      val outputTypes = output.drop(childOutput.length).map(
-        _.dataType.transformRecursively {
-          case udt: UserDefinedType[_] => udt.sqlType
-        })
+      val outputTypes = output.drop(childOutput.length).map { attr =>
+        CharVarcharUtils.replaceCharVarcharWithStringForPhysicalType(
+          attr.dataType.transformRecursively {
+            case udt: UserDefinedType[_] => udt.sqlType
+          })
+      }
 
       val inputColumnIndices = resolveColumnIndices(allInputs.toSeq)
 
@@ -151,7 +163,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
           batch.column(0).isInstanceOf[ArrowColumnVector]
       }
 
-      if (inputColumnIndices.isDefined && isArrow) {
+      if (inputColumnIndices.isDefined && isArrow && !hasCharVarcharOutput) {
         // Path 1: Arrow columnar -- full optimization.
         evalArrowColumnar(peekIter, context, pyFuncs, argMetas,
           udfInputSchema, outputTypes, inputColumnIndices.get)
@@ -287,7 +299,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
       }
 
       val joined = new JoinedRow
-      val resultProj = UnsafeProjection.create(output, output)
+      val resultProj = UnsafeProjection.create(checkedOutput, output)
 
       val rowIter = resultIter.flatMap { batch =>
         validateOutputTypes(batch, outputTypes)
@@ -315,9 +327,9 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
     private def rowsToColumnarBatches(
         rowIter: Iterator[InternalRow],
         context: TaskContext): Iterator[ColumnarBatch] = {
-      val converters = new RowToColumnConverter(outputSchema)
+      val converters = new RowToColumnConverter(physicalOutputSchema)
       val vectors = OnHeapColumnVector
-        .allocateColumns(batchSize, outputSchema).toSeq
+        .allocateColumns(batchSize, physicalOutputSchema).toSeq
       val cb = new ColumnarBatch(vectors.toArray)
       context.addTaskCompletionListener[Unit] { _ => cb.close() }
 

@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -548,6 +549,7 @@ private[sql] object ArrowConverters extends Logging {
       errorOnDuplicatedFieldNames: Boolean,
       largeVarTypes: Boolean): DataFrame = {
     val attrs = toAttributes(schema)
+    val checkedAttrs = attrs.map(attr => CharVarcharUtils.stringLengthCheck(attr, attr.dataType))
     val batchesInDriver = arrowBatches.toArray
     val shouldUseRDD = session.sessionState.conf
       .arrowLocalRelationThreshold < batchesInDriver.map(_.length.toLong).sum
@@ -557,13 +559,15 @@ private[sql] object ArrowConverters extends Logging {
       val rdd = session.sparkContext
         .parallelize(batchesInDriver.toImmutableArraySeq, batchesInDriver.length)
         .mapPartitions { batchesInExecutors =>
-          ArrowConverters.fromBatchIterator(
+          val rows = ArrowConverters.fromBatchIterator(
             batchesInExecutors,
             schema,
             timeZoneId,
             errorOnDuplicatedFieldNames,
             largeVarTypes,
             TaskContext.get())
+          val projection = UnsafeProjection.create(checkedAttrs, attrs)
+          rows.map(row => projection(row).copy(): InternalRow)
         }
       session.internalCreateDataFrame(rdd.setName("arrow"), schema)
     } else {
@@ -577,7 +581,7 @@ private[sql] object ArrowConverters extends Logging {
         TaskContext.get())
 
       // Project/copy it. Otherwise, the Arrow column vectors will be closed and released out.
-      val proj = UnsafeProjection.create(attrs, attrs)
+      val proj = UnsafeProjection.create(checkedAttrs, attrs)
       Dataset.ofRows(session,
         LocalRelation(attrs, data.map(r => proj(r).copy()).toArray.toImmutableArraySeq))
     }

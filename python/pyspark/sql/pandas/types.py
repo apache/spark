@@ -34,6 +34,7 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     ByteType,
+    CharType,
     DataType,
     DateType,
     DayTimeIntervalType,
@@ -57,6 +58,7 @@ from pyspark.sql.types import (
     TimestampType,
     TimeType,
     UserDefinedType,
+    VarcharType,
     VariantType,
     VariantVal,
     YearMonthIntervalType,
@@ -133,7 +135,7 @@ def to_arrow_type(
         arrow_type = pa.float64()
     elif isinstance(dt, DecimalType):
         arrow_type = pa.decimal128(dt.precision, dt.scale)
-    elif isinstance(dt, StringType):
+    elif isinstance(dt, (StringType, CharType, VarcharType)):
         arrow_type = pa.large_string() if prefers_large_types else pa.string()
     elif isinstance(dt, BinaryType):
         arrow_type = pa.large_binary() if prefers_large_types else pa.binary()
@@ -904,7 +906,7 @@ def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
             return np.dtype("timedelta64[ns]")
         else:
             return np.dtype("timedelta64[us]")
-    elif isinstance(dt, StringType):
+    elif isinstance(dt, (StringType, CharType, VarcharType)):
         if LooseVersion(pd.__version__) < "3.0.0":
             return None
         else:
@@ -933,7 +935,7 @@ def _to_corrected_pandas_ext_type(dt: DataType) -> Optional[Any]:
         return pd.Float64Dtype()
     elif isinstance(dt, BooleanType):
         return pd.BooleanDtype()
-    elif isinstance(dt, StringType):
+    elif isinstance(dt, (StringType, CharType, VarcharType)):
         return pd.StringDtype()
     else:
         return None

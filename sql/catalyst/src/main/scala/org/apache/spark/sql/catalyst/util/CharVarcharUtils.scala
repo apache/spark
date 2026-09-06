@@ -34,6 +34,28 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   private[sql] val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
 
   /**
+   * Replaces CHAR/VARCHAR with their unconstrained string representation regardless of session
+   * configuration. Use this only at physical boundaries, such as Arrow, that encode all character
+   * string types as UTF8.
+   */
+  private[sql] def replaceCharVarcharWithStringForPhysicalType(dt: DataType): DataType = dt match {
+    case ArrayType(elementType, containsNull) =>
+      ArrayType(replaceCharVarcharWithStringForPhysicalType(elementType), containsNull)
+    case MapType(keyType, valueType, valueContainsNull) =>
+      MapType(
+        replaceCharVarcharWithStringForPhysicalType(keyType),
+        replaceCharVarcharWithStringForPhysicalType(valueType),
+        valueContainsNull)
+    case StructType(fields) =>
+      StructType(fields.map { field =>
+        field.copy(dataType = replaceCharVarcharWithStringForPhysicalType(field.dataType))
+      })
+    case c: CharType => c.toStringType
+    case v: VarcharType => v.toStringType
+    case other => other
+  }
+
+  /**
    * Creates a StringRPad expression with the pad literal inheriting the collation from the
    * str expression's data type. This is necessary because StringRPad may be created after
    * CollationTypeCasts has run, so the default pad with StringType companion object would

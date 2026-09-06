@@ -30,7 +30,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.ops.TypeApiOps
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData, STUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CharVarcharCodegenUtils, GenericArrayData, MapData, STUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{BinaryView, UTF8String, VariantVal}
 
@@ -206,6 +206,18 @@ object EvaluatePython {
         // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
         case c: Int => c.toLong
       }
+
+    case c: CharType => (obj: Any) => nullSafeConvert(obj) {
+      case _ =>
+        CharVarcharCodegenUtils.charTypeWriteSideCheck(
+          UTF8String.fromString(obj.toString), c.length)
+    }
+
+    case v: VarcharType => (obj: Any) => nullSafeConvert(obj) {
+      case _ =>
+        CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
+          UTF8String.fromString(obj.toString), v.length)
+    }
 
     case _: StringType => (obj: Any) => nullSafeConvert(obj) {
       case _ => UTF8String.fromString(obj.toString)
