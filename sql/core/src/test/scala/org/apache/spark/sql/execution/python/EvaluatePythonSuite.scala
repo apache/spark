@@ -20,9 +20,24 @@ package org.apache.spark.sql.execution.python
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.util.STUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.BinaryView
+import org.apache.spark.unsafe.types.{BinaryView, UTF8String}
 
 class EvaluatePythonSuite extends SparkFunSuite {
+
+  test("SPARK-59275: makeFromJava enforces CHAR/VARCHAR results") {
+    val charResult = EvaluatePython.makeFromJava(CharType(4))("ab")
+    assert(charResult === UTF8String.fromString("ab  "))
+
+    val varcharResult = EvaluatePython.makeFromJava(VarcharType(4))("abcd ")
+    assert(varcharResult === UTF8String.fromString("abcd"))
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        EvaluatePython.makeFromJava(VarcharType(4))("abcde")
+      },
+      condition = "EXCEED_LIMIT_LENGTH",
+      parameters = Map("limit" -> "4"))
+  }
 
   // POINT(1 2) in WKB, little-endian.
   private val pointWkb: Array[Byte] = "010100000000000000000031400000000000001C40"

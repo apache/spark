@@ -15,17 +15,19 @@
 # limitations under the License.
 #
 
+import tempfile
 import unittest
 from decimal import Decimal
 
-from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
+from pyspark.errors import AnalysisException, PythonException
 from pyspark.loose_version import LooseVersion
 from pyspark.sql import Row
-from pyspark.sql.functions import col, udf
+from pyspark.sql.functions import col, lit, pandas_udf, udf
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
+    CharType,
     DayTimeIntervalType,
     DecimalType,
     MapType,
@@ -270,17 +272,52 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             rounded = df.select(f("v").alias("d")).first().d
             self.assertEqual(rounded, Decimal("1.233999999999999986"))
 
-    def test_err_return_type(self):
-        with self.assertRaises(PySparkNotImplementedError) as pe:
-            udf(lambda x: x, VarcharType(10), useArrow=True)
-
-        self.check_error(
-            exception=pe.exception,
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={
-                "feature": "Invalid return type with Arrow-optimized Python UDF: VarcharType(10)"
-            },
+    def test_char_varchar_results(self):
+        schema = StructType(
+            [
+                StructField("c", CharType(4)),
+                StructField("v", VarcharType(3)),
+                StructField("nested", ArrayType(CharType(2))),
+                StructField("m", MapType(CharType(2), VarcharType(3))),
+            ]
         )
+
+        with self.sql_conf(
+            {
+                "spark.sql.charVarchar.standardSemantics.enabled": "true",
+                "spark.sql.execution.arrow.pythonUDF.columnarInput.enabled": "true",
+            }
+        ):
+            result = self.spark.range(1).select(
+                udf(
+                    lambda _: ("ab", "xyz", ["z"], {"k": "xy"}),
+                    schema,
+                    useArrow=True,
+                )("id").alias("s")
+            )
+            self.assertEqual(
+                result.first().s,
+                Row(c="ab  ", v="xyz", nested=["z "], m={"k ": "xy"}),
+            )
+
+            pandas_result = self.spark.range(1).select(
+                pandas_udf(lambda values: values, CharType(4))(lit("ab")).alias("c")
+            )
+            self.assertEqual(pandas_result.first().c, "ab  ")
+
+            invalid = self.spark.range(1).select(
+                udf(lambda _: "abcd", VarcharType(3), useArrow=True)("id")
+            )
+            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                invalid.collect()
+
+            with tempfile.TemporaryDirectory() as path:
+                self.spark.range(1).write.parquet(path)
+                columnar_input = self.spark.read.parquet(path)
+                columnar_result = columnar_input.select(
+                    udf(lambda _: "ab", CharType(4), useArrow=True)("id")
+                )
+                self.assertEqual(columnar_result.first()[0], "ab  ")
 
     def test_named_arguments_negative(self):
         @udf("int")

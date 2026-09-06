@@ -35,6 +35,7 @@ from pyspark.sql.types import (
     ArrayType,
     BinaryType,
     BooleanType,
+    CharType,
     DayTimeIntervalType,
     DoubleType,
     IntegerType,
@@ -44,6 +45,7 @@ from pyspark.sql.types import (
     StructField,
     StructType,
     TimestampNTZType,
+    VarcharType,
     VariantType,
     VariantVal,
 )
@@ -59,6 +61,35 @@ from pyspark.util import is_remote_only
 
 
 class BaseUDFTestsMixin:
+    def test_char_varchar_results(self):
+        schema = StructType(
+            [
+                StructField("c", CharType(4)),
+                StructField("v", VarcharType(3)),
+                StructField("nested", ArrayType(CharType(2))),
+                StructField("m", MapType(CharType(2), VarcharType(3))),
+            ]
+        )
+
+        with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+            result = self.spark.range(1).select(
+                udf(
+                    lambda _: ("ab", "xyz", ["z"], {"k": "xy"}),
+                    schema,
+                    useArrow=False,
+                )("id").alias("s")
+            )
+            self.assertEqual(
+                result.first().s,
+                Row(c="ab  ", v="xyz", nested=["z "], m={"k ": "xy"}),
+            )
+
+            invalid = self.spark.range(1).select(
+                udf(lambda _: "abcd", VarcharType(3), useArrow=False)("id")
+            )
+            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                invalid.collect()
+
     def test_udf_with_callable(self):
         data = self.spark.createDataFrame([(i, i**2) for i in range(10)], ["number", "squared"])
 
