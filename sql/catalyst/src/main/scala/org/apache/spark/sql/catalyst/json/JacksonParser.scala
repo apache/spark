@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 import com.fasterxml.jackson.core._
 import org.apache.hadoop.fs.PositionedReadable
 
-import org.apache.spark.SparkUpgradeException
+import org.apache.spark.{SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions._
@@ -188,7 +188,7 @@ class JacksonParser(
     val fieldConverter = makeConverter(mt.valueType)
     (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, mt) {
       case START_OBJECT =>
-        Some(InternalRow(convertMap(parser, fieldConverter, mt.keyType)))
+        Some(InternalRow(convertMap(parser, fieldConverter, mt.keyType, mt.valueType)))
     }
   }
 
@@ -481,7 +481,7 @@ class JacksonParser(
     case mt: MapType =>
       val valueConverter = makeConverter(mt.valueType)
       (parser: JsonParser) => parseJsonToken[MapData](parser, dataType) {
-        case START_OBJECT => convertMap(parser, valueConverter, mt.keyType)
+        case START_OBJECT => convertMap(parser, valueConverter, mt.keyType, mt.valueType)
       }
 
     case udt: UserDefinedType[_] =>
@@ -619,7 +619,8 @@ class JacksonParser(
   private def convertMap(
       parser: JsonParser,
       fieldConverter: ValueConverter,
-      keyType: DataType): MapData = {
+      keyType: DataType,
+      valueType: DataType): MapData = {
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
     var badRecordException: Option[Throwable] = None
@@ -639,9 +640,8 @@ class JacksonParser(
       }
     }
 
-    // The JSON map will never have null or duplicated map keys, it's safe to create a
-    // ArrayBasedMapData directly here.
-    val mapData = ArrayBasedMapData(keys.toArray, values.toArray)
+    val mapData = new ArrayBasedMapBuilder(keyType, valueType).from(
+      new GenericArrayData(keys.toArray), new GenericArrayData(values.toArray))
 
     if (badRecordException.isEmpty) {
       mapData
@@ -720,6 +720,7 @@ class JacksonParser(
       }
     } catch {
       case e: SparkUpgradeException => throw e
+      case e: SparkRuntimeException if e.getCondition == "DUPLICATED_MAP_KEY" => throw e
       case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException) =>
         // JSON parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by

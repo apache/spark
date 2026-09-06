@@ -37,11 +37,11 @@ import com.google.common.io.ByteStreams
 import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.security.AccessControlException
 
-import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
+import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, ToStringBase}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, CharVarcharUtils, DateFormatter, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, BadRecordException, CharVarcharUtils, DateFormatter, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -259,10 +259,14 @@ class StaxXmlParser(
         throw BadRecordException(xmlLiteral, () => Array.empty,
           wrappedCharException)
       case PartialResultException(row, cause) =>
-        throw BadRecordException(
-          record = xmlLiteral,
-          partialResults = () => Array(row),
-          cause)
+        SparkErrorUtils.getRootCause(cause) match {
+          case e: SparkRuntimeException if e.getCondition == "DUPLICATED_MAP_KEY" => throw e
+          case _ =>
+            throw BadRecordException(
+              record = xmlLiteral,
+              partialResults = () => Array(row),
+              cause)
+        }
       case PartialResultArrayException(rows, cause) =>
         throw BadRecordException(record = xmlLiteral, partialResults = () => rows, cause)
       case e: Throwable =>
@@ -377,32 +381,31 @@ class StaxXmlParser(
       keyType: DataType,
       valueType: DataType,
       attributes: Array[Attribute]): MapData = {
-    val kvPairs = ArrayBuffer.empty[(UTF8String, Any)]
+    val mapBuilder = new ArrayBasedMapBuilder(keyType, valueType)
     def mapKey(raw: String): UTF8String = {
       CharVarcharUtils.applyTextParseSemantics(UTF8String.fromString(raw), keyType)
     }
     attributes.foreach { attr =>
-      kvPairs += (mapKey(options.attributePrefix + attr.getName.getLocalPart)
-        -> convertTo(attr.getValue, valueType))
+      mapBuilder.put(
+        mapKey(options.attributePrefix + attr.getName.getLocalPart),
+        convertTo(attr.getValue, valueType))
     }
     var shouldStop = false
     while (!shouldStop) {
       parser.nextEvent match {
         case e: StartElement =>
           val key = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
-          kvPairs +=
-          (mapKey(key) -> convertField(parser, valueType, key))
+          mapBuilder.put(mapKey(key), convertField(parser, valueType, key))
         case c: Characters if !c.isWhiteSpace =>
           // Create a value tag field for it
-          kvPairs +=
           // TODO: We don't support an array value tags in map yet.
-          (mapKey(options.valueTag) -> convertTo(c.getData, valueType))
+          mapBuilder.put(mapKey(options.valueTag), convertTo(c.getData, valueType))
         case _: EndElement | _: EndDocument =>
           shouldStop = true
         case _ => // do nothing
       }
     }
-    ArrayBasedMapData(kvPairs.toMap)
+    mapBuilder.build()
   }
 
   /**
@@ -540,6 +543,7 @@ class StaxXmlParser(
           }
         } catch {
           case e: SparkUpgradeException => throw e
+          case e: SparkRuntimeException if e.getCondition == "DUPLICATED_MAP_KEY" => throw e
           case NonFatal(e) =>
             // TODO: we don't support partial results now
             badRecordException = badRecordException.orElse(Some(e))

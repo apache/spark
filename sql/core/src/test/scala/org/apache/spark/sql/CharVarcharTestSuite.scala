@@ -861,6 +861,15 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       parameters = Map("limit" -> "5"))
   }
 
+  private def assertDuplicateMapKey(query: String): Unit = {
+    checkError(
+      exception = intercept[SparkRuntimeException] { sql(query).collect() },
+      condition = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "a ",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\""))
+  }
+
   test("user-specified schema in cast") {
     def assertNoCharType(df: DataFrame): Unit = {
       checkAnswer(df, Row("0"))
@@ -2293,6 +2302,27 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       checkAnswer(
         sql("SELECT schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS VARCHAR(40)))"),
         Row("STRUCT<a: BIGINT>"))
+    }
+  }
+
+  test("SPARK-59274: normalized CHAR map key collisions honor the dedup policy") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val jsonQuery =
+        """SELECT from_json('{"a":1,"a ":2}', 'MAP<CHAR(2), INT>')"""
+      val xmlQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><a>1</a>9</m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('valueTag', 'a ')).m""".stripMargin
+
+      assertDuplicateMapKey(jsonQuery)
+      assertDuplicateMapKey(xmlQuery)
+
+      withSQLConf(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+        checkAnswer(sql(jsonQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(xmlQuery), Row(Map("a " -> 9)))
+      }
     }
   }
 }
