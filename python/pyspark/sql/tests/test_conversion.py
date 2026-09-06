@@ -22,11 +22,11 @@ from zoneinfo import ZoneInfo
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.sql.conversion import (
+    ArrowArrayConversion,
     ArrowArrayToPandasConversion,
+    ArrowBatchTransformer,
     ArrowTableToRowsConversion,
     LocalDataToArrowConversion,
-    ArrowArrayConversion,
-    ArrowBatchTransformer,
     PandasToArrowConversion,
 )
 from pyspark.sql.types import (
@@ -46,6 +46,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampNTZType,
     TimestampType,
     UserDefinedType,
     VariantType,
@@ -351,8 +352,9 @@ class PandasToArrowConversionTests(unittest.TestCase):
 
     def test_convert_decimal(self):
         """Test int to decimal coercion."""
-        import pandas as pd
         from decimal import Decimal
+
+        import pandas as pd
 
         # DataFrame with integers, schema expects decimal
         df = pd.DataFrame({"a": [1, 2, 3]})
@@ -461,6 +463,21 @@ class PandasToArrowConversionTests(unittest.TestCase):
         result = PandasToArrowConversion.convert([cat_series], schema)
         self.assertEqual(result.column(0).to_pylist(), ["a", "b", "a", "c"])
 
+    def test_convert_chunked_array_backed(self):
+        """Test a chunked arrow-backed series is converted to a single Array."""
+        import pandas as pd
+        import pyarrow as pa
+
+        # pa.Array.from_pandas returns a ChunkedArray here, which
+        # pa.RecordBatch.from_arrays rejects.
+        chunked = pa.chunked_array([pa.array(["a", "b"]), pa.array(["c", "d", "e"])])
+        series = pd.Series(chunked, dtype="string[pyarrow]")
+        schema = StructType([StructField("s", StringType())])
+
+        result = PandasToArrowConversion.convert([series], schema, arrow_cast=True)
+        self.assertIsInstance(result.column(0), pa.Array)
+        self.assertEqual(result.column(0).to_pylist(), ["a", "b", "c", "d", "e"])
+
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ConversionTests(unittest.TestCase):
@@ -471,12 +488,19 @@ class ConversionTests(unittest.TestCase):
             (IntegerType(), (1,), (None,)),
             ((IntegerType(), {"nullable": False}), (1,)),
             (StringType(), ("a",)),
+            # bool coerced to string matches the JVM (EvaluatePython.makeFromJava).
+            (StringType(), (True, "true"), (False, "false")),
             (BinaryType(), (b"a",)),
             (GeographyType("ANY"), (None,)),
             (GeometryType("ANY"), (None,)),
             (ArrayType(IntegerType()), ([1, None],)),
             (ArrayType(IntegerType(), containsNull=False), ([1, 2],)),
             (ArrayType(BinaryType()), ([b"a", b"b"],)),
+            # array<string> with already-str, coerced (int/bool) and null elements.
+            (
+                ArrayType(StringType()),
+                (["ok", 42, True, False, None], ["ok", "42", "true", "false", None]),
+            ),
             (MapType(StringType(), IntegerType()), ({"a": 1, "b": None},)),
             (
                 MapType(StringType(), IntegerType(), valueContainsNull=False),
@@ -696,6 +720,20 @@ class ConversionTests(unittest.TestCase):
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowArrayToPandasConversionTests(unittest.TestCase):
+    def test_convert_numpy_ser_name_survives_preprocess_time(self):
+        # convert_numpy reads the Arrow field name before preprocess_time, because the
+        # pa.compute kernels it runs for timestamps return a new array with no field name.
+        import pyarrow as pa
+
+        for pa_type in [pa.timestamp("us", tz="UTC"), pa.timestamp("s"), pa.timestamp("ns")]:
+            ts = pa.array([datetime.datetime(2020, 6, 15, 12, 30)], type=pa.timestamp("us")).cast(
+                pa_type
+            )
+            col = pa.RecordBatch.from_arrays([ts], ["tscol"]).column(0)
+            spark_type = TimestampType() if pa_type.tz is not None else TimestampNTZType()
+            result = ArrowArrayToPandasConversion.convert_numpy(col, spark_type, timezone="UTC")
+            self.assertEqual(result.name, "tscol", f"name lost for {pa_type}")
+
     def test_udt_convert_numpy(self):
         import pyarrow as pa
 

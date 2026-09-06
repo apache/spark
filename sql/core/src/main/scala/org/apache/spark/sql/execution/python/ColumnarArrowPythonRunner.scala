@@ -42,7 +42,10 @@ private[python] class ColumnarArrowPythonWithNamedArgumentRunner(
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String],
-    override protected val inputColumnIndices: Array[Int])
+    override protected val inputColumnIndices: Array[Int],
+    // Per-UDF element-wise nesting depth, parallel to `funcs` (see
+    // `PythonUDF.elementwiseNestingDepth`); empty means depth 1 for every UDF.
+    elementwiseNestingDepths: Seq[Int] = Nil)
   extends BaseArrowPythonRunner[ColumnarBatch, ColumnarBatch](
     funcs, evalType, argMetas.map(_.map(_.offset)), schema, timeZoneId, largeVarTypes,
     pythonMetrics, jobArtifactUUID, sessionUUID)
@@ -51,20 +54,14 @@ private[python] class ColumnarArrowPythonWithNamedArgumentRunner(
 
   override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
-  // The input schema travels in evalConf (key "input_type"), exactly like
-  // ArrowPythonWithNamedArgumentRunner. It must NOT be written into the UDF command section:
+  // The input schema (and per-UDF nesting depth) travel in evalConf, exactly like
+  // ArrowPythonWithNamedArgumentRunner. They must NOT be written into the UDF command section:
   // the worker's WorkerInitInfo.from_stream reads that section as a UDF count followed by UDF
   // entries, so an extra UTF string there desyncs the whole init-message parse -- the worker
   // then blocks waiting for bytes past the end of the init message and the task hangs forever.
-  override protected def evalConf: Map[String, String] = {
-    if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
-      super.evalConf ++ Map(
-        "input_type" -> schema.json
-      )
-    } else {
-      super.evalConf
-    }
-  }
+  override protected def evalConf: Map[String, String] =
+    ArrowPythonRunner.elementwiseEvalConf(
+      super.evalConf, evalType, schema, elementwiseNestingDepths)
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas)

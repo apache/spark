@@ -17,6 +17,7 @@
 
 from multiprocessing.pool import ThreadPool
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -26,24 +27,22 @@ from typing import (
     Tuple,
     Union,
     cast,
-    TYPE_CHECKING,
 )
 
 import numpy as np
 import pandas as pd
 
-from pyspark import keyword_only, since, inheritable_thread_target
-from pyspark.ml.connect import Estimator, Model
-from pyspark.ml.connect.base import Evaluator
+from pyspark import inheritable_thread_target, keyword_only, since
+from pyspark.ml.connect.base import Estimator, Evaluator, Model
 from pyspark.ml.connect.io_utils import (
     MetaAlgorithmReadWrite,
     ParamsReadWrite,
 )
-from pyspark.ml.param import Params, Param, TypeConverters
+from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasParallelism, HasSeed
-from pyspark.sql.functions import col, lit, rand
-from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import SparkSession
+from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.functions import col, lit, rand
 from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:

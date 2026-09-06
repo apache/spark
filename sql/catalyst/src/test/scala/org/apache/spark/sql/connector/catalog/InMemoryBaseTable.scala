@@ -25,11 +25,11 @@ import java.util.OptionalLong
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Cast, EvalMode, GenericInternalRow, JoinedRow, Literal, MetadataStructFieldWithLogicalName}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Cast, EvalMode, Expression => CatalystExpression, GenericInternalRow, GetStructField, JoinedRow, Literal, MetadataStructFieldWithLogicalName, Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
@@ -43,7 +43,7 @@ import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.{ColumnImpl, SupportsStreamingUpdateAsAppend}
+import org.apache.spark.sql.internal.connector.{ColumnImpl, SupportsRuntimeCatalystFiltering, SupportsStreamingUpdateAsAppend}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -186,8 +186,10 @@ abstract class InMemoryBaseTable(
   private val metadataColumnNames = metadataColumns.map(_.name).toSet
 
   // Metadata column renaming is supported -- see [[InMemoryScanBuilder.pruneColumns]] and
-  // [[BatchScanBaseClass.createReaderFactory]] for implementation details.
-  override val canRenameConflictingMetadataColumns: Boolean = true
+  // [[BatchScanBaseClass.createReaderFactory]] for implementation details. Set the property to
+  // false to act like a connector that suppresses such conflicts instead of renaming them.
+  override val canRenameConflictingMetadataColumns: Boolean =
+    properties.getOrDefault("rename-conflicting-metadata-columns", "true").toBoolean
 
   private val allowUnsupportedTransforms =
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
@@ -208,6 +210,7 @@ abstract class InMemoryBaseTable(
     case _: SortedBucketTransform =>
     case _: ClusterByTransform =>
     case NamedTransform("truncate", Seq(_: NamedReference, _: V2Literal[_])) =>
+    case NamedTransform("signed_zeros", Seq(_: NamedReference)) =>
     case t if !allowUnsupportedTransforms =>
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")
   }
@@ -226,6 +229,10 @@ abstract class InMemoryBaseTable(
       case Some(_) => ref.fieldNames()
       case None => throw new IllegalArgumentException(s"${ref.describe()} does not exist.")
     }
+  }
+
+  protected def identityPartitionReferences: Array[NamedReference] = {
+    partitioning.collect { case IdentityTransform(ref) => ref }
   }
 
   private val UTC = ZoneId.of("UTC")
@@ -320,6 +327,15 @@ abstract class InMemoryBaseTable(
         extractor(ref.fieldNames, cleanedSchema, row) match {
           case (str: UTF8String, StringType) =>
             str.substring(0, length.value.asInstanceOf[Int])
+          case (v, t) =>
+            throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
+        }
+      // the result should be consistent with SignedZerosFunction defined at
+      // transformFunctions.scala
+      case NamedTransform("signed_zeros", Seq(ref: NamedReference)) =>
+        extractor(ref.fieldNames, cleanedSchema, row) match {
+          case (value: Long, LongType) =>
+            if (value == 1L) -0.0d else if (value == 2L) 0.0d else value.toDouble
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
@@ -501,9 +517,10 @@ abstract class InMemoryBaseTable(
   }
 
   private def canEvaluate(filter: Filter): Boolean = {
-    if (partitioning.length == 1 && partitioning.head.references.length == 1) {
+    val identityRefs = identityPartitionReferences
+    if (partitioning.length == 1 && identityRefs.length == 1) {
       filter match {
-        case In(attrName, _) if attrName == partitioning.head.references.head.toString => true
+        case In(attrName, _) if attrName == identityRefs.head.toString => true
         case _ => false
       }
     } else {
@@ -521,21 +538,33 @@ abstract class InMemoryBaseTable(
     private var _pushedFilters: Array[Filter] = Array.empty
 
     override def build: Scan = {
-      val scan = if (InMemoryBaseTable.this.ordering.nonEmpty) {
-        new InMemoryBatchScanWithOrdering(
-          data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema,
-          options)
-      } else {
-        InMemoryBatchScan(
-          data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema,
-          options)
+      val scan = createScan(
+        data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema, options)
+      scan match {
+        case s: InMemoryBatchScan =>
+          if (evaluableFilters.nonEmpty) {
+            s.filter(evaluableFilters)
+          }
+          s.pushedFilters = _pushedFilters
+        case _ =>
       }
-      if (evaluableFilters.nonEmpty) {
-        scan.filter(evaluableFilters)
-      }
-      scan.pushedFilters = _pushedFilters
       recordScanEvent(_pushedFilters)
       scan
+    }
+
+    /**
+     * Creates the batch scan for [[build]].
+     */
+    protected def createScan(
+        partitions: Seq[InputPartition],
+        readSchema: StructType,
+        tableSchema: StructType,
+        options: CaseInsensitiveStringMap): BatchScanBaseClass = {
+      if (InMemoryBaseTable.this.ordering.nonEmpty) {
+        new InMemoryBatchScanWithOrdering(partitions, readSchema, tableSchema, options)
+      } else {
+        InMemoryBatchScan(partitions, readSchema, tableSchema, options)
+      }
     }
 
     override def pruneColumns(requiredSchema: StructType): Unit = {
@@ -608,6 +637,12 @@ abstract class InMemoryBaseTable(
     extends Scan with Batch with SupportsReportStatistics with SupportsReportPartitioning {
 
     override def toBatch: Batch = this
+
+    protected def identityPartitionAttributes: Array[NamedReference] = {
+      identityPartitionReferences.distinct
+        .filter(ref => readSchema.findNestedField(
+          ref.fieldNames.toImmutableArraySeq, resolver = SQLConf.get.resolver).isDefined)
+    }
 
     override def estimateStatistics(): Statistics = {
       if (data.isEmpty) {
@@ -691,6 +726,110 @@ abstract class InMemoryBaseTable(
       new InMemoryMicroBatchStream(readSchema, tableSchema)
   }
 
+  /**
+   * Reference implementation of [[SupportsRuntimeCatalystFiltering.filter]] for the in-memory
+   * fixtures: records what was pushed, and binds expressions referencing only identity partition
+   * columns against the partition key to drop partitions that do not match. Interpreting the
+   * bound expression lets the fixture honor arbitrary pushed expressions. Mixing classes supply
+   * their own `filterAttributes()`.
+   */
+  trait CatalystRuntimeFilteringScan extends SupportsRuntimeCatalystFiltering {
+    self: BatchScanBaseClass =>
+
+    /** The full table schema, used to locate partition columns pruned out of `readSchema`. */
+    protected def tableSchema: StructType
+
+    private val catalystPredicates = ArrayBuffer.empty[CatalystExpression]
+    private var filterCalls = 0
+
+    override def filter(expressions: Array[CatalystExpression]): Unit = {
+      catalystPredicates ++= expressions
+      filterCalls += 1
+      val partAttrs = partitionAttributes
+      if (partAttrs.isEmpty) return
+
+      expressions.foreach { expr =>
+        // Top down, so `s.part` is rewritten before its `s` child is considered.
+        val remapped = expr.transformDown {
+          case e => partitionAttrFor(e, partAttrs).getOrElse(e)
+        }
+        // Evaluate expressions only when every reference maps to an identity partition-key slot.
+        if (remapped.references.isEmpty) {
+          val pred = CatalystPredicate.createInterpreted(remapped)
+          self.data = self.data.filter { p =>
+            try {
+              pred.eval(p.asInstanceOf[BufferedRows].partitionKey())
+            } catch {
+              // Keep the partition on eval failure, which is safe here because every predicate
+              // the fixture pushes evaluates cleanly. `PartitionPredicateImpl` fails open for a
+              // reason of its own: Spark keeps the post-scan `FilterExec` on that path, so
+              // failing open costs just a pruning opportunity. A scan declaring an attribute in
+              // `fullyPushedFilterAttributes()` stands alone as the evaluator, so keeping an
+              // unevaluated partition would return nonmatching rows.
+              case _: Exception => true
+            }
+          }
+        }
+      }
+    }
+
+    /** Predicates recorded by [[filter]], for test assertions only. */
+    def pushedCatalystPredicates: Seq[CatalystExpression] = catalystPredicates.toSeq
+
+    def filterCallCount: Int = filterCalls
+
+    /**
+     * Identity partition columns paired with their bound partition-key slots.
+     *
+     * Only identity transforms expose a source path because their partition-key slot retains the
+     * source value. Name parts stay separate so a quoted top-level column `a.b` remains distinct
+     * from a nested column `a`.`b`.
+     */
+    private def partitionAttributes: Seq[(Seq[String], BoundReference)] = {
+      partitioning.zipWithIndex.flatMap {
+        case (IdentityTransform(ref), ordinal) =>
+          val path = ref.fieldNames.toImmutableArraySeq
+          val resolver = SQLConf.get.resolver
+          readSchema.findNestedField(path, resolver = resolver)
+            .orElse(tableSchema.findNestedField(path, resolver = resolver)).map {
+            case (_, f) => path -> BoundReference(ordinal, f.dataType, f.nullable)
+          }
+        case _ => None
+      }.toSeq
+    }
+
+    /**
+     * The partition-key slot that `e` reads, or None if `e` reads no identity partition column.
+     * The path `e` reads is compared to each partition column's name parts component-wise with the
+     * resolver, so a quoted top-level column `a.b` cannot collide with a nested column `a`.`b`.
+     */
+    private def partitionAttrFor(
+        e: CatalystExpression,
+        partAttrs: Seq[(Seq[String], BoundReference)]): Option[BoundReference] = {
+      val resolver = SQLConf.get.resolver
+      partitionKeyPath(e).flatMap { path =>
+        partAttrs.collectFirst {
+          case (parts, attr) if parts.length == path.length &&
+            parts.lazyZip(path).forall((part, name) => resolver(part, name)) => attr
+        }
+      }
+    }
+
+    /**
+     * The name parts `e` reads, or None if it reads neither a column nor a struct field. Each
+     * `GetStructField` ordinal is the field's position in its parent struct. Examples:
+     *   - `AttributeReference(a)` -> `Seq("a")`, the top level column a
+     *   - `GetStructField(AttributeReference(a), 0)` -> `Seq("a", "b")`, the nested column a.b
+     *   - `GetStructField(GetStructField(AttributeReference(a), 0), 0)` -> `Seq("a", "b", "c")`
+     */
+    private def partitionKeyPath(e: CatalystExpression): Option[Seq[String]] = e match {
+      case a: AttributeReference => Some(Seq(a.name))
+      case g: GetStructField =>
+        partitionKeyPath(g.child).map(parent => parent :+ g.childSchema(g.ordinal).name)
+      case _ => None
+    }
+  }
+
   case class InMemoryBatchScan(
       var _data: Seq[InputPartition],
       readSchema: StructType,
@@ -705,14 +844,12 @@ abstract class InMemoryBaseTable(
     var pushedFilters: Array[Filter] = Array.empty
 
     override def filterAttributes(): Array[NamedReference] = {
-      val scanFields = readSchema.fields.map(_.name).toSet
-      partitioning.flatMap(_.references)
-        .filter(ref => scanFields.contains(ref.fieldNames.mkString(".")))
+      identityPartitionAttributes
     }
 
     override def filter(filters: Array[Filter]): Unit = {
-      if (partitioning.length == 1 && partitioning.head.references().length == 1) {
-        val ref = partitioning.head.references().head
+      if (partitioning.length == 1 && identityPartitionReferences.length == 1) {
+        val ref = identityPartitionReferences.head
         filters.foreach {
           case In(attrName, values) if attrName == ref.toString =>
             val matchingKeys = values.map { value =>

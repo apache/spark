@@ -18,9 +18,12 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import java.io.File
+import java.lang.reflect.Modifier
 import java.net.{URI, URL, URLClassLoader}
 import java.util.Collections
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, StandardLocation, ToolProvider}
+
+import scala.jdk.CollectionConverters._
 
 import org.codehaus.commons.compiler.CompileException
 import org.mockito.Mockito.{mock, when}
@@ -428,24 +431,265 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
 
   // Compile `dyn.DynHelper` into a fresh temp dir using the system Java compiler, so
   // the class exists only under that dir (never on java.class.path).
-  private def compileDynHelper(): File = {
+  test("reflection that raises a LinkageError does not route the unit or escape") {
+    assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
+    // A partial or shaded jar can leave a class loadable while its enclosing class is not.
+    // `getCanonicalName` and `getEnclosingClass` both throw NoClassDefFoundError then, and
+    // `NonFatal` does not cover a LinkageError, so an escaping Error would bypass the
+    // codegen fallbacks. The token cannot be evaluated, which is no evidence that narrowing
+    // it is unsafe, so the unit must stay on the configured backend rather than gain a
+    // permanent Janino arm.
+    val dir = compileLinkageFixture()
+    // Drop the enclosing class, keeping the anonymous one that references it.
+    assert(new File(dir, "lnk/Holder$Mid.class").delete(), "fixture setup: enclosing class")
+    val loader = new DirClassLoader(dir, getClass.getClassLoader)
+    val anon = loader.loadClass("lnk.Holder$Mid$1")
+    // Precondition: the reflective calls the predicate makes really do throw here.
+    intercept[LinkageError](anon.getCanonicalName)
+    intercept[LinkageError](anon.getEnclosingClass)
+
+    val body = s"${anon.getName} v = (${anon.getName}) references[0];"
+    val prev = Thread.currentThread().getContextClassLoader
+    try {
+      Thread.currentThread().setContextClassLoader(loader)
+      assert(!JdkCodeCompiler.referencesUnnarrowableClass(body),
+        "an unevaluable token must not route the unit to Janino")
+      withSQLConf(SQLConf.CODEGEN_COMPILER.key -> "jdk") {
+        assert(CodeCompiler.active(newCodeAndComment(body)) eq JdkCodeCompiler)
+      }
+      // The rewrite degrades to the binary name instead of propagating the Error.
+      assert(JdkCodeCompiler.rewriteInnerClassRefs(body, loader) === body)
+    } finally {
+      Thread.currentThread().setContextClassLoader(prev)
+    }
+  }
+
+  test("reflection that fails only on member enumeration does not narrow the reference") {
+    assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
+    // The dangerous asymmetry: a class can be missing a type named in one of its method
+    // signatures, so the supertype climb succeeds while `getMethods` throws. Narrowing then
+    // looks safe, since the emitted supertype name compiles, even though no member was ever
+    // checked, and an overload collision would bind to the supertype's method. The verdict
+    // has to keep the binary name instead, which javac rejects and Spark falls back from.
+    val dir = compileMemberLinkageFixture()
+    val loader = new DirClassLoader(dir, getClass.getClassLoader)
+    val anon = loader.loadClass("lnk2.Holder$1")
+    val body = s"${anon.getName} v = (${anon.getName}) references[0];"
+
+    // Positive control: while the classpath is complete the reference IS narrowed, which
+    // proves the token reaches the verdict rather than being inert in this body.
+    assert(JdkCodeCompiler.rewriteInnerClassRefs(body, loader) ===
+      "lnk2.Foo v = (lnk2.Foo) references[0];",
+      "with a complete classpath the reference must narrow to the interface")
+
+    // Now break only the method signature's parameter type. A fresh loader is needed because
+    // the one above has already resolved members for this class.
+    assert(new File(dir, "lnk2/Missing.class").delete(), "fixture setup: signature type")
+    val brokenLoader = new DirClassLoader(dir, getClass.getClassLoader)
+    val brokenAnon = brokenLoader.loadClass("lnk2.Holder$1")
+    // Preconditions: the climb reads fine, only member enumeration throws.
+    assert(brokenAnon.getCanonicalName == null, "fixture must be unnameable")
+    assert(brokenAnon.getInterfaces.map(_.getName).contains("lnk2.Foo"), "climb input must read")
+    intercept[LinkageError](brokenAnon.getMethods)
+
+    val prev = Thread.currentThread().getContextClassLoader
+    try {
+      Thread.currentThread().setContextClassLoader(brokenLoader)
+      // Not routed: an unevaluable class is no evidence that narrowing is unsafe.
+      assert(!JdkCodeCompiler.referencesUnnarrowableClass(body),
+        "an unevaluable token must not route the unit to Janino")
+      // And not narrowed either: narrowing to lnk2.Foo would compile and hide the risk.
+      assert(JdkCodeCompiler.rewriteInnerClassRefs(body, brokenLoader) === body,
+        "an unevaluable class must keep its binary name rather than be narrowed")
+      withSQLConf(SQLConf.CODEGEN_COMPILER.key -> "jdk") {
+        assert(CodeCompiler.active(newCodeAndComment(body)) eq JdkCodeCompiler)
+      }
+    } finally {
+      Thread.currentThread().setContextClassLoader(prev)
+    }
+  }
+
+  test("reflection that fails with a non-LinkageError does not narrow the reference") {
+    assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
+    // The other half of the same failure: a classloader is user code, so it may reject a
+    // class with an ordinary RuntimeException instead of ClassNotFoundException, as a
+    // relocating or artifact loader can, and the JVM propagates that out of `getMethods`
+    // unwrapped rather than as a LinkageError. The verdict has to treat it the same way,
+    // which is why its catch does not stop at LinkageError.
+    val dir = compileMemberLinkageFixture()
+    val loader = new DirClassLoader(dir, getClass.getClassLoader) {
+      override def findClass(name: String): Class[_] =
+        if (name == "lnk2.Missing") throw new IllegalStateException("relocated away")
+        else super.findClass(name)
+    }
+    val anon = loader.loadClass("lnk2.Holder$1")
+    // Preconditions. What matters is not the exact type but that it is NOT a LinkageError,
+    // since that is the property the verdict's `NonFatal` arm exists for; the enumeration
+    // that throws is the one over `lnk2.Foo`, which declares the missing parameter type.
+    assert(anon.getCanonicalName == null, "fixture must be unnameable")
+    assert(anon.getInterfaces.map(_.getName).contains("lnk2.Foo"), "climb input must read")
+    intercept[IllegalStateException](anon.getMethods)
+
+    val body = s"${anon.getName} v = (${anon.getName}) references[0];"
+    val prev = Thread.currentThread().getContextClassLoader
+    try {
+      Thread.currentThread().setContextClassLoader(loader)
+      assert(!JdkCodeCompiler.referencesUnnarrowableClass(body),
+        "an unevaluable token must not route the unit to Janino")
+      assert(JdkCodeCompiler.rewriteInnerClassRefs(body, loader) === body,
+        "an unevaluable class must keep its binary name rather than be narrowed")
+    } finally {
+      Thread.currentThread().setContextClassLoader(prev)
+    }
+  }
+
+  /**
+   * Compile `nrw.Holder`, whose local class holds a named inner class extending `ArrayList`.
+   * `Holder$<n>Local$Inner` is a member class of a local class: neither anonymous nor local
+   * itself, with a null canonical name. javac's outer reference `this$0` is package-private
+   * and comes with no accessor method, so `getFields`/`getMethods` report nothing beyond
+   * `ArrayList`'s and the class is narrowable.
+   */
+  private def compileNestedLocalFixture(): File = {
     val dir = Utils.createTempDir()
     val src =
-      "package dyn; public class DynHelper { public static int magic() { return 4242; } }"
+      """package nrw;
+        |public class Holder {
+        |  public static Object make() {
+        |    class Local {
+        |      public class Inner extends java.util.ArrayList<String> { }
+        |    }
+        |    return new Local().new Inner();
+        |  }
+        |}
+        |""".stripMargin
+    compileJavaFixtures(dir, Seq("nrw/Holder.java" -> src))
+    dir
+  }
+
+  /**
+   * Compile `shd.Holder`, whose anonymous subclass redeclares its supertype's public field.
+   * `getFields` reports both, so a field check that compares names rather than declaring
+   * classes accepts the pair, and narrowing then reads the supertype's value, since field
+   * access is resolved statically. Java, not Scala: a Scala `val` compiles to a private
+   * field plus an accessor, so it cannot shadow a public field.
+   *
+   * `makePublic` carries the same shadowing pair on a member class of a local class. javac
+   * strips `ACC_PUBLIC` from an anonymous class, which Janino then refuses to reference from
+   * the generated unit's package, so an end-to-end test needs this shape instead, for the same
+   * reason [[compileStaticHiderFixture]] uses one.
+   */
+  private def compileShadowedFieldFixture(): File = {
+    val dir = Utils.createTempDir()
+    val src =
+      """package shd;
+        |public class Holder {
+        |  public static class Base { public int shadowed = 1; }
+        |  public static Object make() { return new Base() { public int shadowed = 99; }; }
+        |  public static Object makePublic() {
+        |    class Local {
+        |      public class Inner extends Base { public int shadowed = 99; }
+        |    }
+        |    return new Local().new Inner();
+        |  }
+        |}
+        |""".stripMargin
+    compileJavaFixtures(dir, Seq("shd/Holder.java" -> src))
+    dir
+  }
+
+  /**
+   * Compile `sth.Holder`, whose member-of-local class hides its supertype's public static
+   * method. `getMethods` reports both, with identical erased signatures, so a signature-based
+   * check accepts the pair, and a narrowed call binds the supertype's method, since a static
+   * call is bound statically. A member class of a local class is used rather than an anonymous
+   * one because only the former keeps `ACC_PUBLIC`, which the Janino path needs.
+   */
+  private def compileStaticHiderFixture(): File = {
+    val dir = Utils.createTempDir()
+    val src =
+      """package sth;
+        |public class Holder {
+        |  public static class Base { public static int hidden() { return 1; } }
+        |  public static Object make() {
+        |    class Local {
+        |      public class Inner extends Base { public static int hidden() { return 99; } }
+        |    }
+        |    return new Local().new Inner();
+        |  }
+        |  public static Object makePlain() {
+        |    class Local2 { public class Inner extends Base { } }
+        |    return new Local2().new Inner();
+        |  }
+        |}
+        |""".stripMargin
+    compileJavaFixtures(dir, Seq("sth/Holder.java" -> src))
+    dir
+  }
+
+  /**
+   * Compile `lnk2.Holder`, whose anonymous `Foo` declares a method taking `lnk2.Missing`.
+   * Deleting `Missing.class` afterwards leaves the anonymous class loadable with a readable
+   * supertype while `getMethods` throws: the asymmetric partial-jar shape.
+   */
+  private def compileMemberLinkageFixture(): File = {
+    val dir = Utils.createTempDir()
+    compileJavaFixtures(dir, Seq(
+      "lnk2/Missing.java" -> "package lnk2; public class Missing {}",
+      "lnk2/Foo.java" -> "package lnk2; public interface Foo { String extra(Missing m); }",
+      "lnk2/Holder.java" ->
+        """package lnk2;
+          |public class Holder {
+          |  public static Object make() {
+          |    return new Foo() { public String extra(Missing m) { return "e"; } };
+          |  }
+          |}
+          |""".stripMargin))
+    dir
+  }
+
+  /** Compile Java source strings, given as (path, source) pairs, into `dir`. */
+  private def compileJavaFixtures(dir: File, sources: Seq[(String, String)]): Unit = {
     val compiler = ToolProvider.getSystemJavaCompiler
     val fm = compiler.getStandardFileManager(null, null, null)
     try {
       fm.setLocation(StandardLocation.CLASS_OUTPUT, Collections.singletonList(dir))
-      val srcFile = new SimpleJavaFileObject(
-          URI.create("string:///dyn/DynHelper.java"), JavaFileObject.Kind.SOURCE) {
-        override def getCharContent(ignoreEncodingErrors: Boolean): CharSequence = src
+      val files = sources.map { case (path, src) =>
+        new SimpleJavaFileObject(URI.create(s"string:///$path"), JavaFileObject.Kind.SOURCE) {
+          override def getCharContent(ignoreEncodingErrors: Boolean): CharSequence = src
+        }.asInstanceOf[JavaFileObject]
       }
-      assert(
-        compiler.getTask(null, fm, null, null, null, Collections.singletonList(srcFile)).call(),
-        "failed to compile dyn.DynHelper fixture")
+      assert(compiler.getTask(null, fm, null, null, null, files.asJava).call(),
+        s"failed to compile fixture: ${sources.map(_._1).mkString(", ")}")
     } finally {
       fm.close()
     }
+  }
+
+  /**
+   * Compile `lnk.Holder`, whose nested `Mid` holds an anonymous `Runnable`. Deleting
+   * `Holder$Mid.class` afterwards leaves `Holder$Mid$1` loadable but makes reflection over
+   * its enclosing class throw, which is the partial-jar shape the guards have to survive.
+   */
+  private def compileLinkageFixture(): File = {
+    val dir = Utils.createTempDir()
+    val src =
+      """package lnk;
+        |public class Holder {
+        |  public static class Mid {
+        |    public static Object make() { return new Runnable() { public void run() {} }; }
+        |  }
+        |}
+        |""".stripMargin
+    compileJavaFixtures(dir, Seq("lnk/Holder.java" -> src))
+    dir
+  }
+
+  private def compileDynHelper(): File = {
+    val dir = Utils.createTempDir()
+    val src =
+      "package dyn; public class DynHelper { public static int magic() { return 4242; } }"
+    compileJavaFixtures(dir, Seq("dyn/DynHelper.java" -> src))
     dir
   }
 
@@ -726,6 +970,437 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
     assert(generated.generate(Array[Any](anon)) === "v")
   }
 
+  // ---------------- unnarrowable anonymous/local classes ----------------
+
+  test("containsDollarDigit gates the scan on names Java cannot spell") {
+    // The `$`-digit gate must admit every unnameable shape and reject the nameable `$`
+    // forms the rewrite handles, or the scan either misses a class or runs needlessly.
+    for (name <- Seq("Outer$1", "Outer$1Local", "Outer$$anon$1", "Outer$1$Inner",
+        "a.b.Outer$$anon$12")) {
+      assert(JdkCodeCompiler.containsDollarDigit(name), s"expected $name to be gated in")
+    }
+    for (name <- Seq("", "$", "a$", "java.util.Map$Entry", "Foo$", "Model$SaveLoad$Leaf",
+        "scala.Function1$mcII$sp", "scala.collection.immutable.$colon$colon",
+        "pkg.package$Inner", "$line21.$read$$iw$T")) {
+      assert(!JdkCodeCompiler.containsDollarDigit(name), s"expected $name to be gated out")
+    }
+  }
+
+  test("referencesUnnarrowableClass: false when the supertype offers every member") {
+    // The shapes codegen actually produces: the anonymous or local class only overrides
+    // methods the supertype already declares, so narrowing the reference loses nothing.
+    // `specializedPrimitiveOverride` is the boxing case - scalac specializes the override to
+    // `apply(int)` while the bridge that reaches it takes `Object`. `anonWithLambdaBody` is
+    // the synthetic-static case: a closure in the body adds a `public static final
+    // $anonfun$...` helper javac cannot name, which must not make the class unnarrowable.
+    val anonSubclass = new java.util.HashMap[String, String]() { put("k", "v") }
+    val anonInterface = new java.util.Comparator[String] {
+      override def compare(a: String, b: String): Int = a.compareTo(b)
+    }
+    val narrowable = Seq[Any](anonSubclass, anonInterface, CodeCompilerSuite.plainLocal,
+      CodeCompilerSuite.specializedPrimitiveOverride, CodeCompilerSuite.anonWithLambdaBody)
+    for (o <- narrowable) {
+      val cls = o.getClass
+      // Guard the fixture's own precondition: a nameable class would pass the assertion
+      // below for the wrong reason.
+      assert(cls.getCanonicalName == null, s"expected an unnameable class, got: ${cls.getName}")
+      val name = cls.getName
+      assert(!JdkCodeCompiler.referencesUnnarrowableClass(s"$name v = ($name) references[0];"),
+        s"expected $name to be narrowable")
+    }
+  }
+
+  test("referencesUnnarrowableClass: a synthetic static does not make a class unnarrowable") {
+    // Pins the fixture's own shape, so the case above cannot pass by accident if a future
+    // scalac stops emitting the helper as a public static on the anonymous class.
+    val cls = CodeCompilerSuite.anonWithLambdaBody.getClass
+    val statics = cls.getMethods.filter(m => Modifier.isStatic(m.getModifiers))
+    assert(statics.nonEmpty, s"fixture must carry a public static, got none on ${cls.getName}")
+    assert(statics.forall(_.isSynthetic),
+      s"fixture's statics must all be synthetic, got: ${statics.mkString(", ")}")
+    assert(statics.exists(_.getDeclaringClass eq cls),
+      s"at least one static must be declared by the anonymous class itself, got: " +
+        statics.map(_.getDeclaringClass.getName).mkString(", "))
+  }
+
+  test("referencesUnnarrowableClass: true when narrowing would lose access") {
+    // An extra public method, public fields inherited from a second interface, a member on
+    // a second interface, an overload that shadows nothing, a local class with an extra
+    // method, a bridged override sharing its name and arity with an unrelated overload, and
+    // an instance method whose only counterpart on the supertype is static: each puts
+    // something out of reach of the nearest nameable supertype.
+    val unnarrowable = Seq[Any](
+      CodeCompilerSuite.anonWithExtraMethod,
+      CodeCompilerSuite.anonWithPublicFields,
+      CodeCompilerSuite.anonWithSecondInterface,
+      CodeCompilerSuite.anonWithOverload,
+      CodeCompilerSuite.localWithExtraMethod,
+      CodeCompilerSuite.anonWithBridgeAndPrimitiveOverload,
+      CodeCompilerSuite.anonWithBridgeAndReferenceOverload,
+      CodeCompilerSuite.anonOverStaticClash)
+    for (o <- unnarrowable) {
+      val cls = o.getClass
+      assert(cls.getCanonicalName == null, s"expected an unnameable class, got: ${cls.getName}")
+      val name = cls.getName
+      assert(JdkCodeCompiler.referencesUnnarrowableClass(s"$name v = ($name) references[0];"),
+        s"expected $name to be rejected")
+    }
+  }
+
+  test("referencesUnnarrowableClass: a bridge covers only the method it forwards to") {
+    // Guards the fixture shapes behind the two bridge tests: both classes carry a genuine
+    // bridge for the generic override, so a check that excused the whole name/arity group
+    // would let the unrelated overload ride along on it.
+    for (o <- Seq[Any](CodeCompilerSuite.anonWithBridgeAndPrimitiveOverload,
+        CodeCompilerSuite.anonWithBridgeAndReferenceOverload)) {
+      val compares = o.getClass.getMethods.filter(_.getName == "compare")
+      assert(compares.exists(_.isBridge), "fixture precondition: expected a bridge method")
+      assert(compares.count(m => !m.isBridge && m.getParameterCount == 2) === 2,
+        "fixture precondition: expected the override and the overload to share name and arity")
+    }
+  }
+
+  test("referencesUnnarrowableClass: true when the supertype itself cannot be named") {
+    // Members line up here, but the nearest nameable supertype is a private nested class
+    // (scala.collection.mutable.HashSet$HashSetIterator), so javac could not write the
+    // narrowed cast at all.
+    val cls = scala.collection.mutable.HashSet("a").iterator.getClass
+    assert(cls.getCanonicalName == null, s"expected an unnameable class, got: ${cls.getName}")
+    val name = cls.getName
+    assert(JdkCodeCompiler.referencesUnnarrowableClass(s"$name v = ($name) references[0];"),
+      s"expected $name to be rejected for an unnameable supertype")
+  }
+
+  test("referencesUnnarrowableClass: a field shadowing the supertype's cannot be narrowed") {
+    assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
+    // The one silent-wrong-answer shape that methods do not have. `getFields` reports both
+    // the shadowing and the shadowed field, so comparing names would accept the pair, but
+    // field access is resolved statically: the narrowed reference would read the supertype's
+    // 1 instead of the anonymous class's 99, compiling cleanly the whole way.
+    val dir = compileShadowedFieldFixture()
+    val loader = new DirClassLoader(dir, getClass.getClassLoader)
+    val anon = loader.loadClass("shd.Holder").getMethod("make").invoke(null).getClass
+    assert(anon.getCanonicalName == null, s"expected an unnameable class, got: ${anon.getName}")
+    // Fixture preconditions: the shadowing pair is exactly what a name check would miss.
+    val vs = anon.getFields.filter(_.getName == "shadowed")
+    assert(vs.length === 2, s"expected two public `shadowed` fields: ${vs.mkString(", ")}")
+    assert(vs.exists(_.getDeclaringClass eq anon),
+      "one `shadowed` must be declared by the anonymous class")
+
+    val body = s"${anon.getName} v = (${anon.getName}) references[0];"
+    val prev = Thread.currentThread().getContextClassLoader
+    try {
+      Thread.currentThread().setContextClassLoader(loader)
+      assert(JdkCodeCompiler.referencesUnnarrowableClass(body),
+        "a shadowed field must make the class unnarrowable")
+      assert(JdkCodeCompiler.rewriteInnerClassRefs(body, loader) === body,
+        "an unnarrowable class must keep its binary name")
+    } finally {
+      Thread.currentThread().setContextClassLoader(prev)
+    }
+  }
+
+  test("referencesUnnarrowableClass: a static method hiding the supertype's cannot be narrowed") {
+    assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
+    // The method counterpart of the field case: `hidden()` erases identically on both
+    // classes, so a signature check accepts the pair, but a static call is bound statically:
+    // the narrowed reference would call the supertype's `hidden()` for 1 instead of 99, and
+    // Java permits the instance-qualified form so even a plain cast rebinds.
+    val dir = compileStaticHiderFixture()
+    val loader = new DirClassLoader(dir, getClass.getClassLoader)
+    val inner = loader.loadClass("sth.Holder").getMethod("make").invoke(null).getClass
+    assert(inner.getCanonicalName == null, s"expected an unnameable class, got: ${inner.getName}")
+    // Fixture preconditions: `f` is static and declared here, while the target declares an
+    // identically-erased static of its own: the pair a declaring-class check must reject and
+    // a signature check would accept. (`getMethods` reports only the hiding one; a static is
+    // hidden, not inherited.)
+    val fs = inner.getMethods.filter(_.getName == "hidden")
+    assert(fs.length === 1, s"expected one visible `f`, got: ${fs.mkString(", ")}")
+    assert((fs.head.getDeclaringClass eq inner) && Modifier.isStatic(fs.head.getModifiers),
+      s"`f` must be a static declared by the member class, got: ${fs.head}")
+    val base = loader.loadClass("sth.Holder$Base")
+    assert(base.getMethods.exists(m =>
+      m.getName == "hidden" && m.getParameterCount == 0 && Modifier.isStatic(m.getModifiers)),
+      "the target must declare the same static signature, or nothing would be hidden")
+    assert(inner.getSuperclass eq base, s"expected Base as superclass, got ${inner.getSuperclass}")
+    // And the complement, so both branches of the declaring-class check are pinned: a static
+    // the class merely INHERITS from the target stays narrowable.
+    val plain = loader.loadClass("sth.Holder").getMethod("makePlain").invoke(null).getClass
+    assert(plain.getCanonicalName == null, s"expected an unnameable class, got: ${plain.getName}")
+    assert(plain.getMethods.exists(m =>
+      m.getName == "hidden" && Modifier.isStatic(m.getModifiers) &&
+        (m.getDeclaringClass eq base)),
+      "the complement fixture must inherit the target's static rather than hide it")
+
+    val body = s"${inner.getName} v = (${inner.getName}) references[0];"
+    val prev = Thread.currentThread().getContextClassLoader
+    try {
+      Thread.currentThread().setContextClassLoader(loader)
+      assert(JdkCodeCompiler.referencesUnnarrowableClass(body),
+        "a hidden static method must make the class unnarrowable")
+      assert(JdkCodeCompiler.rewriteInnerClassRefs(body, loader) === body,
+        "an unnarrowable class must keep its binary name")
+      val plainBody = s"${plain.getName} v = (${plain.getName}) references[0];"
+      assert(!JdkCodeCompiler.referencesUnnarrowableClass(plainBody),
+        "merely inheriting the target's static must stay narrowable")
+      assert(JdkCodeCompiler.rewriteInnerClassRefs(plainBody, loader) ===
+        s"sth.Holder.Base v = (sth.Holder.Base) references[0];",
+        "the complement fixture must narrow to the target")
+    } finally {
+      Thread.currentThread().setContextClassLoader(prev)
+    }
+  }
+
+  test("rewriteInnerClassRefs: narrows a class nested inside a local class") {
+    assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
+    // A named class declared inside a local class is neither anonymous nor local, so the
+    // climb has to key off `getCanonicalName == null` to catch it. Its outer reference is
+    // reachable from neither side: javac's `this$0` is package-private with no accessor, and
+    // scalac's `$outer` pair is synthetic, so the member check sees nothing beyond
+    // ArrayList's either way (the two tests below cover the Scala shape).
+    val dir = compileNestedLocalFixture()
+    val loader = new DirClassLoader(dir, getClass.getClassLoader)
+    // Derive the binary name rather than hardcoding it: the JLS fixes the shape
+    // (`Holder$<digits>Local$Inner`) but leaves the digit sequence to the compiler.
+    val cls = loader.loadClass("nrw.Holder")
+      .getMethod("make").invoke(null).getClass
+    assert(!cls.isAnonymousClass && !cls.isLocalClass && cls.isMemberClass,
+      s"expected a member class of a local class, got: ${cls.getName}")
+    assert(cls.getCanonicalName == null, s"expected no canonical name for ${cls.getName}")
+    val name = cls.getName
+    val body = s"$name v = ($name) references[0];"
+    // Fixture guard: this shape must stay on the JDK backend, or the rewrite is moot. The
+    // context loader has to be swapped because the fixture lives only in a temp dir.
+    val prev = Thread.currentThread().getContextClassLoader
+    try {
+      Thread.currentThread().setContextClassLoader(loader)
+      assert(!JdkCodeCompiler.referencesUnnarrowableClass(body),
+        "fixture must be narrowable, otherwise it would route to Janino instead")
+    } finally {
+      Thread.currentThread().setContextClassLoader(prev)
+    }
+    assert(JdkCodeCompiler.rewriteInnerClassRefs(body, loader) ===
+      "java.util.ArrayList v = (java.util.ArrayList) references[0];")
+  }
+
+  test("rewriteInnerClassRefs: keeps the binary name of an unnarrowable nested local class") {
+    assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
+    // The complement of the test above: the same shape plus a non-synthetic public method
+    // `ArrayList` does not have, so narrowing would put it out of reach. The rewrite refuses
+    // rather than emitting a name that compiles but drops the member. The `$outer` field and
+    // accessor are NOT what makes this unnarrowable: being synthetic, they are unreachable
+    // from generated source either way. No context-loader swap is needed here: this fixture
+    // is on the suite's own classpath, unlike the temp-dir one above.
+    val cls = CodeCompilerSuite.memberOfLocalClassWithExtra.getClass
+    assert(cls.getCanonicalName == null, s"expected no canonical name for ${cls.getName}")
+    assert(cls.getMethods.exists(m => m.getName == "extra" && !m.isSynthetic),
+      "fixture must carry a non-synthetic public method absent from ArrayList")
+    val name = cls.getName
+    val body = s"$name v = ($name) references[0];"
+    assert(JdkCodeCompiler.referencesUnnarrowableClass(body),
+      "a member class with an extra public method must be reported unnarrowable")
+    assert(rewrite(body) === body, "an unnarrowable class must keep its binary name")
+  }
+
+  test("referencesUnnarrowableClass: synthetic outer accessors do not block narrowing") {
+    // `memberOfLocalClass` carries scalac's public `$outer` field and accessor, both synthetic
+    // and therefore invisible to javac's source lookup ("cannot find symbol"), so nothing a
+    // generator emits can reach them and narrowing to `ArrayList` loses nothing.
+    val cls = CodeCompilerSuite.memberOfLocalClass.getClass
+    assert(cls.getCanonicalName == null, s"expected no canonical name for ${cls.getName}")
+    val outerFields = cls.getFields.filter(_.getName.contains("outer"))
+    assert(outerFields.nonEmpty && outerFields.forall(_.isSynthetic),
+      s"fixture must carry a synthetic public outer field, got: ${outerFields.mkString(", ")}")
+    val extraMethods = cls.getMethods.filterNot(m =>
+      classOf[java.util.ArrayList[_]].getMethods.exists(_.getName == m.getName))
+    assert(extraMethods.nonEmpty && extraMethods.forall(_.isSynthetic),
+      s"fixture's extra methods must all be synthetic, got: ${extraMethods.mkString(", ")}")
+    val name = cls.getName
+    assert(!JdkCodeCompiler.referencesUnnarrowableClass(s"$name v = ($name) references[0];"),
+      "synthetic-only extras must not make a class unnarrowable")
+  }
+
+  test("active(code) routes an unnarrowable class reference to Janino") {
+    assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
+    val narrowableName = (new java.util.HashMap[String, String]() { put("k", "v") })
+      .getClass.getName
+    val unnarrowableName = CodeCompilerSuite.anonWithExtraMethod.getClass.getName
+    withSQLConf(SQLConf.CODEGEN_COMPILER.key -> "jdk") {
+      assert(CodeCompiler.active(newCodeAndComment(s"$narrowableName v;")) eq JdkCodeCompiler)
+      assert(CodeCompiler.active(newCodeAndComment(s"$unnarrowableName v;")) eq JaninoCodeCompiler)
+    }
+    withSQLConf(SQLConf.CODEGEN_COMPILER.key -> "janino") {
+      assert(CodeCompiler.active(newCodeAndComment(s"$unnarrowableName v;")) eq JaninoCodeCompiler)
+    }
+  }
+
+  test("JDK backend cannot compile a member access that narrowing drops") {
+    assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
+    // Both halves of the routing decision: javac rejects the rewritten unit (the reference
+    // narrows to java.util.HashMap, which has no `extra()`), and `active` therefore hands
+    // the unit to Janino, which compiles it and produces the right answer.
+    val anon = CodeCompilerSuite.anonWithExtraMethod
+    val anonName = anon.getClass.getName
+    val code = newCodeAndComment(
+      s"""
+         |public java.lang.Object generate(Object[] references) {
+         |  $anonName m = ($anonName) references[0];
+         |  return m.extra();
+         |}
+       """.stripMargin)
+    intercept[CompileException] {
+      JdkCodeCompiler.compile(code)
+    }
+    withSQLConf(SQLConf.CODEGEN_COMPILER.key -> "jdk") {
+      assert(CodeCompiler.active(code) eq JaninoCodeCompiler)
+      val (generated, _) = CodeGenerator.compile(code)
+      assert(generated.generate(Array[Any](anon)) === "extra")
+    }
+  }
+
+  test("JDK backend compiles a call that narrowing preserves through a bridge") {
+    assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
+    // The counterpart to the test above: an override of a generic method erases narrower
+    // than the interface declares, but the compiler-emitted bridge keeps dispatch correct,
+    // so this must stay on the JDK backend rather than being routed away.
+    val anon = new java.util.Comparator[String] {
+      override def compare(a: String, b: String): Int = a.compareTo(b)
+    }
+    val anonName = anon.getClass.getName
+    val code = newCodeAndComment(
+      s"""
+         |public java.lang.Object generate(Object[] references) {
+         |  $anonName c = ($anonName) references[0];
+         |  return Integer.valueOf(c.compare("a", "b"));
+         |}
+       """.stripMargin)
+    withSQLConf(SQLConf.CODEGEN_COMPILER.key -> "jdk") {
+      assert(CodeCompiler.active(code) eq JdkCodeCompiler)
+    }
+    val (generated, _) = JdkCodeCompiler.compile(code)
+    assert(generated.generate(Array[Any](anon)) === -1)
+  }
+
+  test("end-to-end: a shadowing field reads the class's own value, not the target's") {
+    assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
+    // The verdict tests pin the decision; this pins the outcome. `Inner` redeclares `Base`'s
+    // public `shadowed`, and a field read is bound statically, so the two names answer
+    // differently at run time: 99 through the class, 1 through the supertype. Routing keeps 99.
+    val dir = compileShadowedFieldFixture()
+    val loader = new DirClassLoader(dir, getClass.getClassLoader)
+    val value = loader.loadClass("shd.Holder").getMethod("makePublic").invoke(null)
+    val name = value.getClass.getName
+    assert(value.getClass.getCanonicalName == null, s"expected an unnameable class: $name")
+    val hazard = newCodeAndComment(
+      s"""
+         |public java.lang.Object generate(Object[] references) {
+         |  $name v = ($name) references[0];
+         |  return Integer.valueOf(v.shadowed);
+         |}
+       """.stripMargin)
+    // The counterfactual: the same read spelled with the name narrowing would emit. Janino
+    // compiles it too, and it answers 1, which is exactly why it may not be emitted.
+    val narrowed = newCodeAndComment(
+      """
+        |public java.lang.Object generate(Object[] references) {
+        |  shd.Holder.Base v = (shd.Holder.Base) references[0];
+        |  return Integer.valueOf(v.shadowed);
+        |}
+      """.stripMargin)
+    val prev = Thread.currentThread().getContextClassLoader
+    try {
+      Thread.currentThread().setContextClassLoader(loader)
+      // Janino names the class itself, so it binds the class's own field.
+      assert(JaninoCodeCompiler.compile(hazard)._1.generate(Array[Any](value)) === 99)
+      withSQLConf(SQLConf.CODEGEN_COMPILER.key -> "jdk") {
+        assert(CodeCompiler.active(hazard) eq JaninoCodeCompiler)
+        val (generated, _) = CodeGenerator.compile(hazard)
+        assert(generated.generate(Array[Any](value)) === 99,
+          "routing must preserve the shadowing field's value")
+      }
+      assert(JaninoCodeCompiler.compile(narrowed)._1.generate(Array[Any](value)) === 1,
+        "counterfactual: the narrowed name reads the supertype's field")
+    } finally {
+      Thread.currentThread().setContextClassLoader(prev)
+    }
+  }
+
+  test("end-to-end: a hidden static call reaches the class's own method, not the target's") {
+    assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
+    // The method counterpart. `Inner.hidden()` hides `Base.hidden()` with an identical
+    // erasure, and a static call is bound statically even in the instance-qualified form, so
+    // the narrowed reference would answer 1 where the class answers 99.
+    val dir = compileStaticHiderFixture()
+    val loader = new DirClassLoader(dir, getClass.getClassLoader)
+    val value = loader.loadClass("sth.Holder").getMethod("make").invoke(null)
+    val name = value.getClass.getName
+    assert(value.getClass.getCanonicalName == null, s"expected an unnameable class: $name")
+    val hazard = newCodeAndComment(
+      s"""
+         |public java.lang.Object generate(Object[] references) {
+         |  $name v = ($name) references[0];
+         |  return Integer.valueOf(v.hidden());
+         |}
+       """.stripMargin)
+    val narrowed = newCodeAndComment(
+      """
+        |public java.lang.Object generate(Object[] references) {
+        |  sth.Holder.Base v = (sth.Holder.Base) references[0];
+        |  return Integer.valueOf(v.hidden());
+        |}
+      """.stripMargin)
+    val prev = Thread.currentThread().getContextClassLoader
+    try {
+      Thread.currentThread().setContextClassLoader(loader)
+      assert(JaninoCodeCompiler.compile(hazard)._1.generate(Array[Any](value)) === 99)
+      withSQLConf(SQLConf.CODEGEN_COMPILER.key -> "jdk") {
+        assert(CodeCompiler.active(hazard) eq JaninoCodeCompiler)
+        val (generated, _) = CodeGenerator.compile(hazard)
+        assert(generated.generate(Array[Any](value)) === 99,
+          "routing must preserve the hiding static's value")
+      }
+      assert(JaninoCodeCompiler.compile(narrowed)._1.generate(Array[Any](value)) === 1,
+        "counterfactual: the narrowed name calls the supertype's static")
+    } finally {
+      Thread.currentThread().setContextClassLoader(prev)
+    }
+  }
+
+  test("end-to-end: an instance method clashing with a static keeps the class's value") {
+    assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
+    // The third shape: `value()` is an INSTANCE method on the anonymous class whose only
+    // counterpart on `StaticClashBase` is STATIC. Java permits the instance-qualified form
+    // for a static, so the narrowed call compiles and binds the target's `value()`, giving 1
+    // instead of 7. Both fixtures are on the suite's own classpath, so no loader swap here.
+    val anon = CodeCompilerSuite.anonOverStaticClash
+    val name = anon.getClass.getName
+    assert(anon.getClass.getCanonicalName == null, s"expected an unnameable class: $name")
+    val target = classOf[StaticClashBase].getName
+    val hazard = newCodeAndComment(
+      s"""
+         |public java.lang.Object generate(Object[] references) {
+         |  $name v = ($name) references[0];
+         |  return Integer.valueOf(v.value());
+         |}
+       """.stripMargin)
+    val narrowed = newCodeAndComment(
+      s"""
+         |public java.lang.Object generate(Object[] references) {
+         |  $target v = ($target) references[0];
+         |  return Integer.valueOf(v.value());
+         |}
+       """.stripMargin)
+    assert(JaninoCodeCompiler.compile(hazard)._1.generate(Array[Any](anon)) === 7)
+    withSQLConf(SQLConf.CODEGEN_COMPILER.key -> "jdk") {
+      assert(CodeCompiler.active(hazard) eq JaninoCodeCompiler)
+      val (generated, _) = CodeGenerator.compile(hazard)
+      assert(generated.generate(Array[Any](anon)) === 7,
+        "routing must preserve the instance method's value")
+    }
+    assert(JdkCodeCompiler.compile(narrowed)._1.generate(Array[Any](anon)) === 1,
+      "counterfactual: the narrowed name calls the target's static")
+  }
+
   // ---------------- Function1 apply(Object) bridge ----------------
 
   test("stripFunction1ApplyBridges removes the bridge but keeps apply(InternalRow)") {
@@ -833,5 +1508,121 @@ object CodeCompilerSuite {
   // reflection-based rewrite must preserve verbatim.
   object SaveLoadV1 {
     case class Leaf(x: Int)
+  }
+
+  private[codegen] trait Greeter {
+    def hello(): String
+  }
+
+  private[codegen] abstract class Converter {
+    def convert(o: Any): String = "base"
+  }
+
+  // Anonymous and local classes for the narrowing-soundness tests. They are held in vals
+  // rather than built inline in the tests because scalac keeps an anonymous class's extra
+  // members `public` only when the binding's type is inferred as the refined type; giving
+  // the val an explicit type, or passing the expression as `Any`, makes them private.
+  val anonWithExtraMethod = new java.util.HashMap[String, String]() {
+    def extra(): String = "extra"
+  }
+
+  // Mixing in a Java constants interface is what actually yields public FIELDS: a Scala
+  // `val` compiles to a private field plus an accessor, which only exercises the method
+  // check. ObjectStreamConstants contributes 30 public static final fields and no method
+  // beyond Comparator's, so this isolates the field clause of `narrowingVerdict`.
+  val anonWithPublicFields = new java.util.Comparator[String] with java.io.ObjectStreamConstants {
+    override def compare(a: String, b: String): Int = a.compareTo(b)
+  }
+
+  val anonWithSecondInterface = new java.util.Comparator[String] with Greeter {
+    override def compare(a: String, b: String): Int = a.compareTo(b)
+    override def hello(): String = "hi"
+  }
+
+  // An INSTANCE method whose only counterpart on the supertype is STATIC. scalac allows it,
+  // since it does not treat a Java static as an inherited member, so `value()` is not an
+  // override; javac rejects the pair outright, which is why `StaticClashBase` is written in
+  // Java. A narrowed call binds the supertype's static `value()`, returning 1 rather than 7.
+  val anonOverStaticClash = new StaticClashBase {
+    def value(): Int = 7
+  }
+
+  // An OVERLOAD, not an override: `convert(String)` does not implement `convert(Any)`, so
+  // no bridge is emitted. Narrowing would silently bind the call to the supertype's method.
+  val anonWithOverload = new Converter {
+    def convert(s: String): String = "anon"
+  }
+
+  // A bridged generic override alongside an unrelated overload of the same name and arity.
+  // `compare(String, String)` is reached through a `compare(Object, Object)` bridge, but
+  // `compare(Int, Int)` has no bridge of its own: after narrowing to `Comparator`, an
+  // integer call would bind to `compare(Object, Object)` and land in the String-casting
+  // bridge instead of the overload.
+  val anonWithBridgeAndPrimitiveOverload = new java.util.Comparator[String] {
+    override def compare(a: String, b: String): Int = a.compareTo(b)
+    def compare(a: Int, b: Int): Int = a - b
+  }
+
+  // The same collision with a reference-typed overload. Boxing-blind parameter matching
+  // would accept this one, since the bridge's `Object` parameters do accept `Integer`.
+  val anonWithBridgeAndReferenceOverload = new java.util.Comparator[String] {
+    override def compare(a: String, b: String): Int = a.compareTo(b)
+    def compare(a: Integer, b: Integer): Int = a - b
+  }
+
+  // Sound counterpart of the two above, and the reason bridge matching treats boxing as
+  // equivalence: scalac specializes this override to `apply(int)`, which is reached through
+  // an `apply(Object)` bridge. Requiring the bridge parameter to accept the override's
+  // parameter without boxing would reject it, since `Object` is not assignable from `int`.
+  val specializedPrimitiveOverride = new scala.runtime.AbstractFunction1[Int, Boolean] {
+    def apply(i: Int): Boolean = i > 0
+  }
+
+  // A lambda in the body makes scalac emit a `public static final $anonfun$...` helper on the
+  // anonymous class. It is synthetic, so javac cannot name it ("cannot find symbol") and no
+  // generated reference can reach it, so narrowing loses nothing and the static check has to
+  // excuse it or every closure-carrying anonymous class would route to Janino.
+  val anonWithLambdaBody = new java.util.Comparator[String] {
+    override def compare(a: String, b: String): Int = {
+      val len: String => Int = _.length
+      len(a) - len(b)
+    }
+  }
+
+  val plainLocal: java.util.ArrayList[String] = {
+    class PlainLocal extends java.util.ArrayList[String]
+    new PlainLocal
+  }
+
+  val localWithExtraMethod = {
+    class LocalWithExtra extends java.util.ArrayList[String] {
+      def extra(): String = "extra"
+    }
+    new LocalWithExtra
+  }
+
+  // A named class declared inside a local class: neither anonymous nor local itself
+  // (`isMemberClass` is true), yet Java cannot name it either. Its supertype offers every
+  // member, so only the canonical-name test keeps it from being narrowed to a binary name
+  // javac would reject. The `$outer` field and accessor scalac adds are synthetic, hence
+  // unreachable from generated source and no obstacle to narrowing.
+  val memberOfLocalClass: Any = {
+    class Holder {
+      class Inner extends java.util.ArrayList[String]
+      def make(): Any = new Inner
+    }
+    new Holder().make()
+  }
+
+  // The same shape plus one NON-synthetic public method, which is what actually puts a member
+  // out of reach of `ArrayList`. Used where the test needs an unnarrowable member-of-local.
+  val memberOfLocalClassWithExtra: Any = {
+    class Holder {
+      class Inner extends java.util.ArrayList[String] {
+        def extra(): String = "e"
+      }
+      def make(): Any = new Inner
+    }
+    new Holder().make()
   }
 }

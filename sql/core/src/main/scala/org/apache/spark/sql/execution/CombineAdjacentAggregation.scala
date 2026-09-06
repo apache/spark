@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Final, Partial}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Final, Partial, PartialMerge}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * This rule combines adjacent aggregation with `Partial` and `Final` to `Complete` mode.
+ * This rule combines adjacent aggregation with `Partial` and `Final` to `Complete` mode. For
+ * [[HashAggregateExec]], it also combines `PartialMerge` and `Final` to `Final` mode. The latter
+ * can be produced by physical plan extensions that add an extra aggregation stage.
  * Example for hash aggregate:
  *    HashAggregate (Final)         HashAggregate (Complete)
  *          |                             |
@@ -43,19 +45,20 @@ import org.apache.spark.sql.internal.SQLConf
  * It supports [[HashAggregateExec]], [[SortAggregateExec]] and [[ObjectHashAggregateExec]].
  */
 object CombineAdjacentAggregation extends Rule[SparkPlan] {
+  private case class CombinedAggregate(
+      aggregateExpressions: Seq[AggregateExpression],
+      initialInputBufferOffset: Int)
+
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.getConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED)) {
       return plan
     }
 
     plan.transformDown {
-      case finalAgg @ HashAggregateExec(_, _, _, _, _, _, _, _, partialAgg: HashAggregateExec)
-          if isPartialAgg(partialAgg, finalAgg) =>
-        finalAgg.copy(
-          groupingExpressions = partialAgg.groupingExpressions,
-          aggregateExpressions = partialAgg.aggregateExpressions.map(_.copy(mode = Complete)),
-          initialInputBufferOffset = 0,
-          child = partialAgg.child)
+      case finalAgg @ HashAggregateExec(_, _, _, _, _, _, _, _, partialAgg: HashAggregateExec) =>
+        combinedAggregate(partialAgg, finalAgg)
+          .map(combineHashAggregates(partialAgg, finalAgg, _))
+          .getOrElse(finalAgg)
 
       case finalAgg @ SortAggregateExec(_, _, _, _, _, _, _, _, partialAgg: SortAggregateExec)
           if isPartialAgg(partialAgg, finalAgg) =>
@@ -76,6 +79,41 @@ object CombineAdjacentAggregation extends Rule[SparkPlan] {
     }
   }
 
+  private def combineHashAggregates(
+      partialAgg: HashAggregateExec,
+      finalAgg: HashAggregateExec,
+      combined: CombinedAggregate): HashAggregateExec = {
+    // Keep the final aggregate's distribution requirement because the rule runs after
+    // EnsureRequirements. The other child-facing metadata comes from the removed aggregate.
+    finalAgg.copy(
+      isStreaming = partialAgg.isStreaming,
+      numShufflePartitions = partialAgg.numShufflePartitions,
+      groupingExpressions = partialAgg.groupingExpressions,
+      aggregateExpressions = combined.aggregateExpressions,
+      initialInputBufferOffset = combined.initialInputBufferOffset,
+      child = partialAgg.child)
+  }
+
+  private def combinedAggregate(
+      partialAgg: HashAggregateExec,
+      finalAgg: HashAggregateExec): Option[CombinedAggregate] = {
+    if (!isCompatibleAggregates(partialAgg, finalAgg)) {
+      None
+    } else if (partialAgg.aggregateExpressions.forall(_.mode == Partial)) {
+      Some(CombinedAggregate(
+        partialAgg.aggregateExpressions.map(_.copy(mode = Complete)),
+        initialInputBufferOffset = 0))
+    } else if (partialAgg.aggregateExpressions.forall(_.mode == PartialMerge) &&
+        partialAgg.aggregateExpressions.forall(_.filter.isEmpty) &&
+        finalAgg.aggregateExpressions.forall(_.filter.isEmpty)) {
+      Some(CombinedAggregate(
+        finalAgg.aggregateExpressions,
+        partialAgg.initialInputBufferOffset))
+    } else {
+      None
+    }
+  }
+
   /**
    * Check if `partialAgg` is the partial aggregate of `finalAgg`.
    */
@@ -83,7 +121,13 @@ object CombineAdjacentAggregation extends Rule[SparkPlan] {
       partialAgg: BaseAggregateExec,
       finalAgg: BaseAggregateExec): Boolean = {
     partialAgg.aggregateExpressions.forall(_.mode == Partial) &&
-      finalAgg.aggregateExpressions.forall(_.mode == Final) &&
+      isCompatibleAggregates(partialAgg, finalAgg)
+  }
+
+  private def isCompatibleAggregates(
+      partialAgg: BaseAggregateExec,
+      finalAgg: BaseAggregateExec): Boolean = {
+    finalAgg.aggregateExpressions.forall(_.mode == Final) &&
       partialAgg.groupingExpressions.map(_.canonicalized) ==
         finalAgg.groupingExpressions.map(_.canonicalized) &&
       finalAgg.logicalLink.isDefined &&

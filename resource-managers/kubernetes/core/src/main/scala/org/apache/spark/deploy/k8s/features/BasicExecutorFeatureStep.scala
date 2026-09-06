@@ -53,7 +53,8 @@ private[spark] class BasicExecutorFeatureStep(
 
   private val executorPodNamePrefix = kubernetesConf.resourceNamePrefix
 
-  private val driverAddress = if (kubernetesConf.get(KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP)) {
+  private val driverAddress = if (kubernetesConf.get(KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP) &&
+      !Utils.isAnyLocalAddress(kubernetesConf.get(DRIVER_BIND_ADDRESS))) {
     kubernetesConf.get(DRIVER_BIND_ADDRESS)
   } else {
     kubernetesConf.get(DRIVER_HOST_ADDRESS)

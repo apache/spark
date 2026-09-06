@@ -84,6 +84,7 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       "bucket", "days", "hours", "months", "years", // Datasource v2 partition transformations
       "product", // Discussed in https://github.com/apache/spark/pull/30745
       "unwrap_udt",
+      "wrap_udt",
       "timestamp_add",
       "timestamp_diff"
     )
@@ -499,6 +500,23 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         callSitePattern = "",
         startIndex = 0,
         stopIndex = 0))
+    expr = randstr(lit(-1), lit(0))
+    checkError(
+      intercept[AnalysisException](df.select(expr)),
+      condition = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+      parameters = Map(
+        "sqlExpr" -> "\"randstr(-1, 0)\"",
+        "exprName" -> "`length`",
+        "valueRange" -> "[0, 2147483647]",
+        "currentValue" -> "-1"),
+      context = ExpectedContext(
+        contextType = QueryContextType.DataFrame,
+        fragment = "randstr",
+        objectType = "",
+        objectName = "",
+        callSitePattern = "",
+        startIndex = 0,
+        stopIndex = 0))
   }
 
   test("uniform function") {
@@ -662,6 +680,23 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     checkAnswer(
       df.selectExpr("crc32(a)", "crc32(b)"),
       Row(2743272264L, 2180413220L))
+  }
+
+  test("misc xxh3_64 and xxh3_128 function") {
+    val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
+    checkAnswer(
+      df.select(xxh3_64($"a"), xxh3_64($"b")),
+      Row(2615927343983396622L, -4044731995552965649L))
+    checkAnswer(
+      df.select(xxh3_128($"a"), xxh3_128($"b")),
+      Row("9e947f00ecd6acb2244da40f405c870e", "866737830f560dbf3e1f439d2d785f44"))
+
+    checkAnswer(
+      df.selectExpr("xxh3_64(a)", "xxh3_64(b)"),
+      Row(2615927343983396622L, -4044731995552965649L))
+    checkAnswer(
+      df.selectExpr("xxh3_128(a)", "xxh3_128(b)"),
+      Row("9e947f00ecd6acb2244da40f405c870e", "866737830f560dbf3e1f439d2d785f44"))
   }
 
   test("misc aes function") {

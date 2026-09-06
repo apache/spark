@@ -87,6 +87,49 @@ class AvroSchemaHelperSuite extends SharedSparkSession {
     assert(nameHelper.getAvroField("nonexist", 1).isEmpty)
   }
 
+  test("SPARK-59108: positional field match resolves against the data schema positions") {
+    val dataSchema = new StructType()
+      .add("a", IntegerType).add("b", IntegerType).add("c", IntegerType)
+    val avroSchema = SchemaConverters.toAvroType(dataSchema)
+    val projection = new StructType().add("c", IntegerType).add("a", IntegerType)
+
+    val helper = new AvroUtils.AvroSchemaHelper(
+      avroSchema, projection, Seq(""), Seq(""), true, Array(2, 0))
+    assert(helper.getAvroField("c", 0) === Some(avroSchema.getFields.get(2)))
+    assert(helper.getAvroField("a", 1) === Some(avroSchema.getFields.get(0)))
+    assert(helper.matchedFields.map(_.avroField.name()) === Seq("c", "a"))
+
+    // With no positions a field's own position is used, which is what an unprojected match needs.
+    val unprojected =
+      new AvroUtils.AvroSchemaHelper(avroSchema, projection, Seq(""), Seq(""), true)
+    assert(unprojected.getAvroField("c", 0) === Some(avroSchema.getFields.get(0)))
+
+    // The shape both read paths produce is an ascending subsequence of the data schema.
+    val ascending = new StructType().add("a", IntegerType).add("c", IntegerType)
+    val ascendingHelper = new AvroUtils.AvroSchemaHelper(
+      avroSchema, ascending, Seq(""), Seq(""), true, Array(0, 2))
+    assert(ascendingHelper.getAvroField("a", 0) === Some(avroSchema.getFields.get(0)))
+    assert(ascendingHelper.getAvroField("c", 1) === Some(avroSchema.getFields.get(2)))
+    assert(ascendingHelper.matchedFields.map(_.avroField.name()) === Seq("a", "c"))
+
+    val msg = intercept[IllegalArgumentException] {
+      new AvroUtils.AvroSchemaHelper(avroSchema, projection, Seq(""), Seq(""), true, Array(2))
+    }.getMessage
+    assert(msg.contains("Got 1 data schema positions for 2 Catalyst fields"))
+
+    // A missing field is reported by the position that was looked for, not by the position the
+    // field happens to have in the projection.
+    val twoFieldAvro = SchemaConverters.toAvroType(
+      new StructType().add("a", IntegerType).add("b", IntegerType))
+    val pastTheEnd = new AvroUtils.AvroSchemaHelper(
+      twoFieldAvro, new StructType().add("c", IntegerType, nullable = false),
+      Seq(""), Seq(""), true, Array(2))
+    val missing = intercept[IncompatibleSchemaException] {
+      pastTheEnd.validateNoExtraCatalystFields(ignoreNullable = false)
+    }.getMessage
+    assert(missing.contains("Cannot find field at position 2"))
+  }
+
   test("properly match fields between Avro and Catalyst schemas") {
     val catalystSchema = StructType(
       Seq("catalyst1", "catalyst2", "shared1", "shared2").map(StructField(_, IntegerType))

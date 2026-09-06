@@ -23,7 +23,7 @@ import java.time.Duration
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
 import org.apache.spark.sql.{Dataset, Row, SaveMode}
-import org.apache.spark.sql.catalyst.expressions.{And, Cast, CodegenObjectFactoryMode, Expression, IsNotNull}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
@@ -34,6 +34,12 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType}
+
+// Nested-struct fixtures for the SPARK-51356 test below. They are top-level so the Dataset
+// encoders resolve without an outer scope.
+case class Spark51356Inner(d: Int)
+case class Spark51356Mid(c: Spark51356Inner = null)
+case class Spark51356Outer(b: Spark51356Mid = null)
 
 // Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
 class WholeStageCodegenSuite extends SharedSparkSession
@@ -1325,6 +1331,116 @@ class WholeStageCodegenSuite extends SharedSparkSession
           checkAnswer(spark.sql(query), Seq(Row("3", 1), Row("3", 2)))
         }
       }
+    }
+  }
+
+  test("SPARK-51356: FilterExec emits IsNotNull on a nested field before its otherPred") {
+    // `IsNotNull(b.c)` is null-intolerant and references only `b`, so it is classified as a
+    // notNullPred -- but its child is a complex expression, so it never matches an otherPred's
+    // bare attribute reference. It used to be deferred to the trailing leftover block, i.e.
+    // emitted *after* the UDF that dereferences `b.c`, and `ScalaUDF` hands a null argument to
+    // its deserializer rather than short-circuiting, so `newInstance(Spark51356Inner)` threw.
+    // The interpreted path evaluates the conjunction in order and was unaffected.
+    val data = Seq(
+      Spark51356Outer(null),
+      Spark51356Outer(Spark51356Mid(null)), // the row that used to trigger the failure
+      Spark51356Outer(Spark51356Mid(Spark51356Inner(0))),
+      Spark51356Outer(Spark51356Mid(Spark51356Inner(1))))
+    val isDZero = udf((c: Spark51356Inner) => c.d == 0)
+    def newDf(): Dataset[Spark51356Mid] = {
+      // `map(identity)` keeps the input from being folded into a LocalRelation, so the filter
+      // really goes through whole-stage codegen.
+      val mids = spark.createDataset(data).map(identity)
+        .where(col("b").isNotNull).select(col("b").as[Spark51356Mid])
+      mids.filter(col("c").isNotNull).filter(not(isDZero(col("c"))))
+    }
+
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      val df = newDf()
+      val plan = df.queryExecution.executedPlan
+      assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        "Filter should be in whole-stage codegen")
+      // Guard against optimizer drift: the regression only exists when a single FilterExec
+      // carries an `IsNotNull` over a complex child together with a non-IsNotNull conjunct
+      // that consumes the same expression.
+      def conjuncts(e: Expression): Seq[Expression] = e match {
+        case And(l, r) => conjuncts(l) ++ conjuncts(r)
+        case other => Seq(other)
+      }
+      val matchingFilter = plan.collect {
+        case f: FilterExec =>
+          val cs = conjuncts(f.condition)
+          val nestedIsNotNulls = cs.collect {
+            case IsNotNull(child) if !child.isInstanceOf[Attribute] => child
+          }
+          nestedIsNotNulls.exists { child =>
+            cs.exists {
+              case _: IsNotNull => false
+              case other => other.exists(_.semanticEquals(child))
+            }
+          }
+      }.exists(identity)
+      assert(matchingFilter,
+        "expected a FilterExec carrying IsNotNull(<complex>) plus a non-IsNotNull conjunct " +
+          "over the same expression")
+      checkAnswer(df.toDF(), Row(Row(1)))
+    }
+    // Cross-check the codegen path against the interpreted path.
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      val df = newDf()
+      assert(!df.queryExecution.executedPlan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        "the cross-check must be planned without whole-stage codegen")
+      checkAnswer(df.toDF(), Row(Row(1)))
+    }
+  }
+
+  test("SPARK-51356: FilterExec CSE emits IsNotNull on a nested field before its otherPred") {
+    // Same defect as above, on the CSE branch of `FilterExec.doConsume`, which inlines its own
+    // copy of the interleaving. Two otherPreds share the non-cheap `f(c)`, so the branch is
+    // taken (a bare `b.c` is cheap and would fall back to `generatePredicateCode`). The
+    // guarding `IsNotNull(b.c)` has to be emitted ahead of the shared CSE precompute, not after
+    // the predicates that consume it.
+    val data = Seq(
+      Spark51356Outer(null),
+      Spark51356Outer(Spark51356Mid(null)), // the row that used to trigger the failure
+      Spark51356Outer(Spark51356Mid(Spark51356Inner(0))),
+      Spark51356Outer(Spark51356Mid(Spark51356Inner(1))))
+    val dOf = udf((c: Spark51356Inner) => c.d)
+    val mids = spark.createDataset(data).map(identity)
+      .where(col("b").isNotNull).select(col("b").as[Spark51356Mid])
+    val df = mids
+      .filter(col("c").isNotNull)
+      .filter(dOf(col("c")) > 0)
+      .filter(dOf(col("c")) < 100)
+
+    withSQLConf(
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      val plan = df.queryExecution.executedPlan
+      assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        "Filter should be in whole-stage codegen")
+      checkAnswer(df.toDF(), Row(Row(1)))
+    }
+  }
+
+  test("SPARK-51356: FilterExec CSE guards an IsNotNull whose child is itself a subexpression") {
+    // A dynamic-gap `session_window` guards the session struct with an IsNotNull over the same
+    // cast the struct is built from, so the guarded expression is itself the common
+    // subexpression. The check must not reference the CSE state, which is emitted later.
+    val df = spark.sql(
+      """
+        |SELECT a, count(*) AS cnt
+        |FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'),
+        |            ('A2', '2021-01-01 00:01:00') AS tab(a, b)
+        |GROUP BY a, session_window(b, CASE WHEN a = 'A1' THEN '5 minutes' ELSE '1 minute' END)
+      """.stripMargin)
+
+    withSQLConf(
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      checkAnswer(df, Seq(Row("A1", 2), Row("A2", 1)))
     }
   }
 

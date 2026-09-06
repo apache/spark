@@ -68,6 +68,34 @@ class StateStoreIterator[A](
   override def close(): Unit = onClose()
 }
 
+/**
+ * An iterator that can be refreshed and repositioned instead of recreated for every scan.
+ */
+private[sql] abstract class ReusableIterator[A] extends Iterator[A] with Closeable {
+  /** Refresh this iterator and seek to the encoded prefix row. */
+  def refreshAndSeekToPrefix(prefixRow: UnsafeRow): Unit
+
+  override def map[B](f: A => B): ReusableIterator[B] = {
+    val self = this
+    new ReusableIterator[B] {
+      override def refreshAndSeekToPrefix(prefixRow: UnsafeRow): Unit =
+        self.refreshAndSeekToPrefix(prefixRow)
+
+      override def hasNext: Boolean = self.hasNext
+
+      override def next(): B = f(self.next())
+
+      override def close(): Unit = self.close()
+    }
+  }
+}
+
+/** State stores that can return an iterator whose native resources are reused across scans. */
+private[sql] trait SupportsReusableIterator {
+  def reusableIterator(
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): ReusableIterator[UnsafeRowPair]
+}
+
 sealed trait StateStoreEncoding {
   override def toString: String = this match {
     case StateStoreEncoding.UnsafeRow => "unsaferow"
@@ -1146,17 +1174,32 @@ object StateStoreProvider extends Logging {
   private[state] def coordinatorRef: Option[StateStoreCoordinatorRef] = synchronized {
     val env = SparkEnv.get
     if (env != null) {
-      val isDriver = SparkContext.isDriver(env.executorId)
-      // If running locally, then the coordinator reference in stateStoreCoordinatorRef may have
-      // become inactive as SparkContext + SparkEnv may have been restarted. Hence, when running in
-      // driver, always recreate the reference.
-      if (isDriver || stateStoreCoordinatorRef == null) {
-        logDebug("Getting StateStoreCoordinatorRef")
-        stateStoreCoordinatorRef = StateStoreCoordinatorRef.forExecutor(env)
+      try {
+        val isDriver = SparkContext.isDriver(env.executorId)
+        // If running locally, then the coordinator reference in stateStoreCoordinatorRef may have
+        // become inactive as SparkContext + SparkEnv may have been restarted. Hence, when running
+        // in driver, always recreate the reference.
+        if (isDriver || stateStoreCoordinatorRef == null) {
+          logDebug("Getting StateStoreCoordinatorRef")
+          stateStoreCoordinatorRef = StateStoreCoordinatorRef.forExecutor(env)
+        }
+        logInfo(log"Retrieved reference to StateStoreCoordinator: " +
+          log"${MDC(LogKeys.STATE_STORE_COORDINATOR, stateStoreCoordinatorRef)}")
+        Some(stateStoreCoordinatorRef)
+      } catch {
+        // SPARK-58973: The StateStoreCoordinator endpoint is only registered when
+        // StreamingQueryManager is initialized (lazy val in SessionState since SPARK-29423).
+        // In non-streaming batch reads of state stores (e.g., spark.read.format("statestore")),
+        // the coordinator may not exist. Return None to make snapshot upload reporting
+        // best-effort rather than failing the read.
+        case e: SparkException if e.getCause != null &&
+            e.getCause.getMessage != null &&
+            e.getCause.getMessage.contains("Cannot find endpoint") =>
+          logWarning(log"StateStoreCoordinator endpoint not available: " +
+            log"${MDC(LogKeys.ERROR, e.getMessage)}")
+          stateStoreCoordinatorRef = null
+          None
       }
-      logInfo(log"Retrieved reference to StateStoreCoordinator: " +
-        log"${MDC(LogKeys.STATE_STORE_COORDINATOR, stateStoreCoordinatorRef)}")
-      Some(stateStoreCoordinatorRef)
     } else {
       stateStoreCoordinatorRef = null
       None

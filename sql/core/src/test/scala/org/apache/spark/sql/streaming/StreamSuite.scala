@@ -1236,6 +1236,36 @@ class StreamSuite extends StreamTest {
     testCurrentTimestampOnStreamingQuery()
   }
 
+  test("SPARK-57837: nanosecond current_timestamp(p)/localtimestamp(p) use the batch timestamp") {
+    // In micro-batch streaming, current_timestamp()/localtimestamp() are rewritten to the
+    // replay-stable batch timestamp (CurrentBatchTimestamp), not folded to a wall clock at
+    // planning time. The nanosecond variants must follow the same rewrite: the batch timestamp is
+    // millisecond resolution, so the collected value must be millisecond-aligned (a wall-clock
+    // fold from Instant.now() would carry sub-millisecond digits and fail this check).
+    val input = MemoryStream[Int]
+    val df = input.toDS().selectExpr("current_timestamp(9) AS ltz", "localtimestamp(9) AS ntz")
+
+    def assertBatchAligned(rows: Seq[Row]): Unit = {
+      assert(rows.size === 1)
+      val row = rows.head
+      // LTZ collects as java.time.Instant, NTZ as java.time.LocalDateTime.
+      val ltzNanos = row.getAs[java.time.Instant]("ltz").getNano
+      val ntzNanos = row.getAs[java.time.LocalDateTime]("ntz").getNano
+      assert(ltzNanos % 1000000 === 0,
+        s"current_timestamp(9) sub-second $ltzNanos is not millisecond-aligned")
+      assert(ntzNanos % 1000000 === 0,
+        s"localtimestamp(9) sub-second $ntzNanos is not millisecond-aligned")
+    }
+
+    testStream(df)(
+      AddData(input, 1),
+      CheckLastBatch { rows: Seq[Row] => assertBatchAligned(rows) },
+      Execute { _ => Thread.sleep(1000) },
+      AddData(input, 2),
+      CheckLastBatch { rows: Seq[Row] => assertBatchAligned(rows) }
+    )
+  }
+
   private def testCurrentTimestampOnStreamingQuery(): Unit = {
     val input = MemoryStream[Int]
     val df = input.toDS().withColumn("cur_timestamp", lit(current_timestamp()))

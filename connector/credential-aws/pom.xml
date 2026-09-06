@@ -48,6 +48,20 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
+    <!--
+      Keep pinned to ${aws.java.sdk.v2.version}. When this module is built into the
+      assembly alongside the hadoop-cloud profile, this `sts` jar co-exists with
+      hadoop-cloud's `bundle` jar and they share the same software.amazon.awssdk.*
+      classes (e.g. StsClient). This is safe only because both resolve to the same
+      version, making the duplicated classes byte-identical. A divergent version here
+      would place duplicate classes at DIFFERENT versions on the classpath and risk
+      NoSuchMethodError / LinkageError at runtime.
+    -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>sts</artifactId>
+      <version>${aws.java.sdk.v2.version}</version>
+    </dependency>
 
     <!-- Test dependencies -->
     <!--
@@ -63,6 +77,11 @@
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

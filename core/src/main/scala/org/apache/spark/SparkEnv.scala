@@ -512,7 +512,10 @@ class SparkEnv (
     } else {
       conf.clone.set(MEMORY_OFFHEAP_ENABLED, false).set(MEMORY_OFFHEAP_SIZE, 0L)
     }
-    _memoryManager = UnifiedMemoryManager(memoryManagerConf, numUsableCores)
+    _memoryManager = UnifiedMemoryManager(
+      memoryManagerConf,
+      numUsableCores,
+      isDriver = SparkContext.isDriver(executorId))
   }
 }
 

@@ -355,6 +355,32 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
             {schedulingMode}
           </li>
           {
+            if (parent.holdEnabled && parent.sc.exists(_.executorHoldSupported)) {
+              val basePathUri = UIUtils.prependBaseUri(request, parent.basePath)
+              val (status, action, confirm) = if (parent.sc.get.executorsHeld) {
+                val numDraining = parent.sc.get.getExecutorIds().size
+                val status = if (numDraining > 0) {
+                  s"Held (draining $numDraining executor${if (numDraining > 1) "s" else ""})"
+                } else {
+                  "Held"
+                }
+                (status, "resume", "Are you sure you want to resume this application?")
+              } else {
+                ("Running", "hold", "Are you sure you want to hold this application? All " +
+                  "executors will be decommissioned after finishing their running tasks.")
+              }
+              val label = action.capitalize
+              <li>
+                <strong>Application:</strong>
+                {status}
+                <a href={s"$basePathUri/jobs/$action/"} role="button"
+                   data-confirm-message={confirm}
+                   class="btn btn-sm btn-outline-secondary confirm-link">{label}</a>
+                {parent.lastHoldRequestStatus.getOrElse("")}
+              </li>
+            }
+          }
+          {
             if (shouldShowActiveJobs) {
               <li>
                 <a href="#active"><strong>Active Jobs:</strong></a>
@@ -589,9 +615,9 @@ private[ui] class JobPagedTable(
     val killLink = if (killEnabled) {
       // SPARK-6846 this should be POST-only but YARN AM won't proxy POST
       val killLinkUri = s"$basePath/jobs/job/kill/?id=${job.jobId}"
-      <a href={killLinkUri}
+      <a href={killLinkUri} role="button"
          data-kill-message={s"Are you sure you want to kill job ${job.jobId} ?"}
-         class="kill-link float-end">(kill)</a>
+         class="btn btn-sm btn-outline-danger kill-link float-end">Kill</a>
     } else {
       Seq.empty
     }

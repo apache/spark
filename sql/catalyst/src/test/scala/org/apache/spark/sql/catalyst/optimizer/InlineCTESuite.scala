@@ -108,4 +108,22 @@ class InlineCTESuite extends PlanTest {
     assert(e.getMessage.contains(
       "found a subquery with outer-scope reference"))
   }
+
+  test("SPARK-58779: optimizer InlineCTE (isAnalysis = false) fails on a ref with no definition") {
+    // During analysis a CTERelationRef whose definition is not in the plan is tolerated -- it is
+    // owned by a surrounding scope (e.g. when `ResolveSQLTableFunctions` runs `checkAnalysis` on a
+    // table-function subplan whose argument references an outer CTE). In the optimizer the plan is
+    // complete, so a missing definition indicates corruption and must fail loudly rather than be
+    // dropped.
+    val defX = CTERelationDef(TestRelation(Seq($"a".int)).select($"a"))
+    val refX = CTERelationRef(defX.id, defX.resolved, defX.output, defX.isStreaming)
+    val danglingRef = CTERelationRef(defX.id + 1000, true, Seq($"a".int), false)
+    val plan = WithCTE(refX.union(danglingRef), Seq(defX))
+    val e = intercept[SparkException] {
+      InlineCTE(isAnalysis = false).apply(plan)
+    }
+    assert(e.getCondition == "INTERNAL_ERROR")
+    // The analysis path tolerates the out-of-scope reference (no throw).
+    InlineCTE(isAnalysis = true).apply(plan)
+  }
 }

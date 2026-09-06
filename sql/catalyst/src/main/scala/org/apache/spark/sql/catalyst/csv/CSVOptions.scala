@@ -107,15 +107,15 @@ class CSVOptions(
   }
 
   private def getBool(paramName: String, default: Boolean = false): Boolean = {
-    val param = parameters.getOrElse(paramName, default.toString)
-    if (param == null) {
-      default
-    } else if (param.toLowerCase(Locale.ROOT) == "true") {
-      true
-    } else if (param.toLowerCase(Locale.ROOT) == "false") {
-      false
-    } else {
-      throw QueryExecutionErrors.paramIsNotBooleanValueError(paramName)
+    val paramValue = parameters.get(paramName)
+    paramValue match {
+      case None => default
+      case Some(null) => default
+      case Some(value) => value.toLowerCase(Locale.ROOT) match {
+        case "true" => true
+        case "false" => false
+        case _ => throw QueryExecutionErrors.paramIsNotBooleanValueError(paramName)
+      }
     }
   }
 
@@ -337,6 +337,9 @@ class CSVOptions(
   // E.g. spark.read.format("csv").option("singleVariantColumn", "colName")
   val singleVariantColumn: Option[String] = parameters.get(SINGLE_VARIANT_COLUMN)
 
+  // When true, reading CSV values into a VARIANT honors `inferSchema` (default: false).
+  val variantRespectInferSchema = getBool(VARIANT_RESPECT_INFER_SCHEMA, default = false)
+
   def needHeaderForSingleVariantColumn: Boolean =
     singleVariantColumn.isDefined && headerFlag
 
@@ -443,6 +446,7 @@ object CSVOptions extends DataSourceOptions {
   newOption(SEP, DELIMITER)
   val COLUMN_PRUNING = newOption("columnPruning")
   val SINGLE_VARIANT_COLUMN = newOption(DataSourceOptions.SINGLE_VARIANT_COLUMN)
+  val VARIANT_RESPECT_INFER_SCHEMA = newOption("variantRespectInferSchema")
 
   // Max error content length in CSV parser/writer exception messages, and the bound on the bad
   // record embedded in MALFORMED_CSV_RECORD errors.

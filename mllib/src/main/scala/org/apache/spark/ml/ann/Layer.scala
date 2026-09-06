@@ -479,10 +479,13 @@ private[ml] class FeedForwardModel private(
 
   val layers = topology.layers
   val layerModels = new Array[LayerModel](layers.length)
+  // Trained weights are normally dense, but Vector and persisted models do not guarantee it.
+  // Convert once so all layer views share one dense backing array.
+  private val denseWeights = weights.toArray
   private var offset = 0
   for (i <- layers.indices) {
     layerModels(i) = layers(i).createModel(
-      new BDV[Double](weights.toArray, offset, 1, layers(i).weightSize))
+      new BDV[Double](denseWeights, offset, 1, layers(i).weightSize))
     offset += layers(i).weightSize
   }
   private var outputs: Array[BDM[Double]] = null

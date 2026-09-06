@@ -16,6 +16,11 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import java.net.{InetSocketAddress, StandardProtocolFamily}
+import java.nio.channels.ServerSocketChannel
+
+import scala.util.Using
+
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Mockito.when
@@ -28,6 +33,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils.TEST_SPARK_APP_ID
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
+import org.apache.spark.util.RpcUtils
 
 class KubernetesClusterManagerSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -86,6 +92,32 @@ class KubernetesClusterManagerSuite extends SparkFunSuite with BeforeAndAfter {
     val backend2 = manager.createSchedulerBackend(sc, "", scheduler)
     assert(backend2.isInstanceOf[LocalSchedulerBackend])
     assert(backend2.applicationId() === "user-app-id")
+  }
+
+  test("SPARK-58719: normalize IPv6 driver host when using the driver pod IP") {
+    assume(
+      Using(ServerSocketChannel.open(StandardProtocolFamily.INET6)) { channel =>
+        channel.bind(new InetSocketAddress("::1", 0))
+      }.isSuccess,
+      "IPv6 loopback is unavailable")
+
+    val rawAddress = "0:0:0:0:0:0:0:1"
+    val conf = new SparkConf(false)
+      .setAppName("ipv6-driver-host")
+      .setMaster("k8s://test")
+      .set(KUBERNETES_DRIVER_MASTER_URL, "local[2]")
+      .set(KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP, true)
+      .set(DRIVER_BIND_ADDRESS, rawAddress)
+      .set("spark.ui.enabled", "false")
+
+    LocalSparkContext.withSpark(new SparkContext(conf)) { context =>
+      assert(context.conf.get(DRIVER_BIND_ADDRESS) === rawAddress)
+      assert(context.conf.get(DRIVER_HOST_ADDRESS) === "[::1]")
+      assert(context.env.blockManager.blockManagerId.host === "[::1]")
+      val driverRef = RpcUtils.makeDriverRef(
+        HeartbeatReceiver.ENDPOINT_NAME, context.conf, context.env.rpcEnv)
+      assert(driverRef.address.host === "[::1]")
+    }
   }
 
   test("deployment allocator with dynamic allocation requires deletion cost") {

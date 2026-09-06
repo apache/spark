@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.optimizer.BuildRight
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.connector.catalog.{InMemoryTableCatalog, InMemoryTableWithV2FilterCatalog}
+import org.apache.spark.sql.connector.catalog.{InMemoryTableCatalog, InMemoryTableCatalystRuntimeFilterCatalog, InMemoryTableWithV2FilterCatalog}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -2688,6 +2688,32 @@ class DynamicPartitionPruningV2FilterSuiteAEOff
 
 class DynamicPartitionPruningV2FilterSuiteAEOn
     extends DynamicPartitionPruningV2FilterSuite
+  with EnableAdaptiveExecutionSuite
+
+/**
+ * Runs the DSv2 dynamic partition pruning tests against scans that receive runtime filters as
+ * Catalyst expressions, via
+ * [[org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering]], rather than as
+ * connector predicates. This is the counterpart of [[DynamicPartitionPruningV2FilterSuite]],
+ * which covers the same tests for
+ * [[org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering]].
+ */
+abstract class DynamicPartitionPruningV2CatalystFilterSuite
+    extends DynamicPartitionPruningV2Suite {
+
+  override protected def initState(): Unit = {
+    super.initState()
+    spark.conf.set("spark.sql.catalog.testcat",
+      classOf[InMemoryTableCatalystRuntimeFilterCatalog].getName)
+  }
+}
+
+class DynamicPartitionPruningV2CatalystFilterSuiteAEOff
+    extends DynamicPartitionPruningV2CatalystFilterSuite
+  with DisableAdaptiveExecutionSuite
+
+class DynamicPartitionPruningV2CatalystFilterSuiteAEOn
+    extends DynamicPartitionPruningV2CatalystFilterSuite
   with EnableAdaptiveExecutionSuite
 
 private object DppMaterializedInputTestState {

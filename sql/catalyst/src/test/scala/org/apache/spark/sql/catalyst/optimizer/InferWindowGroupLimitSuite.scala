@@ -20,9 +20,10 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{CurrentRow, DenseRank, Literal, NthValue, NTile, PercentRank, Rank, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedPreceding}
+import org.apache.spark.sql.catalyst.expressions.{CurrentRow, DenseRank, Literal, NthValue, NTile, PercentRank, Rank, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedFollowing, UnboundedPreceding}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, WindowGroupLimit}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
 
@@ -43,6 +44,17 @@ class InferWindowGroupLimitSuite extends PlanTest {
         CollapseProject,
         RemoveNoopOperators,
         PushDownPredicates,
+        LimitPushDownThroughWindow) :: Nil
+  }
+
+  private object WithCollapseWindow extends RuleExecutor[LogicalPlan] {
+    val batches =
+      Batch("Insert WindowGroupLimit with CollapseWindow", FixedPoint(10),
+        CollapseWindow,
+        CollapseProject,
+        RemoveNoopOperators,
+        PushDownPredicates,
+        InferWindowGroupLimit,
         LimitPushDownThroughWindow) :: Nil
   }
 
@@ -353,5 +365,33 @@ class InferWindowGroupLimitSuite extends PlanTest {
     comparePlans(
       Optimize.execute(originalQuery.analyze),
       WithoutOptimize.execute(originalQuery.analyze))
+  }
+
+  test("SPARK-58757: collapseWindowWithEmptyOrderSpecInChild keeps WindowGroupLimit by default") {
+    val cnt = windowExpr(
+      AggregateExpression(Count(c), Complete, isDistinct = false, None),
+      windowSpec(a :: Nil, Nil,
+        SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing))).as("cnt")
+    val rn = windowExpr(
+      RowNumber(),
+      windowSpec(a :: Nil, c.desc :: Nil,
+        SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))).as("rn")
+
+    def analyzed: LogicalPlan = testRelation
+      .window(Seq(cnt), a :: Nil, Nil)
+      .window(Seq(rn), a :: Nil, c.desc :: Nil)
+      .where($"rn" <= 2)
+      .analyze
+
+    // By default the config is off, so the empty-order child is not collapsed into the ordered
+    // parent and the WindowGroupLimit is preserved.
+    val defaultPlan = WithCollapseWindow.execute(analyzed)
+    assert(defaultPlan.collect { case _: WindowGroupLimit => 1 }.size == 1)
+
+    // With the config on, the empty-order child is collapsed, disabling the WindowGroupLimit.
+    withSQLConf(SQLConf.COLLAPSE_WINDOW_WITH_EMPTY_ORDER_SPEC_IN_CHILD.key -> "true") {
+      val enabledPlan = WithCollapseWindow.execute(analyzed)
+      assert(enabledPlan.collect { case _: WindowGroupLimit => 1 }.isEmpty)
+    }
   }
 }

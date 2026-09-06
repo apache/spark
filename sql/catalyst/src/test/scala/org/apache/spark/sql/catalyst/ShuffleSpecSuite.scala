@@ -19,15 +19,26 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.DirectShufflePartitionID
+import org.apache.spark.sql.catalyst.expressions.{Attribute, DirectShufflePartitionID, Expression, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
 
 class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
   private val passThrough_a_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"a"), 10)
   private val passThrough_b_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"b"), 10)
   private val passThrough_c_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"c"), 10)
+
+  /** A bound function with a stable canonical name, enough to build a `TransformExpression`. */
+  private object TestBucketFunction extends ScalarFunction[Int] {
+    override def inputTypes(): Array[DataType] = Array(IntegerType)
+    override def resultType(): DataType = IntegerType
+    override def name(): String = "bucket"
+    override def canonicalName(): String = "test.bucket"
+  }
+
   protected def checkCompatible(
       left: ShuffleSpec,
       right: ShuffleSpec,
@@ -422,6 +433,83 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         .canCreatePartitioning)
     }
     assert(!RangeShuffleSpec(10, distribution).canCreatePartitioning)
+  }
+
+  test("SPARK-59022: canCreatePartitioning: KeyedShuffleSpec requires grouped partition keys") {
+    val a = $"a".int
+    val distribution = ClusteredDistribution(Seq(a))
+    def keyedSpec(keys: Seq[Int]): KeyedShuffleSpec = KeyedShuffleSpec(
+      KeyedPartitioning(Seq(a), keys.map(k => InternalRow(k))), distribution)
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val grouped = keyedSpec(Seq(2, 1))
+      assert(grouped.partitioning.isGrouped)
+      assert(grouped.canCreatePartitioning,
+        "unsorted keys are fine, the shuffle follows the declared order")
+
+      // Duplicate keys mean one key spans several partitions, which a KeyGroupedPartitioner cannot
+      // reproduce, so this spec must not be the target for shuffling the other child.
+      val ungrouped = keyedSpec(Seq(1, 1, 2))
+      assert(!ungrouped.partitioning.isGrouped)
+      assert(!ungrouped.canCreatePartitioning)
+    }
+  }
+
+  test("SPARK-59121: canCreatePartitioning: KeyedShuffleSpec refuses reduced keys") {
+    // A `bucket(12, a)` partitioning whose keys a join reduced together with a `bucket(8, a)` one.
+    // The keys are `a % 4`, which is not what evaluating `bucket(12, a)` on a row produces, so the
+    // other child cannot be shuffled onto them. This replaces SPARK-59120's data-type proxy,
+    // which both bucket transforms pass, since the reduced keys keep their `IntegerType`.
+    val a = $"a".int
+    val bucket12 = TransformExpression(TestBucketFunction, Seq(a), Some(12))
+    val bucket8 = TransformExpression(TestBucketFunction, Seq(a), Some(8))
+    // `builtWith` types the key row, `declared` is what the partitioning reports, so the two can be
+    // made to disagree the way `createPartitioning` does.
+    def divergingSpec(
+        builtWith: Expression,
+        declared: Expression,
+        key: InternalRow): KeyedShuffleSpec =
+      KeyedShuffleSpec(
+        KeyedPartitioning(Seq(builtWith), Seq(key)).copy(expressions = Seq(declared)),
+        ClusteredDistribution(declared.references.toSeq))
+    def spec(expression: Expression): KeyedShuffleSpec =
+      divergingSpec(expression, expression, InternalRow(1))
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      assert(spec(bucket12).canCreatePartitioning,
+        "keys the expression describes can be evaluated per row")
+      assert(!spec(bucket12.reducedTogetherWith(bucket8)).canCreatePartitioning,
+        "reduced keys cannot")
+
+      // The gate no longer looks at data types, which SPARK-59120's proxy did. That proxy had to
+      // compare struct keys by shape, because `createPartitioning` puts the other child's
+      // expressions over these keys and the two sides can name a field differently. This builds
+      // that divergence, with the key row at `struct<f>` and the partitioning declaring
+      // `struct<g>`.
+      def struct(field: String): Attribute =
+        $"a".struct(new StructType().add(field, IntegerType))
+      assert(divergingSpec(struct("f"), struct("g"), InternalRow(InternalRow(1)))
+        .canCreatePartitioning,
+        "a key row reads the same either way, so the field names must not matter")
+    }
+  }
+
+  test("SPARK-59120: createShuffleSpec sorts the projected keys at their built-with types") {
+    val a = $"a".timestamp
+    val b = $"b".int
+    // A reducer left `(year, bucket)` values, both `IntegerType`, under expressions that still
+    // declare `(TimestampType, IntegerType)`. Projecting to the `a` position sorts them. An
+    // ordering built from the declared types reads the year as a Long and throws.
+    val reduced =
+      KeyedPartitioning(Seq($"a".int, b), Seq(InternalRow(2021, 1), InternalRow(2020, 0)))
+        .copy(expressions = Seq(a, b))
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val spec = reduced.createShuffleSpec(ClusteredDistribution(Seq(a)))
+        .asInstanceOf[KeyedShuffleSpec]
+      assert(spec.joinKeyPositions === Some(Seq(0)))
+      assert(spec.partitioning.partitionKeys.map(_.row.getInt(0)) === Seq(2020, 2021))
+    }
   }
 
   test("createPartitioning: HashShuffleSpec") {

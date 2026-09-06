@@ -66,6 +66,8 @@ public class ChunkFetchRequestHandlerSuite {
     managedBuffers.add(new TestManagedBuffer(40));
     long streamId = streamManager.registerStream("test-app", managedBuffers.iterator(), channel);
     TransportClient reverseClient = mock(TransportClient.class);
+    // TransportContext gives the reverse client the channel it serves; match that here.
+    when(reverseClient.getChannel()).thenReturn(channel);
     ChunkFetchRequestHandler requestHandler = new ChunkFetchRequestHandler(reverseClient,
       rpcHandler.getStreamManager(), 2L, false);
 

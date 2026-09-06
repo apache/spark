@@ -30,6 +30,9 @@ import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
 class SparkDeclarativePipelinesServerSuite
     extends SparkDeclarativePipelinesServerTest
     with Logging {
+
+  private def sessionCaseSensitive: Boolean = spark.sessionState.conf.caseSensitiveAnalysis
+
   test("CreateDataflowGraph request creates a new graph") {
     withRawBlockingStub { implicit stub =>
       assert(Option(createDataflowGraph(stub)).isDefined)
@@ -265,7 +268,7 @@ class SparkDeclarativePipelinesServerSuite
       val definition =
         getDefaultSessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(graphId)
 
-      val graph = definition.toDataflowGraph.resolve()
+      val graph = definition.toDataflowGraph.resolve(sessionCaseSensitive)
 
       assert(graph.flows.size == 3)
       assert(graph.tables.size == 2)
@@ -312,7 +315,7 @@ class SparkDeclarativePipelinesServerSuite
 
       registerPipelineOutputs(pipeline)
       val graph = definition.toDataflowGraph
-        .resolve()
+        .resolve(sessionCaseSensitive)
 
       assert(graph.flows.size == 3)
       assert(graph.tables.size == 2)

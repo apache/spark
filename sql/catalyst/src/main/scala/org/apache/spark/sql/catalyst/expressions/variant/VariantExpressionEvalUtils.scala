@@ -270,12 +270,89 @@ object VariantExpressionEvalUtils {
     arrayAppendAtPath(input, javaSegments, pathStr, value, valueDataType, functionName, failOnError)
   }
 
+  def stripNulls(input: VariantVal, includeArrays: Boolean): VariantVal = {
+    val v = new Variant(input.getValue, input.getMetadata)
+    val out = VariantBuilder.stripNulls(v, includeArrays)
+    new VariantVal(out.getValue, out.getMetadata)
+  }
+
   /** Cast a Spark value from `dataType` into the variant type. */
   def castToVariant(input: Any, dataType: DataType): VariantVal = {
     // Enforce strict check because it is illegal for input struct/map/variant to contain duplicate
     // keys.
     val builder = new VariantBuilder(false)
     buildVariant(builder, input, dataType)
+    val v = builder.result()
+    new VariantVal(v.getValue, v.getMetadata)
+  }
+
+  /**
+   * Build a variant object directly from a keys array and a values array, without materializing an
+   * intermediate map. Keys must be non-null strings and the two arrays must have equal length. A
+   * null key raises `NULL_MAP_KEY`, a duplicate key raises `VARIANT_DUPLICATE_KEY` (matching
+   * to_variant_object), and null values are kept as variant null.
+   */
+  def variantFromArrays(keys: ArrayData, values: ArrayData, valueType: DataType): VariantVal = {
+    if (keys.numElements() != values.numElements()) {
+      // Reuse the same error map_from_arrays raises for a keys/values length mismatch.
+      throw QueryExecutionErrors.mapDataKeyArrayLengthDiffersFromValueArrayLengthError()
+    }
+    val builder = new VariantBuilder(false)
+    val start = builder.getWritePos
+    val numElements = keys.numElements()
+    val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](numElements)
+    var i = 0
+    while (i < numElements) {
+      if (keys.isNullAt(i)) {
+        throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
+      }
+      val key = keys.getUTF8String(i).toString
+      val id = builder.addKey(key)
+      fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
+      val value = if (values.isNullAt(i)) null else values.get(i, valueType)
+      buildVariant(builder, value, valueType)
+      i += 1
+    }
+    builder.finishWritingObject(start, fields)
+    val v = builder.result()
+    new VariantVal(v.getValue, v.getMetadata)
+  }
+
+  /**
+   * Build a variant object directly from an array of key/value struct entries, without an
+   * intermediate map. Keys must be non-null strings. A null entry makes the whole result null,
+   * and this is checked for every entry before any value is converted, so a null entry always
+   * dominates a conversion failure in an earlier entry (matching `map_from_entries`). A null key
+   * raises `NULL_MAP_KEY`, a duplicate key raises `VARIANT_DUPLICATE_KEY`, and null values are
+   * kept as variant null.
+   */
+  def variantFromEntries(entries: ArrayData, valueType: DataType): VariantVal = {
+    val numElements = entries.numElements()
+    var i = 0
+    while (i < numElements) {
+      if (entries.isNullAt(i)) {
+        return null
+      }
+      i += 1
+    }
+
+    val builder = new VariantBuilder(false)
+    val start = builder.getWritePos
+    val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](numElements)
+    i = 0
+    while (i < numElements) {
+      val entry = entries.getStruct(i, 2)
+      if (entry.isNullAt(0)) {
+        throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
+      }
+      val key = entry.getUTF8String(0).toString
+      val id = builder.addKey(key)
+      fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
+      val value = if (entry.isNullAt(1)) null else entry.get(1, valueType)
+      buildVariant(builder, value, valueType)
+      i += 1
+    }
+    builder.finishWritingObject(start, fields)
     val v = builder.result()
     new VariantVal(v.getValue, v.getMetadata)
   }

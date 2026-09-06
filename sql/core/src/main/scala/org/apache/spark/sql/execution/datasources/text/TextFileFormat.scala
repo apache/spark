@@ -142,7 +142,9 @@ case class TextFileFormat()
       textOptions: TextOptions): PartitionedFile => Iterator[UnsafeRow] = {
     (file: PartitionedFile) => {
       val confValue = conf.value.value
-      SupportsArchiveFormat.readArchiveEntries(file.toPath, confValue) { (_, in) =>
+      val entryGlob = textOptions.archivePathFilterPattern
+      SupportsArchiveFormat.readArchiveEntries(
+          file.toPath, confValue, archivePathFilter = entryGlob) { (_, in) =>
         // Each entry is read as a standalone text file, so it gets its own row writer, exactly as
         // `readToUnsafeMem` builds one per file.
         val emptyUnsafeRow = new UnsafeRow(0)

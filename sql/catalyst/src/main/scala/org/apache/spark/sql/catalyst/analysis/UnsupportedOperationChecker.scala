@@ -23,7 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ANALYSIS_ERROR, QUERY_PLAN}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, LocalTimestampNanos, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -637,7 +637,8 @@ object UnsupportedOperationChecker extends Logging {
 
       subPlan.expressions.foreach { e =>
         if (e.collectLeaves().exists {
-          case (_: CurrentTimestampLike | _: CurrentDate | _: LocalTimestamp) => true
+          case (_: CurrentTimestampLike | _: CurrentDate | _: LocalTimestamp |
+              _: LocalTimestampNanos) => true
           case _ => false
         }) {
           throwError(s"Continuous processing does not support current time operations.")
@@ -655,6 +656,18 @@ object UnsupportedOperationChecker extends Logging {
   def checkAdditionalRealTimeModeConstraints(plan: LogicalPlan, outputMode: OutputMode): Unit = {
     if (outputMode != InternalOutputModes.Update) {
       throwRealTimeError("OUTPUT_MODE_NOT_SUPPORTED", Map("outputMode" -> outputMode.toString))
+    }
+
+    plan.foreachUp {
+      case u: Union =>
+        // Block stateful operators before union
+        u.foreachUp {
+          case statefulOp @ (_: Aggregate | _: TransformWithState |
+               _: TransformWithStateInPySpark | _: Deduplicate) if statefulOp.isStateful =>
+            throwRealTimeError("STATEFUL_OPERATORS_BEFORE_UNION_NOT_SUPPORTED", Map.empty)
+          case _ =>
+        }
+      case _ =>
     }
   }
 

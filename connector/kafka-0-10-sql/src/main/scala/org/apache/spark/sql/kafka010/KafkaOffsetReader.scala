@@ -62,11 +62,14 @@ private[kafka010] trait KafkaOffsetReader {
    * This method resolves offset value -1 to the latest and -2 to the
    * earliest Kafka seek position.
    *
-   * @param partitionOffsets the specific offsets to resolve
+   * Offsets bound to a topic as a whole are expanded against the partitions currently assigned
+   * to the query.
+   *
+   * @param offsets the specific offsets to resolve
    * @param reportDataLoss callback to either report or log data loss depending on setting
    */
   def fetchSpecificOffsets(
-      partitionOffsets: Map[TopicPartition, Long],
+      offsets: SpecificOffsetRangeLimit,
       reportDataLoss: (String, () => Throwable) => Unit): KafkaSourceOffset
 
   /**
@@ -175,6 +178,11 @@ private[kafka010] object KafkaOffsetReader extends Logging {
 
 private[kafka010] abstract class KafkaOffsetReaderBase extends KafkaOffsetReader with Logging {
   protected val rangeCalculator: KafkaOffsetRangeCalculator
+
+  /**
+   * @return The set of TopicPartitions currently assigned to the query.
+   */
+  protected def fetchTopicPartitions(): Set[TopicPartition]
 
   private def getSortedExecutorList: Array[String] = {
     def compare(a: ExecutorCacheTaskLocation, b: ExecutorCacheTaskLocation): Boolean = {

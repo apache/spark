@@ -258,8 +258,8 @@ object DistanceMeasure {
 
   private[spark] def decodeFromString(distanceMeasure: String): DistanceMeasure =
     distanceMeasure match {
-      case EUCLIDEAN => new EuclideanDistanceMeasure
-      case COSINE => new CosineDistanceMeasure
+      case EUCLIDEAN => EuclideanDistanceMeasure
+      case COSINE => CosineDistanceMeasure
       case _ => throw new IllegalArgumentException(s"distanceMeasure must be one of: " +
         s"$EUCLIDEAN, $COSINE. $distanceMeasure provided.")
     }
@@ -278,7 +278,7 @@ object DistanceMeasure {
     k.toLong * k * numFeatures < 1000000
 }
 
-private[spark] class EuclideanDistanceMeasure extends DistanceMeasure {
+private[spark] object EuclideanDistanceMeasure extends DistanceMeasure {
 
   /**
    * Statistics used in triangle inequality to obtain useful bounds to find closest centers.
@@ -400,10 +400,7 @@ private[spark] class EuclideanDistanceMeasure extends DistanceMeasure {
       centroid: VectorWithNorm): Double = {
     EuclideanDistanceMeasure.fastSquaredDistance(point, centroid)
   }
-}
 
-
-private[spark] object EuclideanDistanceMeasure {
   /**
    * @return the squared Euclidean distance between two vectors computed by
    * [[org.apache.spark.mllib.util.MLUtils#fastSquaredDistance]].
@@ -415,7 +412,7 @@ private[spark] object EuclideanDistanceMeasure {
   }
 }
 
-private[spark] class CosineDistanceMeasure extends DistanceMeasure {
+private[spark] object CosineDistanceMeasure extends DistanceMeasure {
 
   /**
    * Statistics used in triangle inequality to obtain useful bounds to find closest centers.
