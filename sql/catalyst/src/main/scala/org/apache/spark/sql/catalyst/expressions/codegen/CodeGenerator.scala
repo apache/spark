@@ -287,8 +287,8 @@ class CodegenContext extends Logging {
          |${value.value} = ${defGen.value};
          |$computed = true;
        """.stripMargin
-      // TODO: cover the local-variable case too, by passing the `currentVars` values a definition
-      //   reads into the method as parameters, the way
+      // TODO(SPARK-59295): cover the local-variable case too, by passing the `currentVars` values a
+      //   definition reads into the method as parameters, the way
       //   `subexpressionEliminationForWholeStageCodegen` does. It needs a decision first:
       //   `getLocalInputVariableValues` hoists an input variable that is not evaluated yet to
       //   before the call, which for a reference behind a branch means evaluating it on rows that
