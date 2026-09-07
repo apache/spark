@@ -611,13 +611,16 @@ class ColumnExpressionSuite extends SharedSparkSession {
     // The definition is deterministic, which keeps this out of the pre-existing question of what a
     // nondeterministic sort key means.
     withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
-      val df = spark.range(0, 5, 1, 1).toDF()
-      val sorted = df.orderBy(expr("CASE WHEN id < 0 THEN 0 ELSE nullif(id * 2, -1) END").desc)
-      val withs = sorted.queryExecution.optimizedPlan.collect {
-        case p => p.expressions.flatMap(_.collect { case w: With => w })
-      }.flatten
-      assert(withs.size == 1, s"expected one surviving With node, got ${withs.size}")
       onEachEvalPath {
+        // The DataFrame is built inside, not outside: `QueryExecution.executedPlan` is a lazy val,
+        // so one built ahead of these blocks would be planned under the first block's confs and the
+        // whole-stage block would re-run that same physical plan.
+        val df = spark.range(0, 5, 1, 1).toDF()
+        val sorted = df.orderBy(expr("CASE WHEN id < 0 THEN 0 ELSE nullif(id * 2, -1) END").desc)
+        val withs = sorted.queryExecution.optimizedPlan.collect {
+          case p => p.expressions.flatMap(_.collect { case w: With => w })
+        }.flatten
+        assert(withs.size == 1, s"expected one surviving With node, got ${withs.size}")
         // `checkAnswer` compares in order when the plan holds a `Sort`.
         checkAnswer(sorted, Seq(Row(4L), Row(3L), Row(2L), Row(1L), Row(0L)))
       }

@@ -94,19 +94,24 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
    * `children` is `child +: defs`, so this scan already descends into an inner `With`'s own
    * definitions.
    *
-   * Computing this also checks the two shapes whose bindings could not be kept straight at all; see
-   * the comment on the checks.
+   * Computing this also checks the three shapes whose bindings could not be kept straight at all;
+   * see the comment on the checks.
    */
   @transient private lazy val refsToBind: IndexedSeq[(CommonExpressionRef, CommonExpressionDef)] = {
-    // Two definitions with one id would leave `idToDef` holding the last of them and bind every
-    // reference to it, and a definition object shared with a nested `With` would have that inner
-    // scope clear a cell this scope has already filled -- one definition answering with two values
-    // inside one entry, and with two types if the definitions disagree. Both are shapes this path
-    // would answer for, wrongly, so refuse them here; `CodegenContext.withCommonExprs` refuses them
-    // too, though by a coarser rule -- it keys on the id, so it also refuses a nested `With` that
-    // redefines an id with a definition of its own, which this path handles correctly and a test
-    // pins. Neither shape is reachable from `With.apply`, which mints both the definitions and
-    // their ids, so this is an invariant check rather than a case a query can hit.
+    // Three shapes this path would otherwise answer for, wrongly or not at all. Two definitions
+    // with one id would leave `idToDef` below holding the last of them and bind every reference to
+    // it -- with two types if the definitions disagree. A definition object shared with a nested
+    // `With` would have that inner scope clear a cell this scope has already filled, so one
+    // definition answers twice inside one entry. A definition holding a reference to an id this
+    // `With` defines breaks the invariant the scan below relies on: with a reference object that
+    // also appears in `child`, the scan binds it, and evaluating the definition re-enters a cell
+    // whose `computed` is still false, recursing to a StackOverflowError (measured); with a
+    // separate object it is never bound and raises the unbound-reference error when reached, which
+    // is right but late. `CodegenContext.withCommonExprs` refuses all three, the first two by a
+    // coarser id-keyed rule that also refuses a nested `With` redefining an id with a definition of
+    // its own, which this path handles correctly and a test pins. None is reachable from
+    // `With.apply`, which mints both the definitions and their ids, so these are invariant checks
+    // rather than cases a query can hit.
     if (defs.map(_.id).distinct.length != defs.length) {
       throw SparkException.internalError(
         "Duplicate common expression ids in one With: " + defs.map(_.id.id).mkString(", "))
@@ -115,6 +120,13 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
       case w: With if w.defs.exists(innerDef => defs.exists(_ eq innerDef)) =>
         throw SparkException.internalError(
           "A nested With shares a common expression definition object with the With around it")
+      case _ =>
+    })
+    val ownIds = defs.map(_.id).toSet
+    defs.foreach(_.child.foreach {
+      case r: CommonExpressionRef if ownIds.contains(r.id) =>
+        throw SparkException.internalError(
+          "A common expression definition references an id its own With defines: " + r.id.id)
       case _ =>
     })
     val idToDef = defs.map(d => d.id -> d).toMap
