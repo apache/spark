@@ -3032,23 +3032,53 @@ case class MonthsBetween(
   override def second: Expression = date2
   override def third: Expression = roundOff
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType, BooleanType)
+  // Nanosecond-precision timestamps are accepted alongside the microsecond types. The result is a
+  // DOUBLE month count measured on the microsecond grid, so each nanosecond operand contributes
+  // only its epochMicros; the sub-microsecond remainder does not affect the answer. TimestampType
+  // (not AnyTimestampType) is kept so the microsecond behavior is unchanged -- NTZ micros still
+  // implicit-casts to LTZ as before -- and only the nanosecond types are newly accepted.
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      TypeCollection(TimestampType, AnyTimestampNanoType),
+      TypeCollection(TimestampType, AnyTimestampNanoType),
+      BooleanType)
 
   override def dataType: DataType = DoubleType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  // The TIMESTAMP_NTZ family is evaluated in UTC; every other accepted type uses the session zone.
+  // For the existing microsecond LTZ operands this resolves to the session zone, so the result is
+  // unchanged from before.
+  @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(date1.dataType)
+
+  // For the nanosecond carrier the child value is a boxed TimestampNanosVal, so read its
+  // epochMicros; for the microsecond timestamp types it is already a boxed Long.
+  private def toMicros(value: Any): Long = value match {
+    case v: TimestampNanosVal => v.epochMicros
+    case n => n.asInstanceOf[Long]
+  }
+
   override def nullSafeEval(t1: Any, t2: Any, roundOff: Any): Any = {
     DateTimeUtils.monthsBetween(
-      t1.asInstanceOf[Long], t2.asInstanceOf[Long], roundOff.asInstanceOf[Boolean], zoneId)
+      toMicros(t1), toMicros(t2), roundOff.asInstanceOf[Boolean], zoneIdInEval)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+    // The nanosecond carrier exposes epochMicros as a public field; the microsecond types are
+    // already primitive longs. Reduce each operand to microseconds before passing it to
+    // monthsBetween.
+    def toMicrosCode(e: Expression): String => String = e.dataType match {
+      case _: AnyTimestampNanoType => c => s"$c.epochMicros"
+      case _ => c => c
+    }
+    val d1Micros = toMicrosCode(date1)
+    val d2Micros = toMicrosCode(date2)
+    val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (d1, d2, roundOff) => {
-      s"""$dtu.monthsBetween($d1, $d2, $roundOff, $zid)"""
+      s"""$dtu.monthsBetween(${d1Micros(d1)}, ${d2Micros(d2)}, $roundOff, $zid)"""
     })
   }
 

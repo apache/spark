@@ -774,6 +774,59 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57819: months_between over nanosecond-precision timestamps") {
+    import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
+
+    // Reuse the microsecond `months_between` expectations from the test above: for the pair
+    //   (1997-02-28 10:30:00, 1996-10-30 00:00:00)
+    // months_between is 3.94959677 (roundOff) / 3.9495967741935485 (no roundOff). Carry the same
+    // instants at nanosecond precision, adding non-zero *sub-microsecond* digits (nanosWithinMicro
+    // in (0, 1000)). months_between returns a DOUBLE month count measured on the microsecond grid,
+    // so those digits are dropped and the nanosecond result equals the microsecond expectation, at
+    // every nanosecond precision. checkEvaluation exercises both the interpreted and codegen paths.
+    foreachNanosPrecision { p =>
+      for (zid <- outstandingZoneIds) {
+        val tz = Option(zid.getId)
+
+        // TIMESTAMP_LTZ(p): evaluated in the session zone. Build each operand as the instant whose
+        // wall clock equals the fields below in that zone, mirroring the microsecond test, so the
+        // result matches the microsecond expectation for every zone.
+        val ltzEnd = Literal.create(
+          instantToNanosVal(timestampLTZ(1997, 2, 28, 10, 30, 0, nanoOfSec = 789, zid)),
+          TimestampLTZNanosType(p))
+        val ltzStart = Literal.create(
+          instantToNanosVal(timestampLTZ(1996, 10, 30, 0, 0, 0, nanoOfSec = 123, zid)),
+          TimestampLTZNanosType(p))
+        checkEvaluation(MonthsBetween(ltzEnd, ltzStart, Literal.TrueLiteral, tz), 3.94959677)
+        checkEvaluation(
+          MonthsBetween(ltzEnd, ltzStart, Literal.FalseLiteral, tz), 3.9495967741935485)
+
+        // TIMESTAMP_NTZ(p): evaluated in UTC regardless of the session zone. The wall-clock fields
+        // are read back unchanged, so passing a non-UTC `tz` (which is ignored for NTZ) still
+        // yields the microsecond expectation -- this guards the zoneIdForType(NTZ) = UTC path.
+        val ntzEnd = Literal.create(
+          localDateTimeToNanosVal(timestampNTZ(1997, 2, 28, 10, 30, 0, nanoOfSec = 789)),
+          TimestampNTZNanosType(p))
+        val ntzStart = Literal.create(
+          localDateTimeToNanosVal(timestampNTZ(1996, 10, 30, 0, 0, 0, nanoOfSec = 123)),
+          TimestampNTZNanosType(p))
+        checkEvaluation(MonthsBetween(ntzEnd, ntzStart, Literal.TrueLiteral, tz), 3.94959677)
+        checkEvaluation(
+          MonthsBetween(ntzEnd, ntzStart, Literal.FalseLiteral, tz), 3.9495967741935485)
+
+        // A null nanosecond operand yields null for either family.
+        checkEvaluation(
+          MonthsBetween(ltzEnd, Literal.create(null, TimestampLTZNanosType(p)),
+            Literal.TrueLiteral, tz),
+          null)
+        checkEvaluation(
+          MonthsBetween(Literal.create(null, TimestampNTZNanosType(p)), ntzStart,
+            Literal.TrueLiteral, tz),
+          null)
+      }
+    }
+  }
+
   test("last_day") {
     checkEvaluation(LastDay(Literal(Date.valueOf("2015-02-28"))), Date.valueOf("2015-02-28"))
     checkEvaluation(LastDay(Literal(Date.valueOf("2015-03-27"))), Date.valueOf("2015-03-31"))
