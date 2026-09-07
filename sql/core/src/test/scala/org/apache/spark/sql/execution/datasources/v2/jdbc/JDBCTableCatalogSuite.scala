@@ -230,15 +230,20 @@ class JDBCTableCatalogSuite extends SharedSparkSession {
   }
 
   test("SPARK-58945: H2 renameTable reports source table when it is missing") {
-    val e = intercept[NoSuchTableException] {
-      tableCatalog.renameTable(
-        Identifier.of(Array("test"), "not_existing_table"),
-        Identifier.of(Array("test"), "dst_table"))
+    Seq(
+      "not_existing_table" -> "`test`.`not_existing_table`",
+      "PEOPLE" -> "`test`.`PEOPLE`"
+    ).foreach { case (oldName, expected) =>
+      val e = intercept[NoSuchTableException] {
+        tableCatalog.renameTable(
+          Identifier.of(Array("test"), oldName),
+          Identifier.of(Array("test"), "dst_table"))
+      }
+      checkErrorTableNotFoundWithSearchPath(
+        e,
+        expected,
+        searchPath = "not available")
     }
-    checkErrorTableNotFoundWithSearchPath(
-      e,
-      "`test`.`not_existing_table`",
-      searchPath = "not available")
   }
 
   test("create a table") {

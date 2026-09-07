@@ -117,15 +117,6 @@ class SqlScriptingCursorE2eSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-58945: OPEN cursor outside script reports cursor name") {
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("OPEN cur")
-      },
-      condition = "CURSOR_OUTSIDE_SCRIPT",
-      parameters = Map("cursorName" -> "`cur`"))
-  }
-
   test("Test 5: Cursors have a separate namespace from local variables") {
     val result = sql(
       """
@@ -401,7 +392,7 @@ class SqlScriptingCursorE2eSuite extends SharedSparkSession {
             |""".stripMargin)
       },
       condition = "CURSOR_NOT_FOUND",
-      parameters = Map("cursorName" -> "cur")
+      parameters = Map("cursorName" -> "`cur`")
     )
   }
 
@@ -2092,5 +2083,22 @@ class SqlScriptingCursorE2eSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58945: OPEN cursor outside script reports cursor name") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("OPEN cur")
+      },
+      condition = "CURSOR_OUTSIDE_SCRIPT",
+      parameters = Map("cursorName" -> "`cur`"))
+  }
+
+  test("SPARK-58945: DECLARE CURSOR outside script reports cursor name") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("DECLARE cur CURSOR FOR SELECT 1")
+      },
+      condition = "CURSOR_OUTSIDE_SCRIPT",
+      parameters = Map("cursorName" -> "`cur`"))
+  }
 }
 // scalastyle:on line.size.limit

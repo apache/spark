@@ -104,7 +104,7 @@ class ResolveCursors extends Rule[LogicalPlan] with DataTypeErrorsBase {
       case None =>
         throw new AnalysisException(
           errorClass = "CURSOR_NOT_FOUND",
-          messageParameters = Map("cursorName" -> nameParts.mkString(".")))
+          messageParameters = Map("cursorName" -> toSQLId(nameParts)))
     }
   }
 }

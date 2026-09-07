@@ -229,15 +229,16 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
               errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
               messageParameters = Map("relationName" -> quotedName),
               cause = Some(e))
-          // TABLE_OR_VIEW_NOT_FOUND_1
-          case 42102 =>
+          // TABLE_OR_VIEW_NOT_FOUND_1 and related object-not-found variants.
+          case 42102 | 42103 | 42104 =>
             val relationName = messageParameters
               .getOrElse("tableName", messageParameters.getOrElse("oldName", ""))
             throw new NoSuchTableException(
               errorClass = "TABLE_OR_VIEW_NOT_FOUND",
               messageParameters = Map(
                 "relationName" -> relationName,
-                // Use the shared empty-search-path rendering for this dialect-classification path.
+                // classifyException receives pre-rendered strings, so no resolution
+                // search path is threaded through this API.
                 "searchPath" -> NoSuchItemExceptionHelper.formatSearchPath(Seq.empty)),
               cause = Some(e))
           // SCHEMA_NOT_FOUND_1
