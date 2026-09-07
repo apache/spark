@@ -310,6 +310,52 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       "an array with a 2-byte offset width where 1 byte fits is not canonical")
   }
 
+  test("isCanonical rejects an object whose size field is stored wide") {
+    val elem = parse("1").getValue // INT1(1), the field value
+    // largeSize = true forces a 4-byte size field where 1 byte fits (idSize = offsetSize = 1).
+    val header = VariantUtil.objectHeader(true, 1, 1)
+    val obj = java.nio.ByteBuffer.allocate(
+        1 + // header byte
+        4 + // size field (forced wide: 4 bytes)
+        1 + // id list: size(1) * idSize(1)
+        2 + // offset list: (size + 1) * offsetSize(1)
+        elem.length) // field data: INT1(1)
+      .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+      .put(header)
+      .putInt(1) // size = 1, stored in 4 bytes (canonical uses 1)
+      .put(0.toByte) // field id list: [0] -> key "a"
+      .put(0.toByte) // offset[0] = 0
+      .put(elem.length.toByte) // offset[1] = data size
+      .put(elem) // field value: INT1(1)
+      .array()
+    val wideSizeObject = new Variant(obj, parse("""{"a":1}""").getMetadata)
+    assert(isCanon(parse("""{"a":1}""")), "sanity: a minimal-width object is canonical")
+    assert(!VariantBuilder.isCanonical(wideSizeObject),
+      "an object with a 4-byte size field where 1 byte fits is not canonical")
+  }
+
+  test("isCanonical rejects an array whose size field is stored wide") {
+    val elem = parse("1").getValue // INT1(1), a 2-byte canonical scalar
+    // largeSize = true forces a 4-byte size field where 1 byte fits (offsetSize = 1).
+    val header = VariantUtil.arrayHeader(true, 1)
+    val arr = java.nio.ByteBuffer.allocate(
+        1 + // header byte
+        4 + // size field (forced wide: 4 bytes)
+        2 + // offset list: (size + 1) * offsetSize(1)
+        elem.length) // element data: INT1(1)
+      .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+      .put(header)
+      .putInt(1) // size = 1, stored in 4 bytes (canonical uses 1)
+      .put(0.toByte) // offset[0] = 0
+      .put(elem.length.toByte) // offset[1] = data size
+      .put(elem) // element: INT1(1)
+      .array()
+    val wideSizeArray = new Variant(arr, parse("1").getMetadata)
+    assert(isCanon(parse("[1]")), "sanity: a minimal-width array is canonical")
+    assert(!VariantBuilder.isCanonical(wideSizeArray),
+      "an array with a 4-byte size field where 1 byte fits is not canonical")
+  }
+
   // ----- isCanonical: scalar values -----
 
   test("isCanonical rejects a non-minimally-encoded integer") {

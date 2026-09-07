@@ -731,6 +731,11 @@ public class VariantBuilder {
       case OBJECT:
         return handleObject(value, pos,
             (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+          // Size (element-count) field is 1 byte unless size > U8_MAX, else 4 (never 2 or 3).
+          // idStart - pos - 1 is its stored width.
+          if (idStart - pos - 1 != (size > U8_MAX ? U32_SIZE : 1)) {
+            return false;
+          }
           // Field ids strictly ascending: with a sorted dictionary, canon emits fields in key
           // order, and key order == id order. This also rejects duplicate keys (equal ids).
           int prevId = -1;
@@ -762,6 +767,10 @@ public class VariantBuilder {
         });
       case ARRAY:
         return handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) -> {
+          // Same minimal size-field-width rule as objects (offsetStart - pos - 1 is the width).
+          if (offsetStart - pos - 1 != (size > U8_MAX ? U32_SIZE : 1)) {
+            return false;
+          }
           int dataSize = 0;
           for (int i = 0; i < size; ++i) {
             int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
