@@ -52,7 +52,7 @@ abstract class DistributionAndOrderingSuiteBase
     case HashPartitioning(exprs, numPartitions) =>
       HashPartitioning(exprs.map(resolveAttrs(_, plan)), numPartitions)
     case KeyGroupedPartitioning(clustering, numPartitions, partValues,
-        originalPartValues, isPartiallyClustered) =>
+        originalPartValues, isPartiallyClustered, _) =>
       KeyGroupedPartitioning(clustering.map(resolveAttrs(_, plan)), numPartitions, partValues,
         originalPartValues, isPartiallyClustered)
     case PartitioningCollection(partitionings) =>
