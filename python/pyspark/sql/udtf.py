@@ -325,6 +325,19 @@ def _validate_udtf_handler(cls: Any, returnType: Optional[Union[StructType, str]
         )
 
 
+def _check_arrow_udtf_return_type(return_type: DataType, eval_type: int) -> None:
+    if eval_type in (
+        PythonEvalType.SQL_ARROW_TABLE_UDF,
+        PythonEvalType.SQL_ARROW_UDTF,
+    ) and _has_type(return_type, (CharType, VarcharType)):
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={
+                "feature": f"Invalid return type with Arrow UDTFs: {return_type}"
+            },
+        )
+
+
 class UserDefinedTableFunction:
     """
     User-defined table function in Python
@@ -377,16 +390,7 @@ class UserDefinedTableFunction:
                         "return_type": f"{parsed}",
                     },
                 )
-            if self.evalType in (
-                PythonEvalType.SQL_ARROW_TABLE_UDF,
-                PythonEvalType.SQL_ARROW_UDTF,
-            ) and _has_type(parsed, (CharType, VarcharType)):
-                raise PySparkNotImplementedError(
-                    errorClass="NOT_IMPLEMENTED",
-                    messageParameters={
-                        "feature": f"Invalid return type with Arrow UDTFs: {parsed}"
-                    },
-                )
+            _check_arrow_udtf_return_type(parsed, self.evalType)
             self._returnType_placeholder = parsed
         return self._returnType_placeholder
 
