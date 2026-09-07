@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, LeftExistence, LeftOuter, LeftSingle, RightOuter}
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
 
 /**
  * Holds common logic for join operators by shuffling two child relations
@@ -46,7 +46,14 @@ trait ShuffledJoin extends JoinCodegenSupport {
 
   override def outputPartitioning: Partitioning = joinType match {
     case _: InnerLike =>
-      PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
+      // Every `KeyedPartitioning` in the joined collection speaks for the join output's layout,
+      // and `groupedSatisfies` admits a marked side into it only for full-key join keys, where
+      // the join equality ties every column of its claim: a row of an undeclared key matches
+      // nothing on the accurate side and is filtered, so a marked member alongside an unmarked
+      // one is spurious. Clear it at the one site that can mix them, so consumers take members'
+      // markers at face value (see `KeyedPartitioning.mayContainUnknownPartitionKeys`).
+      PartitioningCollection(
+        clearUnknownPartitionKeys(Seq(left.outputPartitioning, right.outputPartitioning)))
     case LeftOuter | LeftSingle => left.outputPartitioning
     case RightOuter => right.outputPartitioning
     case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
@@ -54,6 +61,36 @@ trait ShuffledJoin extends JoinCodegenSupport {
     case x =>
       throw new IllegalArgumentException(
         s"ShuffledJoin should not take $x as the JoinType")
+  }
+
+  /**
+   * Clears the `mayContainUnknownPartitionKeys` marker of every `KeyedPartitioning` in
+   * `partitionings` when marked and unmarked keyed inputs meet. Only `ShuffledJoin`'s
+   * `InnerLike` arm can mix inputs this way; see the call site for the argument.
+   */
+  private def clearUnknownPartitionKeys(
+      partitionings: Seq[Partitioning]): Seq[Partitioning] = {
+    // Keyless inputs drop out of the `flatMap` rather than reading as unmarked, and a nested
+    // collection answers with one marker per keyed member it holds. The all-unmarked path must
+    // reach no `copy`: `transform`'s `fastEquals` would compare every partition key.
+    def markersOf(p: Partitioning): Seq[Boolean] = p match {
+      case k: KeyedPartitioning => k.mayContainUnknownPartitionKeys :: Nil
+      case c: PartitioningCollection => c.partitionings.flatMap(markersOf)
+      case _ => Nil
+    }
+    val markers = partitionings.flatMap(markersOf)
+    if (markers.isEmpty || markers.forall(_ == markers.head)) {
+      partitionings
+    } else {
+      partitionings.map {
+        case partitioning: Partitioning with Expression if markersOf(partitioning).contains(true) =>
+          partitioning.transform {
+            case k: KeyedPartitioning if k.mayContainUnknownPartitionKeys =>
+              k.copy(mayContainUnknownPartitionKeys = false)
+          }.asInstanceOf[Partitioning]
+        case p => p
+      }
+    }
   }
 
   override def output: Seq[Attribute] = {

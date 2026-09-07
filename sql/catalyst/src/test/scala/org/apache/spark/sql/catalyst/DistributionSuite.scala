@@ -20,11 +20,13 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.SparkFunSuite
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CollationAwareMurmur3Hash, Expression, Literal, Pmod}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, CollationAwareMurmur3Hash, Expression, Literal, Pmod, SortOrder}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
-class DistributionSuite extends SparkFunSuite {
+class DistributionSuite extends SparkFunSuite with SQLHelper {
 
   protected def checkSatisfied(
       inputPartitioning: Partitioning,
@@ -409,5 +411,21 @@ class DistributionSuite extends SparkFunSuite {
     val groupedKP = KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))
     assert(groupedKP.isGrouped)
     checkSatisfied(groupedKP, ClusteredDistribution(Seq(x)), true)
+  }
+  test("SPARK-59050: a marked one-partition layout keeps the global ordering claim") {
+    // The one-partition exemption inside `groupedSatisfies`'s ordered branch: a single partition
+    // holds every row, so an out-of-set key cannot break the cross-partition sequence, while
+    // two partitions can (the e2e `ORDER BY` repro measures that). Positive control: an
+    // always-false gate would shuffle these plans for nothing.
+    val a = AttributeReference("a", IntegerType)()
+    val ordered = OrderedDistribution(Seq(SortOrder(a, Ascending)))
+    val markedOne = KeyedPartitioning(Seq(a), Seq(InternalRow(1)))
+      .copy(mayContainUnknownPartitionKeys = true)
+    val markedTwo = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2)))
+      .copy(mayContainUnknownPartitionKeys = true)
+    withSQLConf(SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
+      checkSatisfied(markedOne, ordered, true)
+      checkSatisfied(markedTwo, ordered, false)
+    }
   }
 }
