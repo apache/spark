@@ -320,9 +320,12 @@ class MultilayerPerceptronClassificationModel private[ml] (
   }
 
   override protected def predictRawColumn(features: Column): Column = {
-    val localPredictRaw =
-      MultilayerPerceptronClassificationModel.predictRawFunction($(layers), weights)
-    udf((features: Vector) => localPredictRaw(features)).apply(features)
+    val localLayers = $(layers).clone()
+    val localWeights = weights
+    lazy val localModel = FeedForwardTopology
+      .multiLayerPerceptron(localLayers, softmaxOnTop = true)
+      .model(localWeights)
+    udf((features: Vector) => localModel.predictRaw(features)).apply(features)
   }
 
   override protected def raw2probabilityColumn(rawPrediction: Column): Column = {
@@ -332,9 +335,12 @@ class MultilayerPerceptronClassificationModel private[ml] (
   }
 
   override protected def predictProbabilityColumn(features: Column): Column = {
-    val localPredictProbability =
-      MultilayerPerceptronClassificationModel.predictProbabilityFunction($(layers), weights)
-    udf((features: Vector) => localPredictProbability(features)).apply(features)
+    val localLayers = $(layers).clone()
+    val localWeights = weights
+    lazy val localModel = FeedForwardTopology
+      .multiLayerPerceptron(localLayers, softmaxOnTop = true)
+      .model(localWeights)
+    udf((features: Vector) => localModel.predict(features)).apply(features)
   }
 
   override protected def raw2predictionColumn(rawPrediction: Column): Column = {
@@ -351,9 +357,12 @@ class MultilayerPerceptronClassificationModel private[ml] (
   }
 
   override protected def predictionColumn(features: Column): Column = {
-    val localPredictProbability =
-      MultilayerPerceptronClassificationModel.predictProbabilityFunction($(layers), weights)
-    udf((features: Vector) => localPredictProbability(features).argmax.toDouble)
+    val localLayers = $(layers).clone()
+    val localWeights = weights
+    lazy val localModel = FeedForwardTopology
+      .multiLayerPerceptron(localLayers, softmaxOnTop = true)
+      .model(localWeights)
+    udf((features: Vector) => localModel.predict(features).argmax.toDouble)
       .apply(features)
   }
 
@@ -436,24 +445,6 @@ class MultilayerPerceptronClassificationModel private[ml] (
 @Since("2.0.0")
 object MultilayerPerceptronClassificationModel
   extends MLReadable[MultilayerPerceptronClassificationModel] {
-
-  private def predictRawFunction(layers: Array[Int], weights: Vector): Vector => Vector = {
-    val localLayers = layers.clone()
-    lazy val model = FeedForwardTopology
-      .multiLayerPerceptron(localLayers, softmaxOnTop = true)
-      .model(weights)
-    features: Vector => model.predictRaw(features)
-  }
-
-  private def predictProbabilityFunction(
-      layers: Array[Int],
-      weights: Vector): Vector => Vector = {
-    val localLayers = layers.clone()
-    lazy val model = FeedForwardTopology
-      .multiLayerPerceptron(localLayers, softmaxOnTop = true)
-      .model(weights)
-    features: Vector => model.predict(features)
-  }
 
   private def raw2probability(rawPrediction: Vector): Vector = {
     raw2probabilityInPlace(rawPrediction.copy)
