@@ -126,6 +126,9 @@ object DataType {
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
   private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
   private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
+  private val CHAR_TYPE_WITH_COLLATION = """char\(\s*(\d+)\s*\)\s+collate\s+(\w+)""".r
+  private val VARCHAR_TYPE_WITH_COLLATION =
+    """varchar\(\s*(\d+)\s*\)\s+collate\s+(\w+)""".r
   private val STRING_WITH_COLLATION = """string\s+collate\s+(\w+)""".r
   private val TIMESTAMP_LTZ_NANOS_TYPE = """timestamp_ltz\(\s*(\d+)\s*\)""".r
   private val TIMESTAMP_NTZ_NANOS_TYPE = """timestamp_ntz\(\s*(\d+)\s*\)""".r
@@ -259,6 +262,10 @@ object DataType {
         CharType(parseIntTypeParameterFromJson(length, "length", "CHAR"))
       case VARCHAR_TYPE(length) =>
         VarcharType(parseIntTypeParameterFromJson(length, "length", "VARCHAR"))
+      case CHAR_TYPE_WITH_COLLATION(length, collation) =>
+        CharType(parseIntTypeParameterFromJson(length, "length", "CHAR"), collation)
+      case VARCHAR_TYPE_WITH_COLLATION(length, collation) =>
+        VarcharType(parseIntTypeParameterFromJson(length, "length", "VARCHAR"), collation)
       case STRING_WITH_COLLATION(collation) => StringType(collation)
       // If the coordinate reference system (CRS) value is omitted, Parquet and other storage
       // formats (Delta, Iceberg) consider "OGC:CRS84" to be the default value of the crs.
@@ -350,7 +357,7 @@ object DataType {
       collationsMap.get(fieldPath) match {
         case Some(collation) =>
           assertValidTypeForCollations(fieldPath, name, collationsMap)
-          stringTypeWithCollation(collation)
+          stringTypeWithCollation(name, collation)
         case _ => nameToType(name)
       }
 
@@ -452,7 +459,11 @@ object DataType {
       fieldPath: String,
       fieldType: String,
       collationMap: Map[String, String]): Unit = {
-    if (collationMap.contains(fieldPath) && fieldType != "string") {
+    val isStringType = fieldType match {
+      case "string" | CHAR_TYPE(_) | VARCHAR_TYPE(_) => true
+      case _ => false
+    }
+    if (collationMap.contains(fieldPath) && !isStringType) {
       throw new SparkIllegalArgumentException(
         errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
         messageParameters = Map("jsonType" -> fieldType))
@@ -485,8 +496,14 @@ object DataType {
     }
   }
 
-  private def stringTypeWithCollation(collationName: String): StringType = {
-    StringType(CollationFactory.collationNameToId(collationName))
+  private def stringTypeWithCollation(typeName: String, collationName: String): StringType = {
+    typeName match {
+      case CHAR_TYPE(length) =>
+        CharType(parseIntTypeParameterFromJson(length, "length", "CHAR"), collationName)
+      case VARCHAR_TYPE(length) =>
+        VarcharType(parseIntTypeParameterFromJson(length, "length", "VARCHAR"), collationName)
+      case _ => StringType(CollationFactory.collationNameToId(collationName))
+    }
   }
 
   protected[types] def buildFormattedString(

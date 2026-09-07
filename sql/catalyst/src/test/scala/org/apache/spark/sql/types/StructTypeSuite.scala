@@ -673,6 +673,20 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     assert(fromDDL(struct.toDDL) === struct)
   }
 
+  test("SPARK-59276: CHAR/VARCHAR collations round trip through JSON") {
+    val dataTypes = Seq(
+      CharType(4, "UTF8_BINARY"),
+      CharType(4, "UTF8_LCASE"),
+      VarcharType(6, "UNICODE_CI"),
+      StructType(
+        StructField("c", CharType(4, "UTF8_LCASE")) ::
+          StructField("v", ArrayType(VarcharType(6, "UNICODE_CI"))) :: Nil))
+
+    dataTypes.foreach { dataType =>
+      assert(DataType.fromJson(dataType.json) === dataType)
+    }
+  }
+
   test("simple struct with collations to json") {
     val simpleStruct = StructType(
       StructField("c1", StringType(UNICODE_COLLATION)) :: Nil)
