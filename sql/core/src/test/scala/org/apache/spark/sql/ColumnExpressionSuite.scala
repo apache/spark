@@ -505,20 +505,13 @@ class ColumnExpressionSuite extends SharedSparkSession {
 
   test("SPARK-58902: a nondeterministic input a branch cannot pre-evaluate is still read once") {
     onEachEvalPath {
-      // Enough rows that the two copies an inlining implementation makes have to fall out of step:
-      // each copy owns its own generator seeded the same way, so they only differ once the first
-      // comparison has skipped the second copy on some row.
+      // 20 rows so the two copies an inlining implementation makes fall out of step: each owns an
+      // identically seeded generator, and they diverge once a failed first comparison skips the
+      // second. Both bounds therefore have to be failable, which the assertion below pins: with an
+      // upper bound no 3-character draw can miss, the answer is the first comparison's alone and
+      // inlining is invisible. The value is a string, so this also covers a non-primitive slot, and
+      // `id` is selected alongside because `checkAnswer` compares as a bag.
       val df = spark.range(0, 20, 1, 1)
-      // `randstr` draws a new string per row, so inlining gives the two comparisons of the BETWEEN
-      // two draws, while memoizing gives them one and makes the answer inside a branch the same as
-      // outside one. Its value is a string rather than a primitive, so this also exercises a slot
-      // that cannot be an inlined field. `id` is selected alongside so that `checkAnswer`, which
-      // compares rows as a bag, is comparing per row rather than just counting trues. Both bounds
-      // have to be ones a 3-character draw can miss, which the assertion below pins for these rows:
-      // the alphabet runs 0-9, a-z, A-Z, so `'a'` is failable by a draw starting with a digit or an
-      // upper-case letter, and the upper bound has to be short of `'zzzz'`, which every 3-character
-      // draw is below -- with an upper bound nothing can fail, the answer is the first comparison's
-      // alone and inlining is invisible.
       val inBranch = df.selectExpr(
         "id", "CASE WHEN id < 0 THEN false ELSE randstr(3, 0) BETWEEN 'a' AND 'm' END")
       val draws = df.selectExpr("randstr(3, 0) as s").collect().map(_.getString(0))
@@ -527,12 +520,9 @@ class ColumnExpressionSuite extends SharedSparkSession {
       val branchFreeStr = df.selectExpr("id", "randstr(3, 0) BETWEEN 'a' AND 'm'").collect()
       checkAnswer(inBranch, branchFreeStr.toSeq)
 
-      // The same for a nondeterministic input wrapped in arithmetic. Comparing against the
-      // branch-free form under a fixed seed is what makes this bite: inlined, the second comparison
-      // draws again, so the row a given draw lands on shifts. The window also has to be one the
-      // first comparison can fail: `BETWEEN 0 AND 1` over `rand` is satisfied by every draw, which
-      // keeps the two copies in lockstep and makes the comparison hold either way. The assertion
-      // below is what keeps that true for these rows rather than merely intended.
+      // The same for a nondeterministic input wrapped in arithmetic, with the same requirement on
+      // the window: `BETWEEN 0 AND 1` over `rand` is satisfied by every draw, which would keep the
+      // two copies in lockstep.
       val branchFree = df.selectExpr("id", "(rand(7) / 1.0) BETWEEN 0.3 AND 0.6").collect()
       assert(branchFree.exists(!_.getBoolean(1)) && branchFree.exists(_.getBoolean(1)),
         s"the window is not selective over these rows: ${branchFree.mkString(", ")}")
@@ -543,27 +533,17 @@ class ColumnExpressionSuite extends SharedSparkSession {
   }
 
   test("SPARK-58902: a nested With agrees across the evaluation paths") {
-    // The outer `nullif`'s definition is the inner `nullif`, which is itself a `With`, and neither
-    // one is cheap or read once, so both survive inside the branch. That nesting is where each
-    // reference's copy of the definition code matters: the definition is generated once, so every
-    // reference shares whatever state it allocated. Whether the code is also emitted once depends
-    // on the input arriving as a row rather than as local variables -- see
-    // `CommonExprSlots.fill` -- so this test is about the values agreeing, not about code size.
-    // `a` is selected alongside so that `checkAnswer`, which compares rows as a bag, is comparing
-    // per row rather than counting how many nulls came back.
+    // The outer `nullif`'s definition is the inner `nullif`, itself a `With`, and neither is cheap
+    // or read once, so both survive inside the branch. This is about the two evaluation paths
+    // agreeing on nested scopes, not about code size -- see `CommonExprSlots.fill` for that. `a` is
+    // selected alongside so `checkAnswer`, which compares as a bag, compares per row.
     val query = "SELECT a, CASE WHEN a < 0 THEN NULL ELSE nullif(nullif(a + b, b), c) END AS r " +
       "FROM VALUES (0, 5, 3), (2, 5, 7), (4, 5, 6), (-1, 1, 1) AS t(a, b, c)"
-    // Assert the shape too, or a later change to the rewrite can leave this test with no `With` at
-    // all -- which is what it is here to exercise -- and it would still pass on the answers. The
-    // `With`s reach the optimized plan at all only because `ConvertToLocalRelation` refuses a
-    // `Project` over a `LocalRelation` whose project list holds an `Unevaluable`, which
-    // `CommonExpressionDef` is; were that to change, the whole `VALUES` projection would be folded
-    // away and this assertion would report 0 for an unrelated reason.
-    // `NullIf` builds a `With` under this conf's default, and decides at construction time, i.e.
-    // during analysis. The block pins that default rather than switching anything on: it keeps a
-    // suite-level override or a future flip from silently turning this into a test of the inlining
-    // path. It has to cover the executed queries and not just the shape assertion, or the answers
-    // could be checked against a plan holding no `With` at all.
+    // The shape assertion keeps a rewrite change from leaving this with no `With` at all and still
+    // passing on the answers. It survives `ConvertToLocalRelation` only because
+    // `CommonExpressionDef` is `Unevaluable`; otherwise the whole `VALUES` projection would fold.
+    // The conf block pins the default `NullIf` builds under, so a suite-level override cannot turn
+    // this into a test of the inlining path.
     withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
       val withs = spark.sql(query).queryExecution.optimizedPlan.collect {
         case p => p.expressions.flatMap(_.collect { case w: With => w })
@@ -598,18 +578,11 @@ class ColumnExpressionSuite extends SharedSparkSession {
   }
 
   test("SPARK-58902: a surviving With in a Sort key is generated once per comparison side") {
-    // `GenerateOrdering` generates the key once per comparison side, each generation in its own
-    // scope with its own slots. That is what this covers: a slot's fill code is generated once and
-    // names the row variable in effect at the time, so sharing a slot between the two sides has the
-    // second side read the first side's row. Here `Expression.reduceCodeSize` has hoisted each
-    // side's key into a method taking just that side's row, so a shared slot's code would name a
-    // variable that is not in scope there and the ordering would not compile at all -- which the
-    // `CODEGEN_ONLY` legs raise rather than falling back to `InterpretedOrdering`. What this does
-    // not cover is a comparison the ordering performs: `SortExec` creates it before deciding
-    // whether radix sort can replace it, so it is generated either way, but the keys here are
-    // distinct and `UnsafeInMemorySorter` asks the record comparator only when two prefixes tie.
-    // The definition is deterministic, which keeps this out of the pre-existing question of what a
-    // nondeterministic sort key means.
+    // `GenerateOrdering` generates the key once per comparison side, each in its own scope with its
+    // own slots. A slot shared between the sides would read the wrong row, and here, where
+    // `Expression.reduceCodeSize` has hoisted each side's key into a method taking one row, would
+    // not compile. What this does not cover is a comparison the ordering performs: the keys are
+    // distinct, so `UnsafeInMemorySorter` settles them on their prefixes.
     withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
       onEachEvalPath {
         // The DataFrame is built inside, not outside: `QueryExecution.executedPlan` is a lazy val,
@@ -628,15 +601,11 @@ class ColumnExpressionSuite extends SharedSparkSession {
   }
 
   test("SPARK-58902: a definition that has to fall back to eval works on every path") {
-    // No other case uses a real `CodegenFallback` expression as a definition: `rand`, `randstr`,
-    // `monotonically_increasing_id` and `nullif` all generate code. `reflect` does not, so this is
-    // what exercises the definition being generated by `CodegenFallback.doGenCode` inside `fill`,
-    // its `Nondeterministic` state being initialized through `ctx.references`, and `INPUT_ROW`
-    // reaching it. A regression there is a compile failure or an uninitialized-state error rather
-    // than a wrong value, which is what this asserts against. Note the three legs are two paths
-    // here: `CollapseCodegenStages.supportCodegen` rejects an operator holding a non-leaf
-    // `CodegenFallback`, so the whole-stage leg runs the same projection as the leg above it --
-    // which is the property `With.doGenCode` relies on to know `INPUT_ROW` is set.
+    // The only case whose definition is a real `CodegenFallback`, which covers it being generated
+    // inside `fill`, its `Nondeterministic` state being initialized, and `INPUT_ROW` reaching it. A
+    // regression there is a compile failure or an uninitialized-state error, not a wrong value.
+    // These are two paths, not three: `CollapseCodegenStages` rejects an operator holding a
+    // non-leaf `CodegenFallback`, which is what guarantees `With.doGenCode` an `INPUT_ROW`.
     withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
       val query = "SELECT CASE WHEN id < 0 THEN 'skipped' " +
         "ELSE nullif(reflect('java.util.UUID', 'randomUUID'), 'never') END AS r " +
@@ -655,13 +624,11 @@ class ColumnExpressionSuite extends SharedSparkSession {
   }
 
   test("SPARK-58902: a surviving With inside a window expression is evaluated once per row") {
-    // The `With` starts in a window function's argument, which `ExtractWindowExpressions` moves
-    // into a `_w0` alias in the `Project` it synthesizes below the `Window`. So the host is
-    // `ProjectExec` as in the cases above, and what this adds is the analyzer path that relocates a
-    // branch into a projection it built for its own purposes, with the rule then reaching the
-    // `With` through the conditional-expression arm like any other branch. The shape assertion is
-    // what keeps this from passing on a plan where the rewrite dropped the `With` entirely, and the
-    // definition is deterministic, so the values pin per-row clearing rather than memoization.
+    // `ExtractWindowExpressions` moves the window function's argument into a `_w0` alias in the
+    // `Project` it synthesizes below the `Window`, so the host is `ProjectExec` as above and what
+    // this adds is that analyzer relocation. The definition is deterministic, so the values pin
+    // per-row clearing rather than memoization; the shape assertion is what keeps the test from
+    // passing on a plan that dropped the `With`.
     withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
       val query = "SELECT id, sum(CASE WHEN id < 0 THEN 0 ELSE nullif(id * 2, -1) END) " +
         "OVER (ORDER BY id) AS s FROM range(0, 4, 1, 1)"

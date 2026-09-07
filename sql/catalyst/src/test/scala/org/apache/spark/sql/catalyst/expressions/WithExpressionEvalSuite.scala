@@ -128,14 +128,11 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-58902: a copy of a With owns its references and its cells") {
-    // The definition is deliberately not stateful, which is what makes
-    // `CommonExpressionDef.stateful` load-bearing: `mapChildren` finds nothing changed below the
-    // definition, so without the override the copy is handed the original definition object, cell
-    // included. A `Rand` definition would hide that, since copying it changes the definition's
-    // child and forces a rebuild anyway.
-    // The references are stateful leaves, and `LeafLike.withNewChildrenInternal` returns `this`, so
-    // without the override on `CommonExpressionRef` the two `With`s would share one set of
-    // reference objects while owning two cells.
+    // A deliberately non-stateful definition, which is what makes `CommonExpressionDef.stateful`
+    // load-bearing: `mapChildren` finds nothing changed below it, so without the override the copy
+    // gets the original definition object, cell included. (A `Rand` definition would hide that.)
+    // Likewise `CommonExpressionRef.stateful`, since `LeafLike.withNewChildrenInternal` returns
+    // `this` and the two `With`s would otherwise share references while owning two cells.
     val w1 = With(Literal(1)) { case Seq(ref) => Add(ref, ref) }
     val w2 = w1.freshCopyIfContainsStatefulExpression().asInstanceOf[With]
     def refOf(e: Expression): CommonExpressionRef =
@@ -146,11 +143,9 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-58902: two Withs over one set of references each read their own definition") {
-    // The shape a rule produces when it rewrites only the definition: `mapChildren` hands back the
-    // same `child` object with a new definition, so `withNewChildrenInternal` builds a `With` over
-    // the original's references -- and a rebuilt reference compares equal to the one it replaces,
-    // so `transform` cannot hand the new `With` references of its own. Giving the two `With`s
-    // visibly different definitions shows which cell the references actually read.
+    // The shape a rule produces when it rewrites only the definition: the new `With` is built over
+    // the original's references, since a rebuilt reference compares equal to the one it replaces.
+    // Visibly different definitions show which cell the references actually read.
     val w1 = With(counter()) { case Seq(ref) => Add(ref, ref) }
     val w2 = w1.withNewChildren(
       IndexedSeq(w1.child, CommonExpressionDef(Literal(100), w1.defs.head.id))).asInstanceOf[With]
@@ -161,12 +156,10 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-58902: a definition's code is generated once however many references read it") {
-    // This definition is short and holds no `With`, so it is emitted inline: every reference emits
-    // it inside its own `if (!computed)` guard, and the text appears once per reference -- but it
-    // has to be the same text, generated once, or each copy calls `addMutableState` again and the
-    // definition ends up owning one counter per reference. Two references in mutually exclusive
-    // positions would then draw from two counters sitting at the same position in their sequences,
-    // and hand out one value on two rows.
+    // Short and holding no `With`, so the body is emitted inline at each reference. It has to be
+    // the same text, generated once: otherwise each copy calls `addMutableState` again and the
+    // definition owns one counter per reference, which for references in mutually exclusive
+    // positions hands out one value on two rows.
     val ctx = new CodegenContext
     With(MonotonicallyIncreasingID()) { case Seq(ref) => Add(ref, ref) }.genCode(ctx)
     val counters = ctx.inlinedMutableStates.count { case (_, name) => name.startsWith("count") }
@@ -174,20 +167,11 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-58902: nesting does not multiply a definition's body when it can go in a method") {
-    // Each level of nested `With`s reads its definition twice, so a reference that pastes the body
-    // doubles it per level. What already stopped that from running away is
-    // `Expression.reduceCodeSize`, which hoists into a method whichever node's code first passes
-    // `methodSplitThreshold` as generation walks up: measured with the 237-character leaf below and
-    // the default threshold, the count settled at 4 from depth 2 on rather than doubling -- where
-    // it settles is where the threshold catches the doubling, so it is a property of those two
-    // numbers and not a law. Emitting the body into a method here makes it 2 at any depth, so the
-    // bound no longer grows with depth wherever the threshold sits.
-    //
-    // What is not covered here is the shape where the input arrives as local variables, which is
-    // what a whole-stage `Project` or `Filter` hands an expression: `currentVars` is set, so
-    // neither this method nor `reduceCodeSize` applies and the body is pasted per reference -- 2,
-    // 4, 8, ... 256 at depths 1 to 8. A bare `CodegenContext` has `INPUT_ROW` set and `currentVars`
-    // null, which is what a method needs.
+    // Each level reads its definition twice, so pasting the body doubles it per level;
+    // `CommonExprSlots.fill` putting it in a method makes it 2 at any depth. Not covered here: the
+    // shape where the input arrives as local variables, as a whole-stage `Project` or `Filter`
+    // passes it, where no method is possible and the count is 2, 4, 8, ... 256 at depths 1 to 8 --
+    // see SPARK-59295. A bare `CodegenContext` has `INPUT_ROW` set and `currentVars` null.
     val marker = 1234567
     def nested(depth: Int): Expression = {
       val leaf: Expression = Add(BoundReference(0, IntegerType, nullable = false), Literal(marker))
@@ -200,24 +184,20 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
       val source = nested(depth).genCode(ctx).code.toString + ctx.declareAddedFunctions()
       marker.toString.r.findAllMatchIn(source).size
     }
-    // The threshold decides whether the innermost body is inlined at all, so pin it rather than
-    // depend on the default: below the length of that body the fill would go into a method of its
-    // own and the count would be 1, for a reason that has nothing to do with nesting.
+    // Pin the threshold: below the innermost body's length the fill would go into a method of its
+    // own and the count would be 1, for a reason unrelated to nesting.
     withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1024") {
       (1 to 6).foreach { depth =>
         val count = markerCount(depth)
         assert(count == 2, s"the innermost body was emitted $count times at depth $depth")
       }
-      // The 2 is the same fact at every depth: the innermost body, pasted at the innermost `With`'s
-      // two references. What changes from depth 2 on is why it stops there -- each enclosing
-      // level's definition is itself a `With`, so that level's body goes into a method instead of
-      // being pasted, and a call site carries no marker.
+      // The 2 is the innermost body pasted at its two references, at every depth; what stops the
+      // doubling from depth 2 on is that each enclosing definition is itself a `With` and so goes
+      // into a method, whose call sites carry no marker.
       //
-      // The values still come out right: each level doubles what the one below it produced. Four
-      // levels are enough to show that and keep the product inside Int, which ANSI `Add` would
-      // raise on rather than wrap past depth 10. A deterministic leaf doubles whether a reference
-      // reads a slot or recomputes, so this is an arithmetic and compile check, not a second
-      // reading of the count above.
+      // The values double per level, which a deterministic leaf does whether a reference reads a
+      // slot or recomputes -- an arithmetic and compile check, not a second reading of the count.
+      // Four levels keeps the product inside Int, which ANSI `Add` would raise on past depth 10.
       val proj = GenerateMutableProjection.generate(Seq(nested(4)))
       assert(proj(InternalRow(1)).getInt(0) == (1 + marker) * 16)
     }

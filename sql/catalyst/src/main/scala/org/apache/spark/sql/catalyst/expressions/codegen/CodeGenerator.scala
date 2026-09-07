@@ -216,42 +216,32 @@ class CodegenContext extends Logging {
       computed: String,
       definition: Expression) {
 
-    // Not constructor parameters: every one of those takes part in a case class's `equals`,
-    // `hashCode`, `copy` and `toString`, so a mutable one would make a slot's hash change as it is
-    // filled, and would hand a `copy` the code generated for another scope.
+    // Not constructor parameters: a mutable one takes part in `equals`/`hashCode`/`copy`, so a
+    // slot's hash would change as it is filled and a `copy` would carry another scope's code.
     private var fillCode: Option[Block] = None
     private var filling: Boolean = false
 
     /**
      * The code that computes the definition into the slots and sets `computed`, which a reference
-     * emits behind that flag. Generated once and cached, so that every reference shares whatever
-     * mutable state the definition allocated, such as an RNG, rather than getting its own.
+     * emits behind that flag. Cached, so every reference shares whatever mutable state the
+     * definition allocated, such as an RNG.
      *
-     * The cache lives on the slot and so lasts exactly as long as the scope, which is as long as it
-     * may: the code is generated against whichever `INPUT_ROW` and `currentVars` are in effect at
-     * the time and names them, so a slot reused across two scopes emits the first scope's names in
-     * the second. `GenerateOrdering` generates its key once per comparison side, under a different
-     * row variable each time, so a slot shared between the sides reads the first side's row -- and
-     * where the reference sits inside a method `Expression.reduceCodeSize` hoisted, which takes
-     * just that side's row, does not compile.
+     * The cache lives on the slot, so it lasts exactly as long as the scope: the code names the
+     * `INPUT_ROW` and `currentVars` in effect when it was generated. `GenerateOrdering` generates
+     * its key once per comparison side under a different row variable, so a slot shared between the
+     * sides would read the wrong row, or not compile where `Expression.reduceCodeSize` has hoisted
+     * the reference into a method taking one row.
      *
-     * A definition that references its own id would re-enter this while the first call is still
-     * generating it, since `fillCode` is set only after `definition.genCode` returns. `filling`
-     * turns that into the error `With.refsToBind` documents for the interpreted path, rather than a
-     * StackOverflowError from generating the same definition inside itself forever.
+     * `filling` catches a definition that references its own id, which would otherwise re-enter and
+     * recurse, since `fillCode` is set only after `definition.genCode` returns.
      *
      * The body goes into a method where it can and is worth it -- a definition that is or holds
-     * another `With`, or a body past the split threshold -- leaving a reference's own code a single
-     * call: such a definition would otherwise have its body pasted once per reference at every
-     * level. `Expression.reduceCodeSize` already keeps that from running away, by hoisting
-     * whichever node's code first passes the same threshold, so what a method here buys is the body
-     * once per scope rather than once per reference up to that threshold, and a bound that no
-     * longer grows with depth wherever the threshold sits. It is only possible where the definition
-     * reads the input row rather than local variables -- the condition `reduceCodeSize` splits
-     * under, and for the same reason. That condition is what decides it, not whether whole-stage
-     * codegen is on: a whole-stage `Project` or `Filter` hands an expression its input as local
-     * variables, so no method is possible there, while `SortMergeJoinExec.createJoinKey` and the
-     * aggregate output paths generate against a row with `currentVars` cleared and can get one.
+     * another `With`, or a body past the split threshold -- so it is emitted once per scope rather
+     * than once per reference, which for nested `With`s would double per level. A method is only
+     * possible where the definition reads the input row rather than local variables, the condition
+     * `reduceCodeSize` splits under. That is not the same as whole-stage codegen being off: a
+     * whole-stage `Project` or `Filter` passes local variables, while
+     * `SortMergeJoinExec.createJoinKey` and the aggregate output paths generate against a row.
      */
     def fill: Block = {
       if (fillCode.isEmpty) {
@@ -336,12 +326,11 @@ class CodegenContext extends Logging {
    */
   def withCommonExprs(defs: Seq[CommonExpressionDef])(f: Seq[CommonExprSlots] => ExprCode)
     : ExprCode = {
-    // The ids this call registered, so the cleanup takes back exactly those. Allocating inside the
-    // `try` is what makes the cleanup run at all: the duplicate-id check throws partway, and the
-    // slots of the definitions before it would otherwise stay registered, leaving a later
-    // `getCommonExpr` for one of those ids to resolve an orphan and generate code from it rather
-    // than report that the id is not in scope. Removing by the full `defs` list instead would
-    // take the duplicate id out of the enclosing scope that still owns it.
+    // The ids this call registered, so the cleanup takes back exactly those: the duplicate-id check
+    // below throws partway, and removing by the whole `defs` list would take that duplicate out of
+    // the enclosing scope that still owns it. Allocating inside the `try` is what runs the cleanup
+    // at all -- otherwise the slots allocated before the throw stay registered, and a later
+    // `getCommonExpr` for one of those ids resolves an orphan instead of reporting it out of scope.
     val added = mutable.ArrayBuffer.empty[Long]
     try {
       val slots = defs.map { d =>

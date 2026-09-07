@@ -210,28 +210,18 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
   }
 
   /**
-   * Whether substituting this definition into its references is as good as evaluating it once.
-   * True when it is referenced once, since substituting then evaluates it once either way, or when
-   * it is cheap enough to evaluate repeatedly and deterministic, so the repeated evaluations agree.
+   * Whether substituting this definition into its references is as good as evaluating it once: it
+   * is referenced once anyway, or it is cheap to evaluate twice and deterministic.
    *
-   * `CollapseProject.isCheap` answers what one evaluation costs, not whether a second one is
-   * allowed: it admits a `PythonUDF`, which may be nondeterministic. Determinism is checked here
-   * rather than read into the cost test, so that a reader of either call site can see which of the
-   * two questions is being asked. A `PythonUDF` is still in the expression tree when this runs --
-   * `SparkOptimizer` extracts them in a batch after the one holding this rule -- so that case is
-   * reachable in a real plan rather than only in a rule test.
+   * `CollapseProject.isCheap` answers what one evaluation costs, not whether a second is allowed --
+   * it admits a `PythonUDF`, which may be nondeterministic and is still in the tree here, since
+   * `SparkOptimizer` extracts them in a later batch. So determinism is asked separately.
    *
-   * This takes the expression at its word about being deterministic, which is weaker than what
-   * `isSafeToDuplicate` above asks of the same definition on the expression-level path. `isCheap`
-   * admits anything foldable, and `InvokeLike.foldable` is `children.forall(_.foldable) &&
-   * deterministic && ...`, so a foldable expression arrives here already claiming determinism: an
-   * `aes_encrypt` with no IV is a foldable `StaticInvoke` that draws a random one, and a Hive UDF
-   * is foldable on a user-declared flag. Such a definition is substituted at both references and
-   * each copy is folded on its own by a later batch, so one common expression yields two values.
-   * That predates this rule learning to keep a `With` -- the condition it replaced was
-   * `isCheap(child) || !commonExprIdSet.contains(id)`, no stricter -- and the fix belongs either on
-   * those expressions, which should not claim determinism, or in one purity predicate shared with
-   * `isSafeToDuplicate`. Both are wider than this rule.
+   * It is asked of the expression, which is weaker than `isSafeToDuplicate` above: `isCheap` admits
+   * anything foldable and `InvokeLike.foldable` implies `deterministic`, so an impure foldable such
+   * as an `aes_encrypt` with no IV still gets substituted and folded per copy. That predates this
+   * rule keeping a `With` -- the condition it replaced was no stricter -- and belongs either on
+   * those expressions or in one purity predicate shared with `isSafeToDuplicate`.
    */
   private def canSubstitute(
       child: Expression,
@@ -241,18 +231,10 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
   }
 
   /**
-   * The ids the given `With` reads more than once, counted from the node in hand.
-   *
-   * Counting once for the whole plan would be stale by the time a nested `With` is classified.
-   * Substituting a definition duplicates whatever it holds, including a reference belonging to an
-   * enclosing `With`, and `inlineDefsThatGainNothing` works bottom-up: with
-   * `spark.sql.optimizer.avoidCollapseUDFWithExpensiveExpr` off, `CollapseProject.isCheap` calls a
-   * `PythonUDF` cheap whatever its children are, so an inner definition holding one outer
-   * reference is substituted at both of its own references and that reference is read twice from
-   * then on.
-   * A count taken before that says once, and a nondeterministic outer definition is inlined into
-   * both -- two values where there has to be one, which is the bug this rule's branch path exists
-   * to avoid.
+   * The ids the given `With` reads more than once, counted from the node in hand rather than once
+   * for the whole plan: substituting an inner definition duplicates the outer references it holds,
+   * and this rule works bottom-up, so a count taken before reads one where there are now two -- and
+   * a nondeterministic outer definition then gets inlined into both.
    */
   private def multiplyReferencedIds(child: Expression, defs: Seq[Expression]) = {
     val counts = mutable.HashMap.empty[CommonExpressionId, Int]
