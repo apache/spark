@@ -264,6 +264,18 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     )
   }
 
+  private object ResolvedHigherOrderFunctionWithExternalUDF {
+    def unapply(expression: Expression): Option[(HigherOrderFunction, Expression)] = {
+      expression match {
+        case hof: HigherOrderFunction if hof.resolved =>
+          hof.functions.iterator.flatMap(_.collectFirst {
+            case udf: ExternalUserDefinedFunction => udf
+          }).take(1).toSeq.headOption.map(udf => (hof, udf))
+        case _ => None
+      }
+    }
+  }
+
   private def containsUnsupportedLCA(e: Expression, operator: LogicalPlan): Boolean = {
     e.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE) && operator.expressions.exists {
       case a: Alias
@@ -527,6 +539,11 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             hof.failAnalysis(
               errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
               messageParameters = Map("funcName" -> toSQLExpr(u)))
+
+          case ResolvedHigherOrderFunctionWithExternalUDF(hof, udf) =>
+            hof.failAnalysis(
+              errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_EXTERNAL_UDF",
+              messageParameters = Map("funcName" -> toSQLExpr(udf)))
 
           // If an attribute can't be resolved as a map key of string type, either the key should be
           // surrounded with single quotes, or there is a typo in the attribute name.

@@ -86,6 +86,37 @@ abstract class Classifier[
  * Model produced by a [[Classifier]].
  * Classes are indexed {0, 1, ..., numClasses - 1}.
  *
+ * `transform` selects column-producing methods based on which output columns are set:
+ *
+ * <table>
+ *   <caption>Column-producing methods by requested output columns</caption>
+ *   <tr>
+ *     <th>Raw prediction</th>
+ *     <th>Prediction</th>
+ *     <th>Column-producing methods</th>
+ *   </tr>
+ *   <tr>
+ *     <td>Not set</td>
+ *     <td>Not set</td>
+ *     <td>None</td>
+ *   </tr>
+ *   <tr>
+ *     <td>Set</td>
+ *     <td>Not set</td>
+ *     <td><code>predictRawColumn</code></td>
+ *   </tr>
+ *   <tr>
+ *     <td>Not set</td>
+ *     <td>Set</td>
+ *     <td><code>predictionColumn</code></td>
+ *   </tr>
+ *   <tr>
+ *     <td>Set</td>
+ *     <td>Set</td>
+ *     <td><code>predictRawColumn</code> => <code>raw2predictionColumn</code></td>
+ *   </tr>
+ * </table>
+ *
  * @tparam FeaturesType  Type of input features.  E.g., `Vector`
  * @tparam M  Concrete Model type
  */
@@ -97,6 +128,9 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    * The default wraps [[predictRaw]] in a UDF. Models may override this with a native expression or
    * a UDF that snapshots prediction state.
    *
+   * `transform` uses this whenever [[rawPredictionCol]] is set. When [[predictionCol]] is also set,
+   * it is used together with [[raw2predictionColumn]].
+   *
    * @param features input features column
    * @return raw-prediction column of type `Vector`
    */
@@ -107,6 +141,9 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
   /**
    * Returns an expression that produces a predicted label from a raw-prediction vector column.
    *
+   * `transform` uses this when both [[rawPredictionCol]] and [[predictionCol]] are set. It consumes
+   * the output of [[predictRawColumn]].
+   *
    * @param rawPrediction input raw-prediction column
    * @return prediction column of type `Double`
    */
@@ -116,6 +153,8 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
 
   /**
    * Returns an expression that produces a predicted label directly from a features column.
+   *
+   * `transform` uses this when [[predictionCol]] is set and [[rawPredictionCol]] is not set.
    *
    * @param features input features column
    * @return prediction column of type `Double`

@@ -35,6 +35,7 @@ import com.google.protobuf.ByteString
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.Python.PYTHON_UNIX_DOMAIN_SOCKET_ENABLED
+import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -73,7 +74,8 @@ class TransformWithStateInPySparkStateServer(
     mapStatesMapForTest : mutable.HashMap[String, MapStateInfo] = null,
     keyValueIteratorMapForTest: mutable.HashMap[String, Iterator[(Row, Row)]] = null,
     expiryTimerIterForTest: mutable.HashMap[String, Iterator[(Row, Long)]] = null,
-    listTimerMapForTest: mutable.HashMap[String, Iterator[Long]] = null)
+    listTimerMapForTest: mutable.HashMap[String, Iterator[Long]] = null,
+    authHelper: SocketAuthHelper = null)
   extends Runnable with Logging {
 
   import PythonResponseWriterUtils._
@@ -176,6 +178,13 @@ class TransformWithStateInPySparkStateServer(
     // lot less reference to disabling delayed ACKs, while there are lots of resources to
     // disable Nagle's algorithm.
     if (!isUnixDomainSock) listeningSocket.socket().setTcpNoDelay(true)
+
+    // Verify the connecting client before serving any state request, reusing the same
+    // secret-exchange protocol as the other Python <-> JVM channels (SocketAuthHelper).
+    // It is a no-op for Unix domain sockets, which rely on filesystem permissions instead.
+    if (authHelper != null) {
+      authHelper.authClient(listeningSocket)
+    }
 
     inputStream = new DataInputStream(
       new BufferedInputStream(Channels.newInputStream(listeningSocket)))

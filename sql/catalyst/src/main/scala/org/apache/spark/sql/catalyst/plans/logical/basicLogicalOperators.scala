@@ -1322,18 +1322,25 @@ object Aggregate {
     schema.forall(f => UnsafeRow.isMutable(f.dataType))
   }
 
+  /**
+   * Returns whether grouping keys of this type can use raw binary equality or schema-aware key
+   * operations in hash aggregation.
+   */
+  def supportsHashAggregateGroupingKey(dataType: DataType): Boolean = {
+    UnsafeRowKeyOperations.supportsDataType(dataType)
+  }
+
   def supportsHashAggregate(
       aggregateBufferAttributes: Seq[Attribute], groupingExpression: Seq[Expression]): Boolean = {
     val aggregationBufferSchema = DataTypeUtils.fromAttributes(aggregateBufferAttributes)
     isAggregateBufferMutable(aggregationBufferSchema) &&
-      groupingExpression.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))
+      groupingExpression.forall(e => supportsHashAggregateGroupingKey(e.dataType))
   }
 
   def supportsObjectHashAggregate(
       aggregateExpressions: Seq[AggregateExpression],
       groupingExpressions: Seq[Expression]): Boolean = {
-    // We should not use hash aggregation on binary unstable types.
-    if (groupingExpressions.exists(e => !UnsafeRowUtils.isBinaryStable(e.dataType))) {
+    if (groupingExpressions.exists(e => !supportsHashAggregateGroupingKey(e.dataType))) {
       return false
     }
 

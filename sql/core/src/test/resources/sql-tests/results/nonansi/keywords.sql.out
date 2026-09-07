@@ -4,6 +4,7 @@ SELECT * from SQL_KEYWORDS()
 -- !query schema
 struct<keyword:string,reserved:boolean>
 -- !query output
+ABSENT	false
 ADD	false
 AFTER	false
 AGGREGATE	false
@@ -213,6 +214,7 @@ ITEMS	false
 ITERATE	false
 JOIN	false
 JSON	false
+JSON_ARRAY	false
 JSON_EXISTS	false
 JSON_QUERY	false
 JSON_TABLE	false

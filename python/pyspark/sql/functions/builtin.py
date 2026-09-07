@@ -23063,7 +23063,7 @@ def variant_delete(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
     Multiple paths are applied left to right. Returns NULL if `v` is NULL; NULL paths are
     skipped.
 
-    .. versionadded:: 5.0.0
+    .. versionadded:: 4.3.0
 
     Parameters
     ----------

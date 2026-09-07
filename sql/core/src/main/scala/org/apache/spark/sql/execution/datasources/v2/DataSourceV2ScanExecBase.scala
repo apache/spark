@@ -53,6 +53,7 @@ trait DataSourceV2ScanExecBase
    * `SupportsReportOrdering` */
   def ordering: Option[Seq[SortOrder]]
 
+  /** Must be stable for the instance, since `outputPartitioning` memoizes over it. */
   protected def inputPartitions: Seq[InputPartition]
 
   override def simpleString(maxFields: Int): String = {
@@ -88,7 +89,9 @@ trait DataSourceV2ScanExecBase
        |""".stripMargin
   }
 
-  override def outputPartitioning: physical.Partitioning = {
+  // A `lazy val` because the planner asks a node for its partitioning many times, and the
+  // key-grouped arm sorts every partition key, wraps each one and runs a `distinct` over them.
+  @transient override lazy val outputPartitioning: physical.Partitioning = {
     keyGroupedPartitioning match {
       case Some(exprs) if conf.v2BucketingEnabled && KeyedPartitioning.supportsExpressions(exprs) &&
           inputPartitions.nonEmpty && inputPartitions.forall(_.isInstanceOf[HasPartitionKey]) =>

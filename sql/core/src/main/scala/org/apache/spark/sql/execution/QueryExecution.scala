@@ -104,7 +104,18 @@ class QueryExecution(
   // are intentionally not handled here and remain a known limitation.
   private val lazyLogicalWithResolvedInsert = LazyTry {
     def resolve(insert: UnresolvedInsert): LogicalPlan = {
-      analyzerOpt.getOrElse(sparkSession.sessionState.analyzer).resolveUnresolvedInsert(insert)
+      try {
+        executePhase(QueryPlanningTracker.ANALYSIS) {
+          QueryPlanningTracker.withTracker(tracker) {
+            analyzerOpt.getOrElse(sparkSession.sessionState.analyzer)
+              .resolveUnresolvedInsert(insert)
+          }
+        }
+      } catch {
+        case NonFatal(e) =>
+          tracker.setAnalysisFailed(logical)
+          throw e
+      }
     }
 
     logical match {

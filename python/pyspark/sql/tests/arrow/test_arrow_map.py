@@ -167,9 +167,14 @@ class MapInArrowTestsMixin:
         ):
             (self.spark.range(10, numPartitions=3).mapInArrow(bad_iter_elem, "a int").count())
 
-        with self.assertRaisesRegex(
-            PythonException,
-            r"iterator of pyarrow\.RecordBatch.*\blist\b",
+        with (
+            self.sql_conf(
+                {"spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled": False}
+            ),
+            self.assertRaisesRegex(
+                PythonException,
+                r"iterator of pyarrow\.RecordBatch.*\blist\b",
+            ),
         ):
             (self.spark.range(10, numPartitions=3).mapInArrow(list_not_iter, "a int").count())
 

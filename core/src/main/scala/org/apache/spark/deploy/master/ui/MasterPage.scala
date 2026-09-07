@@ -335,18 +335,18 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private def appRow(app: ApplicationInfo): Seq[Node] = {
     val killLink = if (parent.killEnabled &&
       (app.state == ApplicationState.RUNNING || app.state == ApplicationState.WAITING)) {
-      <form action="app/kill/" method="POST" class="d-inline">
+      <form action="app/kill/" method="POST" class="d-inline float-end">
         <input type="hidden" name="id" value={app.id}/>
         <input type="hidden" name="terminate" value="true"/>
-        <a href="#"
-           data-kill-message={s"Are you sure you want to kill application ${app.id} ?"}
-           class="kill-link float-end">(kill)</a>
+        <button type="submit"
+                data-kill-message={s"Are you sure you want to kill application ${app.id} ?"}
+                class="btn btn-sm btn-outline-danger kill-link">Kill</button>
       </form>
     }
     // Offered only for an application whose driver reported it as holdable and which did not
     // disable the controls itself through spark.ui.holdEnabled. Rendered before the kill link:
-    // floated links stack right to left, so this keeps the two controls adjacent and leaves the
-    // kill link's left margin between the application id and the pair.
+    // floated controls stack right to left, so this keeps the two adjacent and leaves the kill
+    // button's left margin between the application id and the pair.
     val holdLink = if (parent.holdEnabled && app.desc.holdEnabled && app.holdSupported &&
       !app.isFinished) {
       val (action, message) = if (app.isHeld) {
@@ -355,10 +355,11 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         ("hold", s"Are you sure you want to hold application ${app.id}? All executors will " +
           "be decommissioned after finishing their running tasks, and cached blocks are lost.")
       }
-      <form action={s"app/$action/"} method="POST" class="d-inline">
+      val label = action.capitalize
+      <form action={s"app/$action/"} method="POST" class="d-inline float-end">
         <input type="hidden" name="id" value={app.id}/>
-        <a href="#" data-confirm-message={message}
-           class="confirm-link float-end">{s"($action)"}</a>
+        <button type="submit" data-confirm-message={message}
+                class="btn btn-sm btn-outline-secondary confirm-link">{label}</button>
       </form>
     }
     <tr>
@@ -403,12 +404,12 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     val killLink = if (parent.killEnabled &&
       (driver.state == DriverState.RUNNING ||
         driver.state == DriverState.SUBMITTED)) {
-      <form action="driver/kill/" method="POST" class="d-inline">
+      <form action="driver/kill/" method="POST" class="d-inline float-end">
         <input type="hidden" name="id" value={driver.id}/>
         <input type="hidden" name="terminate" value="true"/>
-        <a href="#"
-           data-kill-message={s"Are you sure you want to kill driver ${driver.id} ?"}
-           class="kill-link float-end">(kill)</a>
+        <button type="submit"
+                data-kill-message={s"Are you sure you want to kill driver ${driver.id} ?"}
+                class="btn btn-sm btn-outline-danger kill-link">Kill</button>
       </form>
     }
     <tr>

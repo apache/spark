@@ -305,11 +305,69 @@ class RandomForestClassificationModel private[ml] (
 
     val outputData = super.transform(dataset)
     if ($(leafCol).nonEmpty) {
-      val leafUDF = udf { features: Vector => predictLeaf(features) }
+      val localRootNodes = _trees.map(_.rootNode)
+      val leafUDF = udf { features: Vector =>
+        TreeEnsembleModel.predictLeaf(features, localRootNodes)
+      }
       outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))),
         outputSchema($(leafCol)).metadata)
     } else {
       outputData
+    }
+  }
+
+  override protected def predictRawColumn(features: Column): Column = {
+    val localRootNodes = _trees.map(_.rootNode)
+    val localNumClasses = numClasses
+    udf((features: Vector) =>
+      RandomForestClassificationModel.predictRaw(features, localRootNodes, localNumClasses)
+    ).apply(features)
+  }
+
+  override protected def raw2probabilityColumn(rawPrediction: Column): Column = {
+    udf((rawPrediction: Vector) =>
+      RandomForestClassificationModel.raw2probability(rawPrediction)
+    ).apply(rawPrediction)
+  }
+
+  override protected def predictProbabilityColumn(features: Column): Column = {
+    val localRootNodes = _trees.map(_.rootNode)
+    val localNumClasses = numClasses
+    udf((features: Vector) => {
+      val rawPrediction =
+        RandomForestClassificationModel.predictRaw(features, localRootNodes, localNumClasses)
+      RandomForestClassificationModel.raw2probability(rawPrediction)
+    }).apply(features)
+  }
+
+  override protected def raw2predictionColumn(rawPrediction: Column): Column = {
+    if (isDefined(thresholds)) {
+      val localThresholds = getThresholds.clone()
+      udf((rawPrediction: Vector) => {
+        val probability = RandomForestClassificationModel.raw2probability(rawPrediction)
+        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+      }).apply(rawPrediction)
+    } else {
+      udf((rawPrediction: Vector) => rawPrediction.argmax.toDouble).apply(rawPrediction)
+    }
+  }
+
+  override protected def predictionColumn(features: Column): Column = {
+    val localRootNodes = _trees.map(_.rootNode)
+    val localNumClasses = numClasses
+    if (isDefined(thresholds)) {
+      val localThresholds = getThresholds.clone()
+      udf((features: Vector) => {
+        val rawPrediction =
+          RandomForestClassificationModel.predictRaw(features, localRootNodes, localNumClasses)
+        val probability = RandomForestClassificationModel.raw2probability(rawPrediction)
+        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+      }).apply(features)
+    } else {
+      udf((features: Vector) =>
+        RandomForestClassificationModel.predictRaw(
+          features, localRootNodes, localNumClasses).argmax.toDouble
+      ).apply(features)
     }
   }
 
@@ -410,6 +468,34 @@ class RandomForestClassificationModel private[ml] (
 
 @Since("2.0.0")
 object RandomForestClassificationModel extends MLReadable[RandomForestClassificationModel] {
+
+  private def predictRaw(
+      features: Vector,
+      rootNodes: Array[Node],
+      numClasses: Int): Vector = {
+    // TODO: When we add a generic Bagging class, handle transform there: SPARK-7128
+    // Classifies using majority votes.
+    // Ignore the tree weights since all are 1.0 for now.
+    val votes = Array.ofDim[Double](numClasses)
+    rootNodes.foreach { rootNode =>
+      val classCounts = rootNode.predictImpl(features).impurityStats.stats
+      val total = classCounts.sum
+      if (total != 0) {
+        var i = 0
+        while (i < numClasses) {
+          votes(i) += classCounts(i) / total
+          i += 1
+        }
+      }
+    }
+    Vectors.dense(votes)
+  }
+
+  private def raw2probability(rawPrediction: Vector): Vector = {
+    val probability = rawPrediction.copy.toDense
+    ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(probability)
+    probability
+  }
 
   @Since("2.0.0")
   override def read: MLReader[RandomForestClassificationModel] =

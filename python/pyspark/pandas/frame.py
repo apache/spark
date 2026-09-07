@@ -14430,22 +14430,25 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             this = inputs[0]
             assert all(inp is this for inp in inputs if isinstance(inp, DataFrame))
             column_labels = this._internal.column_labels
-            outputs = [
-                ufunc(
+
+            def apply_ufunc(label: Label) -> Any:
+                return ufunc(
                     *[inp[label] if isinstance(inp, DataFrame) else inp for inp in inputs], **kwargs
                 )
-                for label in column_labels
-            ]
-            if outputs and isinstance(outputs[0], tuple):
+
+            # numpy declares the number of outputs on the ufunc itself, so a frame with no
+            # columns still returns the right number of DataFrames.
+            if getattr(ufunc, "nout", 1) > 1:
                 # A multi-output ufunc (for example np.modf) yields a two-element tuple per
                 # column; regroup into one DataFrame per output, matching numpy/pandas.
+                outputs = [apply_ufunc(label) for label in column_labels]
                 first_cols = [out[0].rename(label) for out, label in zip(outputs, column_labels)]
                 second_cols = [out[1].rename(label) for out, label in zip(outputs, column_labels)]
                 first_df: DataFrame = DataFrame(this._internal.with_new_columns(first_cols))
                 second_df: DataFrame = DataFrame(this._internal.with_new_columns(second_cols))
                 return first_df, second_df
             else:
-                applied = [out.rename(label) for out, label in zip(outputs, column_labels)]
+                applied = [apply_ufunc(label).rename(label) for label in column_labels]
                 internal = this._internal.with_new_columns(applied)
                 return DataFrame(internal)
 

@@ -30,6 +30,7 @@ from pyspark.sql.types import (
     Row,
     StructType,
 )
+from pyspark.util import _do_server_auth
 
 __all__ = ["StatefulProcessorApiClient", "StatefulProcessorHandleState"]
 
@@ -91,7 +92,11 @@ class StatefulProcessorHandleState(Enum):
 
 class StatefulProcessorApiClient:
     def __init__(
-        self, state_server_port: Union[int, str], key_schema: StructType, is_driver: bool = False
+        self,
+        state_server_port: Union[int, str],
+        key_schema: StructType,
+        is_driver: bool = False,
+        auth_secret: Optional[str] = None,
     ) -> None:
         self.key_schema = key_schema
         if isinstance(state_server_port, str):
@@ -115,6 +120,9 @@ class StatefulProcessorApiClient:
         self.sockfile = self._client_socket.makefile(
             "rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536))
         )
+        if not isinstance(state_server_port, str) and auth_secret is not None:
+            # Unix domain sockets rely on filesystem permissions and skip the handshake.
+            _do_server_auth(self.sockfile, auth_secret)
         if is_driver:
             self.handle_state = StatefulProcessorHandleState.PRE_INIT
         else:

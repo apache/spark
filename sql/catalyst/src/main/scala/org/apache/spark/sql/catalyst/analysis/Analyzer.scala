@@ -401,7 +401,7 @@ class Analyzer(
     relation
   }
 
-  /** Resolves only the dynamic identifier of an INSERT so transaction detection can inspect it. */
+  /** Lowers a parsed INSERT enough for transaction detection to inspect its target. */
   private[sql] def resolveUnresolvedInsert(insert: UnresolvedInsert): LogicalPlan = {
     runWithSessionConf {
       val identifierResolvedTarget = insert.table match {
@@ -1379,7 +1379,7 @@ class Analyzer(
     }
   }
 
-  /** Lower an INSERT as soon as its target identifier expression has been evaluated. */
+  /** Lower a parsed INSERT as soon as its target identifier expression has been evaluated. */
   object ResolveUnresolvedInsert extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(UNRESOLVED_INSERT), ruleId) {
@@ -4445,10 +4445,10 @@ class Analyzer(
               throw QueryCompilationErrors.aggregateInQualifyNotAllowedError(a)
           }
           // Ensure at least one window function in SELECT or QUALIFY condition.
-          if (windowExpressionToAliasMap.size() == 0 && !hasWindowInPlan(child)) {
+          if (windowExpressionToAliasMap.isEmpty && !hasWindowInPlan(child)) {
             throw QueryCompilationErrors.qualifyRequiresWindowFunctionError()
           }
-          if (windowExpressionToAliasMap.size() > 0) {
+          if (!windowExpressionToAliasMap.isEmpty) {
             val projectList =
               windowExpressionToAliasMap.values().asScala.toSeq
             Filter(newCond, Project(newChild.output ++ projectList, newChild))

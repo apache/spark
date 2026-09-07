@@ -131,18 +131,21 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
 
     if (projectablePositions.isEmpty) return LazyList.empty
 
-    // All input KPs share the same partitionKeys by invariant; use the first as the key source.
-    val keySource = kps.head
-    val sharedKeys =
-      if (projectablePositions.length == numPositions) keySource.partitionKeys
-      else keySource.projectKeys(projectablePositions)._2
+    // `PartitioningCollection` requires its members to agree on the marker, so the head
+    // represents them all.
+    val mayContainUnknownPartitionKeys = kps.head.mayContainUnknownPartitionKeys
 
-    val isGrouped = sharedKeys.distinct.size == sharedKeys.size
-    // A KP is narrowed if this node drops positions, or if the input KPs were already narrowed
-    // (i.e. came from a finer-grained partitioning). The flag must be sticky: a subsequent
-    // PartitioningPreservingUnaryExecNode that passes all positions through would otherwise
-    // recompute isNarrowed=false, silently dropping the protection.
-    val isNarrowed = projectablePositions.length < numPositions || keySource.isNarrowed
+    // Dropping a key position coarsens the declared set, which an unknown-keyed claim cannot
+    // survive.
+    if (projectablePositions.length < numPositions && mayContainUnknownPartitionKeys) {
+      return LazyList.empty
+    }
+
+    // All input KPs share the same partitionKeys and flags by invariant, so the first one
+    // projects the keys for every combination below; only the expressions differ. The marker
+    // rides the copies unchanged: the guard above turned away the one shape that could not, a
+    // narrowing projection of a marked collection.
+    val projected = kps.head.project(projectablePositions)
 
     // Cross-product the per-position alternatives to produce all concrete KPs.
     // Note: generateCartesianProduct expects thunks () => Seq[T], but wrapping LazyLists in thunks
@@ -151,8 +154,7 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
     // so all cross-product combinations are distinct by construction.
     MultiTransform.generateCartesianProduct(
       projectablePositions.map(i => () => alternativesPerPosition(i)))
-      .map(projectedExprs =>
-        new KeyedPartitioning(projectedExprs, sharedKeys, isGrouped, isNarrowed))
+      .map(projectedExprs => projected.copy(expressions = projectedExprs))
   }
 }
 
