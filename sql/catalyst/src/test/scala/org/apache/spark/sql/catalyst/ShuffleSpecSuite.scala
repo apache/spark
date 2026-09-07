@@ -664,4 +664,34 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         "identical marked functions remain compatible")
     }
   }
+
+  test("SPARK-59080: a collection whose members cover different key subsets disagrees") {
+    val id = $"id".int
+    val t1 = $"t1".int
+    val t2 = $"t2".int
+    val keys = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 1))
+
+    // The shape an alias cross-product produces: same arity, same keys, different expressions. The
+    // operation clusters on (id, t1), so the first member projects onto both positions and keeps
+    // three partitions, while the second matches only `id` and keeps two.
+    val collection = PartitioningCollection(Seq(
+      KeyGroupedPartitioning(Seq(id, t1), keys.size, keys),
+      KeyGroupedPartitioning(Seq(id, t2), keys.size, keys)))
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val spec = collection.createShuffleSpec(ClusteredDistribution(Seq(id, t1)))
+        .asInstanceOf[ShuffleSpecCollection]
+
+      // The disagreement is kept rather than resolved here. Every member has to stay for
+      // `isCompatibleWith`, which answers for any of them, and the collection cannot know which one
+      // the other side matched. `EnsureRequirements` resolves that and asks the member, not the
+      // collection.
+      assert(spec.specs.map(_.numPartitions).toSet === Set(3, 2))
+      assert(spec.isCompatibleWith(spec), "every member stays available for matching")
+
+      // So asking the collection for a single answer is the caller's mistake, and it says so.
+      val e = intercept[IllegalArgumentException](spec.createPartitioning(Seq(id, t1)))
+      assert(e.getMessage.contains("expected all specs in the collection to have the same number"))
+    }
+  }
 }
