@@ -81,6 +81,15 @@ class InternalRowComparableWrapperSuite extends SparkFunSuite {
     assert(InternalRowComparableWrapper.comparableTypes(alreadyErased) eq alreadyErased)
   }
 
+  test("SPARK-59187: a factory answers for the types it settled on") {
+    // A caller that reports a type list beside the rows a factory built takes it from here, so the
+    // two cannot answer differently.
+    val factory = InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(Seq(structA))
+    assert(factory.dataTypes !== Seq(structA), "test setup: this type has a name to erase")
+    assert(factory.dataTypes === InternalRowComparableWrapper.comparableTypes(Seq(structA)))
+    assert(factory(InternalRow(InternalRow(1))).dataTypes eq factory.dataTypes)
+  }
+
   test("SPARK-59187: two rows of one value are equal however their columns were named") {
     // What the erasure is for. A storage-partitioned join compares key rows that came from two
     // sides' own columns, and the same value has to land in the same partition group either way.

@@ -659,8 +659,10 @@ case class KeyedPartitioning(
    * expressions to place the other child's rows, and it runs on executors, where this value is not
    * available. `expressionsDescribeKeys` is what keeps that site sound.
    *
-   * Only the first key's types are read, and nothing enforces that the rest match. SPARK-59285 is
-   * to carry the types on the partitioning instead of sampling a key row.
+   * Only the first key's types are read, and nothing enforces that the rest match. The fallback is
+   * also the one erasure outside `InternalRowComparableWrapper`, since there is no factory here to
+   * read the types off and building one just to ask would be two cache lookups for no row.
+   * SPARK-59285 carries the types on the partitioning instead, and both go with it.
    */
   @transient lazy val keyDataTypes: Seq[DataType] =
     partitionKeys.headOption
@@ -940,19 +942,15 @@ object KeyedPartitioning {
 
   /**
    * Projects a sequence of partition keys by selecting only the specified positions.
-   *
-   * Both this and `reduceKeys` report a type list beside the keys they built, so both erase it the
-   * same way the keys are built at. Callers pass `keyDataTypes`, which is erased already, so this
-   * is a no-op today and the two cannot drift apart tomorrow.
    */
   def projectKeys(
       keys: Seq[InternalRowComparableWrapper],
       dataTypes: Seq[DataType],
       positions: Seq[Int]): (Seq[DataType], Seq[InternalRowComparableWrapper]) = {
-    val projectedDataTypes =
-      InternalRowComparableWrapper.comparableTypes(positions.map(dataTypes))
     val comparableKeyWrapperFactory =
-      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(projectedDataTypes)
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(positions.map(dataTypes))
+    // The factory is what reports the types, so they are the ones its keys compare at.
+    val projectedDataTypes = comparableKeyWrapperFactory.dataTypes
     // Indexed arrays rather than `Seq`s, because the loop below runs once per key and a key list is
     // as long as the number of splits the scan reported.
     val positionArray = positions.toArray
@@ -982,13 +980,12 @@ object KeyedPartitioning {
     val reducerArray =
       reducers.map(_.map(_.reducer.asInstanceOf[Reducer[Any, Any]]).orNull).toArray
     // A reducer's result type comes from the connector, so it goes through the same erasure the
-    // keys below are built at. See `projectKeys`.
-    val reducedDataTypes = InternalRowComparableWrapper.comparableTypes(
-      dataTypes.zip(reducerArray).map {
-        case (t, reducer) => if (reducer == null) t else reducer.resultType()
-      })
+    // keys below are built at, and the factory is what reports it.
     val comparableKeyWrapperFactory =
-      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(reducedDataTypes)
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+        dataTypes.zip(reducerArray).map {
+          case (t, reducer) => if (reducer == null) t else reducer.resultType()
+        })
     val typeArray = dataTypes.toArray
     // `InternalRow.toSeq(dataTypes)`, which the loop below replaces, asserted the row's arity once
     // per key. All the keys of a partitioning share an arity, so asserting on the first one keeps
@@ -1008,7 +1005,7 @@ object KeyedPartitioning {
       comparableKeyWrapperFactory(new GenericInternalRow(reducedKey))
     }
 
-    (reducedDataTypes, reducedKeys)
+    (comparableKeyWrapperFactory.dataTypes, reducedKeys)
   }
 }
 

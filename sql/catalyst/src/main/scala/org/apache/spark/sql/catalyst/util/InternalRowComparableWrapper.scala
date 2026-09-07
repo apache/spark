@@ -127,7 +127,7 @@ object InternalRowComparableWrapper {
    * Everything else is kept exactly, since it decides where a value belongs: a collation and a
    * decimal precision still tell two rows apart.
    */
-  def comparableTypes(dataTypes: Seq[DataType]): Seq[DataType] = {
+  private[catalyst] def comparableTypes(dataTypes: Seq[DataType]): Seq[DataType] = {
     val erased = dataTypes.map(t => erasePositionalNames(t.asNullable))
     // Erasing is idempotent, and a list that was already erased is returned as it is rather than
     // rebuilt. Callers pass their own types here and then hand the result back in, so keeping the
@@ -149,15 +149,24 @@ object InternalRowComparableWrapper {
     }
 
   /**
-   * Creates a shared factory method for a given row schema to avoid excessive cache lookups. The
-   * rows it builds are compared at `comparableTypes` of the given types, so a caller may pass the
-   * types it has to hand without normalising them first.
+   * Builds wrappers over one row schema, holding the cache lookups that schema needs so a caller
+   * does not repeat them per row.
+   *
+   * `dataTypes` is what the rows it builds compare at, which is `comparableTypes` of what it was
+   * given. A caller reporting a type list beside those rows takes it from here rather than erasing
+   * on its own, so the two cannot answer differently.
    */
-  def getInternalRowComparableWrapperFactory(
-      dataTypes: Seq[DataType]): InternalRow => InternalRowComparableWrapper = {
-    val comparable = comparableTypes(dataTypes)
-    val structType = structTypeCache.get(comparable)
-    val ordering = orderingCache.get(comparable)
-    row: InternalRow => new InternalRowComparableWrapper(row, comparable, structType, ordering)
+  final class Factory private[InternalRowComparableWrapper] (val dataTypes: Seq[DataType])
+    extends (InternalRow => InternalRowComparableWrapper) {
+
+    private[this] val structType = structTypeCache.get(dataTypes)
+    private[this] val ordering = orderingCache.get(dataTypes)
+
+    override def apply(row: InternalRow): InternalRowComparableWrapper =
+      new InternalRowComparableWrapper(row, dataTypes, structType, ordering)
   }
+
+  /** Creates a shared factory for a given row schema to avoid excessive cache lookups. */
+  def getInternalRowComparableWrapperFactory(dataTypes: Seq[DataType]): Factory =
+    new Factory(comparableTypes(dataTypes))
 }
