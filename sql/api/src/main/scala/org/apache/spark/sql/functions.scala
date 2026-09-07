@@ -12170,6 +12170,11 @@ object functions {
    *   field to extract, e.g. an integer for `YEAR` and a decimal for `SECOND`.
    * @group datetime_funcs
    * @since 3.5.0
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
+   *   - `spark.sql.session.timeZone`
    */
   def extract(field: Column, source: Column): Column = {
     Column.fn("extract", field, source)
@@ -12188,6 +12193,11 @@ object functions {
    *   field to extract, e.g. an integer for `YEAR` and a decimal for `SECOND`.
    * @group datetime_funcs
    * @since 3.5.0
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
+   *   - `spark.sql.session.timeZone`
    */
   def date_part(field: Column, source: Column): Column = {
     Column.fn("date_part", field, source)
@@ -12206,6 +12216,11 @@ object functions {
    *   field to extract, e.g. an integer for `YEAR` and a decimal for `SECOND`.
    * @group datetime_funcs
    * @since 3.5.0
+   *
+   * @note
+   *   Affected by these public SQL configurations:
+   *   - `spark.sql.ansi.enabled`
+   *   - `spark.sql.session.timeZone`
    */
   def datepart(field: Column, source: Column): Column = {
     Column.fn("datepart", field, source)

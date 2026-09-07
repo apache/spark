@@ -11683,6 +11683,13 @@ def extract(field: Column, source: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.date_part`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> import datetime
@@ -11740,6 +11747,13 @@ def date_part(field: Column, source: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.extract`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> import datetime
@@ -11796,6 +11810,13 @@ def datepart(field: Column, source: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.second`
     :meth:`pyspark.sql.functions.date_part`
     :meth:`pyspark.sql.functions.extract`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
