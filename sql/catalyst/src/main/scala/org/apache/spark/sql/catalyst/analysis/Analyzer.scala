@@ -2116,40 +2116,44 @@ class Analyzer(
      */
     def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
       expr.transformUp {
-        case f0: UnresolvedFunction if !f0.isDistinct &&
-          matchesFunctionName(f0.nameParts, "count") &&
-          isCountStarExpansionAllowed(f0.arguments) =>
-          // Transform COUNT(*) into COUNT(1).
-          // We do not normalize the name to "count"; we keep the original name parts
-          // (e.g. builtin.count, system.builtin.count) so that resolution still sees
-          // the same qualification.
-          f0.copy(arguments = Seq(Literal(1)))
-        case f1: UnresolvedFunction if containsStar(f1.arguments) =>
-          // A routed SQL/JSON constructor (json_array(*)) forbids a bare `*`; reject it rather than
+        case f: UnresolvedFunction if containsStar(f.arguments) =>
+          // A routed SQL/JSON function (json_array(*)) forbids a bare `*`; reject it rather than
           // expand below. A nested star (json_array(array(*))) is expanded bottom-up before we get
-          // here, and count(*) is rewritten above -- so only a bare `*` reaches this guard.
-          if (functionResolution.resolvesToStarDisallowedJsonConstructor(f1.nameParts)) {
+          // here, so only a bare `*` reaches this guard.
+          if (functionResolution.resolvesToStarDisallowedJsonConstructor(f.nameParts)) {
             throw QueryCompilationErrors.invalidStarUsageError(
-              s"expression `${f1.prettyName}`", extractStar(f1.arguments))
+              s"expression `${f.prettyName}`", extractStar(f.arguments))
           }
-          // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*) will
-          // be expanded while count(*) will be converted to count(1). They will produce different
-          // results and confuse users if there are any null values. For count(t1.*, t2.*), it is
-          // still allowed, since it's well-defined in spark.
-          if (!conf.allowStarWithSingleTableIdentifierInCount &&
-              matchesFunctionName(f1.nameParts, "count") &&
-              f1.arguments.length == 1) {
-            f1.arguments.foreach {
-              case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
-                throw QueryCompilationErrors
-                  .singleTableStarInCountNotAllowedError(u.target.get.mkString("."))
-              case _ => // do nothing
+          // The count owner probe can hit an external functionExists lookup on a persistent-first
+          // PATH, so compute it once (lazily, after the cheap star-shape check) and reuse it for
+          // the count(*) rewrite and the count(tbl.*) guard, as `FunctionResolverUtils` does.
+          lazy val resolvesToCountBuiltin = matchesFunctionName(f.nameParts, "count")
+          if (!f.isDistinct && isCountStarExpansionAllowed(f.arguments) && resolvesToCountBuiltin) {
+            // Transform COUNT(*) into COUNT(1).
+            // We do not normalize the name to "count"; we keep the original name parts
+            // (e.g. builtin.count, system.builtin.count) so that resolution still sees
+            // the same qualification.
+            f.copy(arguments = Seq(Literal(1)))
+          } else {
+            // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*)
+            // will be expanded while count(*) will be converted to count(1). They will produce
+            // different results and confuse users if there are any null values. For
+            // count(t1.*, t2.*), it is still allowed, since it's well-defined in spark.
+            if (!conf.allowStarWithSingleTableIdentifierInCount &&
+                resolvesToCountBuiltin &&
+                f.arguments.length == 1) {
+              f.arguments.foreach {
+                case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
+                  throw QueryCompilationErrors
+                    .singleTableStarInCountNotAllowedError(u.target.get.mkString("."))
+                case _ => // do nothing
+              }
             }
+            f.copy(arguments = f.arguments.flatMap {
+              case s: Star => expand(s, child)
+              case o => o :: Nil
+            })
           }
-          f1.copy(arguments = f1.arguments.flatMap {
-            case s: Star => expand(s, child)
-            case o => o :: Nil
-          })
         case c: CreateNamedStruct if containsStar(c.valExprs) =>
           val newChildren = c.children.grouped(2).flatMap {
             case Seq(k, s : Star) => CreateStruct(expand(s, child)).children

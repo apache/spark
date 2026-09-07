@@ -1720,7 +1720,8 @@ abstract class JsonPathExpressionBuilder extends ExpressionBuilder {
   arguments = """
     Arguments:
       * jsonStr - a JSON string.
-      * path - a SQL/JSON path expression given as a foldable string expression.
+      * path - a SQL/JSON path expression given as a foldable string expression. The path must be
+          wildcard-free, since a single scalar is returned.
   """,
   examples = """
     Examples:
@@ -1740,7 +1741,8 @@ object JsonValueExpressionBuilder extends JsonPathExpressionBuilder {
   arguments = """
     Arguments:
       * jsonStr - a JSON string.
-      * path - a SQL/JSON path expression given as a foldable string expression.
+      * path - a SQL/JSON path expression given as a foldable string expression. The path must be
+          wildcard-free, since a single value is resolved.
   """,
   examples = """
     Examples:
