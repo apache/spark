@@ -969,8 +969,13 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     if (partitionings.forall(_.isInstanceOf[KeyedPartitioning])) {
       val kps = partitionings.map(_.asInstanceOf[KeyedPartitioning])
       val headKp = kps.head
-      // The `KeyedPartitioning`s must agree on the partition expressions to merge.
-      val compatible = kps.forall(comparePartitioning(_, headKp))
+      // To merge, the `KeyedPartitioning`s must agree on the partition expressions and no leg
+      // may carry the marker: the merged set declares the other legs' keys, so an out-of-set row
+      // can sit in the wrong partition for the merged claim (rule (1) of the
+      // `KeyedPartitioning.mayContainUnknownPartitionKeys` doc). Unlike a join, a union keeps
+      // every leg's rows: an unmarked leg does not excuse a marked one.
+      val compatible = kps.forall(kp =>
+        !kp.mayContainUnknownPartitionKeys && comparePartitioning(kp, headKp))
       if (compatible) {
         // `concat` returns the merged partitioning in the first child's attribute space, which is
         // what `prepareOutputPartitioning` normalizes to on this branch, so lift it to this
