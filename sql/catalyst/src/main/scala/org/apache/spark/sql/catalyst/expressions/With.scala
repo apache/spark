@@ -111,7 +111,11 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
     // coarser id-keyed rule that also refuses a nested `With` redefining an id with a definition of
     // its own, which this path handles correctly and a test pins. None is reachable from
     // `With.apply`, which mints both the definitions and their ids, so these are invariant checks
-    // rather than cases a query can hit.
+    // rather than cases a query can hit. The third compares whole `CommonExpressionId`s, so it
+    // would also fire on a canonicalized or `NormalizePlan`-normalized tree, where ids are
+    // renumbered per scope and a definition's own nested scope can collide with this one --
+    // `canonicalizationIdMap` counts nested `With`s in `child` only. Those forms exist to be
+    // compared, not evaluated, and nothing but `eval` reaches this.
     if (defs.map(_.id).distinct.length != defs.length) {
       throw SparkException.internalError(
         "Duplicate common expression ids in one With: " + defs.map(_.id.id).mkString(", "))
