@@ -80,20 +80,43 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
    * The references in `child` that name one of these definitions, paired with the definition each
    * names. The list is found once, since the tree does not change between evaluations.
    *
-   * Only `child` is scanned, which relies on a reference to one of these definitions never living
-   * inside another one of them. The helper `With(commonExprs: _*)(replaced)` builds the references
-   * outside the definitions and cannot produce that, and `RewriteWithExpression`, which does
-   * rewrite inside a `With`, only ever replaces a reference with its definition's child or with an
-   * attribute -- it never puts a reference inside a definition. The case class constructor does
-   * take `child` and `defs` directly, so a caller can hand a definition a reference to any of these
-   * ids; that reference is then never bound, and evaluating it raises "Cannot evaluate a common
-   * expression reference outside its With", which is the failure to want. Scanning `children`
-   * instead would look safer and be worse -- it would bind such a reference, and since
-   * `CommonExpressionCell.get` sets `computed` only after the nested evaluation returns, that loud
-   * error would become a StackOverflowError. A nested `With` is not affected either way: `children`
-   * is `child +: defs`, so this scan already descends into an inner `With`'s own definitions.
+   * Only `child` is scanned for references, which relies on a reference to one of these definitions
+   * never living inside another one of them. The helper `With(commonExprs: _*)(replaced)` builds
+   * the references outside the definitions and cannot produce that, and `RewriteWithExpression`,
+   * which does rewrite inside a `With`, only ever replaces a reference with its definition's child
+   * or with an attribute -- it never puts a reference inside a definition. The case class
+   * constructor does take `child` and `defs` directly, so a caller can hand a definition a
+   * reference to any of these ids; that reference is then never bound, and evaluating it raises
+   * "Cannot evaluate a common expression reference outside its With", which is the failure to want.
+   * Scanning `children` instead would look safer and be worse -- it would bind such a reference,
+   * and since `CommonExpressionCell.get` sets `computed` only after the nested evaluation returns,
+   * that loud error would become a StackOverflowError. A nested `With` is not affected either way:
+   * `children` is `child +: defs`, so this scan already descends into an inner `With`'s own
+   * definitions.
+   *
+   * Computing this also checks the two shapes whose bindings could not be kept straight at all; see
+   * the comment on the checks.
    */
   @transient private lazy val refsToBind: IndexedSeq[(CommonExpressionRef, CommonExpressionDef)] = {
+    // Two definitions with one id would leave `idToDef` holding the last of them and bind every
+    // reference to it, and a definition object shared with a nested `With` would have that inner
+    // scope clear a cell this scope has already filled -- one definition answering with two values
+    // inside one entry, and with two types if the definitions disagree. Both are shapes this path
+    // would answer for, wrongly, so refuse them here; `CodegenContext.withCommonExprs` refuses them
+    // too, though by a coarser rule -- it keys on the id, so it also refuses a nested `With` that
+    // redefines an id with a definition of its own, which this path handles correctly and a test
+    // pins. Neither shape is reachable from `With.apply`, which mints both the definitions and
+    // their ids, so this is an invariant check rather than a case a query can hit.
+    if (defs.map(_.id).distinct.length != defs.length) {
+      throw SparkException.internalError(
+        "Duplicate common expression ids in one With: " + defs.map(_.id.id).mkString(", "))
+    }
+    (child +: defs.map(_.child)).foreach(_.foreach {
+      case w: With if w.defs.exists(innerDef => defs.exists(_ eq innerDef)) =>
+        throw SparkException.internalError(
+          "A nested With shares a common expression definition object with the With around it")
+      case _ =>
+    })
     val idToDef = defs.map(d => d.id -> d).toMap
     val found = mutable.ArrayBuffer.empty[(CommonExpressionRef, CommonExpressionDef)]
     child.foreach {

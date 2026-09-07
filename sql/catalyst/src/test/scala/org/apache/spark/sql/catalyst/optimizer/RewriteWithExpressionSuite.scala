@@ -578,6 +578,20 @@ class RewriteWithExpressionSuite extends PlanTest {
       })
       assert(nondet.length == 1,
         s"the nondeterministic definition was inlined more than once:\n$rewritten")
+      // The count alone would also hold on a plan that kept nothing, or that kept the definition
+      // with references the rebuilt `With` does not bind, so pin the structure the memoization
+      // needs: one surviving `With`, the nondeterministic definition inside it, and every reference
+      // left in the tree naming an id that `With` defines.
+      val withs = rewritten.expressions.flatMap(_.collect { case w: With => w })
+      assert(withs.length == 1, s"expected one surviving With, got ${withs.length}:\n$rewritten")
+      assert(withs.head.defs.exists(d => d.child.exists {
+        case u: PythonUDF => !u.udfDeterministic
+        case _ => false
+      }), s"the surviving With does not hold the nondeterministic definition:\n$rewritten")
+      val definedIds = withs.head.defs.map(_.id).toSet
+      val refIds = rewritten.expressions.flatMap(_.collect { case r: CommonExpressionRef => r.id })
+      assert(refIds.nonEmpty && refIds.forall(definedIds.contains),
+        s"a reference is left without a With that defines it:\n$rewritten")
     }
   }
 

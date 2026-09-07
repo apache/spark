@@ -220,6 +220,18 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
    * two questions is being asked. A `PythonUDF` is still in the expression tree when this runs --
    * `SparkOptimizer` extracts them in a batch after the one holding this rule -- so that case is
    * reachable in a real plan rather than only in a rule test.
+   *
+   * This takes the expression at its word about being deterministic, which is weaker than what
+   * `isSafeToDuplicate` above asks of the same definition on the expression-level path. `isCheap`
+   * admits anything foldable, and `InvokeLike.foldable` is `children.forall(_.foldable) &&
+   * deterministic && ...`, so a foldable expression arrives here already claiming determinism: an
+   * `aes_encrypt` with no IV is a foldable `StaticInvoke` that draws a random one, and a Hive UDF
+   * is foldable on a user-declared flag. Such a definition is substituted at both references and
+   * each copy is folded on its own by a later batch, so one common expression yields two values.
+   * That predates this rule learning to keep a `With` -- the condition it replaced was
+   * `isCheap(child) || !commonExprIdSet.contains(id)`, no stricter -- and the fix belongs either on
+   * those expressions, which should not claim determinism, or in one purity predicate shared with
+   * `isSafeToDuplicate`. Both are wider than this rule.
    */
   private def canSubstitute(
       child: Expression,

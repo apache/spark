@@ -75,8 +75,11 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
     // cells. What it must not do is evaluate the definition before a reference is reached; putting
     // the branch outside would only test that `If` does not evaluate the arm it did not take.
     val w = With(c) { case Seq(ref) => If(Literal.TrueLiteral, Literal(-1), Add(ref, ref)) }
+    // -1 whatever the definition does, since the taken arm is a literal: the assertion below is the
+    // load-bearing one, and this only says the evaluation ran.
     assert((1 to 3).map(_ => w.eval(InternalRow.empty)) == Seq(-1, -1, -1))
-    // The counter is still at 0, so the first row that does reach a reference sees 1.
+    // The counter is still at 0, so the first row that does reach a reference sees 1. Eager filling
+    // would have consumed three values and this would read 8.
     assert(With(c) { case Seq(ref) => Add(ref, ref) }.eval(InternalRow.empty) == 2)
   }
 
@@ -89,6 +92,9 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
     val w = With(c) { case Seq(ref) =>
       And(Literal.FalseLiteral, GreaterThanOrEqual(ref, Literal(1)))
     }
+    // False whatever the definition does, as in the case above: the counter read is what bites.
+    // This is not that case repeated -- there the arm is skipped by `If`, here by `And`'s short
+    // circuit, and the two are separate paths in both evaluation and codegen.
     assert((1 to 3).map(_ => w.eval(InternalRow.empty)) == Seq(false, false, false))
     assert(With(c) { case Seq(ref) => Add(ref, ref) }.eval(InternalRow.empty) == 2)
   }
@@ -202,9 +208,16 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
         val count = markerCount(depth)
         assert(count == 2, s"the innermost body was emitted $count times at depth $depth")
       }
+      // The 2 is the same fact at every depth: the innermost body, pasted at the innermost `With`'s
+      // two references. What changes from depth 2 on is why it stops there -- each enclosing
+      // level's definition is itself a `With`, so that level's body goes into a method instead of
+      // being pasted, and a call site carries no marker.
+      //
       // The values still come out right: each level doubles what the one below it produced. Four
       // levels are enough to show that and keep the product inside Int, which ANSI `Add` would
-      // raise on rather than wrap past depth 10.
+      // raise on rather than wrap past depth 10. A deterministic leaf doubles whether a reference
+      // reads a slot or recomputes, so this is an arithmetic and compile check, not a second
+      // reading of the count above.
       val proj = GenerateMutableProjection.generate(Seq(nested(4)))
       assert(proj(InternalRow(1)).getInt(0) == (1 + marker) * 16)
     }
@@ -297,6 +310,31 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
       case _ =>
     }
     assert((0 until 3).map(_ => interpreted.eval(InternalRow.empty)) == Seq(0L, 202L, 404L))
+  }
+
+  test("SPARK-58902: eval refuses the two shapes whose bindings it could not keep straight") {
+    // Both need the case class constructor, and both were answered by `eval` before this check --
+    // with a wrong value, while `GenerateMutableProjection` raised. Refusing them keeps the two
+    // paths saying the same thing about the same tree.
+    val id = new CommonExpressionId()
+    val first = CommonExpressionDef(Literal(1), id)
+    val ref = new CommonExpressionRef(first)
+    // Two definitions with one id: `defs.map(d => d.id -> d).toMap` kept the last, so both
+    // references read 2 and the answer was 4 where the first definition says 2.
+    val duplicateIds = With(Add(ref, ref), Seq(first, CommonExpressionDef(Literal(2), id)))
+    val duplicate = intercept[SparkException](duplicateIds.eval(InternalRow.empty))
+    assert(duplicate.getMessage.contains("Duplicate common expression ids"))
+
+    // One definition object in two scopes: the inner `With` clears the cell the outer one had
+    // already filled, so the definition answered twice inside one entry -- 1, then 2 from the
+    // counter, giving 3 where the memoization contract says 1 + 0 + 1.
+    val counterDef = CommonExpressionDef(counter(), new CommonExpressionId())
+    val counterRef = new CommonExpressionRef(counterDef)
+    val shared = With(
+      Add(Add(counterRef, With(Literal(0), Seq(counterDef))), counterRef),
+      Seq(counterDef))
+    val sharedFailure = intercept[SparkException](shared.eval(InternalRow.empty))
+    assert(sharedFailure.getMessage.contains("shares a common expression definition object"))
   }
 
   test("SPARK-58902: a refused scope leaves no slot behind in the context") {
