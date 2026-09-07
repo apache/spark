@@ -194,7 +194,7 @@ class OidcCredentialE2ESuite
   // -------------------------------------------------------------------------
 
   /**
-   * Test 1: Basic OIDC credential propagation flow.
+   * Test 1a: Basic OIDC credential propagation flow.
    *
    * Scenario:
    *  1. A Spark job runs on Minikube with spark.security.oidc.enabled=true.
@@ -208,6 +208,26 @@ class OidcCredentialE2ESuite
     val outputPath = s"s3a://$s3Bucket/e2e-basic-${UUID.randomUUID().toString.take(8)}/"
     // A fixed executor count (this test does not use dynamic allocation).
     val conf = baseSparkConf().set("spark.executor.instances", "1")
+
+    runOidcJobAndVerify(conf, outputPath)
+  }
+
+  /**
+   * Test 1b: A user-provided fs.s3a.aws.credentials.provider is respected.
+   *
+   * The primary path (Test 1a) leaves the provider unset so Spark auto-configures it.
+   * Here we explicitly set it to the OIDC provider and verify the job still succeeds,
+   * exercising the "user override is not overwritten" branch of the auto-config logic
+   * (UserCredentialManager only applies additionalSparkProperties when the key is not
+   * already set). The read/write path is identical because the explicit value equals
+   * what auto-config would have chosen.
+   */
+  test("OIDC credential propagation: explicit provider is respected", oidcE2eTag) {
+    val outputPath = s"s3a://$s3Bucket/e2e-explicit-${UUID.randomUUID().toString.take(8)}/"
+    val conf = baseSparkConf()
+      .set("spark.executor.instances", "1")
+      .set("spark.hadoop.fs.s3a.aws.credentials.provider",
+        "org.apache.spark.security.aws.SparkOidcAwsCredentialsProvider")
 
     runOidcJobAndVerify(conf, outputPath)
   }
@@ -443,11 +463,12 @@ class OidcCredentialE2ESuite
       .set("spark.hadoop.fs.s3a.endpoint", s3Endpoint)
       .set("spark.hadoop.fs.s3a.path.style.access", "true")
       .set("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
-      // Explicitly select the OIDC credential provider for S3A. The provider is
-      // registered by the credential-aws module; setting it explicitly avoids
-      // relying on defaulting behaviour and makes the test intent clear.
-      .set("spark.hadoop.fs.s3a.aws.credentials.provider",
-        "org.apache.spark.security.aws.SparkOidcAwsCredentialsProvider")
+      // Intentionally do NOT set spark.hadoop.fs.s3a.aws.credentials.provider here.
+      // This is the primary, documented usage: with OIDC credential propagation
+      // enabled and no explicit provider set, Spark auto-configures the S3A
+      // credentials provider (SparkOidcAwsCredentialsProvider) on both the driver
+      // and executors. Leaving it unset exercises that auto-config path end to end,
+      // including driver-side S3A access (e.g. output-path existence checks).
   }
 
   private def runOidcJobAndVerify(conf: SparkAppConf, outputPath: String): Unit = {

@@ -43,6 +43,7 @@ import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFor
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
+import org.apache.spark.deploy.security.UserCredentialManager
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{Executor, ExecutorMetrics, ExecutorMetricsSource}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
@@ -63,6 +64,7 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils, StandaloneSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
+import org.apache.spark.security.CredentialProviderLoader
 import org.apache.spark.shuffle.ShuffleDataIOUtils
 import org.apache.spark.shuffle.api.ShuffleDriverComponents
 import org.apache.spark.status.{AppStatusSource, AppStatusStore}
@@ -222,6 +224,13 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _progressBar: Option[ConsoleProgressBar] = None
   private var _ui: Option[SparkUI] = None
   private var _hadoopConfiguration: Configuration = _
+
+  // The CredentialProviderLoader created by the OIDC selection phase (applyProviderProperties),
+  // retained so the later credential resolution phase (UserCredentialManager, started by the
+  // scheduler backend) reuses the same loader. None when OIDC credential propagation is
+  // disabled or in local mode (the selection phase is skipped and allocates no loader).
+  // SparkContext is the single owner of this loader and is responsible for closing it in stop().
+  private var _userCredentialProviderLoader: Option[CredentialProviderLoader] = None
   private var _executorMemory: Int = _
   private var _schedulerBackend: SchedulerBackend = _
   private var _taskScheduler: TaskScheduler = _
@@ -337,6 +346,12 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def hadoopConfiguration: Configuration = _hadoopConfiguration
 
+  // The CredentialProviderLoader from the OIDC selection phase, reused by the credential
+  // resolution phase so providers are initialized exactly once. Null if OIDC is disabled or
+  // before initialization. Internal.
+  private[spark] def userCredentialProviderLoader: Option[CredentialProviderLoader] =
+    _userCredentialProviderLoader
+
   private[spark] def executorMemory: Int = _executorMemory
 
   // Environment variables to pass to our executors.
@@ -432,6 +447,18 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     // This should be set as early as possible.
     SparkContext.enableMagicCommitterIfNeeded(_conf)
+
+    // OIDC credential propagation: provider SELECTION phase. When enabled (and not in local
+    // mode), discover the credential provider(s) for the configured scheme(s) and apply their
+    // declared Spark properties (e.g. the S3A credentials provider class) into _conf, so that
+    // the driver's Hadoop Configuration built later -- and other config-derived components --
+    // pick them up. This is done here, at the "as early as possible" slot, so the applied keys
+    // are visible to the spark.logConf dump and to any Hadoop Configuration built during
+    // createSparkEnv (e.g. by SecurityManager). It performs no credential resolution and no
+    // network I/O (providers are selected without init()); actual acquisition happens later in
+    // the scheduler backend (UserCredentialManager). Any returned loader is retained so the
+    // resolution phase reuses it, and SparkContext closes it in stop().
+    _userCredentialProviderLoader = UserCredentialManager.applyProviderProperties(_conf, isLocal)
 
     SparkContext.supplementJavaModuleOptions(_conf)
     SparkContext.supplementJavaIPv6Options(_conf)
@@ -2646,6 +2673,16 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     Utils.tryLogNonFatalError {
       FallbackStorage.cleanUp(_conf, _hadoopConfiguration)
+    }
+    // Close the credential provider loader created by the OIDC selection phase. SparkContext is
+    // the single owner: UserCredentialManager.stop() no longer closes it. This covers every
+    // path, including a normal run (the resolution phase used this same loader), a
+    // construction failure after the selection phase ran, and (defensively) any other case,
+    // so providers that allocate resources in init() do not leak. closeAll() is idempotent.
+    _userCredentialProviderLoader.foreach { loader =>
+      Utils.tryLogNonFatalError {
+        loader.closeAll()
+      }
     }
     Utils.tryLogNonFatalError {
       _eventLogger.foreach(_.stop())
