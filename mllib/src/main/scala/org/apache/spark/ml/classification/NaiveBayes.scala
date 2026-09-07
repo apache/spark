@@ -435,51 +435,6 @@ class NaiveBayesModel private[ml] (
     this
   }
 
-  /**
-   * Bernoulli scoring requires log(condprob) if 1, log(1-condprob) if 0.
-   * This precomputes log(1.0 - exp(theta)) and its sum which are used for the linear algebra
-   * application of this condition (in predict function).
-   */
-  @transient private lazy val thetaMinusNegTheta = $(modelType) match {
-    case Bernoulli =>
-      theta.map(value => value - math.log1p(-math.exp(value)))
-    case _ =>
-      // This should never happen.
-      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}. " +
-        "Variables thetaMinusNegTheta should only be precomputed in Bernoulli NB.")
-  }
-
-  @transient private lazy val piMinusThetaSum = $(modelType) match {
-    case Bernoulli =>
-      val negTheta = theta.map(value => math.log1p(-math.exp(value)))
-      val ones = new DenseVector(Array.fill(theta.numCols)(1.0))
-      val piMinusThetaSum = pi.toDense.copy
-      BLAS.gemv(1.0, negTheta, ones, 1.0, piMinusThetaSum)
-      piMinusThetaSum
-    case _ =>
-      // This should never happen.
-      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}. " +
-        "Variables piMinusThetaSum should only be precomputed in Bernoulli NB.")
-  }
-
-  /**
-   * Gaussian scoring requires sum of log(Variance).
-   * This precomputes sum of log(Variance) which are used for the linear algebra
-   * application of this condition (in predict function).
-   */
-  @transient private lazy val logVarSum = $(modelType) match {
-    case Gaussian =>
-      Array.tabulate(numClasses) { i =>
-        Iterator.range(0, numFeatures).map { j =>
-          math.log(sigma(i, j))
-        }.sum
-      }
-    case _ =>
-      // This should never happen.
-      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}. " +
-        "Variables logVarSum should only be precomputed in Gaussian NB.")
-  }
-
   @Since("1.6.0")
   override val numFeatures: Int = theta.numCols
 
@@ -498,18 +453,18 @@ class NaiveBayesModel private[ml] (
         features: Vector =>
           NaiveBayesModel.complementCalculation(features, localTheta)
       case Bernoulli =>
-        val localPiMinusThetaSum = piMinusThetaSum
-        val localThetaMinusNegTheta = thetaMinusNegTheta
+        val (localPiMinusThetaSum, localThetaMinusNegTheta) =
+          NaiveBayesModel.bernoulliPredictionState(pi, theta)
         features: Vector =>
-          NaiveBayesModel.bernoulliCalculation(
+          NaiveBayesModel.bernoulliCalculationWithPrecomputedState(
             features, localPiMinusThetaSum, localThetaMinusNegTheta)
       case Gaussian =>
         val localPi = pi
         val localTheta = theta
         val localSigma = sigma
-        val localLogVarSum = logVarSum
+        val localLogVarSum = NaiveBayesModel.gaussianLogVarSum(localSigma)
         features: Vector =>
-          NaiveBayesModel.gaussianCalculation(
+          NaiveBayesModel.gaussianCalculationWithPrecomputedState(
             features, localPi, localTheta, localSigma, localLogVarSum)
     }
   }
@@ -567,10 +522,9 @@ class NaiveBayesModel private[ml] (
       case Complement =>
         NaiveBayesModel.complementCalculation(features, theta)
       case Bernoulli =>
-        NaiveBayesModel.bernoulliCalculation(
-          features, piMinusThetaSum, thetaMinusNegTheta)
+        NaiveBayesModel.bernoulliCalculation(features, pi, theta)
       case Gaussian =>
-        NaiveBayesModel.gaussianCalculation(features, pi, theta, sigma, logVarSum)
+        NaiveBayesModel.gaussianCalculation(features, pi, theta, sigma)
     }
   }
 
@@ -646,7 +600,18 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
     Vectors.dense(probArray)
   }
 
-  private def bernoulliCalculation(
+  private def bernoulliPredictionState(
+      pi: Vector,
+      theta: Matrix): (DenseVector, Matrix) = {
+    val negTheta = theta.map(value => math.log1p(-math.exp(value)))
+    val thetaMinusNegTheta = theta.map(value => value - math.log1p(-math.exp(value)))
+    val ones = new DenseVector(Array.fill(theta.numCols)(1.0))
+    val piMinusThetaSum = pi.toDense.copy
+    BLAS.gemv(1.0, negTheta, ones, 1.0, piMinusThetaSum)
+    (piMinusThetaSum, thetaMinusNegTheta)
+  }
+
+  private def bernoulliCalculationWithPrecomputedState(
       features: Vector,
       piMinusThetaSum: DenseVector,
       thetaMinusNegTheta: Matrix): Vector = {
@@ -656,7 +621,44 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
     prob
   }
 
-  private def gaussianCalculation(
+  private def bernoulliCalculation(
+      features: Vector,
+      pi: Vector,
+      theta: Matrix): Vector = {
+    requireZeroOneBernoulliValues(features)
+    val prob = Array.ofDim[Double](pi.size)
+    var i = 0
+    while (i < pi.size) {
+      var score = pi(i)
+      var j = 0
+      while (j < theta.numCols) {
+        val thetaValue = theta(i, j)
+        score += (if (features(j) == 1.0) {
+          thetaValue
+        } else {
+          math.log1p(-math.exp(thetaValue))
+        })
+        j += 1
+      }
+      prob(i) = score
+      i += 1
+    }
+    Vectors.dense(prob)
+  }
+
+  private def gaussianLogVarSum(sigma: Matrix): Array[Double] = {
+    Array.tabulate(sigma.numRows) { i =>
+      var sum = 0.0
+      var j = 0
+      while (j < sigma.numCols) {
+        sum += math.log(sigma(i, j))
+        j += 1
+      }
+      sum
+    }
+  }
+
+  private def gaussianCalculationWithPrecomputedState(
       features: Vector,
       pi: Vector,
       theta: Matrix,
@@ -673,6 +675,28 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
         j += 1
       }
       prob(i) = pi(i) - (s + logVarSum(i)) / 2
+      i += 1
+    }
+    Vectors.dense(prob)
+  }
+
+  private def gaussianCalculation(
+      features: Vector,
+      pi: Vector,
+      theta: Matrix,
+      sigma: Matrix): Vector = {
+    val prob = Array.ofDim[Double](pi.size)
+    var i = 0
+    while (i < pi.size) {
+      var s = 0.0
+      var j = 0
+      while (j < theta.numCols) {
+        val d = features(j) - theta(i, j)
+        val variance = sigma(i, j)
+        s += d * d / variance + math.log(variance)
+        j += 1
+      }
+      prob(i) = pi(i) - s / 2
       i += 1
     }
     Vectors.dense(prob)
