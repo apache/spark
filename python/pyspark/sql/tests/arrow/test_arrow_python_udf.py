@@ -310,6 +310,20 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
                 invalid.collect()
 
+    def test_char_varchar_results_legacy_as_string(self):
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            result = self.spark.range(1).select(
+                udf(lambda _: "a", CharType(3), useArrow=True)("id").alias("c"),
+                udf(lambda _: "abcd", VarcharType(3), useArrow=True)("id").alias("v"),
+            )
+            self.assertEqual(result.first(), Row(c="a", v="abcd"))
+
     def test_named_arguments_negative(self):
         @udf("int")
         def test_udf(a, b):

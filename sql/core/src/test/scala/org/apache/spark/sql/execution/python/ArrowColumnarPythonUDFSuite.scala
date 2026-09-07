@@ -137,6 +137,38 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
     }
   }
 
+  test("Arrow-backed source: legacy CHAR/VARCHAR output remains unchecked") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(
+        SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "true",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      val charUDF = TestTypedScalarPandasUDF(
+        name = "legacy_arrow_char_udf", returnType = CharType(4))
+      val varcharUDF = TestTypedScalarPandasUDF(
+        name = "legacy_arrow_varchar_udf", returnType = VarcharType(3))
+      registerTestUDF(charUDF, spark)
+      registerTestUDF(varcharUDF, spark)
+
+      val result = readArrowSource(numRows = 10).selectExpr(
+        "id", "name", "value", "data",
+        "legacy_arrow_char_udf(id) as udf_id",
+        "legacy_arrow_varchar_udf(name) as udf_name")
+      val arrowExec = collectNodes[ArrowEvalPythonExec](
+        result.queryExecution.executedPlan).head
+      assert(arrowExec.child.supportsColumnar,
+        "ArrowEvalPythonExec should retain its Arrow-backed columnar child")
+
+      val rows = result.select("udf_id", "udf_name").collect()
+      rows.zipWithIndex.foreach { case (row, index) =>
+        assert(row.getString(0) === index.toString)
+        assert(row.getString(1) === s"row_$index")
+      }
+    }
+  }
+
   test("Arrow-backed source: multiple UDF columns") {
     assume(shouldTestPandasUDFs)
     withSQLConf(SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true") {
