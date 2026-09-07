@@ -59,7 +59,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
   }
 
   protected def checkCreatePartitioning(
-      spec: ShuffleSpec,
+      spec: LeafShuffleSpec,
       dist: ClusteredDistribution,
       expected: Partitioning): Unit = {
     val actual = spec.createPartitioning(dist.clustering)
@@ -506,9 +506,37 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
 
     withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
       val spec = reduced.createShuffleSpec(ClusteredDistribution(Seq(a)))
-        .asInstanceOf[KeyedShuffleSpec]
       assert(spec.joinKeyPositions === Some(Seq(0)))
       assert(spec.partitioning.partitionKeys.map(_.row.getInt(0)) === Seq(2020, 2021))
+    }
+  }
+
+  test("SPARK-59256: createShuffleSpec reports no projection when it changes nothing") {
+    val a = $"a".int
+    val b = $"b".int
+    val distribution = ClusteredDistribution(Seq(a, b))
+    val sortedKeys = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 1))
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      // Every position is a cluster key and the keys are already grouped and sorted, so the
+      // projection and the regrouping both rebuild this partitioning. Reporting positions here
+      // would make a consumer insert a `GroupPartitionsExec` that projects nothing.
+      val unchanged = KeyedPartitioning(Seq(a, b), sortedKeys).createShuffleSpec(distribution)
+      assert(unchanged.joinKeyPositions === None)
+      assert(unchanged.partitioning == KeyedPartitioning(Seq(a, b), sortedKeys))
+
+      // The same positions, but the keys arrive unsorted, so `toGrouped` reorders them. That is a
+      // different partitioning, and the positions say so. This is why the question is not simply
+      // whether every position was kept.
+      val resorted = KeyedPartitioning(Seq(a, b), sortedKeys.reverse)
+        .createShuffleSpec(distribution)
+      assert(resorted.joinKeyPositions === Some(Seq(0, 1)))
+      assert(resorted.partitioning.partitionKeys.map(_.row.getInt(1)) === Seq(1, 2, 1))
+
+      // And a position that is no cluster key is dropped, which has always been reported.
+      val narrowed = KeyedPartitioning(Seq(a, $"z".int), sortedKeys)
+        .createShuffleSpec(ClusteredDistribution(Seq(a)))
+      assert(narrowed.joinKeyPositions === Some(Seq(0)))
     }
   }
 
@@ -781,13 +809,6 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       SinglePartition
     )
 
-    checkCreatePartitioning(ShuffleSpecCollection(Seq(
-      HashShuffleSpec(HashPartitioning(Seq($"a"), 10), distribution),
-        RangeShuffleSpec(10, distribution))),
-      ClusteredDistribution(Seq($"c", $"d")),
-      HashPartitioning(Seq($"c"), 10)
-    )
-
     // unsupported cases
 
     checkError(
@@ -797,7 +818,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       condition = "UNSUPPORTED_CALL.WITHOUT_SUGGESTION",
       parameters = Map(
         "methodName" -> "createPartitioning$",
-        "className" -> "org.apache.spark.sql.catalyst.plans.physical.ShuffleSpec"))
+        "className" -> "org.apache.spark.sql.catalyst.plans.physical.LeafShuffleSpec"))
   }
 
   test("compatibility: ShufflePartitionIdPassThroughSpec on both sides") {
@@ -874,18 +895,14 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
 
     withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
       val spec = collection.createShuffleSpec(ClusteredDistribution(Seq(id, t1)))
-        .asInstanceOf[ShuffleSpecCollection]
 
       // The disagreement is kept rather than resolved here. Every member has to stay for
       // `isCompatibleWith`, which answers for any of them, and the collection cannot know which one
-      // the other side matched. `EnsureRequirements` resolves that and asks the member, not the
-      // collection.
-      assert(spec.specs.map(_.numPartitions).toSet === Set(3, 2))
+      // the other side matched. `EnsureRequirements` resolves that and asks the member, so the
+      // collection has no partition count of its own to read.
+      val memberPartitions = spec.flatten.map(_.numPartitions)
+      assert(memberPartitions.toSet === Set(3, 2))
       assert(spec.isCompatibleWith(spec), "every member stays available for matching")
-
-      // So asking the collection for a single answer is the caller's mistake, and it says so.
-      val e = intercept[IllegalArgumentException](spec.createPartitioning(Seq(id, t1)))
-      assert(e.getMessage.contains("expected all specs in the collection to have the same number"))
     }
   }
 
@@ -905,5 +922,48 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     assert(reducedDataTypes !== Seq(named), "test setup: the reducer names a field to erase")
     assert(reducedKeys.map(_.dataTypes).distinct === Seq(reducedDataTypes),
       "the reported types are the ones the keys hold")
+  }
+
+  test("SPARK-59256: a single-partition side needs every member of a collection to be one") {
+    val id = AttributeReference("id", IntegerType)()
+    val t1 = AttributeReference("t1", IntegerType)()
+    val t2 = AttributeReference("t2", IntegerType)()
+    // Clustering on (id, t1) again. The first member matches `id` only and collapses to one
+    // partition, the second projects onto both positions and keeps three. The members disagree, so
+    // no single answer holds for whichever one the plan settles on.
+    val keys = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(1, 3))
+    val collection = PartitioningCollection.fromPartitionings(Seq(
+      KeyedPartitioning(Seq(id, t2), keys),
+      KeyedPartitioning(Seq(id, t1), keys)))
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val spec = collection.createShuffleSpec(ClusteredDistribution(Seq(id, t1)))
+      val memberPartitions = spec.flatten.map(_.numPartitions)
+      // Ordered, not just as a set: the whole point is that the head is the wrong one to read.
+      assert(memberPartitions === Seq(1, 3))
+
+      // Reading the head's count answers one partition and claims a co-partitioning that does not
+      // hold. Only this direction is asserted: `KeyedShuffleSpec` has no
+      // `SinglePartitionShuffleSpec` case at all, so the reverse is false whatever the member
+      // counts are. That asymmetry is pre-existing and is not what this change is about.
+      assert(!SinglePartitionShuffleSpec.isCompatibleWith(spec))
+    }
+  }
+
+  test("SPARK-59256: an empty collection is rejected at construction, not at the first read") {
+    // `numPartitions` carried this `require` and threw the same way, but only once something asked.
+    // `flatten` would answer `Nil` instead, and the ranking's `max` over it throws a worse message.
+    val e = intercept[IllegalArgumentException](ShuffleSpecCollection(Nil))
+    assert(e.getMessage.contains("expected specs to be non-empty"))
+  }
+
+  test("SPARK-59256: flattening reaches the members of a nested collection") {
+    val distribution = ClusteredDistribution(Seq($"a", $"b"))
+    val buried = HashShuffleSpec(HashPartitioning(Seq($"a"), 10), distribution)
+    val direct = HashShuffleSpec(HashPartitioning(Seq($"b"), 10), distribution)
+    // A `PartitioningCollection` can hold another one, so a spec collection can nest too.
+    val collection = ShuffleSpecCollection(Seq(ShuffleSpecCollection(Seq(buried)), direct))
+
+    assert(collection.flatten === Seq(buried, direct))
   }
 }

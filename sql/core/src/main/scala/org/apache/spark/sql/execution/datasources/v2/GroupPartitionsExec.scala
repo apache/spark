@@ -109,10 +109,10 @@ case class GroupPartitionsExec(
                   assert(projectedExpressions.length == exprs.length)
                   projectedExpressions.zip(exprs).map {
                     case (expr, Some(KeyReducer(_, reduced))) =>
-                      // `reduced` was stored from the single spec that `createKeyedShuffleSpec`
-                      // picked (`collectFirst`); re-target it at this `KeyedPartitioning`'s own
-                      // key attribute so that every `KeyedPartitioning` in a collection keeps its
-                      // own.
+                      // `reduced` came from the one member `checkKeyGroupCompatible` paired
+                      // this side on, which need not be the member being rewritten. The keys are
+                      // reduced once, from the shared key rows, so `reduced` describes them
+                      // whichever member this is, and only the key attribute is re-targeted.
                       reduced.withReference(expr.references.head)
                     case (expr, None) => expr
                   }

@@ -1079,11 +1079,11 @@ class KeyGroupedPartitioningSuite
 
   test("SPARK-59045: reduced expression is retargeted per KeyedPartitioning") {
     // A chained SPJ's output partitioning reports one `KeyedPartitioning` per join side, but the
-    // reduced expression is derived from the single spec that `createKeyedShuffleSpec` picks
-    // (`collectFirst`). Re-targeting it at each `KeyedPartitioning`'s own key attribute keeps the
-    // other sides' partitionings intact - otherwise a GROUP BY on the other side's key no longer
-    // sees a partitioning on it and the query shuffles (0 shuffles on base and here, 1 if the
-    // use-site re-targeting is dropped).
+    // reduced expression is derived from the one member `checkKeyGroupCompatible` paired this side
+    // on. Re-targeting it at each `KeyedPartitioning`'s own key attribute keeps the other sides'
+    // partitionings intact - otherwise a GROUP BY on the other side's key no longer sees a
+    // partitioning on it and the query shuffles (0 shuffles on base and here, 1 if the use-site
+    // re-targeting is dropped).
     val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
     createTable("b16", cols, Array(bucket(16, "id")))
     createTable("b8", cols, Array(bucket(8, "id")))
@@ -3809,11 +3809,11 @@ class KeyGroupedPartitioningSuite
     // `arrive_time` is selected twice under two aliases, so the projected partitioning is a
     // `PartitioningCollection` whose members cover different numbers of the join keys: one covers
     // (id, t1), another only id. Each member's spec is projected onto its own subset, so the specs
-    // disagree on `numPartitions`, and asking the collection for one partitioning fails with
-    // "expected all specs in the collection to have the same number of partitions".
+    // disagree on `numPartitions`, and there is no one partitioning the collection could answer
+    // for. Since SPARK-59256 it cannot be asked for one at all.
     //
-    // `EnsureRequirements` now resolves the member the two sides agreed on before it asks, so the
-    // keyed side is grouped on both join keys and the shuffled side is laid out on those same keys.
+    // `EnsureRequirements` resolves the member the two sides agreed on before it asks, so the
+    // shuffled side is laid out on the keys the keyed side actually reports.
     val items_partitions = Array(identity("id"), identity("arrive_time"))
     createTable(items, itemsColumns, items_partitions)
 
@@ -3842,10 +3842,16 @@ class KeyGroupedPartitioningSuite
            |JOIN testcat.ns.$purchases p ON i.id = p.item_id AND i.t1 = p.time
            |""".stripMargin)
       val plan = df.queryExecution.executedPlan
-      val positions = collectAllGroupPartitions(plan).flatMap(_.joinKeyPositions)
-      assert(positions === Seq(Seq(0, 1)),
-        "the keyed side must be grouped on both join keys, the finest granularity available")
-      assert(collectAllShuffles(plan).size == 1, "only the unpartitioned side shuffles")
+      // The keyed side needs no grouping node: the member covering both join keys is already the
+      // scan's layout. What pins the choice is where the other side lands - that member has one
+      // partition per (id, arrive_time) pair, four of them, while the `id`-only member would put
+      // the shuffle on the three distinct ids.
+      assert(collectAllGroupPartitions(plan).isEmpty,
+        "the member covering both join keys is already the scan's layout")
+      val shuffles = collectAllShuffles(plan)
+      assert(shuffles.size == 1, "only the unpartitioned side shuffles")
+      assert(shuffles.map(_.outputPartitioning.numPartitions) === Seq(4),
+        "the shuffled side must land on the member covering both join keys")
       checkAnswer(df, Seq(
         Row(1, java.sql.Timestamp.valueOf("2020-01-01 00:00:00"),
           java.sql.Timestamp.valueOf("2020-01-01 00:00:00"), 40.0, 42.0),
