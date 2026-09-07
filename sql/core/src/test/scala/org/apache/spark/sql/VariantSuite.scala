@@ -776,6 +776,12 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
       sql("SELECT to_json(variant_pick(parse_json('{\"a\": 1}'), '$'))"),
       rows("""{"a":1}"""))
 
+    // The String* DataFrame-API overload compiles each path to a literal.
+    val df = Seq("""{"a": 1, "b": 2, "c": 3}""").toDF("json")
+    checkAnswer(
+      df.select(to_json(variant_pick(parse_json(col("json")), "$.a", "$.c")).alias("r")),
+      rows("""{"a":1,"c":3}"""))
+
     // A NULL path is skipped; a fully-missing projection yields an empty container.
     checkAnswer(
       sql("SELECT to_json(variant_pick(parse_json('{\"a\": 1, \"b\": 2}'), NULL, '$.a'))"),
@@ -813,18 +819,35 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
     Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
         val df = Seq(
-          ("""{"a": 1, "b": 2, "c": 3}""", "$.c"),
-          ("""{"a": 1, "b": 2}""", "$.b"),
-          (null, "$.a")
-        ).toDF("json", "path")
+          ("""{"a": 1, "b": 2, "c": 3}""", "$.c", "$.a"),
+          ("""{"a": 1, "b": 2}""", "$.b", "$.b"),
+          (null, "$.a", "$.a")
+        ).toDF("json", "p1", "p2")
         val v = parse_json(col("json"))
-        // A foldable literal path combined with a dynamic column path.
-        val out = df.select(to_json(variant_pick(v, lit("$.a"), col("path"))).alias("r"))
-        checkAnswer(out, rows("""{"a":1,"c":3}""", """{"a":1,"b":2}""", null))
+        // Dynamic (non-foldable) column paths, collected per row; row 2 has a duplicate path.
+        val out = df.select(to_json(variant_pick(v, col("p1"), col("p2"))).alias("r"))
+        checkAnswer(out, rows("""{"a":1,"c":3}""", """{"b":2}""", null))
+      }
+    }
+  }
 
-        // String-path overload of the DataFrame API.
-        val out2 = df.select(to_json(variant_pick(v, "$.a")).alias("r"))
-        checkAnswer(out2, rows("""{"a":1}""", """{"a":1}""", null))
+  test("variant_pick with a mix of literal and non-literal paths") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+    Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+        val df = Seq(
+          ("""{"a": 1, "b": 2, "c": 3}""", "$.b", "$.c"),
+          ("""{"a": 1, "b": 2, "c": 3}""", "$.b", null)
+        ).toDF("json", "p1", "p2")
+        val v = parse_json(col("json"))
+        // One literal path followed by two dynamic column paths; the second is NULL in row 2.
+        checkAnswer(
+          df.select(to_json(variant_pick(v, lit("$.a"), col("p1"), col("p2"))).alias("r")),
+          rows("""{"a":1,"b":2,"c":3}""", """{"a":1,"b":2}"""))
+        // A dynamic column path followed by two literal paths; the dynamic is NULL in row 2.
+        checkAnswer(
+          df.select(to_json(variant_pick(v, col("p2"), lit("$.a"), lit("$.b"))).alias("r")),
+          rows("""{"a":1,"b":2,"c":3}""", """{"a":1,"b":2}"""))
       }
     }
   }

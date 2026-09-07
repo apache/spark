@@ -2170,15 +2170,17 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       parseJson("null"))
 
     // Type mismatch matches nothing, but the top-level shape is preserved (object -> {}, array
-    // -> []); descending into a scalar drops the parent.
+    // -> []); descending into a scalar, or into a container of the wrong kind, drops the parent.
     checkPick("[1, 2, 3]", Seq("$.a"), "[]")
     checkPick("""{"a": 1}""", Seq("$[0]"), "{}")
     checkPick("""{"a": 1}""", Seq("$.a.b"), "{}")
+    checkPick("""{"a": [1, 2]}""", Seq("$.a.b"), "{}")
+    checkPick("""{"a": {"b": 1}}""", Seq("$.a[0]"), "{}")
 
-    // Paths disagreeing on the container type build a node holding both maps; only the one matching
-    // the actual value is used (object value -> object key, array value -> index).
+    // Both-maps node uses only the matching branch.
     checkPick("""{"a": 1, "b": 2}""", Seq("$.a", "$[0]"), """{"a":1}""")
     checkPick("[10, 20, 30]", Seq("$.a", "$[0]"), "[10]")
+    checkPick("""{"a": {"b": 1}}""", Seq("$.a.b", "$.a[0]", "$.a"), """{"a":{"b":1}}""")
 
     // Duplicate paths are deduplicated, and bracket notation resolves like dot notation.
     checkPick("""{"a": 1, "b": 2}""", Seq("$.a", "$.a"), """{"a":1}""")
@@ -2191,6 +2193,77 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       """{"日本語": {"x": 1, "y": 2}}""", Seq("$['日本語'].x"), """{"日本語":{"x":1}}""")
     checkPick("""{"ключ": [10, 20, 30]}""", Seq("$.ключ[1]"), """{"ключ":[20]}""")
     // scalastyle:on nonascii
+
+    // Larger object trees built from several paths.
+    // Many sibling keys unioned under one parent.
+    checkPick(
+      """{"a": {"b": 1, "c": 2, "d": 3, "e": 4, "f": 5, "g": 6, "h": 7}}""",
+      Seq("$.a.b", "$.a.c", "$.a.e", "$.a.g", "$.a.h"),
+      """{"a":{"b":1,"c":2,"e":4,"g":6,"h":7}}""")
+    // Several top-level parents, each keeping a different subset of children.
+    checkPick(
+      """{"a": {"x": 1, "y": 2}, "b": {"p": 3, "q": 4}, "c": 5, "d": {"m": 6, "n": 7}}""",
+      Seq("$.a.x", "$.b.p", "$.b.q", "$.c", "$.d.m"),
+      """{"a":{"x":1},"b":{"p":3,"q":4},"c":5,"d":{"m":6}}""")
+    // A broader path subsumes a narrower sibling while other branches are kept partially.
+    checkPick(
+      """{"a": {"b": {"c": 1, "d": 2}, "e": 3}, "f": {"g": 4, "h": 5}}""",
+      Seq("$.a.b.c", "$.a.b", "$.a.e", "$.f.g"),
+      """{"a":{"b":{"c":1,"d":2},"e":3},"f":{"g":4}}""")
+    // Deep branch: multiple paths share a long prefix; an unpicked sibling is dropped.
+    checkPick(
+      """{"a": {"b": {"c": {"d": 1, "e": 2}, "f": 3, "g": 4}}}""",
+      Seq("$.a.b.c.d", "$.a.b.c.e", "$.a.b.f"),
+      """{"a":{"b":{"c":{"d":1,"e":2},"f":3}}}""")
+    // A picked field that matches nothing is rewound.
+    checkPick(
+      """{"a": 1, "b": {"m": 1}, "c": 2}""",
+      Seq("$.a", "$.b.x", "$.c"),
+      """{"a":1,"c":2}""")
+
+    // Larger array trees.
+    // Indices given out of order are compacted into original array order, not path order.
+    checkPick(
+      "[0, 10, 20, 30, 40, 50, 60, 70]",
+      Seq("$[5]", "$[0]", "$[7]", "$[3]"),
+      "[0,30,50,70]")
+    // A picked element that matches nothing is dropped; survivors compact around the hole.
+    checkPick(
+      """[{"x": 1}, {"y": 2}, {"z": 3}]""",
+      Seq("$[0].x", "$[1].w", "$[2].z"),
+      """[{"x":1},{"z":3}]""")
+    // Nested arrays: picks descend into multiple sub-arrays, compacting at each level.
+    checkPick(
+      "[[10, 20], [30, 40], [50, 60]]",
+      Seq("$[0][1]", "$[2][0]"),
+      "[[20],[50]]")
+    // A path ending at an array index keeps the whole element; unpicked siblings drop.
+    checkPick(
+      """[{"x": 1, "y": 2}, {"z": 3}]""",
+      Seq("$[0]"),
+      """[{"x":1,"y":2}]""")
+
+    // Mixed object/array variant with paths at different depths.
+    checkPick(
+      """{"a": [{"p": 1, "q": 2, "r": 3}, {"p": 4, "q": 5, "r": 6}], "b": {"s": 7, "t": 8}}""",
+      Seq("$.a[0].p", "$.a[0].q", "$.a[1].r", "$.b.s"),
+      """{"a":[{"p":1,"q":2},{"r":6}],"b":{"s":7}}""")
+
+    // A large variant with many paths at once.
+    checkPick(
+      """{"a": {"b": 1, "c": 2, "d": 3},
+         "e": [{"f": 10, "g": 20}, {"f": 30, "g": 40}, {"f": 50}],
+         "h": {"i": {"j": 5, "k": 6}}, "l": 7}""",
+      Seq("$.a.b", "$.a.c", "$.e[0].f", "$.e[2]", "$.h.i.j", "$.h.i", "$.l", "$.x"),
+      """{"a":{"b":1,"c":2},"e":[{"f":10},{"f":50}],"h":{"i":{"j":5,"k":6}},"l":7}""")
+
+    // Deep, branchy trie exercising many branches at once.
+    checkPick(
+      """{"a": {"b": [{"c": 1, "d": [10, 11, 12], "e": {"f": 1, "g": 2}}, {"c": 2},
+         {"e": {"f": 5}}], "h": {"i": {"j": 9}, "l": 8}}}""",
+      Seq("$.a.b[0].c", "$.a.b[0].d[1]", "$.a.b[0].e.f", "$.a.b[2].e", "$.a.b[1].z", "$.a.b.x",
+        "$.a.h.i", "$.a.h.i.j"),
+      """{"a":{"b":[{"c":1,"d":[11],"e":{"f":1}},{"e":{"f":5}}],"h":{"i":{"j":9}}}}""")
 
     // A NULL path is skipped; the remaining paths still apply.
     checkPick("""{"a": 1, "b": 2}""", Seq(null, "$.a"), """{"a":1}""")

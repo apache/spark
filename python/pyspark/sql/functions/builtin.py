@@ -23588,6 +23588,8 @@ def variant_pick(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
     [Row(r='{"a":{"b":1}}')]
     >>> df.select(to_json(variant_pick(v, "$.missing")).alias("r")).collect()
     [Row(r='{}')]
+    >>> df.select(to_json(variant_pick(parse_json(lit('[1, 2, 3]')), "$[9]")).alias("r")).collect()
+    [Row(r='[]')]
     >>> df.select(variant_pick(lit(None), "$.a").alias("r")).collect()
     [Row(r=None)]
     """
