@@ -1906,6 +1906,17 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
   <td>4.2.0</td>
 </tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pvc.resizeMaxStorage</code></td>
+  <td><code>Long.MaxValue</code></td>
+  <td>
+    The upper bound of the PVC storage request that the resize plugin can grow to.
+    By default, it is <code>Long.MaxValue</code>, which means no upper bound.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.4.0</td>
+</tr>
 </table>
 
 #### Pod template properties
