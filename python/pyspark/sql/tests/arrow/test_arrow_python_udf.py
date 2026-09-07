@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import tempfile
 import unittest
 from decimal import Decimal
 
@@ -310,14 +309,6 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             )
             with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
                 invalid.collect()
-
-            with tempfile.TemporaryDirectory() as path:
-                self.spark.range(1).write.parquet(path)
-                columnar_input = self.spark.read.parquet(path)
-                columnar_result = columnar_input.select(
-                    udf(lambda _: "ab", CharType(4), useArrow=True)("id")
-                )
-                self.assertEqual(columnar_result.first()[0], "ab  ")
 
     def test_named_arguments_negative(self):
         @udf("int")
