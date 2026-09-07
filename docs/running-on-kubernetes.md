@@ -1876,6 +1876,17 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>4.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.executor.resizeMaxMemory</code></td>
+  <td><code>Long.MaxValue</code></td>
+  <td>
+    The upper bound of the executor container memory limit that the resize plugin can grow to.
+    By default, it is <code>Long.MaxValue</code>, which means no upper bound.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.pvc.resizeInterval</code></td>
   <td><code>5min</code></td>
   <td>
