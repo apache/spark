@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.collation
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import java.util.Locale
+
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -25,6 +27,7 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAg
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class CollationAggregationSuite
@@ -524,6 +527,39 @@ class CollationAggregationSuite
     }
   }
 
+  // `pandas_mode` (backing pandas-on-Spark Series.mode / DataFrame.mode) is an internal
+  // expression, so it is invoked here via `Column.internalFn` rather than SQL. Its second
+  // argument is `ignoreNA` (true = drop NULLs, mirroring pandas `dropna`). It returns an
+  // array of all the most frequent values; the array order is unspecified, so the helpers
+  // below normalize before asserting.
+
+  private def pandasMode(df: DataFrame, colName: String, ignoreNA: Boolean): Seq[AnyRef] = {
+    df.select(Column.internalFn("pandas_mode", col(colName), lit(ignoreNA)))
+      .collect().head.getSeq[AnyRef](0)
+  }
+
+  // Case-insensitive, order-insensitive view of a string-valued mode result.
+  private def normalizedStringModes(modes: Seq[AnyRef]): Set[String] =
+    modes.map {
+      case null => null
+      case s: String => s.toLowerCase(Locale.ROOT)
+    }.toSet
+
+  test("SPARK-48701: pandas_mode is collation-aware for non-binary collations") {
+    Seq("UTF8_LCASE", "UNICODE_CI").foreach { collation =>
+      withTable("t") {
+        sql(s"CREATE TABLE t (c STRING COLLATE $collation) USING parquet")
+        // Spread across partitions to also exercise the partial-buffer merge path.
+        sql("INSERT INTO t VALUES ('a'), ('a'), ('b'), ('B')")
+        val modes = pandasMode(spark.table("t").repartition(4), "c", ignoreNA = true)
+        // 'b' and 'B' are collation-equal, so they fold into one group of 2 that ties
+        // 'a' (also 2). Both are modes. Without folding 'a' (2) would win alone.
+        assert(modes.length == 2, s"$collation: expected two modes, got $modes")
+        assert(normalizedStringModes(modes) == Set("a", "b"))
+      }
+    }
+  }
+
   test("collect_set on UTF8_BINARY strings is unchanged (case-sensitive)") {
     val tblName = "collect_set_binary"
     withTable(tblName) {
@@ -535,6 +571,85 @@ class CollationAggregationSuite
       checkAnswer(
         sql(s"SELECT array_sort(collect_set(c1)) FROM $tblName"),
         Seq(Row(Seq("FOO", "bar", "foo"))))
+    }
+  }
+
+  test("SPARK-48701: pandas_mode keeps binary collation unchanged") {
+    withTable("t") {
+      // Default UTF8_BINARY: 'b' and 'B' are distinct, so 'a' (2) is the sole mode.
+      sql("CREATE TABLE t (c STRING) USING parquet")
+      sql("INSERT INTO t VALUES ('a'), ('a'), ('b'), ('B')")
+      val modes = pandasMode(spark.table("t").repartition(4), "c", ignoreNA = true)
+      assert(modes == Seq("a"))
+    }
+  }
+
+  test("SPARK-48701: pandas_mode collation-aware with ignoreNA controlling NULLs") {
+    withTable("t") {
+      sql("CREATE TABLE t (c STRING COLLATE UTF8_LCASE) USING parquet")
+      sql("INSERT INTO t VALUES ('a'), ('b'), ('B'), (null), (null), (null)")
+      val df = spark.table("t").repartition(4)
+
+      // ignoreNA = true: NULLs dropped. 'b'/'B' fold to 2, outvoting 'a' (1).
+      val dropped = pandasMode(df, "c", ignoreNA = true)
+      assert(dropped.length == 1)
+      assert(normalizedStringModes(dropped) == Set("b"))
+
+      // ignoreNA = false: the null key is preserved as its own group (count 3) and wins.
+      // This also exercises the null guard in getCollationAwareBuffer's folding.
+      val kept = pandasMode(df, "c", ignoreNA = false)
+      assert(kept == Seq(null))
+    }
+  }
+
+  test("SPARK-48701: pandas_mode collation-aware for collated string nested in struct") {
+    withTable("t") {
+      sql("CREATE TABLE t (c STRUCT<f: STRING COLLATE UTF8_LCASE>) USING parquet")
+      sql(
+        """INSERT INTO t VALUES (named_struct('f', 'a')), (named_struct('f', 'a')),
+          |  (named_struct('f', 'b')), (named_struct('f', 'B'))""".stripMargin)
+      val modes = pandasMode(spark.table("t").repartition(4), "c", ignoreNA = true)
+        .map(_.asInstanceOf[Row])
+      // Same fold as the top-level case, applied to the collated struct field.
+      assert(modes.length == 2)
+      assert(modes.map(_.getString(0).toLowerCase(Locale.ROOT)).toSet == Set("a", "b"))
+    }
+  }
+
+  // `mode` (the public aggregate) is already collation-aware; these tests guard that
+  // behavior, which currently has no coverage (the original tests were removed with
+  // CollationSQLExpressionsSuite by SPARK-51067). Unlike pandas_mode, `mode` returns a
+  // single value and shares the same eval-time folding via ModeCollationAware.
+
+  test("SPARK-47353: mode is collation-aware for non-binary collations") {
+    // Buffer counts a=3, b=2, B=2. Under a case-insensitive collation 'b' and 'B' fold
+    // into one group of 4 that outvotes 'a' (3); under binary collation 'a' (3) wins.
+    Seq(
+      ("UTF8_BINARY", "a"),
+      ("UTF8_LCASE", "b"),
+      ("UNICODE", "a"),
+      ("UNICODE_CI", "b")).foreach { case (collation, expected) =>
+      withTable("t") {
+        sql(s"CREATE TABLE t (c STRING COLLATE $collation) USING parquet")
+        sql("INSERT INTO t VALUES ('a'), ('a'), ('a'), ('b'), ('b'), ('B'), ('B')")
+        val df = sql("SELECT mode(c) AS m FROM t")
+        // The result keeps the input's collated string type.
+        assert(df.schema("m").dataType.sameType(StringType(collation)))
+        // Representative case within a folded group is unspecified; normalize with lower.
+        checkAnswer(df.select(lower(col("m"))), Row(expected))
+      }
+    }
+  }
+
+  test("SPARK-47353: mode is collation-aware for collated string nested in struct") {
+    withTable("t") {
+      sql("CREATE TABLE t (c STRUCT<f: STRING COLLATE UTF8_LCASE>) USING parquet")
+      sql(
+        """INSERT INTO t VALUES (named_struct('f', 'a')), (named_struct('f', 'a')),
+          |  (named_struct('f', 'a')), (named_struct('f', 'b')), (named_struct('f', 'b')),
+          |  (named_struct('f', 'B')), (named_struct('f', 'B'))""".stripMargin)
+      // The collated struct field folds: {b, B} (4) outvotes {a} (3).
+      checkAnswer(sql("SELECT lower(mode(c).f) FROM t"), Row("b"))
     }
   }
 }

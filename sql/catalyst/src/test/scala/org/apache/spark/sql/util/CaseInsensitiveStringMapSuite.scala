@@ -45,6 +45,31 @@ class CaseInsensitiveStringMapSuite extends SparkFunSuite {
     assert(options.values().asScala.toSeq == Seq("valUE"))
   }
 
+  test("collection views are read-only") {
+    def checkMutationBlocked(mutate: CaseInsensitiveStringMap => Any): Unit = {
+      val options = new CaseInsensitiveStringMap(Map("kEy" -> "valUE").asJava)
+
+      intercept[UnsupportedOperationException] {
+        mutate(options)
+      }
+
+      assert(options.get("key") == "valUE")
+      assert(options.asCaseSensitiveMap().asScala == Map("kEy" -> "valUE"))
+    }
+
+    checkMutationBlocked(_.keySet().remove("key"))
+    checkMutationBlocked(_.values().remove("valUE"))
+    checkMutationBlocked(_.entrySet().iterator().next().setValue("newValue"))
+    checkMutationBlocked { options =>
+      val iterator = options.entrySet().iterator()
+      iterator.next()
+      iterator.remove()
+    }
+    checkMutationBlocked { options =>
+      options.replaceAll((_, _) => "newValue")
+    }
+  }
+
   test("getInt") {
     val options = new CaseInsensitiveStringMap(Map("numFOo" -> "1", "foo" -> "bar").asJava)
     assert(options.getInt("numFOO", 10) == 1)
@@ -107,5 +132,9 @@ class CaseInsensitiveStringMapSuite extends SparkFunSuite {
     intercept[UnsupportedOperationException] {
       caseSensitiveMap.put("kEy", "valUE")
     }
+    intercept[UnsupportedOperationException] {
+      caseSensitiveMap.entrySet().iterator().next().setValue("newValue")
+    }
+    assert(caseSensitiveMap.equals(originalMap))
   }
 }
