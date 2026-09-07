@@ -2215,6 +2215,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       """{"a": {"b": {"c": {"d": 1, "e": 2}, "f": 3, "g": 4}}}""",
       Seq("$.a.b.c.d", "$.a.b.c.e", "$.a.b.f"),
       """{"a":{"b":{"c":{"d":1,"e":2},"f":3}}}""")
+    // A path terminating at a genuinely empty container keeps it as-is (not dropped).
+    checkPick("""{"a": {}, "b": 1}""", Seq("$.a"), """{"a":{}}""")
     // A picked field that matches nothing is rewound.
     checkPick(
       """{"a": 1, "b": {"m": 1}, "c": 2}""",

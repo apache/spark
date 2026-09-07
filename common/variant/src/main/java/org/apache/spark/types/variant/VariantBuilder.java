@@ -1029,15 +1029,20 @@ public class VariantBuilder {
     int basicType = value[pos] & BASIC_TYPE_MASK;
     if (root.keepAll || (basicType != OBJECT && basicType != ARRAY)) {
       appendVariantImpl(value, metadata, pos);
-    } else {
-      pickImpl(value, metadata, pos, root);
+    } else if (!pickImpl(value, metadata, pos, root)) {
+      // `pickImpl` writes nothing when it keeps nothing, so the top-level empty object/array (the
+      // preserved shape) is emitted here rather than in the recursion.
+      if (basicType == OBJECT) {
+        finishWritingObject(writePos, new ArrayList<>());
+      } else {
+        finishWritingArray(writePos, new ArrayList<>());
+      }
     }
   }
 
-  // Append the substructures of the value at `pos` selected by `node`, and return whether anything
-  // was appended. A caller drops a field or element whose pick produced nothing by resetting
-  // `writePos`, so unmatched paths (missing keys, out-of-range indices, or type mismatches) leave
-  // no trace. A dictionary key is registered only for a field that is actually kept.
+  // Append the substructures at `pos` selected by `node`, returning whether anything was appended.
+  // It writes bytes if it returns true, so misses and empty sub-containers leave no trace and the
+  // top-level empty object/array comes from `pickImplTopLevel`. A key is registered only if kept.
   private boolean pickImpl(byte[] value, byte[] metadata, int pos, PickNode node) {
     checkIndex(pos, value.length);
     if (node.keepAll) {
@@ -1058,18 +1063,18 @@ public class VariantBuilder {
             PickNode child = node.objectChildren.get(fieldKey);
             if (child != null) {
               int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
-              int fieldStart = writePos;
               int fieldOffset = writePos - start;
               if (pickImpl(value, metadata, dataStart + offset, child)) {
                 fields.add(new FieldEntry(fieldKey, addKey(fieldKey), fieldOffset));
-              } else {
-                writePos = fieldStart;
               }
             }
           }
         }
+        if (fields.isEmpty()) {
+          return false;
+        }
         finishWritingObject(start, fields);
-        return !fields.isEmpty();
+        return true;
       });
     } else if (basicType == ARRAY) {
       return handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) -> {
@@ -1081,18 +1086,18 @@ public class VariantBuilder {
             PickNode child = node.arrayChildren.get(i);
             if (child != null) {
               int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
-              int elementStart = writePos;
               int elementOffset = writePos - start;
               if (pickImpl(value, metadata, dataStart + offset, child)) {
                 offsets.add(elementOffset);
-              } else {
-                writePos = elementStart;
               }
             }
           }
         }
+        if (offsets.isEmpty()) {
+          return false;
+        }
         finishWritingArray(start, offsets);
-        return !offsets.isEmpty();
+        return true;
       });
     } else {
       // The value is a scalar but the node still has segments to follow: nothing matches.
