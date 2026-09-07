@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.DATA_SOURCE_V2_SCAN_RELATION
 import org.apache.spark.sql.connector.read.{SupportsReportOrdering, SupportsReportPartitioning}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, UnknownPartitioning}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils.sequenceToOption
 
@@ -42,45 +41,35 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
     }
   }
 
-  private def partitioning(plan: LogicalPlan) = {
-    val allowKeysSubsetOfPartitionKeys = SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys
-    plan.transformDownWithPruning(
+  private def partitioning(plan: LogicalPlan) = plan.transformDownWithPruning(
       _.containsPattern(DATA_SOURCE_V2_SCAN_RELATION)) {
-      case d @ ExtractV2ScanInfo(relation, scan: SupportsReportPartitioning, _)
-          if d.keyGroupedPartitioning.isEmpty =>
-        val catalystPartitioning = scan.outputPartitioning() match {
-          case kgp: KeyGroupedPartitioning =>
-            val partitioning = sequenceToOption(
-              kgp.keys().map(V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog))
-                .toImmutableArraySeq)
-            if (partitioning.isEmpty) {
-              None
-            } else {
-              val inOutput = partitioning.get.map(p => p.references.subsetOf(d.outputSet))
-              if (inOutput.forall(identity)) {
-                partitioning
-              } else if (inOutput.exists(identity) && allowKeysSubsetOfPartitionKeys) {
-                // Some partition keys were pruned out of the scan output. Keep the full
-                // partitioning when operation keys may be a subset of the partition keys: the scan
-                // projects the unresolvable key positions away when reporting its physical output
-                // partitioning (see DataSourceV2ScanExecBase.outputPartitioning). Keeping the full
-                // list, rather than the resolvable subset, preserves positional alignment with the
-                // partition keys.
-                partitioning
-              } else {
-                None
-              }
-            }
-          case _: UnknownPartitioning => None
-          case p =>
-            logWarning(
-              log"Spark ignores the partitioning ${MDC(CLASS_NAME, p.getClass.getSimpleName)}. " +
-                log"Please use KeyGroupedPartitioning for better performance")
-            None
-        }
+    case d @ ExtractV2ScanInfo(relation, scan: SupportsReportPartitioning, _)
+        if d.keyGroupedPartitioning.isEmpty =>
+      val catalystPartitioning = scan.outputPartitioning() match {
+        case kgp: KeyGroupedPartitioning =>
+          val partitioning = sequenceToOption(
+            kgp.keys().map(V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog))
+              .toImmutableArraySeq)
+          // Keep the partitioning when at least one of its keys is still in the scan output: the
+          // scan projects the pruned key positions away when reporting its physical output
+          // partitioning (see DataSourceV2ScanExecBase.outputPartitioning). When no key survives,
+          // and likewise when the source reported no key at all, there is nothing to report.
+          // Grouping a projection that collapsed distinct keys onto the same key stays gated on
+          // allowKeysSubsetOfPartitionKeys one layer down, in KeyedPartitioning.mayGroupToSatisfy.
+          //
+          // A kept pruned key leaves a dangling attribute on the relation. What keeps that off
+          // `missingInput`, and so past the optimizer's plan-change validation, is the
+          // `DataSourceV2ScanRelation.references` override; see the comment there.
+          partitioning.filter(_.exists(_.references.subsetOf(d.outputSet)))
+        case _: UnknownPartitioning => None
+        case p =>
+          logWarning(
+            log"Spark ignores the partitioning ${MDC(CLASS_NAME, p.getClass.getSimpleName)}. " +
+              log"Please use KeyGroupedPartitioning for better performance")
+          None
+      }
 
-        d.copy(keyGroupedPartitioning = catalystPartitioning)
-    }
+      d.copy(keyGroupedPartitioning = catalystPartitioning)
   }
 
   private def ordering(plan: LogicalPlan) = plan.transformDownWithPruning(

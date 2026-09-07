@@ -343,11 +343,11 @@ case class DataSourceV2ScanRelation(
         output = this.relation.output.map(QueryPlan.normalizeExpressions(_, this.relation.output))
       ),
       output = this.output.map(QueryPlan.normalizeExpressions(_, this.output)),
-      // keyGroupedPartitioning may reference columns pruned out of `output` (kept when operation
-      // keys may be a subset of the partition keys). A pruned key carries no information for plan
-      // comparison, since the physical outputPartitioning projects it away, so drop it before
-      // normalizing; otherwise the dangling attribute's exprId would keep otherwise-equivalent
-      // scans unequal and defeat subplan merging.
+      // keyGroupedPartitioning may reference columns pruned out of `output`, which is kept as long
+      // as any key survives. A pruned key carries no information for plan comparison, since the
+      // physical outputPartitioning projects it away, so drop it before normalizing; otherwise the
+      // dangling attribute's exprId would keep otherwise-equivalent scans unequal and defeat
+      // subplan merging.
       keyGroupedPartitioning = keyGroupedPartitioning.map(
         _.filter(_.references.subsetOf(outputSet))
           .map(QueryPlan.normalizeExpressions(_, output))

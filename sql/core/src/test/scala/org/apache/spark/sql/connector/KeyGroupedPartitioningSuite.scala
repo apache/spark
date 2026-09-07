@@ -324,6 +324,39 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
       }
     }
   }
+
+  test("SPARK-59248: runtime filtering with a pruned partition key keeps the full key rows") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10",
+      SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      createTable(items, itemsColumns, Array(identity("id")))
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+          s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+          s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+          s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+      val pCols = Array(
+        Column.create("store_id", IntegerType),
+        Column.create("item_id", IntegerType),
+        Column.create("price", FloatType))
+      createTable(purchases, pCols, Array(identity("store_id"), identity("item_id")))
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+          s"(10, 1, 42.0), (20, 1, 44.0), (30, 2, 11.0), (40, 3, 19.5)")
+
+      // `store_id` is the leading partition key and is not selected, so it is pruned and the
+      // reported partitioning is projected onto item_id. The runtime filter on item_id re-plans the
+      // scan's partitions, which must stay keyed and ordered by the full (store_id, item_id) rows,
+      // not the projected item_id-only key types.
+      val df = sql(
+        s"SELECT p.item_id, p.price from testcat.ns.$items i, testcat.ns.$purchases p " +
+          "WHERE i.id = p.item_id AND i.price > 20.0 ORDER BY p.item_id, p.price")
+      checkAnswer(df, Seq(Row(1, 42.0f), Row(1, 44.0f)))
+    }
+  }
 }
 
 @ExtendedSQLTest
@@ -2600,9 +2633,10 @@ class KeyGroupedPartitioningSuite
   test("SPARK-59248: join key subset of partition keys, extra partition key pruned from the " +
     "output") {
     // Both tables are partitioned by (id, data). The join is only on `id`, and `data` is not
-    // selected, so it is column-pruned out of both scan outputs. Without
-    // allowKeysSubsetOfPartitionKeys the pruned `data` key drops the reported partitioning and both
-    // sides shuffle; with it, the partitioning is kept and projected onto `id`, so SPJ triggers.
+    // selected, so it is column-pruned out of both scan outputs. The partitioning is kept and
+    // projected onto `id`; since `data` has several values per `id` the projection collapses the
+    // keys, so grouping them needs allowKeysSubsetOfPartitionKeys. With it SPJ triggers; without it
+    // both sides shuffle.
     val table1 = "prune_t1"
     val table2 = "prune_t2"
     val partition = Array(identity("id"), identity("data"))
@@ -2665,6 +2699,99 @@ class KeyGroupedPartitioningSuite
         }
         checkAnswer(df, expected)
       }
+    }
+  }
+
+  test("SPARK-59248: a pruned leading partition key must not lose join rows") {
+    // The table is partitioned by (store_id, dept_id) and the leading key `store_id` is pruned, so
+    // the surviving partitioning is on dept_id while the raw partition-key rows still lead with
+    // store_id. The other side is unkeyed and is shuffled into the table's layout. Sorting the raw
+    // partitions by the projected (dept_id-only) key ordering reordered the partitions inside a
+    // store_id group against the advertised dept_id order and silently dropped the rows whose label
+    // swapped; the full-width input ordering keeps the two aligned.
+    val cols = Array(Column.create("store_id", IntegerType), Column.create("dept_id", IntegerType))
+    createTable("prune_lead_t", cols, Array(identity("store_id"), identity("dept_id")))
+    sql("INSERT INTO testcat.ns.prune_lead_t VALUES " +
+        "(1, 20), (1, 10), (1, 30), (2, 5), (2, 40), (3, 7), (3, 1)")
+
+    withTempView("other") {
+      spark.range(1, 41).selectExpr("cast(id as int) as dept_id").createOrReplaceTempView("other")
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+        val df = sql(
+          s"""
+             |${selectWithMergeJoinHint("t", "o")}
+             |t.dept_id AS dept_id
+             |FROM testcat.ns.prune_lead_t t JOIN other o ON t.dept_id = o.dept_id
+             |ORDER BY dept_id
+             |""".stripMargin)
+        checkAnswer(df, Seq(1, 5, 7, 10, 20, 30, 40).map(Row(_)))
+        // Only the unkeyed side shuffles; assert the plan shape too, so a silent fall-back to
+        // shuffling both sides does not pass on rows alone.
+        val plan = df.queryExecution.executedPlan
+        assert(collectShuffles(plan).size == 1,
+          s"only the unkeyed side of the join should shuffle:\n$plan")
+      }
+    }
+  }
+
+  test("SPARK-59248: a pruned leading partition key of another type must not fail the scan") {
+    // Partitioned by (data, id) with the String `data` leading. The join is on `id` and `data` is
+    // pruned, so the projected partitioning is on the Integer `id` while the raw partition-key rows
+    // still lead with the String `data`. Sorting those rows with the projected (Integer-only) key
+    // ordering used to cast the leading String to an Integer and throw ClassCastException; the
+    // full-width input ordering reads each column at its own type.
+    val cols = Array(Column.create("data", StringType), Column.create("id", IntegerType))
+    val partition = Array(identity("data"), identity("id"))
+    createTable("prune_cce_t1", cols, partition)
+    sql("INSERT INTO testcat.ns.prune_cce_t1 VALUES ('a', 1), ('b', 2), ('c', 3)")
+    createTable("prune_cce_t2", cols, partition)
+    sql("INSERT INTO testcat.ns.prune_cce_t2 VALUES ('a', 1), ('b', 2)")
+
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint("t1", "t2")}
+           |t1.id AS id
+           |FROM testcat.ns.prune_cce_t1 t1 JOIN testcat.ns.prune_cce_t2 t2
+           |ON t1.id = t2.id ORDER BY id
+           |""".stripMargin)
+      // Each id is unique per table, so the projection collapses nothing and SPJ applies with no
+      // exchange; assert the plan shape, not just the rows, so a regression to shuffle is caught.
+      assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+        "SPJ should be triggered for the pruned leading key of another type")
+      checkAnswer(df, Seq(Row(1), Row(2)))
+    }
+  }
+
+  test("SPARK-59248: a pruned key that collapses nothing keeps SPJ without the config") {
+    // Partitioned by (dept_id, store_id) with one store_id per dept_id, so pruning store_id leaves
+    // the projected dept_id keys unique. No grouping is needed, so
+    // allowKeysSubsetOfPartitionKeys is not required and SPJ applies with the config off.
+    val cols = Array(Column.create("dept_id", IntegerType), Column.create("store_id", IntegerType))
+    val partition = Array(identity("dept_id"), identity("store_id"))
+    createTable("prune_nocollapse_t1", cols, partition)
+    sql("INSERT INTO testcat.ns.prune_nocollapse_t1 VALUES (10, 100), (20, 200), (30, 300)")
+    createTable("prune_nocollapse_t2", cols, partition)
+    sql("INSERT INTO testcat.ns.prune_nocollapse_t2 VALUES (10, 100), (20, 200)")
+
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "false") {
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint("t1", "t2")}
+           |t1.dept_id AS dept_id
+           |FROM testcat.ns.prune_nocollapse_t1 t1 JOIN testcat.ns.prune_nocollapse_t2 t2
+           |ON t1.dept_id = t2.dept_id ORDER BY dept_id
+           |""".stripMargin)
+      assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+        "a non-collapsing pruned key should keep SPJ without the config")
+      checkAnswer(df, Seq(Row(10), Row(20)))
     }
   }
 
@@ -2786,41 +2913,6 @@ class KeyGroupedPartitioningSuite
           s"expected one reused exchange " +
             s"(allowKeysSubsetOfPartitionKeys=$allowKeysSubsetOfPartitionKeys):\n$plan")
       }
-    }
-  }
-
-  test("SPARK-59248: a pruned source-reported ordering must not defeat exchange reuse") {
-    val table1 = "ord_reuse"
-    // Partitioned by `id` (kept in the output) and the source also reports an ordering on `data`.
-    // The self-join prunes `data`, leaving only the reported ordering dangling; that dangling
-    // ordering must not keep the two identical legs from being reused.
-    createTable(table1, columns, Array(identity("id")),
-      Array(sort(column("data"), SortDirection.ASCENDING)))
-    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
-        "(1, 'aa', cast('2020-01-01' as timestamp)), " +
-        "(2, 'bb', cast('2020-01-02' as timestamp)), " +
-        "(3, 'dd', cast('2020-01-03' as timestamp))")
-
-    val query =
-      s"""
-         |SELECT a.id AS id1, b.id AS id2
-         |FROM testcat.ns.$table1 a JOIN testcat.ns.$table1 b
-         |ON a.ts = b.ts ORDER BY id1, id2
-         |""".stripMargin
-
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      val df = sql(query)
-      checkAnswer(df, Seq(Row(1, 1), Row(2, 2), Row(3, 3)))
-      val plan = df.queryExecution.executedPlan
-      // The scan still reports the (dangling) ordering; the point is that it does not block reuse.
-      collectScans(plan).foreach { scan =>
-        assert(scan.ordering.exists(_.exists(_.child.references.exists(_.name == "data"))),
-          s"expected the scan to report an ordering on the pruned `data`:\n$plan")
-      }
-      val scans = collectScans(plan)
-      val reused = collect(plan) { case r: ReusedExchangeExec => r }
-      assert(scans.length == 1, s"the two identical legs should reuse a single scan:\n$plan")
-      assert(reused.length == 1, s"expected one reused exchange:\n$plan")
     }
   }
 

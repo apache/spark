@@ -75,8 +75,8 @@ case class BatchScanExec(
 
   /**
    * The reported partitioning keys restricted to those still present in `output`. A key may
-   * reference a column pruned out of the scan (kept when operation keys may be a subset of the
-   * partition keys). Such a dangling key carries no information, since the physical
+   * reference a column pruned out of the scan, which is kept as long as any key survives (see
+   * V2ScanPartitioningAndOrdering). Such a dangling key carries no information, since the physical
    * outputPartitioning projects it away, so `doCanonicalize`, `equals` and `hashCode` all use
    * this view to stay consistent about ignoring it.
    */
@@ -93,7 +93,7 @@ case class BatchScanExec(
       runtimeFilters,
       table,
       output,
-      outputPartitioning,
+      reportedKeyedPartitioning,
       inputPartitions)
 
   override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
