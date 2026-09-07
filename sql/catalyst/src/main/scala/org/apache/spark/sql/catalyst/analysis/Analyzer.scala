@@ -166,6 +166,10 @@ case class AnalysisContext(
     //    lookup a temporary function. And export to the view metadata.
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
+    // LinkedHashSet keeps insertion order so the recorded names (and any error naming them) are
+    // deterministic when more than one variable is read via an IDENTIFIER clause.
+    referredTempVariableNamesUnderIdentifier: mutable.Set[Seq[String]] =
+      mutable.LinkedHashSet.empty,
     outerPlan: Option[LogicalPlan] = None,
     collation: Option[String] = None,
 
@@ -257,6 +261,9 @@ object AnalysisContext {
       referredTempViewNames = viewDesc.viewReferredTempViewNames,
       referredTempFunctionNames = mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
       referredTempVariableNames = viewDesc.viewReferredTempVariableNames,
+      // A nested view records its own IDENTIFIER clause variables in its own metadata, so they must
+      // not be attributed to the object whose creation is driving this analysis.
+      referredTempVariableNamesUnderIdentifier = mutable.LinkedHashSet.empty,
       collation = viewDesc.collation)
     context.setSinglePassResolverBridgeState(originContext.getSinglePassResolverBridgeState)
     set(context)
@@ -270,6 +277,8 @@ object AnalysisContext {
       resolutionPathEntries = function.functionStoredResolutionPath
         .map(CatalogManager.deserializePathEntriesOrFail(
           _, "SQL function", function.name.unquotedString)),
+      // See the same reset in `withAnalysisContext(viewDesc)`.
+      referredTempVariableNamesUnderIdentifier = mutable.LinkedHashSet.empty,
       collation = function.collation)
     set(context)
     try f finally { set(originContext) }

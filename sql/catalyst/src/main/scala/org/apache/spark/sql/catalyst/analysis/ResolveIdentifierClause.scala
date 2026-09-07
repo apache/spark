@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Expression, SubqueryExpression, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateView, LogicalPlan, V2WriteCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, CreateView, LogicalPlan, V2WriteCommand}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -44,7 +44,9 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
           apply0(createView)
         } else {
           val referredTempVars = new mutable.ArrayBuffer[Seq[String]]
-          val analyzedChild = apply0(createView.child)
+          // The target-name identifier (child) is not part of the view definition, so a variable
+          // used only to compute it must not be recorded as a variable the view refers to.
+          val analyzedChild = apply0(createView.child, recordUnderIdentifier = false)
           val analyzedQuery = apply0(createView.query, Some(referredTempVars))
           if (referredTempVars.nonEmpty) {
             throw QueryCompilationErrors.notAllowedToCreatePermanentViewByReferencingTempVarError(
@@ -54,19 +56,30 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
           }
           createView.copy(child = analyzedChild, query = analyzedQuery)
         }
+      // Same as [[CreateView]]: only the query body's IDENTIFIER-clause variables are dependencies
+      // of the view definition. Without this, a variable used only to compute the ALTER target is
+      // recorded and then wrongly rejected by `verifyTemporaryObjectsNotExists`.
+      case alterView: AlterViewAs =>
+        val analyzedChild = apply0(alterView.child, recordUnderIdentifier = false)
+        val analyzedQuery = apply0(alterView.query)
+        alterView.copy(child = analyzedChild, query = analyzedQuery)
       case _ => apply0(plan)
     }
   }
 
   private def apply0(
       plan: LogicalPlan,
-      referredTempVars: Option[mutable.ArrayBuffer[Seq[String]]] = None): LogicalPlan =
+      referredTempVars: Option[mutable.ArrayBuffer[Seq[String]]] = None,
+      recordUnderIdentifier: Boolean = true): LogicalPlan =
     plan.resolveOperatorsUpWithPruning(_.containsAnyPattern(
       UNRESOLVED_IDENTIFIER, PLAN_WITH_UNRESOLVED_IDENTIFIER)) {
       case p: PlanWithUnresolvedIdentifier if p.identifierExpr.resolved && p.childrenResolved =>
 
         if (referredTempVars.isDefined) {
           referredTempVars.get ++= collectTemporaryVariablesInLogicalPlan(p)
+        }
+        if (recordUnderIdentifier) {
+          recordTemporaryVariablesUnderIdentifier(p.identifierExpr)
         }
 
         executor.execute(p.planBuilder.apply(
@@ -76,6 +89,9 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
         if (p.identifierExpr.resolved && p.childrenResolved) {
           if (referredTempVars.isDefined) {
             referredTempVars.get ++= collectTemporaryVariablesInLogicalPlan(p)
+          }
+          if (recordUnderIdentifier) {
+            recordTemporaryVariablesUnderIdentifier(p.identifierExpr)
           }
           executor.execute(p.planBuilder.apply(
             IdentifierResolution.evalIdentifierExpr(p.identifierExpr), p.children)) match {
@@ -95,11 +111,26 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
             if (referredTempVars.isDefined) {
               referredTempVars.get ++= collectTemporaryVariablesInExpressionTree(e)
             }
+            if (recordUnderIdentifier) {
+              recordTemporaryVariablesUnderIdentifier(e.identifierExpr)
+            }
 
             e.exprBuilder.apply(
               IdentifierResolution.evalIdentifierExpr(e.identifierExpr), e.otherExprs)
         }
     }
+
+  /**
+   * Records the temporary variables read by an identifier expression in the [[AnalysisContext]].
+   * Evaluating the identifier expression is the last time these references are visible: the
+   * placeholder is replaced by the plan or expression built from the evaluated name, which no
+   * longer mentions them. Temporary view creation persists the recorded names so that the
+   * variables are still resolvable when the stored view text is analyzed again.
+   */
+  private def recordTemporaryVariablesUnderIdentifier(identifierExpr: Expression): Unit = {
+    AnalysisContext.get.referredTempVariableNamesUnderIdentifier ++=
+      collectTemporaryVariablesInExpressionTree(identifierExpr)
+  }
 
   private def collectTemporaryVariablesInLogicalPlan(child: LogicalPlan): Seq[Seq[String]] = {
     def collectTempVars(child: LogicalPlan): Seq[Seq[String]] = {
@@ -110,16 +141,13 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
     collectTempVars(child)
   }
 
+  // Visits `child` itself as well as its descendants, so that an identifier expression which is
+  // just a variable reference is collected too.
   private def collectTemporaryVariablesInExpressionTree(child: Expression): Seq[Seq[String]] = {
-    def collectTempVars(child: Expression): Seq[Seq[String]] = {
-      child.flatMap { expr =>
-        expr.children.flatMap(_.flatMap {
-          case e: SubqueryExpression => collectTemporaryVariablesInLogicalPlan(e.plan)
-          case r: VariableReference => Seq(r.originalNameParts)
-          case _ => Seq.empty
-        })
-      }.distinct
-    }
-    collectTempVars(child)
+    child.flatMap {
+      case e: SubqueryExpression => collectTemporaryVariablesInLogicalPlan(e.plan)
+      case r: VariableReference => Seq(r.originalNameParts)
+      case _ => Seq.empty
+    }.distinct
   }
 }

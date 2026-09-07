@@ -468,3 +468,49 @@ SELECT EXTRACT(IDENTIFIER('YEAR') FROM DATE'2024-01-15');
 SELECT TIMESTAMPADD(IDENTIFIER('YEAR'), 1, DATE'2024-01-15');
 
 DROP SCHEMA identifier_clause_test_schema;
+
+-- A variable read only by a temporary view's IDENTIFIER clause is still a variable the view refers
+-- to, so it stays resolvable when the stored view text is analyzed again.
+CREATE OR REPLACE TEMPORARY VIEW identifier_var_target AS SELECT 1 AS c1;
+DECLARE OR REPLACE VARIABLE identifier_var_name STRING DEFAULT 'identifier_var_target';
+CREATE OR REPLACE TEMPORARY VIEW identifier_var_view AS
+SELECT * FROM IDENTIFIER(identifier_var_name);
+SELECT count(*) AS row_count FROM identifier_var_view;
+DROP VIEW identifier_var_view;
+DROP VIEW identifier_var_target;
+DROP TEMPORARY VARIABLE identifier_var_name;
+
+-- A permanent view must still reject a temporary variable read via an IDENTIFIER clause.
+CREATE TEMPORARY VIEW identifier_perm_target AS SELECT 1 AS c1;
+DECLARE OR REPLACE VARIABLE identifier_perm_name STRING DEFAULT 'identifier_perm_target';
+CREATE VIEW identifier_perm_view AS SELECT * FROM IDENTIFIER(identifier_perm_name);
+DROP VIEW identifier_perm_target;
+DROP TEMPORARY VARIABLE identifier_perm_name;
+
+-- A permanent ALTER VIEW must also reject a temporary variable read via an IDENTIFIER clause.
+-- The IDENTIFIER target is a permanent table so the variable is the only temporary object.
+CREATE SCHEMA identifier_alter_schema;
+USE identifier_alter_schema;
+CREATE TABLE identifier_alter_target (c1 INT) USING parquet;
+DECLARE OR REPLACE VARIABLE identifier_alter_name STRING DEFAULT 'identifier_alter_target';
+CREATE VIEW identifier_alter_view AS SELECT 1 AS c1;
+ALTER VIEW identifier_alter_view AS SELECT * FROM IDENTIFIER(identifier_alter_name);
+SELECT * FROM identifier_alter_view;
+DROP VIEW identifier_alter_view;
+DROP TABLE identifier_alter_target;
+DROP TEMPORARY VARIABLE identifier_alter_name;
+USE default;
+DROP SCHEMA identifier_alter_schema;
+
+-- ALTER VIEW whose TARGET is picked by a variable, with a body that has no temp dependency, must
+-- still succeed: the variable is not a dependency of the view definition.
+CREATE SCHEMA ivt_schema;
+USE ivt_schema;
+CREATE VIEW ivt_target AS SELECT 1 AS c1;
+DECLARE OR REPLACE VARIABLE ivt_name STRING DEFAULT 'ivt_target';
+ALTER VIEW IDENTIFIER(ivt_name) AS SELECT 2 AS c1;
+SELECT * FROM ivt_target;
+DROP VIEW ivt_target;
+DROP TEMPORARY VARIABLE ivt_name;
+USE default;
+DROP SCHEMA ivt_schema;
