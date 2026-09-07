@@ -17,12 +17,9 @@
 
 package org.apache.spark.sql.execution.vectorized;
 
-import org.apache.spark.annotation.DeveloperApi;
-
 /**
  * Exception thrown when the vectorized reader capacity is exhausted or cannot be reserved.
  */
-@DeveloperApi
 public class VectorizedReaderCapacityOverflowException extends RuntimeException {
   public VectorizedReaderCapacityOverflowException(String message, Throwable cause) {
     super(message, cause);
