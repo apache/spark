@@ -1253,6 +1253,29 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-58708: LPAD/RPAD length handling is collation-independent") {
+    // `StringLPad` and `StringRPad` call `UTF8String.lpad` and `UTF8String.rpad` directly.
+    // Neither dispatches on collation, and `CollationSupport` defines no collation-aware
+    // pad, so the collation only reaches the result type. The non-positive lengths fixed
+    // above therefore behave identically under every collation.
+    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach { collation =>
+      val st = StringType(collation)
+      val str = Literal.create("hi", st)
+      val pad = Literal.create("??", st)
+      Seq(0, -1, -100, Int.MinValue).foreach { len =>
+        checkEvaluation(StringLPad(str, Literal(len), pad), "")
+        checkEvaluation(StringRPad(str, Literal(len), pad), "")
+      }
+      // Positive lengths are unaffected too, and the case of the input is preserved even
+      // under the case-insensitive collations.
+      checkEvaluation(StringLPad(str, Literal(5), pad), "???hi")
+      checkEvaluation(StringRPad(str, Literal(5), pad), "hi???")
+      val mixed = Literal.create("Hi", st)
+      checkEvaluation(StringLPad(mixed, Literal(2), pad), "Hi")
+      checkEvaluation(StringRPad(mixed, Literal(1), pad), "H")
+    }
+  }
+
   test("PadExpressionBuilderBase") {
     // test if the correct lpad/rpad expression is created given different parameter types
     Seq(true, false).foreach { confVal =>
