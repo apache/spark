@@ -49,7 +49,9 @@ class JsonQuerySuite extends QueryTest with SharedSparkSession {
         checkAnswer(sql(s"SELECT json_query('$doc', '$$.addr')"), Row("shadowed"))
         checkAnswer(sql(s"SELECT json_query(*, '$$.addr') FROM VALUES ('$doc') AS t(j)"),
           Row("shadowed"))
-        // The clause-bearing form is not a function call, so it stays the built-in function.
+        // The clause-bearing form is constructed directly by the dedicated grammar branch instead
+        // of being routed through ordinary routine resolution, so it stays the built-in function
+        // and cannot be shadowed by the temporary routine.
         checkAnswer(
           sql(s"SELECT json_query('$doc', '$$.tags' WITH ARRAY WRAPPER)"), Row("""[["x","y"]]"""))
         assert(sql(s"SELECT json_query('$doc', '$$.tags' WITH ARRAY WRAPPER)")
