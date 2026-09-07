@@ -789,6 +789,28 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
     super.legacyWithNewChildren(newChildren).asInstanceOf[PartitioningCollection]
 }
 
+object PartitioningCollection {
+  /**
+   * One [[KeyedPartitioning]] standing for every one in this partitioning, if there is any. By the
+   * invariant in the class doc, any of them describes the layout.
+   */
+  private[physical] def representativeOf(p: Partitioning): Option[KeyedPartitioning] = p match {
+    case k: KeyedPartitioning => Some(k)
+    case pc: PartitioningCollection =>
+      pc.partitionings.iterator.flatMap(representativeOf).nextOption()
+    case _ => None
+  }
+
+  /**
+   * The number of partitions of the keyed members of `partitioning`, if it has any. A
+   * collection requires all of its members to agree on the count, keyed or not, so the answer
+   * is `partitioning.numPartitions` whenever a keyed member exists; the representative only
+   * decides whether there is one.
+   */
+  private[sql] def numKeyedPartitions(partitioning: Partitioning): Option[Int] =
+    representativeOf(partitioning).map(_.numPartitions)
+}
+
 /**
  * Represents a partitioning where rows are collected, transformed and broadcasted to each
  * node in the cluster.
