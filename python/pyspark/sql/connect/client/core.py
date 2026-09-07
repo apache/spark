@@ -1737,7 +1737,13 @@ class SparkConnectClient(object):
     def _execute_cleanup_command(
         self, command: pb2.Command, timeout: Optional[float]
     ) -> pb2.ExecutePlanResponse:
-        """Execute a best-effort cleanup command once with a bounded deadline."""
+        """Execute a best-effort cleanup command once with a bounded deadline.
+
+        This is shared by cached-relation release from ``CachedRemoteRelation.__del__`` and by
+        targeted or session-wide ML cache cleanup. Both operations are safe to abandon because
+        their server-side state is also released when the session ends. The non-reattachable call
+        ensures that its timeout bounds the cleanup instead of starting another deadline interval.
+        """
         req = self._execute_plan_request_with_metadata()
         self._set_command_in_plan(req.plan, command)
 
@@ -1746,8 +1752,8 @@ class SparkConnectClient(object):
             req = hook.on_execute_plan(req)
             req.operation_id = operation_id
 
-        # Cleanup can run from a finalizer or at interpreter exit, where the generated
-        # unary-stream call is unreliable. These commands return a single response.
+        # Relation and ML cache cleanup can run from a finalizer or at interpreter exit, where the
+        # generated unary-stream call is unreliable. Both commands return a single response.
         channel = self._channel.unary_unary(
             "/spark.connect.SparkConnectService/ExecutePlan",
             request_serializer=pb2.ExecutePlanRequest.SerializeToString,
