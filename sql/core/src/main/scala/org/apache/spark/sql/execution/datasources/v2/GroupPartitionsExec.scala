@@ -67,7 +67,10 @@ case class GroupPartitionsExec(
     @transient enableSortedMerge: Boolean = false
   ) extends UnaryExecNode {
 
-  override def outputPartitioning: Partitioning = {
+  // A `lazy val` because the planner asks a node for its partitioning many times, and this body
+  // rebuilds every `KeyedPartitioning` in the child's on top of the already memoized `grouping`.
+  // Read no live config here, or memoizing would freeze it.
+  @transient override lazy val outputPartitioning: Partitioning = {
     child.outputPartitioning match {
       case p: Partitioning with Expression =>
         // There can be multiple `KeyedPartitioning`s in an output partitioning of a join, but they
@@ -92,29 +95,31 @@ case class GroupPartitionsExec(
         // `ValidateRequirements`. `identityGrouping` is a lazy val, so repeated
         // `outputPartitioning` calls scan it at most once.
         if (PartitioningCollection.keyedMarkerOf(p).contains(true) && !identityGrouping) {
-          return UnknownPartitioning(grouping.partitions.size)
+          UnknownPartitioning(grouping.partitions.size)
+        } else {
+          val partitionKeys = grouping.partitions.map(_._1)
+          p.transform {
+            case k: KeyedPartitioning =>
+              val projectedExpressions = joinKeyPositions.fold(k.expressions)(_.map(k.expressions))
+              val effectiveExpressions = reducers match {
+                case Some(exprs) =>
+                  assert(projectedExpressions.length == exprs.length)
+                  projectedExpressions.zip(exprs).map {
+                    case (expr, Some(KeyReducer(_, reduced))) =>
+                      // `reduced` was stored from the single spec that `createKeyedShuffleSpec`
+                      // picked (`collectFirst`); re-target it at this `KeyedPartitioning`'s own
+                      // key attribute so that every `KeyedPartitioning` in a collection keeps its
+                      // own.
+                      reduced.withReference(expr.references.head)
+                    case (expr, None) => expr
+                  }
+                case None => projectedExpressions
+              }
+              KeyedPartitioning(
+                effectiveExpressions, partitionKeys, grouping.isGrouped, grouping.isCollapsed,
+                mayContainUnknownPartitionKeys = k.mayContainUnknownPartitionKeys)
+          }.asInstanceOf[Partitioning]
         }
-        val partitionKeys = grouping.partitions.map(_._1)
-        p.transform {
-          case k: KeyedPartitioning =>
-            val projectedExpressions = joinKeyPositions.fold(k.expressions)(_.map(k.expressions))
-            val effectiveExpressions = reducers match {
-              case Some(exprs) =>
-                assert(projectedExpressions.length == exprs.length)
-                projectedExpressions.zip(exprs).map {
-                  case (expr, Some(KeyReducer(_, reduced))) =>
-                    // `reduced` was stored from the single spec that `createKeyedShuffleSpec`
-                    // picked (`collectFirst`); re-target it at this `KeyedPartitioning`'s own key
-                    // attribute so that every `KeyedPartitioning` in a collection keeps its own.
-                    reduced.withReference(expr.references.head)
-                  case (expr, None) => expr
-                }
-              case None => projectedExpressions
-            }
-            KeyedPartitioning(
-              effectiveExpressions, partitionKeys, grouping.isGrouped, grouping.isCollapsed,
-              mayContainUnknownPartitionKeys = k.mayContainUnknownPartitionKeys)
-        }.asInstanceOf[Partitioning]
       case o => o
     }
   }
