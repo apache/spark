@@ -2353,15 +2353,27 @@ class SessionCatalog(
   }
 
   /**
-   * Returns whether a temporary function is visible in the current resolution context, applying the
-   * same stored-view filtering as actual resolution ([[handleViewContext]]) but WITHOUT its
-   * side effect of recording the name as a referred temp function. Inside a stored view a temp
-   * function is visible only if the view captured it; outside a view this matches
-   * [[isTemporaryFunction]]. Ownership probes use this so they agree with the resolver on which
-   * routine owns a name inside a view.
+   * Returns whether a temporary SCALAR function with this name exists (ignoring table functions).
+   * The scalar builtin star-handling probe must mirror `resolveScalarFunctionByIdentifier`, which
+   * consults only the scalar registry, so a temp table function of the same name is not a shadow.
    */
-  def isTemporaryFunctionVisible(name: FunctionIdentifier): Boolean = {
-    isTemporaryFunction(name) &&
+  private def isTemporaryScalarFunction(name: FunctionIdentifier): Boolean = {
+    if (name.database.isEmpty) {
+      functionRegistry.functionExists(tempFunctionIdentifier(name.funcName))
+    } else {
+      isTempFunctionIdentifier(name) && functionRegistry.functionExists(name)
+    }
+  }
+
+  /**
+   * Returns whether a temporary scalar function is visible in the current resolution context,
+   * applying the same stored-view filtering as actual resolution ([[handleViewContext]]) but
+   * WITHOUT its side effect of recording the name as a referred temp function. Inside a stored view
+   * a temp function is visible only if the view captured it. Scalar builtin-ownership probes use
+   * this so they agree with `resolveScalarFunctionByIdentifier` on which routine owns a name.
+   */
+  def isTemporaryScalarFunctionVisible(name: FunctionIdentifier): Boolean = {
+    isTemporaryScalarFunction(name) &&
       (AnalysisContext.get.catalogAndNamespace.isEmpty ||
         AnalysisContext.get.referredTempFunctionNames.contains(name.funcName))
   }

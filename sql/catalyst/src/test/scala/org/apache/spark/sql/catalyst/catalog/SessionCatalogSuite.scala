@@ -1774,7 +1774,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     }
   }
 
-  test("isTemporaryFunctionVisible honors stored-view captured temp functions") {
+  test("isTemporaryScalarFunctionVisible honors stored-view captured temp functions") {
     withBasicCatalog { catalog =>
       val tempFunc = (e: Seq[Expression]) => e.head
       catalog.registerFunction(
@@ -1800,19 +1800,46 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
               tempFnProp)
       }
 
-      // Outside any view context, a registered temp function is visible (== isTemporaryFunction).
-      assert(catalog.isTemporaryFunctionVisible(FunctionIdentifier("temp_json")))
+      // Outside any view context, a registered temp scalar function is visible.
+      assert(catalog.isTemporaryScalarFunctionVisible(FunctionIdentifier("temp_json")))
 
       // Inside a view that did NOT capture it (e.g. an unrelated temp created after the view), it
       // is hidden, matching handleViewContext used by actual resolution -- so the builtin-ownership
       // probe won't be fooled into skipping builtin-only syntax handling.
       AnalysisContext.withAnalysisContext(viewDesc(captured = Nil)) {
-        assert(!catalog.isTemporaryFunctionVisible(FunctionIdentifier("temp_json")))
+        assert(!catalog.isTemporaryScalarFunctionVisible(FunctionIdentifier("temp_json")))
       }
       // Inside a view that captured it, it stays visible.
       AnalysisContext.withAnalysisContext(viewDesc(captured = Seq("temp_json"))) {
-        assert(catalog.isTemporaryFunctionVisible(FunctionIdentifier("temp_json")))
+        assert(catalog.isTemporaryScalarFunctionVisible(FunctionIdentifier("temp_json")))
       }
+    }
+  }
+
+  test("isTemporaryScalarFunctionVisible ignores a same-named temp table function") {
+    // The probe governs scalar builtin star handling, which mirrors the scalar-only
+    // resolveScalarFunctionByIdentifier. A temp table function of the same name is not a scalar
+    // shadow, so it must not make the name look shadowed (which would suppress count(*) -> count(1)
+    // or the json_array(*) bare-star rejection).
+    val extCatalog = newEmptyCatalog()
+    extCatalog.createDatabase(newDb("default"), ignoreIfExists = true)
+    val scalarRegistry = new SimpleFunctionRegistry()
+    val tableRegistry = new SimpleTableFunctionRegistry()
+    val catalog = new SessionCatalog(extCatalog, scalarRegistry, tableRegistry)
+    try {
+      val ident = FunctionIdentifier(
+        "count", Some(CatalogManager.SESSION_NAMESPACE), Some(CatalogManager.SYSTEM_CATALOG_NAME))
+      val info = new ExpressionInfo(
+        "test.Example", CatalogManager.SESSION_NAMESPACE, "count", "usage", "arguments",
+        "\n    Examples:\n", "\n    \n  ", "table_funcs", "1.0.0", "", "sql_udf")
+      tableRegistry.registerFunction(ident, info, (_: Seq[Expression]) => Range(1, 1, 1, 1))
+
+      assert(catalog.isTemporaryFunction(FunctionIdentifier("count")),
+        "a temp table function should count as a temporary function")
+      assert(!catalog.isTemporaryScalarFunctionVisible(FunctionIdentifier("count")),
+        "a temp table function must not be visible to the scalar ownership probe")
+    } finally {
+      catalog.reset()
     }
   }
 

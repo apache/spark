@@ -411,7 +411,7 @@ class FunctionResolution(
           // Honor stored-view temp visibility so this probe picks the same owner the resolver
           // would: a temp not captured by the view is hidden here too, just as the persistent
           // branch below expands through the view's frozen catalog.
-          if (v1SessionCatalog.isTemporaryFunctionVisible(FunctionIdentifier(functionName))) {
+          if (v1SessionCatalog.isTemporaryScalarFunctionVisible(FunctionIdentifier(functionName))) {
             return false
           }
         case None =>
