@@ -27,7 +27,7 @@ import org.apache.hadoop.hive.common.`type`.{HiveChar, HiveDecimal, HiveInterval
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.hive.serde2.objectinspector.{StructField => HiveStructField, _}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
-import org.apache.hadoop.hive.serde2.typeinfo.{DecimalTypeInfo, TypeInfoFactory}
+import org.apache.hadoop.hive.serde2.typeinfo.{CharTypeInfo, DecimalTypeInfo, TypeInfoFactory, VarcharTypeInfo}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.datasources.DaysWritable
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.TimestampNanosVal
@@ -102,10 +103,6 @@ import org.apache.spark.unsafe.types.UTF8String
  *   Map: java.util.Map
  *   Struct: Object[] / java.util.List / java POJO
  *   Union: class StandardUnion { byte tag; Object object }
- *
- * NOTICE: HiveVarchar/HiveChar is not supported by catalyst, it will be simply considered as
- *  String type.
- *
  *
  * 2. Hive ObjectInspector is a group of flexible APIs to inspect value in different data
  *  representation, and developers can extend those API as needed, so technically,
@@ -280,7 +277,6 @@ private[hive] trait HiveInspectors {
       (o: Any) =>
         x.getWritableConstantValue
     case x: PrimitiveObjectInspector => x match {
-      // TODO we don't support the HiveVarcharObjectInspector yet.
       case _: StringObjectInspector if x.preferWritable() =>
         withNullSafe(o => getStringWritable(o))
       case _: StringObjectInspector =>
@@ -313,21 +309,28 @@ private[hive] trait HiveInspectors {
         withNullSafe(o => getByteWritable(o))
       case _: ByteObjectInspector =>
         withNullSafe(o => o.asInstanceOf[java.lang.Byte])
-        // To spark HiveVarchar and HiveChar are same as string
-      case _: HiveVarcharObjectInspector if x.preferWritable() =>
-        withNullSafe(o => getStringWritable(o))
-      case _: HiveVarcharObjectInspector =>
+      case hvoi: HiveVarcharObjectInspector if x.preferWritable() =>
+        val length = hvoi.getTypeInfo.asInstanceOf[VarcharTypeInfo].getLength
         withNullSafe { o =>
-            val s = o.asInstanceOf[UTF8String].toString
-            new HiveVarchar(s, s.length)
+          val varchar = new HiveVarchar(o.asInstanceOf[UTF8String].toString, length)
+          new hiveIo.HiveVarcharWritable(varchar)
         }
-      case _: HiveCharObjectInspector if x.preferWritable() =>
-        withNullSafe(o => getStringWritable(o))
-      case _: HiveCharObjectInspector =>
+      case hvoi: HiveVarcharObjectInspector =>
+        val length = hvoi.getTypeInfo.asInstanceOf[VarcharTypeInfo].getLength
         withNullSafe { o =>
-            val s = o.asInstanceOf[UTF8String].toString
-            new HiveChar(s, s.length)
-          }
+          new HiveVarchar(o.asInstanceOf[UTF8String].toString, length)
+        }
+      case hcoi: HiveCharObjectInspector if x.preferWritable() =>
+        val length = hcoi.getTypeInfo.asInstanceOf[CharTypeInfo].getLength
+        withNullSafe { o =>
+          val char = new HiveChar(o.asInstanceOf[UTF8String].toString, length)
+          new hiveIo.HiveCharWritable(char)
+        }
+      case hcoi: HiveCharObjectInspector =>
+        val length = hcoi.getTypeInfo.asInstanceOf[CharTypeInfo].getLength
+        withNullSafe { o =>
+          new HiveChar(o.asInstanceOf[UTF8String].toString, length)
+        }
       case _: JavaHiveDecimalObjectInspector =>
         withNullSafe(o =>
           HiveDecimal.create(o.asInstanceOf[Decimal].toJavaBigDecimal))
@@ -939,7 +942,14 @@ private[hive] trait HiveInspectors {
     case MapType(keyType, valueType, _) =>
       ObjectInspectorFactory.getStandardMapObjectInspector(
         toInspector(keyType), toInspector(valueType))
-    case StringType => PrimitiveObjectInspectorFactory.javaStringObjectInspector
+    // Hive object inspectors preserve the CHAR/VARCHAR length but have no collation metadata.
+    case c: CharType =>
+      PrimitiveObjectInspectorFactory.getPrimitiveJavaObjectInspector(
+        TypeInfoFactory.getCharTypeInfo(c.length))
+    case v: VarcharType =>
+      PrimitiveObjectInspectorFactory.getPrimitiveJavaObjectInspector(
+        TypeInfoFactory.getVarcharTypeInfo(v.length))
+    case _: StringType => PrimitiveObjectInspectorFactory.javaStringObjectInspector
     case IntegerType => PrimitiveObjectInspectorFactory.javaIntObjectInspector
     case DoubleType => PrimitiveObjectInspectorFactory.javaDoubleObjectInspector
     case BooleanType => PrimitiveObjectInspectorFactory.javaBooleanObjectInspector
@@ -986,7 +996,11 @@ private[hive] trait HiveInspectors {
    * @return Hive java objectinspector (recursively).
    */
   def toInspector(expr: Expression): ObjectInspector = expr match {
-    case Literal(value, StringType) =>
+    case Literal(value, c: CharType) =>
+      getHiveCharWritableConstantObjectInspector(value, c.length)
+    case Literal(value, v: VarcharType) =>
+      getHiveVarcharWritableConstantObjectInspector(value, v.length)
+    case Literal(value, _: StringType) =>
       getStringWritableConstantObjectInspector(value)
     case Literal(value, IntegerType) =>
       getIntWritableConstantObjectInspector(value)
@@ -1088,10 +1102,14 @@ private[hive] trait HiveInspectors {
         inspectorToDataType(m.getMapValueObjectInspector))
     case _: WritableStringObjectInspector => StringType
     case _: JavaStringObjectInspector => StringType
-    case _: WritableHiveVarcharObjectInspector => StringType
-    case _: JavaHiveVarcharObjectInspector => StringType
-    case _: WritableHiveCharObjectInspector => StringType
-    case _: JavaHiveCharObjectInspector => StringType
+    // Hive object inspectors cannot represent collations, so Hive function results use the
+    // default collation while preserving CHAR/VARCHAR length under first-class semantics.
+    case hvoi: HiveVarcharObjectInspector if SQLConf.get.charVarcharFirstClassTypes =>
+      VarcharType(hvoi.getTypeInfo.asInstanceOf[VarcharTypeInfo].getLength)
+    case _: HiveVarcharObjectInspector => StringType
+    case hcoi: HiveCharObjectInspector if SQLConf.get.charVarcharFirstClassTypes =>
+      CharType(hcoi.getTypeInfo.asInstanceOf[CharTypeInfo].getLength)
+    case _: HiveCharObjectInspector => StringType
     case _: WritableIntObjectInspector => IntegerType
     case _: JavaIntObjectInspector => IntegerType
     case _: WritableDoubleObjectInspector => DoubleType
@@ -1130,6 +1148,32 @@ private[hive] trait HiveInspectors {
   private def getStringWritableConstantObjectInspector(value: Any): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
       TypeInfoFactory.stringTypeInfo, getStringWritable(value))
+
+  private def getHiveCharWritableConstantObjectInspector(
+      value: Any,
+      length: Int): ObjectInspector = {
+    val writable = if (value == null) {
+      null
+    } else {
+      new hiveIo.HiveCharWritable(
+        new HiveChar(value.asInstanceOf[UTF8String].toString, length))
+    }
+    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+      TypeInfoFactory.getCharTypeInfo(length), writable)
+  }
+
+  private def getHiveVarcharWritableConstantObjectInspector(
+      value: Any,
+      length: Int): ObjectInspector = {
+    val writable = if (value == null) {
+      null
+    } else {
+      new hiveIo.HiveVarcharWritable(
+        new HiveVarchar(value.asInstanceOf[UTF8String].toString, length))
+    }
+    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+      TypeInfoFactory.getVarcharTypeInfo(length), writable)
+  }
 
   private def getIntWritableConstantObjectInspector(value: Any): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
@@ -1296,7 +1340,9 @@ private[hive] trait HiveInspectors {
       case IntegerType => intTypeInfo
       case LongType => longTypeInfo
       case ShortType => shortTypeInfo
-      case StringType => stringTypeInfo
+      case c: CharType => getCharTypeInfo(c.length)
+      case v: VarcharType => getVarcharTypeInfo(v.length)
+      case _: StringType => stringTypeInfo
       case d: DecimalType => decimalTypeInfo(d)
       case DateType => dateTypeInfo
       case TimestampType => timestampTypeInfo

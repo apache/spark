@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
@@ -369,6 +370,27 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           |FROM v
         """.stripMargin)
       checkAnswer(query, identity, df.select($"c", $"d", $"e").collect().toImmutableArraySeq)
+    }
+  }
+
+  test("SPARK-59277: TRANSFORM supports nested collated CHAR/VARCHAR with Hive SerDe") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val query = sql(
+        """
+          |SELECT TRANSFORM(
+          |  array(CAST('ab' AS CHAR(4) COLLATE UTF8_LCASE)),
+          |  named_struct('value', CAST('xyz' AS VARCHAR(6) COLLATE UNICODE_CI)))
+          |USING 'cat'
+          |AS (
+          |  chars ARRAY<CHAR(4) COLLATE UTF8_LCASE>,
+          |  nested STRUCT<value: VARCHAR(6) COLLATE UNICODE_CI>)
+          |FROM VALUES (1) input(dummy)
+          |""".stripMargin)
+      assert(query.schema.map(_.dataType) === Seq(
+        ArrayType(CharType(4, "UTF8_LCASE")),
+        StructType(Seq(StructField("value", VarcharType(6, "UNICODE_CI"))))))
+      checkAnswer(query, Row(Seq("ab  "), Row("xyz")))
     }
   }
 

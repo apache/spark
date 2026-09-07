@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{CharType, VarcharType}
 import org.apache.spark.tags.SlowHiveTest
 
 @SlowHiveTest
@@ -196,6 +197,25 @@ class HiveUDAFSuite extends QueryTest
         checkAnswer(
           spark.sql("SELECT default.myDoubleAvg(value) as my_avg from temp"),
           Row(105.0))
+      }
+    }
+  }
+
+  test("SPARK-59277: Hive UDAF supports first-class CHAR/VARCHAR") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq(
+        ("CHAR(5) COLLATE UTF8_LCASE", CharType(5), Row("def  ")),
+        ("VARCHAR(7) COLLATE UNICODE_CI", VarcharType(7), Row("def"))
+      ).foreach { case (dataType, expectedType, expectedRow) =>
+        val aggregate = sql(
+          s"""SELECT hive_max(value)
+             |FROM VALUES
+             |  (CAST('abc' AS $dataType)),
+             |  (CAST('def' AS $dataType))
+             |AS input(value)
+             |""".stripMargin)
+        assert(aggregate.schema.head.dataType === expectedType)
+        checkAnswer(aggregate, expectedRow)
       }
     }
   }

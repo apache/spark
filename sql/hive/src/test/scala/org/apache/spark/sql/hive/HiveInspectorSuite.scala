@@ -21,10 +21,10 @@ import java.util
 
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
 import org.apache.hadoop.hive.serde2.io.DoubleWritable
-import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory, PrimitiveObjectInspector, StructObjectInspector}
+import org.apache.hadoop.hive.serde2.objectinspector.{ConstantObjectInspector, ObjectInspector, ObjectInspectorFactory, PrimitiveObjectInspector, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.hadoop.hive.serde2.typeinfo.DecimalTypeInfo
+import org.apache.hadoop.hive.serde2.typeinfo.{CharTypeInfo, DecimalTypeInfo, VarcharTypeInfo}
 import org.apache.hadoop.io.LongWritable
 
 import org.apache.spark.SparkFunSuite
@@ -32,9 +32,17 @@ import org.apache.spark.sql.{AnalysisException, Row, TestUserClassUDT}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
+
+  private def withFirstClassCharVarchar(enabled: Boolean)(f: => Unit): Unit = {
+    val conf = new SQLConf
+    conf.setConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS, enabled)
+    SQLConf.withExistingConf(conf)(f)
+  }
 
   def unwrap(data: Any, oi: ObjectInspector): Any = {
     val unwrapper = unwrapperFor(oi)
@@ -290,6 +298,69 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     val typeInfo2 = oi2.getTypeInfo.asInstanceOf[DecimalTypeInfo]
     assert(typeInfo2.precision() === 18)
     assert(typeInfo2.scale() === 10)
+  }
+
+  test("SPARK-59277: Hive object inspectors preserve CHAR/VARCHAR type information") {
+    withFirstClassCharVarchar(enabled = true) {
+      Seq[DataType](CharType(5), VarcharType(7)).foreach { dataType =>
+        val inspector = toInspector(dataType).asInstanceOf[PrimitiveObjectInspector]
+        assert(inspectorToDataType(inspector) === dataType)
+        dataType match {
+          case c: CharType =>
+            assert(inspector.getTypeInfo.asInstanceOf[CharTypeInfo].getLength === c.length)
+          case v: VarcharType =>
+            assert(inspector.getTypeInfo.asInstanceOf[VarcharTypeInfo].getLength === v.length)
+        }
+      }
+    }
+  }
+
+  test("SPARK-59277: Hive object inspectors accept collated CHAR/VARCHAR values") {
+    withFirstClassCharVarchar(enabled = true) {
+      Seq[DataType](
+        CharType(5, "UTF8_LCASE"),
+        VarcharType(7, "UNICODE_CI")).foreach { dataType =>
+        val inspector = toInspector(dataType)
+        val value = UTF8String.fromString(dataType match {
+          case _: CharType => "ab   "
+          case _: VarcharType => "abc"
+        })
+        val expectedType = dataType match {
+          case c: CharType => CharType(c.length)
+          case v: VarcharType => VarcharType(v.length)
+        }
+        assert(inspectorToDataType(inspector) === expectedType)
+        assert(unwrap(wrap(value, inspector, dataType), inspector) === value)
+      }
+    }
+  }
+
+  test("SPARK-59277: Hive object inspectors support nested CHAR/VARCHAR") {
+    withFirstClassCharVarchar(enabled = true) {
+      val dataType = StructType(Seq(
+        StructField("chars", ArrayType(CharType(4))),
+        StructField("varchars", MapType(IntegerType, VarcharType(8)))))
+      assert(inspectorToDataType(toInspector(dataType)) === dataType)
+    }
+  }
+
+  test("SPARK-59277: Hive constant inspectors preserve CHAR/VARCHAR type information") {
+    withFirstClassCharVarchar(enabled = true) {
+      Seq[DataType](CharType(5), VarcharType(7)).foreach { dataType =>
+        val value = UTF8String.fromString("abc")
+        val inspector = toInspector(Literal.create(value, dataType))
+        assert(inspector.isInstanceOf[ConstantObjectInspector])
+        assert(inspectorToDataType(inspector) === dataType)
+      }
+    }
+  }
+
+  test("SPARK-59277: Hive CHAR/VARCHAR inspectors remain STRING under legacy semantics") {
+    withFirstClassCharVarchar(enabled = false) {
+      Seq[DataType](CharType(5), VarcharType(7)).foreach { dataType =>
+        assert(inspectorToDataType(toInspector(dataType)) === StringType)
+      }
+    }
   }
 
   test("SPARK-57556: TIME type is unsupported in Hive object inspectors") {

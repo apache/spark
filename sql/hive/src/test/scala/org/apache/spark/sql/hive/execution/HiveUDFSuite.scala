@@ -46,7 +46,7 @@ import org.apache.spark.sql.hive.HiveGenericUDF
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestUDTFJar}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{TimestampType, TimeType}
+import org.apache.spark.sql.types.{CharType, TimestampType, TimeType, VarcharType}
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
@@ -890,6 +890,30 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
            |         now())""".stripMargin).collect().length == 1)
     }
     hiveContext.reset()
+  }
+
+  test("SPARK-59277: Hive UDF and UDTF support first-class CHAR/VARCHAR") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withUserDefinedFunction("hive_upper" -> true, "hive_explode" -> true) {
+        sql(s"CREATE TEMPORARY FUNCTION hive_upper AS '${classOf[GenericUDFUpper].getName}'")
+        sql(s"CREATE TEMPORARY FUNCTION hive_explode AS '${classOf[GenericUDTFExplode].getName}'")
+
+        val scalar = sql(
+          "SELECT hive_upper(CAST('Ab' AS CHAR(5) COLLATE UTF8_LCASE)) AS value")
+        assert(scalar.schema.head.dataType === CharType(5))
+        checkAnswer(scalar, Row("AB   "))
+
+        val table = sql(
+          """SELECT value
+            |FROM (
+            |  SELECT array(CAST('abc' AS VARCHAR(7) COLLATE UNICODE_CI)) AS values
+            |) input
+            |LATERAL VIEW hive_explode(values) exploded AS value
+            |""".stripMargin)
+        assert(table.schema.head.dataType === VarcharType(7))
+        checkAnswer(table, Row("abc"))
+      }
+    }
   }
 
   test("SPARK-58792: copied HiveGenericUDF nodes must not share a mutable GenericUDF") {
