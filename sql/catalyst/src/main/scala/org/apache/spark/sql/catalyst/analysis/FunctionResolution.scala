@@ -392,7 +392,7 @@ class FunctionResolution(
    * Returns whether an unqualified function name reaches `system.builtin` before any temp or
    * persistent function in the effective SQL PATH. When a temp or persistent function shadows the
    * builtin, special-syntax handling that only applies to Spark's builtins must not fire, since the
-   * name no longer refers to the builtin -- e.g. rejecting a bare `*` in a routed JSON constructor
+   * name no longer refers to the builtin -- e.g. rejecting a bare `*` in a routed SQL/JSON function
    * or the `count(tbl.*)` guard. Parser-built `count(*)` is normalized to `count(1)` in
    * `AstBuilder` so it skips this probe, but a DataFrame `count("*")` keeps its star and does reach
    * the probe during analyzer normalization.
@@ -448,11 +448,12 @@ class FunctionResolution(
     }
   }
 
-  // All routed SQL/JSON constructors forbid a bare `*` argument. Derived from the single registry
-  // list so a newly routed constructor is covered without editing this file too.
+  // All routed SQL/JSON functions (JSON_ARRAY, JSON_VALUE, JSON_QUERY, JSON_EXISTS) forbid a bare
+  // `*` argument. Derived from the single registry list so a newly routed function is covered
+  // without editing this file too.
   private val starDisallowedJsonConstructors = FunctionRegistry.routedJsonConstructorNames
 
-  /** True if `nameParts` resolves to a built-in SQL/JSON constructor that forbids bare `*`. */
+  /** True if `nameParts` resolves to a built-in routed SQL/JSON function that forbids bare `*`. */
   def resolvesToStarDisallowedJsonConstructor(nameParts: Seq[String]): Boolean =
     starDisallowedJsonConstructors.exists(functionNameResolvesToBuiltin(nameParts, _))
 

@@ -544,15 +544,18 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
   }
 
   test("a nested JSON constructor through a routed JSON_ARRAY call is quoted, not spliced") {
-    // A routed (plain or qualified) call carries no lexical FORMAT JSON, so a nested JSON
-    // constructor argument is treated as a plain value and quoted, unlike the JSON_ARRAY(...)
-    // grammar which splices it (see the unqualified `json_array(json_array(1))` -> `[[1]]` cases
-    // above). A nested constructor reaches the routed builder only via a qualified outer call:
-    // an unqualified nested constructor stays on the direct grammar path. Splicing through a
-    // routed call is left as a follow-up.
+    // A routed call carries no lexical FORMAT JSON, so a nested JSON constructor argument is
+    // quoted as a plain value, unlike the JSON_ARRAY(...) grammar which splices it (see the
+    // unqualified `json_array(json_array(1))` -> `[[1]]` cases above). The outer call routes
+    // whenever it sees no lexical implicit-JSON element: `JsonArray.isImplicitlyJson` recognizes
+    // only a grammar-built nested constructor, so a qualified outer call and an unqualified call
+    // over a qualified nested constructor (whose child is still unresolved) both route and quote.
+    // Only a fully unqualified nested constructor stays on the direct grammar path; splicing
+    // through a routed call is left as a follow-up.
     checkAnswer(sql("SELECT builtin.json_array(json_array(1))"), Row("""["[1]"]"""))
     checkAnswer(sql("SELECT system.builtin.json_array(json_array(1))"), Row("""["[1]"]"""))
     checkAnswer(sql("SELECT builtin.json_array(json_array(1), 2)"), Row("""["[1]",2]"""))
+    checkAnswer(sql("SELECT json_array(builtin.json_array(1))"), Row("""["[1]"]"""))
     checkAnswer(
       sql("""SELECT builtin.json_array(json_query('{"a":{"x":1}}', '$.a'))"""),
       Row("""["{\"x\":1}"]"""))
@@ -596,8 +599,9 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
         "SELECT json_array(array(*)) FROM VALUES (1, 2) AS t(a, b)",
         "SELECT json_array(array(*) NULL ON NULL) FROM VALUES (1, 2) AS t(a, b)"
       ).foreach { query =>
-        // Analyze only: the single-pass analyzer cannot execute every operator, so assert the
-        // nested star is neither rejected nor left unexpanded rather than running it.
+        // Analyze only: the single-pass analyzer cannot yet analyze or resolve every operator the
+        // action path needs, so assert the nested star is neither rejected nor left unexpanded
+        // rather than running it.
         val analyzed = sql(query).queryExecution.analyzed
         assert(analyzed.resolved, s"for $query")
         assert(!analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[Star]))),
@@ -646,8 +650,9 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
         "SELECT json_array(count(*)) FROM VALUES (1), (2), (3) AS t(a)",
         "SELECT json_array(count(*) NULL ON NULL) FROM VALUES (1), (2), (3) AS t(a)"
       ).foreach { query =>
-        // Analyze only: the single-pass analyzer cannot execute every operator, so we assert the
-        // query resolves without INVALID_USAGE_OF_STAR_OR_REGEX rather than running it.
+        // Analyze only: the single-pass analyzer cannot yet analyze or resolve every operator the
+        // action path needs, so we assert the query resolves without
+        // INVALID_USAGE_OF_STAR_OR_REGEX rather than running it.
         val analyzed = sql(query).queryExecution.analyzed
         assert(analyzed.resolved, s"for $query")
         assert(!analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[Star]))),
@@ -748,7 +753,7 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
 
   test("default collation recurses into a nested JSON_ARRAY value") {
     // Col a (parser-built nested, direct grammar path) and col b (flat routed built-in) both
-    // recolor to the table default collation.
+    // adopt the table default UTF8_LCASE collation.
     withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
       withTable("t") {
         sql(

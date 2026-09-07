@@ -965,6 +965,36 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
+  test("path-driven COUNT rewrite gate: DataFrame count(\"*\") and count(t.*) reach the owner " +
+      "probe and expand through a shadowing temp count") {
+    // SQL `count(*)` is normalized to `count(1)` in AstBuilder, so it never reaches the analyzer
+    // owner probe. A DataFrame `count("*")` keeps its UnresolvedStar and does, as does count(t.*).
+    // A non-1 input distinguishes an incorrect `count(1)` rewrite from correct star expansion to
+    // `count(a)` through the temp.
+    withPathEnabled {
+      sql("CREATE TEMPORARY FUNCTION count(x INT) RETURNS INT RETURN x + 100")
+      try {
+        val df = sql("SELECT * FROM VALUES (7) AS t(a)")
+
+        // Builtin-first: count is the builtin, so `count("*")` collapses to `count(1)` and returns
+        // the row count (1), while `count(t.*)` hits the single-table-star guard.
+        checkAnswer(df.select(functions.count("*")), Row(1))
+        intercept[AnalysisException] {
+          sql("SELECT count(t.*) FROM VALUES (7) AS t(a)").collect()
+        }
+
+        // Session-first: count is shadowed, so neither the rewrite nor the guard fires; the star
+        // expands to `count(a)` and resolves through the temp: 7 + 100 = 107.
+        sql("SET PATH = system.session, system.builtin")
+        checkAnswer(df.select(functions.count("*")), Row(107))
+        checkAnswer(sql("SELECT count(t.*) FROM VALUES (7) AS t(a)"), Row(107))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS count")
+      }
+    }
+  }
+
   test("path-driven COUNT(*) rewrite gate: rewrite still applies for unrelated builtins") {
     // The gate fires ONLY when a temp function with the same unqualified
     // name as the builtin exists. A temp with a different name must not affect the

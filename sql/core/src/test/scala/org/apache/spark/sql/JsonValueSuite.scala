@@ -230,8 +230,8 @@ class JsonValueSuite extends QueryTest with SharedSparkSession {
   }
 
   test("invalid: a non-foldable path is rejected as a non-foldable argument") {
-    // A column path does not match the constructor grammar and is parsed as a plain function
-    // call; the registered built-in requires a foldable string path.
+    // A column path does not match the dedicated SQL/JSON function grammar and is parsed as a
+    // plain function call; the registered built-in requires a foldable string path.
     Seq("json_value", "json_query", "json_exists").foreach { func =>
       val e = intercept[AnalysisException] {
         sql(s"SELECT $func(a, b) FROM VALUES ('{}', '$$.x') AS t(a, b)").collect()
