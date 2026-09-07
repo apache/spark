@@ -73,8 +73,8 @@ trait ShuffledJoin extends JoinCodegenSupport {
       // `PartitioningCollection` invariant), and `keysSatisfy` admits a marked side into it only
       // for full-key join keys, where the join equality ties every column of its claim: a row of
       // an undeclared key matches nothing on the accurate side and is filtered, so a marked
-      // member alongside an unmarked one is spurious. Clear it at the one site that can mix them, so
-      // consumers can take members' markers at face value (see
+      // member alongside an unmarked one is spurious. Clear it at the one site that can mix
+      // them, so consumers can take members' markers at face value (see
       // `KeyedPartitioning.mayContainUnknownPartitionKeys`).
       PartitioningCollection.fromPartitionings(
         clearUnknownPartitionKeys(Seq(left.outputPartitioning, right.outputPartitioning)))
