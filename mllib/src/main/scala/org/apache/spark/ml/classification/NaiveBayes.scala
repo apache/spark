@@ -486,7 +486,7 @@ class NaiveBayesModel private[ml] (
   @Since("1.5.0")
   override val numClasses: Int = pi.size
 
-  @transient private lazy val predictRawFunc: Vector => Vector = {
+  private def predictRawFunction: Vector => Vector = {
     $(modelType) match {
       case Multinomial =>
         val localPi = pi
@@ -515,7 +515,7 @@ class NaiveBayesModel private[ml] (
   }
 
   override protected def predictRawColumn(features: Column): Column = {
-    val localPredictRaw = predictRawFunc
+    val localPredictRaw = predictRawFunction
     udf((features: Vector) => localPredictRaw(features)).apply(features)
   }
 
@@ -526,7 +526,7 @@ class NaiveBayesModel private[ml] (
   }
 
   override protected def predictProbabilityColumn(features: Column): Column = {
-    val localPredictRaw = predictRawFunc
+    val localPredictRaw = predictRawFunction
     udf((features: Vector) => {
       val rawPrediction = localPredictRaw(features)
       NaiveBayesModel.raw2probabilityInPlace(rawPrediction)
@@ -546,7 +546,7 @@ class NaiveBayesModel private[ml] (
   }
 
   override protected def predictionColumn(features: Column): Column = {
-    val localPredictRaw = predictRawFunc
+    val localPredictRaw = predictRawFunction
     if (isDefined(thresholds)) {
       val localThresholds = getThresholds.clone()
       udf((features: Vector) => {
@@ -560,7 +560,19 @@ class NaiveBayesModel private[ml] (
   }
 
   @Since("3.0.0")
-  override def predictRaw(features: Vector): Vector = predictRawFunc(features)
+  override def predictRaw(features: Vector): Vector = {
+    $(modelType) match {
+      case Multinomial =>
+        NaiveBayesModel.multinomialCalculation(features, pi, theta)
+      case Complement =>
+        NaiveBayesModel.complementCalculation(features, theta)
+      case Bernoulli =>
+        NaiveBayesModel.bernoulliCalculation(
+          features, piMinusThetaSum, thetaMinusNegTheta)
+      case Gaussian =>
+        NaiveBayesModel.gaussianCalculation(features, pi, theta, sigma, logVarSum)
+    }
+  }
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     NaiveBayesModel.raw2probabilityInPlace(rawPrediction)
