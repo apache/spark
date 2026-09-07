@@ -176,6 +176,32 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("SPARK-59273: CBO plans CHAR/VARCHAR predicates after ANALYZE") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.CBO_ENABLED.key -> "true") {
+      val tableName = "char_varchar_cbo_stats"
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName(c CHAR(3), v VARCHAR(3)) USING parquet")
+        sql(s"INSERT INTO $tableName VALUES ('a', 'x'), ('bb', 'yz'), (NULL, NULL)")
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c, v")
+
+        // CBO FilterEstimation used to MatchError on CharType/VarcharType after ANALYZE.
+        sql(s"SELECT c FROM $tableName WHERE c = 'a'").collect()
+        sql(s"SELECT c FROM $tableName WHERE c IN ('a  ', 'bb ')").collect()
+        sql(s"SELECT v FROM $tableName WHERE v IN ('x', 'yz')").collect()
+        sql(s"SELECT v FROM $tableName WHERE v > 'x'").collect()
+
+        checkAnswer(
+          sql(s"SELECT v FROM $tableName WHERE v IN ('x', 'yz')"),
+          Row("x") :: Row("yz") :: Nil)
+        checkAnswer(
+          sql(s"SELECT v FROM $tableName WHERE v > 'x'"),
+          Row("yz"))
+      }
+    }
+  }
+
   test("test table-level statistics for data source table") {
     val tableName = "tbl"
     withTable(tableName) {
