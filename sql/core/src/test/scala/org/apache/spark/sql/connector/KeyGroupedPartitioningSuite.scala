@@ -3669,6 +3669,10 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     sql("INSERT INTO testcat.ns.np2 VALUES (7, 'y')")
 
     withSQLConf(
+        // SPARK-58558 (4.4.0) relaxed `createKeyedShuffleSpec` from exact key match to key
+        // coverage; it is not in this branch, so the subset shape needs the config off, as every
+        // other subset test here does.
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
