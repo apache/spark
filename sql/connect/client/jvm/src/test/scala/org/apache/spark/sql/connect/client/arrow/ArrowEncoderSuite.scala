@@ -309,14 +309,14 @@ class ArrowEncoderSuite extends ConnectFunSuite {
     }
   }
 
-  test("SPARK-58794: char/varchar round trip") {
+  test("SPARK-58794, SPARK-59276: char/varchar round trip") {
     // The client cannot see the server's charVarchar configuration, so a result schema carrying
     // CHAR/VARCHAR must be decodable regardless of the local one. Values are padded and length
     // checked by the server, so the client passes them through unchanged.
     val encoder = toResultRowEncoder(
       new StructType()
-        .add("c", CharType(4))
-        .add("v", VarcharType(6))
+        .add("c", CharType(4, "UTF8_LCASE"))
+        .add("v", VarcharType(6, "UNICODE_CI"))
         .add("s", new StructType().add("c", CharType(4)))
         .add("a", ArrayType(VarcharType(6))))
     roundTripAndCheckIdentical(encoder) { () =>
