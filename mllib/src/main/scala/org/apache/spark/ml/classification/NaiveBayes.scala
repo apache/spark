@@ -441,36 +441,9 @@ class NaiveBayesModel private[ml] (
   @Since("1.5.0")
   override val numClasses: Int = pi.size
 
-  private def predictRawFunction: Vector => Vector = {
-    $(modelType) match {
-      case Multinomial =>
-        val localPi = pi
-        val localTheta = theta
-        features: Vector =>
-          NaiveBayesModel.multinomialCalculation(features, localPi, localTheta)
-      case Complement =>
-        val localTheta = theta
-        features: Vector =>
-          NaiveBayesModel.complementCalculation(features, localTheta)
-      case Bernoulli =>
-        val (localPiMinusThetaSum, localThetaMinusNegTheta) =
-          NaiveBayesModel.bernoulliPredictionState(pi, theta)
-        features: Vector =>
-          NaiveBayesModel.bernoulliCalculationWithPrecomputedState(
-            features, localPiMinusThetaSum, localThetaMinusNegTheta)
-      case Gaussian =>
-        val localPi = pi
-        val localTheta = theta
-        val localSigma = sigma
-        val localLogVarSum = NaiveBayesModel.gaussianLogVarSum(localSigma)
-        features: Vector =>
-          NaiveBayesModel.gaussianCalculationWithPrecomputedState(
-            features, localPi, localTheta, localSigma, localLogVarSum)
-    }
-  }
-
   override protected def predictRawColumn(features: Column): Column = {
-    val localPredictRaw = predictRawFunction
+    val localPredictRaw =
+      NaiveBayesModel.predictRawFunction($(modelType), pi, theta, sigma)
     udf((features: Vector) => localPredictRaw(features)).apply(features)
   }
 
@@ -481,7 +454,8 @@ class NaiveBayesModel private[ml] (
   }
 
   override protected def predictProbabilityColumn(features: Column): Column = {
-    val localPredictRaw = predictRawFunction
+    val localPredictRaw =
+      NaiveBayesModel.predictRawFunction($(modelType), pi, theta, sigma)
     udf((features: Vector) => {
       val rawPrediction = localPredictRaw(features)
       NaiveBayesModel.raw2probabilityInPlace(rawPrediction)
@@ -501,7 +475,8 @@ class NaiveBayesModel private[ml] (
   }
 
   override protected def predictionColumn(features: Column): Column = {
-    val localPredictRaw = predictRawFunction
+    val localPredictRaw =
+      NaiveBayesModel.predictRawFunction($(modelType), pi, theta, sigma)
     if (isDefined(thresholds)) {
       val localThresholds = getThresholds.clone()
       udf((features: Vector) => {
@@ -564,6 +539,28 @@ class NaiveBayesModel private[ml] (
 @Since("1.6.0")
 object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
   import NaiveBayes._
+
+  private def predictRawFunction(
+      modelType: String,
+      pi: Vector,
+      theta: Matrix,
+      sigma: Matrix): Vector => Vector = {
+    modelType match {
+      case Multinomial =>
+        features: Vector => multinomialCalculation(features, pi, theta)
+      case Complement =>
+        features: Vector => complementCalculation(features, theta)
+      case Bernoulli =>
+        val (piMinusThetaSum, thetaMinusNegTheta) = bernoulliPredictionState(pi, theta)
+        features: Vector =>
+          bernoulliCalculationWithPrecomputedState(
+            features, piMinusThetaSum, thetaMinusNegTheta)
+      case Gaussian =>
+        val logVarSum = gaussianLogVarSum(sigma)
+        features: Vector =>
+          gaussianCalculationWithPrecomputedState(features, pi, theta, sigma, logVarSum)
+    }
+  }
 
   private def multinomialCalculation(
       features: Vector,
