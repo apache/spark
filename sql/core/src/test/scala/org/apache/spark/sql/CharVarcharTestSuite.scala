@@ -2309,6 +2309,14 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       val jsonQuery =
         """SELECT from_json('{"a":1,"a ":2}', 'MAP<CHAR(2), INT>')"""
+      val nestedJsonQuery =
+        """SELECT from_json(
+          |  '{"outer":{"a":1,"a ":2}}',
+          |  'MAP<STRING, MAP<CHAR(2), INT>>')""".stripMargin
+      val badFieldBeforeDuplicateQuery =
+        """SELECT from_json(
+          |  '{"bad":"not-an-int","m":{"a":1,"a ":2}}',
+          |  'bad INT, m MAP<CHAR(2), INT>')""".stripMargin
       val xmlQuery =
         """SELECT from_xml(
           |  '<ROW><m><a>1</a>9</m></ROW>',
@@ -2316,12 +2324,30 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           |  map('valueTag', 'a ')).m""".stripMargin
 
       assertDuplicateMapKey(jsonQuery)
+      assertDuplicateMapKey(nestedJsonQuery)
+      assertDuplicateMapKey(badFieldBeforeDuplicateQuery)
       assertDuplicateMapKey(xmlQuery)
 
       withSQLConf(
           SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
         checkAnswer(sql(jsonQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(nestedJsonQuery), Row(Map("outer" -> Map("a " -> 2))))
         checkAnswer(sql(xmlQuery), Row(Map("a " -> 9)))
+      }
+    }
+  }
+
+  test("SPARK-59274: ordinary STRING map duplicate behavior is unchanged") {
+    Seq("false", "true").foreach { standardSemantics =>
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> standardSemantics) {
+        checkAnswer(
+          sql("""SELECT from_json('{"a":1,"a":2}', 'MAP<STRING, INT>')"""),
+          Row(Map("a" -> 2)))
+        checkAnswer(
+          sql("""SELECT from_xml(
+            |  '<ROW><m><a>1</a><a>2</a></m></ROW>',
+            |  'm MAP<STRING, INT>').m""".stripMargin),
+          Row(Map("a" -> 2)))
       }
     }
   }

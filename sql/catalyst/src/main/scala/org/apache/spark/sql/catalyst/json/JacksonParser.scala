@@ -40,7 +40,7 @@ import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant._
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String, VariantVal}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkErrorUtils, Utils}
 
 /**
  * Constructs a parser for a given schema that translates a json string to an [[InternalRow]].
@@ -53,6 +53,16 @@ class JacksonParser(
 
   import JacksonUtils._
   import com.fasterxml.jackson.core.JsonToken._
+
+  private object DuplicateMapKeyException {
+    def unapply(exception: Throwable): Option[SparkRuntimeException] = {
+      SparkErrorUtils.getRootCause(exception) match {
+        case cause: SparkRuntimeException if cause.getCondition == "DUPLICATED_MAP_KEY" =>
+          Some(cause)
+        case _ => None
+      }
+    }
+  }
 
   // A `ValueConverter` is responsible for converting a value from `JsonParser`
   // to a value in a field for `InternalRow`.
@@ -590,6 +600,7 @@ class JacksonParser(
             bitmask(index) = false
           } catch {
             case e: SparkUpgradeException => throw e
+            case DuplicateMapKeyException(e) => throw e
             case err: PartialValueException if enablePartialResults =>
               badRecordException = badRecordException.orElse(Some(err.cause))
               row.update(index, err.partialResult)
@@ -631,6 +642,7 @@ class JacksonParser(
       try {
         values += fieldConverter.apply(parser)
       } catch {
+        case DuplicateMapKeyException(e) => throw e
         case err: PartialValueException if enablePartialResults =>
           badRecordException = badRecordException.orElse(Some(err.cause))
           values += err.partialResult
@@ -640,8 +652,14 @@ class JacksonParser(
       }
     }
 
-    val mapData = new ArrayBasedMapBuilder(keyType, valueType).from(
-      new GenericArrayData(keys.toArray), new GenericArrayData(values.toArray))
+    val mapData = keyType match {
+      case _: CharType | _: VarcharType =>
+        new ArrayBasedMapBuilder(keyType, valueType).from(
+          new GenericArrayData(keys.toArray), new GenericArrayData(values.toArray))
+      case _ =>
+        // Preserve the historical behavior for ordinary string keys.
+        ArrayBasedMapData(keys.toArray, values.toArray)
+    }
 
     if (badRecordException.isEmpty) {
       mapData
@@ -720,7 +738,7 @@ class JacksonParser(
       }
     } catch {
       case e: SparkUpgradeException => throw e
-      case e: SparkRuntimeException if e.getCondition == "DUPLICATED_MAP_KEY" => throw e
+      case DuplicateMapKeyException(e) => throw e
       case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException) =>
         // JSON parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by

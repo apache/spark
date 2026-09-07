@@ -41,7 +41,7 @@ import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException, S
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, ToStringBase}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, BadRecordException, CharVarcharUtils, DateFormatter, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, ArrayBasedMapData, BadRecordException, CharVarcharUtils, DateFormatter, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -381,13 +381,12 @@ class StaxXmlParser(
       keyType: DataType,
       valueType: DataType,
       attributes: Array[Attribute]): MapData = {
-    val mapBuilder = new ArrayBasedMapBuilder(keyType, valueType)
+    val kvPairs = ArrayBuffer.empty[(UTF8String, Any)]
     def mapKey(raw: String): UTF8String = {
       CharVarcharUtils.applyTextParseSemantics(UTF8String.fromString(raw), keyType)
     }
     attributes.foreach { attr =>
-      mapBuilder.put(
-        mapKey(options.attributePrefix + attr.getName.getLocalPart),
+      kvPairs += (mapKey(options.attributePrefix + attr.getName.getLocalPart) ->
         convertTo(attr.getValue, valueType))
     }
     var shouldStop = false
@@ -395,17 +394,25 @@ class StaxXmlParser(
       parser.nextEvent match {
         case e: StartElement =>
           val key = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
-          mapBuilder.put(mapKey(key), convertField(parser, valueType, key))
+          kvPairs += (mapKey(key) -> convertField(parser, valueType, key))
         case c: Characters if !c.isWhiteSpace =>
           // Create a value tag field for it
           // TODO: We don't support an array value tags in map yet.
-          mapBuilder.put(mapKey(options.valueTag), convertTo(c.getData, valueType))
+          kvPairs += (mapKey(options.valueTag) -> convertTo(c.getData, valueType))
         case _: EndElement | _: EndDocument =>
           shouldStop = true
         case _ => // do nothing
       }
     }
-    mapBuilder.build()
+    keyType match {
+      case _: CharType | _: VarcharType =>
+        val mapBuilder = new ArrayBasedMapBuilder(keyType, valueType)
+        kvPairs.foreach { case (key, value) => mapBuilder.put(key, value) }
+        mapBuilder.build()
+      case _ =>
+        // Preserve the historical last-wins behavior for ordinary string keys.
+        ArrayBasedMapData(kvPairs.toMap)
+    }
   }
 
   /**
