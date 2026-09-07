@@ -54,7 +54,8 @@ ignored_file_patterns = (
     ".asf.yaml",
     ".gitattributes",
     ".gitignore",
-    # Workflow callers and schedulers.
+    # Build and test workflow wrappers or schedulers.
+    "/.github/workflows/benchmark.yml",
     "/.github/workflows/branch*_scheduler.yml",
     "/.github/workflows/build_codegen_jdk.yml",
     "/.github/workflows/build_coverage.yml",
@@ -63,15 +64,13 @@ ignored_file_patterns = (
     "/.github/workflows/build_maven*.yml",
     "/.github/workflows/build_non_ansi.yml",
     "/.github/workflows/build_python_3*.yml",
+    "/.github/workflows/build_python_connect*.yml",
     "/.github/workflows/build_python_minimum.yml",
     "/.github/workflows/build_python_pypy3.10.yml",
     "/.github/workflows/build_rockdb_as_ui_backend.yml",
     "/.github/workflows/build_scala213.yml",
-    "/.github/workflows/build_uds.yml",
-    # Non-PR CI test workflows.
-    "/.github/workflows/benchmark.yml",
-    "/.github/workflows/build_python_connect*.yml",
     "/.github/workflows/build_sparkr_window.yml",
+    "/.github/workflows/build_uds.yml",
     "/.github/workflows/maven_test.yml",
     "/.github/workflows/python_hosted_runner_test.yml",
     # GitHub Pages.
@@ -91,10 +90,13 @@ ignored_file_patterns = (
     # the `precondition` job regardless of modifications to these files.
     #   precondition job: https://github.com/apache/spark/blob/065397779ce409996abed999e1d6b46ee98a6c34/.github/workflows/build_and_test.yml#L106-L199
     #   lint job: https://github.com/apache/spark/blob/065397779ce409996abed999e1d6b46ee98a6c34/.github/workflows/build_and_test.yml#L932-L935
+    #   buf job: https://github.com/apache/spark/blob/065397779ce409996abed999e1d6b46ee98a6c34/.github/workflows/build_and_test.yml#L895-L898
     ".pre-commit-config.yaml",
     "/dev/.rat-excludes",
     "/dev/.scalafmt.conf",
+    "/dev/check_pyspark_custom_errors.py",
     "/dev/check-license",
+    "/dev/check-protos.py",
     "/dev/checkstyle-suppressions.xml",
     "/dev/checkstyle.xml",
     "/dev/connect-jvm-client-mima-check",
@@ -116,20 +118,52 @@ ignored_file_patterns = (
     "/dev/structured_logging_style.py",
     "/scalastyle-config.xml",
     # Maintainer tools.
+    "/dev/*gen-protos.sh",
+    "/dev/change-scala-version.sh",
     "/dev/create_jira_and_branch.py",
     "/dev/create_spark_jira.py",
     "/dev/create-release/",
     "/dev/free_disk_space_container",
     "/dev/free_disk_space",
+    "/dev/generate_srs_registry.py",
     "/dev/make-distribution.sh",
     "/dev/merge_spark_pr.py",
     "/dev/next_version_candidates.py",
     "/dev/pr_merge_status.py",
+    "/dev/protobuf-breaking-changes-check.sh",
     "/dev/py-cleanup",
-    "/dev/requirements.txt",
+    "/dev/requirements.txt",  # legacy, replaced in CI by pyproject.toml
     "/dev/spark_jira_utils.py",
     "/dev/spark_merge_footer.py",
-    # Binder.
+    "/dev/spark-test-image/connect-gen-protos/",
+    "/dev/spark-test-image/python-*/Dockerfile",
+    "/sql/create-docs.sh",
+    # Cluster admin scripts, CLI wrappers, and other user executables.
+    # These scripts are currently not covered by any existing test suite
+    # invoked from here.
+    "/bin/beeline*",
+    "/bin/docker-image-tool.sh",
+    "/bin/run-example*",
+    "/bin/spark-connect-shell",
+    "/bin/spark-pipelines",
+    "/bin/sparkR*",
+    "/sbin/decommission-worker.sh",
+    "/sbin/spark-daemons.sh",
+    "/sbin/start-all.sh",
+    "/sbin/start-connect-server.sh",
+    "/sbin/start-history-server.sh",
+    "/sbin/start-master.sh",
+    "/sbin/start-worker*",
+    "/sbin/stop-all.sh",
+    "/sbin/stop-connect-server.sh",
+    "/sbin/stop-history-server.sh",
+    "/sbin/stop-master.sh",
+    "/sbin/stop-worker*",
+    "/sbin/workers.sh",
+    # Default config templates. Suites write temp conf dirs rather than
+    # executing these files.
+    "/conf/",
+    # Binder infra. CI does not test this.
     "/binder/",
     # UI tests. These are typically triggered by the `precondition` job
     # regardless of modifications to these files.
