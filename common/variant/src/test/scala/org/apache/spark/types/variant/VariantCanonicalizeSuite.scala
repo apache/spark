@@ -45,7 +45,7 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     Arrays.equals(a.getValue, b.getValue) && Arrays.equals(a.getMetadata, b.getMetadata)
 
   private def isCanon(v: Variant): Boolean =
-    VariantBuilder.isCanonical(v.getValue, v.getMetadata)
+    VariantBuilder.isCanonical(v)
 
   private def buildDouble(d: Double): Variant = {
     val b = new VariantBuilder(false)
@@ -220,8 +220,26 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       .put('a'.toByte) // key "a"
       .array()
     // isCanonical inspects only the metadata at this step, so any value bytes suffice.
-    assert(!VariantBuilder.isCanonical(parse("1").getValue, meta),
+    assert(!VariantBuilder.isCanonical(new Variant(parse("1").getValue, meta)),
       "a 2-byte offset width where 1 byte fits is not canonical")
+  }
+
+  test("isCanonical rejects a dictionary whose first offset is not 0") {
+    val canonical = parse("""{"a":1}""")
+    val srcMeta = canonical.getMetadata
+    val header = srcMeta(0) // VERSION byte, offset width 1
+    val badMeta = java.nio.ByteBuffer.allocate(1 + 1 + 2 + 2)
+      .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+      .put(header)
+      .put(1.toByte)   // numKeys = 1
+      .put(1.toByte)   // offset[0] = 1  (canonical would be 0)
+      .put(2.toByte)   // offset[1] = 2
+      .put('x'.toByte) // padding byte at string-region[0]
+      .put('a'.toByte) // key "a" at string-region[1]
+      .array()
+    assert(isCanon(canonical), "sanity: the object is canonical")
+    assert(!VariantBuilder.isCanonical(new Variant(canonical.getValue, badMeta)),
+      "a dictionary with offset[0] != 0 is not canonical")
   }
 
   // ----- isCanonical: object / array structure -----
@@ -231,7 +249,7 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     b.addKey("unused")
     b.appendLong(1)
     val withUnusedKey = b.result()
-    assert(!VariantBuilder.isCanonical(withUnusedKey.getValue, withUnusedKey.getMetadata),
+    assert(!VariantBuilder.isCanonical(withUnusedKey),
       "a dictionary with an unreferenced key is not canonical")
   }
 
@@ -268,7 +286,7 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       .array()
     val nonMinimalArray = new Variant(arr, parse("1").getMetadata)
     assert(isCanon(parse("[1]")), "sanity: a minimal-width array is canonical")
-    assert(!VariantBuilder.isCanonical(nonMinimalArray.getValue, nonMinimalArray.getMetadata),
+    assert(!VariantBuilder.isCanonical(nonMinimalArray),
       "an array with a 2-byte offset width where 1 byte fits is not canonical")
   }
 
@@ -279,7 +297,7 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       ((VariantUtil.INT8 << VariantUtil.BASIC_TYPE_BITS) | VariantUtil.PRIMITIVE).toByte
     val int8One =
       new Variant(Array[Byte](int8Header, 1, 0, 0, 0, 0, 0, 0, 0), parse("1").getMetadata)
-    assert(!VariantBuilder.isCanonical(int8One.getValue, int8One.getMetadata),
+    assert(!VariantBuilder.isCanonical(int8One),
       "INT8(1) is not minimal-width")
     assert(isCanon(parse("1")), "INT1(1) is canonical")
   }
@@ -303,7 +321,7 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     val nanBytes = java.nio.ByteBuffer.allocate(9).order(java.nio.ByteOrder.LITTLE_ENDIAN)
       .put(doubleHeader).putLong(0x7ff8000000000001L).array()
     val nonCanonicalNaN = new Variant(nanBytes, parse("1").getMetadata)
-    assert(!VariantBuilder.isCanonical(nonCanonicalNaN.getValue, nonCanonicalNaN.getMetadata),
+    assert(!VariantBuilder.isCanonical(nonCanonicalNaN),
       "a non-canonical NaN bit pattern is not canonical")
   }
 
@@ -315,7 +333,7 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       .order(java.nio.ByteOrder.LITTLE_ENDIAN)
       .put(longStrHeader).putInt(text.length).put(text).array()
     val longEncoded = new Variant(bytes, parse("1").getMetadata)
-    assert(!VariantBuilder.isCanonical(longEncoded.getValue, longEncoded.getMetadata),
+    assert(!VariantBuilder.isCanonical(longEncoded),
       "a short string stored as long_str is not canonical")
     assert(isCanon(parse("\"hi\"")), "a short-encoded string is canonical")
     // A genuinely long string (> MAX_SHORT_STR_SIZE bytes) is canonical as long_str.
@@ -332,7 +350,7 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       .put(floatHeader).putInt(0x7fc00001).array()
     val nonCanonicalNaN = new Variant(bytes, parse("1").getMetadata)
     assert(!bytesEqual(nonCanonicalNaN, buildFloat(Float.NaN)), "sanity: NaN encodings differ")
-    assert(!VariantBuilder.isCanonical(nonCanonicalNaN.getValue, nonCanonicalNaN.getMetadata),
+    assert(!VariantBuilder.isCanonical(nonCanonicalNaN),
       "a non-canonical float NaN is not canonical")
     assert(bytesEqual(canon(nonCanonicalNaN), canon(buildFloat(Float.NaN))),
       "all float NaN bit patterns canonicalize to the same bytes")
