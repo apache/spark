@@ -223,7 +223,9 @@ class SparkSession private[sql] (
 
   /** @inheritdoc */
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
-    createDataset(RowEncoder.encoderFor(schema), rows.iterator().asScala).toDF()
+    // The client cannot observe the server's CHAR/VARCHAR configuration. Encode an explicitly
+    // provided schema independently of the client's local configuration, as for result schemas.
+    createDataset(RowEncoder.encoderForResultSchema(schema), rows.iterator().asScala).toDF()
   }
 
   /** @inheritdoc */
