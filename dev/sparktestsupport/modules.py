@@ -160,9 +160,9 @@ def is_ignored_file(filename: str) -> bool:
     True
 
     Leading slashes anchor at the repository root:
-    >>> is_ignored_file("SECURITY.md")
+    >>> is_ignored_file("LICENSE")
     True
-    >>> is_ignored_file("docs/SECURITY.md")
+    >>> is_ignored_file("docs/LICENSE")
     False
 
     A trailing slash ignores a directory subtree:
