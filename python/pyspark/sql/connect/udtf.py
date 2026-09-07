@@ -32,8 +32,13 @@ from pyspark.sql.connect.table_arg import TableArg
 from pyspark.sql.connect.types import UnparsedDataType
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
-from pyspark.sql.types import DataType, StructType
-from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult, _validate_udtf_handler  # noqa: F401
+from pyspark.sql.types import DataType, StructType, _parse_datatype_string
+from pyspark.sql.udtf import (  # noqa: F401
+    AnalyzeArgument,
+    AnalyzeResult,
+    _check_arrow_udtf_return_type,
+    _validate_udtf_handler,
+)
 from pyspark.sql.udtf import UDTFRegistration as PySparkUDTFRegistration
 from pyspark.util import PythonEvalType
 
@@ -167,9 +172,21 @@ class UserDefinedTableFunction:
         self.evalType = evalType
         self.deterministic = deterministic
 
+    def _check_return_type(self) -> None:
+        if self.returnType is None:
+            return
+        return_type = (
+            _parse_datatype_string(self.returnType.data_type_string)
+            if isinstance(self.returnType, UnparsedDataType)
+            else self.returnType
+        )
+        _check_arrow_udtf_return_type(return_type, self.evalType)
+
     def _build_common_inline_user_defined_table_function(
         self, *args: "ColumnOrName", **kwargs: "ColumnOrName"
     ) -> CommonInlineUserDefinedTableFunction:
+        self._check_return_type()
+
         def to_expr(col: "ColumnOrName") -> Expression:
             if isinstance(col, Column):
                 return col._expr
@@ -245,6 +262,7 @@ class UDTFRegistration:
                 },
             )
 
+        f._check_return_type()
         self.sparkSession._client.register_udtf(
             f.func, f.returnType, name, f.evalType, f.deterministic
         )
