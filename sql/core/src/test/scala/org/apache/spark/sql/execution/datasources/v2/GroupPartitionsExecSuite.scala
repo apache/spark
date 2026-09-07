@@ -19,9 +19,10 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, SortOrder}
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyedPartitioning, KeyedShuffleSpec, Partitioning, PartitioningCollection, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyedPartitioning, KeyedShuffleSpec, KeyReducer, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
+import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer}
 import org.apache.spark.sql.execution.{DummySparkPlan, LeafExecNode, SafeForKWayMerge}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -65,6 +66,36 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
         s"distributePartitions=$distribute: the merged key 1 survives")
       assert(!gpe(Some(Seq(0)), Some(Seq(keyOf(2) -> 1)), distribute).isCollapsed,
         s"distributePartitions=$distribute: only key 2 survives, and it merges nothing")
+    }
+  }
+
+  test("SPARK-59121: a node with no reducers keeps the child's reduced key marker") {
+    // This node re-reports the child's expressions, projected to `joinKeyPositions`. A reduce that
+    // happened below it has to survive that, or a further join above reads the reported transform
+    // as if it still described the keys.
+    val reducedExpr = TransformExpression(BucketFunction, Seq(exprA), Some(12))
+      .reducedTogetherWith(TransformExpression(BucketFunction, Seq(exprA), Some(8)))
+    val child = DummySparkPlan(outputPartitioning =
+      KeyedPartitioning(Seq(reducedExpr, exprB), Seq(row(1, 10), row(2, 20), row(1, 30))))
+    val gpe = GroupPartitionsExec(child, joinKeyPositions = Some(Seq(0)))
+
+    assert(gpe.reducers.isEmpty, "test setup: this node reduces nothing itself")
+    gpe.outputPartitioning match {
+      case kp: KeyedPartitioning =>
+        assert(kp.expressions === Seq(reducedExpr), "the projection keeps the marked expression")
+        assert(!kp.expressionsDescribeKeys)
+      case other => fail(s"Expected KeyedPartitioning, got $other")
+    }
+
+    // Same for a node that reduces the other position. The position it does not reduce passes
+    // through, marker and all.
+    val reducingGpe = GroupPartitionsExec(child, reducers = Some(Seq(None, Some(
+      KeyReducer(BucketReducer(2), TransformExpression(BucketFunction, Seq(exprB), Some(2)))))))
+    reducingGpe.outputPartitioning match {
+      case kp: KeyedPartitioning =>
+        assert(kp.expressions.head === reducedExpr, "the unreduced position keeps its marker")
+        assert(!kp.expressionsDescribeKeys)
+      case other => fail(s"Expected KeyedPartitioning, got $other")
     }
   }
 

@@ -258,6 +258,15 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a not like all ('foo%', 'b%')", $"a" notLikeAll("foo%", "b%"))
     assertEqual("not (a like all ('foo%', 'b%'))", !($"a" likeAll("foo%", "b%")))
 
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assertEqual(
+        "a like any (cast('foo%' as char(4)), cast('b%' as varchar(2)))",
+        $"a" likeAny("foo%", "b%"))
+      assertEqual(
+        "a like all (cast('foo%' as varchar(4)), cast('b%' as char(2)))",
+        $"a" likeAll("foo%", "b%"))
+    }
+
     Seq("any", "some", "all").foreach { quantifier =>
       checkError(
         exception = parseException(s"a like $quantifier()"),

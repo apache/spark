@@ -3810,7 +3810,8 @@ class AstBuilder extends DataTypeAstBuilder
         expr: Expression,
         patterns: Seq[UTF8String]): (Expression, Seq[UTF8String]) = ctx.kind.getType match {
       // scalastyle:off caselocale
-      case SqlBaseParser.ILIKE => (Lower(expr), patterns.map(_.toLowerCase))
+      case SqlBaseParser.ILIKE =>
+        (Lower(expr), patterns.map(pattern => Option(pattern).map(_.toLowerCase).orNull))
       // scalastyle:on caselocale
       case _ => (expr, patterns)
     }
@@ -3818,6 +3819,18 @@ class AstBuilder extends DataTypeAstBuilder
     def getLike(expr: Expression, pattern: Expression): Expression = ctx.kind.getType match {
       case SqlBaseParser.ILIKE => new ILike(expr, pattern)
       case _ => new Like(expr, pattern)
+    }
+
+    def buildBalanced(
+        expressions: Seq[Expression],
+        combine: (Expression, Expression) => Expression): Expression = {
+      assert(expressions.nonEmpty)
+      if (expressions.length == 1) {
+        expressions.head
+      } else {
+        val (left, right) = expressions.splitAt(expressions.length / 2)
+        combine(buildBalanced(left, combine), buildBalanced(right, combine))
+      }
     }
 
     val withNot = blockBang(ctx.errorCapturingNot)
@@ -3848,7 +3861,10 @@ class AstBuilder extends DataTypeAstBuilder
               throw QueryParsingErrors.emptyQuantifiedPatternError(ctx)
             }
             val expressions = expressionList(ctx.expression)
-            if (expressions.forall(_.foldable) && expressions.forall(_.dataType == StringType)) {
+            if (expressions.forall(_.foldable) &&
+                expressions.forall(
+                  expression => expression.resolved &&
+                    DataTypeUtils.isDefaultStringCharOrVarcharType(expression.dataType))) {
               // If there are many pattern expressions, will throw StackOverflowError.
               // So we use LikeAny or NotLikeAny instead.
               val patterns = expressions.map(_.eval(EmptyRow).asInstanceOf[UTF8String])
@@ -3858,15 +3874,19 @@ class AstBuilder extends DataTypeAstBuilder
                 case _ => NotLikeAny(expr, pat)
               }
             } else {
-              ctx.expression.asScala.map(expression)
-                .map(p => invertIfNotDefined(getLike(e, p))).toSeq.reduceLeft(Or)
+              buildBalanced(
+                expressions.map(p => invertIfNotDefined(getLike(e, p))),
+                Or.apply)
             }
           case Some(SqlBaseParser.ALL) =>
             if (ctx.expression.isEmpty) {
               throw QueryParsingErrors.emptyQuantifiedPatternError(ctx)
             }
             val expressions = expressionList(ctx.expression)
-            if (expressions.forall(_.foldable) && expressions.forall(_.dataType == StringType)) {
+            if (expressions.forall(_.foldable) &&
+                expressions.forall(
+                  expression => expression.resolved &&
+                    DataTypeUtils.isDefaultStringCharOrVarcharType(expression.dataType))) {
               // If there are many pattern expressions, will throw StackOverflowError.
               // So we use LikeAll or NotLikeAll instead.
               val patterns = expressions.map(_.eval(EmptyRow).asInstanceOf[UTF8String])
@@ -3876,8 +3896,9 @@ class AstBuilder extends DataTypeAstBuilder
                 case _ => NotLikeAll(expr, pat)
               }
             } else {
-              ctx.expression.asScala.map(expression)
-                .map(p => invertIfNotDefined(getLike(e, p))).toSeq.reduceLeft(And)
+              buildBalanced(
+                expressions.map(p => invertIfNotDefined(getLike(e, p))),
+                And.apply)
             }
           case _ =>
             val escapeChar = Option(ctx.escapeChar)
@@ -6165,7 +6186,7 @@ class AstBuilder extends DataTypeAstBuilder
     checkDuplicateClauses(ctx.clusterBySpec(), "CLUSTER BY", ctx)
     checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
 
-    if (ctx.skewSpec.size > 0) {
+    if (!ctx.skewSpec.isEmpty) {
       invalidStatement("CREATE TABLE ... SKEWED BY", ctx)
     }
 

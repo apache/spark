@@ -108,6 +108,170 @@ class NumPyCompatTestsMixin:
         with self.assertRaisesRegex(ValueError, "cannot join with no overlapping index names"):
             np.left_shift(psdf1, psdf2)
 
+    @property
+    def operand_type_pdf(self):
+        return pd.DataFrame(
+            {
+                "integer": [7, 8],
+                "double": [7.5, 8.5],
+                "decimal": [Decimal("7.5"), Decimal("8.5")],
+                "string": ["7", "8"],
+                "timestamp": pd.to_datetime(["2020-01-01", "2020-01-02"]),
+                "boolean": [True, False],
+                # All nulls, which Spark types as void.
+                "null": [None, None],
+            }
+        )
+
+    def test_np_unsupported_operand_types(self):
+        # Not at module scope: importing numpy_compat builds its pandas_udf entries, which
+        # bind the Column class of whichever session mode is active.
+        from pyspark.pandas.numpy_compat import (
+            _np_spark_accepted_types,
+            binary_np_spark_mappings,
+            multi_output_np_spark_mappings,
+            unary_np_spark_mappings,
+        )
+
+        psdf = ps.from_pandas(self.operand_type_pdf)
+
+        # No ufunc accepts a string column, so one loop covers the whole table.
+        for op_name, accepted_per_operand in _np_spark_accepted_types.items():
+            with self.subTest(name=op_name):
+                self.assertTrue(
+                    op_name in unary_np_spark_mappings
+                    or op_name in binary_np_spark_mappings
+                    or op_name in multi_output_np_spark_mappings,
+                    "%s has no mapping entry" % op_name,
+                )
+                with self.assertRaisesRegex(
+                    TypeError,
+                    "ufunc '%s' is not supported for the input types .*string" % op_name,
+                ):
+                    getattr(np, op_name)(*[psdf["string"]] * len(accepted_per_operand))
+
+    def test_np_unsupported_operand_types_by_ufunc(self):
+        # The types only some ufuncs reject, and which operand carries the rejected one.
+        psdf = ps.from_pandas(self.operand_type_pdf)
+
+        for np_func, columns, unsupported in (
+            (np.cosh, ["timestamp"], "timestamp"),
+            (np.cosh, ["null"], "void"),
+            (np.fmod, ["decimal", "decimal"], "decimal"),
+            # np.invert and the shifts have integer loops only.
+            (np.invert, ["double"], "double"),
+            # The rejected operand is the second one here, the first one below.
+            (np.left_shift, ["integer", "double"], "double"),
+            (np.copysign, ["double", "string"], "string"),
+            (np.logaddexp, ["timestamp", "double"], "timestamp"),
+            # np.ldexp takes its exponent from an integer loop.
+            (np.ldexp, ["double", "double"], "double"),
+            # np.sign is the only ufunc here with no boolean loop.
+            (np.sign, ["boolean"], "boolean"),
+        ):
+            with self.subTest(np_func=np_func.__name__, unsupported=unsupported):
+                with self.assertRaisesRegex(
+                    TypeError,
+                    "ufunc '%s' is not supported for the input types .*%s"
+                    % (np_func.__name__, unsupported),
+                ):
+                    np_func(*[psdf[column] for column in columns])
+
+        # An Index reaches the same dispatch as a Series.
+        with self.assertRaisesRegex(TypeError, "ufunc 'cosh' is not supported"):
+            np.cosh(ps.Index(["7", "8"]))
+
+    def test_np_unsupported_scalar_operand_types(self):
+        # A scalar operand is typed from its Python type, not from a Spark column.
+        psdf = ps.from_pandas(self.operand_type_pdf)
+
+        for np_func, args, unsupported in (
+            (np.fmod, (psdf["integer"], "8"), "string"),
+            (np.ldexp, (psdf["double"], 2.5), "double"),
+            (np.left_shift, (psdf["integer"], 1.5), "double"),
+        ):
+            with self.subTest(np_func=np_func.__name__, unsupported=unsupported):
+                with self.assertRaisesRegex(
+                    TypeError,
+                    "ufunc '%s' is not supported for the input types .*%s"
+                    % (np_func.__name__, unsupported),
+                ):
+                    np_func(*args)
+
+    def test_np_supported_operand_types(self):
+        pdf = self.operand_type_pdf
+        psdf = ps.from_pandas(pdf)
+
+        # The accepted cases the rest of this file does not reach: a decimal column, a scalar
+        # operand, and a ufunc with no table entry.
+        self.assert_eq(np.square(psdf["decimal"]), np.square(pdf["decimal"]), almost=True)
+        self.assert_eq(np.trunc(psdf["decimal"]), np.trunc(pdf["decimal"]), almost=True)
+        self.assert_eq(np.sqrt(psdf["decimal"]), np.sqrt(pdf["decimal"]), almost=True)
+        self.assert_eq(np.absolute(psdf["decimal"]), np.absolute(pdf["decimal"]), almost=True)
+        self.assert_eq(np.sign(psdf["decimal"]), np.sign(pdf["decimal"]), almost=True)
+        # pandas reads an all-null column as False for the bitwise operators, so the check must
+        # not reject void. The values still differ from pandas, which is a pre-existing gap.
+        self.assertIsNotNone(np.bitwise_and(psdf["null"], psdf["null"]))
+        self.assert_eq(np.ldexp(psdf["double"], 2), np.ldexp(pdf["double"], 2), almost=True)
+        self.assert_eq(np.fmod(psdf["integer"], 2), np.fmod(pdf["integer"], 2), almost=True)
+        self.assert_eq(np.left_shift(psdf["integer"], 1), np.left_shift(pdf["integer"], 1))
+        self.assert_eq(
+            np.fmax(psdf["string"], psdf["string"]), np.fmax(pdf["string"], pdf["string"])
+        )
+
+    def test_np_boolean_operand(self):
+        from pyspark.pandas.numpy_compat import _np_spark_accepted_types
+
+        pdf = pd.DataFrame({"b": [True, False, True], "i": [7, 8, 9]})
+        psdf = ps.from_pandas(pdf)
+        # The reference is pandas on the same values as int64, where its float loops are float64 as
+        # Spark's math always is; on a boolean or an int8 pandas runs coarser float16 loops.
+        as_int64 = pdf.b.astype("int64")
+        # Skipped: np.sign rejects a boolean; np.log and np.log10 answer nan for a zero where pandas
+        # answers -inf; np.reciprocal divides in int8; np.invert and np.negative are logical.
+        skip = {"sign", "log", "log10", "reciprocal", "invert", "negative"}
+
+        for op_name, accepted_per_operand in _np_spark_accepted_types.items():
+            if op_name in skip:
+                continue
+            np_func = getattr(np, op_name)
+            with self.subTest(name=op_name):
+                result = np_func(*[psdf.b] * len(accepted_per_operand))
+                expected = np_func(*[as_int64] * len(accepted_per_operand))
+                if isinstance(expected, tuple):
+                    for one_result, one_expected in zip(result, expected):
+                        self.assert_eq(one_result, one_expected, almost=True)
+                else:
+                    self.assert_eq(result, expected, almost=True)
+
+        # A boolean scalar operand takes the same promotion as a column.
+        self.assert_eq(np.ldexp(psdf.i, True), np.ldexp(pdf.i, True), almost=True)
+
+        # A nullable boolean keeps an extension dtype and propagates <NA>.
+        nullable_pser = pd.Series(pd.array([True, None, False], dtype="boolean"))
+        nullable = ps.from_pandas(nullable_pser)
+        self.assertIsInstance(np.sqrt(nullable).dtype, pd.Float64Dtype)
+        self.assert_eq(np.sqrt(nullable), np.sqrt(nullable_pser.astype("Int64")), almost=True)
+
+    def test_np_boolean_operand_logical(self):
+        # NumPy applies these logically rather than promoting: np.invert on a boolean is
+        # np.logical_not and pandas reads np.negative the same way; promoting would answer -2, -1.
+        pdf = pd.DataFrame(
+            {
+                "b": [True, False, True],
+                "nullable": pd.array([True, None, False], dtype="boolean"),
+                "i": [-2, 0, 3],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        for np_func in (np.invert, np.negative):
+            with self.subTest(name=np_func.__name__):
+                self.assert_eq(np_func(psdf.b), np_func(pdf.b))
+                self.assert_eq(np_func(psdf.nullable), np_func(pdf.nullable))
+                # An integer column keeps the arithmetic meaning.
+                self.assert_eq(np_func(psdf.i), np_func(pdf.i))
+
     def test_np_math_functions(self):
         for np_func, values in (
             (np.arccosh, [-np.inf, -1.0, 0.0, 1.0, 2.0, 64.0, np.inf, np.nan]),

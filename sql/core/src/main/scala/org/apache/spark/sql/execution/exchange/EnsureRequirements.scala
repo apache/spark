@@ -565,7 +565,20 @@ case class EnsureRequirements(
         val (rightReducedDataTypes, rightReducedKeys) = rightReducers.fold(
           (rightPartitioning.keyDataTypes, rightPartitioning.partitionKeys)
         )(rightPartitioning.reduceKeys)
-        val reducedDataTypes = if (leftReducedDataTypes == rightReducedDataTypes) {
+        // The reduced types are the types of the key rows the merge below sees. A side with no key
+        // still answers for them while its expressions describe the keys it would have had, and
+        // `keyDataTypes` falls back to exactly those types. After a reduce the expressions no
+        // longer describe them, so the fallback is a type no key of that partitioning would hold,
+        // and comparing it against a real answer fails a co-partitioned query (SPARK-59176). Only
+        // such a side is left out. An empty one that is not marked stays in, which is what keeps
+        // the comparison checking a reducer's result type against the paired transform.
+        val leftTypesDescribeKeys =
+          leftReducedKeys.nonEmpty || leftPartitioning.expressionsDescribeKeys
+        val rightTypesDescribeKeys =
+          rightReducedKeys.nonEmpty || rightPartitioning.expressionsDescribeKeys
+        val reducedDataTypes = if (!leftTypesDescribeKeys) {
+          rightReducedDataTypes
+        } else if (!rightTypesDescribeKeys || leftReducedDataTypes == rightReducedDataTypes) {
           leftReducedDataTypes
         } else {
           throw QueryExecutionErrors.storagePartitionJoinIncompatibleReducedTypesError(
@@ -838,11 +851,19 @@ case class EnsureRequirements(
       joinType: JoinType,
       keyOrdering: Ordering[InternalRowComparableWrapper]): Seq[InternalRowComparableWrapper] = {
     val merged = if (SQLConf.get.getConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED)) {
+      // Rows with matching join keys land in the same key group. If a group is absent from one
+      // side, whether it can produce output depends on which side's unmatched rows the join
+      // preserves. Only equi-joins reach this method, since every SMJ/SHJ takes its keys from
+      // `ExtractEquiJoinKeys`. So a Cross join, e.g. `l CROSS JOIN r ON l.id = r.id`, is treated
+      // like an Inner join: groups absent from either side cannot produce output.
       joinType match {
-        case Inner =>
+        // neither side keeps unmatched rows
+        case _: InnerLike | LeftSemi =>
           mergeAndDedupPartitionKeys(leftPartitionKeys, rightPartitionKeys, intersect = true)
-        case LeftOuter => leftPartitionKeys.distinct
+        // every left row is kept or tested
+        case LeftOuter | LeftAnti | LeftSingle | ExistenceJoin(_) => leftPartitionKeys.distinct
         case RightOuter => rightPartitionKeys.distinct
+        // FullOuter keeps both sides' unmatched rows; any other join type is not filtered
         case _ => mergeAndDedupPartitionKeys(leftPartitionKeys, rightPartitionKeys)
       }
     } else {

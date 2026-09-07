@@ -194,7 +194,14 @@ abstract class ProbabilisticClassificationModel[
    * @note This method honors [[thresholds]] when they are set.
    */
   protected def probability2predictionColumn(probability: Column): Column = {
-    udf(probability2prediction _).apply(probability)
+    if (isDefined(thresholds)) {
+      val localThresholds = getThresholds.clone()
+      udf((probability: Vector) =>
+        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+      ).apply(probability)
+    } else {
+      udf((probability: Vector) => probability.argmax.toDouble).apply(probability)
+    }
   }
 
   /** @group setParam */
