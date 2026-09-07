@@ -200,4 +200,14 @@ class QueryPlanSuite extends SparkFunSuite {
     assert(normalizedExpressions.map(_.dataType) == Seq(IntegerType, StringType),
       "normalizeExpressions preserves original expression order")
   }
+
+  test("normalizeExpressions(Seq) matches the per-element form") {
+    val id = AttributeReference("id", IntegerType)(ExprId(0))
+    val data = AttributeReference("data", StringType)(ExprId(1))
+    val output: AttributeSeq = Seq(id, data)
+    val exprs: Seq[Expression] = Seq(data, id)
+
+    assert(QueryPlan.normalizeExpressions(exprs, output) ==
+      exprs.map(QueryPlan.normalizeExpressions(_, output)))
+  }
 }
