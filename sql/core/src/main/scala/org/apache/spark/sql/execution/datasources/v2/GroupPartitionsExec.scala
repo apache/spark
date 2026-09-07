@@ -67,10 +67,7 @@ case class GroupPartitionsExec(
     @transient enableSortedMerge: Boolean = false
   ) extends UnaryExecNode {
 
-  // A `lazy val` because the planner asks a node for its partitioning many times, and this body
-  // rebuilds every `KeyedPartitioning` in the child's on top of the already memoized `grouping`.
-  // Read no live config here, or memoizing would freeze it.
-  @transient override lazy val outputPartitioning: Partitioning = {
+  override def outputPartitioning: Partitioning = {
     child.outputPartitioning match {
       case p: Partitioning with Expression =>
         // There can be multiple `KeyedPartitioning`s in an output partitioning of a join, but they
