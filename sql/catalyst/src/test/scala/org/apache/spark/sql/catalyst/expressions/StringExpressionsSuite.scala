@@ -851,6 +851,31 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(Int.MinValue, IntegerType)), "_Spark SQL")
   }
 
+  test("SPARK-58713: overlay position arithmetic is collation-independent") {
+    // `Overlay` builds its result from character positions and `substringSQL`, and never
+    // consults the collation - `CollationSupport` defines no collation-aware overlay - so
+    // the clamped out-of-range positions fixed above produce the same result under every
+    // collation. The mixed case of the expected values also shows nothing is case folded.
+    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach { collation =>
+      val st = StringType(collation)
+      val input = Literal.create("Spark SQL", st)
+      val replace = Literal.create("_", st)
+      checkEvaluation(Overlay(input, replace,
+        Literal.create(Int.MaxValue, IntegerType), Literal.create(5, IntegerType)),
+        "Spark SQL_")
+      checkEvaluation(new Overlay(input, replace,
+        Literal.create(Int.MaxValue, IntegerType)), "Spark SQL_")
+      checkEvaluation(Overlay(input, replace,
+        Literal.create(Int.MaxValue - 2, IntegerType), Literal.create(10, IntegerType)),
+        "Spark SQL_")
+      checkEvaluation(Overlay(input, replace,
+        Literal.create(Int.MinValue, IntegerType), Literal.create(1, IntegerType)),
+        "_Spark SQL")
+      checkEvaluation(new Overlay(input, replace,
+        Literal.create(Int.MinValue, IntegerType)), "_Spark SQL")
+    }
+  }
+
   test("overlay for byte array") {
     val input = Literal(Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9))
     checkEvaluation(new Overlay(input, Literal(Array[Byte](-1)),
