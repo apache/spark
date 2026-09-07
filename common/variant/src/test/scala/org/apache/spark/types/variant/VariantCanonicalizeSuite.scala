@@ -59,6 +59,18 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     b.result()
   }
 
+  // offset-list integer width stored in an object/array value header at position 0
+  private def valueOffsetWidth(v: Variant): Int =
+    ((v.getValue()(0) >> VariantUtil.BASIC_TYPE_BITS) & 0x3) + 1
+
+  // dictionary offset width stored in the metadata header byte
+  private def metaOffsetWidth(v: Variant): Int =
+    ((v.getMetadata()(0) >> 6) & 0x3) + 1
+
+  // object field-id integer width stored in an object value header at position 0
+  private def idWidth(v: Variant): Int =
+    ((v.getValue()(0) >> (VariantUtil.BASIC_TYPE_BITS + 2)) & 0x3) + 1
+
   test("object key order does not affect the canonical form") {
     val a = canon(parse("""{"a":1,"b":2}"""))
     val b = canon(parse("""{"b":2,"a":1}"""))
@@ -354,6 +366,59 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     assert(isCanon(parse("[1]")), "sanity: a minimal-width array is canonical")
     assert(!VariantBuilder.isCanonical(wideSizeArray),
       "an array with a 4-byte size field where 1 byte fits is not canonical")
+  }
+
+  // ----- isCanonical + canonicalize: 2/3-byte offset and id widths -----
+
+  test("canonicalize and isCanonical handle 2-byte and 3-byte array offset widths") {
+    // ~200 small ints exceed 255 B of element data -> a 2-byte offset list.
+    val twoByte = canon(parse("[" + (0 until 200).mkString(",") + "]"))
+    assert(valueOffsetWidth(twoByte) == 2, "array data > 255 B -> 2-byte offset width")
+    assert(isCanon(twoByte), "the 2-byte-wide array is canonical")
+
+    // A single ~70 KB string element pushes data past 65535 B -> a 3-byte offset list.
+    val threeByte = canon(parse("[\"" + ("x" * 70000) + "\"]"))
+    assert(valueOffsetWidth(threeByte) == 3, "array data > 65535 B -> 3-byte offset width")
+    assert(isCanon(threeByte), "the 3-byte-wide array is canonical")
+  }
+
+  test("canonicalize and isCanonical handle 2-byte and 3-byte object offset widths") {
+    // {"a": <~470 B array>}: object data > 255 B -> 2-byte offset width
+    val twoByte = canon(parse("{\"a\":[" + (0 until 200).mkString(",") + "]}"))
+    assert(valueOffsetWidth(twoByte) == 2, "object data > 255 B -> 2-byte offset width")
+    assert(isCanon(twoByte), "the 2-byte-wide object is canonical")
+
+    // {"a": <~70 KB string>} -> object data > 65535 B -> a 3-byte offset width.
+    val threeByte = canon(parse("{\"a\":\"" + ("x" * 70000) + "\"}"))
+    assert(valueOffsetWidth(threeByte) == 3, "object data > 65535 B -> 3-byte offset width")
+    assert(isCanon(threeByte), "the 3-byte-wide object is canonical")
+  }
+
+  test("object id width crosses from 1 to 2 bytes at 257 keys") {
+    // id width = minIntWidth(maxId); maxId = numKeys-1 -> width 1 up to 256 keys, 2 at 257.
+    def objectWithKeys(n: Int): Variant =
+      canon(parse("{" + (0 until n).map(i => "\"k%03d\":%d".format(i, i)).mkString(",") + "}"))
+    val at256 = objectWithKeys(256) // maxId 255
+    val at257 = objectWithKeys(257) // maxId 256
+    assert(idWidth(at256) == 1, "256 keys (maxId 255) -> 1-byte id width")
+    assert(idWidth(at257) == 2, "257 keys (maxId 256) -> 2-byte id width")
+    assert(isCanon(at256), "the 256-key object is canonical")
+    assert(isCanon(at257), "the 257-key object is canonical")
+  }
+
+  test("canonicalize and isCanonical handle 2-byte and 3-byte metadata offset widths") {
+    // 50 seven-char keys make the dict key-region > 255 B -> a 2-byte dict offset width.
+    val manyKeys = (0 until 50).map(i => "\"field%02d\":%d".format(i, i)).mkString(",")
+    val twoByte = canon(parse("{" + manyKeys + "}"))
+    assert(metaOffsetWidth(twoByte) == 2, "keys > 255 B -> 2-byte dict offset width")
+    assert(isCanon(twoByte), "the 2-byte-wide dictionary is canonical")
+
+    // Two ~40 KB keys make the key-region > 65535 B -> a 3-byte dict offset width.
+    // (A single key > 50000 chars is rejected by Jackson's max-name-length limit.)
+    val bigKeys = "\"" + ("a" * 40000) + "\":1,\"" + ("b" * 40000) + "\":2"
+    val threeByte = canon(parse("{" + bigKeys + "}"))
+    assert(metaOffsetWidth(threeByte) == 3, "keys > 65535 B -> 3-byte dict offset width")
+    assert(isCanon(threeByte), "the 3-byte-wide dictionary is canonical")
   }
 
   // ----- isCanonical: scalar values -----
