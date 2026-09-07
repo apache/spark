@@ -117,7 +117,8 @@ case class GroupPartitionsExec(
               case None => projectedExpressions
             }
             KeyedPartitioning(effectiveExpressions, groupedPartitions.map(_._1),
-              isGrouped = isGrouped, mayContainUnknownPartitionKeys = k.mayContainUnknownPartitionKeys)
+              isGrouped = isGrouped,
+              mayContainUnknownPartitionKeys = k.mayContainUnknownPartitionKeys)
         }.asInstanceOf[Partitioning]
       case o => o
     }

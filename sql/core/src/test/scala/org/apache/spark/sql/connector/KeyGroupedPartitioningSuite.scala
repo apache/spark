@@ -5930,7 +5930,8 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
   test("SPARK-59050: SPJ: a window keyed on the full key of an unknown-keyed layout does not " +
     "shuffle") {
-    // Positive control for the marked branch of `groupedSatisfies`: whole declared keys co-locate, so
+    // Positive control for the marked branch of `groupedSatisfies`: whole declared keys
+    // co-locate, so
     // a window keyed on the COMPLETE partition key of a marked layout still runs
     // partition-locally. A gate that over-rejects (e.g. also refusing full-key clustering) keeps
     // every wrong-results test green and only silently adds shuffles; this test would not.

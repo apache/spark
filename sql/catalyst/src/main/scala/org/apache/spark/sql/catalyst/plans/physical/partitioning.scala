@@ -453,7 +453,8 @@ case class KeyedPartitioning(
     expressions: Seq[Expression],
     @transient partitionKeys: Seq[InternalRowComparableWrapper],
     isGrouped: Boolean,
-    mayContainUnknownPartitionKeys: Boolean = false) extends Expression with Partitioning with Unevaluable {
+    mayContainUnknownPartitionKeys: Boolean = false)
+  extends Expression with Partitioning with Unevaluable {
   override val numPartitions = partitionKeys.length
 
   override def children: Seq[Expression] = expressions
