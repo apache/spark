@@ -602,10 +602,10 @@ public class VariantBuilder {
   // finishWritingObject already uses for object fields, so the two stay
   // consistent) and unused entries stripped, with field ids remapped to the sorted positions.
   public static Variant canonicalize(Variant v) {
-    // Fast path: a top-level (pos == 0) input that is already canonical is returned unchanged. A
-    // sub-variant (pos != 0) is a view into a parent's shared value/metadata, so it always takes
-    // the slow path, which reads the element at v.pos and rebuilds a standalone canonical Variant.
-    if (v.pos == 0 && isCanonical(v.value, v.metadata)) {
+    // Fast path: an already-canonical input is returned unchanged. isCanonical rejects sub-variants
+    // (pos != 0) -- a view into a parent's shared value/metadata -- so those fall through to the
+    // rebuild below, which reads the element at v.pos and produces a standalone canonical Variant.
+    if (isCanonical(v)) {
       return v;
     }
     return doCanonicalize(v);
@@ -660,8 +660,9 @@ public class VariantBuilder {
     }
   }
 
-  // Return true iff `(value, metadata)` is ALREADY in the exact byte form that `buildCanonicalized`
-  // would produce -- i.e. calling `canonicalize` on it is a no-op. Intended as a read-side fast
+  // Return true iff `v` is ALREADY in the exact byte form that `buildCanonicalized` would produce
+  // -- i.e. calling `canonicalize(v)` is a no-op. A sub-variant (pos != 0) is never canonical (its
+  // value/metadata are a view into a parent). Intended as a read-side fast
   // path so already-canonical Variants skip the allocation-heavy rebuild (dictionary sort +
   // re-serialize).
   //
@@ -673,10 +674,20 @@ public class VariantBuilder {
   //     - decimal integer-promoted, trailing-zero-free, minimal width
   //     - float/double the exact bytes appendFloat/appendDouble emit
   //     - string short-encoded when it fits.
-  public static boolean isCanonical(byte[] value, byte[] metadata) {
+  public static boolean isCanonical(Variant v) {
+    if (v.pos != 0) {
+      return false;
+    }
+    byte[] value = v.value;
+    byte[] metadata = v.metadata;
     checkIndex(0, metadata.length);
     int metaOffsetSize = ((metadata[0] >> 6) & 0x3) + 1;
     int numKeys = readUnsigned(metadata, 1, metaOffsetSize);
+
+    if (readUnsigned(metadata, 1 + metaOffsetSize, metaOffsetSize) != 0) {
+      return false;
+    }
+
     if (numKeys > 1) {
       byte[] prevKey = encodeKey(getMetadataKey(metadata, 0));
       for (int id = 1; id < numKeys; ++id) {
