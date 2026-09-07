@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.IntegratedUDFTestUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{CharType, StringType, VarcharType}
 
 /**
  * End-to-end tests for the Arrow columnar Python UDF input path.
@@ -100,6 +101,39 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
         assert(row.getString(1) == i.toString,
           s"UDF result mismatch at row $i")
       }
+    }
+  }
+
+  test("Arrow-backed source: CHAR/VARCHAR output checks") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(
+        SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charUDF = TestTypedScalarPandasUDF(
+        name = "arrow_char_udf", returnType = CharType(4))
+      val varcharUDF = TestTypedScalarPandasUDF(
+        name = "arrow_varchar_udf", returnType = VarcharType(3))
+      registerTestUDF(charUDF, spark)
+      registerTestUDF(varcharUDF, spark)
+
+      val df = readArrowSource(numRows = 10)
+      val padded = df.selectExpr(
+        "id", "name", "value", "data",
+        "arrow_char_udf(id) as udf_id")
+      val arrowExec = collectNodes[ArrowEvalPythonExec](
+        padded.queryExecution.executedPlan).head
+      assert(arrowExec.child.supportsColumnar,
+        "ArrowEvalPythonExec should retain its Arrow-backed columnar child")
+      assert(padded.select("udf_id").collect().map(_.getString(0)).toSeq ===
+        (0 until 10).map(_.toString.padTo(4, ' ').mkString))
+
+      val exception = intercept[SparkException] {
+        df.selectExpr(
+          "id", "name", "value", "data",
+          "arrow_varchar_udf(name) as udf_name").collect()
+      }
+      assert(exception.getMessage.contains("EXCEED_LIMIT_LENGTH"))
     }
   }
 

@@ -30,7 +30,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.ops.TypeApiOps
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CharVarcharCodegenUtils, GenericArrayData, MapData, STUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CharVarcharCodegenUtils, CharVarcharUtils, GenericArrayData, MapData, STUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{BinaryView, UTF8String, VariantVal}
 
@@ -146,10 +147,19 @@ object EvaluatePython {
    * Make a converter that converts `obj` to the type specified by the data type, or returns
    * null if the type of obj is unexpected. Because Python doesn't enforce the type.
    */
-  def makeFromJava(dataType: DataType): Any => Any =
-    TypeApiOps(dataType).flatMap(_.makeFromJava).getOrElse(makeFromJavaDefault(dataType))
+  def makeFromJava(dataType: DataType): Any => Any = {
+    val applyCharVarcharChecks =
+      CharVarcharUtils.shouldApplyWriteSideLengthCheck(SQLConf.get)
+    makeFromJava(dataType, applyCharVarcharChecks)
+  }
 
-  private def makeFromJavaDefault(dataType: DataType): Any => Any = dataType match {
+  private def makeFromJava(dataType: DataType, applyCharVarcharChecks: Boolean): Any => Any =
+    TypeApiOps(dataType).flatMap(_.makeFromJava)
+      .getOrElse(makeFromJavaDefault(dataType, applyCharVarcharChecks))
+
+  private def makeFromJavaDefault(
+      dataType: DataType,
+      applyCharVarcharChecks: Boolean): Any => Any = dataType match {
     case BooleanType => (obj: Any) => nullSafeConvert(obj) {
       case b: Boolean => b
     }
@@ -207,13 +217,13 @@ object EvaluatePython {
         case c: Int => c.toLong
       }
 
-    case c: CharType => (obj: Any) => nullSafeConvert(obj) {
+    case c: CharType if applyCharVarcharChecks => (obj: Any) => nullSafeConvert(obj) {
       case _ =>
         CharVarcharCodegenUtils.charTypeWriteSideCheck(
           UTF8String.fromString(obj.toString), c.length)
     }
 
-    case v: VarcharType => (obj: Any) => nullSafeConvert(obj) {
+    case v: VarcharType if applyCharVarcharChecks => (obj: Any) => nullSafeConvert(obj) {
       case _ =>
         CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
           UTF8String.fromString(obj.toString), v.length)
@@ -229,7 +239,7 @@ object EvaluatePython {
     }
 
     case ArrayType(elementType, _) =>
-      val elementFromJava = makeFromJava(elementType)
+      val elementFromJava = makeFromJava(elementType, applyCharVarcharChecks)
 
       (obj: Any) => nullSafeConvert(obj) {
         case c: java.util.List[_] =>
@@ -239,8 +249,8 @@ object EvaluatePython {
       }
 
     case MapType(keyType, valueType, _) =>
-      val keyFromJava = makeFromJava(keyType)
-      val valueFromJava = makeFromJava(valueType)
+      val keyFromJava = makeFromJava(keyType, applyCharVarcharChecks)
+      val valueFromJava = makeFromJava(valueType, applyCharVarcharChecks)
 
       (obj: Any) => nullSafeConvert(obj) {
         case javaMap: java.util.Map[_, _] =>
@@ -251,7 +261,7 @@ object EvaluatePython {
       }
 
     case StructType(fields) =>
-      val fieldsFromJava = fields.map(f => makeFromJava(f.dataType))
+      val fieldsFromJava = fields.map(f => makeFromJava(f.dataType, applyCharVarcharChecks))
 
       (obj: Any) => nullSafeConvert(obj) {
         case c if c.getClass.isArray =>
@@ -273,7 +283,7 @@ object EvaluatePython {
           row
       }
 
-    case udt: UserDefinedType[_] => makeFromJava(udt.sqlType)
+    case udt: UserDefinedType[_] => makeFromJava(udt.sqlType, applyCharVarcharChecks)
 
     case VariantType => (obj: Any) => nullSafeConvert(obj) {
       case s: java.util.HashMap[_, _] =>

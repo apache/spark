@@ -66,6 +66,16 @@ class DataFrameCreationTestsMixin:
             with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
                 self.spark.createDataFrame([("ab", ["abcd"])], schema).collect()
 
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            df = self.spark.createDataFrame([("ab", ["abcd"])], schema)
+            self.assertEqual(df.first(), Row(c="ab", nested=["abcd"]))
+
     def test_create_str_from_dict(self):
         data = [
             {"broker": {"teamId": 3398, "contactEmail": "abc.xyz@123.ca"}},

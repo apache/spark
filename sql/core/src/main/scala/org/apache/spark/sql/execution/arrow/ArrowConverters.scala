@@ -549,7 +549,14 @@ private[sql] object ArrowConverters extends Logging {
       errorOnDuplicatedFieldNames: Boolean,
       largeVarTypes: Boolean): DataFrame = {
     val attrs = toAttributes(schema)
-    val checkedAttrs = attrs.map(attr => CharVarcharUtils.stringLengthCheck(attr, attr.dataType))
+    val applyCharVarcharChecks =
+      CharVarcharUtils.hasCharVarchar(schema) &&
+        CharVarcharUtils.shouldApplyWriteSideLengthCheck(session.sessionState.conf)
+    val checkedAttrs = if (applyCharVarcharChecks) {
+      attrs.map(attr => CharVarcharUtils.stringLengthCheck(attr, attr.dataType))
+    } else {
+      attrs
+    }
     val batchesInDriver = arrowBatches.toArray
     val shouldUseRDD = session.sessionState.conf
       .arrowLocalRelationThreshold < batchesInDriver.map(_.length.toLong).sum
@@ -566,8 +573,12 @@ private[sql] object ArrowConverters extends Logging {
             errorOnDuplicatedFieldNames,
             largeVarTypes,
             TaskContext.get())
-          val projection = UnsafeProjection.create(checkedAttrs, attrs)
-          rows.map(row => projection(row).copy(): InternalRow)
+          if (applyCharVarcharChecks) {
+            val projection = UnsafeProjection.create(checkedAttrs, attrs)
+            rows.map(row => projection(row).copy(): InternalRow)
+          } else {
+            rows
+          }
         }
       session.internalCreateDataFrame(rdd.setName("arrow"), schema)
     } else {
