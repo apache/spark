@@ -144,13 +144,12 @@ class RpcDeadlines:
     stream to resume receiving results. Non-reattachable query ExecutePlan calls have no deadline
     because a timeout there would kill the execution with no recovery path.
 
-    Note on ``release_relation``: the RemoveRemoteCachedRelation cleanup command is sent over a
-    blocking, non-reattachable ExecutePlan call issued from
-    :meth:`CachedRemoteRelation.__del__`. Unlike a query ExecutePlan, a timeout here does not kill
-    any recoverable execution -- it only abandons a best-effort cache eviction that the server also
-    performs independently -- so this call is given a bounded deadline. Without it the finalizer
-    can block forever if the release response is never delivered, which (on the foreachBatch
-    Connect path) stalls the streaming query indefinitely.
+    Note on ``release_relation`` and ``release_ml_cache``: these best-effort cleanup commands are
+    sent over blocking, non-reattachable ExecutePlan calls. Unlike a query ExecutePlan, a timeout
+    here does not kill any recoverable execution -- it only abandons cache eviction, and the server
+    also releases the cached state when the session ends -- so these calls are given bounded
+    deadlines. Without them a finalizer or interpreter-exit cleanup can block forever if the
+    release response is never delivered.
     """
 
     reattachable_execute_plan: Optional[float] = 10 * 60  # 10 min
@@ -165,6 +164,7 @@ class RpcDeadlines:
     get_status: Optional[float] = 10 * 60  # 10 min
     fetch_error_details: Optional[float] = 10 * 60  # 10 min
     release_relation: Optional[float] = 60  # 1 min; short: per-batch finalizer
+    release_ml_cache: Optional[float] = 60  # 1 min; best-effort cleanup
 
     def __post_init__(self) -> None:
         for field in fields(self):
@@ -196,6 +196,7 @@ class RpcDeadlines:
             get_status=None,
             fetch_error_details=None,
             release_relation=None,
+            release_ml_cache=None,
         )
 
 
@@ -877,7 +878,8 @@ class SparkConnectClient(object):
             ([1KB, max batch size on server]). Otherwise, the server's maximum batch size is used.
         rpc_deadlines : RpcDeadlines, optional
             Per-RPC gRPC call timeouts in seconds (10 min for most RPCs,
-            1 hour for analyze/addArtifacts, none for non-reattachable execute).
+            1 hour for analyze/addArtifacts, 1 min for best-effort release calls,
+            none for non-reattachable query execute).
             Use :meth:`RpcDeadlines.disabled` to turn off all deadlines.
         max_retry_exception_elapsed_time : float, optional
             Maximum cumulative elapsed time in seconds the client will keep retrying a
@@ -2589,14 +2591,11 @@ class SparkConnectClient(object):
                 command.ml_command.delete.evict_only = evict_only
                 self._ml_cache_rpc_thread = threading.get_ident()
                 try:
-                    _, properties, _ = self.execute_command(command)
+                    ml_command_result = self._execute_ml_cache_command(command)
                 finally:
                     self._ml_cache_rpc_thread = None
 
-                assert properties is not None
-
-                if properties is not None and "ml_command_result" in properties:
-                    ml_command_result = properties["ml_command_result"]
+                if ml_command_result is not None:
                     deleted = ml_command_result.operator_info.obj_ref.id.split(",")
                     return cast(List[str], deleted)
             return []
@@ -2637,11 +2636,47 @@ class SparkConnectClient(object):
             command.ml_command.clean_cache.SetInParent()
             self._ml_cache_rpc_thread = threading.get_ident()
             try:
-                self.execute_command(command)
+                self._execute_ml_cache_command(command)
             finally:
                 self._ml_cache_rpc_thread = None
         except Exception:
             pass
+
+    def _execute_ml_cache_command(self, command: pb2.Command) -> Optional[pb2.MlCommandResult]:
+        """Execute a best-effort ML cache cleanup command with a bounded deadline."""
+        req = self._execute_plan_request_with_metadata()
+        self._set_command_in_plan(req.plan, command)
+
+        operation_id = req.operation_id
+        for hook in self._session_hooks:
+            req = hook.on_execute_plan(req)
+            req.operation_id = operation_id
+
+        try:
+            for attempt in self._retrying():
+                with attempt:
+                    # Use a unary call for cleanup that can run from a finalizer or at interpreter
+                    # exit. A normal reattachable ExecutePlan would restart its per-stream deadline
+                    # indefinitely, while the generated unary-stream call is unreliable during
+                    # interpreter shutdown. ML cache eviction is best effort and also happens when
+                    # the server releases the session, so abandoning it on timeout is safe.
+                    channel = self._channel.unary_unary(
+                        "/spark.connect.SparkConnectService/ExecutePlan",
+                        request_serializer=pb2.ExecutePlanRequest.SerializeToString,
+                        response_deserializer=pb2.ExecutePlanResponse.FromString,
+                    )
+                    response = channel(
+                        req,
+                        metadata=self._execute_plan_metadata(req.operation_id),
+                        timeout=self._rpc_deadlines.release_ml_cache,
+                    )
+                    self._verify_response_integrity(response)
+                    if response.HasField("ml_command_result"):
+                        return cast(pb2.MlCommandResult, response.ml_command_result)
+                    return None
+            raise SparkConnectException("Invalid state during retry exception handling.")
+        except Exception as error:
+            self._handle_error(error, req.operation_id)
 
     def _get_ml_cache_info(self) -> List[str]:
         command = pb2.Command()

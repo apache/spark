@@ -1011,6 +1011,58 @@ class SparkConnectClientTestCase(unittest.TestCase):
         rel.__del__()
         self.assertIsNone(captured["timeout"])
 
+    def test_ml_cache_cleanup_uses_release_ml_cache_deadline(self):
+        """Best-effort ML cache release commands must use their dedicated deadline."""
+        from unittest.mock import MagicMock
+
+        def make_client(deadlines):
+            client = SparkConnectClient(
+                "sc://foo/",
+                rpc_deadlines=deadlines,
+                retry_policy=dict(max_retries=0),
+            )
+            captured = []
+
+            def fake_call(req, metadata=None, timeout="unset"):
+                command = req.plan.command.ml_command
+                captured.append(
+                    {
+                        "delete": command.HasField("delete"),
+                        "clean_cache": command.HasField("clean_cache"),
+                        "timeout": timeout,
+                    }
+                )
+                response = proto.ExecutePlanResponse(
+                    session_id=client._session_id,
+                    operation_id=req.operation_id,
+                )
+                if command.HasField("delete"):
+                    response.ml_command_result.operator_info.obj_ref.id = "model-id"
+                return response
+
+            client._channel = MagicMock()
+            client._channel.unary_unary.return_value = fake_call
+            return client, captured
+
+        client, captured = make_client(RpcDeadlines(release_ml_cache=44.0))
+        self.assertEqual(client._delete_ml_cache(["model-id"]), ["model-id"])
+        cleanup_command = proto.Command()
+        cleanup_command.ml_command.clean_cache.SetInParent()
+        client._execute_ml_cache_command(cleanup_command)
+        self.assertEqual(
+            captured,
+            [
+                {"delete": True, "clean_cache": False, "timeout": 44.0},
+                {"delete": False, "clean_cache": True, "timeout": 44.0},
+            ],
+        )
+        client.close()
+
+        client, captured = make_client(RpcDeadlines.disabled())
+        client._execute_ml_cache_command(cleanup_command)
+        self.assertIsNone(captured[0]["timeout"])
+        client.close()
+
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectClientReattachTestCase(unittest.TestCase):
