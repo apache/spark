@@ -43,7 +43,6 @@ ignored_file_patterns = (
     "PULL_REQUEST_TEMPLATE",
     "README.md",
     "SECURITY.md",
-
     # License and NOTICE files, including bundled third-party licenses.
     "/LICENSE-binary",
     "/LICENSE",
@@ -51,12 +50,10 @@ ignored_file_patterns = (
     "/licenses/",
     "/NOTICE-binary",
     "/NOTICE",
-
     # Git and ASF metadata.
     ".asf.yaml",
     ".gitattributes",
     ".gitignore",
-
     # Workflow callers and schedulers.
     "/.github/workflows/branch*_scheduler.yml",
     "/.github/workflows/build_codegen_jdk.yml",
@@ -71,22 +68,18 @@ ignored_file_patterns = (
     "/.github/workflows/build_rockdb_as_ui_backend.yml",
     "/.github/workflows/build_scala213.yml",
     "/.github/workflows/build_uds.yml",
-
     # Non-PR CI test workflows.
     "/.github/workflows/benchmark.yml",
     "/.github/workflows/build_python_connect*.yml",
     "/.github/workflows/build_sparkr_window.yml",
     "/.github/workflows/maven_test.yml",
     "/.github/workflows/python_hosted_runner_test.yml",
-
     # GitHub Pages.
     ".nojekyll",
     "/.github/workflows/pages.yml",
-
     # Release and publishing.
     "/.github/workflows/publish_snapshot.yml",
     "/.github/workflows/release.yml",
-
     # GitHub housekeeping and repo automation.
     "/.github/workflows/build_infra_images_cache.yml",
     "/.github/workflows/images/",
@@ -94,7 +87,6 @@ ignored_file_patterns = (
     "/.github/workflows/stale.yml",
     "/.github/workflows/test_report.yml",
     "/.github/workflows/update_build_status.yml",
-
     # Linters, formatters, and their configs. These are typically triggered by
     # the `precondition` job regardless of modifications to these files.
     #   precondition job: https://github.com/apache/spark/blob/065397779ce409996abed999e1d6b46ee98a6c34/.github/workflows/build_and_test.yml#L106-L199
@@ -123,7 +115,6 @@ ignored_file_patterns = (
     "/dev/spark-test-image/lint/",
     "/dev/structured_logging_style.py",
     "/scalastyle-config.xml",
-
     # Maintainer tools.
     "/dev/create_jira_and_branch.py",
     "/dev/create_spark_jira.py",
@@ -138,10 +129,8 @@ ignored_file_patterns = (
     "/dev/requirements.txt",
     "/dev/spark_jira_utils.py",
     "/dev/spark_merge_footer.py",
-
     # Binder.
     "/binder/",
-
     # UI tests. These are typically triggered by the `precondition` job
     # regardless of modifications to these files.
     #   precondition job: https://github.com/apache/spark/blob/065397779ce409996abed999e1d6b46ee98a6c34/.github/workflows/build_and_test.yml#L106-L199
