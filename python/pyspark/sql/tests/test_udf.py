@@ -109,6 +109,38 @@ class BaseUDFTestsMixin:
             )
             self.assertEqual(result.first(), Row(c="a", v="abcd"))
 
+    def test_char_varchar_intermediate_udf_results(self):
+        for use_arrow in (False, True):
+            with self.subTest(use_arrow=use_arrow):
+                inner_char = udf(lambda _: "a", CharType(3), useArrow=use_arrow)
+                inner_varchar = udf(lambda _: "abcd", VarcharType(3), useArrow=use_arrow)
+                outer = udf(lambda value: value, StringType(), useArrow=use_arrow)
+
+                with self.sql_conf(
+                    {"spark.sql.charVarchar.standardSemantics.enabled": "true"}
+                ):
+                    padded = self.spark.range(1).select(
+                        outer(inner_char("id")).alias("result")
+                    )
+                    self.assertEqual(padded.first().result, "a  ")
+
+                    invalid = self.spark.range(1).select(outer(inner_varchar("id")))
+                    with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                        invalid.collect()
+
+                with self.sql_conf(
+                    {
+                        "spark.sql.legacy.charVarcharAsString": "true",
+                        "spark.sql.preserveCharVarcharTypeInfo": "false",
+                        "spark.sql.charVarchar.standardSemantics.enabled": "false",
+                    }
+                ):
+                    result = self.spark.range(1).select(
+                        outer(inner_char("id")).alias("c"),
+                        outer(inner_varchar("id")).alias("v"),
+                    )
+                    self.assertEqual(result.first(), Row(c="a", v="abcd"))
+
     def test_char_varchar_non_scalar_return_types_unsupported(self):
         nested_return_type = StructType(
             [StructField("nested", ArrayType(CharType(3)))]
@@ -123,7 +155,9 @@ class BaseUDFTestsMixin:
         ]
         aggregate_eval_types = [
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
         ]
 
         for eval_type in struct_eval_types:

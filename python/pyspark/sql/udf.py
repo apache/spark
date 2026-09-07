@@ -478,7 +478,10 @@ class UserDefinedFunction:
                         "return_type": str(returnType),
                     },
                 )
-        elif evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
+        elif (
+            evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+            or evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
+        ):
             try:
                 # StructType is not yet allowed as a return type, explicitly check here to fail fast
                 if isinstance(returnType, StructType):
@@ -498,7 +501,10 @@ class UserDefinedFunction:
                         f"{returnType}"
                     },
                 )
-        elif evalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF:
+        elif (
+            evalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
+            or evalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF
+        ):
             try:
                 # Different from SQL_GROUPED_AGG_PANDAS_UDF, StructType is allowed here
                 check_arrow_type()

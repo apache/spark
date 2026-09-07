@@ -18,9 +18,9 @@ import logging
 import unittest
 from typing import Iterator, Optional
 
-from pyspark.errors import PySparkAttributeError, PythonException
+from pyspark.errors import PySparkAttributeError, PySparkNotImplementedError, PythonException
 from pyspark.sql.functions import arrow_udtf, lit
-from pyspark.sql.types import IntegerType, Row, StructField, StructType
+from pyspark.sql.types import ArrayType, CharType, IntegerType, Row, StructField, StructType
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
@@ -33,6 +33,25 @@ if have_pyarrow:
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowUDTFTestsMixin:
+    def test_char_varchar_return_types_unsupported(self):
+        @arrow_udtf(returnType="c CHAR(3)")
+        class DirectCharUDTF:
+            def eval(self) -> Iterator["pa.Table"]:
+                yield pa.table({"c": ["a"]})
+
+        nested_type = StructType([StructField("nested", ArrayType(CharType(3)))])
+
+        @arrow_udtf(returnType=nested_type)
+        class NestedCharUDTF:
+            def eval(self) -> Iterator["pa.Table"]:
+                yield pa.table({"nested": [["a"]]})
+
+        for function in (DirectCharUDTF, NestedCharUDTF):
+            with self.assertRaisesRegex(
+                PySparkNotImplementedError, "Invalid return type with Arrow UDTFs"
+            ):
+                function()
+
     def test_arrow_udtf_data_conversion_error(self):
         from pyspark.sql.functions import udtf
 
@@ -40,8 +59,8 @@ class ArrowUDTFTestsMixin:
         class DataConversionErrorUDTF:
             def eval(self):
                 # Return a non-tuple value when multiple return values are expected.
-                # This will cause LocalDataToArrowConversion.convert to fail with TypeError (len() on int),
-                # which should be wrapped in UDTF_ARROW_DATA_CONVERSION_ERROR.
+                # This causes LocalDataToArrowConversion.convert to fail with TypeError
+                # (len() on int), which should be wrapped in UDTF_ARROW_DATA_CONVERSION_ERROR.
                 yield 1
 
         # Enable Arrow optimization for regular UDTFs
