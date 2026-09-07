@@ -242,6 +242,16 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       "a dictionary with offset[0] != 0 is not canonical")
   }
 
+  test("isCanonical rejects metadata with trailing bytes") {
+    val canonical = parse("""{"a":1}""")
+    val meta = canonical.getMetadata
+    val trailing = Arrays.copyOf(meta, meta.length + 1) // canonical metadata + one stray 0 byte
+    assert(isCanon(canonical), "sanity: the object is canonical")
+    val nonCanonical = new Variant(canonical.getValue, trailing)
+    assert(!VariantBuilder.isCanonical(nonCanonical),
+      "metadata with a trailing byte is not canonical")
+  }
+
   // ----- isCanonical: object / array structure -----
 
   test("isCanonical rejects a dictionary with an unused key") {

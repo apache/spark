@@ -699,6 +699,11 @@ public class VariantBuilder {
       }
     }
     int lastOffset = readUnsigned(metadata, 1 + (numKeys + 1) * metaOffsetSize, metaOffsetSize);
+    // No trailing bytes: canonicalize emits exactly this length (header + dict-size field +
+    // (numKeys + 1) offsets + the lastOffset string bytes)
+    if (metadata.length != 1 + (numKeys + 2) * metaOffsetSize + lastOffset) {
+      return false;
+    }
     long maxSize = Math.max(lastOffset, numKeys);
     if ((metadata[0] & 0xFF) != (VERSION | ((minIntWidth(maxSize) - 1) << 6))) {
       return false;
