@@ -2412,10 +2412,8 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     val numArgLists = argListGen.length
     val argListCode = argListGen.zipWithIndex.map { case(v, index) =>
       val value =
-        if (UserDefinedType.sqlType(v._1).isInstanceOf[DecimalType]) {
-          // Keep in sync with toFormatterArg in the interpreted path above. Unwrap a UDT first,
-          // because the generated accessors use the underlying sqlType, so a decimal-backed UDT
-          // reaches this code as a Decimal too.
+        if (CodeGenerator.javaClass(v._1) == classOf[Decimal]) {
+          // Keep in sync with toFormatterArg in the interpreted path above.
           s"(${v._2.isNull}) ? null : ${v._2.value}.toJavaBigDecimal()"
         } else if (CodeGenerator.boxedType(v._1) != CodeGenerator.javaType(v._1)) {
           // Java primitives get boxed in order to allow null values.
