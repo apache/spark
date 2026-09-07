@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructField, StructType, UserDefinedType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
@@ -80,11 +81,18 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
     sessionUUID: Option[String])
   extends PartitionEvaluatorFactory[ColumnarBatch, ColumnarBatch] {
 
-  private val checkedOutput = childOutput ++ output.drop(childOutput.length).map { attr =>
-    CharVarcharUtils.stringLengthCheck(attr, attr.dataType)
+  private val applyCharVarcharChecks =
+    CharVarcharUtils.shouldApplyWriteSideLengthCheck(SQLConf.get)
+  private val checkedOutput = if (applyCharVarcharChecks) {
+    childOutput ++ output.drop(childOutput.length).map { attr =>
+      CharVarcharUtils.stringLengthCheck(attr, attr.dataType)
+    }
+  } else {
+    output
   }
   private val hasCharVarcharOutput =
-    output.drop(childOutput.length).exists(attr => CharVarcharUtils.hasCharVarchar(attr.dataType))
+    applyCharVarcharChecks &&
+      output.drop(childOutput.length).exists(attr => CharVarcharUtils.hasCharVarchar(attr.dataType))
   private val physicalOutputSchema = CharVarcharUtils
     .replaceCharVarcharWithStringForPhysicalType(outputSchema)
     .asInstanceOf[StructType]

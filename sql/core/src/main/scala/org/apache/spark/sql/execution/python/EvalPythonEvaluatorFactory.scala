@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -37,8 +38,14 @@ abstract class EvalPythonEvaluatorFactory(
     output: Seq[Attribute])
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
-  private val checkedOutput = childOutput ++ output.drop(childOutput.length).map { attr =>
-    CharVarcharUtils.stringLengthCheck(attr, attr.dataType)
+  private val applyCharVarcharChecks =
+    CharVarcharUtils.shouldApplyWriteSideLengthCheck(SQLConf.get)
+  private val checkedOutput = if (applyCharVarcharChecks) {
+    childOutput ++ output.drop(childOutput.length).map { attr =>
+      CharVarcharUtils.stringLengthCheck(attr, attr.dataType)
+    }
+  } else {
+    output
   }
 
   protected def evaluate(

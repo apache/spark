@@ -1478,6 +1478,26 @@ class ArrowTestsMixin:
                     invalid, StructType([StructField("c", VarcharType(3))])
                 ).collect()
 
+        legacy_schema = StructType(
+            [
+                StructField("c", CharType(3)),
+                StructField("v", VarcharType(3)),
+            ]
+        )
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+                "spark.sql.execution.arrow.pyspark.enabled": "true",
+                "spark.sql.execution.arrow.localRelationThreshold": "0",
+            }
+        ):
+            df = self.spark.createDataFrame(
+                pa.table({"c": ["a"], "v": ["abcd"]}), legacy_schema
+            )
+            self.assertEqual(df.first(), Row(c="a", v="abcd"))
+
     def test_createDataFrame_pandas_duplicate_field_names(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
