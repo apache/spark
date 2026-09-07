@@ -1734,6 +1734,33 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error, req.operation_id)
 
+    def _execute_cleanup_command(
+        self, command: pb2.Command, timeout: Optional[float]
+    ) -> pb2.ExecutePlanResponse:
+        """Execute a best-effort cleanup command once with a bounded deadline."""
+        req = self._execute_plan_request_with_metadata()
+        self._set_command_in_plan(req.plan, command)
+
+        operation_id = req.operation_id
+        for hook in self._session_hooks:
+            req = hook.on_execute_plan(req)
+            req.operation_id = operation_id
+
+        # Cleanup can run from a finalizer or at interpreter exit, where the generated
+        # unary-stream call is unreliable. These commands return a single response.
+        channel = self._channel.unary_unary(
+            "/spark.connect.SparkConnectService/ExecutePlan",
+            request_serializer=pb2.ExecutePlanRequest.SerializeToString,
+            response_deserializer=pb2.ExecutePlanResponse.FromString,
+        )
+        response = channel(
+            req,
+            metadata=self._execute_plan_metadata(req.operation_id),
+            timeout=timeout,
+        )
+        self._verify_response_integrity(response)
+        return cast(pb2.ExecutePlanResponse, response)
+
     def _builder_metadata(self) -> List[Tuple[str, str]]:
         return [
             (key, value)
@@ -2591,12 +2618,14 @@ class SparkConnectClient(object):
                 command.ml_command.delete.evict_only = evict_only
                 self._ml_cache_rpc_thread = threading.get_ident()
                 try:
-                    ml_command_result = self._execute_ml_cache_command(command)
+                    response = self._execute_cleanup_command(
+                        command, self._rpc_deadlines.release_ml_cache
+                    )
                 finally:
                     self._ml_cache_rpc_thread = None
 
-                if ml_command_result is not None:
-                    deleted = ml_command_result.operator_info.obj_ref.id.split(",")
+                if response.HasField("ml_command_result"):
+                    deleted = response.ml_command_result.operator_info.obj_ref.id.split(",")
                     return cast(List[str], deleted)
             return []
         except Exception:
@@ -2636,47 +2665,11 @@ class SparkConnectClient(object):
             command.ml_command.clean_cache.SetInParent()
             self._ml_cache_rpc_thread = threading.get_ident()
             try:
-                self._execute_ml_cache_command(command)
+                self._execute_cleanup_command(command, self._rpc_deadlines.release_ml_cache)
             finally:
                 self._ml_cache_rpc_thread = None
         except Exception:
             pass
-
-    def _execute_ml_cache_command(self, command: pb2.Command) -> Optional[pb2.MlCommandResult]:
-        """Execute a best-effort ML cache cleanup command with a bounded deadline."""
-        req = self._execute_plan_request_with_metadata()
-        self._set_command_in_plan(req.plan, command)
-
-        operation_id = req.operation_id
-        for hook in self._session_hooks:
-            req = hook.on_execute_plan(req)
-            req.operation_id = operation_id
-
-        try:
-            for attempt in self._retrying():
-                with attempt:
-                    # Use a unary call for cleanup that can run from a finalizer or at interpreter
-                    # exit. A normal reattachable ExecutePlan would restart its per-stream deadline
-                    # indefinitely, while the generated unary-stream call is unreliable during
-                    # interpreter shutdown. ML cache eviction is best effort and also happens when
-                    # the server releases the session, so abandoning it on timeout is safe.
-                    channel = self._channel.unary_unary(
-                        "/spark.connect.SparkConnectService/ExecutePlan",
-                        request_serializer=pb2.ExecutePlanRequest.SerializeToString,
-                        response_deserializer=pb2.ExecutePlanResponse.FromString,
-                    )
-                    response = channel(
-                        req,
-                        metadata=self._execute_plan_metadata(req.operation_id),
-                        timeout=self._rpc_deadlines.release_ml_cache,
-                    )
-                    self._verify_response_integrity(response)
-                    if response.HasField("ml_command_result"):
-                        return cast(pb2.MlCommandResult, response.ml_command_result)
-                    return None
-            raise SparkConnectException("Invalid state during retry exception handling.")
-        except Exception as error:
-            self._handle_error(error, req.operation_id)
 
     def _get_ml_cache_info(self) -> List[str]:
         command = pb2.Command()

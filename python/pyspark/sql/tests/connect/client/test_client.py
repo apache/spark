@@ -994,7 +994,10 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
             def fake_call(req, metadata=None, timeout="unset"):
                 captured["timeout"] = timeout
-                return proto.ExecutePlanResponse()
+                return proto.ExecutePlanResponse(
+                    session_id=client._session_id,
+                    operation_id=req.operation_id,
+                )
 
             client._channel = MagicMock()
             client._channel.unary_unary.return_value = fake_call
@@ -1048,7 +1051,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertEqual(client._delete_ml_cache(["model-id"]), ["model-id"])
         cleanup_command = proto.Command()
         cleanup_command.ml_command.clean_cache.SetInParent()
-        client._execute_ml_cache_command(cleanup_command)
+        client._execute_cleanup_command(cleanup_command, client._rpc_deadlines.release_ml_cache)
         self.assertEqual(
             captured,
             [
@@ -1059,7 +1062,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client.close()
 
         client, captured = make_client(RpcDeadlines.disabled())
-        client._execute_ml_cache_command(cleanup_command)
+        client._execute_cleanup_command(cleanup_command, client._rpc_deadlines.release_ml_cache)
         self.assertIsNone(captured[0]["timeout"])
         client.close()
 

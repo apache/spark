@@ -51,7 +51,6 @@ from pyspark.sql.column import Column
 from pyspark.sql.connect.conversion import storage_level_to_proto
 from pyspark.sql.connect.expressions import Expression, SubqueryExpression
 from pyspark.sql.connect.logging import logger
-from pyspark.sql.connect.proto import base_pb2 as spark_dot_connect_dot_base__pb2
 from pyspark.sql.connect.types import UnparsedDataType, pyspark_types_to_proto_types
 from pyspark.sql.types import DataType, StructType
 from pyspark.storagelevel import StorageLevel
@@ -760,29 +759,8 @@ class CachedRemoteRelation(LogicalPlan):
         if session is not None and not session.client.is_closed and self._relation_id is not None:
             try:
                 command = RemoveRemoteCachedRelation(self).command(session=session.client)
-                req = session.client._execute_plan_request_with_metadata()
-                if session.client._user_id:
-                    req.user_context.user_id = session.client._user_id
-                req.plan.command.CopyFrom(command)
-
                 for attempt in session.client._retrying():
                     with attempt:
-                        # !!HACK ALERT!!
-                        # unary_stream does not work on Python's exit for an unknown reasons
-                        # Therefore, here we open unary_unary channel instead.
-                        # See also :class:`SparkConnectServiceStub`.
-                        request_serializer = (
-                            spark_dot_connect_dot_base__pb2.ExecutePlanRequest.SerializeToString
-                        )
-                        response_deserializer = (
-                            spark_dot_connect_dot_base__pb2.ExecutePlanResponse.FromString
-                        )
-                        channel = session.client._channel.unary_unary(
-                            "/spark.connect.SparkConnectService/ExecutePlan",
-                            request_serializer=request_serializer,
-                            response_deserializer=response_deserializer,
-                        )
-                        metadata = session.client._execute_plan_metadata(req.operation_id)
                         # Bound this blocking call with a client-side deadline. It is issued from a
                         # finalizer with no other timeout at any layer; without a deadline it can
                         # block forever if the response is never delivered, which stalls the
@@ -791,7 +769,7 @@ class CachedRemoteRelation(LogicalPlan):
                         # timeout here is non-fatal: the eviction is best effort and the server
                         # performs it independently, so on timeout we log and move on.
                         timeout = session.client._rpc_deadlines.release_relation
-                        channel(req, metadata=metadata, timeout=timeout)  # type: ignore[arg-type]
+                        session.client._execute_cleanup_command(command, timeout)
             except Exception as e:
                 logger.warning(f"RemoveRemoteCachedRelation failed with exception: {e}.")
 
