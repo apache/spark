@@ -619,7 +619,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
    *   - WEEK/MONTH/QUARTER/YEAR: convert local micros to local epoch-day, run
    *     [[truncDate]] in the local-day frame, multiply back to local micros.
    */
-  def truncTimestamp(micros: Long, level: Int, cache: ZoneOffsetCache): Long = {
+  private[sql] def truncTimestamp(micros: Long, level: Int, cache: ZoneOffsetCache): Long = {
     // MICROSECOND / MILLISECOND / SECOND don't need zone information.
     level match {
       case TRUNC_TO_MICROSECOND => return micros
@@ -719,7 +719,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * is MICROSECOND (see `MIN_LEVEL_OF_TIMESTAMP_TRUNC`), which already discards everything below
    * a microsecond. NTZ vs. LTZ zone handling is the caller's responsibility via the cache's zone.
    */
-  def truncTimestampNanos(
+  private[sql] def truncTimestampNanos(
       value: TimestampNanosVal,
       level: Int,
       cache: ZoneOffsetCache): TimestampNanosVal = {
@@ -1483,7 +1483,7 @@ private[util] final class ZoneTransitionTable(
   }
 }
 
-object ZoneOffsetCache {
+private[sql] object ZoneOffsetCache {
   // The transition table is the same for every task using a given zone, so build it once per JVM.
   private val tables = new java.util.concurrent.ConcurrentHashMap[ZoneId, ZoneTransitionTable]()
   private val tableStart = Instant.parse("1600-01-01T00:00:00Z")
@@ -1534,7 +1534,7 @@ object ZoneOffsetCache {
  * Not thread-safe by design: a fresh instance is created per task (codegen mutable state) and used
  * single-threaded, mirroring how stateful per-row helpers are scoped in generated code.
  */
-class ZoneOffsetCache(val zoneId: ZoneId) {
+private[sql] class ZoneOffsetCache(val zoneId: ZoneId) {
   private val rules = zoneId.getRules
   val isFixedOffset: Boolean = rules.isFixedOffset
   private val table = if (isFixedOffset) null else ZoneOffsetCache.tableFor(zoneId)

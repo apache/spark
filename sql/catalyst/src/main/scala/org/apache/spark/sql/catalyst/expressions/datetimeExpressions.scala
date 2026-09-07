@@ -3304,7 +3304,10 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
       orderReversed: Boolean = false)(
       truncFunc: (String, String) => String)
     : ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    // Call through the module instance rather than the class's static forwarders: Scala emits no
+    // forwarder for private[sql] members, and the cache-taking truncTimestamp overloads are
+    // module-visible only.
+    val dtu = DateTimeUtils.getClass.getName + ".MODULE$"
 
     val javaType = CodeGenerator.javaType(dataType)
     if (format.foldable) {
