@@ -341,7 +341,7 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
 
       val pCols = Array(
         Column.create("store_id", IntegerType),
-        Column.create("item_id", IntegerType),
+        Column.create("item_id", LongType),
         Column.create("price", FloatType))
       createTable(purchases, pCols, Array(identity("store_id"), identity("item_id")))
       sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
@@ -351,10 +351,18 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
       // reported partitioning is projected onto item_id. The runtime filter on item_id re-plans the
       // scan's partitions, which must stay keyed and ordered by the full (store_id, item_id) rows,
       // not the projected item_id-only key types.
+      //
+      // `item_id` must match `items.id` in type. A narrower type makes the join cast it, and
+      // `translateRuntimeFilterV2` cannot translate a cast, so no filter reaches the scan and the
+      // re-planning path never runs.
+      //
+      // Only the V2 instance of this trait reaches that path with a pruned key. The Catalyst
+      // fixture's scan keeps the full table schema, so `store_id` stays in the output and nothing
+      // is projected away; that instance runs a no-pruning variant of the same query.
       val df = sql(
         s"SELECT p.item_id, p.price from testcat.ns.$items i, testcat.ns.$purchases p " +
           "WHERE i.id = p.item_id AND i.price > 20.0 ORDER BY p.item_id, p.price")
-      checkAnswer(df, Seq(Row(1, 42.0f), Row(1, 44.0f)))
+      checkAnswer(df, Seq(Row(1L, 42.0f), Row(1L, 44.0f)))
     }
   }
 }
