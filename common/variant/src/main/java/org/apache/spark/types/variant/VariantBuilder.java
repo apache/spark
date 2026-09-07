@@ -712,6 +712,10 @@ public class VariantBuilder {
     if (!isValueCanonical(value, metadata, 0, referenced)) {
       return false;
     }
+    // No trailing bytes after the value (canonicalize emits an exact-length value).
+    if (VariantUtil.valueSize(value, 0) != value.length) {
+      return false;
+    }
     for (int id = 0; id < numKeys; ++id) {
       if (!referenced[id]) {
         return false;
