@@ -659,6 +659,23 @@ class ClientE2ETestSuite
     testCapturedStdOut(df.printSchema(5), expectedSchema.treeString(5))
   }
 
+  test("SPARK-59276: CHAR/VARCHAR result schema preserves collations") {
+    withSQLConf("spark.sql.charVarchar.standardSemantics.enabled" -> "true") {
+      val schema = spark.sql(
+        """SELECT
+          |  CAST('ab' AS CHAR(4)) AS c,
+          |  CAST('cd' AS VARCHAR(6)) AS v,
+          |  CAST('ef' AS CHAR(4) COLLATE UTF8_LCASE) AS collated_c,
+          |  CAST('gh' AS VARCHAR(6) COLLATE UNICODE_CI) AS collated_v
+          |""".stripMargin).schema
+
+      assert(schema("c").dataType === CharType(4))
+      assert(schema("v").dataType === VarcharType(6))
+      assert(schema("collated_c").dataType === CharType(4, "UTF8_LCASE"))
+      assert(schema("collated_v").dataType === VarcharType(6, "UNICODE_CI"))
+    }
+  }
+
   test("Dataset explain") {
     val df = spark.range(10)
     val simpleExplainFragments = Seq("== Physical Plan ==")
@@ -1146,6 +1163,19 @@ class ClientE2ETestSuite
     val rows = java.util.Arrays.asList(Row("bob", 99), Row("Club", 5), Row("Bag", 5))
     val schema = new StructType().add("key", "string").add("value", "int")
     checkSameResult(rows.asScala, spark.createDataFrame(rows, schema))
+  }
+
+  test("SPARK-59276: SparkSession.createDataFrame preserves CHAR/VARCHAR collations") {
+    val rows = java.util.Arrays.asList(Row("ab", "cd"))
+    val schema = new StructType()
+      .add("c", CharType(4, "UTF8_LCASE"))
+      .add("v", VarcharType(6, "UNICODE_CI"))
+
+    withSQLConf("spark.sql.charVarchar.standardSemantics.enabled" -> "true") {
+      val dataFrame = spark.createDataFrame(rows, schema)
+      assert(dataFrame.schema === schema)
+      checkAnswer(dataFrame, Row("ab  ", "cd"))
+    }
   }
 
   test("SparkSession.createDataFrame - bean") {

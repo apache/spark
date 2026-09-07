@@ -657,6 +657,35 @@ class TypesTestsMixin:
         self.assertEqual(StringType("UTF8_LCASE").simpleString(), "string collate UTF8_LCASE")
         self.assertEqual(StringType("UNICODE").simpleString(), "string collate UNICODE")
 
+    def test_char_varchar_type_collations(self):
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        self.assertEqual(CharType(4).simpleString(), "char(4)")
+        self.assertEqual(
+            CharType(4, "UTF8_LCASE").simpleString(), "char(4) collate UTF8_LCASE"
+        )
+        self.assertEqual(VarcharType(6).simpleString(), "varchar(6)")
+        self.assertEqual(
+            VarcharType(6, "UNICODE_CI").simpleString(), "varchar(6) collate UNICODE_CI"
+        )
+
+        data_types = [
+            CharType(4),
+            CharType(4, "UTF8_BINARY"),
+            CharType(4, "UTF8_LCASE"),
+            VarcharType(6),
+            VarcharType(6, "UTF8_BINARY"),
+            VarcharType(6, "UNICODE_CI"),
+            StructType(
+                [
+                    StructField("c", CharType(4, "UTF8_LCASE")),
+                    StructField("v", ArrayType(VarcharType(6, "UNICODE_CI"))),
+                ]
+            ),
+        ]
+        for data_type in data_types:
+            self.assertEqual(data_type, _parse_datatype_json_string(data_type.json()))
+
     def test_schema_with_collations_json_ser_de(self):
         from pyspark.sql.types import _parse_datatype_json_string
 
