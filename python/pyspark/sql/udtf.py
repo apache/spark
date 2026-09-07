@@ -28,11 +28,19 @@ from typing import TYPE_CHECKING, Any, Optional, Sequence, Type, Union
 from pyspark.errors import (
     PySparkAttributeError,
     PySparkImportError,
+    PySparkNotImplementedError,
     PySparkPicklingError,
     PySparkTypeError,
 )
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
-from pyspark.sql.types import DataType, StructType, _parse_datatype_string
+from pyspark.sql.types import (
+    CharType,
+    DataType,
+    StructType,
+    VarcharType,
+    _has_type,
+    _parse_datatype_string,
+)
 from pyspark.sql.udf import _wrap_function
 from pyspark.util import PythonEvalType
 
@@ -367,6 +375,16 @@ class UserDefinedTableFunction:
                     messageParameters={
                         "name": self._name,
                         "return_type": f"{parsed}",
+                    },
+                )
+            if self.evalType in (
+                PythonEvalType.SQL_ARROW_TABLE_UDF,
+                PythonEvalType.SQL_ARROW_UDTF,
+            ) and _has_type(parsed, (CharType, VarcharType)):
+                raise PySparkNotImplementedError(
+                    errorClass="NOT_IMPLEMENTED",
+                    messageParameters={
+                        "feature": f"Invalid return type with Arrow UDTFs: {parsed}"
                     },
                 )
             self._returnType_placeholder = parsed
