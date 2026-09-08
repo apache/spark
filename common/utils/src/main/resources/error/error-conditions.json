@@ -8918,6 +8918,11 @@
           "SQL cursor operations (DECLARE CURSOR, OPEN, FETCH, CLOSE) are not supported."
         ]
       },
+      "SQL_RESTRICTED_MODE" : {
+        "message" : [
+          "<feature> is not allowed because <config> is enabled."
+        ]
+      },
       "SQL_SCRIPTING" : {
         "message" : [
           "SQL Scripting is under development and not all features are supported. SQL Scripting enables users to write procedural SQL including control flow and error handling. To enable existing features set <sqlScriptingEnabled> to `true`."
