@@ -47,7 +47,14 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
     val step = createStep(
       new SparkConf(false).set(KUBERNETES_KERBEROS_KRB5_CONFIG_MAP, configMap))
 
-    checkPodForKrbConf(step.configurePod(SparkPod.initialPod()), configMap)
+    val pod = step.configurePod(SparkPod.initialPod())
+    checkPodForKrbConf(pod, configMap)
+
+    // Existing-ConfigMap branch: the mount must still select the krb5.conf subPath.
+    val mount = pod.container.getVolumeMounts().asScala
+      .find(_.getName() == KRB_FILE_VOLUME).get
+    assert(mount.getSubPath() === "krb5.conf")
+
     assert(step.getAdditionalPodSystemProperties() === Map(KRB_CONFIG_MAP_NAME -> configMap))
     assert(filter[ConfigMap](step.getAdditionalKubernetesResources()).isEmpty)
   }
@@ -61,9 +68,19 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
     val step = createStep(sparkConf)
 
     val confMap = filter[ConfigMap](step.getAdditionalKubernetesResources()).head
-    assert(confMap.getData().keySet().asScala === Set(krbConf.getName()))
+    assert(confMap.getData().keySet().asScala === Set("krb5.conf"))
 
-    checkPodForKrbConf(step.configurePod(SparkPod.initialPod()), confMap.getMetadata().getName())
+    val pod = step.configurePod(SparkPod.initialPod())
+    checkPodForKrbConf(pod, confMap.getMetadata().getName())
+
+    val volume = pod.pod.getSpec().getVolumes().asScala
+      .find(_.getName() == KRB_FILE_VOLUME).get
+    assert(volume.getConfigMap().getItems().asScala.map(i => (i.getKey, i.getPath)) ===
+      Seq(("krb5.conf", "krb5.conf")))
+    val mount = pod.container.getVolumeMounts().asScala
+      .find(_.getName() == KRB_FILE_VOLUME).get
+    assert(mount.getSubPath() === "krb5.conf")
+
     assert(step.getAdditionalPodSystemProperties() ===
       Map(KRB_CONFIG_MAP_NAME -> confMap.getMetadata().getName()))
   }

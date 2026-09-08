@@ -131,14 +131,13 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
             .endConfigMap()
           .build()
       } else {
-        val krb5Conf = new File(krb5File.get)
         new VolumeBuilder()
           .withName(KRB_FILE_VOLUME)
           .withNewConfigMap()
           .withName(newConfigMapName)
           .withItems(new KeyToPathBuilder()
-            .withKey(krb5Conf.getName())
-            .withPath(krb5Conf.getName())
+            .withKey(KRB_FILE_NAME)
+            .withPath(KRB_FILE_NAME)
             .build())
           .endConfigMap()
           .build()
@@ -154,8 +153,8 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
       val containerWithMount = new ContainerBuilder(pod.container)
         .addNewVolumeMount()
           .withName(KRB_FILE_VOLUME)
-          .withMountPath(KRB_FILE_DIR_PATH + "/krb5.conf")
-          .withSubPath("krb5.conf")
+          .withMountPath(KRB_FILE_DIR_PATH + "/" + KRB_FILE_NAME)
+          .withSubPath(KRB_FILE_NAME)
           .endVolumeMount()
         .build()
 
@@ -239,7 +238,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
             .endMetadata()
           .withImmutable(true)
           .addToData(
-            Map(file.getName() -> Files.readString(file.toPath)).asJava)
+            Map(KRB_FILE_NAME -> Files.readString(file.toPath)).asJava)
           .build()
       }
     } ++ {

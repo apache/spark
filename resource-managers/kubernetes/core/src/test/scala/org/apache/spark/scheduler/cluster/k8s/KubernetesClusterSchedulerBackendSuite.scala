@@ -564,7 +564,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       val labels = created.getMetadata.getLabels.asScala
       assert(labels(SPARK_APP_ID_LABEL) === TEST_SPARK_APP_ID)
       assert(labels(SPARK_ROLE_LABEL) === SPARK_POD_EXECUTOR_ROLE)
-      assert(created.getData.keySet().asScala === Set(krb5.getName))
+      assert(created.getData.keySet().asScala === Set("krb5.conf"))
       assert(sparkConf.get(KRB_CONFIG_MAP_NAME) === created.getMetadata.getName)
     } finally {
       sparkConf.remove(KUBERNETES_KERBEROS_KRB5_FILE.key)

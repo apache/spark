@@ -20,6 +20,10 @@ package org.apache.spark.deploy.k8s.features
 import java.io.File
 import java.nio.file.Files
 
+import scala.jdk.CollectionConverters._
+
+import io.fabric8.kubernetes.api.model.ConfigMap
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
@@ -27,6 +31,7 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.util.Utils
 
 class KerberosConfExecutorFeatureStepSuite extends SparkFunSuite {
+  import KubernetesFeaturesTestUtils._
   import SecretVolumeUtils._
 
   test("SPARK-50758: mount krb5 ConfigMap when KRB_CONFIG_MAP_NAME is set") {
@@ -59,6 +64,11 @@ class KerberosConfExecutorFeatureStepSuite extends SparkFunSuite {
       val driverConf = KubernetesTestConf.createDriverConf(sparkConf = driverSparkConf)
       val driverStep = new KerberosConfDriverFeatureStep(driverConf)
 
+      if (driverSparkConf.get(KUBERNETES_KERBEROS_KRB5_FILE).isDefined) {
+        val confMap = filter[ConfigMap](driverStep.getAdditionalKubernetesResources()).head
+        assert(confMap.getData().keySet().asScala === Set("krb5.conf"))
+      }
+
       val executorSparkConf = new SparkConf(false)
       val additionalProps = driverStep.getAdditionalPodSystemProperties()
       if (expectMount) {
@@ -81,6 +91,9 @@ class KerberosConfExecutorFeatureStepSuite extends SparkFunSuite {
     if (hasKrb5) {
       assert(podHasVolume(pod.pod, KRB_FILE_VOLUME))
       assert(containerHasVolume(pod.container, KRB_FILE_VOLUME, mountPath))
+      val mount = pod.container.getVolumeMounts().asScala
+        .find(_.getName() == KRB_FILE_VOLUME).get
+      assert(mount.getSubPath() === "krb5.conf")
     } else {
       assert(!podHasVolume(pod.pod, KRB_FILE_VOLUME))
       assert(!containerHasVolume(pod.container, KRB_FILE_VOLUME, mountPath))
