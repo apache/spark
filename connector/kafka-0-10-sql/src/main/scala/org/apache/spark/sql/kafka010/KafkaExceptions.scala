@@ -263,6 +263,14 @@ object KafkaExceptions {
         "topic" -> topicPartition.topic,
         "partition" -> topicPartition.partition.toString))
   }
+
+  def disallowedOption(option: String, config: String): KafkaIllegalArgumentException = {
+    new KafkaIllegalArgumentException(
+      errorClass = "KAFKA_DISALLOWED_OPTION",
+      messageParameters = Map(
+        "option" -> option,
+        "config" -> config))
+  }
 }
 
 /**

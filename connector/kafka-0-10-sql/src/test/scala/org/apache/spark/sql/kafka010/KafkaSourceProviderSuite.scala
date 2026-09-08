@@ -24,7 +24,9 @@ import scala.jdk.CollectionConverters._
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.read.Scan
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class KafkaSourceProviderSuite extends SparkFunSuite {
@@ -152,6 +154,47 @@ class KafkaSourceProviderSuite extends SparkFunSuite {
       intercept[IllegalArgumentException] {
         getKafkaDataSourceScan(options).toMicroBatchStream("dummy")
       }
+    }
+  }
+
+  test("SPARK-59328: disallowed Kafka options are rejected on the source path") {
+    // KafkaBatch reads its default poll timeout from SparkEnv, so provide a mock one.
+    val sparkEnv = mock(classOf[SparkEnv])
+    when(sparkEnv.conf).thenReturn(new SparkConf())
+    SparkEnv.set(sparkEnv)
+
+    val options = buildKafkaSourceCaseInsensitiveStringMap("kafka.max.poll.records" -> "1")
+    // Empty denylist (the default) preserves the previous behavior: the option is accepted.
+    getKafkaDataSourceScan(options).toBatch()
+    // When the option name is denylisted, building the batch scan is rejected.
+    val conf = new SQLConf()
+    conf.setConf(SQLConf.KAFKA_DISALLOWED_OPTIONS, Seq("max.poll.records"))
+    SQLConf.withExistingConf(conf) {
+      val e = intercept[IllegalArgumentException] {
+        getKafkaDataSourceScan(options).toBatch()
+      }
+      assert(e.getMessage.contains("kafka.max.poll.records"))
+    }
+  }
+
+  test("SPARK-59328: disallowed Kafka options are rejected on the sink path") {
+    val sparkEnv = mock(classOf[SparkEnv])
+    when(sparkEnv.conf).thenReturn(new SparkConf())
+    SparkEnv.set(sparkEnv)
+
+    val params = CaseInsensitiveMap(Map(
+      "kafka.bootstrap.servers" -> "dummy",
+      "kafka.max.poll.records" -> "1"))
+    // Empty denylist (the default) preserves the previous behavior: the option is accepted.
+    KafkaSourceProvider.kafkaParamsForProducer(params)
+    // When the option name is denylisted, building the producer params is rejected.
+    val conf = new SQLConf()
+    conf.setConf(SQLConf.KAFKA_DISALLOWED_OPTIONS, Seq("max.poll.records"))
+    SQLConf.withExistingConf(conf) {
+      val e = intercept[IllegalArgumentException] {
+        KafkaSourceProvider.kafkaParamsForProducer(params)
+      }
+      assert(e.getMessage.contains("kafka.max.poll.records"))
     }
   }
 }

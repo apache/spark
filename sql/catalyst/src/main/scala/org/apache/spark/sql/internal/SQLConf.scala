@@ -3913,6 +3913,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val KAFKA_DISALLOWED_OPTIONS =
+    buildConf("spark.sql.kafka.disallowedOptions")
+      .internal()
+      .doc("A comma-separated list of Kafka client option names (without the 'kafka.' prefix) " +
+        "that are not allowed to be set through Kafka source/sink options. Empty by default, " +
+        "which allows all options and preserves the previous behavior; when non-empty, setting a " +
+        "listed option raises an error.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   val STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED =
     buildConf("spark.sql.streaming.statefulOperator.checkCorrectness.enabled")
       .internal()
