@@ -154,4 +154,31 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     // ... but the second field pair (TIMESTAMP vs BOOLEAN) is not comparable.
     assert(!MatchConditionTypes.areOperandsCompatible(leftStruct, rightStruct))
   }
+
+  test("array operands with empty struct elements are invalid") {
+    // An array whose element type contains an empty struct is not a valid operand, even though
+    // the array itself is orderable (exercises the ArrayType arm of containsEmptyStructType).
+    val arrayOfEmptyStruct = ArrayType(StructType(Nil))
+    assert(!MatchConditionTypes.isValidOperandType(arrayOfEmptyStruct))
+    assert(!MatchConditionTypes.areOperandsCompatible(arrayOfEmptyStruct, arrayOfEmptyStruct))
+  }
+
+  test("array operands with structurally incompatible struct elements are rejected") {
+    val leftArray = ArrayType(
+      StructType(
+        StructField("a", IntegerType) ::
+          StructField("b", TimestampType) ::
+          Nil))
+    val rightArray = ArrayType(
+      StructType(
+        StructField("x", IntegerType) ::
+          StructField("y", BooleanType) ::
+          Nil))
+    // Each operand is individually a valid, orderable type ...
+    assert(MatchConditionTypes.isValidOperandType(leftArray))
+    assert(MatchConditionTypes.isValidOperandType(rightArray))
+    // ... but the element structs' second field pair (TIMESTAMP vs BOOLEAN) is not comparable.
+    assert(!MatchConditionTypes.areOperandsCompatible(leftArray, rightArray))
+    assert(!MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
+  }
 }
