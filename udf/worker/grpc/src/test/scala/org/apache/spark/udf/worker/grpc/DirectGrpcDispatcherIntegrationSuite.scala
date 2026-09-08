@@ -160,6 +160,24 @@ class DirectGrpcDispatcherIntegrationSuite
     assert(!socketDir.exists(), "dispatcher close should remove its socket directory")
   }
 
+  test("the channel overrides the authority derived from the socket path") {
+    dispatcher = new DirectGrpcDispatcher(workerSpec())
+    val session = dispatcher.createSession(None)
+    val channel = grpcChannel(workerProcess(session))
+
+    try {
+      // Without the override the authority would be the socket path, which a conforming
+      // HTTP/2 server rejects with PROTOCOL_ERROR while decoding the HEADERS frame.
+      // The in-tree worker is grpc-java, which tolerates the encoded form, so this asserts on
+      // the channel's configured authority rather than on an end-to-end failure.
+      val authority = channel.channel.authority()
+      assert(authority === GrpcWorkerChannel.UDS_AUTHORITY,
+        s"expected the overridden authority, got '$authority'")
+    } finally {
+      session.close(emptyCancel)
+    }
+  }
+
   test("a socket path alone does not make a worker ready") {
     val socketOnlyWorker =
       """
