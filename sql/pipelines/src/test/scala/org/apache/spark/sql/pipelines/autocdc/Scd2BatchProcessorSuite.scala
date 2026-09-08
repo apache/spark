@@ -872,6 +872,101 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  gridTest("preprocessMicrobatch leaves delete-representing rows with a null version map")(
+    Seq(
+      // Delete condition is specified; all non-matching rows should be treated as upsert.
+      Some(F.col("is_delete")),
+      // Delete condition is unspecified; all microbatch rows should be treated as upsert.
+      None
+    )
+  ) { case (deleteCondition) =>
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("seq", LongType)
+      .add("is_delete", BooleanType)
+
+    val batch = microbatchOf(schema)(
+      Row(1, null, 10L, false), // upsert with null value
+      Row(1, "a", 20L, false), // upsert with non-null value
+      Row(1, null, 30L, true) // delete iff deleteCondition is set
+    )
+
+    val processor = Scd2BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type2,
+        deleteCondition = deleteCondition,
+        ignoreNullSelection =
+          Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("value"))))
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val result = preprocessMicrobatch(processor, batch)
+
+    val versionMaps = result.select(
+      F.col("seq"),
+      Scd2BatchProcessor.versionMapOf(
+        F.col(AutoCdcReservedNames.cdcMetadataColName)
+      ).as("vm")
+    )
+
+    // Upsert rows always get a populated version map. The third row is a delete (null
+    // version map) only when deleteCondition is set; otherwise it is an upsert too.
+    val expectedDeleteRowMap: Any =
+      if (deleteCondition.isDefined) null else Map("value" -> false)
+
+    checkAnswer(
+      df = versionMaps,
+      expectedAnswer = Seq(
+        Row(10L, Map("value" -> false)),
+        Row(20L, Map.empty[String, Boolean]),
+        Row(30L, expectedDeleteRowMap)
+      )
+    )
+  }
+
+  test("preprocessMicrobatch leaves version map null for all rows when ignore null is off") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("seq", LongType)
+      .add("is_delete", BooleanType)
+
+    val batch = microbatchOf(schema)(
+      Row(1, null, 10L, false),
+      Row(1, null, 20L, true)
+    )
+
+    val processor = Scd2BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type2,
+        deleteCondition = Some(F.col("is_delete")),
+        // None ignore-null selection should be treated as ignore-null off.
+        ignoreNullSelection = None
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val result = preprocessMicrobatch(processor, batch)
+
+    val versionMaps = result.select(
+      Scd2BatchProcessor.versionMapOf(
+        F.col(AutoCdcReservedNames.cdcMetadataColName)
+      ).as("vm")
+    )
+
+    // ignoreNullSelection is None -> version map is null on every row.
+    checkAnswer(
+      df = versionMaps,
+      expectedAnswer = Seq(Row(null), Row(null))
+    )
+  }
+
   // =============== computeMinimumSequencePerKey tests ===============
 
   test("computeMinimumSequencePerKey returns one row per distinct key and aggregates across " +
