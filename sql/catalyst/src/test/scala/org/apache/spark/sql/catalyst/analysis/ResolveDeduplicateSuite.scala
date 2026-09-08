@@ -151,7 +151,9 @@ class ResolveDeduplicateSuite extends AnalysisTest {
         originalKeys, childAfterMetadataPropagation, spec, orderDeterministically,
         SQLConf.get.resolver)
 
-      assert(recomputedKeys === expectedKeys)
+      withClue(s"orderDeterministically=$orderDeterministically: ") {
+        assert(recomputedKeys === expectedKeys)
+      }
     }
   }
 
@@ -172,7 +174,9 @@ class ResolveDeduplicateSuite extends AnalysisTest {
         originalKeys, childWithSelectedMetadata, spec, orderDeterministically,
         SQLConf.get.resolver)
 
-      assert(recomputedKeys === expectedKeys)
+      withClue(s"orderDeterministically=$orderDeterministically: ") {
+        assert(recomputedKeys === expectedKeys)
+      }
     }
   }
 
@@ -191,7 +195,9 @@ class ResolveDeduplicateSuite extends AnalysisTest {
       val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
         legacyKeys, rel, spec, orderDeterministically = false, SQLConf.get.resolver)
 
-      assert(recomputedKeys === legacyKeys)
+      withClue(s"spec=$spec: ") {
+        assert(recomputedKeys === legacyKeys)
+      }
     }
   }
 
