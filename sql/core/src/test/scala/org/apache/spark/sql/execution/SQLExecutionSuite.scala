@@ -487,17 +487,17 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
     "stopped") {
     val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
     try {
-      // Attach an observation so we can pin down that the observation is completed. `tryComplete`
-      // runs at the very end of the `finally`, after the guarded cleanup, so a cleanup NPE would
-      // skip it and leave `observation.get` blocked forever. No job runs here, so only assert that
-      // `get` returns rather than checking the observed value.
+      // Attach an observation to pin down that it is completed. `tryComplete` runs at the end of
+      // the `finally`, after the guarded cleanup, so a cleanup failure would skip it and leave the
+      // observation uncompleted. Assert on `future.isCompleted` (non-blocking) so a regression
+      // fails fast, rather than calling `get`, which would block until the suite timeout.
       val observation = new Observation("obs")
       val df = spark.range(1, 10).observe(observation, count(lit(1)).as("cnt"))
       val qe = df.queryExecution
       withStoppedDagScheduler(spark) {
         assert(SQLExecution.withNewExecutionId(qe)("result") === "result")
       }
-      assert(observation.get != null)
+      assert(observation.future.isCompleted)
     } finally {
       spark.stop()
     }
@@ -534,7 +534,7 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
         }
       }
       assert(thrown eq bodyFailure)
-      assert(observation.get != null)
+      assert(observation.future.isCompleted)
     } finally {
       spark.stop()
     }
