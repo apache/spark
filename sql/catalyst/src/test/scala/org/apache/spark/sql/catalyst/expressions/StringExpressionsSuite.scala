@@ -849,6 +849,20 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(Int.MinValue, IntegerType), Literal.create(1, IntegerType)), "_Spark SQL")
     checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("_"),
       Literal.create(Int.MinValue, IntegerType)), "_Spark SQL")
+    // SPARK-58713: with a zero length the tail starts at `Int.MinValue` itself. `substringSQL`
+    // only treats an end offset of exactly `Int.MaxValue` as the rest of the input, so without
+    // clamping the tail position this dropped the last character and disagreed with the binary
+    // overload below.
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(Int.MinValue, IntegerType), Literal.create(0, IntegerType)), "_Spark SQL")
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(Int.MinValue + 1, IntegerType), Literal.create(0, IntegerType)), "_Spark SQL")
+    // The tail position is clamped in characters, so a multi-byte input keeps every character,
+    // and an empty input has no tail to keep.
+    checkEvaluation(Overlay(Literal("caf\u00e9 SQL"), Literal("_"),
+      Literal.create(Int.MinValue, IntegerType), Literal.create(0, IntegerType)), "_caf\u00e9 SQL")
+    checkEvaluation(Overlay(Literal(""), Literal("_"),
+      Literal.create(Int.MinValue, IntegerType), Literal.create(0, IntegerType)), "_")
   }
 
   test("SPARK-58713: overlay position arithmetic is collation-independent") {
@@ -927,6 +941,10 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Array[Byte](-1, 1, 2, 3, 4, 5, 6, 7, 8, 9))
     checkEvaluation(new Overlay(input, Literal(Array[Byte](-1)),
       Literal.create(Int.MinValue, IntegerType)), Array[Byte](-1, 1, 2, 3, 4, 5, 6, 7, 8, 9))
+    // SPARK-58713: the zero-length case must agree with the string overload above.
+    checkEvaluation(Overlay(input, Literal(Array[Byte](-1)),
+      Literal.create(Int.MinValue, IntegerType), Literal.create(0, IntegerType)),
+      Array[Byte](-1, 1, 2, 3, 4, 5, 6, 7, 8, 9))
   }
 
   test("Check Overlay.checkInputDataTypes results") {

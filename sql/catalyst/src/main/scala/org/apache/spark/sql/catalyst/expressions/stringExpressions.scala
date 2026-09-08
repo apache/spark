@@ -1040,6 +1040,14 @@ object Overlay {
   private def clamp(value: Long): Int =
     math.max(Int.MinValue.toLong, math.min(Int.MaxValue.toLong, value)).toInt
 
+  // The tail of the result starts at `pos + length`. Every position at or before the start of
+  // the input denotes the same tail, the whole input, so clamp there. `substringSQL` treats an
+  // end offset of exactly `Int.MaxValue` as "the rest of the input", and for positions near
+  // `Int.MinValue` the end offset it computes lands below that and below the input length, so
+  // an unclamped tail position silently drops trailing characters.
+  private def clampTail(value: Long, inputLength: Int): Int =
+    clamp(math.max(value, -inputLength.toLong))
+
   def calculate(input: UTF8String, replace: UTF8String, pos: Int, len: Int): UTF8String = {
     val builder = new UTF8StringBuilder
     builder.append(input.substringSQL(1, clamp(pos.toLong - 1)))
@@ -1052,7 +1060,8 @@ object Overlay {
     } else {
       replace.numChars
     }
-    builder.append(input.substringSQL(clamp(pos.toLong + length), Int.MaxValue))
+    val tail = clampTail(pos.toLong + length, input.numChars)
+    builder.append(input.substringSQL(tail, Int.MaxValue))
     builder.build()
   }
 
@@ -1065,8 +1074,9 @@ object Overlay {
     } else {
       replace.length
     }
+    val tail = clampTail(pos.toLong + length, input.length)
     ByteArray.concat(ByteArray.subStringSQL(input, 1, clamp(pos.toLong - 1)),
-      replace, ByteArray.subStringSQL(input, clamp(pos.toLong + length), Int.MaxValue))
+      replace, ByteArray.subStringSQL(input, tail, Int.MaxValue))
   }
 }
 
