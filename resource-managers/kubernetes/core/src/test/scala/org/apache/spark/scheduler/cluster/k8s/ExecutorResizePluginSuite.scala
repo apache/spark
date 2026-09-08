@@ -330,16 +330,26 @@ class ExecutorResizePluginSuite
     val podResource = mock(classOf[SINGLE_POD])
     when(podsWithNamespace.withName("spark-executor-1")).thenReturn(podResource)
 
-    val logAppender = new LogAppender
-    withLogAppender(logAppender) {
-      plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
-      plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
+    def countSkipLogs(rounds: Int): Int = {
+      val logAppender = new LogAppender
+      withLogAppender(logAppender) {
+        (1 to rounds).foreach { _ =>
+          plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
+        }
+      }
+      logAppender.loggingEvents
+        .count(_.getMessage.getFormattedMessage.contains("already reached the maximum"))
     }
 
+    // Logged only once across repeated rounds.
+    assert(countSkipLogs(2) === 1)
     verify(podResource, never()).patch(any(), any(classOf[Pod]))
-    val skipLogs = logAppender.loggingEvents
-      .filter(_.getMessage.getFormattedMessage.contains("already reached the maximum"))
-    assert(skipLogs.size === 1)
+
+    // Once the executor disappears, its capped state is forgotten and logged again on return.
+    when(podList.getItems).thenReturn(Collections.emptyList())
+    assert(countSkipLogs(1) === 0)
+    when(podList.getItems).thenReturn(Collections.singletonList(pod))
+    assert(countSkipLogs(2) === 1)
   }
 
   Seq("statefulset", "deployment").foreach { allocator =>
