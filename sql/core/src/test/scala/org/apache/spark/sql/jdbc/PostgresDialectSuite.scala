@@ -82,9 +82,11 @@ class PostgresDialectSuite extends SparkFunSuite with MockitoSugar {
     verify(conn).setAutoCommit(false)
   }
 
-  test("SPARK-57780: insufficient privilege is not classified as a syntax error") {
+  test("SPARK-57780: classify only syntax error SQLSTATEs as syntax errors") {
+    assert(dialect.isSyntaxErrorBestEffort(new SQLException("syntax error", "42000")))
     assert(dialect.isSyntaxErrorBestEffort(new SQLException("syntax error", "42601")))
     assert(!dialect.isSyntaxErrorBestEffort(new SQLException("permission denied", "42501")))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("undefined table", "42P01")))
   }
 
   test("updateExtraColumnMeta escapes a single quote in the table and column name") {

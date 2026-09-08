@@ -32,6 +32,7 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
+import org.apache.spark.util.Utils
 
 /**
  * To run this test suite for a specific version (e.g., postgres:18.2-alpine):
@@ -394,16 +395,22 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
         .executeUpdate()
     }
 
-    val postgresError = intercept[SQLException] {
-      spark.read.format("jdbc")
-        .option("url", restrictedJdbcUrl)
-        .option("dbtable", "bar")
-        .option("user", restrictedUser)
-        .option("password", restrictedPassword)
-        .load()
+    Utils.tryWithSafeFinally {
+      val postgresError = intercept[SQLException] {
+        spark.read.format("jdbc")
+          .option("url", restrictedJdbcUrl)
+          .option("dbtable", "bar")
+          .option("user", restrictedUser)
+          .option("password", restrictedPassword)
+          .load()
+      }
+      assertResult("42501")(postgresError.getSQLState)
+      assertResult("ERROR: permission denied for table bar")(postgresError.getMessage)
+    } {
+      Using.resource(getConnection()) { conn =>
+        conn.prepareStatement(s"DROP USER $restrictedUser").executeUpdate()
+      }
     }
-    assertResult("42501")(postgresError.getSQLState)
-    assertResult("ERROR: permission denied for table bar")(postgresError.getMessage)
   }
 
   test("write byte as smallint") {

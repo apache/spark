@@ -258,12 +258,12 @@ private case class PostgresDialect()
       s" $indexType (${columnList.mkString(", ")}) $indexProperties"
   }
 
-  // PostgreSQL class 42 contains both syntax errors and access rule violations. SQLSTATE 42501
-  // is insufficient_privilege, which is an access error rather than a syntax error.
   // See https://www.postgresql.org/docs/current/errcodes-appendix.html
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    val sqlState = exception.getSQLState
-    Option(sqlState).exists(_.startsWith("42")) && sqlState != "42501"
+    exception.getSQLState match {
+      case "42000" | "42601" => true
+      case _ => false
+    }
   }
 
   // SHOW INDEX syntax
