@@ -31,7 +31,8 @@ import org.apache.spark.sql.internal.SQLConf
 
 
 /**
- * Collection of rules related to hints. The only hint currently available is join strategy hint.
+ * Collection of rules related to hints: join strategy hints, the runtime filter hint, and
+ * partitioning hints.
  *
  * Note that this is separately into two rules because in the future we might introduce new hint
  * rules that have different ordering requirements from join strategies.
@@ -77,6 +78,11 @@ object ResolveHints {
    * is not aliased differently), subquery, or common table expression that match the specified
    * name.
    *
+   * [[RuntimeFilterHint]] is resolved here too. It takes the same per-relation form, e.g.
+   * "RUNTIME_FILTER(a)", and applies to a join side, so it shares this rule's relation matching
+   * and lands on the same [[HintInfo]] -- which is what lets it accompany a join strategy hint on
+   * a relation instead of displacing one.
+   *
    * The hint resolution works by recursively traversing down the query plan to find a relation or
    * subquery that matches one of the specified relation aliases. The traversal does not go past
    * beyond any view reference, with clause or subquery alias.
@@ -89,10 +95,11 @@ object ResolveHints {
     def resolver: Resolver = conf.resolver
 
     private def createHintInfo(hintName: String): HintInfo = {
-      HintInfo(strategy =
-        JoinStrategyHint.strategies.find(
+      HintInfo(
+        strategy = JoinStrategyHint.strategies.find(
           _.hintAliases.map(
-            _.toUpperCase(Locale.ROOT)).contains(hintName.toUpperCase(Locale.ROOT))))
+            _.toUpperCase(Locale.ROOT)).contains(hintName.toUpperCase(Locale.ROOT))),
+        runtimeFilterSource = RuntimeFilterHint.isRuntimeFilterHintName(hintName))
     }
 
     private def matchedIdentifier(identInHint: Seq[String], identInQuery: Seq[String]): Boolean =
@@ -157,7 +164,8 @@ object ResolveHints {
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(UNRESOLVED_HINT), ruleId) {
-      case h: UnresolvedHint if JoinStrategyHint.isJoinStrategyHintName(h.name) =>
+      case h: UnresolvedHint if JoinStrategyHint.isJoinStrategyHintName(h.name) ||
+          RuntimeFilterHint.isRuntimeFilterHintName(h.name) =>
         if (h.parameters.isEmpty) {
           // If there is no table alias specified, apply the hint on the entire subtree.
           ResolvedHint(h.child, createHintInfo(h.name))
@@ -167,7 +175,7 @@ object ResolveHints {
             case StringLiteral(tableName) => UnresolvedAttribute.parseAttributeName(tableName)
             case tableId: UnresolvedAttribute => tableId.nameParts
             case unsupported =>
-              throw QueryCompilationErrors.joinStrategyHintParameterNotSupportedError(unsupported)
+              throw QueryCompilationErrors.joinHintParameterNotSupportedError(unsupported)
           }.toSet
           val relationsInHintWithMatch = new mutable.HashSet[Seq[String]]
           val applied = applyJoinStrategyHint(
