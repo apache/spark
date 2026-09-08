@@ -216,6 +216,9 @@ case class Scd2BatchProcessor(
    *
    * Must run after [[projectTargetColumnsOntoMicrobatch]], because the eligible schema is
    * computed from the post-selection schema.
+   *
+   * TODO(SPARK-59343): decide how to handle the ignore-null selection changing between
+   * partial-retry attempts of the same microbatch.
    */
   private def extendMicrobatchRowsWithVersionMap(projectedDf: DataFrame): DataFrame =
     changeArgs.ignoreNullSelection match {
