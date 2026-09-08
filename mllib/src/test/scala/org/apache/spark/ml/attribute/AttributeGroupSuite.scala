@@ -18,8 +18,24 @@
 package org.apache.spark.ml.attribute
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types.MetadataBuilder
 
 class AttributeGroupSuite extends SparkFunSuite {
+
+  test("fromMetadata rejects a negative or out-of-Int-range NUM_ATTRIBUTES") {
+    val negative = new MetadataBuilder().putLong(AttributeKeys.NUM_ATTRIBUTES, -1L).build()
+    intercept[IllegalArgumentException] {
+      AttributeGroup.fromMetadata(negative, "g")
+    }
+    val tooLarge = new MetadataBuilder()
+      .putLong(AttributeKeys.NUM_ATTRIBUTES, Int.MaxValue.toLong + 1L).build()
+    intercept[IllegalArgumentException] {
+      AttributeGroup.fromMetadata(tooLarge, "g")
+    }
+    // A valid count is accepted unchanged.
+    val ok = new MetadataBuilder().putLong(AttributeKeys.NUM_ATTRIBUTES, 3L).build()
+    assert(AttributeGroup.fromMetadata(ok, "g").size === 3)
+  }
 
   test("attribute group") {
     val attrs = Array(

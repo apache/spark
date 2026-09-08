@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.linalg
 
+import org.apache.spark.ml.util.MLMaxNumFeatures
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
@@ -59,6 +60,11 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
         tpe match {
           case 0 =>
             val size = row.getInt(1)
+            // The declared size becomes the dense length on densification, so a very large
+            // declared size can drive an excessive allocation. `MLMaxNumFeatures.get` is a cached
+            // read of a static conf (no per-row allocation), and the check is a no-op unless the
+            // limit is set. Only the sparse branch pays it; dense vectors are unaffected.
+            MLMaxNumFeatures.check(size, "Sparse vector size")
             val indices = row.getArray(2).toIntArray()
             val values = row.getArray(3).toDoubleArray()
             new SparseVector(size, indices, values)

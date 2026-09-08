@@ -20,6 +20,7 @@ package org.apache.spark.ml.attribute
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.ml.linalg.SQLDataTypes
+import org.apache.spark.ml.util.MLMaxNumFeatures
 import org.apache.spark.sql.types.{Metadata, MetadataBuilder, StructField}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -193,8 +194,24 @@ object AttributeGroup {
   /** Creates an attribute group from a [[Metadata]] instance with name. */
   private[attribute] def fromMetadata(metadata: Metadata, name: String): AttributeGroup = {
     import org.apache.spark.ml.attribute.AttributeType._
+
+    // `NUM_ATTRIBUTES` is read from column metadata that may originate from a data
+    // file. A negative or out-of-Int-range value would otherwise silently truncate on `.toInt`
+    // and drive a negative/wrong array allocation (NegativeArraySizeException / corrupt indexing).
+    // Reject such clearly-malformed values; any valid Int count is accepted unchanged.
+    // Additionally, when `spark.sql.ml.maxNumFeatures` is set to a positive value, reject counts
+    // above it: a valid-but-huge count (near Int.MaxValue) still drives an excessive allocation.
+    // The default (-1) disables that cap and preserves the previous behavior.
+    def numAttributes(): Int = {
+      val n = metadata.getLong(NUM_ATTRIBUTES)
+      require(n >= 0 && n <= Int.MaxValue,
+        s"$NUM_ATTRIBUTES must be in [0, ${Int.MaxValue}] but got $n.")
+      MLMaxNumFeatures.check(n, NUM_ATTRIBUTES)
+      n.toInt
+    }
+
     if (metadata.contains(ATTRIBUTES)) {
-      val numAttrs = metadata.getLong(NUM_ATTRIBUTES).toInt
+      val numAttrs = numAttributes()
       val attributes = new Array[Attribute](numAttrs)
       val attrMetadata = metadata.getMetadata(ATTRIBUTES)
       if (attrMetadata.contains(Numeric.name)) {
@@ -227,7 +244,7 @@ object AttributeGroup {
       }
       new AttributeGroup(name, attributes)
     } else if (metadata.contains(NUM_ATTRIBUTES)) {
-      new AttributeGroup(name, metadata.getLong(NUM_ATTRIBUTES).toInt)
+      new AttributeGroup(name, numAttributes())
     } else {
       new AttributeGroup(name)
     }

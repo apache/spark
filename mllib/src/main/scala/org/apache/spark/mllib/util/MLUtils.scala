@@ -25,7 +25,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.OPTIMIZER_CLASS_NAME
 import org.apache.spark.ml.linalg.{MatrixUDT => MLMatrixUDT, VectorUDT => MLVectorUDT}
-import org.apache.spark.ml.util.Instrumentation
+import org.apache.spark.ml.util.{Instrumentation, MLMaxNumFeatures}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -93,9 +93,16 @@ object MLUtils extends Logging {
   }
 
   private[spark] def computeNumFeatures(rdd: RDD[(Double, Array[Int], Array[Double])]): Int = {
-    rdd.map { case (label, indices, values) =>
+    val numFeatures = rdd.map { case (label, indices, values) =>
       indices.lastOption.getOrElse(0)
     }.reduce(math.max) + 1
+    // The feature dimension is inferred from the largest index in a libsvm file, and
+    // then used as the (dense) size of every parsed vector. A file with a very large index can
+    // force an excessive allocation. When `spark.sql.ml.maxNumFeatures` is set to a positive
+    // value, reject files whose inferred dimension exceeds it. The default (-1) preserves the
+    // previous behavior.
+    MLMaxNumFeatures.check(numFeatures, "The number of features inferred from the input")
+    numFeatures
   }
 
   private[spark] def parseLibSVMFile(

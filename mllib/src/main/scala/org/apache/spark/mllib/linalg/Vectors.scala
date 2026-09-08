@@ -32,6 +32,7 @@ import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{AlphaComponent, Since}
 import org.apache.spark.ml.{linalg => newlinalg}
+import org.apache.spark.ml.util.MLMaxNumFeatures
 import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
@@ -312,6 +313,9 @@ class VectorUDT extends UserDefinedType[Vector] {
         tpe match {
           case 0 =>
             val size = row.getInt(1)
+            // See ml.linalg.VectorUDT.deserialize: cached read of a static conf, no-op unless set,
+            // sparse branch only.
+            MLMaxNumFeatures.check(size, "Sparse vector size")
             val indices = row.getArray(2).toIntArray()
             val values = row.getArray(3).toDoubleArray()
             new SparseVector(size, indices, values)
