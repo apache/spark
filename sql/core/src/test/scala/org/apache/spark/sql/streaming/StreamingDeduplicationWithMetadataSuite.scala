@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.functions.{lit, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 
 class StreamingDeduplicationWithMetadataSuite extends StreamTest {
@@ -61,6 +62,44 @@ class StreamingDeduplicationWithMetadataSuite extends StreamTest {
       val metadataBeforeDedup = input
         .select($"value", $"_metadata")
         .dropDuplicates()
+        .select($"value", $"_metadata.file_path".isNotNull.as("hasMetadata"))
+
+      testStream(metadataBeforeDedup)(
+        StartStream(),
+        ProcessAllAvailable(),
+        CheckAnswer(("same", true), ("same", true)))
+    }
+  }
+
+  testWithKeyOrders(
+      "metadata added downstream does not become a within-watermark deduplication key") {
+    withTempDir { src =>
+      stringToFile(new File(src, "first"), "same")
+      stringToFile(new File(src, "second"), "same")
+      val input = spark.readStream.format("text").load(src.getCanonicalPath)
+        .withColumn("eventTime", timestamp_seconds(lit(1)))
+        .withWatermark("eventTime", "10 seconds")
+      val metadataAfterDedup = input
+        .dropDuplicatesWithinWatermark()
+        .select($"value", $"_metadata.file_path".isNotNull.as("hasMetadata"))
+
+      testStream(metadataAfterDedup)(
+        StartStream(),
+        ProcessAllAvailable(),
+        CheckAnswer(("same", true)))
+    }
+  }
+
+  testWithKeyOrders("metadata visible before within-watermark deduplication remains a key") {
+    withTempDir { src =>
+      stringToFile(new File(src, "first"), "same")
+      stringToFile(new File(src, "second"), "same")
+      val input = spark.readStream.format("text").load(src.getCanonicalPath)
+        .withColumn("eventTime", timestamp_seconds(lit(1)))
+        .withWatermark("eventTime", "10 seconds")
+      val metadataBeforeDedup = input
+        .select($"value", $"eventTime", $"_metadata")
+        .dropDuplicatesWithinWatermark()
         .select($"value", $"_metadata.file_path".isNotNull.as("hasMetadata"))
 
       testStream(metadataBeforeDedup)(
