@@ -17,11 +17,66 @@
 
 package org.apache.spark.sql.pipelines.util
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import scala.util.Success
+
+import org.apache.spark.SparkException
+import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.pipelines.graph.{
+  FlowFunction,
+  FlowFunctionResult,
+  Input,
+  QueryContext,
+  QueryOrigin,
+  ResolvedFlow,
+  StreamingFlow,
+  UntypedFlow
+}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class SchemaInferenceUtilsSuite extends SparkFunSuite {
+class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
+
+  /** A [[FlowFunction]] that throws if invoked; the inferSchemaFromFlows test builds resolved
+   * flows directly. */
+  private val noOpFlowFunction: FlowFunction = new FlowFunction {
+    override def call(
+        allInputs: Set[TableIdentifier],
+        availableInputs: Seq[Input],
+        configuration: Map[String, String],
+        queryContext: QueryContext,
+        queryOrigin: QueryOrigin): FlowFunctionResult =
+      throw new UnsupportedOperationException(
+        "noOpFlowFunction.call should not be invoked from SchemaInferenceUtilsSuite tests")
+  }
+
+  private val queryContext = QueryContext(currentCatalog = Some("c"), currentDatabase = Some("d"))
+
+  /** A resolved flow with the given identifier and output schema, writing to `destination`. */
+  private def resolvedFlow(
+      identifier: TableIdentifier,
+      destination: TableIdentifier,
+      schema: StructType): ResolvedFlow = {
+    val df = spark.createDataFrame(spark.sparkContext.emptyRDD[Row], schema)
+    val flow = UntypedFlow(
+      identifier = identifier,
+      destinationIdentifier = destination,
+      func = noOpFlowFunction,
+      queryContext = queryContext,
+      sqlConf = Map.empty,
+      once = false,
+      origin = QueryOrigin.empty)
+    new StreamingFlow(
+      flow,
+      FlowFunctionResult(
+        requestedInputs = Set.empty,
+        batchInputs = Set.empty,
+        streamingInputs = Set.empty,
+        usedExternalInputs = Set.empty,
+        dataFrame = Success(df),
+        sqlConf = Map.empty))
+  }
 
   test("determineColumnChanges - adding new columns") {
     val currentSchema = new StructType()
@@ -396,6 +451,35 @@ class SchemaInferenceUtilsSuite extends SparkFunSuite {
       assert(typeChange.head.newDataType() === new StructType().add("Value", LongType))
       assert(!changes.exists(_.isInstanceOf[TableChange.AddColumn]))
       assert(!changes.exists(_.isInstanceOf[TableChange.DeleteColumn]))
+    }
+  }
+
+  test("inferSchemaFromFlows folds a case-only column to the same spelling regardless of flow " +
+    "order, even when identifier names contain dots") {
+    // The merge order decides which spelling of a case-only-differing column survives, so it must
+    // not depend on the incoming flow order (the nondeterministic flow-resolution completion
+    // order). The two identifiers below differ only in where the dot falls, so a dot-joined sort
+    // key would render them identical; sorting on the identifier parts keeps them distinct.
+    val destination = TableIdentifier("t", Some("d"), Some("c"))
+    val flowA = resolvedFlow(
+      identifier = TableIdentifier("x", Some("a.b"), Some("c")),
+      destination = destination,
+      schema = new StructType().add("id", IntegerType).add("value", StringType))
+    val flowB = resolvedFlow(
+      identifier = TableIdentifier("b.x", Some("a"), Some("c")),
+      destination = destination,
+      schema = new StructType().add("id", IntegerType).add("Value", StringType))
+
+    // The lower identifier (flowB: database "a" precedes "a.b") supplies the surviving spelling, in
+    // either input order.
+    val expected = new StructType().add("id", IntegerType).add("Value", StringType)
+    Seq(Seq(flowA, flowB), Seq(flowB, flowA)).foreach { flows =>
+      val inferred = SchemaInferenceUtils.inferSchemaFromFlows(
+        tableIdentifier = destination,
+        flows = flows,
+        userSpecifiedSchema = None,
+        sessionCaseSensitive = false)
+      assert(inferred === expected, s"unexpected schema for input order $flows")
     }
   }
 }

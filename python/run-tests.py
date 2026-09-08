@@ -18,32 +18,30 @@
 #
 
 import asyncio
-import logging
-from argparse import ArgumentParser
-import os
 import io
+import logging
+import os
 import platform
 import pty
+import queue as Queue
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
-from threading import Thread, Lock
 import time
 import uuid
-import queue as Queue
+from argparse import ArgumentParser
 from multiprocessing import Manager
-
+from threading import Lock, Thread
 
 # Append `SPARK_HOME/dev` to the Python path so that we can import the sparktestsupport module
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../dev/"))
 
 
 from sparktestsupport import SPARK_HOME
-from sparktestsupport.shellutils import which, subprocess_check_output
 from sparktestsupport.modules import all_modules, pyspark_sql  # noqa
-
+from sparktestsupport.shellutils import subprocess_check_output, which
 
 python_modules = dict((m.name, m) for m in all_modules if m.python_test_goals if m.name != "root")
 
@@ -420,6 +418,12 @@ def parse_opts():
         default=4,
         help="The number of suites to test in parallel (default %(default)d)",
     )
+    parser.add_argument(
+        "--changed-files",
+        type=str,
+        default=None,
+        help="A file containing a list of changed files (default: %(default)s)",
+    )
     parser.add_argument("--verbose", action="store_true", help="Enable additional debug logging")
 
     group = parser.add_argument_group("Developer Options")
@@ -484,6 +488,12 @@ def main():
         os.remove(LOG_FILE)
     python_execs = opts.python_executables.split(",")
     LOGGER.info("Will test against the following Python executables: %s", python_execs)
+
+    if opts.changed_files:
+        with open(opts.changed_files, "r") as f:
+            changed_files = f.read().splitlines()
+        os.environ["PYSPARK_CHANGED_FILES"] = opts.changed_files
+        LOGGER.info("Will select tests based on the following changed files: %s", changed_files)
 
     if should_test_modules:
         modules_to_test = []

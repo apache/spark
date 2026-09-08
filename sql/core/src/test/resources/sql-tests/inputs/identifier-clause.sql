@@ -14,6 +14,7 @@ SELECT IDENTIFIER('`t`.c1') FROM VALUES(1) AS T(c1);
 SELECT IDENTIFIER('`c 1`') FROM VALUES(1) AS T(`c 1`);
 SELECT IDENTIFIER('``') FROM VALUES(1) AS T(``);
 SELECT IDENTIFIER('c' || '1') FROM VALUES(1) AS T(c1);
+SELECT IDENTIFIER(concat('a', 'b')) FROM VALUES(1) AS T(ab);
 
 -- Table references
 CREATE SCHEMA IF NOT EXISTS s;
@@ -29,6 +30,7 @@ SELECT * FROM IDENTIFIER('tab');
 SELECT * FROM IDENTIFIER('s.tab');
 SELECT * FROM IDENTIFIER('`s`.`tab`');
 SELECT * FROM IDENTIFIER('t' || 'a' || 'b');
+SELECT * FROM IDENTIFIER(concat('t', 'ab'));
 
 USE SCHEMA default;
 DROP TABLE s.tab;
@@ -36,8 +38,72 @@ DROP SCHEMA s;
 
 -- Function reference
 SELECT IDENTIFIER('COAL' || 'ESCE')(NULL, 1);
+SELECT IDENTIFIER(concat('COAL', 'ESCE'))(NULL, 1);
 SELECT IDENTIFIER('abs')(c1) FROM VALUES(-1) AS T(c1);
 SELECT * FROM IDENTIFIER('ra' || 'nge')(0, 1);
+
+VALUES(IDENTIFIER(abs(1)));
+SELECT * FROM IDENTIFIER(nullif('a', 'a'));
+
+-- Function resolution while computing an identifier name
+SELECT IDENTIFIER(max('c1')) FROM VALUES(1) AS T(c1);
+SELECT IDENTIFIER(array_join(transform(array('c', '1'), element -> element), ''))
+FROM VALUES(1) AS T(c1);
+SELECT IDENTIFIER(rand()) FROM VALUES(1) AS T(c1);
+SELECT IDENTIFIER(row_number() OVER ()) FROM VALUES(1) AS T(c1);
+SELECT IDENTIFIER(row_number() OVER (ORDER BY 'x')) FROM VALUES(1) AS T(c1);
+SELECT IDENTIFIER(explode(array('c1'))) FROM VALUES(1) AS T(c1);
+SELECT * FROM IDENTIFIER(max('identifier_function_table'));
+SELECT * FROM IDENTIFIER(row_number() OVER (ORDER BY 'x'));
+SELECT * FROM IDENTIFIER(
+  array_join(transform(array('identifier', '_function_table'), element -> element), '')
+);
+
+CREATE TEMPORARY FUNCTION identifier_name()
+RETURNS STRING
+RETURN 'c1';
+SELECT IDENTIFIER(identifier_name()) FROM VALUES(1) AS T(c1);
+DROP TEMPORARY FUNCTION identifier_name;
+
+CREATE FUNCTION persistent_identifier_name()
+RETURNS STRING
+RETURN 'c1';
+SELECT IDENTIFIER(persistent_identifier_name()) FROM VALUES(1) AS T(c1);
+DROP FUNCTION persistent_identifier_name;
+
+CREATE FUNCTION persistent_identifier_function(value INT)
+RETURNS INT
+RETURN value + 1;
+SELECT IDENTIFIER(concat('persistent_identifier_', 'function'))(1);
+DROP FUNCTION persistent_identifier_function;
+
+CREATE FUNCTION persistent_identifier_base_name()
+RETURNS STRING
+RETURN 'c1';
+CREATE FUNCTION persistent_identifier_nested_name()
+RETURNS STRING
+RETURN persistent_identifier_base_name();
+SELECT IDENTIFIER(persistent_identifier_nested_name()) FROM VALUES(1) AS T(c1);
+DROP FUNCTION persistent_identifier_nested_name;
+DROP FUNCTION persistent_identifier_base_name;
+
+CREATE TEMPORARY FUNCTION identifier_relation_name()
+RETURNS STRING
+RETURN 'identifier_function_table';
+CREATE TABLE identifier_function_table(c1 INT) USING csv;
+SELECT * FROM IDENTIFIER(identifier_relation_name());
+CREATE TEMPORARY FUNCTION identifier_relation_count()
+RETURNS BIGINT
+RETURN SELECT count(*) FROM IDENTIFIER(concat('identifier_function_', 'table'));
+SELECT identifier_relation_count();
+DROP TEMPORARY FUNCTION identifier_relation_count;
+CREATE FUNCTION persistent_identifier_relation_name()
+RETURNS STRING
+RETURN 'identifier_function_table';
+SELECT * FROM IDENTIFIER(persistent_identifier_relation_name());
+DROP FUNCTION persistent_identifier_relation_name;
+DROP TABLE identifier_function_table;
+DROP TEMPORARY FUNCTION identifier_relation_name;
 
 -- Table DDL
 CREATE TABLE IDENTIFIER('tab')(c1 INT) USING CSV;
@@ -120,11 +186,17 @@ VALUES(IDENTIFIER(SUBSTR('HELLO', 1, RAND() + 1)));
 SELECT `IDENTIFIER`('abs')(c1) FROM VALUES(-1) AS T(c1);
 
 CREATE TABLE t(col1 INT);
+CREATE TABLE identifier_name_source(name STRING) USING csv;
 SELECT * FROM IDENTIFIER((SELECT 't'));
+SELECT * FROM IDENTIFIER((SELECT max(name) FROM identifier_name_source));
+SELECT * FROM IDENTIFIER(
+  (SELECT 'x' FROM (SELECT 1) WHERE explode(array(1)) = 1)
+);
 SELECT * FROM (SELECT IDENTIFIER((SELECT 'col1')) FROM IDENTIFIER((SELECT 't')));
 SELECT IDENTIFIER((SELECT 'col1')) FROM VALUES(1);
 SELECT col1, IDENTIFIER((SELECT col1)) FROM VALUES(1);
 SELECT IDENTIFIER((SELECT 'col1', 'col2')) FROM VALUES(1,2);
+DROP TABLE identifier_name_source;
 DROP TABLE t;
 
 CREATE TABLE IDENTIFIER(1)(c1 INT) USING csv;

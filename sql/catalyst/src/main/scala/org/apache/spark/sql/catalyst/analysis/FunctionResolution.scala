@@ -530,8 +530,12 @@ class FunctionResolution(
         }
       // We get an aggregate function, we need to wrap it in an AggregateExpression.
       case agg: AggregateFunction =>
-        // Note: PythonUDAF does not support these advanced clauses.
-        if (agg.isInstanceOf[PythonUDAF]) checkUnsupportedAggregateClause(agg, unresolvedFunc)
+        // Note: neither PythonUDAF nor the incremental PythonAggregate support these advanced
+        // clauses (DISTINCT / FILTER / ORDER BY / IGNORE NULLS). They have dedicated physical
+        // operators that do not honor them, so reject rather than silently drop the clause.
+        if (agg.isInstanceOf[PythonUDAF] || agg.isInstanceOf[PythonAggregate]) {
+          checkUnsupportedAggregateClause(agg, unresolvedFunc)
+        }
         // After parse, the functions not set the ordering within group yet.
         val newAgg = agg match {
           case owg: SupportsOrderingWithinGroup

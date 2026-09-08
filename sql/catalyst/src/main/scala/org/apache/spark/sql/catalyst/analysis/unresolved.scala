@@ -63,12 +63,9 @@ trait UnresolvedUnaryNode extends UnaryNode with UnresolvedNode
  * Extends `NamedRelation` so it can occupy a `NamedRelation`-typed slot (e.g.
  * `OverwriteByExpression.table`) directly at parse time, instead of wrapping the whole command.
  *
- * The parser always places this node inside the command's identifier slot (a child slot for
- * DELETE/UPDATE/MERGE/CTAS/RTAS, or a non-child slot for `InsertIntoStatement.table` and
- * `OverwriteByExpression.table` -- handled via explicit cases in `ResolveIdentifierClause` and
- * `BindParameters`). It is never the substitution root of a `WITH ... <command>` subtree, so
- * `CTEInChildren` semantics are not needed: any surrounding `WithCTE` produced by
- * `CTESubstitution` targets the inner command directly.
+ * Depending on the command shape, the parser uses this node either as the plan root or within the
+ * command's identifier slot. For INSERT, the slot is a child of `UnresolvedInsert` until the
+ * identifier expression has been evaluated.
  */
 case class PlanWithUnresolvedIdentifier(
     identifierExpr: Expression,
@@ -124,6 +121,19 @@ case class ExpressionWithUnresolvedIdentifier(
 }
 
 /**
+ * Holds the raw table identifier and lookup context for an unresolved INSERT target.
+ *
+ * This is deliberately not a [[NamedRelation]]: while it is a child of
+ * [[org.apache.spark.sql.catalyst.plans.logical.UnresolvedInsert]], it must not be interpreted as
+ * a readable relation or substituted with a same-named CTE. It is converted to an
+ * [[UnresolvedRelation]] when the enclosing INSERT is lowered to `InsertIntoStatement`.
+ */
+case class UnresolvedInsertTarget(
+    multipartIdentifier: Seq[String],
+    options: CaseInsensitiveStringMap,
+    writePrivileges: Set[TableWritePrivilege]) extends UnresolvedLeafNode
+
+/**
  * Holds the name of a relation that has yet to be looked up in a catalog.
  *
  * @param multipartIdentifier table name, the location of files or Kafka topic name, etc.
@@ -144,7 +154,9 @@ case class UnresolvedRelation(
   def requireWritePrivileges(privileges: Set[TableWritePrivilege]): UnresolvedRelation = {
     if (privileges.nonEmpty) {
       val newOptions = new java.util.HashMap[String, String]
-      newOptions.putAll(options)
+      // CaseInsensitiveStringMap's Map view exposes lowercase keys. Copy the original map to
+      // preserve user-provided key casing when adding the internal marker.
+      newOptions.putAll(options.asCaseSensitiveMap())
       newOptions.put(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES, privileges.mkString(","))
       copy(options = new CaseInsensitiveStringMap(newOptions))
     } else {
@@ -155,7 +167,8 @@ case class UnresolvedRelation(
   def clearWritePrivileges: UnresolvedRelation = {
     if (options.containsKey(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)) {
       val newOptions = new java.util.HashMap[String, String]
-      newOptions.putAll(options)
+      // Preserve user-provided key casing while removing the internal marker as well.
+      newOptions.putAll(options.asCaseSensitiveMap())
       newOptions.remove(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
       copy(options = new CaseInsensitiveStringMap(newOptions))
     } else {

@@ -59,7 +59,7 @@ private[hive] object OrcFileOperator extends Logging {
       : Option[Reader] = {
     def isWithNonEmptySchema(path: Path, reader: Reader): Boolean = {
       reader.getObjectInspector match {
-        case oi: StructObjectInspector if oi.getAllStructFieldRefs.size() == 0 =>
+        case oi: StructObjectInspector if oi.getAllStructFieldRefs.isEmpty =>
           logInfo(
             log"ORC file ${MDC(PATH, path)} has empty schema, it probably contains no rows. " +
               log"Trying to read another ORC file to figure out the schema.")

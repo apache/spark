@@ -708,6 +708,49 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     assert(optimized != query(Map.empty), "expected the empty-options plan to be rewritten")
   }
 
+  test("SPARK-58707: do not prune a from_json schema down to the corrupt record column") {
+    val schema = StructType.fromDDL("a int, b int, _corrupt_record string")
+
+    def getField(ordinal: Int): LogicalPlan = testRelation2
+      .select(GetStructField(JsonToStructs(schema, Map.empty, $"json"), ordinal)).analyze
+
+    // Pruning to the corrupt record column alone leaves the parser nothing to convert, so a
+    // malformed value in a dropped field would no longer populate the column.
+    comparePlans(Optimizer.execute(getField(2)), getField(2))
+
+    // Control: a non-corrupt field is still pruned, so the guard above is what blocks it rather
+    // than some other precondition of the rule.
+    val prunedSchema = StructType.fromDDL("a int")
+    comparePlans(
+      Optimizer.execute(getField(0)),
+      testRelation2
+        .select(GetStructField(JsonToStructs(prunedSchema, Map.empty, $"json"), 0)).analyze)
+  }
+
+  test("SPARK-58707: simplify named_struct + from_json when no field is dropped") {
+    val schema = StructType.fromDDL("a int, _corrupt_record string")
+
+    def query(fields: (String, Int)*): LogicalPlan = testRelation2.select(
+      namedStruct(fields.flatMap { case (name, ordinal) =>
+        Seq(Literal(name), GetStructField(JsonToStructs(schema, Map.empty, $"json"), ordinal))
+      }: _*).as("struct")).analyze
+
+    // Selecting the corrupt record column together with every other field drops nothing, so the
+    // rewrite is safe and still collapses the repeated parses into one.
+    val nullStruct = namedStruct(
+      "a", Literal(null, IntegerType), "_corrupt_record", Literal(null, StringType))
+    comparePlans(
+      Optimizer.execute(query("a" -> 0, "_corrupt_record" -> 1)),
+      testRelation2.select(
+        If(IsNull($"json"),
+          nullStruct,
+          KnownNotNull(JsonToStructs(schema, Map.empty, $"json"))).as("struct")).analyze)
+
+    // Dropping `a` while selecting the corrupt record column is what makes the column unreliable.
+    val pruning = query("_corrupt_record" -> 1)
+    comparePlans(Optimizer.execute(pruning), pruning)
+  }
+
   test("SPARK-33007: simplify named_struct + from_json") {
     val options = Map.empty[String, String]
     val schema = StructType.fromDDL("a int, b int, c long, d string")

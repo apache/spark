@@ -316,6 +316,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
          |using parquet""".stripMargin
 
     withJdbcStatement(tableName) { statement =>
+      statement.execute(s"SET ${SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key}=true")
       statement.execute(ddl)
 
       val databaseMetaData = statement.getConnection.getMetaData
@@ -338,9 +339,20 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
 
         val colSize = rowSet.getInt("COLUMN_SIZE")
         schema(pos).dataType match {
-          case StringType | BinaryType | _: ArrayType | _: MapType | _: VarcharType =>
+          case StringType | BinaryType | _: ArrayType | _: MapType =>
             assert(colSize === 0)
+          case c: CharType => assert(colSize === c.length)
+          case v: VarcharType => assert(colSize === v.length)
           case o => assert(colSize === o.defaultSize)
+        }
+        if (schema(pos).name == "c17") assert(colSize === 255)
+        if (schema(pos).name == "c18") assert(colSize === 1024)
+
+        val octetLength = rowSet.getInt("CHAR_OCTET_LENGTH")
+        schema(pos).dataType match {
+          case c: CharType => assert(octetLength === c.length * 4)
+          case v: VarcharType => assert(octetLength === v.length * 4)
+          case _ => assert(octetLength === 0) // JDBC getInt on SQL NULL
         }
 
         assert(rowSet.getInt("BUFFER_LENGTH") === 0) // not used
@@ -369,6 +381,23 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       }
 
       assert(pos === 19, "all columns should have been verified")
+    }
+  }
+
+  test("SPARK-58794: result metadata preserves CHAR and VARCHAR") {
+    withJdbcStatement() { statement =>
+      statement.execute(s"SET ${SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key}=true")
+      val resultSet = statement.executeQuery(
+        "SELECT CAST('ab' AS CHAR(4)) AS c, CAST('cd' AS VARCHAR(6)) AS v")
+      assert(resultSet.next())
+
+      val metadata = resultSet.getMetaData
+      assert(metadata.getColumnType(1) === java.sql.Types.CHAR)
+      assert(metadata.getColumnTypeName(1) === "char")
+      assert(metadata.getPrecision(1) === 4)
+      assert(metadata.getColumnType(2) === java.sql.Types.VARCHAR)
+      assert(metadata.getColumnTypeName(2) === "varchar")
+      assert(metadata.getPrecision(2) === 6)
     }
   }
 

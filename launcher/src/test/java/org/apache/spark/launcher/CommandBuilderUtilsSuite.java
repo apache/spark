@@ -74,6 +74,8 @@ public class CommandBuilderUtilsSuite {
     assertEquals(redact("-Dk=v"), "-Dk=v");
     assertEquals(redact("-Dk=secret"), "-Dk=secret");
     assertEquals(redact("-DsecretKey=my-secret"), "-DsecretKey=*********(redacted)");
+    assertEquals(redact("-Dspark.sql.catalog.foo.credential=my-credential"),
+      "-Dspark.sql.catalog.foo.credential=*********(redacted)");
     assertEquals(redactCommandLineArgs(Arrays.asList("-DsecretKey=my-secret")),
       Arrays.asList("-DsecretKey=*********(redacted)"));
   }

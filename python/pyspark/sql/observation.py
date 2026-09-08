@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 import os
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkAssertionError
+from pyspark.errors import PySparkAssertionError, PySparkTypeError, PySparkValueError
 from pyspark.serializers import CPickleSerializer
-from pyspark.sql import Row
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.types import Row
 from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
@@ -160,9 +160,10 @@ class Observation:
 def _test() -> None:
     import doctest
     import sys
+
+    import pyspark.sql.observation
     from pyspark.core.context import SparkContext
     from pyspark.sql import SparkSession
-    import pyspark.sql.observation
 
     globs = pyspark.sql.observation.__dict__.copy()
     sc = SparkContext("local[4]", "PythonTest")

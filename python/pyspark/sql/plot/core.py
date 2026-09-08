@@ -16,19 +16,21 @@
 #
 
 import math
-
-from typing import Any, TYPE_CHECKING, List, Optional, Union, Sequence
 from types import ModuleType
+from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Union
+
 from pyspark.errors import PySparkValueError
-from pyspark.sql import Column, functions as F
+from pyspark.sql import Column
+from pyspark.sql import functions as F
 from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.pandas.utils import require_minimum_pandas_version
 from pyspark.sql.utils import NumpyHelper, require_minimum_plotly_version
 
 if TYPE_CHECKING:
-    from pyspark.sql import DataFrame, Row
     import pandas as pd
     from plotly.graph_objs import Figure
+
+    from pyspark.sql import DataFrame, Row
 
 
 class PySparkTopNPlotBase:
@@ -48,7 +50,8 @@ class PySparkTopNPlotBase:
 
 class PySparkSampledPlotBase:
     def get_sampled(self, sdf: "DataFrame") -> "pd.DataFrame":
-        from pyspark.sql import Observation, functions as F
+        from pyspark.sql import Observation
+        from pyspark.sql import functions as F
 
         max_rows = int(
             sdf._session.conf.get("spark.sql.pyspark.plotting.max_rows")  # type: ignore[arg-type]

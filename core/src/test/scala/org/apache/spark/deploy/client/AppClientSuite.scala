@@ -20,13 +20,15 @@ package org.apache.spark.deploy.client
 import java.io.Closeable
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 
 import org.apache.spark._
 import org.apache.spark.deploy.{ApplicationDescription, Command, DeployTestUtils}
-import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState, WorkerDecommissioning}
+import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestApplicationHold, RequestMasterState, WorkerDecommissioning}
 import org.apache.spark.deploy.master.{ApplicationInfo, Master}
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.internal.{config, Logging}
@@ -217,6 +219,97 @@ class AppClientSuite
     }
   }
 
+  test("SPARK-59055: report the hold status of the application to the Master") {
+    Utils.tryWithResource(new AppClientInst(masterRpcEnv.address.toSparkURL)) { ci =>
+      ci.client.start()
+
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(getApplications().length === 1, "master should have 1 registered app")
+      }
+
+      // The Master knows nothing about the hold until the driver reports it.
+      val app = getApplications().head
+      assert(!app.holdSupported && !app.held && app.numDrainingExecutors === 0)
+
+      ci.client.reportHoldStatus(supported = true, held = false)
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(getApplications().head.holdSupported)
+      }
+      assert(!getApplications().head.held)
+
+      ci.client.reportHoldStatus(supported = true, held = true)
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(getApplications().head.held)
+      }
+
+      ci.client.reportHoldStatus(supported = true, held = false)
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(!getApplications().head.held)
+      }
+
+      // Issue stop command for Client to disconnect from Master
+      ci.client.stop()
+
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(getApplications().isEmpty, "master should have 0 registered apps")
+      }
+    }
+  }
+
+  test("SPARK-59061: hold and resume an application from the Master") {
+    Utils.tryWithResource(new AppClientInst(masterRpcEnv.address.toSparkURL)) { ci =>
+      ci.client.start()
+
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(getApplications().length === 1, "master should have 1 registered app")
+      }
+      val appId = getApplications().head.id
+
+      // A hold requested from the Master UI reaches the driver.
+      master.self.send(RequestApplicationHold(appId, hold = true))
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(ci.listener.holdRequestList.asScala.toSeq === Seq(true))
+      }
+
+      master.self.send(RequestApplicationHold(appId, hold = false))
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(ci.listener.holdRequestList.asScala.toSeq === Seq(true, false))
+      }
+
+      ci.client.stop()
+
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(getApplications().isEmpty, "master should have 0 registered apps")
+      }
+    }
+  }
+
+  test("SPARK-59061: reject the hold request of an application that disabled holding") {
+    Utils.tryWithResource(
+        new AppClientInst(masterRpcEnv.address.toSparkURL, holdEnabled = false)) { ci =>
+      ci.client.start()
+
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(getApplications().length === 1, "master should have 1 registered app")
+      }
+      val app = getApplications().head
+
+      // The Master rejects without forwarding, so the driver never sees the request. The
+      // askSync afterwards is a barrier: the Master processes its messages in order, so once
+      // it answers, the hold request has been handled.
+      master.self.send(RequestApplicationHold(app.id, hold = true))
+      getApplications()
+      Thread.sleep(100)
+      assert(ci.listener.holdRequestList.isEmpty)
+
+      ci.client.stop()
+
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(getApplications().isEmpty, "master should have 0 registered apps")
+      }
+    }
+  }
+
   test("request from AppClient before initialized with master") {
     Utils.tryWithResource(new AppClientInst(masterRpcEnv.address.toSparkURL)) { ci =>
 
@@ -267,6 +360,7 @@ class AppClientSuite
     val execAddedList = new ConcurrentLinkedQueue[String]()
     val execRemovedList = new ConcurrentLinkedQueue[String]()
     val execDecommissionedMap = new ConcurrentHashMap[String, ExecutorDecommissionInfo]()
+    val holdRequestList = new ConcurrentLinkedQueue[Boolean]()
 
     def connected(id: String): Unit = {
       connectedIdList.add(id)
@@ -302,16 +396,22 @@ class AppClientSuite
     }
 
     def workerRemoved(workerId: String, host: String, message: String): Unit = {}
+
+    def holdApplication(hold: Boolean): Future[Boolean] = {
+      holdRequestList.add(hold)
+      Future.successful(true)
+    }
   }
 
   /** Create AppClient and supporting objects */
-  private class AppClientInst(masterUrl: String) extends Closeable {
+  private class AppClientInst(masterUrl: String, holdEnabled: Boolean = true) extends Closeable {
     val rpcEnv = RpcEnv.create("spark", Utils.localHostName(), 0, conf, securityManager)
     private val cmd = new Command(TestExecutor.getClass.getCanonicalName.stripSuffix("$"),
       List(), Map(), Seq(), Seq(), Seq())
     private val defaultRp = DeployTestUtils.createDefaultResourceProfile(512)
     val desc =
-      ApplicationDescription("AppClientSuite", Some(1), cmd, "ignored", defaultRp)
+      ApplicationDescription("AppClientSuite", Some(1), cmd, "ignored", defaultRp,
+        holdEnabled = holdEnabled)
     val listener = new AppClientCollector
     val client = new StandaloneAppClient(rpcEnv, Array(masterUrl), desc, listener, new SparkConf)
 

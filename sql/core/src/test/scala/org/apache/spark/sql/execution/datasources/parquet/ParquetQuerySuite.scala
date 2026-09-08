@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions.struct
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.Utils
 
 /**
@@ -1371,6 +1372,7 @@ class ParquetV1QuerySuite extends ParquetQuerySuite {
   }
 }
 
+@ExtendedSQLTest
 class ParquetV2QuerySuite extends ParquetQuerySuite {
   import testImplicits._
 

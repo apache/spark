@@ -765,6 +765,27 @@ In addition, detailed log output for each job is also written to the work direct
 
 To track and review logs across completed applications, [enable event logging and start the History Server](monitoring.html#viewing-after-the-fact).
 
+## Held Applications
+
+An application that can be held reports to the Master whether it currently is, and the Master web
+UI annotates the application state accordingly, for example `RUNNING (held, draining 2 executors)`.
+An executor that has not exited yet is still finishing its running tasks, and the hold is complete
+once no executor is left. The Master's `/json/` endpoint reports the same in the `holdsupported`,
+`held`, and `draining` fields of each application.
+
+Only applications whose driver reports that it can be held are annotated, per the preconditions
+described in [Web UI](web-ui.html#jobs-tab).
+
+Such an application also gets a **Hold** button next to its **Kill** button, and a **Resume**
+button while it is held. Holding stops requesting new executors for the application and gracefully
+decommissions the running ones; the application keeps its driver and the shuffle output already
+written, while cached blocks are lost and recomputed after resuming. Holding and resuming require
+modify permissions, like killing. The buttons are gated by `spark.ui.holdEnabled` twice: on the
+Master, where setting it to false hides them for every application, and on each application,
+whose own setting travels with its registration -- an application that disabled it gets no buttons
+and its hold requests are rejected, while its hold status stays visible. The same controls remain
+available on the driver web UI.
+
 
 # Running Alongside Hadoop
 

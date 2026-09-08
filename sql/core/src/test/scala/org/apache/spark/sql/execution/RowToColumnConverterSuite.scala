@@ -131,16 +131,18 @@ class RowToColumnConverterSuite extends SparkFunSuite {
   }
 
   test("TimestampNTZNanosType column roundtrip") {
-    val t = TimestampNTZNanosType(9)
-    val schema = StructType(Seq(StructField("ts", t)))
-    val values = Seq(
-      TimestampNanosVal.fromParts(0L, 0.toShort),
-      TimestampNanosVal.fromParts(1_000_000L, 999.toShort),
-      TimestampNanosVal.fromParts(-1L, 123.toShort))
-    val rows = values.map(v => InternalRow(v))
-    val vectors = convertRows(rows, schema)
-    values.zipWithIndex.foreach { case (v, i) =>
-      assert(vectors.head.getTimestampNTZNanos(i) === v)
+    Seq(7, 8, 9).foreach { precision =>
+      val t = TimestampNTZNanosType(precision)
+      val schema = StructType(Seq(StructField("ts", t)))
+      val values = Seq(
+        TimestampNanosVal.fromParts(0L, 0.toShort),
+        TimestampNanosVal.fromParts(1_000_000L, 999.toShort),
+        TimestampNanosVal.fromParts(-1L, 123.toShort))
+      val rows = values.map(v => InternalRow(v))
+      val vectors = convertRows(rows, schema)
+      values.zipWithIndex.foreach { case (v, i) =>
+        assert(vectors.head.getTimestampNTZNanos(i) === v)
+      }
     }
   }
 
@@ -158,16 +160,18 @@ class RowToColumnConverterSuite extends SparkFunSuite {
   }
 
   test("TimestampLTZNanosType column roundtrip") {
-    val t = TimestampLTZNanosType(9)
-    val schema = StructType(Seq(StructField("ts", t)))
-    val values = Seq(
-      TimestampNanosVal.fromParts(0L, 0.toShort),
-      TimestampNanosVal.fromParts(1_000_000L, 999.toShort),
-      TimestampNanosVal.fromParts(-1L, 123.toShort))
-    val rows = values.map(v => InternalRow(v))
-    val vectors = convertRows(rows, schema)
-    values.zipWithIndex.foreach { case (v, i) =>
-      assert(vectors.head.getTimestampLTZNanos(i) === v)
+    Seq(7, 8, 9).foreach { precision =>
+      val t = TimestampLTZNanosType(precision)
+      val schema = StructType(Seq(StructField("ts", t)))
+      val values = Seq(
+        TimestampNanosVal.fromParts(0L, 0.toShort),
+        TimestampNanosVal.fromParts(1_000_000L, 999.toShort),
+        TimestampNanosVal.fromParts(-1L, 123.toShort))
+      val rows = values.map(v => InternalRow(v))
+      val vectors = convertRows(rows, schema)
+      values.zipWithIndex.foreach { case (v, i) =>
+        assert(vectors.head.getTimestampLTZNanos(i) === v)
+      }
     }
   }
 

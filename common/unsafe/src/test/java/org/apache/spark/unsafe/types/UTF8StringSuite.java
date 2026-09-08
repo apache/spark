@@ -332,6 +332,8 @@ public class UTF8StringSuite {
     assertEquals(-1, fromString("hello").indexOf(fromString("o"), 6, 1));
     assertEquals(0, fromString("hello").indexOf(fromString("h"), -5, 1));
     assertEquals(-1, fromString("hello").indexOf(fromString("h"), -6, 1));
+    assertEquals(-1, fromString("abcabc").indexOf(fromString("abc"), Integer.MIN_VALUE, 1));
+    assertEquals(-1, fromString("abcabc").indexOf(fromString("abc"), Integer.MIN_VALUE + 1, 1));
 
     // Target larger than string
     assertEquals(-1, fromString("ab").indexOf(fromString("abc"), 1, 1));
@@ -381,6 +383,10 @@ public class UTF8StringSuite {
     // overlapped delim
     assertEquals(fromString("||"), fromString("||||||").subStringIndex(fromString("|||"), 3));
     assertEquals(fromString("|||"), fromString("||||||").subStringIndex(fromString("|||"), -4));
+    assertEquals(fromString("www.apache.org"),
+      fromString("www.apache.org").subStringIndex(fromString("."), Integer.MIN_VALUE));
+    assertEquals(fromString("www.apache.org"),
+      fromString("www.apache.org").subStringIndex(fromString("."), Integer.MIN_VALUE + 1));
   }
 
   @Test

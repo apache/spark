@@ -28,9 +28,9 @@ own server-side session, so session-local state does not leak between runs.
 
 The discovery file, the daemon's pid file, and the logs live in a per-user ``0700`` directory
 under the system temp dir; ``SPARK_LOCAL_CONNECT_DISCOVERY`` overrides the discovery file
-location. The auth token is stored with ``0600`` and the server binds localhost, so other
-users on the machine can neither read the token nor reach the server. Processes of the same
-user share the server by design.
+location. The auth token is stored with ``0600`` and the server always binds IPv4 loopback,
+overriding any configured binding address, so other users on the machine can neither read the
+token nor authenticate to the server. Processes of the same user share the server by design.
 
 The server runs until stopped with ``python -m pyspark.sql.connect.local_server --stop``.
 (A plain ``sbin/stop-connect-server.sh`` cannot find it: the daemon runs with a custom pid
@@ -62,17 +62,77 @@ _SERVER_CLASS = "org.apache.spark.sql.connect.service.SparkConnectServer"
 # A fixed SPARK_IDENT_STRING keeps the spark-daemon.sh pid and log file names stable
 # regardless of $USER.
 _SPARK_IDENT = "local-connect"
+_LINUX_ZOMBIE_STATE = "Z"
 
 
 def _pid_alive(pid: int) -> bool:
-    """Whether ``pid`` exists (POSIX only). A process we cannot signal counts as alive."""
+    """Whether ``pid`` is running. A process we cannot signal counts as alive. Linux zombies
+    count as terminated: they remain signalable until their parent reaps them, but cannot own
+    or serve a managed server.
+
+    Off POSIX this returns ``True`` without probing: ``os.kill`` there terminates the target for
+    any signal other than ``CTRL_C_EVENT`` / ``CTRL_BREAK_EVENT``, so signal 0 is not a safe
+    liveness probe, and callers fall through to the port check instead. Guarding here rather than
+    at each call site keeps every caller (reuse and pool) safe. (The pool path needs ``fcntl`` and
+    so never runs off POSIX regardless.)
+    """
+    if os.name != "posix":
+        return True
+    if pid <= 0:
+        return False
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
+    except OverflowError:
+        return False
     except OSError:
         pass
+    if sys.platform.startswith("linux"):
+        try:
+            with open(f"/proc/{pid}/status", encoding="utf-8") as status_file:
+                for line in status_file:
+                    key, separator, value = line.partition(":")
+                    if separator and key == "State":
+                        state, _, _ = value.strip().partition(" ")
+                        if state == _LINUX_ZOMBIE_STATE:
+                            return False
+                        break
+        except FileNotFoundError:
+            return False
+        except OSError:
+            pass
     return True
+
+
+def _port_open(host: str, port: int, timeout: float = 0.5) -> bool:
+    """Whether a TCP connection to ``host``:``port`` succeeds within ``timeout`` seconds. A
+    socket error or a host that fails to resolve counts as closed.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(timeout)
+            return sock.connect_ex((host, port)) == 0
+    except (OSError, UnicodeError):
+        return False
+
+
+def _is_local_connect_server(pid: int) -> Optional[bool]:
+    """Whether ``pid`` is still the managed Connect server recorded in discovery.
+
+    Returns ``None`` when the process cannot be inspected, so callers do not discard the
+    discovery information needed to retry later.
+    """
+    try:
+        result = subprocess.run(
+            ["ps", "-ww", "-p", str(pid), "-o", "command="],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.returncode == 0 and _SERVER_CLASS in result.stdout
 
 
 def runtime_dir() -> str:
@@ -205,16 +265,14 @@ class LocalConnectServer:
     def is_listening(self) -> bool:
         if self.host is None or self.port is None:
             return False
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.settimeout(0.5)
-            return sock.connect_ex((self.host, self.port)) == 0
+        return _port_open(self.host, self.port)
 
     def is_reusable(self) -> bool:
         from pyspark.version import __version__
 
         if self.spark_version != __version__ or self.pid is None:
             return False
-        if os.name == "posix" and not _pid_alive(self.pid):
+        if not _pid_alive(self.pid):
             return False
         return self.is_listening()
 
@@ -247,14 +305,18 @@ class LocalConnectServer:
         ).launch()
         self._reload()
 
-    def stop(self) -> bool:
+    def stop(self) -> Optional[bool]:
         stopped = False
         if self.pid is not None:
-            try:
-                os.kill(self.pid, signal.SIGTERM)
-                stopped = True
-            except OSError:
-                pass
+            is_server = _is_local_connect_server(self.pid)
+            if is_server is None:
+                return None
+            if is_server:
+                try:
+                    os.kill(self.pid, signal.SIGTERM)
+                    stopped = True
+                except OSError:
+                    pass
         self._discovery.clear()
         return stopped
 
@@ -271,6 +333,7 @@ def _strip_launcher_conf(conf: Dict[str, Any]) -> Dict[str, Any]:
             "spark.api.mode",
             "spark.master",
             "spark.connect.authenticate.token",
+            "spark.connect.grpc.binding.address",
             "spark.connect.grpc.binding.port",
         ) or k.startswith("spark.local.connect."):
             stripped.pop(k)
@@ -419,6 +482,8 @@ class ServerLauncher:
             "--master",
             self._master,
             "--conf",
+            "spark.connect.grpc.binding.address=127.0.0.1",
+            "--conf",
             "spark.connect.grpc.binding.port={}".format(port),
         ]
         if conf_file is not None:
@@ -464,10 +529,7 @@ class ServerLauncher:
         while time.time() < deadline:
             pid = self._discovery.daemon_pid()
             if pid is not None:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                    sock.settimeout(0.5)
-                    listening = sock.connect_ex(("localhost", port)) == 0
-                if listening:
+                if _port_open("localhost", port):
                     self._discovery.save(
                         {
                             "host": "localhost",
@@ -522,9 +584,11 @@ def reuse_or_start_local_connect_server(master: str, opts: Dict[str, Any]) -> st
         return LocalConnectServer(discovery).reuse_or_start(master, opts)
 
 
-def stop_local_connect_server() -> bool:
+def stop_local_connect_server() -> Optional[bool]:
     """Stop the recorded persistent local Connect server, if any; safe to call when none is
-    running. Also available as ``python -m pyspark.sql.connect.local_server --stop``.
+    running. Returns ``True`` when the server was signalled, ``False`` when no matching server
+    was found, and ``None`` when the process could not be inspected. Also available as
+    ``python -m pyspark.sql.connect.local_server --stop``.
     """
     with Discovery() as discovery:
         return LocalConnectServer(discovery).stop()
@@ -544,8 +608,12 @@ def main() -> None:
     if not args.stop:
         parser.print_help(sys.stderr)
         sys.exit(2)
-    if stop_local_connect_server():
+    stopped = stop_local_connect_server()
+    if stopped:
         print("Stopped the persistent local Spark Connect server.")
+    elif stopped is None:
+        print("Could not verify the persistent local Spark Connect server; try again later.")
+        sys.exit(1)
     else:
         print("No running persistent local Spark Connect server found.")
 

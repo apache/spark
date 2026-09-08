@@ -129,7 +129,6 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       commandOptions: Map[String, String],
       dsOptions: Map[String, String]): Map[String, String] = {
     // for DataFrame API cases, same options are carried by both Command and DataSourceV2Relation
-    // for DataFrameV2 API cases, options are only carried by Command
     // for SQL cases, options are only carried by DataSourceV2Relation
     assert(commandOptions == dsOptions || commandOptions.isEmpty || dsOptions.isEmpty)
     commandOptions ++ dsOptions

@@ -17,29 +17,29 @@
 
 import gc
 import os
-import sys
-from tempfile import NamedTemporaryFile
-import threading
 import pickle
+import sys
+import threading
+from tempfile import NamedTemporaryFile
 from typing import (
-    overload,
+    IO,
+    TYPE_CHECKING,
     Any,
     BinaryIO,
     Callable,
     Dict,
     Generic,
-    IO,
     Iterator,
     Optional,
     Tuple,
     TypeVar,
-    TYPE_CHECKING,
     Union,
+    overload,
 )
 
-from pyspark.serializers import ChunkedStream, pickle_protocol
-from pyspark.util import print_exec, local_connect_and_auth
 from pyspark.errors import PySparkRuntimeError
+from pyspark.serializers import ChunkedStream, pickle_protocol
+from pyspark.util import local_connect_and_auth, print_exec
 
 if TYPE_CHECKING:
     from pyspark import SparkContext
@@ -361,8 +361,9 @@ class BroadcastPickleRegistry(threading.local):
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.core.broadcast
+    from pyspark.sql import SparkSession
 
     globs = pyspark.core.broadcast.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("broadcast tests").getOrCreate()

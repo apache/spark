@@ -177,16 +177,21 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
 
   test("SPARK-57102: requesting a nanos type over a non-NANOS Parquet column fails clearly") {
     withNanosEnabled {
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+      withSQLConf(
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
+        SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
+          SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS.toString) {
         withTempPath { dir =>
-          // Write a microsecond column: the Parquet annotation is TIMESTAMP(MICROS), not NANOS.
-          spark.sql("SELECT TIMESTAMP_NTZ '2020-01-01 12:34:56.123456' AS ts")
+          // Write a TIMESTAMP(MILLIS) column: a coarser non-NANOS encoding, not the INT64
+          // TIMESTAMP(MICROS) the nanos reader now widens to nanos.
+          spark.sql("SELECT TIMESTAMP '2020-01-01 12:34:56.123' AS ts")
             .write.parquet(dir.getCanonicalPath)
-          // Forcing a nanosecond read schema leaves no matching converter case (the guard requires
-          // a NANOS annotation), so it falls through to the generic PARQUET_CONVERSION_FAILURE
-          // error - the same path every other type uses, not a confusing one.
+          // Forcing a nanosecond read schema leaves no matching converter case (only NANOS and
+          // same-family MICROS are accepted), so it falls through to the generic
+          // PARQUET_CONVERSION_FAILURE error - the same path every other type uses, not a confusing
+          // one.
           val e = intercept[SparkException] {
-            spark.read.schema("ts TIMESTAMP_NTZ(7)").parquet(dir.getCanonicalPath).collect()
+            spark.read.schema("ts TIMESTAMP_LTZ(7)").parquet(dir.getCanonicalPath).collect()
           }
           var cause: Throwable = e
           while (cause != null && (cause.getMessage == null ||
@@ -304,6 +309,63 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
           assert(read.schema("arr").dataType.asInstanceOf[ArrayType].elementType ===
             TimestampNTZNanosType(9))
           checkAnswer(read, df.collect().toSeq)
+        }
+      }
+    }
+  }
+
+  test("SPARK-57822: nanos timestamp filter pushdown prunes row groups with identical results") {
+    // End-to-end: write many rows across multiple row groups, filter on the nanos column, and
+    // assert that (a) the filter is pushed to Parquet and skips row groups (a stripped-Spark-filter
+    // scan reads more than the matching rows but fewer than all rows) and (b) the full query result
+    // equals reading the same predicate with pushdown disabled. Record-level filtering is disabled
+    // so ONLY row-group-level skipping is exercised; the non-vectorized reader is used so
+    // `stripSparkFilter` reflects exactly what Parquet returned.
+    withNanosEnabled {
+      Seq(7, 8, 9).foreach { p =>
+        val frac = "000000123".take(p)
+        Seq("ntz", "ltz").foreach { kind =>
+          val typ = if (kind == "ntz") "TIMESTAMP_NTZ" else "TIMESTAMP_LTZ"
+          val expectedType =
+            if (kind == "ntz") TimestampNTZNanosType(p) else TimestampLTZNanosType(p)
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            // 1024 rows one second apart, monotonically increasing so consecutive row groups hold
+            // disjoint value ranges (statistics-based skipping is effective). A small block size
+            // forces multiple row groups.
+            spark.sql(
+              s"""SELECT
+                 |  $typ '2020-01-01 00:00:00.$frac' + make_dt_interval(0,0,0,id) AS c
+                 |FROM range(0, 1024)""".stripMargin)
+              .coalesce(1)
+              .write.option("parquet.block.size", 512).parquet(path)
+            assert(spark.read.parquet(path).schema("c").dataType === expectedType)
+
+            // Matches the single row at id = 1000, which lives only in a late row group.
+            val predicate = s"c = $typ '2020-01-01 00:16:40.$frac'"
+
+            // Row-group-level skipping: with record filtering off, a stripped scan returns whole
+            // surviving row groups. Fewer than all rows (skipping happened) but more than the one
+            // matching row (record filtering is off).
+            withSQLConf(
+              SQLConf.PARQUET_RECORD_FILTER_ENABLED.key -> "false",
+              SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+              SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+              val df = spark.read.parquet(path).filter(predicate)
+              val actual = stripSparkFilter(df).collect().length
+              assert(actual > 1 && actual < 1024,
+                s"Expected row-group skipping (p=$p, $kind) but scanned $actual of 1024 rows.")
+            }
+
+            // Results must be identical whether or not the filter is pushed to Parquet.
+            val expected = withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false") {
+              spark.read.parquet(path).filter(predicate).collect().toSeq
+            }
+            assert(expected.length === 1)
+            withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+              checkAnswer(spark.read.parquet(path).filter(predicate), expected)
+            }
+          }
         }
       }
     }

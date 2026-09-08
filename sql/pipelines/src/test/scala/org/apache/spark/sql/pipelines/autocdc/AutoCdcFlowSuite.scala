@@ -44,6 +44,8 @@ import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, 
  */
 class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
 
+  import testImplicits._
+
   private val testIdentifier = TableIdentifier("cdc_target", Some("db"))
 
   /** A no-op [[FlowFunction]] that throws if invoked; AutoCdcFlow tests should never call it. */
@@ -184,8 +186,6 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
 
   /** A stable 3-column source streaming dataframe used across most schema tests. */
   private def threeColumnSourceDf(): DataFrame = {
-    val session = spark
-    import session.implicits._
     MemoryStream[(Int, String, Option[Long])].toDS().toDF("id", "name", "seq")
   }
 
@@ -416,8 +416,6 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   test("AutoCdcMergeFlow.schema's SCD2 framework columns use the resolved sequencing type") {
     // A non-Long sequencing expression must flow through to __START_AT / __END_AT and the
     // metadata struct's record-start-at field.
-    val session = spark
-    import session.implicits._
     val sourceDf = MemoryStream[(Int, String, Int)].toDS().toDF("id", "name", "seq")
 
     val resolvedFlow = newAutoCdcMergeFlow(sourceDf, storedAsScdType = ScdType.Type2)
@@ -434,8 +432,6 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     // A multi-column sequence is expressed as a struct over the ordering columns; its resolved
     // type is the corresponding StructType, which must flow into __START_AT / __END_AT and the
     // metadata struct's record-start-at field unchanged, including each field's own nullability.
-    val session = spark
-    import session.implicits._
     // seq1 is a non-null Int; seq2 is a nullable Long (Option[Long]), so the struct carries
     // mixed per-field nullability.
     val sourceDf =
@@ -550,8 +546,6 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
 
   /** Builds an empty source df with `id` + `seq` + the supplied extra columns. */
   private def sourceDfWithExtraColumns(extraColumns: (String, DataType)*): DataFrame = {
-    val session = spark
-    import session.implicits._
     val baseStream = MemoryStream[(Int, Option[Long])].toDS().toDF("id", "seq")
     extraColumns.foldLeft(baseStream) { case (acc, (name, dt)) =>
       acc.withColumn(name, F.lit(null).cast(dt))

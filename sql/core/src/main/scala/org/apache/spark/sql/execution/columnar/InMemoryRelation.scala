@@ -289,8 +289,15 @@ case class CachedRDDBuilder(
   // late updates from making a rebuilt cache appear complete.
   private var partitionStats = newPartitionStats()
 
-  val cachedName = tableName.map(n => s"In-memory table $n")
-    .getOrElse(Utils.abbreviate(cachedPlan.toString, 1024))
+  // Resolved on first access (cache materialization for anonymous caches). For adaptive plans,
+  // the name reflects the final plan.
+  lazy val cachedName: String = tableName.map(n => s"In-memory table $n").getOrElse {
+    if (cachedPlan.conf.getConf(SQLConf.DATAFRAME_CACHE_PLAN_ID_NAME_ENABLED)) {
+      s"CachedRDD (plan_id=${cachedPlan.id})"
+    } else {
+      Utils.abbreviate(cachedPlan.toString, 1024)
+    }
+  }
 
   val supportsColumnarInput: Boolean = {
     cachedPlan.supportsColumnar &&
@@ -376,10 +383,7 @@ case class CachedRDDBuilder(
         val cachedPlanConf = cachedPlan.conf.clone()
 
         def hasStrictReads(conf: SQLConf): Boolean = SQLConf.withExistingConf(conf) {
-          fileSourceOptions.forall { options =>
-            val effectiveOptions = new FileSourceOptions(options)
-            !effectiveOptions.ignoreMissingFiles && !effectiveOptions.ignoreCorruptFiles
-          }
+          fileSourceOptions.forall(options => new FileSourceOptions(options).hasStrictFileReads)
         }
 
         val (inputRDD, strictPhysicalReads) = SQLConf.withExistingConf(materializationConf) {
@@ -710,16 +714,22 @@ case class InMemoryRelation(
     val newOutputOrdering = outputOrdering
       .map(_.transform { case a: Attribute => map(a) })
       .asInstanceOf[Seq[SortOrder]]
-    InMemoryRelation(newOutput, cacheBuilder, newOutputOrdering, statsOfPlanToCache)
+    // `attributeStats` is keyed by attribute, so it has to be re-keyed onto `newOutput` as well,
+    // otherwise every column stat lookup misses for the new relation and the estimates silently
+    // fall back to the un-filtered defaults. `statsOfPlanToCache` is a `var` that starts as null.
+    val newStatsOfPlanToCache = if (statsOfPlanToCache == null) {
+      null
+    } else {
+      LogicalRDD.rewriteStatistics(statsOfPlanToCache, map)
+    }
+    InMemoryRelation(newOutput, cacheBuilder, newOutputOrdering, newStatsOfPlanToCache)
   }
 
-  override def newInstance(): this.type = {
-    InMemoryRelation(
-      output.map(_.newInstance()),
-      cacheBuilder,
-      outputOrdering,
-      statsOfPlanToCache).asInstanceOf[this.type]
-  }
+  // Goes through `withOutput` so that `outputOrdering` is re-mapped onto the fresh exprIds.
+  // Returning a relation whose `outputOrdering` still references the old attributes would break
+  // canonicalization, which re-maps the ordering through the relation's own `output`.
+  override def newInstance(): this.type =
+    withOutput(output.map(_.newInstance())).asInstanceOf[this.type]
 
   // override `clone` since the default implementation won't carry over mutable states.
   override def clone(): LogicalPlan = {

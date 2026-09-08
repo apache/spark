@@ -86,22 +86,29 @@ private[sql] object V2TableReference {
       metadataColumns: Seq[MetadataColumn])
 
   sealed trait Context {
+    /** Whether re-resolution may reuse the per-query relation cache. */
     def cacheable: Boolean
+
+    /** Whether re-resolution may reuse the shared (CACHE TABLE) relation cache. */
+    def sharedCacheable: Boolean
   }
 
   /** Context for relations that are re-resolved on access of a dataframe temp view. */
   case class TemporaryViewContext(viewName: Seq[String]) extends Context {
     val cacheable = true
+    val sharedCacheable = true
   }
 
   /** Context for relations that are re-resolved through a transaction catalog. */
   case object TransactionContext extends Context {
     val cacheable = true
+    val sharedCacheable = false
   }
 
   /** Context for write targets. */
   case object WriteTargetContext extends Context {
     val cacheable = false
+    val sharedCacheable = false
   }
 
   def createForTempView(relation: DataSourceV2Relation, viewName: Seq[String]): V2TableReference = {

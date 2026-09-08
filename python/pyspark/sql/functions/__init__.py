@@ -17,8 +17,8 @@
 
 """PySpark Functions"""
 
-from pyspark.sql.functions.builtin import *  # noqa: F403
 from pyspark.sql.functions import partitioning  # noqa: F401
+from pyspark.sql.functions.builtin import *  # noqa: F403
 
 __all__ = [  # noqa: F405
     # Normal functions
@@ -154,6 +154,7 @@ __all__ = [  # noqa: F405
     "ltrim",
     "make_valid_utf8",
     "mask",
+    "normalize",
     "octet_length",
     "overlay",
     "position",
@@ -343,6 +344,7 @@ __all__ = [  # noqa: F405
     "shuffle",
     "slice",
     "sort_array",
+    "trim_array",
     # Struct Functions
     "named_struct",
     "struct",
@@ -368,6 +370,7 @@ __all__ = [  # noqa: F405
     "bitmap_and_agg",
     "bitmap_construct_agg",
     "bitmap_or_agg",
+    "bitmap_xor_agg",
     "bool_and",
     "bool_or",
     "collect_list",
@@ -492,6 +495,7 @@ __all__ = [  # noqa: F405
     "variant_delete",
     "variant_from_arrays",
     "variant_from_entries",
+    "variant_strip_nulls",
     "variant_get",
     "variant_insert",
     "try_variant_insert",
@@ -522,9 +526,13 @@ __all__ = [  # noqa: F405
     "aes_decrypt",
     "aes_encrypt",
     "assert_true",
+    "bitmap_and",
+    "bitmap_andnot",
     "bitmap_bit_position",
     "bitmap_bucket_number",
     "bitmap_count",
+    "bitmap_or",
+    "bitmap_xor",
     "current_catalog",
     "current_database",
     "current_path",
@@ -615,8 +623,10 @@ __all__ = [  # noqa: F405
     # Call Functions
     "call_udf",
     "pandas_udf",
+    "udaf",
     "udf",
     "udtf",
     "arrow_udtf",
     "unwrap_udt",
+    "wrap_udt",
 ]

@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 
-from decimal import Decimal
 import unittest
+from decimal import Decimal
 
-from pyspark.errors import AnalysisException, PythonException, PySparkNotImplementedError
+from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
 from pyspark.loose_version import LooseVersion
 from pyspark.sql import Row
-from pyspark.sql.functions import udf, col
+from pyspark.sql.functions import col, udf
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
 from pyspark.sql.types import (
     ArrayType,

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, InvalidFormat}
@@ -355,6 +355,14 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(-2)), "apache.org")
     checkEvaluation(
       SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(-1)), "org")
+    // SPARK-58443: negating a count of Integer.MIN_VALUE overflows back to Integer.MIN_VALUE;
+    // such a count is always out of range, so the whole string is returned.
+    checkEvaluation(
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(Int.MinValue)),
+      "www.apache.org")
+    checkEvaluation(
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(Int.MinValue + 1)),
+      "www.apache.org")
     checkEvaluation(
       SubstringIndex(Literal(""), Literal("."), Literal(-2)), "")
     checkEvaluation(
@@ -1124,6 +1132,12 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal("abcabc"), Literal("ab"), Literal(-2), Literal(3)), 0)
     checkEvaluation(StringInstrWithOccurrence(
       Literal("abcabc"), Literal("ab"), Literal(-3), Literal(3)), 0)
+    // SPARK-58443: negating a start of Integer.MIN_VALUE overflows back to Integer.MIN_VALUE;
+    // such a start is always out of range, so no match is reported.
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("abc"), Literal(Int.MinValue), Literal(1)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("abc"), Literal(Int.MinValue + 1), Literal(1)), 0)
     checkEvaluation(StringInstrWithOccurrence(
       Literal("abc"), Literal("b"), Literal(0), Literal(1)), 0)
     checkEvaluation(StringInstrWithOccurrence(
@@ -2384,5 +2398,26 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val formatNumberCopy = formatNumber.freshCopyIfContainsStatefulExpression()
     assert(formatNumberCopy ne formatNumber,
       "freshCopyIfContainsStatefulExpression should return a new instance for FormatNumber")
+  }
+
+  test("Normalize") {
+    // scalastyle:off nonascii
+    checkEvaluation(new Normalize(Literal("A\u030A")), "\u00C5")
+    checkEvaluation(Normalize(Literal("A\u030A"), Literal("NFC")), "\u00C5")
+    checkEvaluation(Normalize(Literal("\u00C5"), Literal("NFD")), "A\u030A")
+    checkEvaluation(Normalize(Literal("\uFB01"), Literal("NFKC")), "fi")
+    // scalastyle:on nonascii
+    checkEvaluation(Normalize(Literal.create(null, StringType), Literal("NFC")), null)
+    checkEvaluation(Normalize(Literal("abc"), Literal.create(null, StringType)), null)
+  }
+
+  test("Normalize invalid form") {
+    checkErrorInExpression[SparkRuntimeException](
+      Normalize(Literal("abc"), Literal("NFE")),
+      "INVALID_PARAMETER_VALUE.NORMALIZE_FORM",
+      Map(
+        "parameter" -> "`form`",
+        "functionName" -> "`normalize`",
+        "form" -> "'NFE'"))
   }
 }

@@ -2727,6 +2727,33 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-59009: cached relation with outputOrdering can be referenced more than once") {
+    withTempView("t", "ordered_t") {
+      spark.range(0, 20).selectExpr("id", "id % 3 AS k").createOrReplaceTempView("t")
+      val ordered = sql("SELECT id, k FROM t ORDER BY k, id")
+      ordered.persist()
+      try {
+        ordered.createOrReplaceTempView("ordered_t")
+        // The CTE below is referenced twice, so InlineCTE deduplicates the second copy and calls
+        // newInstance() on the cached relation. The join then canonicalizes it, which used to
+        // throw because newInstance() left `outputOrdering` on the old attributes.
+        checkAnswer(
+          sql(
+            """
+              |WITH r AS (
+              |  SELECT *, row_number() OVER (PARTITION BY k ORDER BY id DESC) AS rn
+              |  FROM ordered_t
+              |)
+              |SELECT x.id AS x_id, y.id AS y_id
+              |FROM r x JOIN r y ON x.k = y.k AND x.rn = 1 AND y.rn = 2
+            """.stripMargin),
+          Row(18L, 15L) :: Row(19L, 16L) :: Row(17L, 14L) :: Nil)
+      } finally {
+        ordered.unpersist()
+      }
+    }
+  }
+
   private def cacheManager = spark.sharedState.cacheManager
 
   private def pinTable(

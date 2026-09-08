@@ -327,10 +327,10 @@ object DeserializerBuildHelper {
       createDeserializerForGeographyType(path, g.dt)
     case g: GeometryEncoder =>
       createDeserializerForGeometryType(path, g.dt)
-    case CharEncoder(length) =>
-      createDeserializerForChar(path, returnNullable = false, length)
-    case VarcharEncoder(length) =>
-      createDeserializerForVarchar(path, returnNullable = false, length)
+    case CharEncoder(dt) =>
+      createDeserializerForChar(path, returnNullable = false, dt.length)
+    case VarcharEncoder(dt) =>
+      createDeserializerForVarchar(path, returnNullable = false, dt.length)
     case StringEncoder =>
       createDeserializerForString(path, returnNullable = false)
     case _: ScalaDecimalEncoder =>

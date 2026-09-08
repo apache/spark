@@ -237,8 +237,10 @@ object AgnosticEncoders {
   // Nullable leaf encoders
   case object NullEncoder extends LeafEncoder[java.lang.Void](NullType)
   case object StringEncoder extends LeafEncoder[String](StringType)
-  case class CharEncoder(length: Int) extends LeafEncoder[String](CharType(length))
-  case class VarcharEncoder(length: Int) extends LeafEncoder[String](VarcharType(length))
+  // Carry the full constrained type (length + collation), matching GeographyEncoder /
+  // GeometryEncoder. Reconstructing from length alone would drop a declared collation.
+  case class CharEncoder(dt: CharType) extends LeafEncoder[String](dt)
+  case class VarcharEncoder(dt: VarcharType) extends LeafEncoder[String](dt)
   case object BinaryEncoder extends LeafEncoder[Array[Byte]](BinaryType)
   case object ScalaBigIntEncoder extends LeafEncoder[BigInt](DecimalType.BigIntDecimal)
   case object JavaBigIntEncoder extends LeafEncoder[JBigInt](DecimalType.BigIntDecimal)

@@ -43,11 +43,11 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
+import org.apache.spark.sql.catalyst.plans.physical.KeyReducer
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{sideBySide, CharsetProvider, DateTimeUtils, FailFastMode, IntervalUtils, MapData}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
@@ -267,6 +267,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "bitmapNumBits" -> s"${bitmapNumBytes * 8}"),
       context = Array.empty,
       summary = "")
+  }
+
+  def bitmapInputTooLargeError(inputNumBytes: Int, maxNumBytes: Int): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "BITMAP_INPUT_TOO_LARGE",
+      messageParameters = Map(
+        "inputNumBytes" -> inputNumBytes.toString,
+        "maxNumBytes" -> maxNumBytes.toString),
+      cause = null)
   }
 
   def invalidFractionOfSecondError(secAndMicros: Double): DateTimeException = {
@@ -573,7 +582,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def unableToCreateDatabaseAsFailedToCreateDirectoryError(
       dbDefinition: CatalogDatabase, e: IOException): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2033",
+      errorClass = "UNABLE_TO_CREATE_DATABASE_DIRECTORY",
       messageParameters = Map(
         "name" -> dbDefinition.name,
         "locationUri" -> dbDefinition.locationUri.toString()),
@@ -974,7 +983,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def writingJobFailedError(cause: Throwable): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2070",
+      errorClass = "WRITING_JOB_FAILED",
       messageParameters = Map.empty,
       cause = cause)
   }
@@ -1387,6 +1396,25 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map.empty)
   }
 
+  def invalidJsonFormatJsonValueError(
+      functionName: String, position: Int, value: String): SparkRuntimeException = {
+    // Bound the echoed value: a FORMAT JSON argument can be a large payload column, and inlining it
+    // whole would bloat task-failure messages, logs, and UI/event metadata. Show a capped preview
+    // plus the full length instead.
+    val maxPreviewLen = 100
+    val preview = if (value.length > maxPreviewLen) {
+      s"${value.take(maxPreviewLen)}... (${value.length} characters)"
+    } else {
+      value
+    }
+    new SparkRuntimeException(
+      errorClass = "INVALID_JSON_FORMAT_JSON_VALUE",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "position" -> position.toString,
+        "value" -> toSQLValue(preview, StringType)))
+  }
+
   def paramExceedOneCharError(paramName: String, actualValue: String): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "OPTION_VALUE_EXCEEDS_ONE_CHARACTER",
@@ -1473,6 +1501,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "parameter" -> toSQLId("length"),
         "length" -> length.toString,
         "functionName" -> toSQLId(prettyName)))
+  }
+
+  def invalidElementCountForTrimArrayError(
+      prettyName: String, numElements: Int, length: Int): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.TRIM_ARRAY_LENGTH",
+      messageParameters = Map(
+        "parameter" -> toSQLId("n"),
+        "functionName" -> toSQLId(prettyName),
+        "numElements" -> numElements.toString,
+        "length" -> length.toString))
   }
 
   def invalidIndexOfZeroError(context: QueryContext): RuntimeException = {
@@ -1623,6 +1662,40 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "badRecord" -> badRecord,
         "failFastMode" -> FailFastMode.name),
       cause = e)
+  }
+
+  def jsonQueryOnEmptyError(functionName: String, path: String, cause: Throwable): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "JSON_QUERY_ON_ERROR.EMPTY",
+      messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)),
+      cause = cause)
+  }
+
+  def jsonQueryOnErrorError(functionName: String, path: String, cause: Throwable): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "JSON_QUERY_ON_ERROR.ERROR",
+      messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)),
+      cause = cause)
+  }
+
+  def jsonValueOnEmptyError(functionName: String, path: String, cause: Throwable): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "JSON_VALUE_ON_ERROR.EMPTY",
+      messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)),
+      cause = cause)
+  }
+
+  def jsonValueOnErrorError(functionName: String, path: String, cause: Throwable): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "JSON_VALUE_ON_ERROR.ERROR",
+      messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)),
+      cause = cause)
+  }
+
+  def jsonExistsOnError(functionName: String, path: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "JSON_EXISTS_ON_ERROR",
+      messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)))
   }
 
   def invalidKerberosConfigForHiveServer2Error(): Throwable = {
@@ -2552,6 +2625,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "detailMessage" -> detailMessage))
   }
 
+  def invalidNormalizeFormError(form: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.NORMALIZE_FORM",
+      messageParameters = Map(
+        "parameter" -> toSQLId("form"),
+        "functionName" -> toSQLId("normalize"),
+        "form" -> toSQLValue(form, StringType)))
+  }
+
   def hiveTableWithAnsiIntervalsError(
       table: TableIdentifier): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
@@ -3294,12 +3376,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def storagePartitionJoinIncompatibleReducedTypesError(
-      leftReducers: Option[Seq[Option[Reducer[_, _]]]],
+      leftReducers: Option[Seq[Option[KeyReducer]]],
       leftReducedDataTypes: Seq[DataType],
-      rightReducers: Option[Seq[Option[Reducer[_, _]]]],
+      rightReducers: Option[Seq[Option[KeyReducer]]],
       rightReducedDataTypes: Seq[DataType]): Throwable = {
-    def reducersNames(reducers: Option[Seq[Option[Reducer[_, _]]]]) = {
-      reducers.toSeq.flatMap(_.map(_.map(_.displayName()).getOrElse("identity")))
+    def reducersNames(reducers: Option[Seq[Option[KeyReducer]]]) = {
+      reducers.toSeq.flatMap(_.map(_.map(_.reducer.displayName()).getOrElse("identity")))
         .mkString("[", ", ", "]")
     }
 
