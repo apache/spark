@@ -28,11 +28,13 @@ import scala.concurrent.duration._
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.{Observation, Row, SparkSession}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.classic
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
+import org.apache.spark.sql.functions.{count, lit}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ThreadUtils
@@ -440,15 +442,34 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
     }
   }
 
+  /**
+   * Runs `f` with `spark`'s `BlockManagerMaster.driverEndpoint` nulled out, standing in for a
+   * `SparkContext` whose `SparkEnv` has been stopped. `SparkContext.stop()` stops `SparkEnv` (which
+   * nulls that endpoint) after nulling `dagScheduler`, so the shuffle cleanup in
+   * `withNewExecutionId`'s `finally` -- which runs before the `dagScheduler` cleanup -- really can
+   * hit a stopped `BlockManagerMaster` and NPE while a query unwinds during teardown.
+   */
+  private def withStoppedBlockManagerMaster[T](spark: SparkSession)(f: => T): T = {
+    val master = spark.sparkContext.env.blockManager.master
+    val savedEndpoint = master.driverEndpoint
+    master.driverEndpoint = null
+    try {
+      f
+    } finally {
+      master.driverEndpoint = savedEndpoint
+    }
+  }
+
   test("SPARK-59242: withNewExecutionId surfaces the body's failure when the SparkContext " +
     "has been stopped") {
     val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
     try {
       val qe = spark.range(1, 10).queryExecution
       val bodyFailure = new IllegalStateException("body failed")
-      // Without the null guard, the DAGScheduler cleanup in the `finally` throws an NPE that,
-      // because it is thrown from a `finally`, replaces `bodyFailure` entirely -- destroying the
-      // only record of why the query actually failed.
+      // Without the null guards, the `finally` dereferences `dagScheduler` while it is null:
+      // under `Utils.isTesting` the `activeQueryToJobs` read throws first, and the
+      // `cleanupQueryJobs` cleanup would do the same. Because the NPE is thrown from a `finally`,
+      // it replaces `bodyFailure` entirely -- destroying the only record of why the query failed.
       val thrown = intercept[IllegalStateException] {
         withStoppedDagScheduler(spark) {
           SQLExecution.withNewExecutionId(qe) {
@@ -466,10 +487,54 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
     "stopped") {
     val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
     try {
-      val qe = spark.range(1, 10).queryExecution
+      // Attach an observation so we can pin down that the observation is completed. `tryComplete`
+      // runs at the very end of the `finally`, after the guarded cleanup, so a cleanup NPE would
+      // skip it and leave `observation.get` blocked forever. No job runs here, so only assert that
+      // `get` returns rather than checking the observed value.
+      val observation = new Observation("obs")
+      val df = spark.range(1, 10).observe(observation, count(lit(1)).as("cnt"))
+      val qe = df.queryExecution
       withStoppedDagScheduler(spark) {
         assert(SQLExecution.withNewExecutionId(qe)("result") === "result")
       }
+      assert(observation.get != null)
+    } finally {
+      spark.stop()
+    }
+  }
+
+  test("SPARK-59242: withNewExecutionId tolerates shuffle cleanup failing when the " +
+    "SparkContext is stopping") {
+    val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
+    try {
+      // Disable AQE so the shuffle id is materialized from the plan below without running a job;
+      // the `finally`'s shuffle cleanup then actually calls `removeShuffle` for it.
+      spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, false)
+      val observation = new Observation("obs")
+      val df = spark.range(0, 4).repartition(2).observe(observation, count(lit(1)).as("cnt"))
+      val qe = df.queryExecution
+      // Guard against a silent no-op: the cleanup only calls `removeShuffle` if the plan yields a
+      // shuffle id, so assert there is one to clean up (accessing it also materializes it).
+      val shuffleIds = qe.executedPlan.collect { case e: ShuffleExchangeLike => e.shuffleId }
+      assert(shuffleIds.nonEmpty)
+
+      val bodyFailure = new IllegalStateException("body failed")
+      // Reproduce the teardown state that actually reaches this `finally`: `SparkContext.stop()`
+      // nulls `dagScheduler` before it stops `SparkEnv`, so both are down. The shuffle cleanup runs
+      // first and `removeShuffle` NPEs on the stopped `BlockManagerMaster`. Without the
+      // `tryLogNonFatalError` guard around the shuffle cleanup, that NPE escapes the `finally`,
+      // replacing `bodyFailure` and skipping the observation completion below.
+      val thrown = intercept[IllegalStateException] {
+        withStoppedDagScheduler(spark) {
+          withStoppedBlockManagerMaster(spark) {
+            SQLExecution.withNewExecutionId(qe) {
+              throw bodyFailure
+            }
+          }
+        }
+      }
+      assert(thrown eq bodyFailure)
+      assert(observation.get != null)
     } finally {
       spark.stop()
     }

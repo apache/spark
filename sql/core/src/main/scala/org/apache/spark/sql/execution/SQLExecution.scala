@@ -261,25 +261,32 @@ object SQLExecution extends Logging {
               }
               if (queryExecution.shuffleCleanupMode != DoNotCleanup
                 && isExecutedPlanAvailable) {
-                val shuffleIds = queryExecution.executedPlan match {
-                  case command: V2CommandExec =>
-                    command.children.flatMap(extractShuffleIds)
-                  case dataWritingCommand: DataWritingCommandExec =>
-                    extractShuffleIds(dataWritingCommand.child)
-                  case plan =>
-                    extractShuffleIds(plan)
-                }
-                shuffleIds.foreach { shuffleId =>
-                  queryExecution.shuffleCleanupMode match {
-                    case RemoveShuffleFiles =>
-                      // Same as what we do in ContextCleaner.doCleanupShuffle, but do not
-                      // unregister the shuffle on MapOutputTracker, so that stage retries would be
-                      // triggered.
-                      // Set blocking to Utils.isTesting to deflake unit tests.
-                      sc.shuffleDriverComponents.removeShuffle(shuffleId, Utils.isTesting)
-                    case SkipMigration =>
-                      SparkEnv.get.blockManager.migratableResolver.addShuffleToSkip(shuffleId)
-                    case _ => // this should not happen
+                // Best-effort shuffle cleanup. This runs in a `finally` while the query may be
+                // unwinding as the `SparkContext` is torn down: `removeShuffle` reaches a stopped
+                // `BlockManagerMaster` and `SparkEnv.get` is null once `SparkContext.stop()` has
+                // stopped `SparkEnv`, either of which would throw. As this runs before the event
+                // post and observation completion below, an escaping failure would replace the
+                // query's real exception and hang observation waiters, so log and swallow it.
+                Utils.tryLogNonFatalError {
+                  val shuffleIds = queryExecution.executedPlan match {
+                    case command: V2CommandExec =>
+                      command.children.flatMap(extractShuffleIds)
+                    case dataWritingCommand: DataWritingCommandExec =>
+                      extractShuffleIds(dataWritingCommand.child)
+                    case plan =>
+                      extractShuffleIds(plan)
+                  }
+                  shuffleIds.foreach { shuffleId =>
+                    queryExecution.shuffleCleanupMode match {
+                      case RemoveShuffleFiles =>
+                        // Same as ContextCleaner.doCleanupShuffle, but do not unregister the
+                        // shuffle on MapOutputTracker so that stage retries would be triggered.
+                        // Set blocking to Utils.isTesting to deflake unit tests.
+                        sc.shuffleDriverComponents.removeShuffle(shuffleId, Utils.isTesting)
+                      case SkipMigration =>
+                        SparkEnv.get.blockManager.migratableResolver.addShuffleToSkip(shuffleId)
+                      case _ => // this should not happen
+                    }
                   }
                 }
               }
@@ -298,22 +305,23 @@ object SQLExecution extends Logging {
               event.duration = endTime - startTime
               event.qe = queryExecution
               event.executionFailure = ex
+              // Snapshot the `@volatile` `dagScheduler` once and share it across both reads below.
+              // `SparkContext.stop()` nulls `dagScheduler` before it stops the listener bus, so a
+              // query unwinding here while the context tears down would otherwise NPE. As this runs
+              // in a `finally`, that NPE would replace the query's real failure and skip the event
+              // post and observation completion below, so tolerate an already-stopped context.
+              val dagSchedulerOpt = Option(sc.dagScheduler)
               if (Utils.isTesting) {
                 import scala.jdk.CollectionConverters._
-                // Tolerate a stopped context here too: this runs earlier in the same `finally`
-                // as the `cleanupQueryJobs` call below, so it hits the same teardown race.
-                event.jobIds = Option(sc.dagScheduler)
+                // Only runs under `Utils.isTesting`; hits the same teardown race as the cleanup.
+                event.jobIds = dagSchedulerOpt
                   .flatMap(ds => Option(ds.activeQueryToJobs.get(executionId)))
                   .map(_.asScala.map(_.jobId).toSet)
                   .getOrElse(Set.empty)
               }
 
               // Clean up jobs tracked by DAGScheduler for this query execution.
-              // `SparkContext.stop()` nulls `dagScheduler` before it stops the listener bus, so a
-              // query unwinding here while the context tears down would NPE. As this runs in a
-              // `finally`, that NPE would replace the query's real failure and skip the event post
-              // and observation completion below, so tolerate an already-stopped context.
-              Option(sc.dagScheduler).foreach(_.cleanupQueryJobs(executionId))
+              dagSchedulerOpt.foreach(_.cleanupQueryJobs(executionId))
 
               sc.listenerBus.post(event)
 
