@@ -255,6 +255,19 @@ class ExecutorPVCResizePluginSuite
     assert(patchedStorage(resource) === 1050000000L)
   }
 
+  test("SPARK-59304: Resize is not clamped when new size is below resizeMaxStorage") {
+    val plugin = createPlugin(threshold = 0.9, factor = 0.1, maxStorage = 2000000000L) // 2GB
+    val pod = createPodWithPVC(1, "pvc-1", "/data")
+    when(podList.getItems).thenReturn(Collections.singletonList(pod))
+    val resource = mockPvcResource("pvc-1", "1000000000") // 1GB
+    plugin.receive(PVCDiskUsageReport("1", 0.95)) // 95%
+
+    plugin.checkAndResizePVCs()
+
+    // 1GB * (1 + 0.1) = 1.1GB is below the 2GB cap, so it is applied as-is.
+    assert(patchedStorage(resource) === 1100000000L)
+  }
+
   test("SPARK-59304: Resize is skipped and logged once when storage already at resizeMaxStorage") {
     val plugin = createPlugin(maxStorage = 1000000000L) // 1GB cap
     val pod = createPodWithPVC(1, "pvc-1", "/data")
