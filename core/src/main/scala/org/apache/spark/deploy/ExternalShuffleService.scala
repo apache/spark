@@ -88,7 +88,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
     // application's own per-app directory (the Worker creates executor local dirs under a
     // path containing the app id). The check is opt-in: executors launched by Workers that
     // predate the per-app layout register unscoped paths and would be rejected, so enable it
-    // only once every Worker is upgraded.
+    // only once every Spark application is upgraded.
     val localDirs = Utils.getConfiguredLocalDirs(sparkConf)
     val requireAppScopedLocalDirs =
       sparkConf.get(config.SHUFFLE_SERVICE_REQUIRE_APP_SCOPED_LOCAL_DIRS)
