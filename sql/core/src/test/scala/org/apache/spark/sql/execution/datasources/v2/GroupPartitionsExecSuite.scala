@@ -436,6 +436,10 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
         val flagged = GroupPartitionsExec(child, enableSortedMerge = true)
         assert(flagged.outputOrdering === childOrdering,
           s"config=$configEnabled: the flag alone must keep the full ordering")
+        val unflagged = GroupPartitionsExec(child)
+        assert(unflagged.outputOrdering !== childOrdering,
+          s"config=$configEnabled: without the flag there is no k-way merge to report, and the " +
+            "config cannot supply one")
       }
     }
   }
