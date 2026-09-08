@@ -93,16 +93,18 @@ object MLUtils extends Logging {
   }
 
   private[spark] def computeNumFeatures(rdd: RDD[(Double, Array[Int], Array[Double])]): Int = {
-    val numFeatures = rdd.map { case (label, indices, values) =>
+    val maxIndex = rdd.map { case (label, indices, values) =>
       indices.lastOption.getOrElse(0)
-    }.reduce(math.max) + 1
+    }.reduce(math.max)
     // The feature dimension is inferred from the largest index in a libsvm file, and
     // then used as the (dense) size of every parsed vector. A file with a very large index can
-    // force an excessive allocation. When `spark.sql.ml.maxNumFeatures` is set to a positive
-    // value, reject files whose inferred dimension exceeds it. The default (-1) preserves the
-    // previous behavior.
+    // force an excessive allocation. Compute the dimension in `Long` so a maximum index near
+    // `Int.MaxValue` does not overflow before it is checked. When `spark.sql.ml.maxNumFeatures`
+    // is set to a positive value, reject files whose inferred dimension exceeds it. The default
+    // (-1) preserves the previous behavior.
+    val numFeatures = maxIndex.toLong + 1
     MLMaxNumFeatures.check(numFeatures, "The number of features inferred from the input")
-    numFeatures
+    numFeatures.toInt
   }
 
   private[spark] def parseLibSVMFile(

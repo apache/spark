@@ -32,8 +32,9 @@ import org.apache.spark.sql.internal.StaticSQLConf
  */
 private[spark] object MLMaxNumFeatures {
 
-  @volatile private var cachedEnv: SparkEnv = _
-  @volatile private var cachedValue: Int = -1
+  // A single volatile so the env and its value are always published together: reading a value
+  // paired with a different env is impossible. Initialized to a null env so the first call reads.
+  @volatile private var cached: (SparkEnv, Int) = (null, -1)
 
   /** The configured maximum, or -1 (no limit) when unset or when no `SparkEnv` is active. */
   def get: Int = {
@@ -44,11 +45,14 @@ private[spark] object MLMaxNumFeatures {
       // Reference-compare the active env against the cached one: on an executor there is a single
       // env for the application's lifetime, so this reads the config exactly once and then only
       // does a volatile read plus a reference comparison per call.
-      if (!env.eq(cachedEnv)) {
-        cachedValue = env.conf.get(StaticSQLConf.ML_MAX_NUM_FEATURES)
-        cachedEnv = env
+      val snapshot = cached
+      if (env.eq(snapshot._1)) {
+        snapshot._2
+      } else {
+        val value = env.conf.get(StaticSQLConf.ML_MAX_NUM_FEATURES)
+        cached = (env, value)
+        value
       }
-      cachedValue
     }
   }
 

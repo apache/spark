@@ -53,8 +53,10 @@ object StaticSQLConf {
       "allocation. This is a static conf so the value can be read once and cached, keeping the " +
       "per-row vector-deserialization check allocation-free. The default of -1 disables the " +
       "check and preserves the previous behavior; set a positive value to reject larger counts.")
-    .version("4.3.0")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .intConf
+    .checkValue(v => v == -1 || v > 0, "Must be -1 (disabled) or a positive value.")
     .createWithDefault(-1)
 
   val CATALOG_DEFAULT_DATABASE =
