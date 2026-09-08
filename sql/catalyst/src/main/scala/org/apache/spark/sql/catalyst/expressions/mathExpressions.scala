@@ -794,7 +794,8 @@ case class Gcd(
 
   override def dataType: DataType = LongType
 
-  // The result overflows for inputs whose divisor is -Long.MinValue, which is null in ANSI mode.
+  // The result overflows for inputs whose divisor is -Long.MinValue, which is null in non-ANSI
+  // mode.
   override def nullable: Boolean = true
 
   override def initQueryContext(): Option[QueryContext] = if (ansiEnabled) {
@@ -823,8 +824,6 @@ case class Gcd(
       """
     })
   }
-
-  override def prettyName: String = "gcd"
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): Gcd = copy(left = newLeft, right = newRight)
@@ -891,8 +890,6 @@ case class Lcm(
       """
     })
   }
-
-  override def prettyName: String = "lcm"
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): Lcm = copy(left = newLeft, right = newRight)
