@@ -1028,42 +1028,74 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
             def fake_call(req, metadata=None, timeout="unset"):
                 command = req.plan.command.ml_command
-                captured.append(
-                    {
-                        "delete": command.HasField("delete"),
-                        "clean_cache": command.HasField("clean_cache"),
-                        "timeout": timeout,
-                    }
-                )
+                call = {
+                    "delete": command.HasField("delete"),
+                    "clean_cache": command.HasField("clean_cache"),
+                    "timeout": timeout,
+                    "responses": 0,
+                }
+                captured.append(call)
                 response = proto.ExecutePlanResponse(
                     session_id=client._session_id,
                     operation_id=req.operation_id,
                 )
                 if command.HasField("delete"):
                     response.ml_command_result.operator_info.obj_ref.id = "model-id"
-                return response
 
-            client._channel = MagicMock()
-            client._channel.unary_unary.return_value = fake_call
+                def responses():
+                    call["responses"] += 1
+                    yield response
+                    call["responses"] += 1
+                    yield proto.ExecutePlanResponse(
+                        session_id=client._session_id,
+                        operation_id=req.operation_id,
+                        result_complete=proto.ExecutePlanResponse.ResultComplete(),
+                    )
+
+                return responses()
+
+            client._stub = MagicMock()
+            client._stub.ExecutePlan.side_effect = fake_call
             return client, captured
 
         client, captured = make_client(RpcDeadlines(release_ml_cache=44.0))
         self.assertEqual(client._delete_ml_cache(["model-id"]), ["model-id"])
         cleanup_command = proto.Command()
         cleanup_command.ml_command.clean_cache.SetInParent()
-        client._execute_cleanup_command(cleanup_command, client._rpc_deadlines.release_ml_cache)
+        client._execute_ml_cache_command(cleanup_command)
         self.assertEqual(
             captured,
             [
-                {"delete": True, "clean_cache": False, "timeout": 44.0},
-                {"delete": False, "clean_cache": True, "timeout": 44.0},
+                {
+                    "delete": True,
+                    "clean_cache": False,
+                    "timeout": 44.0,
+                    "responses": 2,
+                },
+                {
+                    "delete": False,
+                    "clean_cache": True,
+                    "timeout": 44.0,
+                    "responses": 2,
+                },
             ],
         )
         client.close()
 
         client, captured = make_client(RpcDeadlines.disabled())
-        client._execute_cleanup_command(cleanup_command, client._rpc_deadlines.release_ml_cache)
+        client._execute_ml_cache_command(cleanup_command)
         self.assertIsNone(captured[0]["timeout"])
+        self.assertEqual(captured[0]["responses"], 2)
+        client.close()
+
+        # Cleanup is best effort, so transient failures are not retried.
+        client = SparkConnectClient("sc://foo/")
+        client._stub = MagicMock()
+        client._stub.ExecutePlan.side_effect = TestException(
+            "unavailable", grpc.StatusCode.UNAVAILABLE
+        )
+        self.assertEqual(client._delete_ml_cache(["model-id"]), [])
+        client._stub.ExecutePlan.assert_called_once()
         client.close()
 
 

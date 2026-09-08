@@ -1734,39 +1734,6 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error, req.operation_id)
 
-    def _execute_cleanup_command(
-        self, command: pb2.Command, timeout: Optional[float]
-    ) -> pb2.ExecutePlanResponse:
-        """Execute a best-effort cleanup command once with a bounded deadline.
-
-        This is shared by cached-relation release from ``CachedRemoteRelation.__del__`` and by
-        targeted or session-wide ML cache cleanup. Both operations are safe to abandon because
-        their server-side state is also released when the session ends. The non-reattachable call
-        ensures that its timeout bounds the cleanup instead of starting another deadline interval.
-        """
-        req = self._execute_plan_request_with_metadata()
-        self._set_command_in_plan(req.plan, command)
-
-        operation_id = req.operation_id
-        for hook in self._session_hooks:
-            req = hook.on_execute_plan(req)
-            req.operation_id = operation_id
-
-        # Relation and ML cache cleanup can run from a finalizer or at interpreter exit, where the
-        # generated unary-stream call is unreliable. Both commands return a single response.
-        channel = self._channel.unary_unary(
-            "/spark.connect.SparkConnectService/ExecutePlan",
-            request_serializer=pb2.ExecutePlanRequest.SerializeToString,
-            response_deserializer=pb2.ExecutePlanResponse.FromString,
-        )
-        response = channel(
-            req,
-            metadata=self._execute_plan_metadata(req.operation_id),
-            timeout=timeout,
-        )
-        self._verify_response_integrity(response)
-        return cast(pb2.ExecutePlanResponse, response)
-
     def _builder_metadata(self) -> List[Tuple[str, str]]:
         return [
             (key, value)
@@ -2624,15 +2591,12 @@ class SparkConnectClient(object):
                 command.ml_command.delete.evict_only = evict_only
                 self._ml_cache_rpc_thread = threading.get_ident()
                 try:
-                    response = self._execute_cleanup_command(
-                        command, self._rpc_deadlines.release_ml_cache
-                    )
+                    ml_command_result = self._execute_ml_cache_command(command)
                 finally:
                     self._ml_cache_rpc_thread = None
 
-                if response.HasField("ml_command_result"):
-                    deleted = response.ml_command_result.operator_info.obj_ref.id.split(",")
-                    return cast(List[str], deleted)
+                if ml_command_result is not None:
+                    return ml_command_result.operator_info.obj_ref.id.split(",")
             return []
         except Exception:
             return []
@@ -2671,11 +2635,47 @@ class SparkConnectClient(object):
             command.ml_command.clean_cache.SetInParent()
             self._ml_cache_rpc_thread = threading.get_ident()
             try:
-                self._execute_cleanup_command(command, self._rpc_deadlines.release_ml_cache)
+                self._execute_ml_cache_command(command)
             finally:
                 self._ml_cache_rpc_thread = None
         except Exception:
             pass
+
+    def _execute_ml_cache_command(self, command: pb2.Command) -> Optional[pb2.MlCommandResult]:
+        """Execute an ML cache cleanup command once with a bounded deadline.
+
+        This is used by targeted model deletion and session-wide ML cache cleanup. Both are
+        best-effort releases whose server-side state is also removed when the session ends. Use a
+        non-reattachable ExecutePlan call so its deadline bounds the cleanup, and consume the full
+        response stream because ML commands can return more than one response.
+        """
+        req = self._execute_plan_request_with_metadata()
+        self._set_command_in_plan(req.plan, command)
+
+        operation_id = req.operation_id
+        for hook in self._session_hooks:
+            req = hook.on_execute_plan(req)
+            req.operation_id = operation_id
+
+        with disable_gc():
+            responses = iter(
+                self._stub.ExecutePlan(
+                    req,
+                    metadata=self._execute_plan_metadata(req.operation_id),
+                    timeout=self._rpc_deadlines.release_ml_cache,
+                )
+            )
+
+        ml_command_result = None
+        while True:
+            try:
+                with disable_gc():
+                    response = next(responses)
+                self._verify_response_integrity(response)
+                if response.HasField("ml_command_result"):
+                    ml_command_result = response.ml_command_result
+            except StopIteration:
+                return ml_command_result
 
     def _get_ml_cache_info(self) -> List[str]:
         command = pb2.Command()
