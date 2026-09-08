@@ -1081,6 +1081,18 @@ class PlanParserSuite extends AnalysisTest {
           usingColumns = Some(Seq("b"))).select(star()))
 
       assertEqual(
+        "select * from t asof join u match_condition (t.a >= u.a) using (a, b)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          GreaterThanOrEqualOp,
+          $"u.a",
+          None,
+          Inner,
+          usingColumns = Some(Seq("a", "b"))).select(star()))
+
+      assertEqual(
         "select * from t asof join u match_condition (u.a <= t.a)",
         AsOfJoin.fromMatchCondition(
           table("t"),
@@ -1271,6 +1283,24 @@ class PlanParserSuite extends AnalysisTest {
             fragment = "asof join u match_condition (t.a >= u.a or t.b >= u.b)",
             start = 16,
             stop = 69)))
+    }
+  }
+
+  test("asof join - non-comparison match condition rejected") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      // A MATCH_CONDITION that is not a top-level comparison (here a bare column reference)
+      // is rejected, and the original expression text is echoed back as the operator.
+      checkError(
+        exception = parseException(
+          "select * from t asof join u match_condition (t.a)"),
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = Some("42K0E"),
+        parameters = Map("operator" -> "t.a"),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "asof join u match_condition (t.a)",
+            start = 16,
+            stop = 48)))
     }
   }
 
