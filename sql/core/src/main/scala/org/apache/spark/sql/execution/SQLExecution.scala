@@ -26,6 +26,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{ErrorMessageFormat, JobArtifactSet, JobArtifactState, SparkContext, SparkEnv, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT_ON_CANCEL}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{EXECUTION_ID, SHUFFLE_ID}
 import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.classic.SparkSession
@@ -117,6 +118,53 @@ object SQLExecution extends Logging {
         plan.collect {
           case exec: ShuffleExchangeLike => exec.shuffleId
         }
+    }
+  }
+
+  /**
+   * Best-effort cleanup of the shuffle dependencies produced by `queryExecution`, invoked from
+   * `withNewExecutionId0`'s `finally`. It runs while the `SparkContext` may be tearing down, so it
+   * must not throw: `removeShuffle` can reach a stopped `BlockManagerMaster` and `SparkEnv.get` can
+   * be null. Each shuffle is cleaned independently so one failure does not abandon the rest, and a
+   * failure is logged with its id -- an operator enables the cleanup to bound disk usage, so a
+   * leaked shuffle is worth a warning.
+   */
+  private def cleanupShuffleDependencies(
+      queryExecution: QueryExecution,
+      executionId: Long): Unit = {
+    val sc = queryExecution.sparkSession.sparkContext
+    try {
+      val shuffleIds = queryExecution.executedPlan match {
+        case command: V2CommandExec =>
+          command.children.flatMap(extractShuffleIds)
+        case dataWritingCommand: DataWritingCommandExec =>
+          extractShuffleIds(dataWritingCommand.child)
+        case plan =>
+          extractShuffleIds(plan)
+      }
+      shuffleIds.foreach { shuffleId =>
+        try {
+          queryExecution.shuffleCleanupMode match {
+            case RemoveShuffleFiles =>
+              // Same as ContextCleaner.doCleanupShuffle, but do not unregister the shuffle on
+              // MapOutputTracker so that stage retries would be triggered. Blocking is
+              // Utils.isTesting to deflake unit tests.
+              sc.shuffleDriverComponents.removeShuffle(shuffleId, Utils.isTesting)
+            case SkipMigration =>
+              SparkEnv.get.blockManager.migratableResolver.addShuffleToSkip(shuffleId)
+            case _ => // this should not happen
+          }
+        } catch {
+          case NonFatal(e) =>
+            logWarning(log"Failed to clean up shuffle ${MDC(SHUFFLE_ID, shuffleId)} for " +
+              log"execution ${MDC(EXECUTION_ID, executionId)}; its files may be left on disk.", e)
+        }
+      }
+    } catch {
+      // `queryExecution.executedPlan` re-throws the planning failure cached in its `LazyTry`.
+      case NonFatal(e) =>
+        logWarning(log"Failed to clean up shuffle dependencies for execution " +
+          log"${MDC(EXECUTION_ID, executionId)}.", e)
     }
   }
 
@@ -259,75 +307,54 @@ object SQLExecution extends Logging {
                 case e =>
                   Utils.exceptionString(e)
               }
-              if (queryExecution.shuffleCleanupMode != DoNotCleanup
-                && isExecutedPlanAvailable) {
-                // Best-effort shuffle cleanup. This runs in a `finally` while the query may be
-                // unwinding as the `SparkContext` is torn down: `removeShuffle` reaches a stopped
-                // `BlockManagerMaster` and `SparkEnv.get` is null once `SparkContext.stop()` has
-                // stopped `SparkEnv`, either of which would throw. As this runs before the event
-                // post and observation completion below, an escaping failure would replace the
-                // query's real exception and hang observation waiters, so log and swallow it.
-                Utils.tryLogNonFatalError {
-                  val shuffleIds = queryExecution.executedPlan match {
-                    case command: V2CommandExec =>
-                      command.children.flatMap(extractShuffleIds)
-                    case dataWritingCommand: DataWritingCommandExec =>
-                      extractShuffleIds(dataWritingCommand.child)
-                    case plan =>
-                      extractShuffleIds(plan)
-                  }
-                  shuffleIds.foreach { shuffleId =>
-                    queryExecution.shuffleCleanupMode match {
-                      case RemoveShuffleFiles =>
-                        // Same as ContextCleaner.doCleanupShuffle, but do not unregister the
-                        // shuffle on MapOutputTracker so that stage retries would be triggered.
-                        // Set blocking to Utils.isTesting to deflake unit tests.
-                        sc.shuffleDriverComponents.removeShuffle(shuffleId, Utils.isTesting)
-                      case SkipMigration =>
-                        SparkEnv.get.blockManager.migratableResolver.addShuffleToSkip(shuffleId)
-                      case _ => // this should not happen
-                    }
-                  }
+              // The rest of this `finally` runs while the query may be unwinding as the
+              // `SparkContext` is torn down: `SparkContext.stop()` nulls `dagScheduler` before it
+              // stops the listener bus, then stops `SparkEnv` (and the `BlockManagerMaster`). Each
+              // cleanup step below is best-effort so a teardown failure does not replace the
+              // query's real exception, and `tryComplete` runs from a `finally` so an
+              // `Observation.get` waiter is never left hung whatever the cleanup or event post
+              // throws.
+              try {
+                if (queryExecution.shuffleCleanupMode != DoNotCleanup && isExecutedPlanAvailable) {
+                  cleanupShuffleDependencies(queryExecution, executionId)
                 }
+                val event = SparkListenerSQLExecutionEnd(
+                  executionId,
+                  System.currentTimeMillis(),
+                  // Use empty string to indicate no error, as None may mean events generated by old
+                  // versions of Spark.
+                  errorMessage.orElse(Some("")),
+                  Some(queryId))
+                // Currently only `Dataset.withAction` and `DataFrameWriter.runCommand` specify the
+                // `name` parameter. The `ExecutionListenerManager` only watches SQL executions with
+                // name. We can specify the execution name in more places in the future, so that
+                // `QueryExecutionListener` can track more cases.
+                event.executionName = name
+                event.duration = endTime - startTime
+                event.qe = queryExecution
+                event.executionFailure = ex
+                // Snapshot the `@volatile` `dagScheduler` once and share it across both reads
+                // below; it is null once `SparkContext.stop()` has run.
+                val dagSchedulerOpt = Option(sc.dagScheduler)
+                if (Utils.isTesting) {
+                  import scala.jdk.CollectionConverters._
+                  // Only runs under `Utils.isTesting`; hits the same teardown race as the job
+                  // cleanup below.
+                  event.jobIds = dagSchedulerOpt
+                    .flatMap(ds => Option(ds.activeQueryToJobs.get(executionId)))
+                    .map(_.asScala.map(_.jobId).toSet)
+                    .getOrElse(Set.empty)
+                }
+
+                // Clean up jobs tracked by DAGScheduler for this query execution.
+                dagSchedulerOpt.foreach(_.cleanupQueryJobs(executionId))
+
+                sc.listenerBus.post(event)
+              } finally {
+                // Complete the observation whatever the block above threw, so an `Observation.get`
+                // waiter is never left hung. `promise.tryComplete` is idempotent.
+                sparkSession.observationManager.tryComplete(queryExecution)
               }
-              val event = SparkListenerSQLExecutionEnd(
-                executionId,
-                System.currentTimeMillis(),
-                // Use empty string to indicate no error, as None may mean events generated by old
-                // versions of Spark.
-                errorMessage.orElse(Some("")),
-                Some(queryId))
-              // Currently only `Dataset.withAction` and `DataFrameWriter.runCommand` specify the
-              // `name` parameter. The `ExecutionListenerManager` only watches SQL executions with
-              // name. We can specify the execution name in more places in the future, so that
-              // `QueryExecutionListener` can track more cases.
-              event.executionName = name
-              event.duration = endTime - startTime
-              event.qe = queryExecution
-              event.executionFailure = ex
-              // Snapshot the `@volatile` `dagScheduler` once and share it across both reads below.
-              // `SparkContext.stop()` nulls `dagScheduler` before it stops the listener bus, so a
-              // query unwinding here while the context tears down would otherwise NPE. As this runs
-              // in a `finally`, that NPE would replace the query's real failure and skip the event
-              // post and observation completion below, so tolerate an already-stopped context.
-              val dagSchedulerOpt = Option(sc.dagScheduler)
-              if (Utils.isTesting) {
-                import scala.jdk.CollectionConverters._
-                // Only runs under `Utils.isTesting`; hits the same teardown race as the cleanup.
-                event.jobIds = dagSchedulerOpt
-                  .flatMap(ds => Option(ds.activeQueryToJobs.get(executionId)))
-                  .map(_.asScala.map(_.jobId).toSet)
-                  .getOrElse(Set.empty)
-              }
-
-              // Clean up jobs tracked by DAGScheduler for this query execution.
-              dagSchedulerOpt.foreach(_.cleanupQueryJobs(executionId))
-
-              sc.listenerBus.post(event)
-
-              // Observation.tryComplete is called here to ensure the observation is completed,
-              // but it is not high priority, so it is fine to call it later.
-              sparkSession.observationManager.tryComplete(queryExecution)
             }
           }
         }

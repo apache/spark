@@ -466,10 +466,9 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
     try {
       val qe = spark.range(1, 10).queryExecution
       val bodyFailure = new IllegalStateException("body failed")
-      // Without the null guards, the `finally` dereferences `dagScheduler` while it is null:
-      // under `Utils.isTesting` the `activeQueryToJobs` read throws first, and the
-      // `cleanupQueryJobs` cleanup would do the same. Because the NPE is thrown from a `finally`,
-      // it replaces `bodyFailure` entirely -- destroying the only record of why the query failed.
+      // The body's failure must survive the `finally`. Without the guards, under `Utils.isTesting`
+      // the `activeQueryToJobs` read NPEs first (and `cleanupQueryJobs` would too), and an NPE from
+      // a `finally` replaces `bodyFailure`.
       val thrown = intercept[IllegalStateException] {
         withStoppedDagScheduler(spark) {
           SQLExecution.withNewExecutionId(qe) {
@@ -487,10 +486,8 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
     "stopped") {
     val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
     try {
-      // Attach an observation to pin down that it is completed. `tryComplete` runs at the end of
-      // the `finally`, after the guarded cleanup, so a cleanup failure would skip it and leave the
-      // observation uncompleted. Assert on `future.isCompleted` (non-blocking) so a regression
-      // fails fast, rather than calling `get`, which would block until the suite timeout.
+      // Assert the observation is completed via the non-blocking `future.isCompleted`; a regression
+      // that skipped `tryComplete` would otherwise block `get` until the suite timeout.
       val observation = new Observation("obs")
       val df = spark.range(1, 10).observe(observation, count(lit(1)).as("cnt"))
       val qe = df.queryExecution
@@ -507,34 +504,38 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
     "SparkContext is stopping") {
     val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
     try {
-      // Disable AQE so the shuffle id is materialized from the plan below without running a job;
-      // the `finally`'s shuffle cleanup then actually calls `removeShuffle` for it.
-      spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, false)
-      val observation = new Observation("obs")
-      val df = spark.range(0, 4).repartition(2).observe(observation, count(lit(1)).as("cnt"))
-      val qe = df.queryExecution
-      // Guard against a silent no-op: the cleanup only calls `removeShuffle` if the plan yields a
-      // shuffle id, so assert there is one to clean up (accessing it also materializes it).
-      val shuffleIds = qe.executedPlan.collect { case e: ShuffleExchangeLike => e.shuffleId }
-      assert(shuffleIds.nonEmpty)
+      // AQE off so the shuffle id materializes from the plan without running a job, and file
+      // cleanup on so the mode is RemoveShuffleFiles even when the suite runs without
+      // `spark.testing` set (its default). Both are read when `qe` is built, so the whole body
+      // sits in the block.
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key -> "true") {
+        val observation = new Observation("obs")
+        val df = spark.range(0, 4).repartition(2).observe(observation, count(lit(1)).as("cnt"))
+        val qe = df.queryExecution
+        // The cleanup runs `removeShuffle` only when the mode is not DoNotCleanup and the plan
+        // yields a shuffle id, so pin down both (accessing the plan also materializes the id).
+        assert(qe.shuffleCleanupMode == RemoveShuffleFiles)
+        assert(qe.executedPlan.collect { case e: ShuffleExchangeLike => e.shuffleId }.nonEmpty)
 
-      val bodyFailure = new IllegalStateException("body failed")
-      // Reproduce the teardown state that actually reaches this `finally`: `SparkContext.stop()`
-      // nulls `dagScheduler` before it stops `SparkEnv`, so both are down. The shuffle cleanup runs
-      // first and `removeShuffle` NPEs on the stopped `BlockManagerMaster`. Without the
-      // `tryLogNonFatalError` guard around the shuffle cleanup, that NPE escapes the `finally`,
-      // replacing `bodyFailure` and skipping the observation completion below.
-      val thrown = intercept[IllegalStateException] {
-        withStoppedDagScheduler(spark) {
-          withStoppedBlockManagerMaster(spark) {
-            SQLExecution.withNewExecutionId(qe) {
-              throw bodyFailure
+        val bodyFailure = new IllegalStateException("body failed")
+        // Reproduce the teardown state that reaches this `finally`: both `dagScheduler` and the
+        // `BlockManagerMaster` are down (stop() nulls the former before stopping `SparkEnv`). The
+        // shuffle cleanup runs first, so `removeShuffle` NPEs; the body's failure must still win
+        // and the observation must still complete.
+        val thrown = intercept[IllegalStateException] {
+          withStoppedDagScheduler(spark) {
+            withStoppedBlockManagerMaster(spark) {
+              SQLExecution.withNewExecutionId(qe) {
+                throw bodyFailure
+              }
             }
           }
         }
+        assert(thrown eq bodyFailure)
+        assert(observation.future.isCompleted)
       }
-      assert(thrown eq bodyFailure)
-      assert(observation.future.isCompleted)
     } finally {
       spark.stop()
     }
