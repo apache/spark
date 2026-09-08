@@ -392,6 +392,10 @@ class KeyGroupedPartitioningSuite
     catalog.clearFunctions()
   }
 
+  /** Two structs of one shape, named differently, which is legal to join across. */
+  private val structA = new StructType().add("a", IntegerType)
+  private val structB = new StructType().add("b", IntegerType)
+
   private val table: String = "tbl"
 
   private val columns: Array[Column] = Array(
@@ -2356,7 +2360,7 @@ class KeyGroupedPartitioningSuite
     // the field names.
     val items_partitions = Array(identity("id"))
     createTable(items, Array(
-      Column.create("id", new StructType().add("a", IntegerType)),
+      Column.create("id", structA),
       Column.create("name", StringType),
       Column.create("price", DoubleType)), items_partitions)
 
@@ -2367,7 +2371,7 @@ class KeyGroupedPartitioningSuite
       "(named_struct('a', 4), 'dd', 20.0)")
 
     createTable(purchases, Array(
-      Column.create("item_id", new StructType().add("b", IntegerType)),
+      Column.create("item_id", structB),
       Column.create("price", DoubleType)), Array.empty)
     sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
       "(named_struct('b', 1), 42.0), (named_struct('b', 2), 19.5), " +
@@ -2389,6 +2393,113 @@ class KeyGroupedPartitioningSuite
           Row(Row(2), "bb", 10.0, 19.5),
           Row(Row(3), "cc", 15.5, 26.0),
           Row(Row(4), "dd", 20.0, 50.0)))
+      }
+    }
+  }
+
+  test("SPARK-59187: a union of a key that repeats across children under two namings joins right") {
+    // Two keyed sides holding one logical key under two namings, `struct<a:int>` and
+    // `struct<b:int>`. Struct equality ignores field names, so the union merges their keys and the
+    // merged list holds that key twice. It has to report that it does, or nothing regroups it and
+    // `s4` is shuffled straight onto it. `KeyGroupedPartitioner`'s map keeps one partition per key,
+    // so the union partition holding the earlier copy gets no rows and its row is dropped.
+    withTable("t1", "t2", "s4") {
+      createTable("t1", Array(Column.create("k1", structA)), Array(identity("k1")))
+      sql("INSERT INTO testcat.ns.t1 VALUES (named_struct('a', 1)), (named_struct('a', 2))")
+      createTable("t2", Array(Column.create("k2", structB)), Array(identity("k2")))
+      sql("INSERT INTO testcat.ns.t2 VALUES (named_struct('b', 1))")
+      createTable("s4", Array(
+        Column.create("k4", structB),
+        Column.create("w", StringType)), Array.empty)
+      sql("INSERT INTO testcat.ns.s4 VALUES " +
+        "(named_struct('b', 1), 'x'), (named_struct('b', 2), 'y')")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+        val unionSql =
+          """SELECT k1 AS k FROM testcat.ns.t1
+            |UNION ALL
+            |SELECT k2 AS k FROM testcat.ns.t2
+            |""".stripMargin
+        val df = sql(s"""SELECT u.k, s.w FROM ($unionSql) u JOIN testcat.ns.s4 s ON u.k = s.k4""")
+        checkAnswer(df, Seq(Row(Row(1), "x"), Row(Row(1), "x"), Row(Row(2), "y")))
+
+        val union = sql(unionSql).queryExecution.executedPlan
+          .collectFirst { case u: UnionExec => u }.get
+        union.outputPartitioning match {
+          case kp: physical.KeyedPartitioning =>
+            assert(kp.numPartitions === 3, "two children's keys, concatenated")
+            assert(!kp.isGrouped,
+              "the key `t1` and `t2` share is in the list twice, however each named it")
+          case other => fail(s"Expected the union to merge the children's keys, got $other")
+        }
+      }
+    }
+  }
+
+  test("SPARK-59187: two keyed sides whose struct field names differ join without a shuffle") {
+    // The join is legal, since struct equality ignores field names, and the two sides hold the same
+    // key values. Key rows are compared at types with the naming erased, so the two sides' keys
+    // pair and the join needs no shuffle. Before that erasure this threw
+    // STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES, for a join that reduced nothing.
+    withTable("s1", "s2") {
+      createTable("s1", Array(Column.create("id", structA), Column.create("v", StringType)),
+        Array(identity("id")))
+      sql("INSERT INTO testcat.ns.s1 VALUES " +
+        "(named_struct('a', 1), 'x'), (named_struct('a', 2), 'y')")
+      createTable("s2", Array(Column.create("k", structB), Column.create("w", StringType)),
+        Array(identity("k")))
+      sql("INSERT INTO testcat.ns.s2 VALUES " +
+        "(named_struct('b', 1), 'p'), (named_struct('b', 2), 'q')")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true") {
+        val df = sql("SELECT s1.v, s2.w FROM testcat.ns.s1 JOIN testcat.ns.s2 ON s1.id = s2.k")
+        assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+          "the two sides are laid out on the same keys")
+        checkAnswer(df, Seq(Row("x", "p"), Row("y", "q")))
+      }
+    }
+  }
+
+  test("SPARK-59187: a shuffled side keeps its own struct field names over shared empty keys") {
+    // End to end because the point is that the planner reaches this shape, not that two hand-built
+    // partitionings agree. `createPartitioning` puts the other child's expressions over this side's
+    // keys, so the two members of the join's partitioning carry `struct<a:int>` and `struct<b:int>`
+    // over one shared key list. Struct equality ignores field names, so the join is legal, and with
+    // the keys pruned to nothing each member answers for its key types from its own expressions.
+    // The two answers describe the same key space and must not be held against each other.
+    withTable("a1", "b1", "c1") {
+      createTable("a1", Array(Column.create("id", structA)), Array(identity("id")))
+      sql("INSERT INTO testcat.ns.a1 VALUES (named_struct('a', 1))")
+      createTable("b1", Array(Column.create("id", structA)), Array(identity("id")))
+      sql("INSERT INTO testcat.ns.b1 VALUES (named_struct('a', 2))")
+      createTable("c1", Array(Column.create("k", structB)), Array.empty)
+      sql("INSERT INTO testcat.ns.c1 VALUES (named_struct('b', 1))")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+        // The GROUP BY is what asks the join for its `outputPartitioning`.
+        val df = sql(
+          """SELECT id, count(*) FROM (
+            |  SELECT j.id, c1.k FROM
+            |    (SELECT a1.id AS id FROM testcat.ns.a1 JOIN testcat.ns.b1 ON a1.id = b1.id) j
+            |    JOIN testcat.ns.c1 ON j.id = c1.k
+            |) GROUP BY id
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+        val members = keyedPartitioningsOf(collect(plan) { case j: SortMergeJoinExec => j })
+        assert(members.map(_.expressions).distinct.size > 1,
+          "test setup: a join reports the two sides' expressions over one layout")
+        assert(members.map(_.keyDataTypes).distinct.size === 1,
+          "and they answer for one key space, whatever each side calls its struct field")
+        checkAnswer(df, Nil)
       }
     }
   }
