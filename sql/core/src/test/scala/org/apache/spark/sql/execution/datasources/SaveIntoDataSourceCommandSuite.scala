@@ -73,8 +73,8 @@ class SaveIntoDataSourceCommandSuite extends SharedSparkSession {
     spark.catalog.clearCache()
     FakeV1DataSource.data = null
 
-    // Bound modes store Some(false)/Some(true) on LogicalRelation, so recache must match
-    // the written BaseRelation rather than sameResult against an unbound probe.
+    // The two bound scan modes are part of LogicalRelation identity, so recache must match the
+    // written BaseRelation rather than sameResult against an unbound probe.
     Seq(
       Seq(
         SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
