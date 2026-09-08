@@ -131,19 +131,30 @@ class ResolveDeduplicateSuite extends AnalysisTest {
     assert(resolved.asInstanceOf[DeduplicateWithinWatermark].keys.map(_.name) === Seq("a"))
   }
 
-  test("streaming recomputation preserves the original metadata boundary") {
-    val evolved = $"evolved".int
-    val metadata = MetadataAttribute("_metadata", StringType)
-    val child = LocalRelation(rel.output ++ Seq(evolved, metadata))
+  test("streaming recomputation excludes metadata added after the deduplication boundary") {
+    val evolvedDataColumn = $"evolved".int
+    val metadataAddedAfterDeduplication = MetadataAttribute("_metadata", StringType)
+    val recomputationChild = LocalRelation(
+      rel.output ++ Seq(evolvedDataColumn, metadataAddedAfterDeduplication))
     val spec = DeduplicateSpec(DeduplicateAllColumnsAsKey, viaSparkClassic = true)
 
-    val withoutMetadata = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
-      rel.output, child, spec, orderDeterministically = true, SQLConf.get.resolver)
-    assert(withoutMetadata === rel.output ++ Seq(evolved))
+    val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
+      rel.output, recomputationChild, spec, orderDeterministically = true, SQLConf.get.resolver)
 
-    val withMetadata = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
-      rel.output :+ metadata, child, spec, orderDeterministically = true, SQLConf.get.resolver)
-    assert(withMetadata === child.output)
+    assert(recomputedKeys === rel.output :+ evolvedDataColumn)
+  }
+
+  test("streaming recomputation retains metadata visible at the deduplication boundary") {
+    val metadataSelectedBeforeDeduplication = MetadataAttribute("_metadata", StringType)
+    val originalKeys = rel.output :+ metadataSelectedBeforeDeduplication
+    val recomputationChild = LocalRelation(originalKeys)
+    val spec = DeduplicateSpec(DeduplicateAllColumnsAsKey, viaSparkClassic = true)
+
+    val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
+      originalKeys, recomputationChild, spec, orderDeterministically = true,
+      SQLConf.get.resolver)
+
+    assert(recomputedKeys === originalKeys)
   }
 
   test("SPARK-57489: duplicate-named columns produce multiple keys (filter, not find)") {
