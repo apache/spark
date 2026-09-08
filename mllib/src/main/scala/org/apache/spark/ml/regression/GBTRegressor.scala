@@ -280,7 +280,7 @@ class GBTRegressionModel private[ml](
       if ($(predictionCol).nonEmpty) {
         val predUDF = udf { features: Vector =>
           val (rootNodes, treeWeights) = bcTreeData.value
-          GBTRegressionModel.predict(features, rootNodes, treeWeights)
+          TreeEnsembleModel.weightedPrediction(features, rootNodes, treeWeights)
         }
         predColNames :+= $(predictionCol)
         predCols :+= predUDF(col($(featuresCol)))
@@ -365,19 +365,6 @@ class GBTRegressionModel private[ml](
 
 @Since("2.0.0")
 object GBTRegressionModel extends MLReadable[GBTRegressionModel] {
-
-  private def predict(
-      features: Vector,
-      rootNodes: Array[Node],
-      treeWeights: Array[Double]): Double = {
-    var prediction = 0.0
-    var i = 0
-    while (i < rootNodes.length) {
-      prediction += rootNodes(i).predictImpl(features).prediction * treeWeights(i)
-      i += 1
-    }
-    prediction
-  }
 
   @Since("2.0.0")
   override def read: MLReader[GBTRegressionModel] = new GBTRegressionModelReader

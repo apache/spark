@@ -470,13 +470,7 @@ object GBTClassificationModel extends MLReadable[GBTClassificationModel] {
       features: Vector,
       rootNodes: Array[Node],
       treeWeights: Array[Double]): Double = {
-    var prediction = 0.0
-    var i = 0
-    while (i < rootNodes.length) {
-      prediction += rootNodes(i).predictImpl(features).prediction * treeWeights(i)
-      i += 1
-    }
-    prediction
+    TreeEnsembleModel.weightedPrediction(features, rootNodes, treeWeights)
   }
 
   private def predictRaw(
