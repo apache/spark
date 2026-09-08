@@ -637,15 +637,20 @@ class JacksonParser(
     var badRecordException: Option[Throwable] = None
 
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
-      keys += CharVarcharUtils.applyTextParseSemantics(
-        UTF8String.fromString(parser.currentName), keyType)
+      val rawKey = UTF8String.fromString(parser.currentName)
       try {
-        values += fieldConverter.apply(parser)
+        val value = try {
+          fieldConverter.apply(parser)
+        } catch {
+          case err: PartialValueException if enablePartialResults =>
+            badRecordException = badRecordException.orElse(Some(err.cause))
+            err.partialResult
+        }
+        val key = CharVarcharUtils.applyTextParseSemantics(rawKey, keyType)
+        keys += key
+        values += value
       } catch {
         case DuplicateMapKeyException(e) => throw e
-        case err: PartialValueException if enablePartialResults =>
-          badRecordException = badRecordException.orElse(Some(err.cause))
-          values += err.partialResult
         case NonFatal(e) if enablePartialResults =>
           badRecordException = badRecordException.orElse(Some(e))
           parser.skipChildren()

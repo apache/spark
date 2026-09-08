@@ -2265,30 +2265,39 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       checkAnswer(jsonVarchar, Row(Row("ab")))
 
       // Default PERMISSIVE mode turns length failures into a null record.
-      checkAnswer(
-        sql("""SELECT from_json('{"a": "abcdef"}', 'a VARCHAR(5)')"""),
-        Row(Row(null)))
-      assertParseExceedLimit(
-        """SELECT from_json('{"a": "abcdef"}', 'a VARCHAR(5)', map('mode', 'FAILFAST'))""")
+      Seq("CHAR(5)", "VARCHAR(5)").foreach { dataType =>
+        checkAnswer(
+          sql(s"""SELECT from_json('{"a": "abcdef"}', 'a $dataType')"""),
+          Row(Row(null)))
+        assertParseExceedLimit(
+          s"""SELECT from_json(
+             |  '{"a": "abcdef"}',
+             |  'a $dataType',
+             |  map('mode', 'FAILFAST'))""".stripMargin)
+      }
 
       checkAnswer(
         sql("""SELECT from_json('{"ab": 1}', 'MAP<CHAR(4), INT>')"""),
         Row(Map("ab  " -> 1)))
 
       checkAnswer(sql("SELECT from_csv('str', 'a CHAR(5)')"), Row(Row("str  ")))
-      checkAnswer(sql("SELECT from_csv('abcdef', 'a VARCHAR(5)')"), Row(Row(null)))
-      assertParseExceedLimit(
-        "SELECT from_csv('abcdef', 'a VARCHAR(5)', map('mode', 'FAILFAST'))")
+      Seq("CHAR(5)", "VARCHAR(5)").foreach { dataType =>
+        checkAnswer(sql(s"SELECT from_csv('abcdef', 'a $dataType')"), Row(Row(null)))
+        assertParseExceedLimit(
+          s"SELECT from_csv('abcdef', 'a $dataType', map('mode', 'FAILFAST'))")
+      }
 
       checkAnswer(
         sql("SELECT from_xml('<ROW><a>str</a></ROW>', 'a CHAR(5)')"),
         Row(Row("str  ")))
-      checkAnswer(
-        sql("SELECT from_xml('<ROW><a>abcdef</a></ROW>', 'a VARCHAR(5)')"),
-        Row(Row(null)))
-      assertParseExceedLimit(
-        "SELECT from_xml('<ROW><a>abcdef</a></ROW>', 'a VARCHAR(5)', " +
-          "map('mode', 'FAILFAST'))")
+      Seq("CHAR(5)", "VARCHAR(5)").foreach { dataType =>
+        checkAnswer(
+          sql(s"SELECT from_xml('<ROW><a>abcdef</a></ROW>', 'a $dataType')"),
+          Row(Row(null)))
+        assertParseExceedLimit(
+          s"SELECT from_xml('<ROW><a>abcdef</a></ROW>', 'a $dataType', " +
+            "map('mode', 'FAILFAST'))")
+      }
       checkAnswer(
         sql("SELECT from_xml('<ROW><m><ab>1</ab></m></ROW>', 'm MAP<CHAR(4), INT>')"),
         Row(Row(Map("ab  " -> 1))))
@@ -2306,7 +2315,9 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
   }
 
   test("SPARK-59274: normalized CHAR map key collisions honor the dedup policy") {
-    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
       val jsonQuery =
         """SELECT from_json('{"a":1,"a ":2}', 'MAP<CHAR(2), INT>')"""
       val nestedJsonQuery =
@@ -2317,6 +2328,12 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         """SELECT from_json(
           |  '{"bad":"not-an-int","m":{"a":1,"a ":2}}',
           |  'bad INT, m MAP<CHAR(2), INT>')""".stripMargin
+      val badKeyThenSiblingQuery =
+        """SELECT from_json(
+          |  '{"m":{"abc":1},"tail":2}',
+          |  'm MAP<CHAR(2), INT>, tail INT').tail""".stripMargin
+      val badValueBeforeDuplicateQuery =
+        """SELECT from_json('{"bad":"not-an-int","a":1,"a ":2}', 'MAP<CHAR(2), INT>')"""
       val xmlQuery =
         """SELECT from_xml(
           |  '<ROW><m><a>1</a>9</m></ROW>',
@@ -2326,12 +2343,15 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assertDuplicateMapKey(jsonQuery)
       assertDuplicateMapKey(nestedJsonQuery)
       assertDuplicateMapKey(badFieldBeforeDuplicateQuery)
+      assertDuplicateMapKey(badValueBeforeDuplicateQuery)
       assertDuplicateMapKey(xmlQuery)
+      checkAnswer(sql(badKeyThenSiblingQuery), Row(2))
 
       withSQLConf(
           SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
         checkAnswer(sql(jsonQuery), Row(Map("a " -> 2)))
         checkAnswer(sql(nestedJsonQuery), Row(Map("outer" -> Map("a " -> 2))))
+        checkAnswer(sql(badValueBeforeDuplicateQuery), Row(Map("a " -> 2)))
         checkAnswer(sql(xmlQuery), Row(Map("a " -> 9)))
       }
     }
