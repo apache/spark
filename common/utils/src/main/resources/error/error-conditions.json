@@ -1838,7 +1838,7 @@
   },
   "CURSOR_OUTSIDE_SCRIPT" : {
     "message" : [
-      "Cursor operations can only be used within SQL scripts."
+      "Cursor <cursorName> can only be used within SQL scripts."
     ],
     "sqlState" : "0A000"
   },
@@ -2290,6 +2290,11 @@
       "CANNOT_RESOLVE" : {
         "message" : [
           "The attribute cannot be resolved."
+        ]
+      },
+      "NOT_IN_FILTER_ATTRIBUTES" : {
+        "message" : [
+          "The attribute must also be returned by `filterAttributes()`."
         ]
       },
       "NOT_TOP_LEVEL" : {
@@ -5125,6 +5130,16 @@
           "<memoryFractionKey> should be between 0 and 1 (was '<memoryFractionValue>')."
         ]
       },
+      "INVALID_PYTHON_WORKER_ENV_VAR_NAME" : {
+        "message" : [
+          "The environment variable name <name>, set under <prefix>, is not valid. Names must match the pattern <pattern> and contain at most <maxLength> characters."
+        ]
+      },
+      "INVALID_PYTHON_WORKER_ENV_VAR_VALUE" : {
+        "message" : [
+          "The value of the environment variable <name>, set under <prefix>, contains a NUL character, which a process environment cannot carry."
+        ]
+      },
       "INVALID_SPARK_SUBMIT_DEPLOY_MODE_KEY" : {
         "message" : [
           "<sparkSubmitDeployModeKey> can only be \"cluster\" or \"client\"."
@@ -5133,6 +5148,21 @@
       "NETWORK_AUTH_MUST_BE_ENABLED" : {
         "message" : [
           "<networkAuthEnabledConf> must be enabled when enabling encryption."
+        ]
+      },
+      "PYTHON_WORKER_ENV_TOO_LARGE" : {
+        "message" : [
+          "The environment variables set under <prefix> total <size> bytes, which is more than the maximum of <maxSize> bytes."
+        ]
+      },
+      "PYTHON_WORKER_ENV_TOO_MANY_VARIABLES" : {
+        "message" : [
+          "<count> environment variables are set under <prefix>, which is more than the maximum of <maxCount>."
+        ]
+      },
+      "RESERVED_PYTHON_WORKER_ENV_VAR_NAME" : {
+        "message" : [
+          "The environment variable name <name>, set under <prefix>, is reserved for Spark. Names beginning with <reservedPrefixes>, and the names <reservedNames>, are set by Spark for its own Python workers and cannot be set by a session."
         ]
       }
     },
@@ -8306,6 +8336,12 @@
     ],
     "sqlState" : "42K0G"
   },
+  "UNABLE_TO_CREATE_DATABASE_DIRECTORY" : {
+    "message" : [
+      "Unable to create database <name> as failed to create its directory <locationUri>."
+    ],
+    "sqlState" : "58030"
+  },
   "UNABLE_TO_FETCH_HIVE_TABLES" : {
     "message" : [
       "Unable to fetch tables of Hive database: <dbName>."
@@ -8943,6 +8979,21 @@
           "Drop the namespace <namespace>."
         ]
       },
+      "EXTERNAL_UDF" : {
+        "message" : [
+          "External UDF expressions are disabled. Set <config> to true to enable planning."
+        ]
+      },
+      "EXTERNAL_UDF_IN_ON_CLAUSE" : {
+        "message" : [
+          "External UDF in the ON clause of a <joinType> JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
+        ]
+      },
+      "EXTERNAL_UDF_WITH_MULTIPLE_CHILDREN" : {
+        "message" : [
+          "External UDF <funcName> uses columns from more than one input relation. Rewrite the query so the UDF is evaluated after the inputs are combined."
+        ]
+      },
       "GEOSPATIAL_DISABLED" : {
         "message" : [
           "Geospatial feature is disabled."
@@ -8966,6 +9017,12 @@
       "INTERRUPT_TYPE" : {
         "message" : [
           "Unsupported interrupt type: <interruptType>."
+        ]
+      },
+      "LAMBDA_FUNCTION_WITH_EXTERNAL_UDF" : {
+        "message" : [
+          "Cannot evaluate the external UDF <funcName> inside the lambda of a higher-order function.",
+          "This placement is not supported. Rewrite the query so the UDF is applied outside the lambda."
         ]
       },
       "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
@@ -10870,11 +10927,6 @@
       "<fieldCannotBeNullMsg>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2033" : {
-    "message" : [
-      "Unable to create database <name> as failed to create its directory <locationUri>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2034" : {
     "message" : [
       "Unable to drop database <name> as failed to delete its directory <locationUri>."
@@ -11767,7 +11819,7 @@
   },
   "_LEGACY_ERROR_TEMP_3070" : {
     "message" : [
-      "<internalName> is a reserved column name that cannot be read in combination with <colName> column."
+      "Unrecognized file metadata field: <field>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3071" : {

@@ -279,7 +279,7 @@ class InferVariantShreddingSchema(val schema: StructType) {
             }
           }
         // If we weren't able to retain any fields, just use VariantType
-        if (newFields.size() > 0) StructType(newFields) else VariantType
+        if (!newFields.isEmpty) StructType(newFields) else VariantType
       case ArrayType(elementType, _) =>
         ArrayType(finalizeSimpleSchema(elementType, minCardinality, maxFields))
       case ByteType | ShortType | IntegerType | LongType =>

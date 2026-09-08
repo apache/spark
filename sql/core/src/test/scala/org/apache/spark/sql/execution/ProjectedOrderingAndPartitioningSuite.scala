@@ -50,9 +50,9 @@ class ProjectedOrderingAndPartitioningSuite
               .toSet.subsetOf(Set("x", "y", "z")))
           case 1 =>
             assert(outputOrdering.size == 1)
-            assert(outputOrdering.head.sameOrderExpressions.size == 0)
+            assert(outputOrdering.head.sameOrderExpressions.isEmpty)
           case 0 =>
-            assert(outputOrdering.size == 0)
+            assert(outputOrdering.isEmpty)
         }
       }
     }
@@ -118,7 +118,7 @@ class ProjectedOrderingAndPartitioningSuite
     val outputOrdering = df.queryExecution.optimizedPlan.outputOrdering
     assert(outputOrdering.size == 1)
     assert(outputOrdering.head.sql == "(x + y) ASC NULLS FIRST")
-    assert(outputOrdering.head.sameOrderExpressions.size == 0)
+    assert(outputOrdering.head.sameOrderExpressions.isEmpty)
   }
 
   test("SPARK-42049: Improve AliasAwareOutputExpression - partitioning - multi-references") {
@@ -222,7 +222,7 @@ class ProjectedOrderingAndPartitioningSuite
 
     val df3 = df.selectExpr("id + 2 AS b")
     val outputOrdering3 = df3.queryExecution.optimizedPlan.outputOrdering
-    assert(outputOrdering3.size == 0)
+    assert(outputOrdering3.isEmpty)
   }
 
   test("SPARK-42049: Improve AliasAwareOutputExpression - no alias but still prune expressions") {
@@ -236,7 +236,7 @@ class ProjectedOrderingAndPartitioningSuite
     val outputOrdering = df2.queryExecution.optimizedPlan.outputOrdering
     assert(outputOrdering.size == 1)
     assert(outputOrdering.head.child.asInstanceOf[Attribute].name == "a")
-    assert(outputOrdering.head.sameOrderExpressions.size == 0)
+    assert(outputOrdering.head.sameOrderExpressions.isEmpty)
   }
 
   test("SPARK-46367: KeyedPartitioning expressions are projected through " +
@@ -738,6 +738,35 @@ class ProjectedOrderingAndPartitioningSuite
         KeyedPartitioning(Seq(x), keys1d)))
     }
     assert(e.getMessage.contains("partitionKeys"))
+  }
+
+  test("SPARK-59121: a projection drops the reduced key marker with its own position") {
+    // KP([bucket(32, id) reduced together with bucket(24, id), years(ts)], keys2d). The marker
+    // rides on the expression, so a projection that keeps the reduced position keeps it, and one
+    // that drops that position leaves a partitioning whose expressions describe their keys again.
+    val id = AttributeReference("id", IntegerType)()
+    val ts = AttributeReference("ts", IntegerType)()
+    val reducedExpr = TransformExpression(BucketFunction, Seq(id), Some(32))
+      .reducedTogetherWith(TransformExpression(BucketFunction, Seq(id), Some(24)))
+    val yearsExpr = TransformExpression(YearsFunction, Seq(ts))
+    val keys2d = Seq(InternalRow(0, 2020), InternalRow(1, 2021))
+    val child = DummyLeafExecWithPartitioning(
+      output = Seq(id, ts),
+      partitioning = KeyedPartitioning(Seq(reducedExpr, yearsExpr), keys2d))
+
+    ProjectExec(Seq(id), child).outputPartitioning match {
+      case kp: KeyedPartitioning =>
+        assert(kp.expressions === Seq(reducedExpr), "the reduced position survives, marked")
+        assert(!kp.expressionsDescribeKeys)
+      case other => fail(s"Expected KeyedPartitioning, got $other")
+    }
+
+    ProjectExec(Seq(ts), child).outputPartitioning match {
+      case kp: KeyedPartitioning =>
+        assert(kp.expressions === Seq(yearsExpr), "only the unreduced position survives")
+        assert(kp.expressionsDescribeKeys, "no reduced position is left to refuse")
+      case other => fail(s"Expected KeyedPartitioning, got $other")
+    }
   }
 
   test("SPARK-58138: BIN BY preserves a child partitioning on a pass-through column") {

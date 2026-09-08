@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.exchange
 
-import scala.annotation.tailrec
 import scala.collection.immutable.BitSet
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -247,30 +246,50 @@ case class EnsureRequirements(
         }
       }
 
+      // A `ShuffleSpecCollection` answers `isCompatibleWith` if *any* of its members does, so the
+      // collection alone does not say which member the sides agreed on. The projection pushed into
+      // a compatible child and the partitioning built for a re-shuffled child both have to come
+      // from one member, otherwise the sides end up grouped on different keys, or on a key set the
+      // child does not even have. Pick that member once, preferring the finest when several
+      // qualify. Only the branch that shuffles a child reads these, hence `lazy`.
+      lazy val matchedIndexes = bestSpecOpt.toSeq.flatMap { best =>
+        childrenIndexes.filter(i => best.isCompatibleWith(specs(i)))
+      }
+      lazy val bestMemberOpt = bestSpecOpt.flatMap { best =>
+        val matchedMembers = matchedIndexes.map(i => flattenSpec(specs(i)))
+        // No member serving every matched child means there is no layout to align them on, so they
+        // all take the ordinary shuffle. That needs three or more clustered children, since with
+        // two the member that reported the match serves both, and no operator has three today.
+        flattenSpec(best)
+          .filter(m => matchedMembers.forall(_.exists(m.isCompatibleWith)))
+          .maxByOption(_.numPartitions)
+      }
+
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
         case ((child, _), idx) if areChildrenCompatible ||
             !childrenIndexes.contains(idx) =>
           child
         case ((child, dist), idx) =>
-          if (bestSpecOpt.isDefined && bestSpecOpt.get.isCompatibleWith(specs(idx))) {
-            // If the child's partitioning is a `PartitioningCollection`, its spec is a
-            // `ShuffleSpecCollection` whose `createPartitioning` delegates to the head spec,
-            // so unwrap to the head spec to stay aligned with the re-shuffled side below.
-            unwrapSpecCollection(bestSpecOpt.get) match {
+          if (bestMemberOpt.isDefined && matchedIndexes.contains(idx)) {
+            // The positions come from this child's own matching member, since they index into its
+            // own partition expressions -- the chosen best member only says which member of it the
+            // two sides agreed on.
+            val bestMember = bestMemberOpt.get
+            flattenSpec(specs(idx)).find(bestMember.isCompatibleWith) match {
               // If `areChildrenCompatible` is false, we can still perform SPJ
               // by shuffling the other side based on join keys (see the else case below).
               // Hence we need to ensure that after this call, the outputPartitioning of the
               // partitioned side's BatchScanExec is grouped by join keys to match,
               // and we do that by pushing down the join keys
-              case KeyedShuffleSpec(_, _, Some(joinKeyPositions)) =>
+              case Some(KeyedShuffleSpec(_, _, Some(joinKeyPositions))) =>
                 withJoinKeyPositions(child, joinKeyPositions)
               case _ => child
             }
           } else {
-            val newPartitioning = bestSpecOpt.map { bestSpec =>
+            val newPartitioning = bestMemberOpt.map { bestMember =>
               // Use the best spec to create a new partitioning to re-shuffle this child
               val clustering = dist.asInstanceOf[ClusteredDistribution].clustering
-              bestSpec.createPartitioning(clustering)
+              bestMember.createPartitioning(clustering)
             }.getOrElse {
               // No best spec available, so we create default partitioning from the required
               // distribution
@@ -282,7 +301,10 @@ case class EnsureRequirements(
             child match {
               case s: ShuffleExchangeExec =>
                 s.copy(outputPartitioning = newPartitioning)
-              case gpe: GroupPartitionsExec => ShuffleExchangeExec(newPartitioning, gpe.child)
+              case gpe: GroupPartitionsExec =>
+                // Strip every grouping this rule inserted (they can stack on a re-run): a
+                // replicating one repeats every row, so none of them may feed the shuffle.
+                ShuffleExchangeExec(newPartitioning, unwrapGroupPartitions(gpe))
               case _ => ShuffleExchangeExec(newPartitioning, child)
             }
           }
@@ -417,14 +439,14 @@ case class EnsureRequirements(
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, rightExpressions, rightKeys)
           .orElse(reorderJoinKeysRecursively(
             leftKeys, rightKeys, leftPartitioning, None))
-      case (Some(KeyedPartitioning(clustering, _, _, _)), _) =>
+      case (Some(KeyedPartitioning(clustering, _, _, _, _)), _) =>
         // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
         // attribute per partition expression.
         val leafExprs = clustering.flatMap(_.references)
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, leftKeys)
             .orElse(reorderJoinKeysRecursively(
               leftKeys, rightKeys, None, rightPartitioning))
-      case (_, Some(KeyedPartitioning(clustering, _, _, _))) =>
+      case (_, Some(KeyedPartitioning(clustering, _, _, _, _))) =>
         // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
         // attribute per partition expression.
         val leafExprs = clustering.flatMap(_.references)
@@ -565,9 +587,25 @@ case class EnsureRequirements(
         val (rightReducedDataTypes, rightReducedKeys) = rightReducers.fold(
           (rightPartitioning.keyDataTypes, rightPartitioning.partitionKeys)
         )(rightPartitioning.reduceKeys)
-        val reducedDataTypes = if (leftReducedDataTypes == rightReducedDataTypes) {
+        // The reduced types are the types of the key rows the merge below sees. A side with no key
+        // still answers for them while its expressions describe the keys it would have had, and
+        // `keyDataTypes` falls back to those types, erased. After a reduce the expressions no
+        // longer describe them, so the fallback is a type no key of that partitioning would hold,
+        // and comparing it against a real answer fails a co-partitioned query (SPARK-59176). Only
+        // such a side is left out. An empty one that is not marked stays in, which is what keeps
+        // the comparison checking a reducer's result type against the paired transform.
+        val leftTypesDescribeKeys =
+          leftReducedKeys.nonEmpty || leftPartitioning.expressionsDescribeKeys
+        val rightTypesDescribeKeys =
+          rightReducedKeys.nonEmpty || rightPartitioning.expressionsDescribeKeys
+        val reducedDataTypes = if (!leftTypesDescribeKeys) {
+          rightReducedDataTypes
+        } else if (!rightTypesDescribeKeys || leftReducedDataTypes == rightReducedDataTypes) {
           leftReducedDataTypes
         } else {
+          // The two lists are the erased ones, so a struct in the message prints positional field
+          // names. That is deliberate: the names do not decide where a key belongs, so printing the
+          // connector's own would point a reader at a difference that is not the cause.
           throw QueryExecutionErrors.storagePartitionJoinIncompatibleReducedTypesError(
             leftReducers = leftReducers,
             leftReducedDataTypes = leftReducedDataTypes,
@@ -611,8 +649,13 @@ case class EnsureRequirements(
             logInfo(log"Skipping partially clustered distribution as it cannot be applied for " +
               log"join type '${MDC(LogKeys.JOIN_TYPE, joinType)}'")
           } else {
-            val unwrappedLeft = unwrapGroupPartitions(left)
-            val unwrappedRight = unwrapGroupPartitions(right)
+            // The pre-alignment plan of each side and the grouping this rule inserted over it,
+            // are read once: the statistics and the original partition keys below come from the
+            // plan, the positions projecting them from the grouping.
+            val leftGrouping = innermostGroupPartition(left)
+            val rightGrouping = innermostGroupPartition(right)
+            val unwrappedLeft = leftGrouping.map(_._1.child).getOrElse(left)
+            val unwrappedRight = rightGrouping.map(_._1.child).getOrElse(right)
 
             val leftLink = unwrappedLeft.logicalLink
             val rightLink = unwrappedRight.logicalLink
@@ -634,11 +677,18 @@ case class EnsureRequirements(
                    |""".stripMargin)
               leftLink.get.stats.sizeInBytes < rightLink.get.stats.sizeInBytes
             } else {
-              // As a simple heuristic, we pick the side with fewer number of partitions
-              // to apply the grouping & replication of partitions
+              // As a simple heuristic, we pick the side with fewer partitions to apply the
+              // grouping & replication of partitions. The counts read the
+              // pre-alignment plans, for the same reason the statistics do: on a re-run both
+              // aligned reports hold the same number of keys, so comparing them decides nothing.
+              // This also changes a first pass, which compared the aligned report's distinct
+              // keys rather than the splits behind them.
               logInfo("Using number of partitions to determine which side of join " +
                   "to fully cluster partition values")
-              leftPartKeys.size < rightPartKeys.size
+              PartitioningCollection.numKeyedPartitions(unwrappedLeft.outputPartitioning)
+                .getOrElse(leftPartKeys.size) <
+                PartitioningCollection.numKeyedPartitions(unwrappedRight.outputPartitioning)
+                .getOrElse(rightPartKeys.size)
             }
 
             replicateRightSide = !replicateLeftSide
@@ -657,23 +707,31 @@ case class EnsureRequirements(
                 log"distribution.")
               replicateRightSide = false
             } else {
-              // In partially clustered distribution, we should use un-grouped partition values
-              val (partiallyClusteredChild, partiallyClusteredSpec) = if (replicateLeftSide) {
-                (unwrappedRight, rightSpec)
-              } else {
-                (unwrappedLeft, leftSpec)
-              }
-              // Original `KeyedPartitioning` can be obtained from the child directly if the child
-              // satisfied the distribution requirement; or from the child's child if it didn't as
-              // the child must be a `GroupPartitionsExec` inserted by `EnsureRequirement`
-              // to satisfy the distribution requirement.
+              // In partially clustered distribution, we should use un-grouped partition values.
+              // The child and the positions projecting its keys come from the same grouping:
+              // the keys from the node's child, the positions from the node itself, falling back
+              // to the spec's when there is no grouping. Like in `applyGroupPartitions`, the
+              // node's positions were computed against the raw partition keys, while the spec's
+              // were computed against the node's already projected report on a re-run.
+              val (partiallyClusteredChild, partiallyClusteredPositions) =
+                if (replicateLeftSide) {
+                  (unwrappedRight,
+                    rightGrouping.flatMap(_._1.joinKeyPositions)
+                      .orElse(rightSpec.joinKeyPositions))
+                } else {
+                  (unwrappedLeft,
+                    leftGrouping.flatMap(_._1.joinKeyPositions)
+                      .orElse(leftSpec.joinKeyPositions))
+                }
+              // The pre-alignment plan of the side that keeps its splits: its partitioning
+              // still holds the original partition keys, one per input split.
               val originalPartitioning =
                 partiallyClusteredChild.outputPartitioning.asInstanceOf[Expression]
               // `outputPartitioning` is either a `PartitioningCollection` or a `KeyedPartitioning`
               // otherwise `createKeyedShuffleSpec()` would have returned `None`.
               val originalKeyedPartitioning =
                 originalPartitioning.collectFirst { case k: KeyedPartitioning => k }.get
-              val projectedOriginalPartitionKeys = partiallyClusteredSpec.joinKeyPositions
+              val projectedOriginalPartitionKeys = partiallyClusteredPositions
                 .fold(originalKeyedPartitioning.partitionKeys)(
                   originalKeyedPartitioning.projectKeys(_)._2)
 
@@ -731,19 +789,79 @@ case class EnsureRequirements(
   }
 
   /**
-   * Unwraps a GroupPartitionsExec to get the underlying child plan.
+   * The innermost `GroupPartitionsExec` reachable from `plan` by descending only through nodes
+   * this rule itself inserted above it, together with a function rebuilding the traversed local
+   * sorts over a replacement node. `None` when no `GroupPartitionsExec` is reachable.
+   *
+   * The descent only traverses a `GroupPartitionsExec` and a *local* `SortExec`. That bound is a
+   * decision, not an omission: a `GroupPartitionsExec` hidden behind any other node belongs to a
+   * different operator, and reusing it would move that operator's alignment. Instrumentation of
+   * the descent over `KeyGroupedPartitioningSuite` found these non-`SortExec` shapes hiding a
+   * node: `Project > SortMergeJoin > Sort > GroupPartitions` and `Project > Filter > Window >
+   * WindowGroupLimit > GroupPartitions`, where refusing to descend is right every time. A global
+   * `SortExec` also stops the descent: it requires `OrderedDistribution`, which a
+   * `KeyedPartitioning` can satisfy (behind `spark.sql.sources.v2.bucketing.sorting.enabled`)
+   * through a `GroupPartitionsExec` built to emit the partition keys in sorted order, and
+   * reusing that node for a join would destroy the ordering it exists to provide.
    */
-  private def unwrapGroupPartitions(plan: SparkPlan): SparkPlan = plan match {
-    case g: GroupPartitionsExec => g.child
-    case other => other
+  private def innermostGroupPartition(
+      plan: SparkPlan): Option[(GroupPartitionsExec, SparkPlan => SparkPlan)] = plan match {
+    case g: GroupPartitionsExec =>
+      // When groupings stack, the outer one is the wrap this invocation's distribution step
+      // just added; the one below is inherited from an earlier pass and owns the alignment to
+      // preserve. Keep the descent below the outer node and drop it.
+      innermostGroupPartition(g.child).orElse(Some((g, identity[SparkPlan])))
+    case s: SortExec if !s.global =>
+      innermostGroupPartition(s.child).map { case (g, rebuild) =>
+        (g, (newChild: SparkPlan) => s.withNewChildren(Seq(rebuild(newChild))))
+      }
+    case _ => None
   }
+
+  /**
+   * Rewrites the innermost `GroupPartitionsExec` in `plan` with `f` and drops any redundant
+   * grouping stacked above it, per the descent of [[innermostGroupPartition]]. Returns `None`
+   * when `plan` holds no `GroupPartitionsExec`, leaving it to the caller to create one.
+   *
+   * This is what makes the rule idempotent for storage-partitioned joins. `EnsureRequirements`
+   * is re-run on plans it already produced: `AdaptiveSparkPlanExec` builds one instance of this
+   * rule, and `ConvertSortMergeJoinToShuffledHashJoin` and `OptimizeSkewedJoin` hand the whole
+   * tree back to it after rewriting some other join, all within one
+   * `queryStagePreparationRules` pass. A join child then arrives as
+   * `SortExec(GroupPartitionsExec(...))` rather than a bare scan, and the distribution step adds
+   * a plain `GroupPartitionsExec` on top, because a partially clustered `KeyedPartitioning`
+   * reports `isGrouped = false` by design and so is only satisfied "after grouping". Rewriting
+   * that outer node instead of the one below it re-derives the alignment from an already-aligned
+   * layout and duplicates rows; descending to the innermost node and dropping what sits above it
+   * reproduces the plan a single pass would have produced.
+   *
+   * Dropping a grouping is safe because only `applyGroupPartitions` calls this, reached from
+   * `checkKeyGroupCompatible`, which runs for joins alone: every `GroupPartitionsExec` a join
+   * child carries is this rule's own. A single-child operator genuinely needs its non-grouped
+   * input grouped and takes the wrap in the children loop instead; `withJoinKeyPositions`, which
+   * other multi-child operators reach, does not reuse at depth.
+   */
+  private[exchange] def rewriteGroupPartitions(plan: SparkPlan)(
+      f: GroupPartitionsExec => GroupPartitionsExec): Option[SparkPlan] =
+    innermostGroupPartition(plan).map { case (g, rebuild) =>
+      val rewritten = f(g)
+      rewritten.copyTagsFrom(g)
+      rebuild(rewritten)
+    }
+
+  /**
+   * Unwraps the groupings and local sorts this rule inserted over a child, down to the
+   * pre-alignment plan, per the descent of [[innermostGroupPartition]]. Peeling one level stops
+   * at the local sort this rule added, leaving the earlier pass's alignment in place.
+   */
+  private def unwrapGroupPartitions(plan: SparkPlan): SparkPlan =
+    innermostGroupPartition(plan).map(_._1.child).getOrElse(plan)
 
   /**
    * Applies or updates `GroupPartitionsExec` with the given parameters.
    *
-   * `GroupPartitionsExec` can be either the given plan node (child of the join inserted by
-   * `EnsureRequirement`) if the original child didn't satisfy the distribution requirement; or we
-   * can create a new one specifically for this join.
+   * Reuses the node this rule inserted over the join child in an earlier pass, per the descent
+   * of [[innermostGroupPartition]], and creates a new one when the child carries none.
    */
   private def applyGroupPartitions(
       plan: SparkPlan,
@@ -751,33 +869,34 @@ case class EnsureRequirements(
       mergedPartitionKeys: Seq[(InternalRowComparableWrapper, Int)],
       reducers: Option[Seq[Option[KeyReducer]]],
       distributePartitions: Boolean): SparkPlan = {
-    plan match {
-      case g: GroupPartitionsExec =>
-        val newGroupPartitions = g.copy(
-          joinKeyPositions = joinKeyPositions,
-          expectedPartitionKeys = Some(mergedPartitionKeys),
-          reducers = reducers,
-          distributePartitions = distributePartitions)
-        newGroupPartitions.copyTagsFrom(g)
-        newGroupPartitions
-      case _ =>
-        GroupPartitionsExec(plan, joinKeyPositions, Some(mergedPartitionKeys), reducers,
-          distributePartitions)
+    rewriteGroupPartitions(plan) { g =>
+      g.copy(
+        joinKeyPositions = g.joinKeyPositions.orElse(joinKeyPositions),
+        expectedPartitionKeys = Some(mergedPartitionKeys),
+        // Unlike `joinKeyPositions`, these need no `orElse`. A re-run with reducers never reaches
+        // here. Both sides then report the same reduced keys, so `isCompatible` above is true and
+        // the whole block is skipped.
+        reducers = reducers,
+        distributePartitions = distributePartitions)
+    }.getOrElse {
+      GroupPartitionsExec(plan, joinKeyPositions, Some(mergedPartitionKeys), reducers,
+        distributePartitions)
     }
   }
 
-  // Unwraps a `ShuffleSpecCollection` (possibly nested) to the spec that its
-  // `createPartitioning` delegates to, i.e. the head spec.
-  @tailrec
-  private def unwrapSpecCollection(spec: ShuffleSpec): ShuffleSpec = spec match {
-    case ShuffleSpecCollection(specs) => unwrapSpecCollection(specs.head)
-    case other => other
+  // Flattens a (possibly nested) `ShuffleSpecCollection` into its member specs.
+  private def flattenSpec(spec: ShuffleSpec): Seq[ShuffleSpec] = spec match {
+    case ShuffleSpecCollection(specs) => specs.flatMap(flattenSpec)
+    case other => Seq(other)
   }
 
   /**
    * Applies join key positions to a plan by wrapping or updating GroupPartitionsExec.
+   *
+   * Unlike `applyGroupPartitions`, this does not descend: it serves every multi-child operator,
+   * not just joins, so a `GroupPartitionsExec` below the top is not known to be this rule's own.
    */
-  private def withJoinKeyPositions(plan: SparkPlan, positions: Seq[Int]): SparkPlan = {
+  private[exchange] def withJoinKeyPositions(plan: SparkPlan, positions: Seq[Int]): SparkPlan = {
     plan match {
       case g: GroupPartitionsExec =>
         val newGroupPartitions = g.copy(joinKeyPositions = Some(positions))
@@ -838,11 +957,19 @@ case class EnsureRequirements(
       joinType: JoinType,
       keyOrdering: Ordering[InternalRowComparableWrapper]): Seq[InternalRowComparableWrapper] = {
     val merged = if (SQLConf.get.getConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED)) {
+      // Rows with matching join keys land in the same key group. If a group is absent from one
+      // side, whether it can produce output depends on which side's unmatched rows the join
+      // preserves. Only equi-joins reach this method, since every SMJ/SHJ takes its keys from
+      // `ExtractEquiJoinKeys`. So a Cross join, e.g. `l CROSS JOIN r ON l.id = r.id`, is treated
+      // like an Inner join: groups absent from either side cannot produce output.
       joinType match {
-        case Inner =>
+        // neither side keeps unmatched rows
+        case _: InnerLike | LeftSemi =>
           mergeAndDedupPartitionKeys(leftPartitionKeys, rightPartitionKeys, intersect = true)
-        case LeftOuter => leftPartitionKeys.distinct
+        // every left row is kept or tested
+        case LeftOuter | LeftAnti | LeftSingle | ExistenceJoin(_) => leftPartitionKeys.distinct
         case RightOuter => rightPartitionKeys.distinct
+        // FullOuter keeps both sides' unmatched rows; any other join type is not filtered
         case _ => mergeAndDedupPartitionKeys(leftPartitionKeys, rightPartitionKeys)
       }
     } else {

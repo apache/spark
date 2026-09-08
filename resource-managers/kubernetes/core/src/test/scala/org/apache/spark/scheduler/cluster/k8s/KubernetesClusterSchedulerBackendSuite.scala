@@ -510,4 +510,11 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     }
     assert(schedulerBackendUnderTest.supportsExecutorHold)
   }
+
+  test("SPARK-59331: resuming a held application leaves the recovery mode an OOM turned on") {
+    schedulerBackendUnderTest.setExecutorsHeld(true)
+    verify(podAllocator, never()).unsetRecoveryMode()
+    schedulerBackendUnderTest.setExecutorsHeld(false)
+    verify(podAllocator).unsetRecoveryMode()
+  }
 }

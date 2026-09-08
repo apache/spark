@@ -485,14 +485,21 @@ class TorchDistributor(Distributor):
                 decoded = line.decode("utf-8")
                 tail.append(decoded)
                 if redirect_to_stdout:
-                    if (
-                        log_streaming_client
-                        and not log_streaming_client.failed
-                        and (
-                            log_streaming_client.sock.getsockname()[0]
-                            == log_streaming_client.sock.getpeername()[0]
-                        )
-                    ):
+                    same_node = False
+                    if log_streaming_client and not log_streaming_client.failed:
+                        try:
+                            same_node = (
+                                log_streaming_client.sock.getsockname()[0]
+                                == log_streaming_client.sock.getpeername()[0]
+                            )
+                        except OSError:
+                            # The log-streaming socket is best effort and can be
+                            # dropped (e.g. a cloud-provider idle-timeout) while
+                            # torch/NCCL initializes. getpeername() then raises
+                            # OSError; a barrier task must not die over log
+                            # redirection, so fall back to writing to stdout.
+                            same_node = False
+                    if same_node:
                         # If log_streaming_client and log_stream_server are in the same
                         # node (typical case is spark local mode),
                         # server side will redirect the log to STDOUT,
@@ -647,6 +654,7 @@ class TorchDistributor(Distributor):
         input_params = self.input_params
         driver_address = self.driver_address
         log_streaming_server_port = self.log_streaming_server_port
+        log_streaming_auth_secret = self.log_streaming_auth_secret
         is_spark_local_master = self.is_spark_local_master
         driver_owned_gpus: List[str] = []
         if is_spark_local_master and use_gpu:
@@ -725,7 +733,9 @@ class TorchDistributor(Distributor):
                 os.environ[CUDA_VISIBLE_DEVICES] = ""
             set_torch_config(context)
 
-            log_streaming_client = LogStreamingClient(driver_address, log_streaming_server_port)
+            log_streaming_client = LogStreamingClient(
+                driver_address, log_streaming_server_port, auth_secret=log_streaming_auth_secret
+            )
             input_params["log_streaming_client"] = log_streaming_client
             try:
                 with TorchDistributor._setup_spark_partition_data(iterator, schema_json):
@@ -778,10 +788,12 @@ class TorchDistributor(Distributor):
             log_streaming_server.start(spark_host_address=self.driver_address)
             time.sleep(1)  # wait for the server to start
             self.log_streaming_server_port = log_streaming_server.port
+            self.log_streaming_auth_secret = log_streaming_server.auth_secret
         except Exception as e:
             # If starting log streaming server failed, we don't need to break
             # the distributor training but emit a warning instead.
             self.log_streaming_server_port = -1
+            self.log_streaming_auth_secret = None
             self.logger.warning(
                 "Start torch distributor log streaming server failed, "
                 "You cannot receive logs sent from distributor workers, ",

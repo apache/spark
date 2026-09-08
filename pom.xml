@@ -223,7 +223,7 @@
      -->
     <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.2.17.Final</netty.version>
-    <netty-tcnative.version>2.0.81.Final</netty-tcnative.version>
+    <netty-tcnative.version>2.0.83.Final</netty-tcnative.version>
     <icu4j.version>78.3</icu4j.version>
     <junit.version>6.0.3</junit.version>
     <jline.version>2.14.6</jline.version>
@@ -868,7 +868,7 @@
       <dependency>
         <groupId>com.ning</groupId>
         <artifactId>compress-lzf</artifactId>
-        <version>1.2.0</version>
+        <version>1.2.1</version>
       </dependency>
       <dependency>
         <groupId>org.xerial.snappy</groupId>
@@ -3522,6 +3522,17 @@
       <id>credential-aws</id>
       <modules>
         <module>connector/credential-aws</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>oidc-e2e</id>
+      <modules>
+        <!-- The integration-tests module depends on the credential-aws module, so
+             include it here too. This lets -Poidc-e2e be used on its own (without also
+             passing -Pcredential-aws) without failing dependency resolution. -->
+        <module>connector/credential-aws</module>
+        <module>connector/credential-aws-integration-tests</module>
       </modules>
     </profile>
 

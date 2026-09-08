@@ -910,6 +910,34 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
+  test("don't push down sub-microsecond timestamp bounds on a micros column read as nanos") {
+    // A micros timestamp column may be read under a nanosecond timestamp type (the read side of
+    // widening TIMESTAMP(6) to nanosecond precision). Pushing a sub-microsecond bound through the
+    // micros converter would truncate it and could over-prune row groups, so such a bound must not
+    // be pushed down; a bound already on the microsecond grid still is.
+    withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> TIMESTAMP_MICROS.toString) {
+      val schema = StructType(Seq(StructField("cts", TimestampType)))
+      val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
+      val parquetFilters = createParquetFilters(parquetSchema)
+
+      val onGrid = Instant.parse("2020-01-01T00:00:00.000001Z")      // on the microsecond grid
+      val subMicro = Instant.parse("2020-01-01T00:00:00.000000500Z") // 500 ns past the grid
+
+      // A bound on the microsecond grid still pushes down.
+      assert(parquetFilters.createFilter(sources.LessThan("cts", onGrid)).isDefined)
+      // Sub-microsecond bounds must fall back to a full scan (no pushdown) for every predicate.
+      Seq[sources.Filter](
+        sources.LessThan("cts", subMicro),
+        sources.LessThanOrEqual("cts", subMicro),
+        sources.GreaterThan("cts", subMicro),
+        sources.GreaterThanOrEqual("cts", subMicro),
+        sources.EqualTo("cts", subMicro),
+        sources.In("cts", Array[Any](subMicro))).foreach { f =>
+        assert(parquetFilters.createFilter(f).isEmpty, s"should not push down sub-micro bound: $f")
+      }
+    }
+  }
+
   test("don't push down filters that would result in overflows") {
     val schema = StructType(Seq(
       StructField("cbyte", ByteType),
