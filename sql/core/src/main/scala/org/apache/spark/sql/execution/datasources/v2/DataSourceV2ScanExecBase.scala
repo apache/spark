@@ -89,9 +89,18 @@ trait DataSourceV2ScanExecBase
        |""".stripMargin
   }
 
-  // A `lazy val` because the planner asks a node for its partitioning many times, and the
-  // key-grouped arm sorts every partition key, wraps each one and runs a `distinct` over them.
-  @transient override lazy val outputPartitioning: physical.Partitioning = {
+  /**
+   * The partitioning as the source reported it: one key per input partition, holding every
+   * reported key position, with the partitions in the order those full keys sort into. It is built
+   * from the raw, full-width `HasPartitionKey.partitionKey()` rows, so a consumer of those rows
+   * (`filteredPartitions`) must take the keys, the key types and the order from here, not from the
+   * possibly-projected `outputPartitioning`.
+   *
+   * A `lazy val` because this is the expensive half: it sorts every partition key, wraps each one
+   * and runs a `distinct` over them, and both `outputPartitioning` and `filteredPartitions` ask
+   * for it.
+   */
+  @transient protected lazy val reportedKeyedPartitioning: Option[KeyedPartitioning] = {
     keyGroupedPartitioning match {
       case Some(exprs) if conf.v2BucketingEnabled && KeyedPartitioning.supportsExpressions(exprs) &&
           inputPartitions.nonEmpty && inputPartitions.forall(_.isInstanceOf[HasPartitionKey]) =>
@@ -99,11 +108,28 @@ trait DataSourceV2ScanExecBase
         val rowOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
         val partitionKeys =
           inputPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey()).sorted(rowOrdering)
-        KeyedPartitioning(exprs, partitionKeys)
-      case _ =>
-        super.outputPartitioning
+        Some(KeyedPartitioning(exprs, partitionKeys))
+      case _ => None
     }
   }
+
+  // A `lazy val` because the planner asks a node for its partitioning many times, and each ask
+  // would otherwise re-project the reported keys.
+  @transient override lazy val outputPartitioning: physical.Partitioning =
+    reportedKeyedPartitioning match {
+      case Some(partitioning) =>
+        // A partition key may reference a column that was pruned out of the scan output (see
+        // V2ScanPartitioningAndOrdering). Project such unresolvable key positions away so the
+        // reported partitioning only references output columns.
+        val exprs = partitioning.expressions
+        val resolvablePositions = exprs.indices.filter(i => exprs(i).references.subsetOf(outputSet))
+        if (resolvablePositions.isEmpty) {
+          super.outputPartitioning
+        } else {
+          partitioning.project(resolvablePositions)
+        }
+      case _ => super.outputPartitioning
+    }
 
   /**
    * Returns the output ordering for this scan. When the source reports ordering via

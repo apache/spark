@@ -670,7 +670,7 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     def replanAfterFiltering(afterFilter: Seq[InputPartition]): Unit = {
       val scan = new PartitioningBreakingScan(Seq(KeyedInputPartition(1)), afterFilter)
       PushDownUtils.replanWithRuntimeFilters(scan, Seq(EqualTo(partAttr, Literal(1))), table,
-        Seq(partAttr), partitioning, originalPartitions = Seq.empty)
+        Seq(partAttr), Some(partitioning), originalPartitions = Seq.empty)
     }
 
     val keyDropped = intercept[SparkException](replanAfterFiltering(Seq(new InputPartition {})))

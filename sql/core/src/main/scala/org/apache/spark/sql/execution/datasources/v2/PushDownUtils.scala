@@ -24,7 +24,7 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, Literal, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
-import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, InternalRowComparableWrapper}
@@ -273,23 +273,25 @@ object PushDownUtils extends Logging {
   }
 
   /**
-   * Pushes runtime filters into `scan` and re-plans its input partitions. For scans whose
-   * `outputPartitioning` is a [[KeyedPartitioning]] (SPJ-active), validates that the data source
-   * preserved the original partitioning and pads with `None` to preserve key alignment with the
-   * pre-filter partition set.
+   * Pushes runtime filters into `scan` and re-plans its input partitions. When the scan reported a
+   * [[KeyedPartitioning]] (SPJ-active), validates that the data source preserved the original
+   * partitioning and pads with `None` to preserve key alignment with the pre-filter partition set.
    *
    * Notes:
    *  - `filter` is mutating, and Spark may call this more than once for the same `scan` instance
    *    (see [[pushRuntimeFilters]]); successive calls are additive.
-   *  - When `outputPartitioning` is a [[KeyedPartitioning]], every split from
-   *    `planInputPartitions()` used on this path must implement [[HasPartitionKey]].
+   *  - With a [[KeyedPartitioning]], every split from `planInputPartitions()` used on this path
+   *    must implement [[HasPartitionKey]].
    *
    * @param scan                the V2 scan to push filters into
    * @param runtimeFilters      runtime filters to translate and push
    * @param table               the table backing the scan, used to derive the partition-predicate
    *                            schema for iterative [[PartitionPredicate]] pushdown
    * @param output              scan output attributes
-   * @param outputPartitioning  Spark-side output partitioning (used for SPJ validation)
+   * @param keyedPartitioning   the partitioning as the source reported it, at its full key width.
+   *                            The raw [[HasPartitionKey]] rows are read and ordered against it, so
+   *                            a projected partitioning must not be passed here: it would read each
+   *                            key row at the wrong positions and types
    * @param originalPartitions  unfiltered partitions, consulted only when no runtime filters fire
    * @return one entry per original input partition: `Some(part)` for surviving partitions and
    *         `None` for partition keys whose splits were entirely pruned (SPJ alignment)
@@ -299,15 +301,15 @@ object PushDownUtils extends Logging {
       runtimeFilters: Seq[Expression],
       table: Table,
       output: Seq[AttributeReference],
-      outputPartitioning: Partitioning,
+      keyedPartitioning: Option[KeyedPartitioning],
       originalPartitions: => Seq[InputPartition]): Seq[Option[InputPartition]] = {
     val filtered = pushRuntimeFilters(scan, runtimeFilters, table, output)
     if (filtered) {
       // call toBatch again to get filtered partitions
       val newPartitions = scan.toBatch.planInputPartitions()
 
-      outputPartitioning match {
-        case k: KeyedPartitioning =>
+      keyedPartitioning match {
+        case Some(k) =>
           if (newPartitions.exists(!_.isInstanceOf[HasPartitionKey])) {
             throw new SparkException("Data source must have preserved the original partitioning " +
                 "during runtime filtering: not all partitions implement HasPartitionKey after " +
@@ -344,22 +346,22 @@ object PushDownUtils extends Logging {
               fps.map(Some).padTo(size, None)
             }
 
-        case _ =>
+        case None =>
           // no validation is needed as the data source did not report any specific partitioning
           newPartitions.toSeq.map(Some)
       }
 
     } else {
       val parts = originalPartitions
-      (outputPartitioning match {
-        case k: KeyedPartitioning =>
+      (keyedPartitioning match {
+        case Some(k) =>
           if (parts.exists(!_.isInstanceOf[HasPartitionKey])) {
             throw new SparkException("Original partitions must implement HasPartitionKey when " +
-                "outputPartitioning is KeyedPartitioning.")
+                "the scan reported a KeyedPartitioning.")
           }
           parts.sortBy(_.asInstanceOf[HasPartitionKey].partitionKey())(k.keyRowOrdering)
 
-        case _ => parts
+        case None => parts
       }).map(Some)
     }
   }
