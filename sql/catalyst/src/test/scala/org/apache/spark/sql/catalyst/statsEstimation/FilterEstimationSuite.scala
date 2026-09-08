@@ -73,6 +73,13 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   val colStatString = ColumnStat(distinctCount = Some(10), min = None, max = None,
     nullCount = Some(0), avgLen = Some(2), maxLen = Some(2))
 
+  val attrChar = AttributeReference("cchar", CharType(2))()
+  val colStatChar = ColumnStat(distinctCount = Some(10), min = None, max = None,
+    nullCount = Some(0), avgLen = Some(2), maxLen = Some(2))
+  val attrVarchar = AttributeReference("cvarchar", VarcharType(2))()
+  val colStatVarchar = ColumnStat(distinctCount = Some(10), min = None, max = None,
+    nullCount = Some(0), avgLen = Some(2), maxLen = Some(2))
+
   // column cint2 has values: 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
   // Hence, distinctCount:10, min:7, max:16, nullCount:0, avgLen:4, maxLen:4
   // This column is created to test "cint < cint2
@@ -121,6 +128,8 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     attrDecimal -> colStatDecimal,
     attrDouble -> colStatDouble,
     attrString -> colStatString,
+    attrChar -> colStatChar,
+    attrVarchar -> colStatVarchar,
     attrInt2 -> colStatInt2,
     attrInt3 -> colStatInt3,
     attrInt4 -> colStatInt4,
@@ -567,6 +576,29 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(LessThan(attrString, Literal("A2")), childStatsTestPlan(Seq(attrString), 10L)),
       Seq(attrString -> ColumnStat(distinctCount = Some(10), min = None, max = None,
         nullCount = Some(0), avgLen = Some(2), maxLen = Some(2))),
+      expectedRowCount = 10)
+  }
+
+  test("SPARK-59273: CHAR/VARCHAR equality, IN, and range fall back like STRING") {
+    Seq(attrChar -> colStatChar, attrVarchar -> colStatVarchar).foreach {
+      case (attr, colStat) =>
+        validateEstimatedStats(
+          Filter(EqualTo(attr, Literal("A2")), childStatsTestPlan(Seq(attr), 10L)),
+          Seq(attr -> colStat.copy(distinctCount = Some(1), nullCount = Some(0))),
+          expectedRowCount = 1)
+        validateEstimatedStats(
+          Filter(InSet(attr, Set("A0")), childStatsTestPlan(Seq(attr), 10L)),
+          Seq(attr -> colStat.copy(distinctCount = Some(1), nullCount = Some(0))),
+          expectedRowCount = 1)
+        validateEstimatedStats(
+          Filter(LessThan(attr, Literal("A2")), childStatsTestPlan(Seq(attr), 10L)),
+          Seq(attr -> colStat),
+          expectedRowCount = 10)
+    }
+    validateEstimatedStats(
+      Filter(GreaterThan(attrChar, attrVarchar),
+        childStatsTestPlan(Seq(attrChar, attrVarchar), 10L)),
+      Seq(attrChar -> colStatChar, attrVarchar -> colStatVarchar),
       expectedRowCount = 10)
   }
 
