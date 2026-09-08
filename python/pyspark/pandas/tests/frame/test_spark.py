@@ -22,13 +22,13 @@ import numpy as np
 import pandas as pd
 
 from pyspark import StorageLevel
-from pyspark.ml.linalg import SparseVector
-from pyspark.sql.types import StructType
 from pyspark import pandas as ps
-from pyspark.pandas.frame import CachedDataFrame
+from pyspark.ml.linalg import SparseVector
 from pyspark.pandas.exceptions import PandasNotImplementedError
+from pyspark.pandas.frame import CachedDataFrame
 from pyspark.pandas.missing.frame import MissingPandasLikeDataFrame
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, SPARK_CONF_ARROW_ENABLED
+from pyspark.sql.types import StructType
+from pyspark.testing.pandasutils import SPARK_CONF_ARROW_ENABLED, PandasOnSparkTestCase
 
 
 # This file contains test cases for 'Spark-related'

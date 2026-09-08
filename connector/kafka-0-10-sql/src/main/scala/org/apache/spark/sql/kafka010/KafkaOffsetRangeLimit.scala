@@ -40,9 +40,37 @@ private[kafka010] case object LatestOffsetRangeLimit extends KafkaOffsetRangeLim
 /**
  * Represents the desire to bind to specific offsets. A offset == -1 binds to the
  * latest offset, and offset == -2 binds to the earliest offset.
+ *
+ * `topicOffsets` holds topic-level bindings, written in the JSON as "earliest" or "latest" in
+ * place of a topic's per-partition object. They are expanded against the partitions discovered
+ * for the topic when the offsets are resolved, so they keep working across repartitioning.
  */
 private[kafka010] case class SpecificOffsetRangeLimit(
-    partitionOffsets: Map[TopicPartition, Long]) extends KafkaOffsetRangeLimit
+    partitionOffsets: Map[TopicPartition, Long],
+    topicOffsets: Map[String, Long] = Map.empty) extends KafkaOffsetRangeLimit {
+
+  /**
+   * Expands the topic-level bindings against `assignedPartitions` and returns the resulting
+   * offset per topic-partition. `assignedPartitions` is by-name so that a fully enumerated
+   * limit never pays for discovering the partitions.
+   */
+  def resolve(assignedPartitions: => Set[TopicPartition]): Map[TopicPartition, Long] = {
+    if (topicOffsets.isEmpty) {
+      partitionOffsets
+    } else {
+      val partitions = assignedPartitions
+      val expanded = partitions.collect {
+        case tp if topicOffsets.contains(tp.topic) => tp -> topicOffsets(tp.topic)
+      }.toMap
+      val unmatchedTopics = topicOffsets.keySet.diff(expanded.keySet.map(_.topic))
+      if (unmatchedTopics.nonEmpty) {
+        throw KafkaExceptions.topicOffsetDoesNotMatchAssigned(
+          unmatchedTopics, partitions.map(_.topic))
+      }
+      expanded ++ partitionOffsets
+    }
+  }
+}
 
 /**
  * Represents the desire to bind to earliest offset which timestamp for the offset is equal or

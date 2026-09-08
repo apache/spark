@@ -2779,13 +2779,12 @@ class MergeSubplansSuite extends PlanTest {
   }
 
   test("SPARK-58549: merge DSv2 scans reporting the same bucket transform partitioning") {
-    // Both inputs report `bucket(4, a)`, each derived independently, so each holds its OWN
-    // BoundFunction instance -- what production does, since V2ExpressionUtils binds the function
-    // afresh per derivation. The two reports compare equal only because `TestBucketFunction`
-    // implements `equals`/`hashCode` the way `BoundFunction` asks a connector to, so this is the
-    // end-to-end check that Spark honours that contract: the merge proceeds and the rebuilt scan
-    // re-derives the same report. It is also the only test here whose report is a transform rather
-    // than a plain attribute, which is what an identity-partitioned source would report.
+    // Both inputs report `bucket(4, a)` and derive the report independently. This fixture returns a
+    // distinct BoundFunction from each bind. The reports compare equal because `TestBucketFunction`
+    // implements `equals`/`hashCode` as `BoundFunction` recommends, so the merge proceeds and the
+    // rebuilt scan re-derives the same report. It is also the only test here whose report is a
+    // transform rather than a plain attribute, which is what an identity-partitioned source would
+    // report.
     val q = testRelation.select(
       ScalarSubquery(v2ScanReportingOn(v2TableBucketedOnA, Seq("a", "b"))
         .groupBy()(sum($"b").as("sum_b"))),
@@ -2817,6 +2816,33 @@ class MergeSubplansSuite extends PlanTest {
         v2ScanReportingOn(v2TableBucketedOnA, Seq("a", "c"), TestNotComparableFunctionCatalog)
           .groupBy()(sum($"c").as("sum_c"))))
     comparePlans(Optimize.execute(q.analyze), q.analyze)
+  }
+
+  test("SPARK-59248: identical DSv2 scans whose reported ordering is on a pruned column are " +
+    "deduplicated, not fused") {
+    // The two subqueries read the same column and compute the same aggregate, so they are
+    // identical and the identical-plan check should deduplicate them (plan left unchanged). The
+    // table reports an ordering on `b`, which is pruned out of each scan's output (only `a` is
+    // read). Canonicalize must drop that dangling ordering: otherwise the two scans' ordering
+    // attributes carry different exprIds, the identical check fails, and the plans are wrongly
+    // fused into a CTE.
+    val table = new TestV2Table(
+      StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", IntegerType),
+        StructField("c", StringType))),
+      reportedOrderingCols = Seq("b"))
+    val q = testRelation.select(
+      ScalarSubquery(v2ScanReportingOn(table, Seq("a")).groupBy()(sum($"a").as("sum_a"))),
+      ScalarSubquery(v2ScanReportingOn(table, Seq("a")).groupBy()(sum($"a").as("sum_a"))))
+
+    val optimized = Optimize.execute(q.analyze)
+    // Deduplicated, not fused: both subqueries survive and no merged CTE scan is introduced.
+    assert(v2Scans(optimized).length == 2,
+      s"the two identical scans must be deduplicated, not fused into one:\n$optimized")
+    assert(!optimized.isInstanceOf[WithCTE],
+      s"identical subqueries must not be extracted to a merged CTE:\n$optimized")
+    comparePlans(optimized, q.analyze)
   }
 
   test("SPARK-58549: enforce the required report on the deferred under-Filter scan build") {
@@ -3177,11 +3203,9 @@ private case class TestV2ReportingScan(
 }
 
 /**
- * A `FunctionCatalog` that resolves `bucket`, binding it to a FRESH function instance every time --
- * as a real connector does, since `V2ExpressionUtils.loadV2FunctionOpt` binds the function afresh
- * for every derivation of a reported transform. Spark's own `UnboundBucketFunction` hands back a
- * singleton, which would hide the fact that relating two independently derived reports rests on the
- * function's own `equals` (see `BoundFunction#equals`).
+ * A `FunctionCatalog` whose `bucket` function returns a new bound instance for every bind.
+ * `V2ExpressionUtils` binds each independently derived report, and this fixture exercises the case
+ * where those calls do not share object identity.
  */
 private object TestFreshBindFunctionCatalog extends FunctionCatalog {
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
@@ -3203,11 +3227,9 @@ private object TestUnboundBucketFunction extends UnboundFunction {
 
 /**
  * A bound `bucket` that implements `equals`/`hashCode` over the state identifying it, as
- * `BoundFunction` asks a connector to. That is what lets Spark recognize two separately bound
- * instances as the same transform: `V2ExpressionUtils` binds afresh on every derivation, so two
- * reported partitionings hold two different instances and nothing but this comparison relates them.
- * `canonicalName` is stable too (its default returns a fresh random UUID), which is what a
- * storage-partitioned join compares.
+ * `BoundFunction` asks a connector to. This fixture returns a distinct instance for each bind, so
+ * two independently derived reports are related only by this comparison. `canonicalName` is stable
+ * too (its default returns a fresh random UUID), which is what a storage-partitioned join compares.
  */
 private class TestBucketFunction extends ScalarFunction[Int] {
   override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)

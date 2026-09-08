@@ -17,8 +17,8 @@
 
 """PySpark Functions"""
 
-from pyspark.sql.functions.builtin import *  # noqa: F403
 from pyspark.sql.functions import partitioning  # noqa: F401
+from pyspark.sql.functions.builtin import *  # noqa: F403
 
 __all__ = [  # noqa: F405
     # Normal functions
@@ -628,4 +628,5 @@ __all__ = [  # noqa: F405
     "udtf",
     "arrow_udtf",
     "unwrap_udt",
+    "wrap_udt",
 ]

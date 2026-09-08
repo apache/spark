@@ -45,6 +45,20 @@ SELECT typeof(cast('a' AS CHAR(1)) || cast('b' AS VARCHAR(1)));
 SELECT typeof(substr(cast('hello' AS VARCHAR(5)), 1, 2));
 SELECT typeof(upper(coalesce(cast('a' AS CHAR(2)), cast('b' AS CHAR(4)))));
 SELECT typeof(concat(cast('a' AS CHAR(2)), cast('b' AS CHAR(3))));
+SELECT typeof(concat(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+  cast('b' AS CHAR(3) COLLATE UTF8_LCASE)));
+SELECT concat('<', concat(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+  cast('b' AS CHAR(3) COLLATE UTF8_LCASE)), '>');
+SELECT typeof(elt(
+  1,
+  cast('ab' AS CHAR(5) COLLATE UTF8_LCASE),
+  cast('x' AS CHAR(1) COLLATE UTF8_LCASE)));
+SELECT concat('<', elt(
+  1,
+  cast('ab' AS CHAR(5) COLLATE UTF8_LCASE),
+  cast('x' AS CHAR(1) COLLATE UTF8_LCASE)), '>');
 SELECT typeof(trim(cast('ab  ' AS CHAR(4))));
 SELECT typeof(lpad(cast('ab' AS CHAR(2)), 5, 'x'));
 

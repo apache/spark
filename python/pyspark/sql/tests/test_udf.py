@@ -15,39 +15,39 @@
 # limitations under the License.
 #
 
+import datetime
 import functools
+import io
+import logging
 import pydoc
 import shutil
-import tempfile
-import unittest
-import datetime
-import io
-import time
-from contextlib import redirect_stdout
-import logging
 import sys
+import tempfile
+import time
+import unittest
+from contextlib import redirect_stdout
 
-from pyspark.sql import SparkSession, Column, Row
-from pyspark.sql.functions import col, udf, assert_true, lit, rand
-from pyspark.sql.udf import UserDefinedFunction
+from pyspark.errors import AnalysisException, PySparkTypeError, PythonException
+from pyspark.logger import PySparkLogger
+from pyspark.sql import Column, Row, SparkSession
+from pyspark.sql.functions import assert_true, col, lit, rand, udf
 from pyspark.sql.types import (
-    StringType,
-    IntegerType,
+    ArrayType,
     BinaryType,
     BooleanType,
-    DoubleType,
-    LongType,
-    ArrayType,
-    MapType,
-    StructType,
-    StructField,
-    TimestampNTZType,
     DayTimeIntervalType,
+    DoubleType,
+    IntegerType,
+    LongType,
+    MapType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampNTZType,
     VariantType,
     VariantVal,
 )
-from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
-from pyspark.logger import PySparkLogger
+from pyspark.sql.udf import UserDefinedFunction
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -190,8 +190,9 @@ class BaseUDFTestsMixin:
             self.check_nondeterministic_udf_in_aggregate()
 
     def check_nondeterministic_udf_in_aggregate(self):
-        from pyspark.sql.functions import sum
         import random
+
+        from pyspark.sql.functions import sum
 
         udf_random_col = udf(lambda: int(100 * random.random()), "int").asNondeterministic()
         df = self.spark.range(10)
@@ -836,7 +837,7 @@ class BaseUDFTestsMixin:
     # SPARK-24721
     @unittest.skipIf(not test_compiled, test_not_compiled_message)
     def test_datasource_with_udf(self):
-        from pyspark.sql.functions import lit, col
+        from pyspark.sql.functions import col, lit
 
         path = tempfile.mkdtemp()
         shutil.rmtree(path)

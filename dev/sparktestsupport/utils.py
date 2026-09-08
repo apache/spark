@@ -18,8 +18,9 @@
 #
 
 import os
-import sys
 import subprocess
+import sys
+
 from sparktestsupport import modules
 from sparktestsupport.shellutils import run_cmd
 from sparktestsupport.toposort import toposort_flatten

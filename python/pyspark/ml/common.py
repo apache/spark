@@ -15,19 +15,19 @@
 # limitations under the License.
 #
 
-from typing import Any, Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable
 
-from pyspark.util import is_remote_only
-from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
+from pyspark.serializers import AutoBatchedSerializer, CPickleSerializer
 from pyspark.sql import DataFrame, SparkSession
+from pyspark.util import is_remote_only
 
 if TYPE_CHECKING:
     import py4j.protocol
     from py4j.java_gateway import JavaObject
 
     import pyspark.core.context
-    from pyspark.core.rdd import RDD
     from pyspark.core.context import SparkContext
+    from pyspark.core.rdd import RDD
     from pyspark.ml._typing import C, JavaObjectOrPickleDump
 
 
@@ -80,8 +80,9 @@ def _to_java_object_rdd(rdd: "RDD") -> "JavaObject":
 def _py2java(sc: "SparkContext", obj: Any) -> "JavaObject":
     """Convert Python object into Java"""
     from py4j.java_gateway import JavaObject
-    from pyspark.core.rdd import RDD
+
     from pyspark.core.context import SparkContext
+    from pyspark.core.rdd import RDD
 
     if isinstance(obj, RDD):
         obj = _to_java_object_rdd(obj)
@@ -103,9 +104,9 @@ def _py2java(sc: "SparkContext", obj: Any) -> "JavaObject":
 
 
 def _java2py(sc: "SparkContext", r: "JavaObjectOrPickleDump", encoding: str = "bytes") -> Any:
-    from py4j.protocol import Py4JJavaError
-    from py4j.java_gateway import JavaObject
     from py4j.java_collections import JavaArray, JavaList
+    from py4j.java_gateway import JavaObject
+    from py4j.protocol import Py4JJavaError
 
     if isinstance(r, JavaObject):
         clsName = r.getClass().getSimpleName()

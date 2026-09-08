@@ -18,30 +18,31 @@
 import unittest
 import uuid
 from collections.abc import Generator
-from typing import Optional, Any, Union
+from typing import Any, Optional, Union
 
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
 from pyspark.testing.utils import eventually
 
 if should_test_connect:
-    import grpc
     import google.protobuf.any_pb2 as any_pb2
     import google.protobuf.wrappers_pb2 as wrappers_pb2
-    from google.rpc import status_pb2
-    from google.rpc.error_details_pb2 import ErrorInfo
+    import grpc
     import pandas as pd
     import pyarrow as pa
-    from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
-    from pyspark.sql.connect.client.core import RpcDeadlines
-    from pyspark.sql.connect.client.retries import (
-        Retrying,
-        DefaultPolicy,
-    )
-    from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
-    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+    from google.rpc import status_pb2
+    from google.rpc.error_details_pb2 import ErrorInfo
+
+    import pyspark.sql.connect.proto as proto
     from pyspark.errors import PySparkRuntimeError
     from pyspark.errors.exceptions.connect import SparkConnectGrpcException
-    import pyspark.sql.connect.proto as proto
+    from pyspark.sql.connect.client import DefaultChannelBuilder, SparkConnectClient
+    from pyspark.sql.connect.client.core import RpcDeadlines
+    from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
+    from pyspark.sql.connect.client.retries import (
+        DefaultPolicy,
+        Retrying,
+    )
+    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
     class TestPolicy(DefaultPolicy):
         def __init__(self):
@@ -966,6 +967,49 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
         client._get_operation_statuses()
         self.assertEqual(mock.captured_timeouts["GetStatus"], 55.0)
+
+    def test_remove_cached_relation_uses_release_relation_deadline(self):
+        """CachedRemoteRelation.__del__ must bound its release RPC with the release_relation
+        deadline.
+
+        Regression test: the RemoveRemoteCachedRelation cleanup is a blocking, non-reattachable
+        ExecutePlan call issued from a finalizer with no other timeout at any layer. Without a
+        client-side deadline it can hang forever if the response is never delivered, which on the
+        foreachBatch Connect path stalls the streaming query indefinitely (the Python worker never
+        sends its completion signal and the driver JVM blocks on the per-batch read).
+        """
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        from pyspark.sql.connect.plan import CachedRemoteRelation
+
+        def make_relation(deadlines):
+            client = SparkConnectClient(
+                "sc://foo/",
+                use_reattachable_execute=False,
+                rpc_deadlines=deadlines,
+                retry_policy=dict(max_retries=0),
+            )
+            captured = {}
+
+            def fake_call(req, metadata=None, timeout="unset"):
+                captured["timeout"] = timeout
+                return proto.ExecutePlanResponse()
+
+            client._channel = MagicMock()
+            client._channel.unary_unary.return_value = fake_call
+            rel = CachedRemoteRelation("df-id-123", spark_session=SimpleNamespace(client=client))
+            return rel, captured
+
+        # A configured deadline is forwarded as the gRPC call timeout.
+        rel, captured = make_relation(RpcDeadlines(release_relation=44.0))
+        rel.__del__()
+        self.assertEqual(captured["timeout"], 44.0)
+
+        # Disabled deadlines forward None (opt out; rely on transport/server-side timeouts).
+        rel, captured = make_relation(RpcDeadlines.disabled())
+        rel.__del__()
+        self.assertIsNone(captured["timeout"])
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

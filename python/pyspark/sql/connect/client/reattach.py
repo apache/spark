@@ -14,23 +14,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.client.retries import Retrying, RetryException
-
-from threading import RLock
-import uuid
-from collections.abc import Generator
-from typing import Optional, Any, Iterator, Iterable, Tuple, Callable, cast, ClassVar
-from concurrent.futures import Future, ThreadPoolExecutor
 import os
+import uuid
 import weakref
+from collections.abc import Generator
+from concurrent.futures import Future, ThreadPoolExecutor
+from threading import RLock
+from typing import Any, Callable, ClassVar, Iterable, Iterator, Optional, Tuple, cast
 
 import grpc
 from grpc_status import rpc_status
 
-from pyspark.sql.connect.logging import logger
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 from pyspark.errors import PySparkRuntimeError
+from pyspark.sql.connect.client.retries import RetryException, Retrying
+from pyspark.sql.connect.logging import logger
 from pyspark.util import disable_gc
 
 

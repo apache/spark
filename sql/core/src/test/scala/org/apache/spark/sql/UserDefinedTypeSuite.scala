@@ -293,8 +293,33 @@ class UserDefinedTypeSuite extends SharedSparkSession with ParquetTest
     val unwrappedFeaturesArrays: Array[Array[Double]] = unwrappedFeatures.collect()
     assert(unwrappedFeaturesArrays.length === 2)
 
-    java.util.Arrays.equals(unwrappedFeaturesArrays(0), Array(0.1, 1.0))
-    java.util.Arrays.equals(unwrappedFeaturesArrays(1), Array(0.2, 2.0))
+    assert(Arrays.equals(unwrappedFeaturesArrays(0), Array(0.1, 1.0)))
+    assert(Arrays.equals(unwrappedFeaturesArrays(1), Array(0.2, 2.0)))
+  }
+
+  test("Test wrap_udt function") {
+    val udt = new TestUDT.MyDenseVectorUDT()
+    val df = Seq(Array(0.1, 1.0), Array(0.2, 2.0)).toDF("features")
+    val wrappedFeatures = df.select(wrap_udt(col("features"), udt).as("features"))
+
+    assert(wrappedFeatures.schema("features").dataType === udt)
+    checkAnswer(
+      wrappedFeatures,
+      Seq(
+        Row(new TestUDT.MyDenseVector(Array(0.1, 1.0))),
+        Row(new TestUDT.MyDenseVector(Array(0.2, 2.0)))))
+  }
+
+  test("Test unwrap_udt and wrap_udt round trip") {
+    val udt = new TestUDT.MyDenseVectorUDT()
+    val roundTrip = pointsRDD.select(wrap_udt(unwrap_udt(col("features")), udt).as("features"))
+
+    assert(roundTrip.schema("features").dataType === udt)
+    checkAnswer(
+      roundTrip,
+      Seq(
+        Row(new TestUDT.MyDenseVector(Array(0.1, 1.0))),
+        Row(new TestUDT.MyDenseVector(Array(0.2, 2.0)))))
   }
 
   test("SPARK-46289: UDT ordering") {

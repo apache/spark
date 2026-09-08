@@ -98,12 +98,8 @@ public class LevelDB implements KVStore {
       db().put(STORE_VERSION_KEY, serializer.serialize(STORE_VERSION));
     }
 
-    Map<String, byte[]> aliases;
-    try {
-      aliases = get(TYPE_ALIASES_KEY, TypeAliases.class).aliases;
-    } catch (NoSuchElementException e) {
-      aliases = new HashMap<>();
-    }
+    TypeAliases aliasesValue = getOrNull(TYPE_ALIASES_KEY, TypeAliases.class);
+    Map<String, byte[]> aliases = aliasesValue != null ? aliasesValue.aliases : new HashMap<>();
     typeAliases = new ConcurrentHashMap<>(aliases);
 
     iteratorTracker = new ConcurrentLinkedQueue<>();
@@ -111,11 +107,7 @@ public class LevelDB implements KVStore {
 
   @Override
   public <T> T getMetadata(Class<T> klass) throws Exception {
-    try {
-      return get(METADATA_KEY, klass);
-    } catch (NoSuchElementException nsee) {
-      return null;
-    }
+    return getOrNull(METADATA_KEY, klass);
   }
 
   @Override
@@ -128,11 +120,21 @@ public class LevelDB implements KVStore {
   }
 
   <T> T get(byte[] key, Class<T> klass) throws Exception {
-    byte[] data = db().get(key);
-    if (data == null) {
+    T value = getOrNull(key, klass);
+    if (value == null) {
       throw new NoSuchElementException(new String(key, UTF_8));
     }
-    return serializer.deserialize(data, klass);
+    return value;
+  }
+
+  /**
+   * Returns the value for the given key, or {@code null} if the key is not present, so that
+   * callers where a missing key is expected do not pay the cost of throwing and filling in an
+   * exception stack trace.
+   */
+  <T> T getOrNull(byte[] key, Class<T> klass) throws Exception {
+    byte[] data = db().get(key);
+    return data != null ? serializer.deserialize(data, klass) : null;
   }
 
   private void put(byte[] key, Object value) throws Exception {
@@ -207,12 +209,7 @@ public class LevelDB implements KVStore {
       Class<?> klass,
       LevelDBTypeInfo.Index naturalIndex,
       Collection<LevelDBTypeInfo.Index> indices) throws Exception {
-    Object existing;
-    try {
-      existing = get(naturalIndex.entityKey(null, value), klass);
-    } catch (NoSuchElementException e) {
-      existing = null;
-    }
+    Object existing = getOrNull(naturalIndex.entityKey(null, value), klass);
 
     PrefixCache cache = new PrefixCache(value);
     byte[] naturalKey = naturalIndex.toKey(naturalIndex.getValue(value));
@@ -229,9 +226,8 @@ public class LevelDB implements KVStore {
       LevelDBTypeInfo ti = getTypeInfo(type);
       byte[] key = ti.naturalIndex().start(null, naturalKey);
       synchronized (ti) {
-        byte[] data = db().get(key);
-        if (data != null) {
-          Object existing = serializer.deserialize(data, type);
+        Object existing = getOrNull(key, type);
+        if (existing != null) {
           PrefixCache cache = new PrefixCache(existing);
           byte[] keyBytes = ti.naturalIndex().toKey(ti.naturalIndex().getValue(existing));
           for (LevelDBTypeInfo.Index idx : ti.indices()) {
@@ -240,8 +236,6 @@ public class LevelDB implements KVStore {
           db().write(batch);
         }
       }
-    } catch (NoSuchElementException nse) {
-      // Ignore.
     }
   }
 

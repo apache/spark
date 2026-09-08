@@ -22,7 +22,7 @@ import scala.annotation.nowarn
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationChanges, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationChanges, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedInsertTarget, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -47,17 +47,18 @@ class PlanParserSuite extends AnalysisTest {
     // We don't care the write privileges in this suite.
     val parsed = parsePlan(sqlCommand).transform {
       case u: UnresolvedRelation => u.clearWritePrivileges
-      case i: InsertIntoStatement =>
-        i.table match {
-          case u: UnresolvedRelation => i.copy(table = u.clearWritePrivileges)
-          case _ => i
-        }
+      case u: UnresolvedInsertTarget => UnresolvedRelation(u.multipartIdentifier, u.options)
     }
     comparePlans(parsed, plan, checkAnalysis = false)
   }
 
   private def parseException(sqlText: String): SparkThrowable = {
     super.parseException(parsePlan)(sqlText)
+  }
+
+  private def unresolvedInsertInto(tableName: String, query: LogicalPlan): LogicalPlan = {
+    UnresolvedInsert(
+      table(tableName), Map.empty, Nil, query, overwrite = false, ifPartitionNotExists = false)
   }
 
   private def cte(
@@ -359,8 +360,8 @@ class PlanParserSuite extends AnalysisTest {
       parameters = Map("error" -> "'from'", "hint" -> ""))
     assertEqual(
       "from a insert into tbl1 select * insert into tbl2 select * where s < 10",
-      table("a").select(star()).insertInto("tbl1").union(
-        table("a").where($"s" < 10).select(star()).insertInto("tbl2")))
+      unresolvedInsertInto("tbl1", table("a").select(star())).union(
+        unresolvedInsertInto("tbl2", table("a").where($"s" < 10).select(star()))))
     assertEqual(
       "select * from (from a select * select *)",
       table("a").select(star())
@@ -458,7 +459,7 @@ class PlanParserSuite extends AnalysisTest {
         partition: Map[String, Option[String]],
         overwrite: Boolean = false,
         ifPartitionNotExists: Boolean = false): LogicalPlan =
-      InsertIntoStatement(table("s"), partition, Nil, plan, overwrite, ifPartitionNotExists)
+      UnresolvedInsert(table("s"), partition, Nil, plan, overwrite, ifPartitionNotExists)
 
     // Single inserts
     assertEqual(s"insert overwrite table s $sql",
@@ -473,7 +474,7 @@ class PlanParserSuite extends AnalysisTest {
     // Multi insert
     val plan2 = table("t").where($"x" > 5).select(star())
     assertEqual("from t insert into s select * limit 1 insert into u select * where x > 5",
-      plan.limit(1).insertInto("s").union(plan2.insertInto("u")))
+      unresolvedInsertInto("s", plan.limit(1)).union(unresolvedInsertInto("u", plan2)))
   }
 
   test("aggregation") {
@@ -579,11 +580,10 @@ class PlanParserSuite extends AnalysisTest {
         |select *
         |where s < 10
       """.stripMargin,
-      Union(from
+      Union(unresolvedInsertInto("t2", from
         .generate(jsonTuple, alias = Some("jtup"), outputNames = Seq("q", "z"))
-        .select(star())
-        .insertInto("t2"),
-        from.where($"s" < 10).select(star()).insertInto("t3")))
+        .select(star())),
+        unresolvedInsertInto("t3", from.where($"s" < 10).select(star()))))
 
     // Unresolved generator.
     val expected = table("t")
@@ -1081,6 +1081,18 @@ class PlanParserSuite extends AnalysisTest {
           usingColumns = Some(Seq("b"))).select(star()))
 
       assertEqual(
+        "select * from t asof join u match_condition (t.a >= u.a) using (a, b)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          GreaterThanOrEqualOp,
+          $"u.a",
+          None,
+          Inner,
+          usingColumns = Some(Seq("a", "b"))).select(star()))
+
+      assertEqual(
         "select * from t asof join u match_condition (u.a <= t.a)",
         AsOfJoin.fromMatchCondition(
           table("t"),
@@ -1088,6 +1100,68 @@ class PlanParserSuite extends AnalysisTest {
           $"u.a",
           LessThanOrEqualOp,
           $"t.a",
+          None,
+          Inner).select(star()))
+
+      assertEqual(
+        "select * from t asof join u match_condition (t.a > u.a)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          GreaterThanOp,
+          $"u.a",
+          None,
+          Inner).select(star()))
+
+      assertEqual(
+        "select * from t asof join u match_condition (t.a < u.a)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          LessThanOp,
+          $"u.a",
+          None,
+          Inner).select(star()))
+
+      assertEqual(
+        "select * from t inner asof join u match_condition (t.a >= u.a)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          GreaterThanOrEqualOp,
+          $"u.a",
+          None,
+          Inner).select(star()))
+
+      assertEqual(
+        "select * from t left outer asof join u match_condition (t.a >= u.a)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          GreaterThanOrEqualOp,
+          $"u.a",
+          None,
+          LeftOuter).select(star()))
+    }
+  }
+
+  test("asof join - struct match condition") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      // A multi-column MATCH_CONDITION: `(a, b)` parses to a row constructor (CreateStruct),
+      // and the top-level comparison must still be extracted as the match operator so that
+      // STRUCT operands compare lexicographically (see the SQL reference for ASOF JOIN).
+      assertEqual(
+        "select * from t asof join u match_condition ((t.a, t.b) >= (u.a, u.b))",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          CreateStruct($"t.a" :: $"t.b" :: Nil),
+          GreaterThanOrEqualOp,
+          CreateStruct($"u.a" :: $"u.b" :: Nil),
           None,
           Inner).select(star()))
     }
@@ -1193,6 +1267,40 @@ class PlanParserSuite extends AnalysisTest {
             fragment = "asof join u match_condition (t.a >= u.a and t.b >= u.b)",
             start = 16,
             stop = 70)))
+    }
+  }
+
+  test("asof join - disjunction match condition rejected") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      checkError(
+        exception = parseException(
+          "select * from t asof join u match_condition (t.a >= u.a or t.b >= u.b)"),
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = Some("42K0E"),
+        parameters = Map("operator" -> "OR"),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "asof join u match_condition (t.a >= u.a or t.b >= u.b)",
+            start = 16,
+            stop = 69)))
+    }
+  }
+
+  test("asof join - non-comparison match condition rejected") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      // A MATCH_CONDITION that is not a top-level comparison (here a bare column reference)
+      // is rejected, and the original expression text is echoed back as the operator.
+      checkError(
+        exception = parseException(
+          "select * from t asof join u match_condition (t.a)"),
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = Some("42K0E"),
+        parameters = Map("operator" -> "t.a"),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "asof join u match_condition (t.a)",
+            start = 16,
+            stop = 48)))
     }
   }
 
@@ -1696,7 +1804,7 @@ class PlanParserSuite extends AnalysisTest {
 
     assertEqual(
       "INSERT INTO s SELECT /*+ REPARTITION(100), COALESCE(500), COALESCE(10) */ * FROM t",
-      InsertIntoStatement(table("s"), Map.empty, Nil,
+      UnresolvedInsert(table("s"), Map.empty, Nil,
         UnresolvedHint("REPARTITION", Seq(Literal(100)),
           UnresolvedHint("COALESCE", Seq(Literal(500)),
             UnresolvedHint("COALESCE", Seq(Literal(10)),

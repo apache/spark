@@ -48,16 +48,16 @@ Public classes:
 
 import sys
 from functools import wraps
-from typing import cast, Any, Callable, TypeVar, Union
+from typing import Any, Callable, TypeVar, Union, cast
 
 from pyspark.util import is_remote_only
 
 if not is_remote_only():
-    from pyspark.core.rdd import RDD, RDDBarrier
-    from pyspark.core.files import SparkFiles
-    from pyspark.core.status import StatusTracker, SparkJobInfo, SparkStageInfo, SparkExecutorInfo
+    from pyspark.core import broadcast, files, rdd, status
     from pyspark.core.broadcast import Broadcast
-    from pyspark.core import rdd, files, status, broadcast
+    from pyspark.core.files import SparkFiles
+    from pyspark.core.rdd import RDD, RDDBarrier
+    from pyspark.core.status import SparkExecutorInfo, SparkJobInfo, SparkStageInfo, StatusTracker
 
     # for backward compatibility references.
     sys.modules["pyspark.rdd"] = rdd
@@ -65,15 +65,15 @@ if not is_remote_only():
     sys.modules["pyspark.status"] = status
     sys.modules["pyspark.broadcast"] = broadcast
 
-from pyspark.conf import SparkConf
-from pyspark.util import InheritableThread, inheritable_thread_target
-from pyspark.storagelevel import StorageLevel
-from pyspark.accumulators import Accumulator, AccumulatorParam
-from pyspark.serializers import MarshalSerializer, CPickleSerializer
-from pyspark.taskcontext import TaskContext, BarrierTaskContext, BarrierTaskInfo
-from pyspark.profiler import Profiler, BasicProfiler
-from pyspark.version import __version__
 from pyspark._globals import _NoValue  # noqa: F401
+from pyspark.accumulators import Accumulator, AccumulatorParam
+from pyspark.conf import SparkConf
+from pyspark.profiler import BasicProfiler, Profiler
+from pyspark.serializers import CPickleSerializer, MarshalSerializer
+from pyspark.storagelevel import StorageLevel
+from pyspark.taskcontext import BarrierTaskContext, BarrierTaskInfo, TaskContext
+from pyspark.util import InheritableThread, inheritable_thread_target
+from pyspark.version import __version__
 
 _F = TypeVar("_F", bound=Callable)
 
@@ -119,14 +119,14 @@ def keyword_only(func: _F) -> _F:
 
 # To avoid circular dependencies
 if not is_remote_only():
-    from pyspark.core.context import SparkContext
     from pyspark.core import context
+    from pyspark.core.context import SparkContext
 
     # for backward compatibility references.
     sys.modules["pyspark.context"] = context
 
     # for back compatibility
-    from pyspark.sql import SQLContext, HiveContext  # noqa: F401
+    from pyspark.sql import HiveContext, SQLContext  # noqa: F401
 
 from pyspark.sql import Row  # noqa: F401
 

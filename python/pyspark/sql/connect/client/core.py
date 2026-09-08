@@ -22,108 +22,105 @@ __all__ = [
 ]
 
 import atexit
-from dataclasses import dataclass, fields
-
-import pyspark
-from pyspark.sql.connect.proto.base_pb2 import FetchErrorDetailsResponse
-
 import concurrent.futures
-import logging
-import threading
-import os
 import copy
+import logging
+import os
 import platform
-import urllib.parse
-import uuid
 import sys
+import threading
 import time
 import traceback
+import urllib.parse
+import uuid
 import weakref
+from dataclasses import dataclass, fields
 from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
     Iterable,
     Iterator,
-    Optional,
-    Any,
-    Union,
     List,
-    Tuple,
-    Dict,
-    Set,
-    NoReturn,
     Mapping,
-    cast,
-    TYPE_CHECKING,
+    NoReturn,
+    Optional,
+    Set,
+    Tuple,
     Type,
+    Union,
+    cast,
 )
-
-import pandas as pd
-import pyarrow as pa
 
 import google.protobuf.message
-from grpc_status import rpc_status
 import grpc
-from google.protobuf import text_format, any_pb2
+import pandas as pd
+import pyarrow as pa
+from google.protobuf import any_pb2, text_format
 from google.rpc import error_details_pb2
+from grpc_status import rpc_status
 
-from pyspark.util import is_remote_only, disable_gc
-from pyspark.accumulators import SpecialAccumulatorIds, pickleSer
-from pyspark.version import __version__
-from pyspark.traceback_utils import CallSite
-from pyspark.resource.information import ResourceInformation
-from pyspark.sql.metrics import MetricValue, PlanMetrics, ExecutionInfo, ObservedMetrics
-from pyspark.sql.connect.client.artifact import ArtifactManager
-from pyspark.sql.connect.logging import logger
-from pyspark.sql.connect.profiler import ConnectProfilerCollector
-from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
-from pyspark.sql.connect.client.retries import (
-    RetryPolicy,
-    Retrying,
-    DefaultPolicy,
-    DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
-)
-from pyspark.sql.connect.conversion import (
-    storage_level_to_proto,
-    proto_to_storage_level,
-    proto_to_remote_cached_dataframe,
-)
+import pyspark
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
-from pyspark.errors.exceptions.connect import (
-    convert_exception,
-    convert_observation_errors,
-    SparkConnectException,
-    SparkConnectGrpcException,
-)
-from pyspark.sql.connect.expressions import (
-    LiteralExpression,
-    PythonUDF,
-    CommonInlineUserDefinedFunction,
-    JavaUDF,
-)
-from pyspark.sql.connect.plan import (
-    CommonInlineUserDefinedTableFunction,
-    CommonInlineUserDefinedDataSource,
-    PythonUDTF,
-    PythonDataSource,
-)
-from pyspark.sql.connect.observation import Observation
-from pyspark.sql.connect.utils import get_python_ver
-from pyspark.sql.pandas.types import from_arrow_schema
-from pyspark.sql.pandas.conversion import _convert_arrow_table_to_pandas
-from pyspark.sql.types import DataType, StructType
-from pyspark.util import PythonEvalType
-from pyspark.storagelevel import StorageLevel
+from pyspark.accumulators import SpecialAccumulatorIds, pickleSer
 from pyspark.errors import (
     PySparkAssertionError,
     PySparkNotImplementedError,
     PySparkValueError,
 )
+from pyspark.errors.exceptions.connect import (
+    SparkConnectException,
+    SparkConnectGrpcException,
+    convert_exception,
+    convert_observation_errors,
+)
+from pyspark.resource.information import ResourceInformation
+from pyspark.sql.connect.client.artifact import ArtifactManager
+from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
+from pyspark.sql.connect.client.retries import (
+    DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
+    DefaultPolicy,
+    Retrying,
+    RetryPolicy,
+)
+from pyspark.sql.connect.conversion import (
+    proto_to_remote_cached_dataframe,
+    proto_to_storage_level,
+    storage_level_to_proto,
+)
+from pyspark.sql.connect.expressions import (
+    CommonInlineUserDefinedFunction,
+    JavaUDF,
+    LiteralExpression,
+    PythonUDF,
+)
+from pyspark.sql.connect.logging import logger
+from pyspark.sql.connect.observation import Observation
+from pyspark.sql.connect.plan import (
+    CommonInlineUserDefinedDataSource,
+    CommonInlineUserDefinedTableFunction,
+    PythonDataSource,
+    PythonUDTF,
+)
+from pyspark.sql.connect.profiler import ConnectProfilerCollector
+from pyspark.sql.connect.proto.base_pb2 import FetchErrorDetailsResponse
 from pyspark.sql.connect.shell.progress import Progress, ProgressHandler, from_proto
+from pyspark.sql.connect.utils import get_python_ver
+from pyspark.sql.metrics import ExecutionInfo, MetricValue, ObservedMetrics, PlanMetrics
+from pyspark.sql.pandas.conversion import _convert_arrow_table_to_pandas
+from pyspark.sql.pandas.types import from_arrow_schema
+from pyspark.sql.types import DataType, StructType
+from pyspark.storagelevel import StorageLevel
+from pyspark.traceback_utils import CallSite
+from pyspark.util import PythonEvalType, disable_gc, is_remote_only
+from pyspark.version import __version__
 
 if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo
     from google.rpc.status_pb2 import Status
+
     from pyspark.sql.connect._typing import DataTypeOrString
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.datasource import DataSource
@@ -144,8 +141,16 @@ class RpcDeadlines:
     Note on ``reattachable_execute_plan`` and ``reattach_execute``: these timeouts apply to each
     individual gRPC stream segment, not to the overall query execution lifetime. When a deadline
     fires, the server-side operation continues running; the client opens a new ReattachExecute
-    stream to resume receiving results. Non-reattachable ExecutePlan has no deadline because a
-    timeout there would kill the execution with no recovery path.
+    stream to resume receiving results. Non-reattachable query ExecutePlan calls have no deadline
+    because a timeout there would kill the execution with no recovery path.
+
+    Note on ``release_relation``: the RemoveRemoteCachedRelation cleanup command is sent over a
+    blocking, non-reattachable ExecutePlan call issued from
+    :meth:`CachedRemoteRelation.__del__`. Unlike a query ExecutePlan, a timeout here does not kill
+    any recoverable execution -- it only abandons a best-effort cache eviction that the server also
+    performs independently -- so this call is given a bounded deadline. Without it the finalizer
+    can block forever if the release response is never delivered, which (on the foreachBatch
+    Connect path) stalls the streaming query indefinitely.
     """
 
     reattachable_execute_plan: Optional[float] = 10 * 60  # 10 min
@@ -159,6 +164,7 @@ class RpcDeadlines:
     clone_session: Optional[float] = 10 * 60  # 10 min
     get_status: Optional[float] = 10 * 60  # 10 min
     fetch_error_details: Optional[float] = 10 * 60  # 10 min
+    release_relation: Optional[float] = 60  # 1 min; short: per-batch finalizer
 
     def __post_init__(self) -> None:
         for field in fields(self):
@@ -189,6 +195,7 @@ class RpcDeadlines:
             clone_session=None,
             get_status=None,
             fetch_error_details=None,
+            release_relation=None,
         )
 
 

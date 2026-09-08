@@ -16,6 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+from types import FunctionType
 from typing import (
     Any,
     Callable,
@@ -25,16 +26,14 @@ from typing import (
     TypeVar,
     Union,
 )
-from typing_extensions import Protocol, Literal
-from types import FunctionType
-
-from pyspark.sql._typing import LiteralType
-from pyspark.sql.streaming.state import GroupState
-from pandas.core.frame import DataFrame as PandasDataFrame
-from pandas.core.series import Series as PandasSeries
-from numpy import ndarray as NDArray
 
 import pyarrow
+from numpy import ndarray as NDArray
+from pandas.core.frame import DataFrame as PandasDataFrame
+from pandas.core.series import Series as PandasSeries
+from pyspark.sql._typing import LiteralType
+from pyspark.sql.streaming.state import GroupState
+from typing_extensions import Literal, Protocol
 
 ArrayLike = NDArray
 DataFrameLike = PandasDataFrame

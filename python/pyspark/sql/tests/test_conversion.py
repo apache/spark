@@ -22,11 +22,11 @@ from zoneinfo import ZoneInfo
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.sql.conversion import (
+    ArrowArrayConversion,
     ArrowArrayToPandasConversion,
+    ArrowBatchTransformer,
     ArrowTableToRowsConversion,
     LocalDataToArrowConversion,
-    ArrowArrayConversion,
-    ArrowBatchTransformer,
     PandasToArrowConversion,
 )
 from pyspark.sql.types import (
@@ -46,6 +46,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampNTZType,
     TimestampType,
     UserDefinedType,
     VariantType,
@@ -351,8 +352,9 @@ class PandasToArrowConversionTests(unittest.TestCase):
 
     def test_convert_decimal(self):
         """Test int to decimal coercion."""
-        import pandas as pd
         from decimal import Decimal
+
+        import pandas as pd
 
         # DataFrame with integers, schema expects decimal
         df = pd.DataFrame({"a": [1, 2, 3]})
@@ -718,6 +720,20 @@ class ConversionTests(unittest.TestCase):
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowArrayToPandasConversionTests(unittest.TestCase):
+    def test_convert_numpy_ser_name_survives_preprocess_time(self):
+        # convert_numpy reads the Arrow field name before preprocess_time, because the
+        # pa.compute kernels it runs for timestamps return a new array with no field name.
+        import pyarrow as pa
+
+        for pa_type in [pa.timestamp("us", tz="UTC"), pa.timestamp("s"), pa.timestamp("ns")]:
+            ts = pa.array([datetime.datetime(2020, 6, 15, 12, 30)], type=pa.timestamp("us")).cast(
+                pa_type
+            )
+            col = pa.RecordBatch.from_arrays([ts], ["tscol"]).column(0)
+            spark_type = TimestampType() if pa_type.tz is not None else TimestampNTZType()
+            result = ArrowArrayToPandasConversion.convert_numpy(col, spark_type, timezone="UTC")
+            self.assertEqual(result.name, "tscol", f"name lost for {pa_type}")
+
     def test_udt_convert_numpy(self):
         import pyarrow as pa
 

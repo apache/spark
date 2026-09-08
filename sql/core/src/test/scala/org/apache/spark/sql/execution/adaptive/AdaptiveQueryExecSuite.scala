@@ -2541,7 +2541,8 @@ class AdaptiveQueryExecSuite
           "== Optimized Logical Plan ==", "== Physical Plan ==")),
         ("codegen", Seq("WholeStageCodegen subtrees")),
         ("cost", Seq("== Optimized Logical Plan ==", "Statistics(sizeInBytes")),
-        ("formatted", Seq("== Physical Plan ==", "Output", "Arguments"))).foreach {
+        ("formatted", Seq("== Physical Plan ==", "Output", "Arguments")),
+        ("none", Seq(SQLExecution.NO_PLAN_DESCRIPTION))).foreach {
       case (mode, expected) =>
         checkPlanDescription(mode, expected)
     }
@@ -4814,7 +4815,7 @@ class AdaptiveQueryExecSuite
         """.stripMargin
       )
       assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
-      assert(findTopLevelUnion(adaptivePlan).size == 0)
+      assert(findTopLevelUnion(adaptivePlan).isEmpty)
     }
 
     withSQLConf(

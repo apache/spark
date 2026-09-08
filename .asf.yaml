@@ -32,7 +32,8 @@ github:
   enabled_merge_buttons:
     merge: false
     squash: true
-    rebase: true
+    squash_commit_message: PR_TITLE_AND_DESC
+    rebase: false
   ghp_branch: master
   ghp_path: /docs
 

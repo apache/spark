@@ -21,7 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.ExpectsInputTypes.{toSQLExpr, toSQLId}
+import org.apache.spark.sql.catalyst.expressions.ExpectsInputTypes.{toSQLExpr, toSQLId, toSQLValue}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
@@ -345,13 +345,13 @@ object Uniform {
   usage = """
     _FUNC_(length[, seed]) - Returns a string of the specified length whose characters are chosen
       uniformly at random from the following pool of characters: 0-9, a-z, A-Z. The random seed is
-      optional. The string length must be a constant two-byte or four-byte integer (SMALLINT or INT,
-      respectively).
+      optional. The string length must be a non-negative constant two-byte or four-byte integer
+      (SMALLINT or INT, respectively).
   """,
   arguments = """
     Arguments:
       * length - The length of the random string to generate.
-        An expression that evaluates to an integer. Must be a constant.
+        An expression that evaluates to a non-negative integer. Must be a constant.
       * seed - The seed used to produce reproducible random results.
         An expression that evaluates to an integer or long. Must be a constant.
   """,
@@ -424,6 +424,18 @@ case class RandStr(
               "inputType" -> "integer",
               "inputExpr" -> toSQLExpr(expr)))
         }
+    }
+    if (result == TypeCheckResult.TypeCheckSuccess) {
+      val lengthValue = length.eval()
+      // randstr(NULL, 0) is valid (treated as 0), so only reject a negative length.
+      if (lengthValue != null && lengthValue.asInstanceOf[Int] < 0) {
+        result = DataTypeMismatch(
+          errorSubClass = "VALUE_OUT_OF_RANGE",
+          messageParameters = Map(
+            "exprName" -> toSQLId("length"),
+            "valueRange" -> s"[0, ${Int.MaxValue}]",
+            "currentValue" -> toSQLValue(lengthValue, IntegerType)))
+      }
     }
     result
   }

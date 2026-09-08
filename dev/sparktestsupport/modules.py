@@ -15,11 +15,11 @@
 # limitations under the License.
 #
 
-from functools import total_ordering
 import itertools
 import os
 import re
 import sys
+from functools import total_ordering
 from pathlib import Path, PurePath
 
 all_modules = []
@@ -493,6 +493,7 @@ credential_aws = Module(
     dependencies=[tags, core],
     source_file_regexes=[
         "connector/credential-aws/",
+        "connector/credential-aws-integration-tests/",
     ],
     build_profile_flags=[
         "-Pcredential-aws",
@@ -723,6 +724,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_types",
         "pyspark.sql.tests.test_geographytype",
         "pyspark.sql.tests.test_geometrytype",
+        "pyspark.sql.tests.test_python_worker_env",
         "pyspark.sql.tests.test_udf",
         "pyspark.sql.tests.test_udf_combinations",
         "pyspark.sql.tests.test_udf_in_higher_order_function",
@@ -1274,6 +1276,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_dataframe_property",
         "pyspark.sql.tests.connect.test_connect_channel",
         "pyspark.sql.tests.connect.test_connect_clone_session",
+        "pyspark.sql.tests.connect.test_parity_python_worker_env",
         "pyspark.sql.tests.connect.test_connect_error",
         "pyspark.sql.tests.connect.test_connect_function",
         "pyspark.sql.tests.connect.test_connect_collection",

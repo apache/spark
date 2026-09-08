@@ -32,11 +32,12 @@ import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkSQLException}
+import org.apache.spark.executor.InputMetrics
 import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, Row}
 import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
@@ -1232,6 +1233,54 @@ class JDBCSuite extends SharedSparkSession {
     }
   }
 
+  test("rename table query quotes the new table name by jdbc dialect") {
+    // The base JdbcDialect.renameTable quotes both sides; the Postgres and Derby overrides left
+    // the new name unquoted, so a name needing quotes could not be renamed to.
+    val ident = (ns: String, name: String) => Identifier.of(Array(ns), name)
+    assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+      .renameTable(ident("s", "t1"), ident("s", "new tbl")) ===
+      "ALTER TABLE \"s\".\"t1\" RENAME TO \"new tbl\"")
+    assert(JdbcDialects.get("jdbc:derby:memory:db")
+      .renameTable(ident("s", "t1"), ident("s", "new tbl")) ===
+      "RENAME TABLE \"s\".\"t1\" TO \"new tbl\"")
+  }
+
+  test("MySQLDialect quotes the table name in dropIndex and listIndexes") {
+    // createIndex and indexExists put the table name at identifier position via quoteIdentifier;
+    // dropIndex and listIndexes build the same position and now match them.
+    val dialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val ident = Identifier.of(Array.empty[String], "ta ble")
+
+    assert(dialect.dropIndex("i 1", ident) === "DROP INDEX `i 1` ON `ta ble`")
+
+    val conn = mock(classOf[Connection])
+    val stmt = mock(classOf[Statement])
+    val rs = mock(classOf[ResultSet])
+    when(conn.createStatement()).thenReturn(stmt)
+    when(stmt.executeQuery(anyString())).thenReturn(rs)
+
+    val options =
+      new JDBCOptions("jdbc:mysql://127.0.0.1/db", "ta ble", Map.empty[String, String])
+    dialect.listIndexes(conn, ident, options)
+
+    val sqlCaptor = ArgumentCaptor.forClass(classOf[String])
+    verify(stmt).executeQuery(sqlCaptor.capture())
+    assert(sqlCaptor.getValue.contains("SHOW INDEXES FROM `ta ble`"),
+      s"Unexpected listIndexes SQL: ${sqlCaptor.getValue}")
+  }
+
+  test("MsSqlServerDialect escapes a single quote in the renamed column name") {
+    // getRenameColumnQuery passes the qualified "table.column" name to sp_rename as a SQL string
+    // literal, so a single quote in the column name must be escaped to keep the literal
+    // well-formed. The table name arrives already quoted from JDBCTableCatalog.
+    val dialect = JdbcDialects.get("jdbc:sqlserver://127.0.0.1;databaseName=db")
+    assert(dialect.getRenameColumnQuery("\"tbl\"", "it's", "fine", 0) ===
+      "EXEC sp_rename '\"tbl\".\"it''s\"', \"fine\", 'COLUMN'")
+    // A name without a single quote produces the same statement as before.
+    assert(dialect.getRenameColumnQuery("\"db\".\"tbl\"", "ID", "RENAMED", 0) ===
+      "EXEC sp_rename '\"db\".\"tbl\".\"ID\"', \"RENAMED\", 'COLUMN'")
+  }
+
   test("quote column names by jdbc dialect") {
     val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     val postgresDialect = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
@@ -1632,6 +1681,163 @@ class JDBCSuite extends SharedSparkSession {
       Some(TimestampType))
     assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMP_LTZ, "TIMESTAMP", 0, null) ==
       Some(TimestampType))
+  }
+
+  test("SPARK-58876: Oracle stamps the NTZ wall-clock write marker, legacy-gated, even wrapped") {
+    val custom = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
+      override def getCatalystType(
+          sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
+    }
+    val dialects = Seq[JdbcDialect](
+      OracleDialect(),
+      new AggregatedDialect(List(custom, OracleDialect())),
+      new AggregatedDialect(List(OracleDialect(), custom)))
+    dialects.foreach { dialect =>
+      val ntzMd = new MetadataBuilder()
+      dialect.updateExtraColumnMetaForWrite(TimestampNTZType, ntzMd)
+      assert(ntzMd.build().contains(JdbcUtils.WRITE_TIMESTAMP_NTZ_WALL_CLOCK), s"dialect=$dialect")
+
+      val tsMd = new MetadataBuilder()
+      dialect.updateExtraColumnMetaForWrite(TimestampType, tsMd)
+      assert(!tsMd.build().contains(JdbcUtils.WRITE_TIMESTAMP_NTZ_WALL_CLOCK), s"dialect=$dialect")
+
+      withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
+        val legacyMd = new MetadataBuilder()
+        dialect.updateExtraColumnMetaForWrite(TimestampNTZType, legacyMd)
+        assert(!legacyMd.build().contains(JdbcUtils.WRITE_TIMESTAMP_NTZ_WALL_CLOCK),
+          s"dialect=$dialect")
+      }
+    }
+  }
+
+  test("SPARK-58876: Oracle DATE/TIMESTAMP map to NTZ, read marker, legacy-gated, even wrapped") {
+    val custom = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
+      override def getCatalystType(
+          sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
+    }
+    val dialects = Seq[JdbcDialect](
+      OracleDialect(),
+      new AggregatedDialect(List(custom, OracleDialect())),
+      new AggregatedDialect(List(OracleDialect(), custom)))
+    dialects.foreach { dialect =>
+      Seq("DATE", "TIMESTAMP").foreach { typeName =>
+        val hint = s"dialect=$dialect typeName=$typeName"
+        val md = new MetadataBuilder()
+        assert(dialect.getCatalystType(java.sql.Types.TIMESTAMP, typeName, 0, md) ===
+          Some(TimestampNTZType), hint)
+        assert(md.build().contains(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK), hint)
+
+        withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
+          val legacyMd = new MetadataBuilder()
+          val legacyType = dialect.getCatalystType(java.sql.Types.TIMESTAMP, typeName, 0, legacyMd)
+          assert(legacyType === None, hint)
+          assert(!legacyMd.build().contains(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK), hint)
+        }
+      }
+    }
+  }
+
+  test("SPARK-58876: only zoneless Oracle temporal types map to TimestampNTZType") {
+    val oracleDialect = OracleDialect()
+    // Zoneless DATE/TIMESTAMP map to NTZ (with the marker); the WITH [LOCAL] TIME ZONE variants
+    // (distinct sqlTypes) must not map to NTZ, and carry no marker.
+    val cases = Seq(
+      (java.sql.Types.TIMESTAMP, "TIMESTAMP", true),
+      (java.sql.Types.TIMESTAMP, "DATE", true),
+      (OracleDialect.TIMESTAMP_TZ, "TIMESTAMP WITH TIME ZONE", false),
+      (OracleDialect.TIMESTAMP_LTZ, "TIMESTAMP WITH LOCAL TIME ZONE", false))
+    cases.foreach { case (sqlType, typeName, isNTZ) =>
+      val md = new MetadataBuilder()
+      val hint = s"sqlType=$sqlType typeName=$typeName"
+      val resolved = oracleDialect.getCatalystType(sqlType, typeName, 0, md)
+      assert((resolved == Some(TimestampNTZType)) === isNTZ, hint)
+      assert(md.build().contains(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK) === isNTZ, hint)
+    }
+  }
+
+  test("SPARK-58876: Oracle NTZ mapping and the preferTimestampNTZ read option") {
+    // preferTimestampNTZ reaches the dialect only through getSchema's isTimestampNTZ argument, so
+    // resolve a mocked Oracle TIMESTAMP column via getSchema under each (prefer, flag) combination.
+    def resolve(preferTimestampNTZ: Boolean): StructField = {
+      val rsmd = mock(classOf[java.sql.ResultSetMetaData])
+      when(rsmd.getColumnCount).thenReturn(1)
+      when(rsmd.getColumnLabel(anyInt())).thenReturn("T")
+      when(rsmd.getColumnType(anyInt())).thenReturn(java.sql.Types.TIMESTAMP)
+      when(rsmd.getColumnTypeName(anyInt())).thenReturn("TIMESTAMP")
+      when(rsmd.getPrecision(anyInt())).thenReturn(0)
+      when(rsmd.getScale(anyInt())).thenReturn(0)
+      when(rsmd.isSigned(anyInt())).thenReturn(false)
+      when(rsmd.isNullable(anyInt())).thenReturn(java.sql.ResultSetMetaData.columnNullable)
+      val rs = mock(classOf[ResultSet])
+      when(rs.getMetaData).thenReturn(rsmd)
+      JdbcUtils.getSchema(mock(classOf[Connection]), rs, OracleDialect(),
+        isTimestampNTZ = preferTimestampNTZ).fields.head
+    }
+
+    // Non-legacy always maps to NTZ (with the read marker) regardless of preferTimestampNTZ; the
+    // legacy flag defers to the shared mapping, which honors preferTimestampNTZ; no marker.
+    for {
+      legacy <- Seq(true, false)
+      prefer <- Seq(true, false)
+    } {
+      withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> legacy.toString) {
+        val field = resolve(prefer)
+        val expectedType = if (legacy && !prefer) TimestampType else TimestampNTZType
+        val hint = s"legacy=$legacy prefer=$prefer"
+        assert(field.dataType === expectedType, hint)
+        assert(field.metadata.contains(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK) === !legacy, hint)
+      }
+    }
+  }
+
+  test("SPARK-58876: a marked NTZ column reads wall-clock regardless of the resolved dialect") {
+    val custom = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
+      override def getCatalystType(
+          sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
+    }
+    val schema = new StructType().add("t", TimestampNTZType, nullable = true,
+      new MetadataBuilder().putBoolean(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK, value = true)
+        .build())
+    // Bare Oracle, then AggregatedDialect with Oracle at the tail and at the head, so the getter
+    // selection is exercised regardless of Oracle's position among the members.
+    val dialects = Seq[JdbcDialect](
+      OracleDialect(),
+      new AggregatedDialect(List(custom, OracleDialect())),
+      new AggregatedDialect(List(OracleDialect(), custom)))
+    val ldt = LocalDateTime.of(1991, 11, 9, 0, 0, 0)
+    val expected = DateTimeUtils.localDateTimeToMicros(ldt)
+    dialects.foreach { dialect =>
+      val rs = mock(classOf[ResultSet])
+      when(rs.next()).thenReturn(true, false)
+      when(rs.getObject(1, classOf[java.time.LocalDateTime])).thenReturn(ldt)
+      val rows = JdbcUtils.resultSetToSparkInternalRows(
+        rs, dialect, schema, new InputMetrics).toArray
+      assert(rows.length === 1)
+      assert(rows.head.getLong(0) === expected, s"dialect=$dialect")
+    }
+  }
+
+  test("SPARK-58876: Oracle compileValue renders a LocalDateTime as a JDBC timestamp literal") {
+    // Filters on an NTZ-mapped Oracle column push down a LocalDateTime; it must become a valid
+    // Oracle literal rather than LocalDateTime.toString.
+    val oracleDialect = JdbcDialects.get("jdbc:oracle")
+    assert(oracleDialect.compileValue(LocalDateTime.of(2018, 7, 6, 6, 0, 0)) ===
+      "{ts '2018-07-06 06:00:00.0'}")
+  }
+
+  test("SPARK-58876: Oracle TIMESTAMP stays microsecond TimestampNTZType under the nanos preview") {
+    val oracleDialect = JdbcDialects.get("jdbc:oracle")
+    // Even with the nanosecond timestamp preview enabled, the Oracle mapping is microsecond
+    // TimestampNTZType and does not engage that preview (no nanosecond type, no deferral).
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val md = new MetadataBuilder()
+        .putBoolean("preferTimestampNanos", value = true).putLong("scale", 9)
+      assert(oracleDialect.getCatalystType(java.sql.Types.TIMESTAMP, "TIMESTAMP", 0, md) ===
+        Some(TimestampNTZType))
+    }
   }
 
   test("SPARK-42469: OracleDialect Limit query test") {
@@ -2265,7 +2471,7 @@ class JDBCSuite extends SharedSparkSession {
     modifiedParameters += ("customKey" -> "a-value")
     modifiedParameters += ("dbTable" -> "t1")
     testJdbcOptions(new JDBCOptions(modifiedParameters))
-    assert ((modifiedParameters -- parameters.keys).size == 0)
+    assert ((modifiedParameters -- parameters.keys).isEmpty)
   }
 
   test("SPARK-19318: jdbc data source options should be treated case-insensitive.") {

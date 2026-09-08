@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, LazyExpression, NameParameterizedQuery, UnsupportedOperationChecker}
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union, UnresolvedWith, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union, UnresolvedInsert, UnresolvedWith, WithCTE}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.transactions.TransactionUtils
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
@@ -99,6 +99,33 @@ class QueryExecution(
     logical.exists(_.expressions.exists(_.exists(_.isInstanceOf[LazyExpression])))
   }
 
+  // Legacy constant-only parameter substitution wraps the plan in a ParameterizedQuery. Its
+  // parameters bind during analysis, after transaction selection, so INSERT IDENTIFIER parameters
+  // are intentionally not handled here and remain a known limitation.
+  private val lazyLogicalWithResolvedInsert = LazyTry {
+    def resolve(insert: UnresolvedInsert): LogicalPlan = {
+      try {
+        executePhase(QueryPlanningTracker.ANALYSIS) {
+          QueryPlanningTracker.withTracker(tracker) {
+            analyzerOpt.getOrElse(sparkSession.sessionState.analyzer)
+              .resolveUnresolvedInsert(insert)
+          }
+        }
+      } catch {
+        case NonFatal(e) =>
+          tracker.setAnalysisFailed(logical)
+          throw e
+      }
+    }
+
+    logical match {
+      case unresolvedWith @ UnresolvedWith(insert: UnresolvedInsert, _, _) =>
+        unresolvedWith.copy(child = resolve(insert))
+      case insert: UnresolvedInsert => resolve(insert)
+      case other => other
+    }
+  }
+  private def logicalWithResolvedInsert: LogicalPlan = lazyLogicalWithResolvedInsert.get
 
   // 1. At the pre-Analyzed plan we look for nodes that implement the TransactionalWrite trait.
   //    When a plan contains such a node we initiate a transaction. Note, we should never start
@@ -116,7 +143,7 @@ class QueryExecution(
     analyzerOpt.flatMap(_.catalogManager.transaction).orElse {
       // Only begin a new transaction for outer QEs that lead to execution.
       if (mode != CommandExecutionMode.SKIP) {
-        val catalog = logical match {
+        val catalog = logicalWithResolvedInsert match {
           case UnresolvedWith(TransactionalWrite(c), _, _) => Some(c)
           case TransactionalWrite(c) => Some(c)
           case _ => None
@@ -181,7 +208,7 @@ class QueryExecution(
         SqlScriptingExecution.executeSqlScript(
           session = sparkSession,
           script = compoundBody)
-      case _ => logical
+      case _ => logicalWithResolvedInsert
     }
   }
 

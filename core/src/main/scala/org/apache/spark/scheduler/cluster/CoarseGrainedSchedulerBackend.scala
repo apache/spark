@@ -809,6 +809,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     executorsHeld = held
   }
 
+  /**
+   * Report the hold status of the application to the cluster manager, so that it can show the
+   * status on its own UI. Called once the application is fully started and again on every
+   * transition. Ignored by default: only Standalone renders it today.
+   */
+  private[spark] def reportExecutorHoldStatus(supported: Boolean, held: Boolean): Unit = {}
+
   /** Whether an executor total was ever explicitly requested. Visible for testing only. */
   private[spark] def hasExplicitExecutorRequests: Boolean = synchronized {
     explicitExecutorRequest

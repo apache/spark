@@ -16,8 +16,8 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-import sys
 import os
+import sys
 
 table_name = None
 if os.environ in 'hive_streaming_tablename':

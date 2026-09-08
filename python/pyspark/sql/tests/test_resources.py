@@ -17,7 +17,7 @@
 import unittest
 
 from pyspark import TaskContext
-from pyspark.resource import TaskResourceRequests, ResourceProfileBuilder
+from pyspark.resource import ResourceProfileBuilder, TaskResourceRequests
 from pyspark.sql import SparkSession
 from pyspark.testing.utils import (
     ReusedPySparkTestCase,

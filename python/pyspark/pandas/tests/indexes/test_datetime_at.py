@@ -20,8 +20,8 @@ import datetime
 import pandas as pd
 
 import pyspark.pandas as ps
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.indexes.test_datetime import DatetimeIndexTestingFuncMixin
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class DatetimeIndexAtMixin(DatetimeIndexTestingFuncMixin):

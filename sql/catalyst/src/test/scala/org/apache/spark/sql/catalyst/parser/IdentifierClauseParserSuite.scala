@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, ExpressionWithUnresolvedIdentifier, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedInlineTable, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, LambdaFunction, Literal, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, OneRowRelation, Pivot, Project, SubqueryAlias, Unpivot}
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Pivot, Project, SubqueryAlias, Unpivot, UnresolvedInsert}
 import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
@@ -179,13 +179,13 @@ class IdentifierClauseParserSuite extends AnalysisTest {
   test("Partition spec with IDENTIFIER() for partition column name") {
     val plan = parsePlan(
       "INSERT INTO partition_spec_test PARTITION (IDENTIFIER('c2') = 'value1') VALUES (1)")
-      .asInstanceOf[InsertIntoStatement]
+      .asInstanceOf[UnresolvedInsert]
     val values = EvaluateUnresolvedInlineTable.evaluate(
       UnresolvedInlineTable(Seq("col1"), Seq(Seq(Literal(1)))))
 
     comparePlans(
       plan,
-      InsertIntoStatement(
+      UnresolvedInsert(
         plan.table,
         Map("c2" -> Some("value1")),
         Nil,

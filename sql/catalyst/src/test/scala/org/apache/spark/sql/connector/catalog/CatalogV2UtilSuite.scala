@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import scala.collection.mutable
+
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, eq => mockEq}
 import org.mockito.Mockito.{mock, verify, when}
+import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{
-  AsOfTimestamp, AsOfVersion, TimeTravelSpec, UnresolvedRelation}
+  AsOfTimestamp, AsOfVersion, TableCacheKey, TimeTravelSpec, UnresolvedRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -195,6 +198,68 @@ class CatalogV2UtilSuite extends SparkFunSuite {
       mockEq(ident),
       any[TableContext],
       mockEq(expected))
+  }
+
+  test("getTableWithStateOptions rejects catalog mutation of a retained cache key") {
+    val catalog = mock(classOf[TableCatalog])
+    val ident = Identifier.of(Array("ns"), "table")
+    val table = mock(classOf[Table])
+    var catalogOptions: CaseInsensitiveStringMap = null
+    var mutationBlocked = false
+    when(catalog.loadTable(any[Identifier], any[TableContext], any[CaseInsensitiveStringMap]))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        catalogOptions = invocation.getArgument[CaseInsensitiveStringMap](2)
+        intercept[UnsupportedOperationException] {
+          catalogOptions.entrySet().iterator().next().setValue("s2")
+        }
+        mutationBlocked = true
+        table
+      })
+    val stateOptions =
+      new CaseInsensitiveStringMap(java.util.Map.of("SnApShOt", "s1"))
+    val retainedKey = TableCacheKey(catalog, ident, None, stateOptions)
+
+    val loaded = CatalogV2Util.getTableWithStateOptions(catalog, ident, stateOptions)
+    val tableCache = mutable.Map(retainedKey -> loaded)
+    val sameStateKey = TableCacheKey(
+      catalog,
+      ident,
+      None,
+      new CaseInsensitiveStringMap(java.util.Map.of("snapshot", "s1")))
+    val differentStateKey = TableCacheKey(
+      catalog,
+      ident,
+      None,
+      new CaseInsensitiveStringMap(java.util.Map.of("snapshot", "s2")))
+
+    assert(mutationBlocked, "the catalog fixture did not attempt to mutate its map")
+    assert(catalogOptions.get("snapshot") == "s1")
+    assert(catalogOptions.asCaseSensitiveMap().containsKey("SnApShOt"))
+    assert(tableCache.get(sameStateKey).contains(table))
+    assert(!tableCache.contains(differentStateKey))
+  }
+
+  test("getTableWithStateOptions preserves effective values for duplicate-case keys") {
+    val catalog = mock(classOf[TableCatalog])
+    val ident = Identifier.of(Array("ns"), "table")
+    val table = mock(classOf[Table])
+    var catalogOptions: CaseInsensitiveStringMap = null
+    when(catalog.loadTable(any[Identifier], any[TableContext], any[CaseInsensitiveStringMap]))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        catalogOptions = invocation.getArgument[CaseInsensitiveStringMap](2)
+        table
+      })
+    val options = new java.util.LinkedHashMap[String, String]()
+    options.put("snapshot", "lower-value")
+    options.put("SNAPSHOT", "upper-value")
+    val stateOptions = new CaseInsensitiveStringMap(options)
+
+    CatalogV2Util.getTableWithStateOptions(catalog, ident, stateOptions)
+
+    assert(stateOptions.asCaseSensitiveMap().size() == 2)
+    assert(stateOptions.get("snapshot") == "upper-value")
+    assert(catalogOptions.get("snapshot") == stateOptions.get("snapshot"))
+    assert(catalogOptions.asCaseSensitiveMap() == stateOptions.asCaseSensitiveMap())
   }
 
   test("getTable forwards no options when a catalog declares no table-state options") {

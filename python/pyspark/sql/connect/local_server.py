@@ -333,6 +333,7 @@ def _strip_launcher_conf(conf: Dict[str, Any]) -> Dict[str, Any]:
             "spark.api.mode",
             "spark.master",
             "spark.connect.authenticate.token",
+            "spark.connect.grpc.binding.address",
             "spark.connect.grpc.binding.port",
         ) or k.startswith("spark.local.connect."):
             stripped.pop(k)

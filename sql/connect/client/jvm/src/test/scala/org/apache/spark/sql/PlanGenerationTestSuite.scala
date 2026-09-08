@@ -106,6 +106,8 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   private val printer = JsonFormat.printer().usingTypeRegistry(registry)
 
+  private val testUDT = new TestUDT.NewArrayUDT()
+
   private var session: SparkSession = _
 
   override protected def beforeAll(): Unit = {
@@ -3298,6 +3300,14 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("typeof") {
     fn.typeof(fn.col("g"))
+  }
+
+  functionTest("wrap_udt") {
+    fn.wrap_udt(fn.array(fn.col("b")), testUDT)
+  }
+
+  functionTest("unwrap_udt") {
+    fn.unwrap_udt(fn.wrap_udt(fn.array(fn.col("b")), testUDT))
   }
 
   functionTest("stack") {

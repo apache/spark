@@ -1985,3 +1985,141 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "json_query('{\"name\":\"Ada\"}', '$.name' WITH ARRAY WRAPPER OMIT QUOTES)"
   } ]
 }
+
+
+-- !query
+select json_array(1, 'x', true)
+-- !query schema
+struct<JSON_ARRAY(1, x, true):string>
+-- !query output
+[1,"x",true]
+
+
+-- !query
+select json_array(1, NULL, 3)
+-- !query schema
+struct<JSON_ARRAY(1, NULL, 3):string>
+-- !query output
+[1,3]
+
+
+-- !query
+select json_array(1, NULL, 3 NULL ON NULL)
+-- !query schema
+struct<JSON_ARRAY(1, NULL, 3 NULL ON NULL):string>
+-- !query output
+[1,null,3]
+
+
+-- !query
+select json_array()
+-- !query schema
+struct<JSON_ARRAY():string>
+-- !query output
+[]
+
+
+-- !query
+select json_array(CAST(1.50 AS DECIMAL(5,2)), DATE'2020-01-02')
+-- !query schema
+struct<JSON_ARRAY(CAST(1.50 AS DECIMAL(5,2)), DATE '2020-01-02'):string>
+-- !query output
+[1.50,"2020-01-02"]
+
+
+-- !query
+select json_array(json_array(1, 2), 3)
+-- !query schema
+struct<JSON_ARRAY(JSON_ARRAY(1, 2), 3):string>
+-- !query output
+[[1,2],3]
+
+
+-- !query
+select json_array('[1,2]')
+-- !query schema
+struct<JSON_ARRAY([1,2]):string>
+-- !query output
+["[1,2]"]
+
+
+-- !query
+select json_array('[1,2]' FORMAT JSON)
+-- !query schema
+struct<JSON_ARRAY([1,2] FORMAT JSON):string>
+-- !query output
+[[1,2]]
+
+
+-- !query
+select json_array('{"a":1}' FORMAT JSON, 'x')
+-- !query schema
+struct<JSON_ARRAY({"a":1} FORMAT JSON, x):string>
+-- !query output
+[{"a":1},"x"]
+
+
+-- !query
+select json_array(123 FORMAT JSON)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_FORMAT_JSON_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_array`",
+    "inputType" : "\"INT\"",
+    "position" : "1",
+    "sqlExpr" : "\"JSON_ARRAY(123 FORMAT JSON)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "json_array(123 FORMAT JSON)"
+  } ]
+}
+
+
+-- !query
+select json_array('1,2' FORMAT JSON)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_JSON_FORMAT_JSON_VALUE",
+  "sqlState" : "22032",
+  "messageParameters" : {
+    "functionName" : "`json_array`",
+    "position" : "1",
+    "value" : "'1,2'"
+  }
+}
+
+
+-- !query
+select json_array(NULL FORMAT JSON)
+-- !query schema
+struct<JSON_ARRAY(NULL FORMAT JSON):string>
+-- !query output
+[]
+
+
+-- !query
+select json_array(NULL FORMAT JSON NULL ON NULL)
+-- !query schema
+struct<JSON_ARRAY(NULL FORMAT JSON NULL ON NULL):string>
+-- !query output
+[null]
+
+
+-- !query
+select json_array(1 IS NULL, 2 > 1)
+-- !query schema
+struct<JSON_ARRAY((1 IS NULL), (2 > 1)):string>
+-- !query output
+[false,true]

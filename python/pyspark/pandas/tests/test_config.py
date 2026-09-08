@@ -17,7 +17,7 @@
 
 from pyspark import pandas as ps
 from pyspark.pandas import config
-from pyspark.pandas.config import Option, DictWrapper
+from pyspark.pandas.config import DictWrapper, Option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 

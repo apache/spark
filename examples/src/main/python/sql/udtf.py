@@ -136,6 +136,7 @@ def python_udtf_arrow_example(spark: SparkSession) -> None:
 def python_udtf_date_expander_example(spark: SparkSession) -> None:
     # $example on:python_udtf_date_expander$
     from datetime import datetime, timedelta
+
     from pyspark.sql.functions import lit, udtf
 
     @udtf(returnType="date: string")
