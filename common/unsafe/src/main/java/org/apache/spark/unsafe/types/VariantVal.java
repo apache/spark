@@ -105,6 +105,12 @@ public class VariantVal implements Serializable {
     return new Variant(value, metadata).toJson(zoneId);
   }
 
+  // Rejects a value nested more deeply than `maxNestingDepth` when that argument is positive.
+  // A non-positive value imposes no limit and preserves the previous behavior.
+  public String toJson(ZoneId zoneId, int maxNestingDepth) {
+    return new Variant(value, metadata).toJson(zoneId, maxNestingDepth);
+  }
+
   /**
    * @return A human-readable representation of the Variant value. It is always a JSON string at
    * this moment.

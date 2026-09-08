@@ -7074,6 +7074,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val VARIANT_MAX_NESTING_DEPTH =
+    buildConf("spark.sql.variant.maxNestingDepth")
+      .internal()
+      .doc("The maximum nesting depth allowed when converting a variant value to its JSON " +
+        "string form. When set to a positive value, converting a variant nested more deeply " +
+        "than this limit fails instead of recursing. A non-positive value (the default) " +
+        "imposes no limit and preserves the previous behavior.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .createWithDefault(-1)
+
   val PUSH_VARIANT_INTO_SCAN =
     buildConf("spark.sql.variant.pushVariantIntoScan")
       .internal()

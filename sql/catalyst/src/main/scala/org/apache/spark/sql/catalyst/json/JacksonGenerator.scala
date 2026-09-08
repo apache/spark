@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.VariantVal
 import org.apache.spark.util.ArrayImplicits._
@@ -110,6 +111,9 @@ class JacksonGenerator(
     case TimeFormatter.defaultPattern => TimeFormatter.getFractionFormatter()
     case customPattern => TimeFormatter(customPattern, isParsing = false)
   }
+
+  // Read once at construction (per task) to avoid any per-row lookup overhead.
+  private val variantMaxNestingDepth = SQLConf.get.getConf(SQLConf.VARIANT_MAX_NESTING_DEPTH)
 
   private def makeWriter(dataType: DataType): ValueWriter = dataType match {
     case NullType =>
@@ -351,7 +355,7 @@ class JacksonGenerator(
   }
 
   def write(v: VariantVal): Unit = {
-    gen.writeRawValue(v.toJson(options.zoneId))
+    gen.writeRawValue(v.toJson(options.zoneId, variantMaxNestingDepth))
   }
 
   def writeLineEnding(): Unit = {

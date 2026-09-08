@@ -31,6 +31,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.datasources.VariantMetadata
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant._
 import org.apache.spark.types.variant.VariantUtil.Type
@@ -211,7 +212,8 @@ class ParquetVariantReader(
   protected final def invalidCast(row: InternalRow, topLevelMetadata: Array[Byte]): Any = {
     if (castArgs.failOnError) {
       throw QueryExecutionErrors.invalidVariantCast(
-        rebuildVariant(row, topLevelMetadata).toJson(castArgs.zoneId), targetType)
+        rebuildVariant(row, topLevelMetadata).toJson(
+          castArgs.zoneId, castArgs.maxNestingDepth), targetType)
     } else {
       null
     }
@@ -444,7 +446,8 @@ private[this] final class ScalarReader(
   override def readFromTyped(row: InternalRow, topLevelMetadata: Array[Byte]): Any = {
     if (castProject == null) {
       return if (targetType.isInstanceOf[StringType]) {
-        UTF8String.fromString(rebuildVariant(row, topLevelMetadata).toJson(castArgs.zoneId))
+        UTF8String.fromString(
+          rebuildVariant(row, topLevelMetadata).toJson(castArgs.zoneId, castArgs.maxNestingDepth))
       } else {
         invalidCast(row, topLevelMetadata)
       }
@@ -769,7 +772,8 @@ case object SparkShreddingUtils {
             val reader = ParquetVariantReader(schema, f.dataType, VariantCastArgs(
               metadata.failOnError,
               Some(metadata.timeZoneId),
-              DateTimeUtils.getZoneId(metadata.timeZoneId)),
+              DateTimeUtils.getZoneId(metadata.timeZoneId),
+              SQLConf.get.getConf(SQLConf.VARIANT_MAX_NESTING_DEPTH)),
               isTopLevelUnshredded = schemaPath.isEmpty && inputSchema.isUnshredded)
             val castErrorOrdinal = companionIdxByDataName.getOrElse(f.name, -1)
             if (castErrorOrdinal >= 0) {

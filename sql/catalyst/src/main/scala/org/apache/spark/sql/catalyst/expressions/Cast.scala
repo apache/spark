@@ -810,7 +810,8 @@ case class Cast(
   private lazy val castArgs = variant.VariantCastArgs(
     evalMode != EvalMode.TRY,
     timeZoneId,
-    zoneId)
+    zoneId,
+    SQLConf.get.getConf(SQLConf.VARIANT_MAX_NESTING_DEPTH))
 
   def needsTimeZone: Boolean = Cast.needsTimeZone(child.dataType, dataType)
 

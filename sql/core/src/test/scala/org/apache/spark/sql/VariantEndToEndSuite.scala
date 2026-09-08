@@ -523,4 +523,36 @@ class VariantEndToEndSuite extends SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-59325: spark.sql.variant.maxNestingDepth bounds rendering to JSON") {
+    def nestedObject(depth: Int): String =
+      if (depth == 0) "1" else s"""{"a":${nestedObject(depth - 1)}}"""
+    def nestedArray(depth: Int): String =
+      if (depth == 0) "1" else s"[${nestedArray(depth - 1)}]"
+    def causeMessages(t: Throwable): String =
+      if (t == null) "" else t.getMessage + " " + causeMessages(t.getCause)
+
+    Seq(nestedObject(20), nestedArray(20)).foreach { json =>
+      val df = Seq(json).toDF("v")
+
+      // Default (-1) and a generous limit render fully (to_json and CAST AS STRING).
+      checkAnswer(df.select(to_json(parse_json(col("v")))), Seq(Row(json)))
+      checkAnswer(df.selectExpr("CAST(parse_json(v) AS STRING)"), Seq(Row(json)))
+      withSQLConf(SQLConf.VARIANT_MAX_NESTING_DEPTH.key -> "100") {
+        checkAnswer(df.select(to_json(parse_json(col("v")))), Seq(Row(json)))
+        checkAnswer(df.selectExpr("CAST(parse_json(v) AS STRING)"), Seq(Row(json)))
+      }
+
+      // A limit below the nesting depth rejects on both render paths.
+      withSQLConf(SQLConf.VARIANT_MAX_NESTING_DEPTH.key -> "5") {
+        val renders = Seq(
+          () => df.select(to_json(parse_json(col("v")))).collect(),
+          () => df.selectExpr("CAST(parse_json(v) AS STRING)").collect())
+        renders.foreach { render =>
+          val e = intercept[Exception](render())
+          assert(causeMessages(e).contains("nesting depth exceeds the configured maximum"))
+        }
+      }
+    }
+  }
 }

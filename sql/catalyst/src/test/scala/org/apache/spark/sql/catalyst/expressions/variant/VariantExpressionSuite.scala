@@ -2058,6 +2058,25 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       name => Map("sizeLimit" -> "16.0 MiB", "functionName" -> s"`$name`"))
   }
 
+  test("Variant.toJson enforces the configured maximum nesting depth") {
+    // A value nested `depth` arrays deep: [[[ ... 1 ... ]]].
+    val depth = 50
+    val json = ("[" * depth) + "1" + ("]" * depth)
+    val variant = VariantBuilder.parseJson(json, false)
+
+    // A non-positive limit imposes no bound and reproduces the previous behavior.
+    assert(variant.toJson(ZoneOffset.UTC) == json)
+    assert(variant.toJson(ZoneOffset.UTC, -1) == json)
+    // A limit at least as large as the actual nesting still renders the whole value.
+    assert(variant.toJson(ZoneOffset.UTC, depth * 2) == json)
+
+    // A limit smaller than the actual nesting is rejected instead of recursing all the way down.
+    val e = intercept[IllegalStateException] {
+      variant.toJson(ZoneOffset.UTC, 10)
+    }
+    assert(e.getMessage.contains("nesting depth"))
+  }
+
   test("variant_strip_nulls") {
     // Strip `input`, render the result back to JSON, and compare. `includeArrays` defaults to true.
     def check(input: String, expected: String, includeArrays: Boolean = true): Unit = {

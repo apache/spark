@@ -237,8 +237,15 @@ public final class Variant {
   // Stringify the variant in JSON format.
   // Throw `MALFORMED_VARIANT` if the variant is malformed.
   public String toJson(ZoneId zoneId) {
+    return toJson(zoneId, -1);
+  }
+
+  // Stringify the variant in JSON format, rejecting a value nested more deeply than
+  // `maxNestingDepth` when that argument is positive. A non-positive value imposes no limit and
+  // preserves the previous behavior.
+  public String toJson(ZoneId zoneId, int maxNestingDepth) {
     StringBuilder sb = new StringBuilder();
-    toJsonImpl(value, metadata, pos, sb, zoneId);
+    toJsonImpl(value, metadata, pos, sb, zoneId, 1, maxNestingDepth);
     return sb.toString();
   }
 
@@ -280,6 +287,15 @@ public final class Variant {
   }
 
   static void toJsonImpl(byte[] value, byte[] metadata, int pos, StringBuilder sb, ZoneId zoneId) {
+    toJsonImpl(value, metadata, pos, sb, zoneId, 1, -1);
+  }
+
+  static void toJsonImpl(byte[] value, byte[] metadata, int pos, StringBuilder sb, ZoneId zoneId,
+      int depth, int maxNestingDepth) {
+    if (maxNestingDepth > 0 && depth > maxNestingDepth) {
+      throw new IllegalStateException(
+          "Variant value nesting depth exceeds the configured maximum of " + maxNestingDepth + ".");
+    }
     switch (VariantUtil.getType(value, pos)) {
       case OBJECT:
         handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
@@ -291,7 +307,7 @@ public final class Variant {
             if (i != 0) sb.append(',');
             sb.append(escapeJson(getMetadataKey(metadata, id)));
             sb.append(':');
-            toJsonImpl(value, metadata, elementPos, sb, zoneId);
+            toJsonImpl(value, metadata, elementPos, sb, zoneId, depth + 1, maxNestingDepth);
           }
           sb.append('}');
           return null;
@@ -304,7 +320,7 @@ public final class Variant {
             int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
             int elementPos = dataStart + offset;
             if (i != 0) sb.append(',');
-            toJsonImpl(value, metadata, elementPos, sb, zoneId);
+            toJsonImpl(value, metadata, elementPos, sb, zoneId, depth + 1, maxNestingDepth);
           }
           sb.append(']');
           return null;

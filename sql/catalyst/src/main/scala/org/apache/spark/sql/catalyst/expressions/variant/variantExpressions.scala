@@ -449,7 +449,8 @@ case class VariantGet(
   private lazy val castArgs = VariantCastArgs(
     failOnError,
     timeZoneId,
-    zoneId)
+    zoneId,
+    SQLConf.get.getConf(SQLConf.VARIANT_MAX_NESTING_DEPTH))
 
   override def eval(input: InternalRow): Any = {
     val _ = parsedPath
@@ -512,7 +513,8 @@ case class VariantGet(
 case class VariantCastArgs(
     failOnError: Boolean,
     zoneStr: Option[String],
-    zoneId: ZoneId)
+    zoneId: ZoneId,
+    maxNestingDepth: Int = -1)
 
 case object VariantGet {
   /**
@@ -594,7 +596,8 @@ case object VariantGet {
   def cast(v: Variant, dataType: DataType, castArgs: VariantCastArgs): Any = {
     def invalidCast(): Any = {
       if (castArgs.failOnError) {
-        throw QueryExecutionErrors.invalidVariantCast(v.toJson(castArgs.zoneId), dataType)
+        throw QueryExecutionErrors.invalidVariantCast(
+          v.toJson(castArgs.zoneId, castArgs.maxNestingDepth), dataType)
       } else {
         null
       }
@@ -622,7 +625,7 @@ case object VariantGet {
         val input = variantType match {
           case Type.OBJECT | Type.ARRAY =>
             return if (dataType.isInstanceOf[StringType]) {
-              UTF8String.fromString(v.toJson(castArgs.zoneId))
+              UTF8String.fromString(v.toJson(castArgs.zoneId, castArgs.maxNestingDepth))
             } else {
               invalidCast()
             }
