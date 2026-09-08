@@ -124,9 +124,9 @@ case class Scd2BatchProcessor(
    *
    * Step ordering is load-bearing: the row-extension steps reference user data columns that
    * target-column selection is allowed to drop. Selection therefore runs after those extensions,
-   * followed by target-schema alignment. Unlike SCD1, no per-key deduplication step is performed
-   * here - SCD2 preserves every event as part of the row's history, including byte-identical
-   * full-event duplicates.
+   * followed by target-schema alignment and version-map population. Unlike SCD1, no per-key
+   * deduplication step is performed here - SCD2 preserves every event as part of the row's history,
+   * including byte-identical full-event duplicates.
    *
    * Duplicate event elimination (e.g., collapsing two identical events at the same sequence),
    * whether across microbatches or within the same microbatch, is the responsibility of
@@ -151,6 +151,7 @@ case class Scd2BatchProcessor(
       .transform(extendMicrobatchRowsWithCdcMetadata)
       .transform(projectTargetColumnsOntoMicrobatch)
       .transform(alignMicrobatchToTargetSchema(_, targetTableDf))
+      .transform(extendMicrobatchRowsWithVersionMap)
   }
 
   /**
@@ -189,20 +190,61 @@ case class Scd2BatchProcessor(
   /**
    * Project the operational CDC metadata column carrying the literal event sequence. Downstream
    * merges rely on it to preserve original event lineage regardless of how rows start/end-at are
-   * coalesced.
+   * coalesced. The version map is initially null; [[extendMicrobatchRowsWithVersionMap]] populates
+   * it after column selection runs.
    */
   private def extendMicrobatchRowsWithCdcMetadata(microbatchDf: DataFrame): DataFrame = {
     microbatchDf.withColumn(
       colName = AutoCdcReservedNames.cdcMetadataColName,
       col = Scd2BatchProcessor.constructCdcMetadataCol(
         recordStartAt = changeArgs.sequencing,
-        // TODO (SPARK-59183): actually populate version map according to ignore-null selection and
-        // actual authorship in microbatch.
         versionMap = F.lit(null),
         sequencingType = resolvedSequencingType
       )
     )
   }
+
+  /**
+   * Populates the version map on each microbatch row, recording which leaves the event authored.
+   * Null leaves in ignore-null columns get a `false` entry (declined); null leaves in other
+   * columns get `true` (authored null); non-null leaves need no entry. No-op when ignore-null
+   * is off.
+   *
+   * Must run after [[projectTargetColumnsOntoMicrobatch]], because the eligible schema is
+   * computed from the post-selection schema.
+   */
+  private def extendMicrobatchRowsWithVersionMap(projectedDf: DataFrame): DataFrame =
+    changeArgs.ignoreNullSelection match {
+      case None => projectedDf
+      case Some(ignoreNullSelection) =>
+        val cdcMetadataCol = F.col(AutoCdcReservedNames.cdcMetadataColName)
+        val resolver = projectedDf.sparkSession.sessionState.conf.resolver
+        val schemaEligibleForNullAuthorshipTracking = 
+          Scd2BatchProcessor.computeUserDataSchema(
+            schema = projectedDf.schema,
+            changeArgs = changeArgs,
+            resolver = resolver
+          )
+
+        projectedDf.withColumn(
+          // Update the existing CDC metadata column via replace semantics when projecting a column
+          // with the same name.
+          colName = AutoCdcReservedNames.cdcMetadataColName,
+          col = Scd2BatchProcessor.constructCdcMetadataCol(
+            // Copy the same recordStartAt already computed from when the CDC metadata column was
+            // first projected.
+            recordStartAt = Scd2BatchProcessor.recordStartAtOf(cdcMetadataCol),
+            // Construct the version map for this row since ignore-null is being used.
+            versionMap = Scd2VersionMap.buildVersionMap(
+              schema = schemaEligibleForNullAuthorshipTracking,
+              ignoreNullSelection = ignoreNullSelection,
+              resolver = resolver
+            ),
+            // Sequencing type is unchanged from when the CDC metadata column was first projected.
+            sequencingType = resolvedSequencingType
+          )
+        )
+    }
 
   /**
    * Apply the user's target column selection while preserving the SCD2 framework columns; the
@@ -1460,23 +1502,38 @@ object Scd2BatchProcessor {
   private[pipelines] def computeTrackedHistoryColumns(
       schema: StructType,
       changeArgs: ChangeArgs,
-      resolver: Resolver): Seq[String] = {
-    val keyColNames = changeArgs.keys.map(_.name)
-
-    val eligibleSchema = StructType(schema.fields.filterNot { field =>
-      reservedFrameworkColNames.exists(resolver(_, field.name)) ||
-        keyColNames.exists(resolver(_, field.name))
-    })
-
+      resolver: Resolver): Seq[String] =
     ColumnSelection
       .applyToSchema(
         schemaName = "trackHistorySelection",
-        schema = eligibleSchema,
+        schema = computeUserDataSchema(schema, changeArgs, resolver),
         columnSelection = changeArgs.trackHistorySelection,
         resolver = resolver
       )
       .fieldNames
       .toImmutableArraySeq
+
+  /**
+   * The subset of `schema` that is user data a column selection may act on: every field that is
+   * neither a framework reserved column nor one of [[ChangeArgs.keys]]. Field order is preserved.
+   *
+   * Both [[ChangeArgs.trackHistorySelection]] and [[ChangeArgs.ignoreNullSelection]] resolve
+   * against this, so an exclude-list in either cannot pick up a key or a framework column, and
+   * an include-list naming one fails as not found.
+   *
+   * `schema` is expected to have already been narrowed by [[ChangeArgs.columnSelection]], which
+   * happens once per microbatch in [[Scd2BatchProcessor.projectTargetColumnsOntoMicrobatch]];
+   * this method does not re-apply it.
+   */
+  private[pipelines] def computeUserDataSchema(
+      schema: StructType,
+      changeArgs: ChangeArgs,
+      resolver: Resolver): StructType = {
+    val keyColNames = changeArgs.keys.map(_.name)
+    StructType(schema.fields.filterNot { field =>
+      reservedFrameworkColNames.exists(resolver(_, field.name)) ||
+        keyColNames.exists(resolver(_, field.name))
+    })
   }
 
   /**

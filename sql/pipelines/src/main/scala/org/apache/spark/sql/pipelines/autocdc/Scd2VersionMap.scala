@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import org.apache.spark.sql.types.{BooleanType, MapType, StringType}
+import org.apache.spark.sql.{functions => F, Column}
+import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.util.QuotingUtils
+import org.apache.spark.sql.types.{BooleanType, MapType, StringType, StructType}
 
 /**
  * Per-row column authorship tracker for SCD2 ignore-null semantics.
@@ -82,10 +85,80 @@ private[pipelines] object Scd2VersionMap {
    * must be formatted by [[org.apache.spark.sql.catalyst.util.QuotingUtils.quoted]] to
    * ensure segments that need quoting are back-tick escaped.
    *
-   * Values indicate authorship. I.e, `true` => authored-null, `false` => unauthored-null.
+   * Values indicate authorship: `true` means authored-null, `false` means unauthored-null.
+   * Null values never appear in the map.
    *
    * Lack of entry in the map for a null-valued leaf column implies the column was
    * schema-evolved with an unauthored-null.
    */
   def mapType: MapType = MapType(StringType, BooleanType, valueContainsNull = false)
+
+  /**
+   * Enumerates every leaf path in `schema`, in schema order, as its sequence of name parts.
+   * Structs unfold recursively; every other type (including arrays and maps) is an opaque leaf.
+   */
+  private[autocdc] def extractLeafPaths(schema: StructType): Seq[Seq[String]] =
+    schema.fields.toSeq.flatMap { field =>
+      field.dataType match {
+        case nested: StructType =>
+          extractLeafPaths(nested).map(field.name +: _)
+        case _ => Seq(Seq(field.name))
+      }
+    }
+
+  /**
+   * Joins a multi-part name into a single dot-delimited string, backtick-quoting any segment
+   * that contains special characters, via [[QuotingUtils.quoted]].
+   */
+  private[autocdc] def quotedPath(path: Seq[String]): String =
+    QuotingUtils.quoted(path.toArray)
+
+  /**
+   * Builds the ingest-time version map column for a microbatch. Each row's map records which
+   * null leaves are authored vs declined, based on the active ignore-null selection.
+   *
+   * @param schema The schema whose leaves the version map covers. Null-authorship is tracked
+   *   for every leaf column in this schema, as per the version map contract.
+   * @param ignoreNullSelection The ignore-null column selection this schema is being ingested
+   *   under.
+   * @param resolver Case-sensitivity resolver for column name matching.
+   * @return A [[Column]] of [[mapType]] schema.
+   */
+  def buildVersionMap(
+      schema: StructType,
+      ignoreNullSelection: ColumnSelection,
+      resolver: Resolver): Column = {
+    val ignoreNullColumns = ColumnSelection.applyToSchema(
+      schemaName = "ignoreNullSelection",
+      schema = schema,
+      columnSelection = Some(ignoreNullSelection),
+      resolver = resolver
+    )
+    val ignoreNullLeafPathsQuoted =
+      extractLeafPaths(ignoreNullColumns).map(quotedPath).toSet
+
+    // For each leaf, build a nullable struct (key, value). The struct is non-null only when
+    // the leaf column's runtime value is null (meaning the leaf needs a version map entry).
+    // The value is a non-nullable BooleanType literal indicating authorship: true if the null
+    // is authored, false if declined.
+    val candidateEntries = extractLeafPaths(schema).map { path =>
+      val leafPathQuoted = quotedPath(path)
+      val isIgnoreNullLeaf = ignoreNullLeafPathsQuoted.contains(leafPathQuoted)
+      val leafIsNull = F.col(leafPathQuoted).isNull
+
+      // If the leaf is not null, this candidate entry will simply resolve to null and will not be
+      // added to the version map during construction below.
+      F.when(leafIsNull, F.struct(
+        F.lit(leafPathQuoted).as("key"),
+        F.lit(!isIgnoreNullLeaf).as("value")
+      ))
+    }
+
+    if (candidateEntries.isEmpty) {
+      F.map().cast(mapType)
+    } else {
+      val nonNullEntries = F.filter(F.array(candidateEntries: _*), (e: Column) => e.isNotNull)
+      F.map_from_entries(nonNullEntries)
+    }
+  }
 }
