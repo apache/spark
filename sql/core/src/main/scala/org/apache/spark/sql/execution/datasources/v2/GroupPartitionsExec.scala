@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.physical.{IdentityReducer, KeyedPartitioning, KeyReducer, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{IdentityReducer, KeyedPartitioning, KeyReducer, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.execution.{SafeForKWayMerge, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.internal.SQLConf
@@ -86,6 +86,20 @@ case class GroupPartitionsExec(
           }
         }
 
+        // A marked claim pins undeclared rows to hash(key) % numPartitions (see
+        // `KeyedPartitioning.mayContainUnknownPartitionKeys`). Only an identity grouping keeps
+        // that relationship: a reorder, a coalesce, or a resize moves those rows, and a
+        // projection or reduction rewrites the keys the claim speaks for (see
+        // `identityGrouping`). Clearing only the marker would misreport the undeclared rows
+        // that remain, so give up the keyed partitioning at the physical output count (one per
+        // group, padding included). The give-up deliberately under-reports: the node still
+        // physically groups the partitions but no longer claims a keyed layout, so a join
+        // planned over it does not see its required distribution satisfied. `identityGrouping`
+        // is a lazy val, so repeated `outputPartitioning` calls scan it at most once.
+        if (keyedPartitionings.exists(_.mayContainUnknownPartitionKeys) && !identityGrouping) {
+          return UnknownPartitioning(groupedPartitions.size)
+        }
+
         p.transform {
           case k: KeyedPartitioning =>
             val projectedExpressions = joinKeyPositions.fold(k.expressions)(_.map(k.expressions))
@@ -103,7 +117,8 @@ case class GroupPartitionsExec(
               case None => projectedExpressions
             }
             KeyedPartitioning(effectiveExpressions, groupedPartitions.map(_._1),
-              isGrouped = isGrouped)
+              isGrouped = isGrouped,
+              mayContainUnknownPartitionKeys = k.mayContainUnknownPartitionKeys)
         }.asInstanceOf[Partitioning]
       case o => o
     }
@@ -208,6 +223,36 @@ case class GroupPartitionsExec(
     groupedPartitionsTuple._1
 
   @transient lazy val isGrouped: Boolean = groupedPartitionsTuple._2
+
+  /**
+   * Whether this node's grouping leaves the declared keys and every partition where they were:
+   * no projection or reduction rewrote the keys, output partition i holds exactly input
+   * partition i, and there is one output per input. That is the only grouping that keeps a
+   * marked layout's undeclared rows at hash(key) % numPartitions. A projection or reduction
+   * re-labels the groups into a different key space, so even a grouping whose indices line up
+   * would pin the claim to keys it no longer declares; `keysRewritten` rejects it up front --
+   * it covers a narrowing projection, a reordering one, and any reducer slot. A reducer slot
+   * is treated as key-changing: a conforming self-reducer cannot rewrite a reachable key
+   * value, so the give-up there loses at most an optimization. A grouping that drops trailing
+   * declared keys still reads identity for every group it keeps, but the partition count
+   * shrinks and the hash modulus with it. The `forall` stops at the first moved partition, so
+   * a reorder or coalesce is rejected without a full scan.
+   */
+  @transient private lazy val identityGrouping: Boolean = {
+    val childKp = child.outputPartitioning
+      .asInstanceOf[Partitioning with Expression]
+      .collectFirst { case k: KeyedPartitioning => k }
+      .getOrElse(
+        throw new SparkException("GroupPartitionsExec requires a child with KeyedPartitioning"))
+    val keysRewritten =
+      joinKeyPositions.exists(_ != childKp.expressions.indices) || reducers.isDefined
+    !keysRewritten &&
+      groupedPartitions.size == child.outputPartitioning.numPartitions &&
+      groupedPartitions.iterator.zipWithIndex.forall {
+        case ((_, Seq(single)), outputIndex) => single == outputIndex
+        case _ => false
+      }
+  }
 
   @transient private lazy val hasCoalescing: Boolean = groupedPartitions.exists(_._2.size > 1)
 
