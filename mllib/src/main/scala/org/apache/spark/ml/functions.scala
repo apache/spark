@@ -56,7 +56,7 @@ object functions {
   private[ml] def vector_posexplode(
       v: Column,
       mode: String = "sparse"): Column = {
-    Column.internalFn("vector_posexplode", sf.unwrap_udt(v), sf.lit(mode))
+    Column.internalFn("ml_vector_posexplode", sf.unwrap_udt(v), sf.lit(mode))
   }
 
   private[ml] def array_binary_search(a: Column, v: Column): Column =

@@ -24,6 +24,7 @@ import org.apache.spark.ml.util.MLTest
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, MatrixUDT => OldMatrixUDT,
   Vector => OldVector, Vectors => OldVectors, VectorUDT => OldVectorUDT}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.catalyst.expressions.ml.VectorPosExplode
 import org.apache.spark.sql.functions.{col, unwrap_udt, wrap_udt}
 import org.apache.spark.sql.types.{StructField, StructType, UserDefinedType}
 
@@ -213,6 +214,10 @@ class FunctionsSuite extends MLTest {
 
     val schema = df.select(vector_posexplode($"vec")).schema
     assert(schema.simpleString === "struct<index:int,value:double>")
+
+    val generators = df.select(vector_posexplode($"vec")).queryExecution.analyzed
+      .flatMap(_.expressions.flatMap(_.collect { case v: VectorPosExplode => v }))
+    assert(generators.map(_.prettyName).distinct === Seq("ml_vector_posexplode"))
   }
 
   test("test get_vector") {
