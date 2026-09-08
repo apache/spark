@@ -200,7 +200,7 @@ SELECT vector_norm(array(float('nan'), float('inf')), float('inf'));
 SELECT vector_norm(array(float('nan'), 5.0F), 1.0F);
 SELECT vector_norm(array(float('nan'), 5.0F), 2.0F);
 
--- vector_norm: a NaN element in the unrolled section of a large vector
+-- vector_norm: a NaN element anywhere in a longer vector still makes the norm NaN
 SELECT vector_norm(
   array(1.0F, 2.0F, 3.0F, 4.0F, 5.0F, float('nan'), 7.0F, 8.0F, 9.0F, 10.0F, 11.0F, 12.0F, 13.0F, 14.0F, 15.0F, 16.0F),
   float('inf')
