@@ -137,11 +137,11 @@ class ResolveDeduplicateSuite extends AnalysisTest {
     val child = LocalRelation(rel.output ++ Seq(evolved, metadata))
     val spec = DeduplicateSpec(DeduplicateAllColumnsAsKey, viaSparkClassic = true)
 
-    val withoutMetadata = ResolveDeduplicate.recomputeStreamingKeys(
+    val withoutMetadata = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
       rel.output, child, spec, orderDeterministically = true, SQLConf.get.resolver)
     assert(withoutMetadata === rel.output ++ Seq(evolved))
 
-    val withMetadata = ResolveDeduplicate.recomputeStreamingKeys(
+    val withMetadata = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
       rel.output :+ metadata, child, spec, orderDeterministically = true, SQLConf.get.resolver)
     assert(withMetadata === child.output)
   }

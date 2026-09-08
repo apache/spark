@@ -247,12 +247,14 @@ class MicroBatchExecution(
       }
     }.getOrElse(streamConf.getConf(SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER))
     val dedupResolver = sparkSessionForStream.sessionState.analyzer.resolver
+    // Recompute streaming subplans for checkpoint compatibility and static subplans so batch
+    // deduplication keeps the same semantics when embedded in a streaming query.
     val planWithDedupKeys = analyzedPlan.transformUp {
       case d @ Deduplicate(keys, child, Some(spec)) =>
-        d.copy(keys = ResolveDeduplicate.recomputeStreamingKeys(
+        d.copy(keys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
           keys, child, spec, orderDeterministically, dedupResolver))
       case d @ DeduplicateWithinWatermark(keys, child, Some(spec)) =>
-        d.copy(keys = ResolveDeduplicate.recomputeStreamingKeys(
+        d.copy(keys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
           keys, child, spec, orderDeterministically, dedupResolver))
     }
 

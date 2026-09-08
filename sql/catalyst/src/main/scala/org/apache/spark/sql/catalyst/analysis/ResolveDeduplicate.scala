@@ -94,7 +94,7 @@ object ResolveDeduplicate extends Rule[LogicalPlan] {
    * at the original deduplication boundary. Analyzer rules may add metadata columns to the child
    * later to satisfy downstream references, but those columns must not silently become state keys.
    */
-  def recomputeStreamingKeys(
+  def recomputeKeysPreservingMetadataBoundary(
       originalKeys: Seq[Attribute],
       child: LogicalPlan,
       spec: DeduplicateSpec,
