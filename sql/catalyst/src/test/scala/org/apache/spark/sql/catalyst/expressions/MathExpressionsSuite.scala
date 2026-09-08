@@ -492,7 +492,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Gcd(Literal(24L), Literal(36L)), 12L)
     checkEvaluation(Gcd(Literal(36L), Literal(24L)), 12L)
     checkEvaluation(Gcd(Literal(17L), Literal(5L)), 1L)
-    // The result is never negative, whichever inputs are.
+    // The result is non-negative regardless of the inputs' signs.
     checkEvaluation(Gcd(Literal(-24L), Literal(36L)), 12L)
     checkEvaluation(Gcd(Literal(24L), Literal(-36L)), 12L)
     checkEvaluation(Gcd(Literal(-24L), Literal(-36L)), 12L)
@@ -522,7 +522,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Lcm(Literal(4L), Literal(6L)), 12L)
     checkEvaluation(Lcm(Literal(6L), Literal(4L)), 12L)
     checkEvaluation(Lcm(Literal(17L), Literal(5L)), 85L)
-    // The result is never negative, whichever inputs are.
+    // The result is non-negative regardless of the inputs' signs.
     checkEvaluation(Lcm(Literal(-4L), Literal(6L)), 12L)
     checkEvaluation(Lcm(Literal(4L), Literal(-6L)), 12L)
     checkEvaluation(Lcm(Literal(-4L), Literal(-6L)), 12L)
