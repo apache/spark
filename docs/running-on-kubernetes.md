@@ -2142,13 +2142,6 @@ Spark allows users to specify a custom Kubernetes schedulers.
   kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.2/installer/volcano-development.yaml
   ```
 
-##### Build
-To create a Spark distribution along with Volcano support like those distributed by the Spark [Downloads page](https://spark.apache.org/downloads.html), also see more in ["Building Spark"](https://spark.apache.org/docs/latest/building-spark.html):
-
-```bash
-./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phive -Phive-thriftserver -Pkubernetes -Pvolcano
-```
-
 ##### Usage
 Spark on Kubernetes allows using Volcano as a custom scheduler. Users can use Volcano to
 support more advanced resource scheduling: queue scheduling, resource reservation, priority scheduling, and more.
