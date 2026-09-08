@@ -19,9 +19,10 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeduplicateWithinWatermark, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, MetadataAttribute}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeduplicateSpec, DeduplicateWithinWatermark, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StringType
 
 /**
  * Unit tests for [[ResolveDeduplicate]], the analyzer rule that resolves [[UnresolvedDeduplicate]]
@@ -128,6 +129,21 @@ class ResolveDeduplicateSuite extends AnalysisTest {
         viaSparkClassic = true, rel))
     assert(resolved.isInstanceOf[DeduplicateWithinWatermark])
     assert(resolved.asInstanceOf[DeduplicateWithinWatermark].keys.map(_.name) === Seq("a"))
+  }
+
+  test("streaming recomputation preserves the original metadata boundary") {
+    val evolved = $"evolved".int
+    val metadata = MetadataAttribute("_metadata", StringType)
+    val child = LocalRelation(rel.output ++ Seq(evolved, metadata))
+    val spec = DeduplicateSpec(DeduplicateAllColumnsAsKey, viaSparkClassic = true)
+
+    val withoutMetadata = ResolveDeduplicate.recomputeStreamingKeys(
+      rel.output, child, spec, orderDeterministically = true, SQLConf.get.resolver)
+    assert(withoutMetadata === rel.output ++ Seq(evolved))
+
+    val withMetadata = ResolveDeduplicate.recomputeStreamingKeys(
+      rel.output :+ metadata, child, spec, orderDeterministically = true, SQLConf.get.resolver)
+    assert(withMetadata === child.output)
   }
 
   test("SPARK-57489: duplicate-named columns produce multiple keys (filter, not find)") {

@@ -248,12 +248,12 @@ class MicroBatchExecution(
     }.getOrElse(streamConf.getConf(SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER))
     val dedupResolver = sparkSessionForStream.sessionState.analyzer.resolver
     val planWithDedupKeys = analyzedPlan.transformUp {
-      case d @ Deduplicate(_, child, Some(spec)) =>
-        d.copy(keys =
-          ResolveDeduplicate.computeKeys(child, spec, orderDeterministically, dedupResolver))
-      case d @ DeduplicateWithinWatermark(_, child, Some(spec)) =>
-        d.copy(keys =
-          ResolveDeduplicate.computeKeys(child, spec, orderDeterministically, dedupResolver))
+      case d @ Deduplicate(keys, child, Some(spec)) =>
+        d.copy(keys = ResolveDeduplicate.recomputeStreamingKeys(
+          keys, child, spec, orderDeterministically, dedupResolver))
+      case d @ DeduplicateWithinWatermark(keys, child, Some(spec)) =>
+        d.copy(keys = ResolveDeduplicate.recomputeStreamingKeys(
+          keys, child, spec, orderDeterministically, dedupResolver))
     }
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
