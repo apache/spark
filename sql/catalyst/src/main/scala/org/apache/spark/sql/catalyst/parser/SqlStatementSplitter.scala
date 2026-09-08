@@ -422,7 +422,7 @@ object SqlStatementSplitter {
       try {
         val context = parser.singleCompoundStatement()
         val end = context.END()
-        if (end != null && end.getSymbol.getTokenIndex >= 0 && tokens.LA(1) == Token.EOF) {
+        if (end != null && isOuterCompoundEnd(tokens, end.getSymbol)) {
           return Some((delimiter, endIdx))
         }
       } catch {
@@ -431,6 +431,30 @@ object SqlStatementSplitter {
       delimiter += 1
     }
     None
+  }
+
+  /**
+   * Returns true only when recovery found a real END and the candidate itself
+   * ends in a real END, the optional outer semicolon, and EOF. Error recovery
+   * can bind the context's END node to an inner control terminator and skip its
+   * suffix, so the candidate suffix is checked independently.
+   */
+  private def isOuterCompoundEnd(tokens: CommonTokenStream, recoveredEnd: Token): Boolean = {
+    if (recoveredEnd.getTokenIndex < 0) return false
+
+    var index = tokens.size() - 1
+    if (index < 0 || tokens.get(index).getType != Token.EOF) return false
+    index -= 1
+    while (index >= 0 && tokens.get(index).getChannel == Token.HIDDEN_CHANNEL) {
+      index -= 1
+    }
+    if (index >= 0 && tokens.get(index).getType == SqlBaseLexer.SEMICOLON) {
+      index -= 1
+      while (index >= 0 && tokens.get(index).getChannel == Token.HIDDEN_CHANNEL) {
+        index -= 1
+      }
+    }
+    index >= 0 && tokens.get(index).getType == SqlBaseLexer.END
   }
 
   /** Outcome of attempting to parse one statement candidate. */
@@ -524,8 +548,10 @@ object SqlStatementSplitter {
    * Configure a fresh [[SqlBaseParser]] for splitter use: install the managed
    * caches so candidate parses share ANTLR DFA state across calls, apply the
    * session's behavior flags so the splitter agrees with the session parser
-   * on grammar interpretation (e.g. `double_quoted_identifiers`), and install
-   * a bail error strategy so failures throw immediately.
+   * on grammar interpretation (e.g. `double_quoted_identifiers`), and, when
+   * `bailOnError` is true, install a bail error strategy so failures throw
+   * immediately. Malformed-compound recovery keeps the default error strategy
+   * so it can inspect the recovered outer END boundary.
    *
    * Notably, the splitter does NOT install [[PostProcessor]] or
    * [[UnclosedCommentProcessor]] -- the former mutates the parse tree (which
