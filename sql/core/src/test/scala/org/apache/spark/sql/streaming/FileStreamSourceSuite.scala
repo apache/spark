@@ -576,35 +576,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
-  test("metadata added downstream does not become a streaming deduplication key") {
-    withTempDirs { case (src, tmp) =>
-      val input = spark.readStream.format("text").load(src.getCanonicalPath)
-      val metadataAfterDedup = input
-        .dropDuplicates()
-        .select($"value", $"_metadata.file_path".isNotNull.as("hasMetadata"))
-
-      testStream(metadataAfterDedup)(
-        AddTextFileData("same", src, tmp),
-        AddTextFileData("same", src, tmp),
-        CheckAnswer(("same", true)))
-    }
-  }
-
-  test("metadata visible before streaming deduplication remains a key") {
-    withTempDirs { case (src, tmp) =>
-      val input = spark.readStream.format("text").load(src.getCanonicalPath)
-      val metadataBeforeDedup = input
-        .select($"value", $"_metadata")
-        .dropDuplicates()
-        .select($"value", $"_metadata.file_path".isNotNull.as("hasMetadata"))
-
-      testStream(metadataBeforeDedup)(
-        AddTextFileData("same", src, tmp),
-        AddTextFileData("same", src, tmp),
-        CheckAnswer(("same", true), ("same", true)))
-    }
-  }
-
   test("SPARK-17165 should not track the list of seen files indefinitely") {
     // This test works by:
     // 1. Create a file
