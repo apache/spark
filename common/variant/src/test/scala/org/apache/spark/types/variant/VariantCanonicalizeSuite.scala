@@ -160,6 +160,72 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     assert(actual.compareTo(new java.math.BigDecimal(big)) == 0, "10^20 value must be preserved")
   }
 
+  test("canonicalize and isCanonical handle the DECIMAL8 and DECIMAL16 branches") {
+    // 12 significant digits -> DECIMAL8.
+    val nonCanon8 = parse("1234567.890120")
+    assert(!isCanon(nonCanon8), "trailing-zero DECIMAL8 is not canonical")
+    val d8 = canon(nonCanon8)
+    assert(VariantUtil.getTypeInfo(d8.getValue, 0) == VariantUtil.DECIMAL8, "emits DECIMAL8")
+    assert(isCanon(d8), "canon output is a canonical DECIMAL8")
+    val expected8 = new java.math.BigDecimal("1234567.89012")
+    assert(VariantUtil.getDecimal(d8.getValue, 0).compareTo(expected8) == 0, "value preserved")
+
+    // 19 significant digits -> DECIMAL16.
+    val nonCanon16 = parse("1234567890.1234567890")
+    assert(!isCanon(nonCanon16), "trailing-zero DECIMAL16 is not canonical")
+    val d16 = canon(nonCanon16)
+    assert(VariantUtil.getTypeInfo(d16.getValue, 0) == VariantUtil.DECIMAL16, "emits DECIMAL16")
+    assert(isCanon(d16), "canon output is a canonical DECIMAL16")
+    val expected16 = new java.math.BigDecimal("1234567890.123456789")
+    assert(VariantUtil.getDecimal(d16.getValue, 0).compareTo(expected16) == 0, "value preserved")
+  }
+
+  private def assertDecimalReduces(
+      wide: Variant, stored: Int, minimal: Int, value: String): Unit = {
+    assert(VariantUtil.getTypeInfo(wide.getValue, 0) == stored, "stored in the wide type")
+    assert(!isCanon(wide), "an over-wide decimal is not canonical")
+    val reduced = canon(wide)
+    assert(VariantUtil.getTypeInfo(reduced.getValue, 0) == minimal, "reduced to minimal")
+    val actual = VariantUtil.getDecimal(reduced.getValue, 0)
+    assert(actual.compareTo(new java.math.BigDecimal(value)) == 0, "value preserved")
+  }
+
+  test("canonicalize reduces an over-wide decimal to the minimal type") {
+    // 11 stored digits -> DECIMAL8, reduces to DECIMAL4.
+    assertDecimalReduces(
+      parse("123.45600000"), VariantUtil.DECIMAL8, VariantUtil.DECIMAL4, "123.456")
+    // 19 stored digits -> DECIMAL16, reduces to DECIMAL4.
+    assertDecimalReduces(
+      parse("1.500000000000000000"), VariantUtil.DECIMAL16, VariantUtil.DECIMAL4, "1.5")
+    // 19 stored digits -> DECIMAL16, reduces to DECIMAL8.
+    assertDecimalReduces(
+      parse("1234567.890120000000"), VariantUtil.DECIMAL16, VariantUtil.DECIMAL8, "1234567.89012")
+  }
+
+  test("isCanonical rejects a decimal stored in a wider type than its value needs") {
+    def wideDecimal(wideType: Int, scale: Int, unscaled: Long): Variant = {
+      val header = ((wideType << VariantUtil.BASIC_TYPE_BITS) | VariantUtil.PRIMITIVE).toByte
+      val width = if (wideType == VariantUtil.DECIMAL8) 8 else 16
+      val buf = java.nio.ByteBuffer.allocate(2 + width).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+      buf.put(header).put(scale.toByte).putLong(unscaled)
+      if (width == 16) buf.putLong(if (unscaled < 0) -1L else 0L) // sign-extend to 16 bytes
+      new Variant(buf.array(), parse("1").getMetadata)
+    }
+
+    // DECIMAL8 holding 1.5 -> reduces to DECIMAL4.
+    assertDecimalReduces(
+      wideDecimal(VariantUtil.DECIMAL8, 1, 15L),
+      VariantUtil.DECIMAL8, VariantUtil.DECIMAL4, "1.5")
+    // DECIMAL16 holding 1.5 -> reduces to DECIMAL4.
+    assertDecimalReduces(
+      wideDecimal(VariantUtil.DECIMAL16, 1, 15L),
+      VariantUtil.DECIMAL16, VariantUtil.DECIMAL4, "1.5")
+    // DECIMAL16 holding 1234567.89012 -> reduces to DECIMAL8.
+    assertDecimalReduces(
+      wideDecimal(VariantUtil.DECIMAL16, 5, 123456789012L),
+      VariantUtil.DECIMAL16, VariantUtil.DECIMAL8, "1234567.89012")
+  }
+
   // ----- Value normalization: integer width -----
 
   test("non-minimal integer width is reduced to the smallest") {
