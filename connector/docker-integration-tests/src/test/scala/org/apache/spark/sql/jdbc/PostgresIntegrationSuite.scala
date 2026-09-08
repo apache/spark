@@ -23,6 +23,8 @@ import java.text.SimpleDateFormat
 import java.time.LocalDateTime
 import java.util.Properties
 
+import scala.util.Using
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -42,12 +44,6 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
   override val db = new PostgresDatabaseOnDocker
-
-  private val restrictedUser = "restricted_user"
-  private val restrictedPassword = "restricted_password"
-
-  private def restrictedJdbcUrl: String =
-    s"jdbc:postgresql://$dockerIp:$externalPort/postgres"
 
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement("CREATE DATABASE foo").executeUpdate()
@@ -172,9 +168,6 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
 
     conn.prepareStatement(
       "CREATE FUNCTION test_null() RETURNS VOID AS $$ BEGIN RETURN; END; $$ LANGUAGE plpgsql")
-      .executeUpdate()
-
-    conn.prepareStatement(s"CREATE USER $restrictedUser PASSWORD '$restrictedPassword'")
       .executeUpdate()
 
     conn.prepareStatement("CREATE TABLE test_bit_array (c1 bit(1)[], c2 bit(5)[])").executeUpdate()
@@ -392,12 +385,22 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
   }
 
   test("SPARK-57780: do not classify insufficient privilege as a syntax error") {
-    val properties = new Properties()
-    properties.setProperty("user", restrictedUser)
-    properties.setProperty("password", restrictedPassword)
+    val restrictedUser = "restricted_user"
+    val restrictedPassword = "restricted_password"
+    val restrictedJdbcUrl = s"jdbc:postgresql://$dockerIp:$externalPort/postgres"
+
+    Using.resource(getConnection()) { conn =>
+      conn.prepareStatement(s"CREATE USER $restrictedUser PASSWORD '$restrictedPassword'")
+        .executeUpdate()
+    }
 
     val postgresError = intercept[SQLException] {
-      spark.read.jdbc(restrictedJdbcUrl, "bar", properties)
+      spark.read.format("jdbc")
+        .option("url", restrictedJdbcUrl)
+        .option("dbtable", "bar")
+        .option("user", restrictedUser)
+        .option("password", restrictedPassword)
+        .load()
     }
     assert(postgresError.getSQLState === "42501")
     assert(postgresError.getMessage === "ERROR: permission denied for table bar")
