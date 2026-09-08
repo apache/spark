@@ -18,7 +18,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, ResultSet, ResultSetMetaData, Statement, Types}
+import java.sql.{Connection, ResultSet, ResultSetMetaData, SQLException, Statement, Types}
 
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.anyString
@@ -80,6 +80,11 @@ class PostgresDialectSuite extends SparkFunSuite with MockitoSugar {
     // No explicit fetchsize - should use Postgres default (1000) and set autoCommit=false
     dialect.beforeFetch(conn, createJDBCOptions(Map.empty))
     verify(conn).setAutoCommit(false)
+  }
+
+  test("SPARK-57780: insufficient privilege is not classified as a syntax error") {
+    assert(dialect.isSyntaxErrorBestEffort(new SQLException("syntax error", "42601")))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("permission denied", "42501")))
   }
 
   test("updateExtraColumnMeta escapes a single quote in the table and column name") {
