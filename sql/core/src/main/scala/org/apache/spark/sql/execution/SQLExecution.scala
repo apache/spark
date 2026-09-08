@@ -123,11 +123,13 @@ object SQLExecution extends Logging {
 
   /**
    * Best-effort cleanup of the shuffle dependencies produced by `queryExecution`, invoked from
-   * `withNewExecutionId0`'s `finally`. It runs while the `SparkContext` may be tearing down, so it
-   * must not throw: `removeShuffle` can reach a stopped `BlockManagerMaster` and `SparkEnv.get` can
-   * be null. Each shuffle is cleaned independently so one failure does not abandon the rest, and a
-   * failure is logged with its id -- an operator enables the cleanup to bound disk usage, so a
-   * leaked shuffle is worth a warning.
+   * `withNewExecutionId0`'s `finally` while the `SparkContext` may be tearing down (`removeShuffle`
+   * can reach a stopped `BlockManagerMaster`, `SparkEnv.get` can be null). Each shuffle is cleaned
+   * independently and non-fatal failures are logged rather than propagated, so one failure does not
+   * abandon the rest; an `InterruptedException` is not `NonFatal` and still propagates. The log is
+   * mode-specific: for `RemoveShuffleFiles` a failure may leak the shuffle's files on disk, while
+   * `SkipMigration` only marks the shuffle to skip decommission migration and keeps its files by
+   * design.
    */
   private def cleanupShuffleDependencies(
       queryExecution: QueryExecution,
@@ -307,19 +309,28 @@ object SQLExecution extends Logging {
                 ex = Some(e)
                 throw e
             } finally {
-              // This whole `finally` runs while the query may be unwinding as the `SparkContext`
-              // is torn down: `SparkContext.stop()` nulls `dagScheduler` before it stops the
-              // listener bus, then stops `SparkEnv` (and the `BlockManagerMaster`). Rendering the
-              // error and each cleanup step below is best-effort so a teardown failure does not
-              // replace the query's real exception, and `tryComplete` runs from a `finally` so an
-              // `Observation.get` waiter is never left hung whatever this block throws.
+              // `SparkContext.stop()` nulls `dagScheduler` before it stops the listener bus, so the
+              // end event may still be posted after the scheduler is unavailable. Keep observation
+              // completion in a `finally` so an error in this block never leaves a waiter hung.
               try {
                 val endTime = System.nanoTime()
-                val errorMessage = ex.map {
-                  case e: SparkThrowable =>
-                    SparkThrowableHelper.getMessage(e, ErrorMessageFormat.PRETTY)
-                  case e =>
-                    Utils.exceptionString(e)
+                val errorMessage = ex.map { e =>
+                  try {
+                    e match {
+                      case st: SparkThrowable =>
+                        SparkThrowableHelper.getMessage(st, ErrorMessageFormat.PRETTY)
+                      case _ =>
+                        Utils.exceptionString(e)
+                    }
+                  } catch {
+                    // Rendering a user throwable can itself throw (e.g. a custom `getMessage`).
+                    // Fall back to a safe value so the query's real failure is still surfaced and
+                    // the cleanup, event post and observation completion below still run.
+                    case NonFatal(t) =>
+                      logWarning(log"Failed to render the error message for execution " +
+                        log"${MDC(EXECUTION_ID, executionId)}.", t)
+                      e.getClass.getName
+                  }
                 }
                 if (queryExecution.shuffleCleanupMode != DoNotCleanup && isExecutedPlanAvailable) {
                   cleanupShuffleDependencies(queryExecution, executionId)
