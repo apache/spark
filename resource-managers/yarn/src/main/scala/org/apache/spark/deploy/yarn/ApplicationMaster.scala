@@ -695,7 +695,8 @@ private[spark] class ApplicationMaster(
   /** Add the Yarn IP filter that is required for properly securing the UI. */
   private def addAmIpFilter(driver: Option[RpcEndpointRef], proxyBase: String) = {
     val amFilter = classOf[AmIpFilter].getName
-    val params = client.getAmIpFilterParams(yarnConf, proxyBase)
+    val params = client.getAmIpFilterParams(yarnConf, proxyBase) +
+      (AmIpFilter.TRUST_PROXY_USER_PARAM -> sparkConf.get(AM_TRUST_PROXY_USER_COOKIE).toString)
     driver match {
       case Some(d) =>
         d.send(AddWebUIFilter(amFilter, params, proxyBase))

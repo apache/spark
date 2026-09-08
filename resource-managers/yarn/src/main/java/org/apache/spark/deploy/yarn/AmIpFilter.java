@@ -45,6 +45,9 @@ import org.apache.spark.internal.SparkLoggerFactory;
 // Copy constant string definitions to strip external dependency
 //  - RM_HA_URLS
 //  - PROXY_USER_COOKIE_NAME
+// Add the TRUST_PROXY_USER init parameter: when set to "false", the proxy-user cookie is
+//  ignored, so proxy requests are treated as having no user. Controlled by
+//  spark.yarn.am.trustProxyUserCookie; defaults preserve the original behavior.
 @Public
 public class AmIpFilter implements Filter {
   private static final SparkLogger LOG = SparkLoggerFactory.getLogger(AmIpFilter.class);
@@ -62,6 +65,8 @@ public class AmIpFilter implements Filter {
   private static final String RM_HA_URLS = "RM_HA_URLS";
   // WebAppProxyServlet is defined in WebAppProxyServlet in the original Hadoop code
   public static final String PROXY_USER_COOKIE_NAME = "proxy-user";
+  // Spark addition: init parameter name controlling whether the proxy-user cookie is trusted.
+  public static final String TRUST_PROXY_USER_PARAM = "TRUST_PROXY_USER";
   // update the proxy IP list about every 5 min
   private static long updateInterval = TimeUnit.MINUTES.toMillis(5);
 
@@ -71,6 +76,9 @@ public class AmIpFilter implements Filter {
   @VisibleForTesting
   Map<String, String> proxyUriBases;
   String[] rmUrls = null;
+  // Spark addition: when false, the proxy-user cookie is ignored. Defaults to true to
+  // preserve the original behavior.
+  private boolean trustProxyUser = true;
 
   @Override
   public void init(FilterConfig conf) throws ServletException {
@@ -99,6 +107,11 @@ public class AmIpFilter implements Filter {
 
     if (conf.getInitParameter(RM_HA_URLS) != null) {
       rmUrls = conf.getInitParameter(RM_HA_URLS).split(",");
+    }
+
+    // Spark addition: allow operators to ignore the proxy-user cookie.
+    if (conf.getInitParameter(TRUST_PROXY_USER_PARAM) != null) {
+      trustProxyUser = Boolean.parseBoolean(conf.getInitParameter(TRUST_PROXY_USER_PARAM));
     }
   }
 
@@ -165,7 +178,9 @@ public class AmIpFilter implements Filter {
     } else {
       String user = null;
 
-      if (httpReq.getCookies() != null) {
+      // Spark addition: only read the proxy-user cookie when it is trusted. The cookie is not
+      // verified, so when trust is disabled the request proceeds with no user.
+      if (trustProxyUser && httpReq.getCookies() != null) {
         for (Cookie c: httpReq.getCookies()) {
           if (PROXY_USER_COOKIE_NAME.equals(c.getName())){
             user = c.getValue();
