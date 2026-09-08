@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
+import org.json4s.JsonAST.{JArray, JString}
+import org.json4s.jackson.JsonMethods.compact
+
 import org.apache.spark.sql.{functions => F, Column}
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.util.QuotingUtils
@@ -80,10 +83,10 @@ private[pipelines] object Scd2VersionMap {
   /**
    * Schema of the version map: `Map(String, Boolean)`.
    *
-   * Keys are dot-delimited paths to *leaf* columns that received a null value in their
-   * corresponding upsert event (e.g. `"address.city"`, `` "`has space`.city" ``). Paths
-   * must be formatted by [[org.apache.spark.sql.catalyst.util.QuotingUtils.quoted]] to
-   * ensure segments that need quoting are back-tick escaped.
+   * Keys are compact JSON arrays containing the canonical name parts of *leaf* columns that
+   * received a null value in their corresponding upsert event (e.g. `["address","city"]`).
+   * Keeping name parts separate distinguishes a nested path from a column whose name contains
+   * dots and keeps persisted keys independent of SQL identifier quoting rules.
    *
    * Values indicate authorship: `true` means authored-null, `false` means unauthored-null.
    * Null values never appear in the map.
@@ -106,12 +109,9 @@ private[pipelines] object Scd2VersionMap {
       }
     }
 
-  /**
-   * Joins a multi-part name into a single dot-delimited string, backtick-quoting any segment
-   * that contains special characters, via [[QuotingUtils.quoted]].
-   */
-  private[autocdc] def quotedPath(path: Seq[String]): String =
-    QuotingUtils.quoted(path.toArray)
+  /** Encodes a leaf path as the compact JSON string persisted as its version map key. */
+  private[autocdc] def encodePath(path: Seq[String]): String =
+    compact(JArray(path.map(JString(_)).toList))
 
   /**
    * Builds the ingest-time version map column for a microbatch. Each row's map records which
@@ -134,22 +134,21 @@ private[pipelines] object Scd2VersionMap {
       columnSelection = Some(ignoreNullSelection),
       resolver = resolver
     )
-    val ignoreNullLeafPathsQuoted =
-      extractLeafPaths(ignoreNullColumns).map(quotedPath).toSet
+    val ignoreNullLeafPaths = extractLeafPaths(ignoreNullColumns).toSet
 
     // For each leaf, build a nullable struct (key, value). The struct is non-null only when
     // the leaf column's runtime value is null (meaning the leaf needs a version map entry).
     // The value is a non-nullable BooleanType literal indicating authorship: true if the null
     // is authored, false if declined.
     val candidateEntries = extractLeafPaths(schema).map { path =>
-      val leafPathQuoted = quotedPath(path)
-      val isIgnoreNullLeaf = ignoreNullLeafPathsQuoted.contains(leafPathQuoted)
-      val leafIsNull = F.col(leafPathQuoted).isNull
+      val encodedPath = encodePath(path)
+      val isIgnoreNullLeaf = ignoreNullLeafPaths.contains(path)
+      val leafIsNull = F.col(QuotingUtils.quoteNameParts(path)).isNull
 
       // If the leaf is not null, this candidate entry will simply resolve to null and will not be
       // added to the version map during construction below.
       F.when(leafIsNull, F.struct(
-        F.lit(leafPathQuoted).as("key"),
+        F.lit(encodedPath).as("key"),
         F.lit(!isIgnoreNullLeaf).as("value")
       ))
     }

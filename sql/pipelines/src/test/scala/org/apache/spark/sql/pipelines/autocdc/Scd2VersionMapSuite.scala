@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.json4s.JsonAST.{JArray, JString}
+import org.json4s.jackson.JsonMethods.parse
+
+import org.apache.spark.sql.{functions => F, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -72,6 +75,8 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
     spark.createDataFrame(
       spark.sparkContext.parallelize(Seq(Row.fromSeq(values))), schema)
 
+  private def encodedPath(path: String*): String = Scd2VersionMap.encodePath(path)
+
   // =========================================================================
   // extractLeafPaths
   // =========================================================================
@@ -101,25 +106,29 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
   }
 
   // =========================================================================
-  // quotedPath
+  // encodePath
   // =========================================================================
 
-  test("quotedPath - simple names are not quoted") {
-    assert(Scd2VersionMap.quotedPath(Seq("a")) === "a")
-    assert(Scd2VersionMap.quotedPath(Seq("address", "city")) === "address.city")
+  test("encodePath - writes name parts as a compact JSON array") {
+    assert(Scd2VersionMap.encodePath(Seq("a")) === """["a"]""")
+    assert(Scd2VersionMap.encodePath(Seq("address", "city")) ===
+      """["address","city"]""")
   }
 
-  test("quotedPath - name containing a period is backtick-quoted") {
-    assert(Scd2VersionMap.quotedPath(Seq("a.b")) === "`a.b`")
-    assert(Scd2VersionMap.quotedPath(Seq("x", "a.b")) === "x.`a.b`")
+  test("encodePath - distinguishes nested paths from names containing periods") {
+    assert(Scd2VersionMap.encodePath(Seq("a", "b")) === """["a","b"]""")
+    assert(Scd2VersionMap.encodePath(Seq("a.b")) === """["a.b"]""")
   }
 
-  test("quotedPath - name containing a space is backtick-quoted") {
-    assert(Scd2VersionMap.quotedPath(Seq("has space")) === "`has space`")
+  test("encodePath - escapes JSON delimiters and control characters") {
+    val encoded = Scd2VersionMap.encodePath(
+      Seq("quote\"", "back\\slash", "null" + 0.toChar + "byte"))
+    assert(encoded === "[\"quote\\\"\",\"back\\\\slash\",\"null\\" + "u0000byte\"]")
   }
 
-  test("quotedPath - name containing a hyphen is backtick-quoted") {
-    assert(Scd2VersionMap.quotedPath(Seq("col-one")) === "`col-one`")
+  test("encodePath - round trips arbitrary name parts") {
+    val path = Seq("", "a.b", "has space", "back`tick", "quote\"", "back\\slash")
+    assert(parse(Scd2VersionMap.encodePath(path)) === JArray(path.map(JString(_)).toList))
   }
 
   // =========================================================================
@@ -142,7 +151,7 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
     val result = df.select(
       Scd2VersionMap.buildVersionMap(flatSchema, selection, resolver).as("vm"))
     // a is null + not in ignore-null -> true (authored null)
-    checkAnswer(result, Row(Map("a" -> true)))
+    checkAnswer(result, Row(Map(encodedPath("a") -> true)))
   }
 
   // Contract case 2: null in event + part of ignore-null -> (column, false) = unauthored null
@@ -152,7 +161,7 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
     val result = df.select(
       Scd2VersionMap.buildVersionMap(flatSchema, selection, resolver).as("vm"))
     // a is null + in ignore-null -> false (declined)
-    checkAnswer(result, Row(Map("a" -> false)))
+    checkAnswer(result, Row(Map(encodedPath("a") -> false)))
   }
 
   // Contract case 3: column not in the event schema (schema evolution later adds it with null).
@@ -166,7 +175,7 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
     val result = df.select(
       Scd2VersionMap.buildVersionMap(narrowSchema, selection, resolver).as("vm"))
     // Only "a" appears (declined); a future column "b" added by schema evolution has no entry.
-    checkAnswer(result, Row(Map("a" -> false)))
+    checkAnswer(result, Row(Map(encodedPath("a") -> false)))
   }
 
   // Non-null values are always considered authored and produce no entry.
@@ -189,7 +198,10 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
       Seq(UnqualifiedColumnName("a"), UnqualifiedColumnName("b"), UnqualifiedColumnName("c")))
     val result = df.select(
       Scd2VersionMap.buildVersionMap(flatSchema, selection, resolver).as("vm"))
-    checkAnswer(result, Row(Map("a" -> true, "b" -> true, "c" -> true)))
+    checkAnswer(result, Row(Map(
+      encodedPath("a") -> true,
+      encodedPath("b") -> true,
+      encodedPath("c") -> true)))
   }
 
   test("flat schema - all null, all in ignore-null -> all declined (false)") {
@@ -198,7 +210,10 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
       Seq(UnqualifiedColumnName("a"), UnqualifiedColumnName("b"), UnqualifiedColumnName("c")))
     val result = df.select(
       Scd2VersionMap.buildVersionMap(flatSchema, selection, resolver).as("vm"))
-    checkAnswer(result, Row(Map("a" -> false, "b" -> false, "c" -> false)))
+    checkAnswer(result, Row(Map(
+      encodedPath("a") -> false,
+      encodedPath("b") -> false,
+      encodedPath("c") -> false)))
   }
 
   test("flat schema - mixed nulls with partial ignore-null") {
@@ -207,7 +222,7 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
     val selection = ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("a")))
     val result = df.select(
       Scd2VersionMap.buildVersionMap(flatSchema, selection, resolver).as("vm"))
-    checkAnswer(result, Row(Map("a" -> false, "c" -> true)))
+    checkAnswer(result, Row(Map(encodedPath("a") -> false, encodedPath("c") -> true)))
   }
 
   test("flat schema - multiple rows produce independent per-row maps") {
@@ -220,15 +235,18 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
     val result = df.select(
       Scd2VersionMap.buildVersionMap(flatSchema, selection, resolver).as("vm"))
     checkAnswer(result, Seq(
-      Row(Map("b" -> false)),                     // b=null + ignore-null
-      Row(Map("a" -> true, "c" -> true))))        // a,c=null + not ignore-null
+      Row(Map(encodedPath("b") -> false)), // b=null + ignore-null
+      // a,c=null + not ignore-null
+      Row(Map(
+        encodedPath("a") -> true,
+        encodedPath("c") -> true))))
   }
 
   // =========================================================================
   // buildVersionMap: nested schemas
   // =========================================================================
 
-  test("nested schema - null nested leaf tracked with dotted key") {
+  test("nested schema - null nested leaf tracked with multipart key") {
     // x=1, address.city=null, address.zip=100
     // ColumnSelection operates on top-level fields; include "address" struct.
     val df = singleRow(nestedSchema)(1, Row(null, 100))
@@ -238,7 +256,7 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd2VersionMap.buildVersionMap(nestedSchema, selection, resolver).as("vm"))
     // address.city is null + ignore-null leaf -> false
     // address.zip is null-checked but non-null -> no entry
-    checkAnswer(result, Row(Map("address.city" -> false)))
+    checkAnswer(result, Row(Map(encodedPath("address", "city") -> false)))
   }
 
   test("nested schema - entire struct null makes all nested leaves null") {
@@ -249,9 +267,9 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
     val result = df.select(
       Scd2VersionMap.buildVersionMap(nestedSchema, selection, resolver).as("vm"))
     checkAnswer(result, Row(Map(
-      "x" -> true,              // null + not ignore-null -> authored
-      "address.city" -> false,  // null + ignore-null -> declined
-      "address.zip" -> false))) // null + ignore-null -> declined
+      encodedPath("x") -> true, // null + not ignore-null -> authored
+      encodedPath("address", "city") -> false, // null + ignore-null -> declined
+      encodedPath("address", "zip") -> false))) // null + ignore-null -> declined
   }
 
   test("deeply nested schema - three-level path tracked correctly") {
@@ -261,7 +279,7 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
       Seq(UnqualifiedColumnName("top")))
     val result = df.select(
       Scd2VersionMap.buildVersionMap(deeplyNestedSchema, selection, resolver).as("vm"))
-    checkAnswer(result, Row(Map("top.mid.leaf" -> false)))
+    checkAnswer(result, Row(Map(encodedPath("top", "mid", "leaf") -> false)))
   }
 
   // =========================================================================
@@ -275,16 +293,16 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
     val result = df.select(
       Scd2VersionMap.buildVersionMap(arrayAndMapSchema, selection, resolver).as("vm"))
     checkAnswer(result, Row(Map(
-      "tags" -> false,     // null + ignore-null -> declined
-      "props" -> true,     // null + not ignore-null -> authored
-      "plain" -> true)))   // null + not ignore-null -> authored
+      encodedPath("tags") -> false, // null + ignore-null -> declined
+      encodedPath("props") -> true, // null + not ignore-null -> authored
+      encodedPath("plain") -> true))) // null + not ignore-null -> authored
   }
 
   // =========================================================================
-  // buildVersionMap: special character column names (backtick quoting)
+  // buildVersionMap: special character column names
   // =========================================================================
 
-  test("column name with space is backtick-quoted in version map key") {
+  test("column name with space is encoded in version map key") {
     // normal=null, wrapper."has space"=null
     val df = singleRow(specialCharSchema)(null, Row(null))
     // Include "wrapper" struct -> its leaf "has space" is ignore-null.
@@ -294,11 +312,11 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd2VersionMap.buildVersionMap(
         specialCharSchema, selection, resolver).as("vm"))
     checkAnswer(result, Row(Map(
-      "normal" -> true,
-      "wrapper.`has space`" -> false)))
+      encodedPath("normal") -> true,
+      encodedPath("wrapper", "has space") -> false)))
   }
 
-  test("column name with period is backtick-quoted in version map key") {
+  test("column name with period is encoded in version map key") {
     // wrapper."a.b"=null, c=null
     val df = singleRow(periodInNameSchema)(Row(null), null)
     val selection = ColumnSelection.IncludeColumns(
@@ -307,11 +325,11 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd2VersionMap.buildVersionMap(
         periodInNameSchema, selection, resolver).as("vm"))
     checkAnswer(result, Row(Map(
-      "wrapper.`a.b`" -> false,
-      "c" -> true)))
+      encodedPath("wrapper", "a.b") -> false,
+      encodedPath("c") -> true)))
   }
 
-  test("column name with hyphen is backtick-quoted in version map key") {
+  test("column name with hyphen is encoded in version map key") {
     // wrapper."col-one"=null, col_two=null
     val df = singleRow(hyphenInNameSchema)(Row(null), null)
     val selection = ColumnSelection.IncludeColumns(
@@ -320,8 +338,35 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd2VersionMap.buildVersionMap(
         hyphenInNameSchema, selection, resolver).as("vm"))
     checkAnswer(result, Row(Map(
-      "wrapper.`col-one`" -> false,
-      "col_two" -> true)))
+      encodedPath("wrapper", "col-one") -> false,
+      encodedPath("col_two") -> true)))
+  }
+
+  test("special-character path parts survive version map encoding") {
+    val specialNames =
+      Seq("a.b", "has space", "back`tick", "quote\"", "back\\slash", "null" + 0.toChar + "byte")
+    val schema = new StructType()
+      .add("wrapper", StructType(specialNames.map(StructField(_, StringType))))
+    val df = singleRow(schema)(Row.fromSeq(Seq.fill[Any](specialNames.size)(null)))
+    val selection = ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("wrapper")))
+
+    val encodedKeys = df
+      .select(F.map_keys(Scd2VersionMap.buildVersionMap(schema, selection, resolver)))
+      .head()
+      .getSeq[String](0)
+    val decodedPaths = encodedKeys.map { encodedKey =>
+      parse(encodedKey) match {
+        case JArray(parts) =>
+          parts.map {
+            case JString(part) => part
+            case other => fail(s"Expected a JSON string path part, but found $other")
+          }
+        case other => fail(s"Expected a JSON array version map key, but found $other")
+      }
+    }
+
+    val expectedPaths = specialNames.map(name => Seq("wrapper", name)).toSet
+    assert(decodedPaths.map(_.toSeq).toSet === expectedPaths)
   }
 
   // =========================================================================
@@ -348,7 +393,10 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
     val result = df.select(
       Scd2VersionMap.buildVersionMap(flatSchema, selection, resolver).as("vm"))
     // a,c are in ignore-null -> declined (false); b is NOT -> authored (true).
-    checkAnswer(result, Row(Map("a" -> false, "b" -> true, "c" -> false)))
+    checkAnswer(result, Row(Map(
+      encodedPath("a") -> false,
+      encodedPath("b") -> true,
+      encodedPath("c") -> false)))
   }
 
   test("ExcludeColumns - empty exclude list -> ignore-null covers all columns") {
@@ -357,7 +405,10 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
     val result = df.select(
       Scd2VersionMap.buildVersionMap(flatSchema, selection, resolver).as("vm"))
     // Exclude nothing -> ignore-null applies to all columns -> all nulls are declined.
-    checkAnswer(result, Row(Map("a" -> false, "b" -> false, "c" -> false)))
+    checkAnswer(result, Row(Map(
+      encodedPath("a") -> false,
+      encodedPath("b") -> false,
+      encodedPath("c") -> false)))
   }
 
   // =========================================================================
@@ -370,7 +421,10 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
     val result = df.select(
       Scd2VersionMap.buildVersionMap(flatSchema, selection, resolver).as("vm"))
     // No columns included in ignore-null -> all nulls are authored.
-    checkAnswer(result, Row(Map("a" -> true, "b" -> true, "c" -> true)))
+    checkAnswer(result, Row(Map(
+      encodedPath("a") -> true,
+      encodedPath("b") -> true,
+      encodedPath("c") -> true)))
   }
 
   // =========================================================================
@@ -386,7 +440,10 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
       val result = df.select(
         Scd2VersionMap.buildVersionMap(
           flatSchema, selection, caseInsensitiveResolver).as("vm"))
-      checkAnswer(result, Row(Map("a" -> false, "b" -> true, "c" -> true)))
+      checkAnswer(result, Row(Map(
+        encodedPath("a") -> false,
+        encodedPath("b") -> true,
+        encodedPath("c") -> true)))
     }
   }
 
@@ -413,7 +470,10 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
       val result = df.select(
         Scd2VersionMap.buildVersionMap(
           flatSchema, selection, caseSensitiveResolver).as("vm"))
-      checkAnswer(result, Row(Map("a" -> false, "b" -> true, "c" -> true)))
+      checkAnswer(result, Row(Map(
+        encodedPath("a") -> false,
+        encodedPath("b") -> true,
+        encodedPath("c") -> true)))
     }
   }
 }
