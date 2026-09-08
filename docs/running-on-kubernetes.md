@@ -524,16 +524,19 @@ single task at a time, while its pod still requests the configured executor core
 memory-hungry task gets the whole executor memory to itself instead of sharing it with other tasks,
 which lets the remaining tasks and stages finish instead of failing repeatedly with the same OOM.
 
-The property is unset by default, so recovery mode is off until the driver detects the first OOM.
-At that point the driver turns it on and it stays on for the rest of the driver's lifetime. Executors
-that were already running are not changed. Recovery-mode executors always derive their announced cores
-from `spark.task.cpus`, not from the resource profile of the stage. To disable the automatic switch:
+The property is unset by default, so recovery mode is off until the driver detects the first OOM. At
+that point the driver turns it on, and it stays on until the application is held and resumed: the hold
+drains every executor the OOM was reacting to, so the resumed application starts over with normal
+executors. Executors that were already running are not changed. Recovery-mode executors always derive
+their announced cores from `spark.task.cpus`, not from the resource profile of the stage. To disable
+the automatic switch:
 
 ```
 --conf spark.kubernetes.allocation.recoveryMode.enabled=false
 ```
 
-Setting the property to `true` starts the application in recovery mode from the beginning. See the
+Setting the property to `true` starts the application in recovery mode from the beginning, and a hold
+and resume does not turn it off, because only the driver's own reaction to an OOM is reverted. See the
 description of `spark.kubernetes.allocation.recoveryMode.enabled` in the
 [Spark Properties](#spark-properties) table for the behavior when `spark.task.cpus` is 0.5 or less.
 
