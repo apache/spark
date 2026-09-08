@@ -293,6 +293,54 @@ org.apache.spark.SparkDateTimeException
 
 
 -- !query
+select try_make_time(1, 18, 19.87)
+-- !query schema
+struct<try_make_time(make_time(1, 18, 19.87)):time(6)>
+-- !query output
+01:18:19.87
+
+
+-- !query
+select try_make_time(null, 18, 19.87)
+-- !query schema
+struct<try_make_time(make_time(NULL, 18, 19.87)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+select try_make_time(-1, 18, 19.87)
+-- !query schema
+struct<try_make_time(make_time(-1, 18, 19.87)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+select try_make_time(1, 60, 19.87)
+-- !query schema
+struct<try_make_time(make_time(1, 60, 19.87)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+select try_make_time(1, 18, 60.0)
+-- !query schema
+struct<try_make_time(make_time(1, 18, 60.0)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+select try_make_time(1, 18, 9999999999.999999)
+-- !query schema
+struct<try_make_time(make_time(1, 18, 9999999999.999999)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
 select second(to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
 -- !query schema
 struct<second(to_time(23-59-58.987654, HH-mm-ss.SSSSSS)):int>

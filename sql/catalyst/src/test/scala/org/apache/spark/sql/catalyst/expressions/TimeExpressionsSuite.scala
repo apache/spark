@@ -247,6 +247,30 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
+  test("try_make_time returns null instead of throwing on invalid input") {
+    // Valid input behaves like make_time.
+    checkEvaluation(
+      TryEval(MakeTime(Literal(13), Literal(2), Literal(Decimal(23.5, 16, 6)))),
+      LocalTime.of(13, 2, 23, 500000000))
+
+    // Null input propagates as null.
+    checkEvaluation(
+      TryEval(MakeTime(
+        Literal.create(null, IntegerType), Literal(18), Literal(Decimal(23.5, 16, 6)))),
+      null)
+
+    // Invalid inputs that make_time would reject with an error return null instead.
+    checkEvaluation(
+      TryEval(MakeTime(Literal(25), Literal(2), Literal(Decimal(23.5, 16, 6)))),
+      null)
+    checkEvaluation(
+      TryEval(MakeTime(Literal(23), Literal(-1), Literal(Decimal(23.5, 16, 6)))),
+      null)
+    checkEvaluation(
+      TryEval(MakeTime(Literal(23), Literal(12), Literal(Decimal(100.5, 16, 6)))),
+      null)
+  }
+
   test("SecondExpressionBuilder") {
     // Empty expressions list
     checkError(

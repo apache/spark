@@ -40,6 +40,14 @@ select make_time(1, 18, -999999999.999999);
 -- Full seconds overflows to a valid seconds integer when converted from long to int
 select make_time(1, 18, 4294967297.999999);
 
+-- try_make_time returns NULL (instead of throwing) on invalid inputs
+select try_make_time(1, 18, 19.87);
+select try_make_time(null, 18, 19.87);
+select try_make_time(-1, 18, 19.87);
+select try_make_time(1, 60, 19.87);
+select try_make_time(1, 18, 60.0);
+select try_make_time(1, 18, 9999999999.999999);
+
 select second(to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
 select minute(to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
 select hour(to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
