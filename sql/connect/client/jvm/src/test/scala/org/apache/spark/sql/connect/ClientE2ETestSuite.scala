@@ -1167,6 +1167,7 @@ class ClientE2ETestSuite
 
   test("SPARK-59276: SparkSession.createDataFrame preserves CHAR/VARCHAR collations") {
     val rows = java.util.Arrays.asList(Row("ab", "cd"))
+    val emptyRows = java.util.Collections.emptyList[Row]()
     val schema = new StructType()
       .add("c", CharType(4, "UTF8_LCASE"))
       .add("v", VarcharType(6, "UNICODE_CI"))
@@ -1175,6 +1176,19 @@ class ClientE2ETestSuite
       val dataFrame = spark.createDataFrame(rows, schema)
       assert(dataFrame.schema === schema)
       checkAnswer(dataFrame, Row("ab  ", "cd"))
+
+      val emptyDataFrame = spark.createDataFrame(emptyRows, schema)
+      assert(emptyDataFrame.schema === schema)
+      checkAnswer(emptyDataFrame, Seq.empty)
+    }
+
+    Seq(rows, emptyRows).foreach { input =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.createDataFrame(input, schema).schema
+        },
+        condition = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
+        parameters = Map.empty)
     }
   }
 
