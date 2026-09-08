@@ -4749,7 +4749,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def invalidUDFClassError(invalidClass: String): Throwable = {
     new InvalidUDFClassException(
       errorClass = "_LEGACY_ERROR_TEMP_2450",
-      messageParameters = Map("invalidClass" -> invalidClass))
+      messageParameters = Map("clazz" -> invalidClass))
   }
 
   def cannotInstantiateHiveFunctionError(clazz: String, e: Throwable): Throwable = {

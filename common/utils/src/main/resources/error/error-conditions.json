@@ -1838,7 +1838,7 @@
   },
   "CURSOR_OUTSIDE_SCRIPT" : {
     "message" : [
-      "Cursor operations can only be used within SQL scripts."
+      "Cursor <cursorName> can only be used within SQL scripts."
     ],
     "sqlState" : "0A000"
   },
@@ -8336,6 +8336,12 @@
     ],
     "sqlState" : "42K0G"
   },
+  "UNABLE_TO_CREATE_DATABASE_DIRECTORY" : {
+    "message" : [
+      "Unable to create database <name> as failed to create its directory <locationUri>."
+    ],
+    "sqlState" : "58030"
+  },
   "UNABLE_TO_FETCH_HIVE_TABLES" : {
     "message" : [
       "Unable to fetch tables of Hive database: <dbName>."
@@ -10921,11 +10927,6 @@
       "<fieldCannotBeNullMsg>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2033" : {
-    "message" : [
-      "Unable to create database <name> as failed to create its directory <locationUri>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2034" : {
     "message" : [
       "Unable to drop database <name> as failed to delete its directory <locationUri>."
@@ -11818,7 +11819,7 @@
   },
   "_LEGACY_ERROR_TEMP_3070" : {
     "message" : [
-      "<internalName> is a reserved column name that cannot be read in combination with <colName> column."
+      "Unrecognized file metadata field: <field>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3071" : {

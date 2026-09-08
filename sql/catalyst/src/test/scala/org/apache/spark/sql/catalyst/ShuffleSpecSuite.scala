@@ -888,4 +888,22 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       assert(e.getMessage.contains("expected all specs in the collection to have the same number"))
     }
   }
+
+  test("SPARK-59187: reduceKeys reports the types its keys are compared at") {
+    // A reducer's result type comes from the connector, so it can name a struct field. See
+    // `KeyedPartitioning.reduceKeys`.
+    val named = new StructType().add("reduced", IntegerType)
+    val reducer = new Reducer[Int, InternalRow] {
+      override def resultType(): DataType = named
+      override def reduce(value: Int): InternalRow = InternalRow(value)
+    }
+    val transform = TransformExpression(TestBucketFunction, Seq($"a".int), Some(4))
+    val partitioning = KeyedPartitioning(Seq($"a".int), Seq(InternalRow(1), InternalRow(2)))
+
+    val (reducedDataTypes, reducedKeys) =
+      partitioning.reduceKeys(Seq(Some(KeyReducer(reducer, transform))))
+    assert(reducedDataTypes !== Seq(named), "test setup: the reducer names a field to erase")
+    assert(reducedKeys.map(_.dataTypes).distinct === Seq(reducedDataTypes),
+      "the reported types are the ones the keys hold")
+  }
 }

@@ -1222,6 +1222,20 @@ class CollectionExpressionsSuite
         "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
         "parameter" -> toSQLId("count")))
 
+    // SPARK-58821: an overflow in the `Long` length computation does not by itself mean the
+    // sequence is too long, because the length also depends on the step. For a large step the
+    // result has only a few elements, so the exact length recomputed in `BigInt` has to be
+    // returned rather than treated as an unreachable case.
+    checkEvaluation(
+      new Sequence(Literal(Long.MinValue), Literal(Long.MaxValue), Literal(Long.MaxValue)),
+      Seq(Long.MinValue, -1L, Long.MaxValue - 1))
+    checkEvaluation(
+      new Sequence(Literal(Long.MinValue), Literal(0L), Literal(4611686018427387904L)),
+      Seq(Long.MinValue, -4611686018427387904L, 0L))
+    checkEvaluation(
+      new Sequence(Literal(Long.MaxValue), Literal(Long.MinValue), Literal(-Long.MaxValue)),
+      Seq(Long.MaxValue, 0L, -Long.MaxValue))
+
     // test sequence with one element (zero step or equal start and stop)
 
     checkEvaluation(new Sequence(Literal(1), Literal(1), Literal(-1)), Seq(1))

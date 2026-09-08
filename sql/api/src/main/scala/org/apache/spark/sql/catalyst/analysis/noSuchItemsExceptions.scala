@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.util.QuotingUtils.{quoted, quoteIdentifier,
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.util.ArrayImplicits._
 
-private[analysis] object NoSuchItemExceptionHelper {
+private[sql] object NoSuchItemExceptionHelper {
 
   /** Format a search path for TABLE_OR_VIEW_NOT_FOUND (e.g. [`cat`.`ns`]). */
   def formatSearchPath(searchPath: Seq[String]): String =
