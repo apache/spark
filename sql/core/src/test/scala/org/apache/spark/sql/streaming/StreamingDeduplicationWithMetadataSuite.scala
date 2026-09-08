@@ -21,12 +21,23 @@ import java.io.File
 
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.internal.SQLConf
 
-class StreamingQueryDeduplicationResolutionSuite extends StreamTest {
+class StreamingDeduplicationWithMetadataSuite extends StreamTest {
 
   import testImplicits._
 
-  test("metadata added downstream does not become a streaming deduplication key") {
+  private val confKey = SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER.key
+
+  private def testWithKeyOrders(name: String)(f: => Unit): Unit = {
+    Seq(false, true).foreach { orderDeterministically =>
+      test(s"$name (orderDeterministically = $orderDeterministically)") {
+        withSQLConf(confKey -> orderDeterministically.toString)(f)
+      }
+    }
+  }
+
+  testWithKeyOrders("metadata added downstream does not become a streaming deduplication key") {
     withTempDir { src =>
       stringToFile(new File(src, "first"), "same")
       stringToFile(new File(src, "second"), "same")
@@ -42,7 +53,7 @@ class StreamingQueryDeduplicationResolutionSuite extends StreamTest {
     }
   }
 
-  test("metadata visible before streaming deduplication remains a key") {
+  testWithKeyOrders("metadata visible before streaming deduplication remains a key") {
     withTempDir { src =>
       stringToFile(new File(src, "first"), "same")
       stringToFile(new File(src, "second"), "same")
@@ -59,7 +70,7 @@ class StreamingQueryDeduplicationResolutionSuite extends StreamTest {
     }
   }
 
-  test("metadata added downstream does not become a batch deduplication key") {
+  testWithKeyOrders("metadata added downstream does not become a batch deduplication key") {
     withTempDir { src =>
       stringToFile(new File(src, "first"), "same")
       stringToFile(new File(src, "second"), "same")
@@ -80,7 +91,7 @@ class StreamingQueryDeduplicationResolutionSuite extends StreamTest {
     }
   }
 
-  test("metadata visible before batch deduplication remains a key") {
+  testWithKeyOrders("metadata visible before batch deduplication remains a key") {
     withTempDir { src =>
       stringToFile(new File(src, "first"), "same")
       stringToFile(new File(src, "second"), "same")
