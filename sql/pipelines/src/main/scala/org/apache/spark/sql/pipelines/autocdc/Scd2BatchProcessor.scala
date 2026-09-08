@@ -210,6 +210,10 @@ case class Scd2BatchProcessor(
    * columns get `true` (authored null); non-null leaves need no entry. No-op when ignore-null
    * is off.
    *
+   * Delete-encoded rows (those matching [[ChangeArgs.deleteCondition]]) receive a null version
+   * map: their data-column values are not part of the SCD2 contract, so authorship tracking
+   * is not applicable.
+   *
    * Must run after [[projectTargetColumnsOntoMicrobatch]], because the eligible schema is
    * computed from the post-selection schema.
    */
@@ -219,28 +223,28 @@ case class Scd2BatchProcessor(
       case Some(ignoreNullSelection) =>
         val cdcMetadataCol = F.col(AutoCdcReservedNames.cdcMetadataColName)
         val resolver = projectedDf.sparkSession.sessionState.conf.resolver
-        val schemaEligibleForNullAuthorshipTracking = 
+        val schemaEligibleForNullAuthorshipTracking =
           Scd2BatchProcessor.computeUserDataSchema(
             schema = projectedDf.schema,
             changeArgs = changeArgs,
             resolver = resolver
           )
+        val isUpsertRow = !changeArgs.deleteCondition.getOrElse(F.lit(false))
 
         projectedDf.withColumn(
-          // Update the existing CDC metadata column via replace semantics when projecting a column
-          // with the same name.
           colName = AutoCdcReservedNames.cdcMetadataColName,
           col = Scd2BatchProcessor.constructCdcMetadataCol(
-            // Copy the same recordStartAt already computed from when the CDC metadata column was
-            // first projected.
             recordStartAt = Scd2BatchProcessor.recordStartAtOf(cdcMetadataCol),
-            // Construct the version map for this row since ignore-null is being used.
-            versionMap = Scd2VersionMap.buildVersionMap(
-              schema = schemaEligibleForNullAuthorshipTracking,
-              ignoreNullSelection = ignoreNullSelection,
-              resolver = resolver
+            // Only upsert rows get a populated version map. By convention, delete-encoded rows
+            // always maintain a null version map.
+            versionMap = F.when(
+              isUpsertRow,
+              Scd2VersionMap.buildVersionMap(
+                schema = schemaEligibleForNullAuthorshipTracking,
+                ignoreNullSelection = ignoreNullSelection,
+                resolver = resolver
+              )
             ),
-            // Sequencing type is unchanged from when the CDC metadata column was first projected.
             sequencingType = resolvedSequencingType
           )
         )
