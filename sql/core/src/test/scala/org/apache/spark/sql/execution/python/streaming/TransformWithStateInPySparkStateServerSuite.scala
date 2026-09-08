@@ -38,6 +38,8 @@ import org.mockito.invocation.InvocationOnMock
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
 
+import net.razorvine.pickle.Pickler
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -46,7 +48,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.execution.streaming.state.StateMessage
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, ContainsKey, DeleteTimer, Exists, ExpiryTimerRequest, Get, GetProcessingTime, GetValue, GetWatermark, HandleState, Keys, ListStateCall, ListStateGet, ListStatePut, ListTimers, MapStateCall, ParseStringSchema, RegisterTimer, RemoveKey, SetHandleState, StateCallCommand, StatefulProcessorCall, TimerRequest, TimerStateCallCommand, TimerValueRequest, UpdateValue, UtilsRequest, Values, ValueStateCall, ValueStateUpdate}
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType, VarcharType}
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
@@ -291,6 +293,64 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     stateServer.handleValueStateRequest(message)
     verify(valueState).update(any[Row])
     verify(outputStream).writeInt(0)
+  }
+
+  test("legacy CHAR/VARCHAR policy applies to value, list, and map state updates") {
+    val schema = StructType(Seq(StructField("value", VarcharType(3))))
+    val encoder =
+      ExpressionEncoder(StructType(Seq(StructField("value", StringType)))).resolveAndBind()
+    val deserializer = encoder.createDeserializer()
+    val serializer = encoder.createSerializer()
+    val bytes = ByteString.copyFrom(new Pickler(true, false).dumps(Array[AnyRef]("abcd")))
+    val valueStateInfo =
+      mutable.HashMap(stateName -> ValueStateInfo(valueState, schema, deserializer))
+    val listStateInfo =
+      mutable.HashMap(stateName -> ListStateInfo(listState, schema, deserializer, serializer))
+    val mapStateInfo = mutable.HashMap(
+      stateName -> MapStateInfo(
+        mapState,
+        schema,
+        schema,
+        deserializer,
+        serializer,
+        deserializer,
+        serializer))
+    val legacyStateServer = new TransformWithStateInPySparkStateServer(
+      serverSocket,
+      statefulProcessorHandle,
+      groupingKeySchema,
+      2,
+      outputStreamForTest = outputStream,
+      valueStateMapForTest = valueStateInfo,
+      deserializerForTest = transformWithStateInPySparkDeserializer,
+      listStatesMapForTest = listStateInfo,
+      mapStatesMapForTest = mapStateInfo,
+      applyCharVarcharChecks = false)
+
+    legacyStateServer.handleValueStateRequest(
+      ValueStateCall
+        .newBuilder()
+        .setStateName(stateName)
+        .setValueStateUpdate(ValueStateUpdate.newBuilder().setValue(bytes))
+        .build())
+    legacyStateServer.handleListStateRequest(
+      ListStateCall
+        .newBuilder()
+        .setStateName(stateName)
+        .setAppendValue(AppendValue.newBuilder().setValue(bytes))
+        .build())
+    legacyStateServer.handleMapStateRequest(
+      MapStateCall
+        .newBuilder()
+        .setStateName(stateName)
+        .setUpdateValue(UpdateValue.newBuilder().setUserKey(bytes).setValue(bytes))
+        .build())
+
+    verify(valueState).update(argThat((row: Row) => row.getString(0) == "abcd"))
+    verify(listState).appendValue(argThat((row: Row) => row.getString(0) == "abcd"))
+    verify(mapState).updateValue(
+      argThat((row: Row) => row.getString(0) == "abcd"),
+      argThat((row: Row) => row.getString(0) == "abcd"))
   }
 
   test("list state exists") {

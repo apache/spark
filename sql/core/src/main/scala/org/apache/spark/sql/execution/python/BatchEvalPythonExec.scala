@@ -77,7 +77,7 @@ class BatchEvalPythonEvaluatorFactory(
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String],
     binaryAsBytes: Boolean)
-  extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
+    extends EvalPythonEvaluatorFactory(childOutput, udfs, output, outputAlreadyChecked = true) {
 
   override def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],
@@ -106,7 +106,13 @@ class BatchEvalPythonEvaluatorFactory(
       StructType(udfs.map(u => StructField("", u.dataType, u.nullable)))
     }
 
-    val fromJava = EvaluatePython.makeFromJava(resultType)
+    val fromJava = if (udfs.length == 1) {
+      EvaluatePython.makeFromJava(resultType, udfs.head.applyCharVarcharChecks)
+    } else {
+      EvaluatePython.makeFromJava(
+        resultType.asInstanceOf[StructType],
+        udfs.map(_.applyCharVarcharChecks))
+    }
 
     outputIterator.flatMap { pickedResult =>
       val unpickledBatch = unpickle.loads(pickedResult)
