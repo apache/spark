@@ -205,6 +205,17 @@ tags = Module(
     ],
 )
 
+config = Module(
+    name="config",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/config/",
+    ],
+    sbt_test_goals=[
+        "config/test",
+    ],
+)
+
 utils_java = Module(
     name="utils-java",
     dependencies=[tags],
@@ -218,7 +229,7 @@ utils_java = Module(
 
 utils = Module(
     name="utils",
-    dependencies=[tags, utils_java],
+    dependencies=[tags, utils_java, config],
     source_file_regexes=[
         "common/utils/",
     ],
