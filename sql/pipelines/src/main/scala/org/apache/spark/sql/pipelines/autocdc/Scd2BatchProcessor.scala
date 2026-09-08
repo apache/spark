@@ -234,8 +234,10 @@ case class Scd2BatchProcessor(
           )
 
         // Only upsert rows get a populated version map. By convention, delete-encoded
-        // rows always maintain a null version map.
-        val isUpsertRow = !changeArgs.deleteCondition.getOrElse(F.lit(false))
+        // rows always maintain a null version map. We detect deletes via endAt rather
+        // than changeArgs.deleteCondition because column selection may have already
+        // dropped the column the delete condition references.
+        val isUpsertRow = F.col(Scd2BatchProcessor.endAtColName).isNull
         val versionMap = F.when(isUpsertRow, Scd2VersionMap.buildVersionMap(
           schema = schemaEligibleForNullAuthorshipTracking,
           ignoreNullSelection = ignoreNullSelection,
