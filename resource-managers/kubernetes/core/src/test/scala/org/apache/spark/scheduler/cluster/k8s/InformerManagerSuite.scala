@@ -18,10 +18,9 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.KubernetesClient
-import io.fabric8.kubernetes.client.informers.SharedIndexInformer
-import org.mockito.{Mock, MockitoAnnotations}
+import io.fabric8.kubernetes.client.informers.{ExceptionHandler, SharedIndexInformer}
+import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.Mockito._
-import org.mockito.Mockito.verify
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -43,20 +42,15 @@ class InformerManagerSuite extends SparkFunSuite with BeforeAndAfter {
   @Mock
   private var scopedPods: LABELED_PODS = _
 
+  private val resyncInterval = 10000L
   private var conf: SparkConf = _
   private val applicationId = "test-app-id"
 
   before {
-    MockitoAnnotations.initMocks(this)
-    conf = new SparkConf().set(KUBERNETES_EXECUTOR_INFORMER_RESYNC_INTERVAL, 10000L)
-
-    // The informer is scoped server-side to app-id + role=executor + non-inactive pods.
-    // Chain all filter calls into the same mock so the final .runnableInformer(...) hits.
-    when(kubernetesClient.pods()).thenReturn(podOperations)
-    when(podOperations.withLabel(SPARK_APP_ID_LABEL, applicationId)).thenReturn(scopedPods)
-    when(scopedPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(scopedPods)
-    when(scopedPods.withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")).thenReturn(scopedPods)
-    when(scopedPods.runnableInformer(10000L)).thenReturn(informer)
+    MockitoAnnotations.openMocks(this).close()
+    conf = new SparkConf().set(KUBERNETES_EXECUTOR_INFORMER_RESYNC_INTERVAL, resyncInterval)
+    InformerTestUtils.stubInformerBuilder(
+      kubernetesClient, podOperations, scopedPods, informer, applicationId, resyncInterval)
   }
 
   test("If informer is null, initInformer should initialize it") {
@@ -72,18 +66,39 @@ class InformerManagerSuite extends SparkFunSuite with BeforeAndAfter {
     verify(podOperations).withLabel(SPARK_APP_ID_LABEL, applicationId)
     verify(scopedPods).withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
     verify(scopedPods).withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
-    verify(scopedPods).runnableInformer(10000L)
+    verify(scopedPods).runnableInformer(resyncInterval)
   }
 
-  test("startInformer should not call run if informer is already running") {
+  test("initInformer installs an exceptionHandler that forces retries") {
+    val manager = new InformerManager(kubernetesClient, conf)
+    manager.initInformer(applicationId)
+
+    val handlerCaptor = ArgumentCaptor.forClass(classOf[ExceptionHandler])
+    verify(informer).exceptionHandler(handlerCaptor.capture())
+    val handler = handlerCaptor.getValue
+
+    assert(handler.retryAfterException(true, new RuntimeException("transient apiserver 5xx")))
+    assert(handler.retryAfterException(false, new RuntimeException("startup hiccup")))
+    assert(handler.retryAfterException(true, new ClassCastException("truncated response")))
+  }
+
+  test("startInformer should call start() when informer is not running") {
+    val manager = new InformerManager(kubernetesClient, conf)
+
+    manager.initInformer(applicationId)
+    manager.startInformer()
+
+    verify(informer, times(1)).start()
+  }
+
+  test("startInformer should not call start() if informer is already running") {
     when(informer.isRunning).thenReturn(true)
     val manager = new InformerManager(kubernetesClient, conf)
 
     manager.initInformer(applicationId)
-    manager.getInformer()
     manager.startInformer()
 
-    verify(informer, times(0)).run()
+    verify(informer, times(0)).start()
   }
 
   test("stopInformer should close the informer and null it out") {
@@ -97,7 +112,15 @@ class InformerManagerSuite extends SparkFunSuite with BeforeAndAfter {
     assert(manager.informer == null)
   }
 
-  test("getInformer should throw if the informer has not been initialized") {
+  test("getInformer should throw when never initialized") {
+    val manager = new InformerManager(kubernetesClient, conf)
+    val e = intercept[IllegalStateException] {
+      manager.getInformer()
+    }
+    assert(e.getMessage == "Informer has not been initialized. Call initInformer() first.")
+  }
+
+  test("getInformer should throw after stopInformer") {
     val manager = new InformerManager(kubernetesClient, conf)
     manager.initInformer(applicationId)
     manager.startInformer()
@@ -106,18 +129,36 @@ class InformerManagerSuite extends SparkFunSuite with BeforeAndAfter {
     val e = intercept[IllegalStateException] {
       manager.getInformer()
     }
-    assert(e.getMessage.contains("Informer has not been initialized"))
+    assert(e.getMessage == "Informer has not been initialized. Call initInformer() first.")
   }
 
-  test("Calling startInformer after stopInformer should throw") {
+  test("initInformer should throw after stopInformer to prevent silent revival") {
     val manager = new InformerManager(kubernetesClient, conf)
     manager.initInformer(applicationId)
     manager.startInformer()
     manager.stopInformer()
     val e = intercept[IllegalStateException] {
       manager.initInformer(applicationId)
+    }
+    assert(e.getMessage == "Cannot re-initialize informer after stopInformer() has been called.")
+  }
+
+  test("startInformer should throw when never initialized") {
+    val manager = new InformerManager(kubernetesClient, conf)
+    val e = intercept[IllegalStateException] {
       manager.startInformer()
     }
-    assert(e.getMessage.contains("Cannot run informer after stopInformer() has been called."))
+    assert(e.getMessage == "Informer has not been initialized. Call initInformer() first.")
+  }
+
+  test("startInformer should throw after stopInformer") {
+    val manager = new InformerManager(kubernetesClient, conf)
+    manager.initInformer(applicationId)
+    manager.startInformer()
+    manager.stopInformer()
+    val e = intercept[IllegalStateException] {
+      manager.startInformer()
+    }
+    assert(e.getMessage == "Informer has not been initialized. Call initInformer() first.")
   }
 }

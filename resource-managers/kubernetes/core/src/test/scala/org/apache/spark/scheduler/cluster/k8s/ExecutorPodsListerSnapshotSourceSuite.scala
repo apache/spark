@@ -24,12 +24,12 @@ import io.fabric8.kubernetes.client.informers.SharedIndexInformer
 import io.fabric8.kubernetes.client.informers.cache.Indexer
 import org.jmock.lib.concurrent.DeterministicScheduler
 import org.mockito.{Mock, MockitoAnnotations}
-import org.mockito.Mockito.{verify, when}
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{never, verify, when}
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.deploy.k8s.Constants.{SPARK_APP_ID_LABEL, SPARK_EXECUTOR_INACTIVE_LABEL, SPARK_POD_EXECUTOR_ROLE, SPARK_ROLE_LABEL}
 import org.apache.spark.deploy.k8s.Fabric8Aliases.{LABELED_PODS, PODS}
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
 
@@ -63,38 +63,51 @@ class ExecutorPodsListerSnapshotSourceSuite extends SparkFunSuite with BeforeAnd
   private var scopedPods: LABELED_PODS = _
 
   override def beforeEach(): Unit = {
-    MockitoAnnotations.initMocks(this)
-
+    MockitoAnnotations.openMocks(this).close()
+    InformerTestUtils.stubInformerBuilder(
+      kubernetesClient, podOperations, scopedPods, informer, TEST_SPARK_APP_ID, resyncInterval)
     when(kubernetesClient.getNamespace).thenReturn(testNamespace)
-    when(kubernetesClient.pods()).thenReturn(podOperations)
-    when(podOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(scopedPods)
-    when(scopedPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(scopedPods)
-    when(scopedPods.withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")).thenReturn(scopedPods)
-    when(scopedPods.runnableInformer(resyncInterval)).thenReturn(informer)
-    when(informer.isRunning).thenReturn(false)
     when(informer.getIndexer).thenReturn(indexer)
 
     informerManager = new InformerManager(kubernetesClient, sparkConf)
     snapshotSource = new ExecutorPodsListerSnapshotSource(
       sparkConf, kubernetesClient, snapshotsStore, informerManager, pollingExecutor)
-    snapshotSource.start(TEST_SPARK_APP_ID)
   }
 
   test("Lister snapshot source pushes all current pods to snapshot store") {
+    when(informer.hasSynced).thenReturn(true)
     val exec1 = runningExecutor(1)
     val exec2 = runningExecutor(2)
     val podList = new PodListBuilder().addToItems(exec1, exec2).build().getItems
     when(indexer.byIndex("namespace", testNamespace)).thenReturn(podList)
+    snapshotSource.start(TEST_SPARK_APP_ID)
     pollingExecutor.tick(pollingInterval, TimeUnit.MILLISECONDS)
     verify(snapshotsStore).replaceSnapshot(Seq(exec1, exec2))
   }
 
-  test("Empty list of pods results in empty snapshot replacement") {
+  test("Poll skips replacement when informer has not synced yet") {
+    when(informer.hasSynced).thenReturn(false)
     when(indexer.byIndex("namespace", testNamespace))
       .thenReturn(new PodListBuilder().build().getItems)
-
+    snapshotSource.start(TEST_SPARK_APP_ID)
     pollingExecutor.tick(pollingInterval, TimeUnit.MILLISECONDS)
+    verify(snapshotsStore, never()).replaceSnapshot(any())
+  }
 
+  test("Poll replaces snapshot with empty seq when informer is synced but no pods exist") {
+    when(informer.hasSynced).thenReturn(true)
+    when(indexer.byIndex("namespace", testNamespace))
+      .thenReturn(new PodListBuilder().build().getItems)
+    snapshotSource.start(TEST_SPARK_APP_ID)
+    pollingExecutor.tick(pollingInterval, TimeUnit.MILLISECONDS)
     verify(snapshotsStore).replaceSnapshot(Seq.empty)
+  }
+
+  test("start should throw when called twice") {
+    snapshotSource.start(TEST_SPARK_APP_ID)
+    val e = intercept[IllegalArgumentException] {
+      snapshotSource.start(TEST_SPARK_APP_ID)
+    }
+    assert(e.getMessage.contains("Cannot start lister polling more than once"))
   }
 }

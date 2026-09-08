@@ -1075,8 +1075,47 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>30s</code></td>
   <td>
     Interval between polls against the Kubernetes API server to inspect the state of executors.
+    Only applies when <code>spark.kubernetes.executor.enableInformer</code> is <code>false</code>.
   </td>
   <td>2.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.enableInformer</code></td>
+  <td><code>false</code></td>
+  <td>
+    If <code>true</code>, track executor pod state via a shared Kubernetes informer
+    (one initial LIST plus a long-lived WATCH, backed by a local Lister cache). This is an
+    opt-in alternative to the legacy path (per-interval full LIST plus a separate WATCH) and
+    reduces steady-state apiserver load in clusters with many concurrent Spark applications,
+    at the cost of holding a small in-memory cache of executor pods in the driver. The
+    informer path requires <code>list</code> and <code>watch</code> permissions on
+    <code>pods</code> in the driver's namespace. The two modes are mutually exclusive; when
+    this is <code>true</code>, <code>spark.kubernetes.executor.enableApiWatcher</code> and
+    <code>spark.kubernetes.executor.enableApiPolling</code> have no effect.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.listerPollingInterval</code></td>
+  <td><code>30s</code></td>
+  <td>
+    Interval between polls against the informer's local cache to inspect the state of
+    executors. Only applies when <code>spark.kubernetes.executor.enableInformer</code> is
+    <code>true</code>. Unlike <code>spark.kubernetes.executor.apiPollingInterval</code>, this
+    poll reads from a local cache and does not hit the apiserver.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.informerResyncInterval</code></td>
+  <td><code>0s</code></td>
+  <td>
+    Interval at which the informer replays every cached executor pod as an update event to
+    registered handlers. The replay reads from the local cache only and does not re-list
+    against the apiserver. Only applies when <code>spark.kubernetes.executor.enableInformer</code>
+    is <code>true</code>. Set to <code>0</code> to disable (default).
+  </td>
+  <td>4.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.request.cores</code></td>
