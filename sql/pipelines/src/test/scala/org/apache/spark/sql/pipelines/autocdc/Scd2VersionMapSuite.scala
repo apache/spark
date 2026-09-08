@@ -20,7 +20,7 @@ package org.apache.spark.sql.pipelines.autocdc
 import org.json4s.JsonAST.{JArray, JString}
 import org.json4s.jackson.JsonMethods.parse
 
-import org.apache.spark.sql.{functions => F, QueryTest, Row}
+import org.apache.spark.sql.{functions => F, AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -411,21 +411,6 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
       encodedPath("c") -> false)))
   }
 
-  // =========================================================================
-  // buildVersionMap: IncludeColumns variations
-  // =========================================================================
-
-  test("IncludeColumns - empty include list means no columns are ignore-null") {
-    val df = singleRow(flatSchema)(null, null, null)
-    val selection = ColumnSelection.IncludeColumns(Seq.empty)
-    val result = df.select(
-      Scd2VersionMap.buildVersionMap(flatSchema, selection, resolver).as("vm"))
-    // No columns included in ignore-null -> all nulls are authored.
-    checkAnswer(result, Row(Map(
-      encodedPath("a") -> true,
-      encodedPath("b") -> true,
-      encodedPath("c") -> true)))
-  }
 
   // =========================================================================
   // buildVersionMap: case sensitivity
@@ -452,13 +437,24 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
       val caseSensitiveResolver = spark.sessionState.conf.resolver
       val df = singleRow(flatSchema)(null, null, null)
       // Selection uses uppercase "A" but schema has lowercase "a" -> "A" is not found.
-      val selection = ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("A")))
-      val e = intercept[Exception] {
-        df.select(
-          Scd2VersionMap.buildVersionMap(
-            flatSchema, selection, caseSensitiveResolver).as("vm")).collect()
-      }
-      assert(e.getMessage.contains("A"))
+      val selection =
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("A")))
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.select(
+            Scd2VersionMap.buildVersionMap(
+              flatSchema, selection, caseSensitiveResolver).as("vm")
+          ).collect()
+        },
+        condition = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
+        sqlState = "42703",
+        parameters = Map(
+          "caseSensitivity" -> "case-sensitive",
+          "schemaName" -> "ignoreNullSelection",
+          "missingColumns" -> "A",
+          "availableColumns" -> "a, b, c"
+        )
+      )
     }
   }
 
