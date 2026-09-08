@@ -7383,7 +7383,7 @@ object SQLConf {
         "optimization. If the estimated size exceeds this value, Spark falls back to regular " +
         "join planning. The fallback may still use a broadcast nested loop join. By setting " +
         "this value to -1, the broadcast hash join optimization can be disabled.")
-      .version("5.0.0")
+      .version("4.2.1")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(Long.MaxValue)
 
