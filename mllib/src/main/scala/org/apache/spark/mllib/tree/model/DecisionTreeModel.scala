@@ -285,10 +285,12 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
     /**
      * Builds a node from the node data map and adds new nodes to the input nodes map.
      *
-     * `visiting` tracks the node ids currently on the recursion stack. A saved model whose
-     * left/right node ids form a cycle (which never happens for a valid tree) would otherwise
-     * recurse until the driver hits a StackOverflowError; detecting the cycle turns that into a
-     * clear, contained failure. Valid models (including shared leaves) are unaffected.
+     * `visiting` records the node ids currently being constructed (a fully constructed node is in
+     * `nodes` and every later visit short-circuits on it before `visiting` is consulted). A saved
+     * model whose left/right node ids form a cycle (which never happens for a valid tree) would
+     * otherwise recurse until the driver hits a StackOverflowError; detecting a node reached while
+     * it is still being constructed turns that into a clear, contained failure. Valid models
+     * (including shared leaves, which are served from `nodes`) are unaffected.
      */
     private def constructNode(
       id: Int,
@@ -298,8 +300,10 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       if (nodes.contains(id)) {
         return nodes(id)
       }
-      require(visiting.add(id),
-        s"Cycle detected among node ids while loading the decision tree model (node id = $id).")
+      if (!visiting.add(id)) {
+        throw new IllegalArgumentException(
+          s"Cycle detected among node ids while loading the decision tree model (node id = $id).")
+      }
       val data = dataMap(id)
       val node =
         if (data.isLeaf) {
@@ -312,7 +316,6 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
           new Node(data.nodeId, data.predict.toPredict, data.impurity, data.isLeaf,
             data.split.map(_.toSplit), Some(leftNode), Some(rightNode), Some(stats))
         }
-      visiting -= id
       nodes += node.id -> node
       node
     }

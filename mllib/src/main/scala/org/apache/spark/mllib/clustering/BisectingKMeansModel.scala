@@ -159,39 +159,33 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
   }
 
   private def buildTree(rootId: Int, nodes: Map[Int, Data]): ClusteringTreeNode =
-    buildTree(rootId, nodes, mutable.Set.empty, mutable.Map.empty)
+    buildTree(rootId, nodes, mutable.Set.empty)
 
   /**
-   * `visiting` tracks the node ids currently on the recursion stack and `built` memoizes nodes
-   * already constructed. A saved model whose child ids form a cycle (which never happens for a
-   * valid tree) would otherwise recurse until the driver hits a StackOverflowError; detecting the
-   * cycle turns that into a clear failure. Memoization additionally prevents a model that
-   * references the same child id from many parents (a DAG) from expanding exponentially. Valid
-   * trees have neither cycles nor shared children, so their construction is unchanged.
+   * `visiting` accumulates every node id reached while building the tree. A valid tree reaches each
+   * id exactly once, so encountering an id that is already present means the saved data is not a
+   * tree: either its child ids form a cycle (which would otherwise recurse until the driver hits a
+   * StackOverflowError) or a child id is shared by more than one parent. Either way we fail with a
+   * clear message. Valid trees build unchanged.
    */
   private def buildTree(
       rootId: Int,
       nodes: Map[Int, Data],
-      visiting: mutable.Set[Int],
-      built: mutable.Map[Int, ClusteringTreeNode]): ClusteringTreeNode = {
-    built.get(rootId) match {
-      case Some(node) => node
-      case None =>
-        require(visiting.add(rootId),
-          s"Cycle detected among node ids while loading the bisecting k-means model " +
-            s"(node id = $rootId).")
-        val root = nodes(rootId)
-        val result = if (root.children.isEmpty) {
-          new ClusteringTreeNode(root.index, root.size, new VectorWithNorm(root.center, root.norm),
-            root.cost, root.height, new Array[ClusteringTreeNode](0))
-        } else {
-          val children = root.children.map(c => buildTree(c, nodes, visiting, built))
-          new ClusteringTreeNode(root.index, root.size, new VectorWithNorm(root.center, root.norm),
-            root.cost, root.height, children.toArray)
-        }
-        visiting -= rootId
-        built(rootId) = result
-        result
+      visiting: mutable.Set[Int]): ClusteringTreeNode = {
+    if (!visiting.add(rootId)) {
+      throw new IllegalArgumentException(
+        s"Node id $rootId is reached more than once while loading the bisecting k-means " +
+          s"model; the saved node data is not a tree (its child ids form a cycle, or a child " +
+          s"id is shared by more than one parent).")
+    }
+    val root = nodes(rootId)
+    if (root.children.isEmpty) {
+      new ClusteringTreeNode(root.index, root.size, new VectorWithNorm(root.center, root.norm),
+        root.cost, root.height, new Array[ClusteringTreeNode](0))
+    } else {
+      val children = root.children.map(c => buildTree(c, nodes, visiting))
+      new ClusteringTreeNode(root.index, root.size, new VectorWithNorm(root.center, root.norm),
+        root.cost, root.height, children.toArray)
     }
   }
 
