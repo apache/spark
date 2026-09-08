@@ -304,9 +304,20 @@ package object config extends Logging {
   private[spark] val AM_TRUST_PROXY_USER_COOKIE =
     ConfigBuilder("spark.yarn.am.trustProxyUserCookie")
       .doc("When true (default), the YARN AM UI filter uses the 'proxy-user' cookie set by the " +
-        "YARN RM web proxy to determine the user for the AM UI view/modify ACLs. Set to false " +
-        "to ignore the cookie: proxy requests are then treated as having no user, which " +
-        "disables per-user AM UI ACLs through the proxy.")
+        "YARN RM web proxy to determine the user for the AM UI view/modify ACLs. This forwarded " +
+        "cookie is not cryptographically signed; fully guaranteeing its integrity would require " +
+        "the YARN RM web proxy to sign it (a Hadoop-side change), so this option is an interim " +
+        "workaround until then. The AM always installs its own filter first, so this option is " +
+        "meant for client mode, where a separate authentication filter set in spark.ui.filters " +
+        "runs after it: the last request wrapper in the chain determines the user, so that " +
+        "authentication filter already establishes the request's user regardless of this " +
+        "option, and setting this to false additionally makes the AM ignore the forwarded " +
+        "cookie. If this is set to false without such an authentication filter (for example in " +
+        "cluster mode, where the AM sets the UI filters and no filter can precede it), proxy " +
+        "requests are treated as having no user, and a request with no user passes every view " +
+        "and modify ACL check, exposing the AM UI regardless of spark.ui.view.acls / " +
+        "spark.modify.acls. Only set it to false in client mode together with such an " +
+        "authentication filter.")
       .version("4.3.0")
       .booleanConf
       .createWithDefault(true)

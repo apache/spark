@@ -45,9 +45,11 @@ import org.apache.spark.internal.SparkLoggerFactory;
 // Copy constant string definitions to strip external dependency
 //  - RM_HA_URLS
 //  - PROXY_USER_COOKIE_NAME
-// Add the TRUST_PROXY_USER init parameter: when set to "false", the proxy-user cookie is
+// Add the TRUST_PROXY_USER_COOKIE init parameter: when set to "false", the proxy-user cookie is
 //  ignored, so proxy requests are treated as having no user. Controlled by
-//  spark.yarn.am.trustProxyUserCookie; defaults preserve the original behavior.
+//  spark.yarn.am.trustProxyUserCookie; defaults preserve the original behavior. Note that with
+//  no other authentication filter installed, ignoring the cookie leaves proxied requests with no
+//  user, so per-user AM UI ACLs no longer apply to them; see the config doc for details.
 @Public
 public class AmIpFilter implements Filter {
   private static final SparkLogger LOG = SparkLoggerFactory.getLogger(AmIpFilter.class);
@@ -66,7 +68,7 @@ public class AmIpFilter implements Filter {
   // WebAppProxyServlet is defined in WebAppProxyServlet in the original Hadoop code
   public static final String PROXY_USER_COOKIE_NAME = "proxy-user";
   // Spark addition: init parameter name controlling whether the proxy-user cookie is trusted.
-  public static final String TRUST_PROXY_USER_PARAM = "TRUST_PROXY_USER";
+  public static final String TRUST_PROXY_USER_PARAM = "TRUST_PROXY_USER_COOKIE";
   // update the proxy IP list about every 5 min
   private static long updateInterval = TimeUnit.MINUTES.toMillis(5);
 

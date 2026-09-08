@@ -249,6 +249,27 @@ To use a custom metrics.properties for the application master and executors, upd
  <td>1.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.yarn.am.trustProxyUserCookie</code></td>
+  <td><code>true</code></td>
+  <td>
+    When <code>true</code> (default), the AM UI filter uses the <code>proxy-user</code> cookie set
+    by the YARN RM web proxy to determine the user for the AM UI view/modify ACLs. This forwarded
+    cookie is not cryptographically signed; fully guaranteeing its integrity would require the YARN
+    RM web proxy to sign it (a Hadoop-side change), so this option is an interim workaround until
+    then. The AM always installs its own filter first, so this option is meant for client mode,
+    where a separate authentication filter set in <code>spark.ui.filters</code> runs after it: the
+    last request wrapper in the chain determines the user, so that authentication filter already
+    establishes the request's user regardless of this option, and setting this to
+    <code>false</code> additionally makes the AM ignore the forwarded cookie. If this is set to
+    <code>false</code> without such an authentication filter (for example in cluster mode, where
+    the AM sets the UI filters and no filter can precede it), proxy requests are treated as having
+    no user, and a request with no user passes every view and modify ACL check, exposing the AM UI
+    regardless of <code>spark.ui.view.acls</code> / <code>spark.modify.acls</code>. Only set it to
+    <code>false</code> in client mode together with such an authentication filter.
+  </td>
+ <td>4.3.0</td>
+</tr>
+<tr>
   <td><code>spark.yarn.submit.file.replication</code></td>
   <td>The default HDFS replication (usually <code>3</code>)</td>
   <td>
