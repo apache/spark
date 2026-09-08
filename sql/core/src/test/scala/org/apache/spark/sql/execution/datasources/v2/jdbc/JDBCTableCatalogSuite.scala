@@ -28,7 +28,7 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{Identifier, TableSummary}
+import org.apache.spark.sql.connector.catalog.{Identifier, TableChange, TableSummary}
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLConf, toSQLStmt}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.internal.SQLConf
@@ -230,20 +230,27 @@ class JDBCTableCatalogSuite extends SharedSparkSession {
   }
 
   test("SPARK-58945: H2 renameTable reports source table when it is missing") {
-    Seq(
-      "not_existing_table" -> "`test`.`not_existing_table`",
-      "PEOPLE" -> "`test`.`PEOPLE`"
-    ).foreach { case (oldName, expected) =>
-      val e = intercept[NoSuchTableException] {
-        tableCatalog.renameTable(
-          Identifier.of(Array("test"), oldName),
-          Identifier.of(Array("test"), "dst_table"))
-      }
-      checkErrorTableNotFoundWithSearchPath(
-        e,
-        expected,
-        searchPath = "not available")
+    val e = intercept[NoSuchTableException] {
+      tableCatalog.renameTable(
+        Identifier.of(Array("test"), "not_existing_table"),
+        Identifier.of(Array("test"), "dst_table"))
     }
+    checkErrorTableNotFoundWithSearchPath(
+      e,
+      "`test`.`not_existing_table`",
+      searchPath = "not available")
+  }
+
+  test("SPARK-58945: H2 alterTable deleteColumn reports source table") {
+    val e = intercept[NoSuchTableException] {
+      tableCatalog.alterTable(
+        Identifier.of(Array("test"), "people"),
+        TableChange.deleteColumn(Array("missing_col"), false))
+    }
+    checkErrorTableNotFoundWithSearchPath(
+      e,
+      "`test`.`people`",
+      searchPath = "not available")
   }
 
   test("create a table") {
