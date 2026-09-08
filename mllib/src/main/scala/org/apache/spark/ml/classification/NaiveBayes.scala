@@ -478,36 +478,9 @@ class NaiveBayesModel private[ml] (
   @Since("1.5.0")
   override val numClasses: Int = pi.size
 
-  @transient private lazy val predictRawFunc: Vector => Vector = {
-    $(modelType) match {
-      case Multinomial =>
-        val localPi = pi
-        val localTheta = theta
-        features: Vector =>
-          NaiveBayesModel.multinomialCalculation(features, localPi, localTheta)
-      case Complement =>
-        val localTheta = theta
-        features: Vector =>
-          NaiveBayesModel.complementCalculation(features, localTheta)
-      case Bernoulli =>
-        val localPiMinusThetaSum = piMinusThetaSum
-        val localThetaMinusNegTheta = thetaMinusNegTheta
-        features: Vector =>
-          NaiveBayesModel.bernoulliCalculation(
-            features, localPiMinusThetaSum, localThetaMinusNegTheta)
-      case Gaussian =>
-        val localPi = pi
-        val localTheta = theta
-        val localSigma = sigma
-        val localLogVarSum = logVarSum
-        features: Vector =>
-          NaiveBayesModel.gaussianCalculation(
-            features, localPi, localTheta, localSigma, localLogVarSum)
-    }
-  }
-
   override protected def predictRawColumn(features: Column): Column = {
-    val localPredictRaw = predictRawFunc
+    val localPredictRaw = NaiveBayesModel.predictRawFunction(
+      $(modelType), pi, theta, sigma)
     udf((features: Vector) => localPredictRaw(features)).apply(features)
   }
 
@@ -518,7 +491,8 @@ class NaiveBayesModel private[ml] (
   }
 
   override protected def predictProbabilityColumn(features: Column): Column = {
-    val localPredictRaw = predictRawFunc
+    val localPredictRaw = NaiveBayesModel.predictRawFunction(
+      $(modelType), pi, theta, sigma)
     udf((features: Vector) => {
       val rawPrediction = localPredictRaw(features)
       NaiveBayesModel.raw2probabilityInPlace(rawPrediction)
@@ -538,7 +512,8 @@ class NaiveBayesModel private[ml] (
   }
 
   override protected def predictionColumn(features: Column): Column = {
-    val localPredictRaw = predictRawFunc
+    val localPredictRaw = NaiveBayesModel.predictRawFunction(
+      $(modelType), pi, theta, sigma)
     if (isDefined(thresholds)) {
       val localThresholds = getThresholds.clone()
       udf((features: Vector) => {
@@ -552,7 +527,19 @@ class NaiveBayesModel private[ml] (
   }
 
   @Since("3.0.0")
-  override def predictRaw(features: Vector): Vector = predictRawFunc(features)
+  override def predictRaw(features: Vector): Vector = {
+    $(modelType) match {
+      case Multinomial =>
+        NaiveBayesModel.multinomialCalculation(features, pi, theta)
+      case Complement =>
+        NaiveBayesModel.complementCalculation(features, theta)
+      case Bernoulli =>
+        NaiveBayesModel.bernoulliCalculation(
+          features, piMinusThetaSum, thetaMinusNegTheta)
+      case Gaussian =>
+        NaiveBayesModel.gaussianCalculation(features, pi, theta, sigma, logVarSum)
+    }
+  }
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     NaiveBayesModel.raw2probabilityInPlace(rawPrediction)
@@ -590,6 +577,28 @@ class NaiveBayesModel private[ml] (
 @Since("1.6.0")
 object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
   import NaiveBayes._
+
+  private def predictRawFunction(
+      modelType: String,
+      pi: Vector,
+      theta: Matrix,
+      sigma: Matrix): Vector => Vector = {
+    modelType match {
+      case Multinomial =>
+        features: Vector => multinomialCalculation(features, pi, theta)
+      case Complement =>
+        features: Vector => complementCalculation(features, theta)
+      case Bernoulli =>
+        val localPiMinusThetaSum = bernoulliPiMinusThetaSum(pi, theta)
+        val localThetaMinusNegTheta = bernoulliThetaMinusNegTheta(theta)
+        features: Vector =>
+          bernoulliCalculation(features, localPiMinusThetaSum, localThetaMinusNegTheta)
+      case Gaussian =>
+        val localLogVarSum = gaussianLogVarSum(sigma)
+        features: Vector =>
+          gaussianCalculation(features, pi, theta, sigma, localLogVarSum)
+    }
+  }
 
   private def multinomialCalculation(
       features: Vector,
