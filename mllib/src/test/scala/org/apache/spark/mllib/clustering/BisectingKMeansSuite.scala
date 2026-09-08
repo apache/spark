@@ -17,13 +17,50 @@
 
 package org.apache.spark.mllib.clustering
 
+import org.apache.hadoop.fs.{FileUtil, Path => HadoopPath}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.sql.functions.{array, col, lit, when}
 import org.apache.spark.util.Utils
 
 class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
+
+  test("load rejects a model whose node ids form a cycle") {
+    val srcDir = Utils.createTempDir()
+    val dstDir = Utils.createTempDir()
+    try {
+      val src = srcDir.toURI.toString
+      val dst = dstDir.toURI.toString
+      val data = sc.parallelize((1 until 8).map(i => Vectors.dense(i.toDouble)), 2)
+      val model = new BisectingKMeans().run(data)
+      model.save(sc, src)
+      val rootId = model.root.index
+
+      // Copy the metadata verbatim, and write a modified data set where the root node lists
+      // itself as its own child (a cycle). Reading src and writing dst avoids a self-overwrite.
+      val hadoopConf = sc.hadoopConfiguration
+      val srcMeta = new HadoopPath(s"$src/metadata")
+      val dstMeta = new HadoopPath(s"$dst/metadata")
+      FileUtil.copy(
+        srcMeta.getFileSystem(hadoopConf), srcMeta,
+        dstMeta.getFileSystem(hadoopConf), dstMeta, false, hadoopConf)
+      spark.read.parquet(s"$src/data")
+        .withColumn("children",
+          when(col("index") === rootId, array(lit(rootId))).otherwise(col("children")))
+        .write.parquet(s"$dst/data")
+
+      val e = intercept[IllegalArgumentException] {
+        BisectingKMeansModel.load(sc, dst)
+      }
+      assert(e.getMessage.contains("Cycle detected"))
+    } finally {
+      Utils.deleteRecursively(srcDir)
+      Utils.deleteRecursively(dstDir)
+    }
+  }
 
   test("default values") {
     val bkm0 = new BisectingKMeans()
