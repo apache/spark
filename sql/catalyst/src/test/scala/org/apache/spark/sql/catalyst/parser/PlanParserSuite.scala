@@ -1056,7 +1056,11 @@ class PlanParserSuite extends AnalysisTest {
           $"u.a",
           None,
           Inner).select(star()))
+    }
+  }
 
+  test("asof join - left asof with on condition") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
       assertEqual(
         "select * from t left asof join u match_condition (t.a >= u.a) on t.b = u.b",
         AsOfJoin.fromMatchCondition(
@@ -1067,7 +1071,11 @@ class PlanParserSuite extends AnalysisTest {
           $"u.a",
           Some($"t.b" === $"u.b"),
           LeftOuter).select(star()))
+    }
+  }
 
+  test("asof join - using single join column") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
       assertEqual(
         "select * from t asof join u match_condition (t.a >= u.a) using (b)",
         AsOfJoin.fromMatchCondition(
@@ -1079,7 +1087,11 @@ class PlanParserSuite extends AnalysisTest {
           None,
           Inner,
           usingColumns = Some(Seq("b"))).select(star()))
+    }
+  }
 
+  test("asof join - using multiple join columns") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
       assertEqual(
         "select * from t asof join u match_condition (t.a >= u.a) using (a, b)",
         AsOfJoin.fromMatchCondition(
@@ -1091,7 +1103,11 @@ class PlanParserSuite extends AnalysisTest {
           None,
           Inner,
           usingColumns = Some(Seq("a", "b"))).select(star()))
+    }
+  }
 
+  test("asof join - less than or equal match operator") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
       assertEqual(
         "select * from t asof join u match_condition (u.a <= t.a)",
         AsOfJoin.fromMatchCondition(
@@ -1102,7 +1118,11 @@ class PlanParserSuite extends AnalysisTest {
           $"t.a",
           None,
           Inner).select(star()))
+    }
+  }
 
+  test("asof join - greater than match operator") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
       assertEqual(
         "select * from t asof join u match_condition (t.a > u.a)",
         AsOfJoin.fromMatchCondition(
@@ -1113,7 +1133,11 @@ class PlanParserSuite extends AnalysisTest {
           $"u.a",
           None,
           Inner).select(star()))
+    }
+  }
 
+  test("asof join - less than match operator") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
       assertEqual(
         "select * from t asof join u match_condition (t.a < u.a)",
         AsOfJoin.fromMatchCondition(
@@ -1124,7 +1148,11 @@ class PlanParserSuite extends AnalysisTest {
           $"u.a",
           None,
           Inner).select(star()))
+    }
+  }
 
+  test("asof join - explicit inner join type") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
       assertEqual(
         "select * from t inner asof join u match_condition (t.a >= u.a)",
         AsOfJoin.fromMatchCondition(
@@ -1135,7 +1163,11 @@ class PlanParserSuite extends AnalysisTest {
           $"u.a",
           None,
           Inner).select(star()))
+    }
+  }
 
+  test("asof join - explicit left outer join type") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
       assertEqual(
         "select * from t left outer asof join u match_condition (t.a >= u.a)",
         AsOfJoin.fromMatchCondition(
