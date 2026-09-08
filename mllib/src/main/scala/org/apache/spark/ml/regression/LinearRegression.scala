@@ -31,6 +31,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PipelineStage, PredictorParams}
 import org.apache.spark.ml.feature._
+import org.apache.spark.ml.functions.vector_dot_product
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.optim.WeightedLeastSquares
 import org.apache.spark.ml.optim.aggregator._
@@ -751,6 +752,13 @@ class LinearRegressionModel private[ml] (
 
   override def predict(features: Vector): Double = {
     BLAS.dot(features, coefficients) + intercept
+  }
+
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
+    val outputSchema = transformSchema(dataset.schema, logging = true)
+    val prediction = vector_dot_product(col($(featuresCol)), coefficients) + intercept
+    dataset.withColumn(
+      $(predictionCol), prediction, outputSchema($(predictionCol)).metadata)
   }
 
   @Since("1.4.0")

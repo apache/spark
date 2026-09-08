@@ -18,8 +18,10 @@
 package org.apache.spark.ml
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector}
 import org.apache.spark.sql.{functions => sf}
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.types.{ArrayType, IntegerType}
 
 // scalastyle:off
 @Since("3.0.0")
@@ -57,6 +59,30 @@ object functions {
       v: Column,
       mode: String = "sparse"): Column = {
     Column.internalFn("ml_vector_posexplode", sf.unwrap_udt(v), sf.lit(mode))
+  }
+
+  private[ml] def vector_dot_product(left: Column, right: Column): Column =
+    Column.internalFn("ml_vector_dot_product", sf.unwrap_udt(left), sf.unwrap_udt(right))
+
+  private[ml] def vector_dot_product(left: Column, right: Vector): Column = {
+    val rightStruct = right match {
+      case sparse: SparseVector =>
+        sf.struct(
+          sf.lit(0.toByte).alias("type"),
+          sf.lit(sparse.size).alias("size"),
+          sf.lit(sparse.indices).alias("indices"),
+          sf.lit(sparse.values).alias("values"))
+      case dense: DenseVector =>
+        sf.struct(
+          sf.lit(1.toByte).alias("type"),
+          sf.lit(null).cast(IntegerType).alias("size"),
+          sf.lit(null).cast(ArrayType(IntegerType)).alias("indices"),
+          sf.lit(dense.values).alias("values"))
+    }
+    Column.internalFn(
+      "ml_vector_dot_product",
+      sf.unwrap_udt(left),
+      rightStruct)
   }
 
   private[ml] def array_binary_search(a: Column, v: Column): Column =

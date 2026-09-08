@@ -33,6 +33,7 @@ import org.apache.spark.ml.stat.MultiClassSummarizer
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.catalyst.expressions.ml.VectorDotProduct
 import org.apache.spark.sql.functions.{col, lit, rand}
 import org.apache.spark.sql.types.LongType
 
@@ -598,6 +599,8 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(model.numClasses === 2)
     val numFeatures = smallBinaryDataset.select("features").first().getAs[Vector](0).size
     assert(model.numFeatures === numFeatures)
+    assert(model.transform(smallBinaryDataset).queryExecution.analyzed.exists(
+      _.expressions.exists(_.exists(_.isInstanceOf[VectorDotProduct]))))
 
     testTransformer[(Double, Vector)](smallBinaryDataset.toDF(),
       model, "rawPrediction", "probability", "prediction") {
