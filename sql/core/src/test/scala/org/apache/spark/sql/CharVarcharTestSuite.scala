@@ -681,6 +681,47 @@ trait CharVarcharTestSuite extends QueryTest {
     }
   }
 
+  test("SPARK-59278: CHAR padding preserves IN list order around NULL") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(c CHAR(5)) USING $format")
+      sql("INSERT INTO t VALUES ('a')")
+
+      checkAnswer(sql("SELECT c IN (NULL, 'a') FROM t"), Row(true))
+      checkAnswer(sql("SELECT c IN ('x', NULL, 'a') FROM t"), Row(true))
+      checkAnswer(sql("SELECT c IN (NULL, 'x') FROM t"), Row(null))
+      checkAnswer(sql("SELECT c NOT IN (NULL, 'a') FROM t"), Row(false))
+      checkAnswer(sql("SELECT c NOT IN (NULL, 'x') FROM t"), Row(null))
+
+      // A user-specified cast deliberately opts into STRING comparison and must not trigger the
+      // implicit CHAR padding rewrite.
+      checkAnswer(sql("SELECT CAST(c AS STRING) IN ('a') FROM t"), Row(false))
+      checkAnswer(sql("SELECT CAST(c AS STRING) IN (NULL, 'a') FROM t"), Row(null))
+    }
+  }
+
+  test("SPARK-59278: CHAR padding accumulates across nested struct fields") {
+    withTable("t1", "t2") {
+      sql(s"CREATE TABLE t1(s STRUCT<a: CHAR(2), b: CHAR(5)>) USING $format")
+      sql(s"CREATE TABLE t2(s STRUCT<a: CHAR(4), b: CHAR(5)>) USING $format")
+      sql("INSERT INTO t1 SELECT named_struct('a', 'a', 'b', 'b')")
+      sql("INSERT INTO t2 SELECT named_struct('a', 'a', 'b', 'b')")
+
+      checkAnswer(sql("SELECT t1.s = t2.s FROM t1 CROSS JOIN t2"), Row(true))
+
+      sql("INSERT OVERWRITE t1 SELECT CAST(NULL AS STRUCT<a: STRING, b: STRING>)")
+      sql("INSERT OVERWRITE t2 SELECT CAST(NULL AS STRUCT<a: STRING, b: STRING>)")
+      checkAnswer(sql("SELECT t1.s = t2.s FROM t1 CROSS JOIN t2"), Row(null))
+      checkAnswer(sql("SELECT t1.s <=> t2.s FROM t1 CROSS JOIN t2"), Row(true))
+
+      sql(
+        """INSERT OVERWRITE t2
+          |SELECT named_struct(
+          |  'a', CAST(NULL AS STRING),
+          |  'b', CAST(NULL AS STRING))""".stripMargin)
+      checkAnswer(sql("SELECT t1.s <=> t2.s FROM t1 CROSS JOIN t2"), Row(false))
+    }
+  }
+
   test("SPARK-35359: create table and insert data over length values") {
     Seq("char", "varchar").foreach { typ =>
       withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {

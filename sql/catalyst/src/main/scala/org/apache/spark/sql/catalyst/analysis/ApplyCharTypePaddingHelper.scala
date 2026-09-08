@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   Attribute,
   BinaryComparison,
+  Cast,
   Expression,
   In,
   Literal,
@@ -45,6 +46,19 @@ object ApplyCharTypePaddingHelper {
       case a: Attribute => Some(a)
       case OuterReference(a: Attribute) => Some(a)
       case _ => None
+    }
+  }
+
+  private object StringAttrOrOuterRef {
+    def unapply(e: Expression): Option[(Expression, Attribute)] = e match {
+      case attr @ AttrOrOuterRef(a) if attr.dataType.isInstanceOf[StringType] =>
+        Some(attr -> a)
+      case cast @ Cast(AttrOrOuterRef(a), _: StringType, _, _)
+          if a.dataType.isInstanceOf[StringType] &&
+            !cast.containsTag(Cast.USER_SPECIFIED_CAST) =>
+        Some(cast -> a)
+      case _ =>
+        None
     }
   }
 
@@ -98,23 +112,25 @@ object ApplyCharTypePaddingHelper {
           }
           .getOrElse(b)
 
-      case i @ In(e @ AttrOrOuterRef(attr), list)
-          if i.resolved && attr.dataType.isInstanceOf[StringType] && list.forall(_.foldable) =>
+      case i @ In(StringAttrOrOuterRef(e, attr), list)
+          if i.resolved && list.forall(_.foldable) =>
         CharVarcharUtils
           .getRawType(attr.metadata)
           .flatMap {
             case c: CharType =>
-              val (nulls, literalChars) =
-                list.map(_.eval().asInstanceOf[UTF8String]).partition(_ == null)
-              val literalCharLengths = literalChars.map(_.numChars())
+              val literalValues = list.map(lit => lit -> lit.eval().asInstanceOf[UTF8String])
+              val literalCharLengths = literalValues.collect {
+                case (_, value) if value != null => value.numChars()
+              }
               val targetLen = (c.length +: literalCharLengths).max
               Some(
                 i.copy(
                   value = addPadding(e, c.length, targetLen, alwaysPad = padCharCol),
-                  list = list.zip(literalCharLengths).map {
-                      case (lit, charLength) =>
-                        addPadding(lit, charLength, targetLen, alwaysPad = false)
-                    } ++ nulls.map(Literal.create(_, StringType))
+                  list = literalValues.map {
+                    case (lit, null) => lit
+                    case (lit, value) =>
+                      addPadding(lit, value.numChars(), targetLen, alwaysPad = false)
+                  }
                 )
               )
             case _ => None

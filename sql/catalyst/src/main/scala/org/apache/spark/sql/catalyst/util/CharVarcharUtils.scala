@@ -337,12 +337,21 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
           val fieldExpr = GetStructField(expr, i, Some(field.name))
           val padded = padCharToTargetLength(
             fieldExpr, field.dataType, targets(i).dataType, alwaysPad)
-          needPadding = padded.isDefined
+          needPadding = needPadding || padded.isDefined
           createStructExprs += Literal(field.name)
           createStructExprs += padded.getOrElse(fieldExpr)
           i += 1
         }
-        if (needPadding) Some(CreateNamedStruct(createStructExprs.toSeq)) else None
+        if (needPadding) {
+          val struct = CreateNamedStruct(createStructExprs.toSeq)
+          if (expr.nullable) {
+            Some(If(IsNull(expr), Literal(null, struct.dataType), struct))
+          } else {
+            Some(struct)
+          }
+        } else {
+          None
+        }
 
       case (ArrayType(et, containsNull), ArrayType(target, _)) =>
         val param = NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)
