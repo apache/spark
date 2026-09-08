@@ -18,17 +18,22 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyedPartitioning, KeyedShuffleSpec, KeyReducer, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
+import org.apache.spark.sql.connector.KeyGroupedPartitioningSuiteBase
 import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer, Reducer}
+import org.apache.spark.sql.connector.expressions.Expressions.identity
 import org.apache.spark.sql.execution.{DummySparkPlan, LeafExecNode, SafeForKWayMerge}
+import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
+import org.apache.spark.sql.execution.ui.SparkPlanGraphNode
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
-class GroupPartitionsExecSuite extends SharedSparkSession {
+class GroupPartitionsExecSuite
+  extends KeyGroupedPartitioningSuiteBase with SQLMetricsTestUtils {
 
   private val exprA = AttributeReference("a", IntegerType)()
   private val exprB = AttributeReference("b", IntegerType)()
@@ -36,6 +41,16 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
 
   private def row(a: Int): InternalRow = InternalRow.fromSeq(Seq(a))
   private def row(a: Int, b: Int): InternalRow = InternalRow.fromSeq(Seq(a, b))
+
+  /** Reads one metric of a plan-graph node back from the status store values. */
+  private def metricValue(
+      metricValues: Map[Long, String], node: SparkPlanGraphNode, name: String): String = {
+    val metric = node.metrics.find(_.name == name).getOrElse {
+      val names = node.metrics.map(_.name).mkString(", ")
+      fail(s"metric '$name' missing on ${node.name}: $names")
+    }
+    metricValues(metric.accumulatorId).replaceAll(",", "")
+  }
 
   test("SPARK-59057: the output flag reports what this node's grouping merges") {
     // Keys [(1,1), (1,2), (2,1)] projected onto position 0 give [1, 1, 2]. The first two groups
@@ -523,6 +538,281 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(gpe.groupedPartitions.forall(_._2.size <= 1), "expected non-coalescing")
     withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       assert(gpe.tryEnableSortedMerge().isEmpty)
+    }
+  }
+
+  test("SPARK-59310: basic counts without alignment") {
+    // Keys [1, 2, 1]: 3 input splits, key 1 coalesces partitions 0 and 2, 2 output partitions.
+    val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(1))))
+    val gpe = GroupPartitionsExec(child)
+    gpe.execute()
+
+    assert(gpe.metrics("numInputPartitions").value === 3)
+    assert(gpe.metrics("numPartitions").value === 2)
+    assert(gpe.metrics("numEmptyPartitions").value === 0)
+    assert(gpe.metrics("numCoalescedPartitions").value === 1)
+    assert(gpe.metrics("maxPartitionsPerGroup").value === 2)
+    // Without expectedPartitionKeys there is no alignment, so its metrics stay unregistered.
+    assert(!gpe.metrics.contains("numPrunedPartitions"))
+    assert(!gpe.metrics.contains("numReplicatedPartitions"))
+  }
+
+  test("SPARK-59310: zero coalesced without duplicate keys") {
+    val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(3))))
+    val gpe = GroupPartitionsExec(child)
+    gpe.execute()
+
+    assert(gpe.metrics("numCoalescedPartitions").value === 0)
+    assert(gpe.metrics("numPartitions").value === 3)
+    assert(gpe.metrics("maxPartitionsPerGroup").value === 1)
+  }
+
+  test("SPARK-59310: distribute alignment pads and never replicates") {
+    // Child splits: key 1 -> [0], key 2 -> [1, 2]. Expected: key 1 x1, key 2 x3, key 3 x1.
+    // Key 2 spreads its 2 splits over 3 expected partitions (one empty pad) and key 3 has no
+    // split (one more empty), so 5 output partitions with 2 empty and nothing coalesced.
+    def keyOf(a: Int): InternalRowComparableWrapper =
+      InternalRowComparableWrapper(row(a), Seq(exprA))
+    val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(2))))
+    val gpe = GroupPartitionsExec(child,
+      expectedPartitionKeys = Some(Seq(keyOf(1) -> 1, keyOf(2) -> 3, keyOf(3) -> 1)),
+      distributePartitions = true)
+    gpe.execute()
+
+    assert(gpe.metrics("numInputPartitions").value === 3)
+    assert(gpe.metrics("numPartitions").value === 5)
+    assert(gpe.metrics("numEmptyPartitions").value === 2)
+    assert(gpe.metrics("numPrunedPartitions").value === 0)
+    assert(gpe.metrics("numCoalescedPartitions").value === 0, "distribute never coalesces")
+    assert(!gpe.metrics.contains("numReplicatedPartitions"), "distribute never replicates")
+  }
+
+  test("SPARK-59310: alignment prunes unmatched keys, pads missing ones") {
+    // The expected keys carry key 1 and a key-3 slot the child does not hold, as an inner
+    // join's intersection combined with the other side's layout would. The 2 splits of key 2
+    // cannot produce join output and never enter the alignment; the missing key 3 pads two
+    // empty output partitions, and being empty, replicates nothing despite its 2 slots.
+    def keyOf(a: Int): InternalRowComparableWrapper =
+      InternalRowComparableWrapper(row(a), Seq(exprA))
+    val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(2))))
+    val gpe = GroupPartitionsExec(child,
+      expectedPartitionKeys = Some(Seq(keyOf(1) -> 1, keyOf(3) -> 2)))
+    gpe.execute()
+
+    assert(gpe.metrics("numInputPartitions").value === 3)
+    assert(gpe.metrics("numPartitions").value === 3)
+    assert(gpe.metrics("numPrunedPartitions").value === 2)
+    assert(gpe.metrics("numEmptyPartitions").value === 2)
+    assert(gpe.metrics("numCoalescedPartitions").value === 0)
+    assert(gpe.metrics("maxPartitionsPerGroup").value === 1)
+    assert(gpe.metrics("numReplicatedPartitions").value === 0,
+      "empty groups replicate nothing, and the single-split key 1 has no copy")
+  }
+
+  test("SPARK-59310: replicate alignment counts the reads beyond the first") {
+    // The other join side expects 2 partitions for key 1, so this side's splits for the key are
+    // replicated to both: the slot beyond the first re-reads both splits, 2 extra input
+    // partition reads. Each output partition also coalesces the 2 splits of the key.
+    def keyOf(a: Int): InternalRowComparableWrapper =
+      InternalRowComparableWrapper(row(a), Seq(exprA))
+    val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(1))))
+    val gpe = GroupPartitionsExec(child, expectedPartitionKeys = Some(Seq(keyOf(1) -> 2)))
+    gpe.execute()
+
+    assert(gpe.metrics("numInputPartitions").value === 2)
+    assert(gpe.metrics("numPartitions").value === 2)
+    assert(gpe.metrics("numReplicatedPartitions").value === 2)
+    assert(gpe.metrics("numCoalescedPartitions").value === 2, "both copies merge the 2 splits")
+    assert(gpe.metrics("maxPartitionsPerGroup").value === 2)
+    assert(gpe.metrics("numEmptyPartitions").value === 0)
+    assert(gpe.metrics("numPrunedPartitions").value === 0)
+  }
+
+  test("SPARK-59310: an inner join intersection prunes both sides") {
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTable(s"testcat.ns.$items", s"testcat.ns.$purchases") {
+        createTable(items, itemsColumns, Array(identity("id")))
+        sql(s"INSERT INTO testcat.ns.$items VALUES " +
+            s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+            s"(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+            s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+            s"(2, 'bb', 10.5, cast('2020-01-01' as timestamp)), " +
+            s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+        createTable(purchases, purchasesColumns, Array(identity("item_id")))
+        sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+            s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+            s"(1, 44.0, cast('2020-01-15' as timestamp)), " +
+            s"(1, 45.0, cast('2020-01-15' as timestamp)), " +
+            s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
+            s"(4, 19.5, cast('2020-02-01' as timestamp))")
+
+        // The sides hold different keys ({1,2,3} vs {1,2,4}), so grouping alone cannot align
+        // them and the join pushes the inner intersection {1,2} down as the expected keys.
+        // Each side then coalesces its duplicate-key splits (items merges two groups of two,
+        // purchases one group of three) and prunes the one split of its unmatched key
+        // (items key 3, purchases key 4); nothing is empty or replicated.
+        // Both AQE arms: the query has no shuffle, so the executed nodes and their accumulator
+        // ids are the same with and without AQE, and the reporting chain must work in both.
+        Seq(false, true).foreach { aqeEnabled =>
+          withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
+            val df = sql(s"SELECT i.id FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+              "ON i.id = p.item_id")
+            val previousExecutionIds = currentExecutionIds()
+            checkAnswer(df, Seq.fill(6)(Row(1L)) ++ Seq.fill(2)(Row(2L)))
+            val executionIds = currentExecutionIds().diff(previousExecutionIds)
+            assert(executionIds.size === 1)
+            val executionId = executionIds.head
+
+            // The metrics must survive the full reporting path: set on the driver during
+            // doExecute, posted to the listener bus, and readable back from the status store
+            // the SQL UI renders.
+            val metricValues = statusStore.executionMetrics(executionId)
+            val groupNodes =
+              statusStore.planGraph(executionId).nodes.filter(_.name == "GroupPartitions")
+            assert(groupNodes.size === 2, "one GroupPartitionsExec per join side")
+            groupNodes.foreach { node =>
+              assert(metricValue(metricValues, node, "number of input partitions") === "5")
+              assert(metricValue(metricValues, node, "number of partitions") === "2")
+              assert(metricValue(metricValues, node, "number of empty partitions") === "0")
+              assert(metricValue(metricValues, node, "number of pruned input partitions") === "1")
+              assert(metricValue(metricValues, node,
+                "number of replicated input partition reads") === "0",
+                "no expected key carries multiple splits, so nothing is replicated")
+            }
+            assert(groupNodes.map(metricValue(metricValues, _, "number of coalesced partitions"))
+              .sorted === Seq("1", "2"))
+            assert(groupNodes.map(metricValue(metricValues, _, "max partitions per group"))
+              .sorted === Seq("2", "3"))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59310: a disjoint inner join prunes both sides to empty end to end") {
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTable(s"testcat.ns.$items", s"testcat.ns.$purchases") {
+        createTable(items, itemsColumns, Array(identity("id")))
+        sql(s"INSERT INTO testcat.ns.$items VALUES " +
+            s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+            s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp))")
+        createTable(purchases, purchasesColumns, Array(identity("item_id")))
+        sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+            s"(3, 42.0, cast('2020-01-01' as timestamp)), " +
+            s"(4, 44.0, cast('2020-01-15' as timestamp))")
+
+        // The key sets {1, 2} and {3, 4} are disjoint, so the inner join's intersection is
+        // empty: the alignment emits no output partition on either side, each side prunes both
+        // of its inputs, and doExecute takes the empty-RDD branch. The metrics are sent before
+        // that branch, so the total pruning still reaches the store.
+        val df = sql(s"SELECT i.id FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+          "ON i.id = p.item_id")
+        val previousExecutionIds = currentExecutionIds()
+        checkAnswer(df, Nil)
+        val executionIds = currentExecutionIds().diff(previousExecutionIds)
+        assert(executionIds.size === 1)
+        val executionId = executionIds.head
+
+        val metricValues = statusStore.executionMetrics(executionId)
+        val groupNodes =
+          statusStore.planGraph(executionId).nodes.filter(_.name == "GroupPartitions")
+        assert(groupNodes.size === 2, "one GroupPartitionsExec per join side")
+        groupNodes.foreach { node =>
+          assert(metricValue(metricValues, node, "number of input partitions") === "2")
+          assert(metricValue(metricValues, node, "number of partitions") === "0")
+          assert(metricValue(metricValues, node, "number of pruned input partitions") === "2")
+          assert(metricValue(metricValues, node, "number of empty partitions") === "0")
+          assert(metricValue(metricValues, node, "number of coalesced partitions") === "0")
+          assert(metricValue(metricValues, node, "max partitions per group") === "0")
+          assert(metricValue(metricValues, node,
+            "number of replicated input partition reads") === "0")
+        }
+      }
+    }
+  }
+
+  test("SPARK-59310: partial clustering replicates the smaller side") {
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTable(s"testcat.ns.$items", s"testcat.ns.$purchases") {
+        createTable(items, itemsColumns, Array(identity("id")))
+        sql(s"INSERT INTO testcat.ns.$items VALUES " +
+            s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+            s"(1, 'aa', 41.0, cast('2020-01-02' as timestamp)), " +
+            s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+            s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+        createTable(purchases, purchasesColumns, Array(identity("item_id")))
+        sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+            s"(1, 45.0, cast('2020-01-01' as timestamp)), " +
+            s"(1, 50.0, cast('2020-01-02' as timestamp)), " +
+            s"(1, 55.0, cast('2020-01-02' as timestamp)), " +
+            s"(2, 15.0, cast('2020-01-02' as timestamp)), " +
+            s"(2, 20.0, cast('2020-01-03' as timestamp)), " +
+            s"(2, 22.0, cast('2020-01-03' as timestamp)), " +
+            s"(3, 20.0, cast('2020-02-01' as timestamp))")
+
+        // Partial clustering picks the side with fewer splits to replicate: items (4 splits,
+        // key 1 x2, key 2 x1, key 3 x1) groups per key and copies each group into every
+        // expected slot, while purchases (7 splits) keeps them, one per slot. The slots come
+        // from purchases: key 1 x3, key 2 x3, key 3 x1. Items' extra reads: (3-1) x 2 splits
+        // for key 1, (3-1) x 1 for key 2, none for key 3's single slot.
+        val df = sql(s"SELECT i.id FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+          "ON i.id = p.item_id")
+        val previousExecutionIds = currentExecutionIds()
+        checkAnswer(df, Seq.fill(6)(Row(1L)) ++ Seq.fill(3)(Row(2L)) ++ Seq(Row(3L)))
+        val executionIds = currentExecutionIds().diff(previousExecutionIds)
+        assert(executionIds.size === 1)
+        val executionId = executionIds.head
+
+        val metricValues = statusStore.executionMetrics(executionId)
+        val groupNodes =
+          statusStore.planGraph(executionId).nodes.filter(_.name == "GroupPartitions")
+        assert(groupNodes.size === 2, "one GroupPartitionsExec per join side")
+        val byInputPartitions = groupNodes.map { node =>
+          metricValue(metricValues, node, "number of input partitions") -> node
+        }.toMap
+        assert(byInputPartitions.keySet === Set("4", "7"))
+        val replicatedSide = byInputPartitions("4")
+        val distributeSide = byInputPartitions("7")
+        Seq(replicatedSide, distributeSide).foreach { node =>
+          assert(metricValue(metricValues, node, "number of partitions") === "7")
+          assert(metricValue(metricValues, node, "number of empty partitions") === "0")
+          assert(metricValue(metricValues, node, "number of pruned input partitions") === "0")
+        }
+        assert(metricValue(metricValues, replicatedSide,
+          "number of replicated input partition reads") === "6")
+        assert(!distributeSide.metrics.exists(
+          _.name == "number of replicated input partition reads"),
+          "the distribute side holds one split per slot and registers no replicated metric")
+        assert(metricValue(metricValues, replicatedSide, "number of coalesced partitions") === "3",
+          "the three copies of key 1's two-split group each merge their splits")
+        assert(metricValue(metricValues, replicatedSide, "max partitions per group") === "2")
+        assert(metricValue(metricValues, distributeSide, "number of coalesced partitions") === "0")
+        assert(metricValue(metricValues, distributeSide, "max partitions per group") === "1")
+      }
+    }
+  }
+
+  private case class ExecutableKeyedLeaf(kp: KeyedPartitioning)
+    extends LeafExecNode with SafeForKWayMerge {
+    override def outputPartitioning: Partitioning = kp
+    override def output: Seq[Attribute] = Seq(AttributeReference("a", IntegerType)())
+    override protected def doExecute(): RDD[InternalRow] = {
+      val n = kp.numPartitions
+      sparkContext.parallelize(0 until n, n).map(i => InternalRow(i))
     }
   }
 }
