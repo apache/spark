@@ -186,7 +186,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         sql(s"INSERT INTO $tableName VALUES ('a', 'x'), ('bb', 'yz'), (NULL, NULL)")
         sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c, v")
 
-        // CBO FilterEstimation used to MatchError on CharType/VarcharType after ANALYZE.
+        // CBO FilterEstimation used to throw a MatchError on CharType/VarcharType after ANALYZE.
         sql(s"SELECT c FROM $tableName WHERE c = 'a'").collect()
         sql(s"SELECT c FROM $tableName WHERE c IN ('a  ', 'bb ')").collect()
         sql(s"SELECT v FROM $tableName WHERE v IN ('x', 'yz')").collect()
