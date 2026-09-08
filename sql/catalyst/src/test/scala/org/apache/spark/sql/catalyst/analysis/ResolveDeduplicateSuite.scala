@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, MetadataAttribute}
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeduplicateSpec, DeduplicateWithinWatermark, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeduplicateSpec, DeduplicateWithinWatermark, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 
@@ -134,8 +134,9 @@ class ResolveDeduplicateSuite extends AnalysisTest {
   test("streaming recomputation excludes metadata added after the deduplication boundary") {
     val evolvedDataColumn = $"evolved".int
     val metadataAddedAfterDeduplication = MetadataAttribute("_metadata", StringType)
-    val recomputationChild = LocalRelation(
+    val expandedRelation = LocalRelation(
       rel.output ++ Seq(evolvedDataColumn, metadataAddedAfterDeduplication))
+    val recomputationChild = Project(expandedRelation.output, expandedRelation)
     val spec = DeduplicateSpec(DeduplicateAllColumnsAsKey, viaSparkClassic = true)
 
     val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
@@ -147,7 +148,8 @@ class ResolveDeduplicateSuite extends AnalysisTest {
   test("streaming recomputation retains metadata visible at the deduplication boundary") {
     val metadataSelectedBeforeDeduplication = MetadataAttribute("_metadata", StringType)
     val originalKeys = rel.output :+ metadataSelectedBeforeDeduplication
-    val recomputationChild = LocalRelation(originalKeys)
+    val relation = LocalRelation(originalKeys)
+    val recomputationChild = Project(relation.output, relation)
     val spec = DeduplicateSpec(DeduplicateAllColumnsAsKey, viaSparkClassic = true)
 
     val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
