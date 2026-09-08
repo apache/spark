@@ -53,9 +53,24 @@ class VectorDotProductSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(VectorDotProduct(denseVector, sparseWeights), 22.0)
     checkEvaluation(VectorDotProduct(sparseVector, denseWeights), 22.0)
     checkEvaluation(VectorDotProduct(sparseVector, sparseWeights), 22.0)
-    checkEvaluation(VectorDotProduct(dense(), sparse(0, Array.emptyIntArray,
-      Array.emptyDoubleArray)), 0.0)
-    checkEvaluation(VectorDotProduct(Literal(null, vectorSqlType), denseWeights), null)
+  }
+
+  test("vector dot product with null vectors") {
+    val nullVector = Literal(null, vectorSqlType)
+    val vector = dense(1.0)
+
+    checkEvaluation(VectorDotProduct(nullVector, vector), null)
+    checkEvaluation(VectorDotProduct(vector, nullVector), null)
+  }
+
+  test("vector dot product with empty vectors") {
+    val emptyDense = dense()
+    val emptySparse = sparse(0, Array.emptyIntArray, Array.emptyDoubleArray)
+
+    checkEvaluation(VectorDotProduct(emptyDense, emptyDense), 0.0)
+    checkEvaluation(VectorDotProduct(emptyDense, emptySparse), 0.0)
+    checkEvaluation(VectorDotProduct(emptySparse, emptyDense), 0.0)
+    checkEvaluation(VectorDotProduct(emptySparse, emptySparse), 0.0)
   }
 
   test("vector dot product rejects vectors with different sizes") {
