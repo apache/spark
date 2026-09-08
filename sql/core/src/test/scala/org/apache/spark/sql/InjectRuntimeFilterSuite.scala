@@ -19,14 +19,17 @@ package org.apache.spark.sql
 
 import java.io.File
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, Literal, ScalarSubquery}
+import org.apache.logging.log4j.Level
+
+import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, Literal, ScalarSubquery, XxHash64}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, SHUFFLE_MERGE}
 import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SubqueryExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.planmerging.MergeSubplans
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -260,8 +263,10 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       case Filter(condition, _) => condition.collect {
         case subquery: org.apache.spark.sql.catalyst.expressions.ScalarSubquery
         => subquery.plan.collect {
+          // A hinted creation side can carry its own `Aggregate` (e.g. a `SELECT DISTINCT` one),
+          // so count the Bloom filter aggregates rather than assuming every aggregate is one.
           case Aggregate(_, aggregateExpressions, _, _) =>
-            aggregateExpressions.map {
+            aggregateExpressions.collect {
               case Alias(AggregateExpression(bfAgg : BloomFilterAggregate, _, _, _, _),
               _) =>
                 assert(bfAgg.estimatedNumItemsExpression.isInstanceOf[Literal])
@@ -300,6 +305,34 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
 
   def assertDidNotRewriteWithBloomFilter(query: String): Unit = {
     checkWithAndWithoutFeatureEnabled(query, shouldReplace = false)
+  }
+
+  /**
+   * Returns the join keys the query's runtime Bloom filters are applied on. The attribute names in
+   * this suite's tables are unique per table (`c1` in `bf1`, `c2` in `bf2`, ...), so this
+   * identifies which side a filter was applied to.
+   */
+  def bloomFilterApplicationSideKeys(query: String): Set[String] = {
+    sql(query).queryExecution.optimizedPlan.collect {
+      case Filter(condition, _) => condition.collect {
+        case BloomFilterMightContain(_, XxHash64(Seq(key), _)) => key.references.map(_.name)
+      }.flatten
+    }.flatten.toSet
+  }
+
+  /** Optimizes `query` and returns the warnings the hint error handler logged while doing so. */
+  def hintWarnings(query: String): Seq[String] = {
+    val logAppender = new LogAppender("runtime filter hint")
+    withLogAppender(logAppender, level = Some(Level.WARN)) {
+      sql(query).queryExecution.optimizedPlan
+    }
+    logAppender.loggingEvents.map(_.getMessage.getFormattedMessage).toSeq
+  }
+
+  def assertHintNotApplied(query: String, reason: String): Unit = {
+    val warnings = hintWarnings(query)
+    assert(warnings.exists(_.contains(s"is not supported in the query: $reason")),
+      s"expected a warning mentioning '$reason', got: $warnings")
   }
 
   test("SPARK-58272: safely use fully materialized selectively filtered caches") {
@@ -1267,6 +1300,321 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
           |       JOIN bf2 ON bf1.c1 = bf2.c2
           |WHERE  bf2.a2 = 62
         """.stripMargin)
+    }
+  }
+
+  test("RUNTIME_FILTER hint waives the creation side's selective predicate requirement") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val query = "select * from bf1 join bf2 on bf1.c1 = bf2.c2"
+      // Without a selective predicate on either side there is no evidence a filter pays off.
+      assertDidNotRewriteWithBloomFilter(query)
+      // The hint supplies that evidence, and picks which side to build from.
+      assertRewroteWithBloomFilter(
+        "select /*+ RUNTIME_FILTER(bf2) */ * from bf1 join bf2 on bf1.c1 = bf2.c2")
+      assert(bloomFilterApplicationSideKeys(
+        "select /*+ RUNTIME_FILTER(bf2) */ * from bf1 join bf2 on bf1.c1 = bf2.c2") == Set("c1"))
+      assert(bloomFilterApplicationSideKeys(
+        "select /*+ RUNTIME_FILTER(bf1) */ * from bf1 join bf2 on bf1.c1 = bf2.c2") == Set("c2"))
+    }
+  }
+
+  test("RUNTIME_FILTER hint waives the application side's scan size threshold") {
+    // A threshold above the application side's scan size, so only the hint can trigger a rewrite.
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1GB",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      assertDidNotRewriteWithBloomFilter(
+        "select * from bf1 join bf2 on bf1.c1 = bf2.c2 where bf2.a2 = 62")
+      assertRewroteWithBloomFilter(
+        "select /*+ RUNTIME_FILTER(bf2) */ * from bf1 join bf2 on bf1.c1 = bf2.c2")
+    }
+  }
+
+  test("RUNTIME_FILTER hint waives the creation side's size threshold") {
+    // A threshold below any creation side's size, so only the hint can trigger a rewrite. The
+    // threshold estimates whether the filter is worth building; the filter's own size is bounded
+    // by the max number of bits regardless.
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "1",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      assertDidNotRewriteWithBloomFilter(
+        "select * from bf1 join bf2 on bf1.c1 = bf2.c2 where bf2.a2 = 62")
+      assertRewroteWithBloomFilter(
+        "select /*+ RUNTIME_FILTER(bf2) */ * from bf1 join bf2 on bf1.c1 = bf2.c2")
+    }
+  }
+
+  test("RUNTIME_FILTER hint waives the shuffle requirement") {
+    // `bf2` is below the broadcast threshold, so this is a broadcast join with no shuffle below
+    // the application side, where a filter is not expected to pay off.
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000") {
+      assertDidNotRewriteWithBloomFilter(
+        "select * from bf1 join bf2 on bf1.c1 = bf2.c2 where bf2.a2 = 62")
+      assertRewroteWithBloomFilter(
+        "select /*+ RUNTIME_FILTER(bf2) */ * from bf1 join bf2 on bf1.c1 = bf2.c2")
+    }
+  }
+
+  test("RUNTIME_FILTER hint waives the application side's single-leaf lineage requirement") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // The application side's key is an aggregate result, which cannot be traced to a scan. The
+      // heuristics use that lineage to predict that the filter reaches a scan; the filter above
+      // the aggregate is valid regardless, and prunes the aggregate's output before the join.
+      val aggregatedApplicationSide =
+        """
+          |FROM   (SELECT max(c1) AS c1 FROM bf1 GROUP BY b1) t
+          |       JOIN bf2
+          |       ON t.c1 = bf2.c2
+        """.stripMargin
+      assertDidNotRewriteWithBloomFilter(s"SELECT * $aggregatedApplicationSide WHERE bf2.a2 = 62")
+      assertRewroteWithBloomFilter(
+        s"SELECT /*+ RUNTIME_FILTER(bf2) */ * $aggregatedApplicationSide")
+    }
+  }
+
+  test("RUNTIME_FILTER hint accepts a creation side the heuristics reject") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // Left to itself the rule looks for a selective predicate over a scan, a search an
+      // `Aggregate` stops, so this is not rewritten despite the selective predicate below it. The
+      // hint designates the creation side instead of searching for one, so the shape stops
+      // mattering.
+      val distinctSource =
+        """
+          |FROM   bf1
+          |       JOIN (SELECT DISTINCT c2 FROM bf2 WHERE a2 = 62) t
+          |       ON bf1.c1 = t.c2
+        """.stripMargin
+      assertDidNotRewriteWithBloomFilter(s"SELECT * $distinctSource")
+      assertRewroteWithBloomFilter(s"SELECT /*+ RUNTIME_FILTER(t) */ * $distinctSource")
+      // Likewise for an ordered `Limit`, which the search does not descend through either.
+      assertRewroteWithBloomFilter(
+        """
+          |SELECT /*+ RUNTIME_FILTER(t) */ *
+          |FROM   bf1
+          |       JOIN (SELECT c2 FROM bf2 WHERE a2 = 62 ORDER BY c2 LIMIT 5) t
+          |       ON bf1.c1 = t.c2
+        """.stripMargin)
+    }
+  }
+
+  test("RUNTIME_FILTER hint builds a filter from a computed join key") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // The filter is built from the hinted side's output, so a join key the creation side computes
+      // rather than reads from a scan -- here an aggregate result -- works like any other.
+      assertRewroteWithBloomFilter(
+        """
+          |SELECT /*+ RUNTIME_FILTER(t) */ *
+          |FROM   bf1
+          |       JOIN (SELECT max(c2) AS c2 FROM bf2 GROUP BY b2) t
+          |       ON bf1.c1 = t.c2
+        """.stripMargin)
+    }
+  }
+
+  test("RUNTIME_FILTER hint does not duplicate an existing DPP filter") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+      // `bf5part` is partitioned by `f5`, and the selective `bf2.a2 = 62` makes DPP prune it on
+      // that key. The hint does not waive the duplication check, so no Bloom filter is added on the
+      // key DPP already prunes -- matching the unhinted behavior asserted above.
+      assertDidNotRewriteWithBloomFilter("select /*+ RUNTIME_FILTER(bf2) */ * from bf5part " +
+        "join bf2 on bf5part.f5 = bf2.c2 where bf2.a2 = 62")
+      // On a join with another, non-partition key, the filter still lands on that key.
+      assertRewroteWithBloomFilter("select /*+ RUNTIME_FILTER(bf2) */ * from bf5part join bf2 " +
+        "on bf5part.c5 = bf2.c2 and bf5part.f5 = bf2.f2 where bf2.a2 = 62")
+    }
+  }
+
+  test("RUNTIME_FILTER hint adds a Bloom filter when the DPP filter cannot reach the scan") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // The hint gets a DPP filter on `bf5part`'s partition key, but the non-deterministic filter
+      // on the pruned side keeps it from being pushed to the scan, so it is later dropped. The
+      // Bloom filter needs no pushdown, so the hint is honored with one instead.
+      spark.udf.register("bf_nondeterministic_true", udf((_: Int) => true).asNondeterministic())
+      assertRewroteWithBloomFilter(
+        """
+          |SELECT /*+ RUNTIME_FILTER(bf2) */ f.f5, bf2.c2
+          |FROM   (SELECT f5 FROM bf5part WHERE bf_nondeterministic_true(f5)) f
+          |       JOIN bf2
+          |       ON f.f5 = bf2.c2
+        """.stripMargin)
+    }
+  }
+
+  test("RUNTIME_FILTER hint is ignored for a creation side that is not repeatable") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // The filter subquery re-executes the creation side, so one that can produce different rows
+      // on re-evaluation could yield keys the join itself never sees and prune rows that do match.
+      val reason = "the hinted side may produce different rows when evaluated again"
+      // A non-deterministic expression.
+      val nonDeterministic =
+        """
+          |SELECT /*+ RUNTIME_FILTER(t) */ *
+          |FROM   bf1
+          |       JOIN (SELECT c2 FROM bf2 WHERE rand() < 0.5) t
+          |       ON bf1.c1 = t.c2
+        """.stripMargin
+      assertDidNotRewriteWithBloomFilter(nonDeterministic)
+      assertHintNotApplied(nonDeterministic, reason)
+      // An unordered limit, whose rows depend on evaluation order.
+      val unorderedLimit =
+        """
+          |SELECT /*+ RUNTIME_FILTER(t) */ *
+          |FROM   bf1
+          |       JOIN (SELECT c2 FROM bf2 WHERE a2 = 62 LIMIT 5) t
+          |       ON bf1.c1 = t.c2
+        """.stripMargin
+      assertDidNotRewriteWithBloomFilter(unorderedLimit)
+      assertHintNotApplied(unorderedLimit, reason)
+    }
+  }
+
+  test("RUNTIME_FILTER hint keeps correctness requirements") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // A left outer join may not have its left side pruned: dropping a left row would drop the
+      // null-extended output row it is entitled to.
+      val leftOuter =
+        "select /*+ RUNTIME_FILTER(bf2) */ * from bf1 left outer join bf2 on bf1.c1 = bf2.c2"
+      assertDidNotRewriteWithBloomFilter(leftOuter)
+      assertHintNotApplied(leftOuter, "the left side of a left outer join cannot be pruned")
+      // The mirror case is allowed: the right side of a left outer join is prunable.
+      assertRewroteWithBloomFilter(
+        "select /*+ RUNTIME_FILTER(bf1) */ * from bf1 left outer join bf2 on bf1.c1 = bf2.c2")
+      // Non-simple expressions stay excluded, as the filter subquery would recompute them.
+      spark.udf.register("bf_square", (s: Long) => s * s)
+      val udfKey =
+        "select /*+ RUNTIME_FILTER(bf2) */ * from bf1 join bf2 on bf1.c1 = bf_square(bf2.c2)"
+      assertDidNotRewriteWithBloomFilter(udfKey)
+      assertHintNotApplied(udfKey, "the join key is not a simple expression")
+    }
+  }
+
+  test("RUNTIME_FILTER hint never filters the hinted side") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+      // Left to itself the rule builds a filter from the selective `bf2` and applies it to `bf1`.
+      // Hinting `bf1` as the source designates the opposite direction, and the hinted side is not
+      // filtered even though it would have been without the hint.
+      val query = "select /*+ RUNTIME_FILTER(bf1) */ * from bf1 join bf2 on bf1.c1 = bf2.c2 " +
+        "where bf2.a2 = 62"
+      assertRewroteWithBloomFilter(query)
+      assert(bloomFilterApplicationSideKeys(query) == Set("c2"))
+    }
+  }
+
+  test("RUNTIME_FILTER hint composes with a join strategy hint") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val query =
+        "select /*+ MERGE(bf1, bf2), RUNTIME_FILTER(bf2) */ * from bf1 join bf2 on bf1.c1 = bf2.c2"
+      assertRewroteWithBloomFilter(query)
+      val plan = sql(query).queryExecution.optimizedPlan
+      val hints = plan.collect { case Join(_, _, _, _, hint) => hint }
+      assert(hints.size == 1)
+      // Both hints survive on the same side: the strategy hint is not overridden by the runtime
+      // filter hint, nor the other way around.
+      assert(hints.head.leftHint.exists(_.strategy.contains(SHUFFLE_MERGE)))
+      assert(hints.head.rightHint.exists(_.strategy.contains(SHUFFLE_MERGE)))
+      assert(hints.head.rightHint.exists(_.runtimeFilterSource))
+      assert(!hints.head.leftHint.exists(_.runtimeFilterSource))
+      // A warning about one hint does not name the other: overriding the strategy leaves the
+      // runtime filter hint in effect, and rejecting the runtime filter hint leaves the strategy.
+      val warnings = hintWarnings("select /*+ BROADCAST(bf2), MERGE(bf2), RUNTIME_FILTER(bf2) */ " +
+        "* from bf1 left outer join bf2 on bf1.c1 = bf2.c2")
+      assert(warnings.exists(_.contains("Hint (strategy=merge) is overridden")))
+      assert(warnings.exists(_.contains("Hint (runtime_filter_source) is not supported")))
+      assert(!warnings.exists(_.contains("(strategy=merge, runtime_filter_source)")))
+    }
+  }
+
+  test("RUNTIME_FILTER hint on both join sides is ambiguous and ignored") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+      // Each side would have to be the other's creation side, so the hint is dropped and the
+      // heuristics decide: the selective `bf2` still yields a filter on `bf1`, as without a hint.
+      val query = "select /*+ RUNTIME_FILTER(bf1, bf2) */ * from bf1 join bf2 on bf1.c1 = bf2.c2 " +
+        "where bf2.a2 = 62"
+      assertRewroteWithBloomFilter(query)
+      assert(bloomFilterApplicationSideKeys(query) == Set("c1"))
+      assertHintNotApplied(query, "the runtime filter source is ambiguous")
+      // The same on a join without equi-join keys.
+      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        assertHintNotApplied(
+          "select /*+ RUNTIME_FILTER(bf1, bf2) */ * from bf1 join bf2 on bf1.c1 > bf2.c2",
+          "the runtime filter source is ambiguous")
+      }
+    }
+  }
+
+  test("RUNTIME_FILTER hint warns with the reason when it cannot be applied") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+      // A filter on the key was already injected at the inner join, so the hinted one is not
+      // built; the warning says so rather than blaming the hinted side.
+      val existing = "select /*+ RUNTIME_FILTER(bf3) */ * from bf1 join bf2 on bf1.c1 = bf2.c2 " +
+        "join bf3 on bf3.c3 = bf1.c1 where bf2.a2 = 5"
+      assertRewroteWithBloomFilter(existing)
+      assertHintNotApplied(existing, "a runtime filter on the join key already exists")
+      // The filter count limit applies to hinted filters too.
+      withSQLConf(SQLConf.RUNTIME_FILTER_NUMBER_THRESHOLD.key -> "1") {
+        assertRewroteWithBloomFilter(existing)
+        assertHintNotApplied(existing,
+          s"${SQLConf.RUNTIME_FILTER_NUMBER_THRESHOLD.key} (1) is reached")
+      }
+      // With Bloom filters disabled the hint is still reported rather than silently dropped.
+      withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
+        assertHintNotApplied(
+          "select /*+ RUNTIME_FILTER(bf2) */ * from bf1 join bf2 on bf1.c1 = bf2.c2",
+          s"${SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key} is false")
+      }
+    }
+  }
+
+  test("RUNTIME_FILTER hint on a relation that is not part of a join is reported") {
+    val logAppender = new LogAppender("runtime filter hint")
+    withLogAppender(logAppender, level = Some(Level.WARN)) {
+      sql("select /*+ RUNTIME_FILTER(bf1) */ * from bf1").queryExecution.optimizedPlan
+    }
+    assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+      "runtime_filter_source) is specified but it is not part of a join relation")))
+  }
+
+  test("RUNTIME_FILTER hint on a join without equi-join keys is reported") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      assertHintNotApplied(
+        "select /*+ RUNTIME_FILTER(bf2) */ * from bf1 join bf2 on bf1.c1 > bf2.c2",
+        "no equi-join keys")
+    }
+  }
+
+  test("RUNTIME_FILTER hint inside a subquery applies to the join it is rewritten into") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // An IN subquery becomes a left semi join, whose left side can be pruned.
+      assertRewroteWithBloomFilter(
+        "select * from bf1 where bf1.c1 in (select /*+ RUNTIME_FILTER(bf2) */ c2 from bf2)")
+      // A NOT EXISTS subquery becomes a left anti join, whose left side cannot.
+      val notExists = "select * from bf1 where not exists " +
+        "(select /*+ RUNTIME_FILTER(bf2) */ 1 from bf2 where bf2.c2 = bf1.c1)"
+      assertDidNotRewriteWithBloomFilter(notExists)
+      assertHintNotApplied(notExists, "the left side of a left anti join cannot be pruned")
+    }
+  }
+
+  test("RUNTIME_FILTER hint without parameters applies to the subtree below it") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val query = "select * from bf1 join (select /*+ RUNTIME_FILTER */ c2 from bf2) t " +
+        "on bf1.c1 = t.c2"
+      assertRewroteWithBloomFilter(query)
+      assert(bloomFilterApplicationSideKeys(query) == Set("c1"))
     }
   }
 
