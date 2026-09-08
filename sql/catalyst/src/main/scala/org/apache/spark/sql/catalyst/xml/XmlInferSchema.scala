@@ -208,6 +208,11 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
       case e @ (_: IOException | _: RuntimeException) if options.ignoreCorruptFiles =>
         logWarning("Skipped the rest of the content in the corrupted file", e)
         Some(StructType(Nil))
+      case e: StackOverflowError =>
+        // A record nested too deeply to infer without exhausting the stack is handled as a
+        // malformed record per the parse mode, rather than letting the StackOverflowError escape
+        // and fail the job.
+        handleXmlErrorsByParseMode(parser, options.parseMode, options.columnNameOfCorruptRecord, e)
       case NonFatal(e) =>
         handleXmlErrorsByParseMode(parser, options.parseMode, options.columnNameOfCorruptRecord, e)
     } finally {
@@ -290,6 +295,11 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
       case e: FileNotFoundException if !options.ignoreMissingFiles =>
         parser.close()
         throw e
+      case e: StackOverflowError =>
+        // See `infer(String, ...)`: a record too deeply nested to infer is handled as a malformed
+        // record rather than crashing with a StackOverflowError.
+        parser.close()
+        handleXmlErrorsByParseMode(parser, options.parseMode, options.columnNameOfCorruptRecord, e)
       case NonFatal(e) =>
         SparkErrorUtils.getRootCause(e) match {
           case _: XMLStreamException | _: MalformedInputException =>

@@ -331,6 +331,47 @@ class XmlSuite
     )
   }
 
+  test("SPARK-59322: deeply nested record does not overflow the stack during inference") {
+    // A record nested far more deeply than the JVM stack can accommodate previously escaped
+    // schema inference as a StackOverflowError. It is now handled per the parse mode.
+    val depth = 60000
+    val deepRecord =
+      "<ROWS><ROW>" + ("<a>" * depth) + "x" + ("</a>" * depth) + "</ROW></ROWS>"
+
+    withTempPath { path =>
+      Files.write(path.toPath, deepRecord.getBytes(StandardCharsets.UTF_8))
+
+      // FAILFAST surfaces a clean, framework error instead of a StackOverflowError.
+      checkError(
+        exception = intercept[SparkException] {
+          spark.read
+            .option("rowTag", "ROW")
+            .option("mode", FailFastMode.name)
+            .xml(path.getAbsolutePath)
+        },
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map(
+          "badRecord" -> "_corrupt_record",
+          "failFastMode" -> "FAILFAST"))
+
+      // PERMISSIVE (the default) captures it as a corrupt record without crashing.
+      val df = spark.read
+        .option("rowTag", "ROW")
+        .xml(path.getAbsolutePath)
+      assert(df.columns.contains("_corrupt_record"))
+    }
+  }
+
+  test("SPARK-59322: a normally nested record still infers its schema") {
+    val record = "<ROWS><ROW><a><b><c>1</c></b></a></ROW></ROWS>"
+    withTempPath { path =>
+      Files.write(path.toPath, record.getBytes(StandardCharsets.UTF_8))
+      val df = spark.read.option("rowTag", "ROW").xml(path.getAbsolutePath)
+      assert(!df.columns.contains("_corrupt_record"))
+      assert(df.count() === 1)
+    }
+  }
+
   test("DSL test for permissive mode for corrupt records") {
     val carsDf = spark.read
       .option("rowTag", "ROW")
