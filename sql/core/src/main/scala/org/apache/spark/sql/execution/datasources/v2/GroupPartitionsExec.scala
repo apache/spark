@@ -171,7 +171,7 @@ case class GroupPartitionsExec(
       keyMap: Map[InternalRowComparableWrapper, Seq[Int]],
       numInputPartitions: Int) = {
     var isGrouped = true
-    var numReplicatedPartitions = 0
+    var numReplicatedPartitionReads = 0
     // Splits the alignment references, accumulated over the expected keys. Every producer of
     // `expectedPartitionKeys` deduplicates the keys, so no split is counted twice here.
     var numMatchedPartitions = 0
@@ -190,7 +190,7 @@ case class GroupPartitionsExec(
       } else {
         // The slots beyond the first re-read the whole group. A key this side does not hold
         // has no splits to re-read, so the product is 0 and no explicit guard is needed.
-        numReplicatedPartitions += (numSplits - 1) * splits.size
+        numReplicatedPartitionReads += (numSplits - 1) * splits.size
         // Replicate all splits to each expected partition
         Seq.fill(numSplits)((key, splits))
       }
@@ -198,7 +198,7 @@ case class GroupPartitionsExec(
     // The keyMap groups partition every input index, so the pruned inputs are the total minus
     // the matched.
     val numPrunedPartitions = numInputPartitions - numMatchedPartitions
-    (alignedPartitions, isGrouped, numPrunedPartitions, numReplicatedPartitions)
+    (alignedPartitions, isGrouped, numPrunedPartitions, numReplicatedPartitionReads)
   }
 
   /**
@@ -245,7 +245,7 @@ case class GroupPartitionsExec(
 
     val keyToPartitionIndices = reducedKeys.zipWithIndex.groupMap(_._1)(_._2)
 
-    val (partitions, isGrouped, numPrunedPartitions, numReplicatedPartitions) =
+    val (partitions, isGrouped, numPrunedPartitions, numReplicatedPartitionReads) =
       if (expectedPartitionKeys.isDefined) {
         alignToExpectedKeys(keyToPartitionIndices, childKp.numPartitions)
       } else {
@@ -280,7 +280,7 @@ case class GroupPartitionsExec(
       }
     }
     PartitionGrouping(partitions, isGrouped, isCollapsed, keysRewritten,
-      childKp.numPartitions, numPrunedPartitions, numReplicatedPartitions)
+      numPrunedPartitions, numReplicatedPartitionReads)
   }
 
   /**
@@ -312,9 +312,11 @@ case class GroupPartitionsExec(
 
   // All values are computed on the driver by `grouping`, so they are reported through
   // `sendDriverMetrics` rather than task-side accumulators. Registration reads constructor
-  // parameters only: pruning and replication are facts of the alignment path and are registered
-  // only in the modes that produce them, while coalescing can happen in any mode and reports 0
-  // when nothing merged.
+  // parameters only: replication needs an expected key with several slots, which the expected
+  // keys themselves show. Pruning is registered over the whole alignment path; the ordering
+  // producer expects the child's own keys and so never prunes, but no constructor parameter
+  // separates it from the join producers that can. Coalescing can happen in any mode and
+  // reports 0 when nothing merged.
   @transient override lazy val metrics: Map[String, SQLMetric] = Map(
     "numInputPartitions" -> SQLMetrics.createMetric(sparkContext, "number of input partitions"),
     "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions"),
@@ -323,8 +325,8 @@ case class GroupPartitionsExec(
       SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"),
     "maxPartitionsPerGroup" ->
       SQLMetrics.createMetric(sparkContext, "max partitions per group")) ++ {
-    if (expectedPartitionKeys.isDefined && !distributePartitions) {
-      Map("numReplicatedPartitions" -> SQLMetrics.createMetric(sparkContext,
+    if (expectedPartitionKeys.exists(_.exists(_._2 > 1)) && !distributePartitions) {
+      Map("numReplicatedPartitionReads" -> SQLMetrics.createMetric(sparkContext,
         "number of replicated input partition reads"))
     } else {
       Map.empty[String, SQLMetric]
@@ -431,8 +433,10 @@ case class GroupPartitionsExec(
   private def sendDriverMetrics(): Unit = {
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     val driverAccumUpdates = ArrayBuffer.empty[(Long, Long)]
-    def set(name: String, value: Long): Unit = {
-      val metric = metrics(name)
+    // `metrics` is the single source of truth for what this node reports: an unregistered name
+    // is skipped here instead of its registration condition being repeated. `SparkPlan.execute`
+    // memoizes `doExecute` per instance, so this posts at most once.
+    def set(name: String, value: Long): Unit = metrics.get(name).foreach { metric =>
       metric.set(value)
       driverAccumUpdates += (metric.id -> value)
     }
@@ -452,17 +456,13 @@ case class GroupPartitionsExec(
         maxPartitionsPerGroup = size
       }
     }
-    set("numInputPartitions", grouping.numInputPartitions)
+    set("numInputPartitions", child.outputPartitioning.numPartitions)
     set("numPartitions", groupedPartitions.size)
     set("numEmptyPartitions", numEmptyPartitions)
     set("numCoalescedPartitions", numCoalescedPartitions)
     set("maxPartitionsPerGroup", maxPartitionsPerGroup)
-    if (expectedPartitionKeys.isDefined && !distributePartitions) {
-      set("numReplicatedPartitions", grouping.numReplicatedPartitions)
-    }
-    if (expectedPartitionKeys.isDefined) {
-      set("numPrunedPartitions", grouping.numPrunedPartitions)
-    }
+    set("numReplicatedPartitionReads", grouping.numReplicatedPartitionReads)
+    set("numPrunedPartitions", grouping.numPrunedPartitions)
     SQLMetrics.postDriverMetricsUpdatedByValue(
       sparkContext, executionId, driverAccumUpdates.toSeq)
   }
@@ -567,19 +567,17 @@ case class GroupPartitionsExec(
 }
 
 /**
- * What a [[GroupPartitionsExec]] computes once and reports from several members.
- * `numInputPartitions` is the child's split count; the last two fields count the alignment's
- * effect on the reads of those splits (see `alignToExpectedKeys`), and are 0 outside the
- * alignment path.
+ * What a [[GroupPartitionsExec]] computes once and reports from several members. The last two
+ * fields count the alignment's effect on the reads of the child's splits (see
+ * `alignToExpectedKeys`), and are 0 outside the alignment path.
  */
 private case class PartitionGrouping(
     partitions: Seq[(InternalRowComparableWrapper, Seq[Int])],
     isGrouped: Boolean,
     isCollapsed: Boolean,
     keysRewritten: Boolean,
-    numInputPartitions: Int,
     numPrunedPartitions: Int,
-    numReplicatedPartitions: Int)
+    numReplicatedPartitionReads: Int)
 
 /**
  * A PartitionCoalescer that groups partitions according to a pre-computed grouping plan.

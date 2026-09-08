@@ -45,6 +45,8 @@ import org.apache.spark.sql.execution.{
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
+import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
+import org.apache.spark.sql.execution.ui.SparkPlanGraphNode
 import org.apache.spark.sql.functions.{col, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
@@ -370,7 +372,7 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
 
 @ExtendedSQLTest
 class KeyGroupedPartitioningSuite
-  extends KeyGroupedPartitioningSuiteBase with ExplainSuiteHelper {
+  extends KeyGroupedPartitioningSuiteBase with ExplainSuiteHelper with SQLMetricsTestUtils {
   private val functions = Seq(
     UnboundYearsFunction,
     UnboundDaysFunction,
@@ -824,6 +826,199 @@ class KeyGroupedPartitioningSuite
     nodes.map(_.outputPartitioning)
       .flatMap(physical.PartitioningCollection.flatten)
       .collect { case kp: physical.KeyedPartitioning => kp }
+  }
+
+  /** Reads one metric of a plan-graph node back from the status store values. */
+  private def metricValue(
+      metricValues: Map[Long, String], node: SparkPlanGraphNode, name: String): String = {
+    val metric = node.metrics.find(_.name == name).getOrElse {
+      val names = node.metrics.map(_.name).mkString(", ")
+      fail(s"metric '$name' missing on ${node.name}: $names")
+    }
+    metricValues(metric.accumulatorId).replaceAll(",", "")
+  }
+
+  test("SPARK-59310: an inner join intersection prunes both sides") {
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+      withTable(s"testcat.ns.$items", s"testcat.ns.$purchases") {
+        createTable(items, itemsColumns, Array(identity("id")))
+        sql(s"INSERT INTO testcat.ns.$items VALUES " +
+            s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+            s"(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+            s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+            s"(2, 'bb', 10.5, cast('2020-01-01' as timestamp)), " +
+            s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+        createTable(purchases, purchasesColumns, Array(identity("item_id")))
+        sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+            s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+            s"(1, 44.0, cast('2020-01-15' as timestamp)), " +
+            s"(1, 45.0, cast('2020-01-15' as timestamp)), " +
+            s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
+            s"(4, 19.5, cast('2020-02-01' as timestamp))")
+
+        // The sides hold different keys ({1,2,3} vs {1,2,4}), so grouping alone cannot align
+        // them and the join pushes the inner intersection {1,2} down as the expected keys.
+        // Each side then coalesces its duplicate-key splits (items merges two groups of two,
+        // purchases one group of three) and prunes the one split of its unmatched key
+        // (items key 3, purchases key 4); nothing is empty or replicated.
+        // Both AQE arms run their own query and read their own execution's plan graph and
+        // metric values: the reporting chain must work with and without AQE.
+        Seq(false, true).foreach { aqeEnabled =>
+          withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
+            val df = sql(s"SELECT i.id FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+              "ON i.id = p.item_id")
+            val previousExecutionIds = currentExecutionIds()
+            checkAnswer(df, Seq.fill(6)(Row(1L)) ++ Seq.fill(2)(Row(2L)))
+            val executionIds = currentExecutionIds().diff(previousExecutionIds)
+            assert(executionIds.size === 1)
+            val executionId = executionIds.head
+
+            // The metrics must survive the full reporting path: set on the driver during
+            // doExecute, posted to the listener bus, and readable back from the status store
+            // the SQL UI renders.
+            val metricValues = statusStore.executionMetrics(executionId)
+            val groupNodes =
+              statusStore.planGraph(executionId).nodes.filter(_.name == "GroupPartitions")
+            assert(groupNodes.size === 2, "one GroupPartitionsExec per join side")
+            groupNodes.foreach { node =>
+              assert(metricValue(metricValues, node, "number of input partitions") === "5")
+              assert(metricValue(metricValues, node, "number of partitions") === "2")
+              assert(metricValue(metricValues, node, "number of empty partitions") === "0")
+              assert(metricValue(metricValues, node, "number of pruned input partitions") === "1")
+              assert(!node.metrics.exists(
+                _.name == "number of replicated input partition reads"),
+                "no expected key carries multiple slots, so the metric stays unregistered")
+            }
+            assert(groupNodes.map(metricValue(metricValues, _, "number of coalesced partitions"))
+              .sorted === Seq("1", "2"))
+            assert(groupNodes.map(metricValue(metricValues, _, "max partitions per group"))
+              .sorted === Seq("2", "3"))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59310: a disjoint inner join prunes both sides to empty end to end") {
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+      withTable(s"testcat.ns.$items", s"testcat.ns.$purchases") {
+        createTable(items, itemsColumns, Array(identity("id")))
+        sql(s"INSERT INTO testcat.ns.$items VALUES " +
+            s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+            s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp))")
+        createTable(purchases, purchasesColumns, Array(identity("item_id")))
+        sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+            s"(3, 42.0, cast('2020-01-01' as timestamp)), " +
+            s"(4, 44.0, cast('2020-01-15' as timestamp))")
+
+        // The key sets {1, 2} and {3, 4} are disjoint, so the inner join's intersection is
+        // empty: the alignment emits no output partition on either side, each side prunes both
+        // of its inputs, and doExecute takes the empty-RDD branch. The metrics are sent before
+        // that branch, so the total pruning still reaches the store. Both AQE arms run their
+        // own query and read their own execution's plan graph and metric values.
+        Seq(false, true).foreach { aqeEnabled =>
+          withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
+            val df = sql(s"SELECT i.id FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+              "ON i.id = p.item_id")
+            val previousExecutionIds = currentExecutionIds()
+            checkAnswer(df, Nil)
+            val executionIds = currentExecutionIds().diff(previousExecutionIds)
+            assert(executionIds.size === 1)
+            val executionId = executionIds.head
+
+            val metricValues = statusStore.executionMetrics(executionId)
+            val groupNodes =
+              statusStore.planGraph(executionId).nodes.filter(_.name == "GroupPartitions")
+            assert(groupNodes.size === 2, "one GroupPartitionsExec per join side")
+            groupNodes.foreach { node =>
+              assert(metricValue(metricValues, node, "number of input partitions") === "2")
+              assert(metricValue(metricValues, node, "number of partitions") === "0")
+              assert(metricValue(metricValues, node, "number of pruned input partitions") === "2")
+              assert(metricValue(metricValues, node, "number of empty partitions") === "0")
+              assert(metricValue(metricValues, node, "number of coalesced partitions") === "0")
+              assert(metricValue(metricValues, node, "max partitions per group") === "0")
+              assert(!node.metrics.exists(
+                _.name == "number of replicated input partition reads"),
+                "an empty intersection carries no key with multiple slots")
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59310: partial clustering replicates the smaller side") {
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+      withTable(s"testcat.ns.$items", s"testcat.ns.$purchases") {
+        createTable(items, itemsColumns, Array(identity("id")))
+        sql(s"INSERT INTO testcat.ns.$items VALUES " +
+            s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+            s"(1, 'aa', 41.0, cast('2020-01-02' as timestamp)), " +
+            s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+            s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+        createTable(purchases, purchasesColumns, Array(identity("item_id")))
+        sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+            s"(1, 45.0, cast('2020-01-01' as timestamp)), " +
+            s"(1, 50.0, cast('2020-01-02' as timestamp)), " +
+            s"(1, 55.0, cast('2020-01-02' as timestamp)), " +
+            s"(2, 15.0, cast('2020-01-02' as timestamp)), " +
+            s"(2, 20.0, cast('2020-01-03' as timestamp)), " +
+            s"(2, 22.0, cast('2020-01-03' as timestamp)), " +
+            s"(3, 20.0, cast('2020-02-01' as timestamp))")
+
+        // Partial clustering picks the side with fewer splits to replicate: items (4 splits,
+        // key 1 x2, key 2 x1, key 3 x1) groups per key and copies each group into every
+        // expected slot, while purchases (7 splits) keeps them, one per slot. The slots come
+        // from purchases: key 1 x3, key 2 x3, key 3 x1. Items' extra reads: (3-1) x 2 splits
+        // for key 1, (3-1) x 1 for key 2, none for key 3's single slot. Both AQE arms run
+        // their own query and read their own execution's plan graph and metric values.
+        Seq(false, true).foreach { aqeEnabled =>
+          withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
+            val df = sql(s"SELECT i.id FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+              "ON i.id = p.item_id")
+            val previousExecutionIds = currentExecutionIds()
+            checkAnswer(df, Seq.fill(6)(Row(1L)) ++ Seq.fill(3)(Row(2L)) ++ Seq(Row(3L)))
+            val executionIds = currentExecutionIds().diff(previousExecutionIds)
+            assert(executionIds.size === 1)
+            val executionId = executionIds.head
+
+            val metricValues = statusStore.executionMetrics(executionId)
+            val groupNodes =
+              statusStore.planGraph(executionId).nodes.filter(_.name == "GroupPartitions")
+            assert(groupNodes.size === 2, "one GroupPartitionsExec per join side")
+            val byInputPartitions = groupNodes.map { node =>
+              metricValue(metricValues, node, "number of input partitions") -> node
+            }.toMap
+            assert(byInputPartitions.keySet === Set("4", "7"))
+            val replicatedSide = byInputPartitions("4")
+            val distributeSide = byInputPartitions("7")
+            Seq(replicatedSide, distributeSide).foreach { node =>
+              assert(metricValue(metricValues, node, "number of partitions") === "7")
+              assert(metricValue(metricValues, node, "number of empty partitions") === "0")
+              assert(metricValue(metricValues, node, "number of pruned input partitions") === "0")
+            }
+            assert(metricValue(metricValues, replicatedSide,
+              "number of replicated input partition reads") === "6")
+            assert(!distributeSide.metrics.exists(
+              _.name == "number of replicated input partition reads"),
+              "the distribute side holds one split per slot and registers no replicated metric")
+            assert(metricValue(metricValues, replicatedSide,
+              "number of coalesced partitions") === "3",
+              "the three copies of key 1's two-split group each merge their splits")
+            assert(metricValue(metricValues, replicatedSide, "max partitions per group") === "2")
+            assert(metricValue(metricValues, distributeSide,
+              "number of coalesced partitions") === "0")
+            assert(metricValue(metricValues, distributeSide, "max partitions per group") === "1")
+          }
+        }
+      }
+    }
   }
 
   test("partitioned join: exact distribution (same number of buckets) from both sides") {
