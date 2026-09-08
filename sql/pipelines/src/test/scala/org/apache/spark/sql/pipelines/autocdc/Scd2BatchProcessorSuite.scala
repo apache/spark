@@ -898,6 +898,10 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
         sequencing = F.col("seq"),
         storedAsScdType = ScdType.Type2,
         deleteCondition = deleteCondition,
+        // Even if we drop `is_delete` from the output schema, delete-row detection should still
+        // work and the row should still receive a null version map.
+        columnSelection = Some(ColumnSelection.ExcludeColumns(
+          Seq(UnqualifiedColumnName("is_delete")))),
         ignoreNullSelection =
           Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("value"))))
       ),
