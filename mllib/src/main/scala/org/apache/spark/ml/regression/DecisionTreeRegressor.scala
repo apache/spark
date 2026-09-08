@@ -190,6 +190,8 @@ class DecisionTreeRegressionModel private[ml] (
   // For ml connect only
   private[ml] def this() = this("", Node.dummyNode, -1)
 
+  override private[ml] val treeStats: NodeStats = rootNode.computeStats
+
   private[spark] override def estimatedSize: Long = estimateMatadataSize + getEstimatedSize()
 
   override def predict(features: Vector): Double = {
@@ -216,26 +218,33 @@ class DecisionTreeRegressionModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
+    val localRootNode = rootNode
 
     var predictionColNames = Seq.empty[String]
     var predictionColumns = Seq.empty[Column]
 
     if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf { features: Vector => predict(features) }
+      val predictUDF = udf { features: Vector =>
+        localRootNode.predictImpl(features).prediction
+      }
       predictionColNames :+= $(predictionCol)
       predictionColumns :+= predictUDF(col($(featuresCol)))
         .as($(predictionCol), outputSchema($(predictionCol)).metadata)
     }
 
     if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
-      val predictVarianceUDF = udf { features: Vector => predictVariance(features) }
+      val predictVarianceUDF = udf { features: Vector =>
+        localRootNode.predictImpl(features).impurityStats.calculate()
+      }
       predictionColNames :+= $(varianceCol)
       predictionColumns :+= predictVarianceUDF(col($(featuresCol)))
         .as($(varianceCol), outputSchema($(varianceCol)).metadata)
     }
 
     if ($(leafCol).nonEmpty) {
-      val leafUDF = udf { features: Vector => predictLeaf(features) }
+      val leafUDF = udf { features: Vector =>
+        DecisionTreeModel.predictLeaf(features, localRootNode)
+      }
       predictionColNames :+= $(leafCol)
       predictionColumns :+= leafUDF(col($(featuresCol)))
         .as($(leafCol), outputSchema($(leafCol)).metadata)

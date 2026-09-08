@@ -48,7 +48,9 @@ import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProv
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.execution.streaming.checkpointing.FileSystemBasedCheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.{
+  FileSystemBasedCheckpointFileManager,
+  HDFSMetadataLog}
 import org.apache.spark.sql.execution.vectorized.{
   ColumnVectorUtils,
   ConstantColumnVector,
@@ -994,6 +996,22 @@ class QueryExecutionErrorsSuite
           parameters = Map("sourcePath" -> s"$expectedPath.+")
         )
       }
+    }
+  }
+
+  test("SPARK-43940: BATCH_METADATA_NOT_FOUND") {
+    withTempDir { dir =>
+      val metadataLog = new HDFSMetadataLog[String](spark, dir.getAbsolutePath)
+      val e = intercept[SparkFileNotFoundException] {
+        metadataLog.applyFnToBatchByStream(0L) { _ => () }
+      }
+
+      val batchMetadataFile = new Path(dir.getAbsolutePath, "0").toString
+      checkError(
+        exception = e,
+        condition = "BATCH_METADATA_NOT_FOUND",
+        parameters = Map("batchMetadataFile" -> batchMetadataFile),
+        sqlState = "42K03")
     }
   }
 

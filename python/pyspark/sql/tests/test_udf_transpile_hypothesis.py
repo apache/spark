@@ -76,7 +76,6 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import have_package
 from pyspark.util import is_remote_only
 
-
 # Sentinel value used by ``_run`` to mark "this side raised". A unique
 # object is sufficient because we only ever compare it against itself
 # inside the helper.
@@ -109,7 +108,8 @@ _skip_reason = (
 
 
 if _have_hypothesis:
-    from hypothesis import HealthCheck, example, given, settings, strategies as st
+    from hypothesis import HealthCheck, example, given, settings
+    from hypothesis import strategies as st
 
     _DEFAULT_MAX_EXAMPLES = int(os.environ.get("RUN_HYPOTHESIS_MAX_EXAMPLES", "1000"))
 

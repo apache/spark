@@ -24,8 +24,8 @@ by constructing the complete binary protocol that ``worker.py``'s
 """
 
 import io
-import os
 import json
+import os
 import socket
 import struct
 import sys
@@ -35,9 +35,8 @@ from typing import Any, Callable, Iterator
 
 import numpy as np
 import pyarrow as pa
-
 from pyspark.cloudpickle import dumps as cloudpickle_dumps
-from pyspark.serializers import CPickleSerializer, write_int, write_long, SpecialLengths
+from pyspark.serializers import CPickleSerializer, SpecialLengths, write_int, write_long
 from pyspark.sql.types import (
     BinaryType,
     BooleanType,
@@ -51,7 +50,6 @@ from pyspark.sql.types import (
 )
 from pyspark.util import PythonEvalType
 from pyspark.worker import main as worker_main
-
 
 # ---------------------------------------------------------------------------
 # Mock helpers: protocol writer, data factory, UDF factory
@@ -119,6 +117,9 @@ class MockProtocolWriter:
                     "attemptNumber": 0,
                     "taskAttemptId": 0,
                     "cpus": 1,
+                    # Plain decimal string, matching CpuAmount.toDisplayString on
+                    # the JVM side; TaskContextInfo.from_stream requires the key.
+                    "cpuAmount": "1",
                     "resources": {},
                     "localProperties": {},
                 }

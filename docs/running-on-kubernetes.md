@@ -905,8 +905,13 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>default</code></td>
   <td>
     Service account that is used when running the driver pod. The driver pod uses this service account when requesting
-    executor pods from the API server. Note that this cannot be specified alongside a CA cert file, client key file,
-    client cert file, and/or OAuth token. In client mode, use <code>spark.kubernetes.authenticate.serviceAccountName</code> instead.
+    executor pods from the API server. Note that this cannot be specified alongside a submitted CA cert file, client key
+    file, client cert file, and/or OAuth token: Spark mounts those as a secret and they take precedence, so the driver
+    pod is left with the service account its spec already names, or the namespace's default. Spark logs a warning when
+    the account is dropped. To have Spark apply this configuration anyway, put the
+    credentials inside the driver pod and point the
+    <code>spark.kubernetes.authenticate.driver.mounted.*</code> configurations at them instead, which does not mount a
+    secret. In client mode, use <code>spark.kubernetes.authenticate.serviceAccountName</code> instead.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -1871,6 +1876,17 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>4.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.executor.resizeMaxMemory</code></td>
+  <td><code>Long.MaxValue</code></td>
+  <td>
+    The upper bound of the executor container memory limit that the resize plugin can grow to.
+    By default, it is <code>Long.MaxValue</code>, which means no upper bound.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.pvc.resizeInterval</code></td>
   <td><code>5min</code></td>
   <td>
@@ -1900,6 +1916,17 @@ See the [configuration page](configuration.html) for information on Spark config
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pvc.resizeMaxStorage</code></td>
+  <td><code>Long.MaxValue</code></td>
+  <td>
+    The upper bound of the PVC storage request that the resize plugin can grow to.
+    By default, it is <code>Long.MaxValue</code>, which means no upper bound.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.4.0</td>
 </tr>
 </table>
 
@@ -1973,7 +2000,8 @@ See the below table for the full list of pod specifications that will be overwri
   <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
   <td>
     Spark will override <code>serviceAccount</code> with the value of the spark configuration for only
-    driver pods, and only if the spark configuration is specified. Executor pods will remain unaffected.
+    driver pods, and only if the spark configuration is specified and no driver credentials are
+    submitted for Spark to mount as a secret. Executor pods will remain unaffected.
   </td>
 </tr>
 <tr>
@@ -1981,7 +2009,8 @@ See the below table for the full list of pod specifications that will be overwri
   <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
   <td>
     Spark will override <code>serviceAccountName</code> with the value of the spark configuration for only
-    driver pods, and only if the spark configuration is specified. Executor pods will remain unaffected.
+    driver pods, and only if the spark configuration is specified and no driver credentials are
+    submitted for Spark to mount as a secret. Executor pods will remain unaffected.
   </td>
 </tr>
 <tr>
@@ -2188,10 +2217,10 @@ Install Apache YuniKorn:
 ```bash
 helm repo add yunikorn https://apache.github.io/yunikorn-release
 helm repo update
-helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.8.0 --create-namespace --set embedAdmissionController=false
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.9.0 --create-namespace --set embedAdmissionController=false
 ```
 
-The above steps will install YuniKorn v1.8.0 on an existing Kubernetes cluster.
+The above steps will install YuniKorn v1.9.0 on an existing Kubernetes cluster.
 
 ##### Get started
 

@@ -168,6 +168,25 @@ public class ParquetVectorUpdaterFactory {
           isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MILLIS)) {
           // TIMESTAMP_NTZ is a new data type and has no legacy files that need to do rebase.
           return new LongAsMicrosUpdater();
+        } else if (sparkType instanceof TimestampLTZNanosType &&
+          isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS, true)) {
+          // Read side of widening a microsecond LTZ timestamp (TIMESTAMP(6)) to nanosecond
+          // precision: old files stay INT64 TIMESTAMP(MICROS); promote each micros value to
+          // (epochMicros = value, nanosWithinMicro = 0). The isAdjustedToUTC=true match keeps this
+          // to the LTZ family. LTZ files can be legacy Julian, so rebase exactly like the
+          // TimestampType read path above.
+          if ("CORRECTED".equals(datetimeRebaseMode)) {
+            return new MicrosAsTimestampNanosUpdater();
+          } else {
+            boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
+            return new MicrosAsTimestampNanosRebaseUpdater(failIfRebase, datetimeRebaseTz);
+          }
+        } else if (sparkType instanceof TimestampNTZNanosType &&
+          isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS, false)) {
+          // TIMESTAMP_NTZ(nanos) postdates the proleptic Gregorian switch: no legacy files, no
+          // rebase (mirrors the TimestampNTZType read path). The isAdjustedToUTC=false match keeps
+          // this to the NTZ family.
+          return new MicrosAsTimestampNanosUpdater();
         } else if (sparkType instanceof DayTimeIntervalType) {
           return new LongUpdater();
         } else if (canReadAsDecimal(descriptor, sparkType)) {
@@ -247,6 +266,13 @@ public class ParquetVectorUpdaterFactory {
   boolean isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit unit) {
     return logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation annotation &&
       annotation.getUnit() == unit;
+  }
+
+  // Also matches the time-zone family (isAdjustedToUTC). Used when reading a micros column as a
+  // nanosecond type, so a cross-family file (e.g. an NTZ file requested as LTZ) is not mis-decoded.
+  boolean isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit unit, boolean isAdjustedToUTC) {
+    return logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation annotation &&
+      annotation.getUnit() == unit && annotation.isAdjustedToUTC() == isAdjustedToUTC;
   }
 
   boolean isUnsignedIntTypeMatched(int bitWidth) {
@@ -910,6 +936,104 @@ public class ParquetVectorUpdaterFactory {
       long julianMillis = dictionary.decodeToLong(dictionaryIds.getDictId(offset));
       long julianMicros = DateTimeUtils.millisToMicros(julianMillis);
       values.putLong(offset, rebaseMicros(julianMicros, failIfRebase, timeZone));
+    }
+  }
+
+  // Reads an INT64 TIMESTAMP(MICROS) column as a nanosecond timestamp, promoting each micros value
+  // to the two-child (epochMicros, nanosWithinMicro) vector as (value, 0) -- the vectorized read
+  // side of widening TIMESTAMP(6) to nanosecond precision.
+  private static class MicrosAsTimestampNanosUpdater implements ParquetVectorUpdater {
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; i++) {
+        putMicrosAsNanos(offset + i, values, valuesReader.readLong());
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipLongs(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      putMicrosAsNanos(offset, values, valuesReader.readLong());
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      putMicrosAsNanos(offset, values, dictionary.decodeToLong(dictionaryIds.getDictId(offset)));
+    }
+
+    private static void putMicrosAsNanos(
+        int offset, WritableColumnVector values, long epochMicros) {
+      values.getChild(0).putLong(offset, epochMicros);
+      values.getChild(1).putShort(offset, (short) 0);
+    }
+  }
+
+  // LTZ variant of MicrosAsTimestampNanosUpdater: legacy (Julian) micros files are rebased to
+  // proleptic Gregorian before promotion, mirroring LongWithRebaseUpdater for the microsecond read
+  // path. Rebase is applied per value (not via the bulk readLongsWithRebase primitive) because the
+  // target is a two-child struct vector rather than a flat long vector.
+  private static class MicrosAsTimestampNanosRebaseUpdater implements ParquetVectorUpdater {
+    private final boolean failIfRebase;
+    private final String timeZone;
+
+    MicrosAsTimestampNanosRebaseUpdater(boolean failIfRebase, String timeZone) {
+      this.failIfRebase = failIfRebase;
+      this.timeZone = timeZone;
+    }
+
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; i++) {
+        putRebasedMicrosAsNanos(offset + i, values, valuesReader.readLong());
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipLongs(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      putRebasedMicrosAsNanos(offset, values, valuesReader.readLong());
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      putRebasedMicrosAsNanos(
+          offset, values, dictionary.decodeToLong(dictionaryIds.getDictId(offset)));
+    }
+
+    private void putRebasedMicrosAsNanos(
+        int offset, WritableColumnVector values, long julianMicros) {
+      values.getChild(0).putLong(offset, rebaseMicros(julianMicros, failIfRebase, timeZone));
+      values.getChild(1).putShort(offset, (short) 0);
     }
   }
 

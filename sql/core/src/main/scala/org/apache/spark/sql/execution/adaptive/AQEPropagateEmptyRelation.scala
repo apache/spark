@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJo
 import org.apache.spark.sql.catalyst.plans.logical.EmptyRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, LOGICAL_QUERY_STAGE, TRUE_OR_FALSE_LITERAL}
+import org.apache.spark.sql.execution.{BaseLimitExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
@@ -52,19 +53,39 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   //   - positive value means an estimated row count which can be over-estimated
   //   - none means the plan has not materialized or the plan can not be estimated
   private def getEstimatedRowCount(plan: LogicalPlan): Option[BigInt] = plan match {
-    case LogicalQueryStage(_, stage: QueryStageExec) if stage.isMaterialized =>
-      stage.getRuntimeStatistics.rowCount
-
-    case LogicalQueryStage(_, agg: BaseAggregateExec) if agg.groupingExpressions.nonEmpty &&
-      agg.child.isInstanceOf[QueryStageExec] =>
-      val stage = agg.child.asInstanceOf[QueryStageExec]
-      if (stage.isMaterialized) {
-        stage.getRuntimeStatistics.rowCount
-      } else {
-        None
-      }
+    case LogicalQueryStage(_, physicalPlan) =>
+      getEstimatedRowCount(physicalPlan)
 
     case _: EmptyRelation => Some(0)
+
+    case _ => None
+  }
+
+  private def getEstimatedRowCount(plan: SparkPlan): Option[BigInt] = plan match {
+    case stage: QueryStageExec if stage.isMaterialized =>
+      stage.getRuntimeStatistics.rowCount
+
+    case sort: SortExec =>
+      getEstimatedRowCount(sort.child)
+
+    // A global limit can also drop rows through an offset, so only propagate
+    // proven emptiness; a zero limit is unconditionally empty.
+    case limit: BaseLimitExec =>
+      if (limit.limit == 0) {
+        Some(BigInt(0))
+      } else {
+        getEstimatedRowCount(limit.child).filter(_ == 0)
+      }
+
+    // Match the global-aggregate invariant in LogicalQueryStage.computeStats without adopting
+    // its logical-statistics fallback or its unrestricted physical-plan traversal.
+    case aggregate: BaseAggregateExec if aggregate.groupingExpressions.isEmpty =>
+      getEstimatedRowCount(aggregate.child).map { rowCount =>
+        if (rowCount == 0) BigInt(1) else rowCount
+      }
+
+    case aggregate: BaseAggregateExec =>
+      getEstimatedRowCount(aggregate.child)
 
     case _ => None
   }

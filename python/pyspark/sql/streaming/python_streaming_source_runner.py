@@ -15,45 +15,45 @@
 # limitations under the License.
 #
 
+import dataclasses
+import json
 import os
 import sys
-import json
 from typing import IO, Iterator, Tuple
-import dataclasses
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import IllegalArgumentException, PySparkAssertionError
 from pyspark.errors.exceptions.base import PySparkException
 from pyspark.serializers import (
+    SpecialLengths,
     read_int,
     write_int,
     write_with_length,
-    SpecialLengths,
 )
 from pyspark.sql.datasource import (
     DataSource,
     DataSourceStreamReader,
 )
+from pyspark.sql.datasource_internal import (
+    ReadLimitRegistry,
+    _SimpleStreamReaderWrapper,
+    _streamReader,
+)
+from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.streaming.datasource import (
     SupportsTriggerAvailableNow,
 )
-from pyspark.sql.datasource_internal import (
-    _SimpleStreamReaderWrapper,
-    _streamReader,
-    ReadLimitRegistry,
-)
-from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import (
-    _parse_datatype_json_string,
     StructType,
+    _parse_datatype_json_string,
 )
 from pyspark.sql.worker.plan_data_source_read import records_to_arrow_batches
 from pyspark.util import handle_worker_exception
 from pyspark.worker_util import (
-    get_sock_file_to_executor,
     check_python_version,
-    read_command,
+    get_sock_file_to_executor,
     pickleSer,
+    read_command,
     send_accumulator_updates,
     setup_memory_limits,
     setup_spark_files,

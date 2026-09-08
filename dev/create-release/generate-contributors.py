@@ -22,13 +22,12 @@ import os
 import sys
 
 from github import Github
-
 from releaseutils import (
-    tag_exists,
-    get_commits,
-    yesOrNoPrompt,
     contributors_file_name,
+    get_commits,
     get_github_name,
+    tag_exists,
+    yesOrNoPrompt,
 )
 
 # You must set the following before use!

@@ -61,7 +61,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val arrowRecordBatches = arrowBatches.map(ArrowConverters.loadBatch(_, allocator))
     val rowCount = arrowRecordBatches.map(_.getLength).sum
     assert(rowCount === indexData.count())
-    arrowRecordBatches.foreach(batch => assert(batch.getNodes.size() > 0))
+    arrowRecordBatches.foreach(batch => assert(!batch.getNodes.isEmpty))
     arrowRecordBatches.foreach(_.close())
     allocator.close()
   }

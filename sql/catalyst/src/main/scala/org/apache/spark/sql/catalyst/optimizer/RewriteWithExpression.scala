@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, PlanHelper, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, WITH_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, CURRENT_LIKE, WITH_EXPRESSION}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -64,6 +64,125 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       case p if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
         applyInternal(p)
     }
+  }
+
+  /**
+   * Rewrites the `With` expressions in a single expression tree by inlining their common
+   * expressions. Uses `transformUp` to handle nested `With`.
+   *
+   * Inlining duplicates a definition at every reference, so a definition referenced more than once
+   * must be safe to duplicate (see `isSafeToDuplicate`); anything else throws, as there is no plan
+   * here to pre-evaluate it into.
+   *
+   * Does not descend into subquery plans (e.g. `ScalarSubquery`). A caller whose expression
+   * may contain a subquery must rewrite those plans separately.
+   */
+  private[sql] def applyForExpression(expression: Expression): Expression =
+    inlineWith(expression, checkDuplication = true)
+
+  // The plan-level rewrite shares this to inline `With` in conditional branches, which may not be
+  // evaluated and so can't be pulled into a Project; it passes false to inline unconditionally.
+  private def inlineWith(expression: Expression, checkDuplication: Boolean): Expression = {
+    // Which definitions are safe to duplicate can only be decided outer-first, so it is collected
+    // in a separate pass before inlining bottom-up.
+    val safeIds = if (checkDuplication) {
+      safeToDuplicateIds(expression)
+    } else {
+      Set.empty[CommonExpressionId]
+    }
+    expression.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+      case With(child, defs) =>
+        if (checkDuplication) {
+          // Nested `With` is already rewritten, so a ref left in `child` belongs to `defs` or to
+          // an enclosing `With`. Only the ids defined here are checked.
+          val refCounts = child.collect { case ref: CommonExpressionRef => ref.id }
+            .groupBy(identity)
+            .transform((_, refs) => refs.size)
+          defs.foreach { commonExprDef =>
+            // Canonicalization re-numbers ids per `With`, so sibling `With`s reuse ids and break
+            // the global uniqueness `safeIds` relies on. Reject them, as the plan-level rewrite
+            // does.
+            if (commonExprDef.id.canonicalized) {
+              throw SparkException.internalError(
+                "Cannot inline canonicalized common expression definitions")
+            }
+            if (refCounts.getOrElse(commonExprDef.id, 0) > 1 &&
+              !safeIds.contains(commonExprDef.id)) {
+              throw SparkException.internalError(
+                "Cannot inline a common expression definition that is referenced more than " +
+                  s"once and is not safe to duplicate: ${commonExprDef.child.sql}")
+            }
+          }
+        }
+        val refToExpr = defs.map(commonExprDef => commonExprDef.id -> commonExprDef.child).toMap
+        // The guard skips refs to an enclosing `With`, which are inlined when `transformUp` reaches
+        // it. Without it those refs hit `Map.apply` on a missing key and throw
+        // NoSuchElementException.
+        child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
+          case ref: CommonExpressionRef if refToExpr.contains(ref.id) => refToExpr(ref.id)
+        }
+    }
+  }
+
+  /**
+   * Ids of the definitions that are safe to duplicate. Walks outer-first, so a definition that
+   * references an enclosing one is decided after it, and visits a definition's own nested `With`
+   * before the definition itself. Ids are globally unique, so one flat set is enough.
+   */
+  private def safeToDuplicateIds(expression: Expression): Set[CommonExpressionId] = {
+    val safeIds = mutable.Set.empty[CommonExpressionId]
+    def visit(e: Expression): Unit = if (e.containsPattern(WITH_EXPRESSION)) {
+      e match {
+        case With(child, defs) =>
+          defs.foreach { commonExprDef =>
+            visit(commonExprDef.child)
+            if (isSafeToDuplicate(commonExprDef.child, safeIds)) {
+              safeIds += commonExprDef.id
+            }
+          }
+          visit(child)
+        case other => other.children.foreach(visit)
+      }
+    }
+    visit(expression)
+    safeIds.toSet
+  }
+
+  /**
+   * Whether a copy of `e` at every reference always evaluates to the same value. `foldable` is not
+   * enough: `current_timestamp()` re-reads the clock, a TIME -> TIMESTAMP cast derives the current
+   * date, `aes_encrypt` is a foldable `StaticInvoke` with a random IV, and a Hive UDF is foldable
+   * on a user-declared determinism flag.
+   */
+  private def isSafeToDuplicate(
+      e: Expression,
+      safeIds: collection.Set[CommonExpressionId]): Boolean = {
+    // A whitelist: an unrecognized expression is rejected rather than assumed safe.
+    def isLiteralTree(e: Expression): Boolean = e match {
+      case _: Literal => true
+      // A ref is safe exactly when the definition it points to is.
+      case ref: CommonExpressionRef => safeIds.contains(ref.id)
+      // Any other leaf varies per row (attribute) or reads a clock.
+      case _: LeafExpression => false
+      // ComputeCurrentTime stabilizes a TIME -> TIMESTAMP cast into a DateTimeUtils.makeTimestamp*
+      // builder, which depends only on its arguments (none read a clock). Accept it here, ahead
+      // of the blanket NonSQLExpression rejection below, when every argument is a literal tree.
+      case _ if ComputeCurrentTime.isMakeTimestampBuilder(e) =>
+        e.children.forall(isLiteralTree)
+      // Arbitrary Java methods and UDFs can be foldable without being pure.
+      case _: NonSQLExpression | _: UserDefinedExpression => false
+      // A TIME -> TIMESTAMP cast has no date of its own; it derives one from the current date at
+      // eval time, so duplicated copies could resolve different dates. Reject it. Scope to exactly
+      // this source/target pair -- other timestamp-target casts (e.g. CAST('1970-01-01' AS
+      // TIMESTAMP)) are ordinary deterministic casts and fall through to the generic check below.
+      case c: Cast
+          if Cast.isTimeToTimestampNTZ(c.child.dataType, c.dataType) ||
+            Cast.isTimeToTimestampLTZ(c.child.dataType, c.dataType) => false
+      case _ => e.deterministic && e.children.forall(isLiteralTree)
+    }
+    // `current_time()` is a non-leaf whose only leaf is a literal, so the tree walk accepts it;
+    // the CURRENT_LIKE pattern is what rejects it.
+    !e.containsPattern(CURRENT_LIKE) && isLiteralTree(e)
   }
 
   private def applyInternal(p: LogicalPlan): LogicalPlan = {
@@ -181,16 +300,10 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
           rewriteWithExprAndInputPlans(
             _, inputPlans, commonExprsPerChild, commonExprIdSet, isNestedWith))
         val newExpr = c.withNewAlwaysEvaluatedInputs(newAlwaysEvaluatedInputs)
-        // Use transformUp to handle nested With.
-        newExpr.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
-          case With(child, defs) =>
-            // For With in the conditional branches, they may not be evaluated at all and we can't
-            // pull the common expressions into a project which will always be evaluated. Inline it.
-            val refToExpr = defs.map(d => d.id -> d.child).toMap
-            child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
-              case ref: CommonExpressionRef => refToExpr(ref.id)
-            }
-        }
+        // For With in the conditional branches, they may not be evaluated at all and we can't
+        // pull the common expressions into a project which will always be evaluated. Inline it
+        // unconditionally. Use transformUp to handle nested With.
+        inlineWith(newExpr, checkDuplication = false)
 
       case other => other.mapChildren(
         rewriteWithExprAndInputPlans(

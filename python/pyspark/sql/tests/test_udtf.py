@@ -15,27 +15,33 @@
 # limitations under the License.
 #
 
-from decimal import Decimal
 import datetime
+import logging
 import os
 import shutil
 import tempfile
-import unittest
-import logging
 import time
+import unittest
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Iterator, Optional
 
 from pyspark.errors import (
-    PySparkAttributeError,
-    PythonException,
-    PySparkTypeError,
     AnalysisException,
-    PySparkPicklingError,
     IllegalArgumentException,
+    PySparkAttributeError,
+    PySparkPicklingError,
+    PySparkTypeError,
+    PythonException,
 )
-from pyspark.util import PythonEvalType
+from pyspark.logger import PySparkLogger
 from pyspark.sql.functions import (
+    AnalyzeArgument,
+    AnalyzeResult,
+    OrderingColumn,
+    PartitioningColumn,
+    SelectedColumn,
+    SkipRestOfInputTableException,
     array,
     col,
     create_map,
@@ -43,12 +49,6 @@ from pyspark.sql.functions import (
     named_struct,
     udf,
     udtf,
-    AnalyzeArgument,
-    AnalyzeResult,
-    OrderingColumn,
-    PartitioningColumn,
-    SelectedColumn,
-    SkipRestOfInputTableException,
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -64,7 +64,6 @@ from pyspark.sql.types import (
     StructType,
     VariantVal,
 )
-from pyspark.logger import PySparkLogger
 from pyspark.testing import assertDataFrameEqual, assertSchemaEqual
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -74,7 +73,7 @@ from pyspark.testing.utils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.util import is_remote_only
+from pyspark.util import PythonEvalType, is_remote_only
 
 
 class BaseUDTFTestsMixin:

@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from contextlib import contextmanager
-from typing import Generator, NoReturn, List, Callable
+from typing import Callable, Generator, List, NoReturn
 
 from pyspark.errors import PySparkException
 from pyspark.sql.connect.catalog import Catalog

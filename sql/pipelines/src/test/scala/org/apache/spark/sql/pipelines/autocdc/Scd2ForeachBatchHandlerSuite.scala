@@ -20,7 +20,7 @@ package org.apache.spark.sql.pipelines.autocdc
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{functions => F, AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.classic.DataFrame
+import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -715,6 +715,132 @@ class Scd2ForeachBatchHandlerSuite
     checkAnswer(auxTable, auxRow(1, null, 20L, 20L, 20L, 2L))
   }
 
+  test("the auxiliary merge's own writes do not duplicate the rows the target merge reads") {
+    // [[Scd2ForeachBatchHandler.execute]] builds ONE reconciliation source and hands it to two
+    // MERGEs in turn. The auxiliary merge commits first, and the source reads the auxiliary table,
+    // so the target merge re-evaluates that source over a table this very batch just rewrote. A
+    // batch that DEMOTES a visible target row into a hidden auxiliary no-op stresses that: the
+    // same (id, recordStartAt) - the pair both MERGEs match on - ends up in both tables at once.
+    // Reconciliation has to collapse the two copies, keeping the one that knows the run's closure.
+    //
+    // Seed: the "a" run covers [5, 20), its head hidden at 5 and its visible tail at 10, closed by
+    // "b" at 20.
+    createAuxTable(auxRow(1, "a", 5L, null, 5L, null))
+    createTargetTable(
+      targetRow(1, "a", 5L, 20L, 10L),
+      targetRow(1, "b", 20L, null, 20L)
+    )
+
+    // A no-op "a" at 15 lands inside the run and becomes its visible tail, demoting the tail at 10
+    // into the auxiliary table - where the target table still holds its own copy of it.
+    val batchId = 11L
+    val batchDf = microbatchOf(sourceSchema)(upsert(1, "a", 15L))
+    val reconciled = exec.reconcileMicrobatch(batchDf, batchId)
+    val sourceTheAuxMergeReads = reconciled.reconciledAndRoutedDf.collect().toSeq
+    processor.mergeRowsIntoAuxiliaryTable(
+      reconciledDfWithAuxRowsTagged = reconciled.reconciledAndRoutedDf,
+      originalAffectedRowsFromAuxiliaryTable = reconciled.affectedRowsFromAuxiliaryTable,
+      auxiliaryTableIdentifier = defaultAuxTableIdentifier,
+      batchId = batchId
+    )
+
+    // The demotion landed: the auxiliary table now holds a copy of the event at 10 alongside the
+    // run head at 5, and the target table has not been touched yet, so it holds one too.
+    checkAnswer(
+      auxTable,
+      Seq(
+        auxRow(1, "a", 5L, null, 5L, null),
+        auxRow(1, "a", 5L, null, 10L, null)
+      )
+    )
+
+    // Evaluate the source the way the target merge does: a fresh execution over the same plan, so
+    // its scans are rebuilt against the auxiliary table as the merge above left it. It must yield
+    // exactly what the auxiliary merge consumed - the duplicated event at 10 collapsing back to
+    // the one copy that was there before, the copy that knows the run's closure at 20.
+    checkAnswer(
+      Dataset.ofRows(spark, reconciled.reconciledAndRoutedDf.logicalPlan),
+      sourceTheAuxMergeReads
+    )
+
+    processor.mergeRowsIntoTargetTable(
+      reconciledDfWithAuxRowsTagged = reconciled.reconciledAndRoutedDf,
+      affectedRowsFromTargetTable = reconciled.affectedRowsFromTargetTable,
+      targetTableIdentifier = defaultTargetTableIdentifier
+    )
+
+    // The merge lands exactly those rows: the run still covers [5, 20) with the event at 15 as its
+    // visible tail, and "b" is untouched.
+    checkAnswer(
+      targetTable,
+      Seq(
+        targetRow(1, "a", 5L, 20L, 15L),
+        targetRow(1, "b", 20L, null, 20L)
+      )
+    )
+  }
+
+  test("a demoted row's two copies reconcile even when they disagree on where the run starts") {
+    // Same cross-merge duplication as the test above, but here the batch also moves the run's
+    // start, so the two copies of the demoted event disagree on startAt rather than only on
+    // endAt - the case the startAt sort key exists to decide.
+    //
+    // Seed: the "a" run covers [10, 20) as a single visible event, closed by "b" at 20. Nothing
+    // is hidden yet.
+    createAuxTable()
+    createTargetTable(
+      targetRow(1, "a", 10L, 20L, 10L),
+      targetRow(1, "b", 20L, null, 20L)
+    )
+
+    // Two no-op "a" events. The one at 5 predates the run and pulls its start back to 5; the one
+    // at 15 becomes the run's visible tail, demoting the event at 10 into the auxiliary table.
+    val batchId = 11L
+    val batchDf = microbatchOf(sourceSchema)(upsert(1, "a", 5L), upsert(1, "a", 15L))
+    val reconciled = exec.reconcileMicrobatch(batchDf, batchId)
+    val sourceTheAuxMergeReads = reconciled.reconciledAndRoutedDf.collect().toSeq
+    processor.mergeRowsIntoAuxiliaryTable(
+      reconciledDfWithAuxRowsTagged = reconciled.reconciledAndRoutedDf,
+      originalAffectedRowsFromAuxiliaryTable = reconciled.affectedRowsFromAuxiliaryTable,
+      auxiliaryTableIdentifier = defaultAuxTableIdentifier,
+      batchId = batchId
+    )
+
+    // Both hidden members of the run now record the run's new start at 5, while the target table
+    // still holds its own copy of the event at 10 recording the old start at 10.
+    checkAnswer(
+      auxTable,
+      Seq(
+        auxRow(1, "a", 5L, null, 5L, null),
+        auxRow(1, "a", 5L, null, 10L, null)
+      )
+    )
+    checkAnswer(targetTable.filter("value = 'a'"), targetRow(1, "a", 10L, 20L, 10L))
+
+    // The target merge re-evaluates the same plan against the auxiliary table as the merge above
+    // left it, so the two disagreeing copies of the event at 10 meet in the window. They must
+    // collapse back to what the auxiliary merge already consumed.
+    checkAnswer(
+      Dataset.ofRows(spark, reconciled.reconciledAndRoutedDf.logicalPlan),
+      sourceTheAuxMergeReads
+    )
+
+    processor.mergeRowsIntoTargetTable(
+      reconciledDfWithAuxRowsTagged = reconciled.reconciledAndRoutedDf,
+      affectedRowsFromTargetTable = reconciled.affectedRowsFromTargetTable,
+      targetTableIdentifier = defaultTargetTableIdentifier
+    )
+
+    // The run now covers [5, 20) with the event at 15 as its visible tail, and "b" is untouched.
+    checkAnswer(
+      targetTable,
+      Seq(
+        targetRow(1, "a", 5L, 20L, 15L),
+        targetRow(1, "b", 20L, null, 20L)
+      )
+    )
+  }
+
   test("duplicate events at the same key and sequence in one microbatch collapse to one record") {
     createAuxTable()
     createTargetTable()
@@ -907,6 +1033,75 @@ class Scd2ForeachBatchHandlerSuite
     ),
     resolvedSequencingType = LongType
   )
+
+  test("a closed run of untracked-only changes is one record holding the last event's values") {
+    // SPARK-58937 Regression test; A row hidden inside a no-op run should not be prematurely
+    // considered affected by the microbatch and promoted into the target table.
+    createTable(defaultAuxIdent, defaultAuxTableIdentifier, trackedAuxSchema)
+    createTable(defaultTargetIdent, defaultTargetTableIdentifier, trackedCanonicalSchema)
+    val handler = execWith(trackedProcessor)
+
+    Seq(
+      // Start a run whose tracked `name` is "alice".
+      Seq(Row(1, "alice", 39, 39L, false)),
+      // Continue that run with an untracked-only score change.
+      Seq(Row(1, "alice", 41, 41L, false)),
+      // Close the run, then process a later event that needs left context from the same key.
+      Seq(Row(1, "bob", 42, 42L, false)),
+      Seq(Row(1, "carol", 43, 43L, false))
+    ).zipWithIndex.foreach { case (batch, batchId) =>
+      handler.execute(microbatchOf(trackedSourceSchema)(batch: _*), batchId)
+    }
+
+    checkAnswer(
+      targetTable,
+      Seq(
+        Row(1, "alice", 41, 39L, 42L, meta(41L)),
+        Row(1, "bob", 42, 42L, 43L, meta(42L)),
+        Row(1, "carol", 43, 43L, null, meta(43L))
+      )
+    )
+
+    // The run head stays hidden in the auxiliary table, holding the values it had before the
+    // untracked-only change continued the run.
+    checkAnswer(auxTable, Row(1, "alice", 39, 39L, null, meta(39L), null))
+  }
+
+  test("an event after a deletion leaves the run the deletion closed exactly as it was") {
+    // SPARK-58937 Regression test; A row hidden behind a run that a deletion closed should not be
+    // considered affected by a microbatch that only touches instants after that deletion.
+    createAuxTable()
+    createTargetTable()
+
+    // Batch 1: a two-event no-op run for "a". The head at 10 is hidden in the aux table and the
+    // tail at 11 is the single visible row covering the run.
+    runBatch(1L)(upsert(1, "a", 10L), upsert(1, "a", 11L))
+    checkAnswer(targetTable, targetRow(1, "a", 10L, null, 11L))
+    checkAnswer(auxTable, auxRow(1, "a", 10L, null, 10L, null))
+
+    // Batch 2: a delete closes that run at 12. The key is now absent from 12 onwards, so no
+    // target row covers any instant at or after 12 - the history has a gap there.
+    runBatch(2L)(del(1, 12L))
+    checkAnswer(targetTable, targetRow(1, "a", 10L, 12L, 11L))
+    checkAnswer(auxTable, auxRow(1, "a", 10L, null, 10L, null))
+
+    // Batch 3: a new value at 20, strictly after the gap. It cannot interact with the run that
+    // already closed at 12, so that run's single visible row must be left exactly as it is - in
+    // particular the head hidden at 10 must not be pulled back into the target table beside it.
+    runBatch(3L)(upsert(1, "b", 20L))
+
+    checkAnswer(
+      targetTable,
+      Seq(
+        targetRow(1, "a", 10L, 12L, 11L),
+        targetRow(1, "b", 20L, null, 20L)
+      )
+    )
+
+    // The head hidden at 10 is also left untouched - the new event neither closed it nor
+    // duplicated it.
+    checkAnswer(auxTable, auxRow(1, "a", 10L, null, 10L, null))
+  }
 
   test("changing only an untracked column updates the current record without adding history") {
     createTable(defaultAuxIdent, defaultAuxTableIdentifier, trackedAuxSchema)

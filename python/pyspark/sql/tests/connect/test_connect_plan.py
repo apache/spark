@@ -14,46 +14,55 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
-import uuid
 import datetime
 import decimal
 import math
+import unittest
+import uuid
+from unittest.mock import MagicMock
 
+from pyspark.errors import PySparkValueError
 from pyspark.testing.connectutils import (
     PlanOnlyTestFixture,
-    should_test_connect,
     connect_requirement_message,
+    should_test_connect,
 )
-from pyspark.errors import PySparkValueError
-
-from unittest.mock import MagicMock
 
 if should_test_connect:
     import pyspark.sql.connect.proto as proto
     from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql.connect.plan import (
-        WriteOperation,
-        Read,
-        Join,
-        SetOperation,
-        CollectMetrics,
-        LogicalPlan,
+    from pyspark.sql.connect.expressions import LiteralExpression
+    from pyspark.sql.connect.functions import (
+        bitmap_and,
+        bitmap_andnot,
+        bitmap_or,
+        bitmap_xor,
+        col,
+        lit,
+        max,
+        min,
+        sum,
     )
     from pyspark.sql.connect.observation import Observation
+    from pyspark.sql.connect.plan import (
+        CollectMetrics,
+        Join,
+        LogicalPlan,
+        Read,
+        SetOperation,
+        WriteOperation,
+    )
     from pyspark.sql.connect.readwriter import DataFrameReader
-    from pyspark.sql.connect.expressions import LiteralExpression
-    from pyspark.sql.connect.functions import col, lit, max, min, sum
     from pyspark.sql.connect.types import pyspark_types_to_proto_types
     from pyspark.sql.types import (
-        StringType,
-        StructType,
-        StructField,
-        IntegerType,
-        MapType,
         ArrayType,
         DoubleType,
+        IntegerType,
+        MapType,
+        StringType,
+        StructField,
+        StructType,
     )
 
 
@@ -70,6 +79,20 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         plan = self.connect.readTable(table_name=self.tbl_name)._plan.to_proto(self.connect)
         self.assertIsNotNone(plan.root, "Root relation must be set")
         self.assertIsNotNone(plan.root.read)
+
+    def test_bitmap_scalar_functions(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.select(
+            bitmap_and(col("bytes"), col("bytes")),
+            bitmap_or(col("bytes"), col("bytes")),
+            bitmap_andnot(col("bytes"), col("bytes")),
+            bitmap_xor(col("bytes"), col("bytes")),
+        )._plan.to_proto(self.connect)
+        function_names = [
+            expression.unresolved_function.function_name
+            for expression in plan.root.project.expressions
+        ]
+        self.assertEqual(function_names, ["bitmap_and", "bitmap_or", "bitmap_andnot", "bitmap_xor"])
 
     def test_join_using_columns(self):
         left_input = self.connect.readTable(table_name=self.tbl_name)

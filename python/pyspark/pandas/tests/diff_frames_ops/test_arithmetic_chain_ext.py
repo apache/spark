@@ -18,12 +18,12 @@ import unittest
 
 import pandas as pd
 
-from pyspark.pandas.config import set_option, reset_option
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.pandas.typedef.typehints import extension_dtypes_available
+from pyspark.pandas.config import reset_option, set_option
 from pyspark.pandas.tests.diff_frames_ops.test_arithmetic_chain import (
     ArithmeticChainTestingFuncMixin,
 )
+from pyspark.pandas.typedef.typehints import extension_dtypes_available
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class ArithmeticChainExtMixin(ArithmeticChainTestingFuncMixin):

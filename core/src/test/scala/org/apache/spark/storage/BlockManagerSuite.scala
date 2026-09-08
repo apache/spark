@@ -521,8 +521,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(store.getSingleAndReleaseLock("a3").isDefined, "a3 was not in store")
 
     // Checking whether master knows about the blocks or not
-    assert(master.getLocations("a1").size > 0, "master was not told about a1")
-    assert(master.getLocations("a2").size > 0, "master was not told about a2")
+    assert(master.getLocations("a1").nonEmpty, "master was not told about a1")
+    assert(master.getLocations("a2").nonEmpty, "master was not told about a2")
     assert(master.getLocations("a3").size === 0, "master was told about a3")
 
     // Drop a1 and a2 from memory; this should be reported back to the master
@@ -570,8 +570,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(store.getSingleAndReleaseLock("a3-to-remove").isDefined, "a3 was not in store")
 
     // Checking whether master knows about the blocks or not
-    assert(master.getLocations("a1-to-remove").size > 0, "master was not told about a1")
-    assert(master.getLocations("a2-to-remove").size > 0, "master was not told about a2")
+    assert(master.getLocations("a1-to-remove").nonEmpty, "master was not told about a1")
+    assert(master.getLocations("a2-to-remove").nonEmpty, "master was not told about a2")
     assert(master.getLocations("a3-to-remove").size === 0, "master was told about a3")
 
     // Remove a1 and a2 and a3. Should be no-op for a3.
@@ -728,7 +728,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       removedFromMemory: Boolean,
       removedFromDisk: Boolean): Unit = {
     def assertSizeReported(captor: ArgumentCaptor[Long], expectRemoved: Boolean): Unit = {
-      assert(captor.getAllValues().size() >= 1)
+      assert(!captor.getAllValues().isEmpty)
       if (expectRemoved) {
         assert(captor.getValue() > 0)
       } else {
@@ -759,10 +759,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
 
     assert(store.getSingleAndReleaseLock("a1").isDefined, "a1 was not in store")
-    assert(master.getLocations("a1").size > 0, "master was not told about a1")
+    assert(master.getLocations("a1").nonEmpty, "master was not told about a1")
 
     master.removeExecutor(store.blockManagerId.executorId)
-    assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
+    assert(master.getLocations("a1").isEmpty, "a1 was not removed from master")
 
     val reregister = !master.driverHeartbeatEndPoint.askSync[Boolean](
       BlockManagerHeartbeat(store.blockManagerId))
@@ -791,16 +791,16 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     )
 
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
-    assert(master.getLocations("a1").size > 0, "master was not told about a1")
+    assert(master.getLocations("a1").nonEmpty, "master was not told about a1")
 
     master.removeExecutor(store.blockManagerId.executorId)
-    assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
+    assert(master.getLocations("a1").isEmpty, "a1 was not removed from master")
 
     store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY)
     store.waitForAsyncReregister()
 
-    assert(master.getLocations("a1").size > 0, "a1 was not reregistered with master")
-    assert(master.getLocations("a2").size > 0, "master was not told about a2")
+    assert(master.getLocations("a1").nonEmpty, "a1 was not reregistered with master")
+    assert(master.getLocations("a2").nonEmpty, "master was not told about a2")
   }
 
   test("reregistration doesn't dead lock") {
@@ -1781,9 +1781,13 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     // Because the BlockManager's metadata claims that the block exists (i.e. that it's present
     // in at least one store), the read attempts to read it and fails when the on-disk file is
     // missing.
-    intercept[SparkException] {
-      readMethod(store)
-    }
+    checkError(
+      exception = intercept[SparkException] {
+        readMethod(store)
+      },
+      condition = "LOCAL_BLOCK_DATA_NOT_FOUND",
+      sqlState = Some("58030"),
+      parameters = Map("blockId" -> "test_blockId"))
     // Subsequent read attempts will succeed; the block isn't present but we return an expected
     // "block not found" response rather than a fatal error:
     assert(readMethod(store).isEmpty)
@@ -2065,7 +2069,16 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val exception = intercept[SparkException] {
       bm.putBlockDataAsStream(shuffleBlockId, StorageLevel.DISK_ONLY, ClassTag(message.getClass))
     }
-    assert(exception.getMessage.contains("unsupported shuffle resolver"))
+    checkError(
+      exception = exception,
+      condition = "SHUFFLE_BLOCK_MIGRATION_NOT_SUPPORTED",
+      sqlState = Some("0A000"),
+      parameters = Map(
+        "blockId" -> shuffleBlockId.toString,
+        "resolverClass" -> badShuffleResolver.getClass.getName))
+    // The `ClassCastException` is kept as the cause. The `try` only covers building the callback,
+    // so this pins the cast failure itself rather than anything the resolver does while writing.
+    assert(exception.getCause.isInstanceOf[ClassCastException])
   }
 
   test("SPARK-54796: putBlockDataAsStream throws ShuffleManagerNotInitializedException " +
@@ -2401,10 +2414,18 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       conf.set(SHUFFLE_SERVICE_PORT.key, shufflePort.toString)
       conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "40")
       conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
-      val e = intercept[SparkException] {
-        makeBlockManager(8000, "timeoutExec")
-      }.getMessage
-      assert(e.contains("TimeoutException"))
+      // `matchPVals` because the parameter is the text of the `RuntimeException` that
+      // `TransportClient.sendRpcSync` wraps Guava's `TimeoutException` in (`cause.toString`).
+      // Only the class-name prefix of that text is stable; the rest is a Guava internal that
+      // varies run to run (e.g. the future's identity hash and a scheduling-delay clause).
+      checkError(
+        exception = intercept[SparkException] {
+          makeBlockManager(8000, "timeoutExec")
+        },
+        condition = "UNABLE_TO_REGISTER_WITH_EXTERNAL_SHUFFLE_SERVICE",
+        sqlState = Some("58030"),
+        parameters = Map("message" -> "(?s)java\\.util\\.concurrent\\.TimeoutException: .*"),
+        matchPVals = true)
       verify(master, times(0))
         .registerBlockManager(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
       server.close()

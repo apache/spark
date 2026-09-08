@@ -481,6 +481,11 @@ class UnivocityParser(
         return
       }
 
+      if (!options.inferSchemaFlag && options.variantRespectInferSchema) {
+        builder.appendString(s)
+        return
+      }
+
       def parseLong(): DataType = {
         try {
           builder.appendLong(s.toLong)

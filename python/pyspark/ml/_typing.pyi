@@ -16,19 +16,19 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Any, Dict, List, TYPE_CHECKING, TypeVar, Tuple, Union
-from typing_extensions import Literal
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, TypeVar, Union
 
 from numpy import ndarray
 from py4j.java_gateway import JavaObject
+from typing_extensions import Literal
 
 import pyspark.ml.base
 import pyspark.ml.param
-from pyspark.ml.linalg import Vector
 import pyspark.ml.wrapper
+from pyspark.ml.linalg import Vector
 
 if TYPE_CHECKING:
-    from scipy.sparse import spmatrix, sparray
+    from scipy.sparse import sparray, spmatrix
 
 ParamMap = Dict[pyspark.ml.param.Param, Any]
 PipelineStage = Union[pyspark.ml.base.Estimator, pyspark.ml.base.Transformer]

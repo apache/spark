@@ -1183,7 +1183,8 @@ EXPLAIN EXTENDED INSERT INTO TABLE explain_temp5 SELECT * FROM explain_temp4
 struct<plan:string>
 -- !query output
 == Parsed Logical Plan ==
-'InsertIntoStatement 'UnresolvedRelation [explain_temp5], [__required_write_privileges__=INSERT], false, false, false, false, false
+'UnresolvedInsert false, false, false, false
+:- 'UnresolvedInsertTarget [explain_temp5], [], {INSERT}
 +- 'Project [*]
    +- 'UnresolvedRelation [explain_temp4], [], false
 

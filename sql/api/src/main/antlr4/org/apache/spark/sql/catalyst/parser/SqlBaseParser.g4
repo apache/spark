@@ -1466,6 +1466,19 @@ primaryExpression
       (RETURNING returning=dataType)?
       (emptyBehavior=jsonValueBehavior ON EMPTY)?
       (errorBehavior=jsonValueBehavior ON ERROR)? RIGHT_PAREN                                  #jsonValue
+    | JSON_EXISTS LEFT_PAREN jsonExpr=valueExpression COMMA path=stringLit
+      (errorBehavior=jsonExistsErrorBehavior ON ERROR)? RIGHT_PAREN                             #jsonExists
+    | JSON_QUERY LEFT_PAREN jsonExpr=valueExpression COMMA path=stringLit
+      (RETURNING returning=dataType)?
+      wrapper=jsonQueryArrayWrapper?
+      quotes=jsonQueryQuotes?
+      (emptyBehavior=jsonQueryBehavior ON EMPTY)?
+      (errorBehavior=jsonQueryBehavior ON ERROR)? RIGHT_PAREN                                  #jsonQuery
+    | JSON_ARRAY LEFT_PAREN
+      (values+=jsonArrayValue (COMMA values+=jsonArrayValue)*)?
+      (nullBehavior=jsonConstructorNullBehavior ON NULL)?
+      (RETURNING returning=dataType)?
+      RIGHT_PAREN                                  #jsonArray
     | constant                                                                                 #constantDefault
     | ASTERISK exceptClause?                                                                   #star
     | qualifiedName DOT ASTERISK exceptClause?                                                 #star
@@ -1498,6 +1511,52 @@ jsonValueBehavior
     : NULL                                                                                     #jsonValueBehaviorNull
     | ERROR                                                                                     #jsonValueBehaviorError
     | DEFAULT defaultExpr=expression                                                            #jsonValueBehaviorDefault
+    ;
+
+// The behavior selected by a JSON_EXISTS `... ON ERROR` clause: the boolean (or UNKNOWN, i.e. a
+// BOOLEAN NULL) to produce when the input is not a single well-formed JSON value.
+jsonExistsErrorBehavior
+    : TRUE
+    | FALSE
+    | UNKNOWN
+    | ERROR
+    ;
+
+// The JSON_QUERY array-wrapper clause. `WITH [UNCONDITIONAL]` always wraps the result in `[...]`;
+// `WITH CONDITIONAL` wraps only a non-array/object (scalar) result; `WITHOUT` (default) never wraps.
+// The `ARRAY` word is optional, matching the SQL standard (`WITH WRAPPER` == `WITH ARRAY WRAPPER`).
+jsonQueryArrayWrapper
+    : WITHOUT ARRAY? WRAPPER                                                                    #jsonQueryWrapperWithout
+    | WITH wrapperType=(CONDITIONAL | UNCONDITIONAL)? ARRAY? WRAPPER                            #jsonQueryWrapperWith
+    ;
+
+// The JSON_QUERY quotes clause: `OMIT QUOTES` strips the surrounding quotes from a scalar string
+// result; `KEEP QUOTES` (default) leaves them.
+jsonQueryQuotes
+    : KEEP QUOTES                                                                              #jsonQueryQuotesKeep
+    | OMIT QUOTES                                                                              #jsonQueryQuotesOmit
+    ;
+
+// The behavior selected by a JSON_QUERY `... ON EMPTY` / `... ON ERROR` clause.
+jsonQueryBehavior
+    : NULL                                                                                     #jsonQueryBehaviorNull
+    | ERROR                                                                                     #jsonQueryBehaviorError
+    | EMPTY ARRAY                                                                              #jsonQueryBehaviorEmptyArray
+    | EMPTY OBJECT                                                                             #jsonQueryBehaviorEmptyObject
+    ;
+
+// The behavior selected by JSON_ARRAY/JSON_OBJECT `... ON NULL` clause: NULL keeps nulls, ABSENT
+// drops null elements/pairs.
+jsonConstructorNullBehavior
+    : NULL                                                                                     #jsonConstructorNullBehaviorNull
+    | ABSENT                                                                                   #jsonConstructorNullBehaviorAbsent
+    ;
+
+// A JSON_ARRAY element. The optional `FORMAT JSON` clause marks a string argument as already-JSON
+// text, so it is spliced into the array verbatim instead of being quoted as a JSON string. A
+// lexically-nested JSON constructor (e.g. JSON_ARRAY(JSON_ARRAY(1))) carries this implicitly.
+jsonArrayValue
+    : value=expression (FORMAT JSON)?
     ;
 
 semiStructuredExtractionPath
@@ -2081,7 +2140,8 @@ operatorPipeSetAssignmentSeq
 // The non-reserved keywords are listed below. Keywords not in this list are reserved keywords.
 ansiNonReserved
 //--ANSI-NON-RESERVED-START
-    : ADD
+    : ABSENT
+    | ADD
     | AFTER
     | AGGREGATE
     | ALIGN
@@ -2141,6 +2201,7 @@ ansiNonReserved
     | COMPUTE
     | CONCATENATE
     | CONDITION
+    | CONDITIONAL
     | CONTAINS
     | CONTINUE
     | COST
@@ -2244,8 +2305,12 @@ ansiNonReserved
     | ITEMS
     | ITERATE
     | JSON
+    | JSON_ARRAY
+    | JSON_EXISTS
+    | JSON_QUERY
     | JSON_TABLE
     | JSON_VALUE
+    | KEEP
     | KEY
     | KEYS
     | LANGUAGE
@@ -2297,7 +2362,9 @@ ansiNonReserved
     | NORELY
     | NULLS
     | NUMERIC
+    | OBJECT
     | OF
+    | OMIT
     | OPEN
     | OPTION
     | OPTIONS
@@ -2324,6 +2391,7 @@ ansiNonReserved
     | QUALIFY
     | QUARTER
     | QUERY
+    | QUOTES
     | RANGE
     | READ
     | READS
@@ -2421,6 +2489,7 @@ ansiNonReserved
     | UNARCHIVE
     | UNBOUNDED
     | UNCACHE
+    | UNCONDITIONAL
     | UNIFORM
     | UNLOCK
     | UNNEST
@@ -2446,6 +2515,7 @@ ansiNonReserved
     | WIDTH
     | WINDOW
     | WITHOUT
+    | WRAPPER
     | YEAR
     | YEARS
     | ZONE
@@ -2482,7 +2552,8 @@ strictNonReserved
 
 nonReserved
 //--DEFAULT-NON-RESERVED-START
-    : ADD
+    : ABSENT
+    | ADD
     | AFTER
     | AGGREGATE
     | ALIGN
@@ -2555,6 +2626,7 @@ nonReserved
     | COMPUTE
     | CONCATENATE
     | CONDITION
+    | CONDITIONAL
     | CONSTRAINT
     | CONTAINS
     | CONTINUE
@@ -2683,8 +2755,12 @@ nonReserved
     | ITEMS
     | ITERATE
     | JSON
+    | JSON_ARRAY
+    | JSON_EXISTS
+    | JSON_QUERY
     | JSON_TABLE
     | JSON_VALUE
+    | KEEP
     | KEY
     | KEYS
     | LANGUAGE
@@ -2741,8 +2817,10 @@ nonReserved
     | NULL
     | NULLS
     | NUMERIC
+    | OBJECT
     | OF
     | OFFSET
+    | OMIT
     | ONLY
     | OPEN
     | OPTION
@@ -2775,6 +2853,7 @@ nonReserved
     | QUALIFY
     | QUARTER
     | QUERY
+    | QUOTES
     | RANGE
     | READ
     | READS
@@ -2881,6 +2960,7 @@ nonReserved
     | UNARCHIVE
     | UNBOUNDED
     | UNCACHE
+    | UNCONDITIONAL
     | UNIFORM
     | UNIQUE
     | UNKNOWN
@@ -2913,6 +2993,7 @@ nonReserved
     | WITH
     | WITHIN
     | WITHOUT
+    | WRAPPER
     | YEAR
     | YEARS
     | ZONE
