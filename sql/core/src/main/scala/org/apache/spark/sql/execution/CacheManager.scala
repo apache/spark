@@ -362,6 +362,20 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
+   * Re-caches every entry whose plan contains the given catalog-less [[DataSourceV2Relation]].
+   * The scan mode is ignored only for this mutation-specific match so an unbound write target
+   * invalidates preserve-native and standard cache entries without weakening normal cache identity.
+   */
+  def recacheByV2Relation(spark: SparkSession, relation: DataSourceV2Relation): Unit = {
+    val unboundRelation = relation.copy(charVarcharScanMode = None)
+    recacheByCondition(spark, cd => cd.plan.exists {
+      case cached: DataSourceV2Relation =>
+        cached.copy(charVarcharScanMode = None).sameResult(unboundRelation)
+      case _ => false
+    })
+  }
+
+  /**
    * Re-caches all cache entries that reference the given table name.
    */
   def recacheTableOrView(

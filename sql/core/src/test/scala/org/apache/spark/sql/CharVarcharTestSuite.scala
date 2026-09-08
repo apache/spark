@@ -39,7 +39,7 @@ import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, InMemoryPartitionTableCatalog}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-import org.apache.spark.sql.execution.datasources.{LogicalRelation, PartitionedFile}
+import org.apache.spark.sql.execution.datasources.{FileFormat, LogicalRelation, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.functions
@@ -2679,6 +2679,24 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
                 Row("abcd"))
             }
           }
+        }
+      }
+    }
+  }
+
+  test("SPARK-58814: caller options cannot set the private ORC scan mode") {
+    import testImplicits._
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "orc") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        Seq("abcdef").toDF("v").write.mode("overwrite").orc(path)
+
+        Seq("not-a-mode", "SparkStandard", "PreserveNative").foreach { optionValue =>
+          checkAnswer(
+            spark.read
+              .option(FileFormat.CHAR_VARCHAR_SCAN_MODE, optionValue)
+              .orc(path),
+            Row("abcdef"))
         }
       }
     }

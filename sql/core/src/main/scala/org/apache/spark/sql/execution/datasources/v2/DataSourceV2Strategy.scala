@@ -73,7 +73,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val nameParts = ident.toQualifiedNameParts(catalog)
       cacheManager.recacheTableOrView(session, nameParts, includeTimeTravel = false)
     case _ =>
-      cacheManager.recacheByPlan(session, r)
+      cacheManager.recacheByV2Relation(session, r)
   }
 
   private def recacheTable(r: ResolvedTable, includeTimeTravel: Boolean)(): Unit = {

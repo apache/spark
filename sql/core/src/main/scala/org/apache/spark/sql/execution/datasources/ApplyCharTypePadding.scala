@@ -54,11 +54,10 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
     val standardSemantics = conf.charVarcharStandardSemantics
     val scanMode = CharVarcharScanMode(standardSemantics)
 
-    // Bind into case-class state, not a TreeNodeTag: `TreeNode.makeCopy` calls `copyTagsFrom`,
-    // so a tag survives canonicalization, but it does not participate in structural plan
-    // equality / sameResult, so cache lookup and scan reuse would treat preserve-only and
-    // standard scans as the same plan. A case-class field does participate. Keep an
-    // already-bound value (views, catalog-cached relations) unchanged.
+    // Bind into case-class state, not a TreeNodeTag: tags do not participate in structural plan
+    // equality / sameResult, so cache lookup and scan reuse would treat preserve-only and standard
+    // scans as the same plan. A case-class field does participate. Keep an already-bound value
+    // (views, catalog-cached relations) unchanged.
     def bindStandardSemantics(p: LogicalPlan): LogicalPlan = p match {
       case relation: LogicalRelation if relation.charVarcharScanMode.isEmpty =>
         val bound = relation.copy(charVarcharScanMode = Some(scanMode))

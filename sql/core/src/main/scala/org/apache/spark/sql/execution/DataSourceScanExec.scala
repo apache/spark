@@ -757,6 +757,7 @@ case class FileSourceScanExec(
     val options = relation.options +
       (FileFormat.OPTION_RETURNING_BATCH -> supportsColumnar.toString)
     val hadoopConf = getHadoopConf(relation.sparkSession, relation.options)
+    hadoopConf.unset(FileFormat.CHAR_VARCHAR_SCAN_MODE)
     val readFile: (PartitionedFile) => Iterator[InternalRow] = charVarcharScanMode match {
       // A bound mode routes through the mode-aware overload regardless of the concrete file
       // format. Its default implementation bridges the mode across the legacy signature via an
