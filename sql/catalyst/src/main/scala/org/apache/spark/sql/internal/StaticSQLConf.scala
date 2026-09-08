@@ -377,6 +377,19 @@ object StaticSQLConf {
       "Every entry must be a valid regular expression.")
     .createWithDefault(Nil)
 
+  val RESTRICTED_MODE_ENABLED = buildStaticConf("spark.sql.restrictedMode.enabled")
+    .internal()
+    .doc("When true, SQL features that load or execute externally provided code or scripts from " +
+      "the query itself are disabled: the reflect, java_method and try_reflect functions and the " +
+      "TRANSFORM ... USING clause are rejected during analysis. This is an opt-in profile for " +
+      "deployments that want a more constrained SQL surface. As a static configuration it can " +
+      "only be set when starting the driver, and not from a session, so that a session cannot " +
+      "turn it off for itself. The default of false preserves the previous behavior.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(false)
+
   // Bounds on the environment a session may install in its Python workers through the reserved
   // `spark.pythonWorkerEnv.` prefix. Static, so a session cannot raise its own limits. Their keys
   // are deliberately not under that prefix: every SparkConf entry is copied into a new session's

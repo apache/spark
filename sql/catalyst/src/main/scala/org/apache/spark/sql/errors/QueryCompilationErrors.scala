@@ -39,6 +39,7 @@ import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundF
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
@@ -327,6 +328,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.BIN_BY",
       messageParameters = Map.empty)
+  }
+
+  def restrictedModeFeatureError(feature: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.SQL_RESTRICTED_MODE",
+      messageParameters = Map(
+        "feature" -> feature,
+        "config" -> toSQLConf(StaticSQLConf.RESTRICTED_MODE_ENABLED.key)))
   }
 
   def binByRequiresTopLevelColumnError(reference: Expression): Throwable = {
