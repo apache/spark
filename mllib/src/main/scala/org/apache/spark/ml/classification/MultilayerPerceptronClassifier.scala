@@ -20,9 +20,10 @@ package org.apache.spark.ml.classification
 import java.io.{DataInputStream, DataOutputStream}
 
 import org.apache.hadoop.fs.Path
+import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.ann.{FeedForwardTopology, FeedForwardTrainer}
+import org.apache.spark.ml.ann.{FeedForwardModel, FeedForwardTopology, FeedForwardTrainer}
 import org.apache.spark.ml.feature.OneHotEncoderModel
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param._
@@ -249,7 +250,9 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
       dataset: Dataset[_],
       weights: Vector,
       objectiveHistory: Array[Double]): MultilayerPerceptronClassificationModel = {
-    val model = copyValues(new MultilayerPerceptronClassificationModel(uid, weights))
+    val mlpModel = MultilayerPerceptronClassificationModel.createFeedForwardModel(
+      $(layers).clone(), weights)
+    val model = copyValues(new MultilayerPerceptronClassificationModel(uid, mlpModel))
 
     model.createSummary(dataset, objectiveHistory)
     model
@@ -278,25 +281,26 @@ object MultilayerPerceptronClassifier
  * Each layer has sigmoid activation function, output layer has softmax.
  *
  * @param uid uid
- * @param weights the weights of layers
+ * @param mlpModel the underlying feed-forward model
  */
 @Since("1.5.0")
 class MultilayerPerceptronClassificationModel private[ml] (
     @Since("1.5.0") override val uid: String,
-    @Since("2.0.0") val weights: Vector)
+    private val mlpModel: FeedForwardModel)
   extends ProbabilisticClassificationModel[Vector, MultilayerPerceptronClassificationModel]
   with MultilayerPerceptronParams with Serializable with MLWritable
   with HasTrainingSummary[MultilayerPerceptronClassificationTrainingSummary]{
 
   // For ml connect only
-  private[ml] def this() = this("", Vectors.empty)
+  private[ml] def this() = this("",
+    MultilayerPerceptronClassificationModel.createFeedForwardModel(
+      Array(0, 0), Vectors.empty))
+
+  @Since("2.0.0")
+  def weights: Vector = mlpModel.weights
 
   @Since("1.6.0")
   override lazy val numFeatures: Int = $(layers).head
-
-  @transient private[ml] lazy val mlpModel = FeedForwardTopology
-    .multiLayerPerceptron($(layers), softmaxOnTop = true)
-    .model(weights)
 
   /**
    * Gets summary of model on training set. An exception is thrown
@@ -328,7 +332,10 @@ class MultilayerPerceptronClassificationModel private[ml] (
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): MultilayerPerceptronClassificationModel = {
-    val copied = new MultilayerPerceptronClassificationModel(uid, weights)
+    val copiedLayers = extra.get(layers).getOrElse($(layers)).clone()
+    val copiedMlpModel = MultilayerPerceptronClassificationModel.createFeedForwardModel(
+      copiedLayers, weights)
+    val copied = new MultilayerPerceptronClassificationModel(uid, copiedMlpModel)
       .setParent(parent)
     copyValues(copied, extra)
   }
@@ -397,6 +404,12 @@ class MultilayerPerceptronClassificationModel private[ml] (
 @Since("2.0.0")
 object MultilayerPerceptronClassificationModel
   extends MLReadable[MultilayerPerceptronClassificationModel] {
+
+  private[ml] def createFeedForwardModel(
+      layers: Array[Int],
+      weights: Vector): FeedForwardModel = {
+    FeedForwardTopology.multiLayerPerceptron(layers, softmaxOnTop = true).model(weights)
+  }
   private[ml] case class Data(weights: Vector)
 
   private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
@@ -448,11 +461,15 @@ object MultilayerPerceptronClassificationModel
         val data = df.select("layers", "weights").head()
         val layers = data.getAs[Seq[Int]](0).toArray
         val weights = data.getAs[Vector](1)
-        val model = new MultilayerPerceptronClassificationModel(metadata.uid, weights)
+        val mlpModel = createFeedForwardModel(layers, weights)
+        val model = new MultilayerPerceptronClassificationModel(metadata.uid, mlpModel)
         model.set("layers", layers)
       } else {
         val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
-        new MultilayerPerceptronClassificationModel(metadata.uid, data.weights)
+        val layersJson = compact(render(metadata.getParamValue("layers")))
+        val layers = new MultilayerPerceptronClassifier(metadata.uid).layers.jsonDecode(layersJson)
+        val mlpModel = createFeedForwardModel(layers, data.weights)
+        new MultilayerPerceptronClassificationModel(metadata.uid, mlpModel)
       }
       metadata.getAndSetParams(model)
       model

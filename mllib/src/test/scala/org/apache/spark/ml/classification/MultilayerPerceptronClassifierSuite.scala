@@ -140,7 +140,7 @@ class MultilayerPerceptronClassifierSuite extends MLTest with DefaultReadWriteTe
     model.setProbabilityCol("probability")
     testTransformer[(Vector, Double)](dataset.toDF(), model, "features", "probability") {
       case Row(features: Vector, prob: Vector) =>
-        val prob2 = model.mlpModel.predict(features)
+        val prob2 = model.predictProbability(features)
         assert(prob ~== prob2 absTol 1e-3)
     }
   }
