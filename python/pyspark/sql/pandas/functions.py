@@ -70,11 +70,11 @@ def arrow_udf(f=None, returnType=None, functionType=None):
     ----------
     f : function, optional
         user-defined function. A python function if used as a standalone function
-    returnType : :class:`pyspark.sql.types.DataType` or str, optional
+    returnType : :class:`~pyspark.sql.types.DataType` or str, optional
         the return type of the user-defined function. The value can be either a
-        :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        :class:`~pyspark.sql.types.DataType` object or a DDL-formatted type string.
     functionType : int, optional
-        an enum value in :class:`pyspark.sql.functions.ArrowUDFType`.
+        an enum value in :class:`~pyspark.sql.functions.ArrowUDFType`.
         Default: SCALAR. This parameter exists for compatibility.
         Using Python type hints is encouraged.
 
@@ -424,11 +424,11 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     ----------
     f : function, optional
         user-defined function. A python function if used as a standalone function
-    returnType : :class:`pyspark.sql.types.DataType` or str, optional
+    returnType : :class:`~pyspark.sql.types.DataType` or str, optional
         the return type of the user-defined function. The value can be either a
-        :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        :class:`~pyspark.sql.types.DataType` object or a DDL-formatted type string.
     functionType : int, optional
-        an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
+        an enum value in :class:`~pyspark.sql.functions.PandasUDFType`.
         Default: SCALAR. This parameter exists for compatibility.
         Using Python type hints is encouraged.
 
@@ -460,7 +460,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
     Note that the type hint should use `pandas.Series` in all cases but there is one variant
     that `pandas.DataFrame` should be used for its input or output type hint instead when the input
-    or output column is of :class:`pyspark.sql.types.StructType`. The following example shows
+    or output column is of :class:`~pyspark.sql.types.StructType`. The following example shows
     a Pandas UDF which takes long column, string column and struct column, and outputs a struct
     column. It requires the function to specify the type hints of `pandas.Series` and
     `pandas.DataFrame` as below:
@@ -753,8 +753,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     should be checked for accuracy by users.
 
     Currently,
-    :class:`pyspark.sql.types.ArrayType` of :class:`pyspark.sql.types.TimestampType` and
-    nested :class:`pyspark.sql.types.StructType`
+    :class:`~pyspark.sql.types.ArrayType` of :class:`~pyspark.sql.types.TimestampType` and
+    nested :class:`~pyspark.sql.types.StructType`
     are currently not supported as output types.
 
     See Also

@@ -176,9 +176,9 @@ class DataType:
         ----------
         ddl : str
             DDL-formatted string representation of types, e.g.
-            :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct
+            :class:`~pyspark.sql.types.DataType.simpleString`, except that top level struct
             type can omit the ``struct<>`` for the compatibility reason with
-            ``spark.createDataFrame`` and Python UDFs.
+            `~pyspark.sql.SparkSession.createDataFrame` and Python UDFs.
 
         Returns
         -------
@@ -643,12 +643,12 @@ class GeometryType(SpatialType):
     Geospatial Consortium (OGC) Simple Feature Access specification
     (https://portal.ogc.org/files/?artifact_id=25355), with a Cartesian coordinate system.
 
+    .. versionadded:: 4.1.0
+
     Parameters
     ----------
     srid : int or str
         The Spatial Reference System Identifier (SRID) value for the GEOMETRY.
-
-    .. versionadded:: 4.1.0
     """
 
     # The default coordinate reference system (CRS) value used for geometries, as specified by the
