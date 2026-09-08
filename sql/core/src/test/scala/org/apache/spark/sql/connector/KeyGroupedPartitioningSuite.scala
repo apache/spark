@@ -7479,9 +7479,13 @@ class KeyGroupedPartitioningSuite
         checkAnswer(df, expected)
         // Pin the total exchange count so later silent shuffles surface: the marked (id, k)
         // side refuses to pair on the subset key, cascading one-side shuffles around it.
+        // The three exchanges shuffle t onto a's (id, k) layout, r onto x's (id) layout, and
+        // the marked side onto u's (id, k) layout. x itself does not shuffle: its key k is
+        // pruned from its scan output and the surviving (id) projection still pairs
+        // (SPARK-59248).
         val plan = df.queryExecution.executedPlan
         val shuffles = collectAllShuffles(plan)
-        assert(shuffles.size == 4, s"expected 4 exchanges, got ${shuffles.size}:\n$plan")
+        assert(shuffles.size == 3, s"expected 3 exchanges, got ${shuffles.size}:\n$plan")
       }
     }
   }
