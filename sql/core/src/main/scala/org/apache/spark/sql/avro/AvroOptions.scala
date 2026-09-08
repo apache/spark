@@ -18,7 +18,7 @@
 package org.apache.spark.sql.avro
 
 import java.net.URI
-import java.util.HashMap
+import java.util.{HashMap, Locale}
 
 import org.apache.avro.Schema
 import org.apache.hadoop.conf.Configuration
@@ -76,6 +76,18 @@ private[sql] class AvroOptions(
     parameters.get(AVRO_SCHEMA).map(AvroUtils.parseAvroSchema).orElse({
       val avroUrlSchema = parameters.get(AVRO_SCHEMA_URL).map(url => {
         log.debug("loading avro schema from url: " + url)
+        // Optional operator-configured allowlist of URI schemes for avroSchemaUrl. Empty by
+        // default, which permits any scheme and preserves the previous behavior.
+        val allowedSchemes = SQLConf.get.getConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES)
+          .map(_.toLowerCase(Locale.ROOT))
+        if (allowedSchemes.nonEmpty) {
+          val scheme = Option(new URI(url).getScheme).map(_.toLowerCase(Locale.ROOT)).getOrElse("")
+          if (!allowedSchemes.contains(scheme)) {
+            throw new IllegalArgumentException(
+              s"The scheme '$scheme' of avroSchemaUrl '$url' is not in the allowlist " +
+                s"${SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES.key}.")
+          }
+        }
         val fs = FileSystem.get(new URI(url), conf)
         val in = fs.open(new Path(url))
         try {

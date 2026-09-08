@@ -1163,11 +1163,14 @@ private[hive] object HiveClientImpl extends Logging {
     Option(hc.getComment).map(field.withComment).getOrElse(field)
   }
 
+  // Resolve the class without running its static initializer here; initialization happens when
+  // the format is actually instantiated for a scan, which is the only point it is needed.
   private def toInputFormat(name: String) =
-    Utils.classForName[org.apache.hadoop.mapred.InputFormat[_, _]](name)
+    Utils.classForName[org.apache.hadoop.mapred.InputFormat[_, _]](name, initialize = false)
 
   private def toOutputFormat(name: String) =
-    Utils.classForName[org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]](name)
+    Utils.classForName[org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]](
+      name, initialize = false)
 
   def toHiveTableType(catalogTableType: CatalogTableType): HiveTableType = {
     catalogTableType match {

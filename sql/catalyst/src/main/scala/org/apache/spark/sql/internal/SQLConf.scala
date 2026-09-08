@@ -7016,6 +7016,32 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val AVRO_SCHEMA_URL_ALLOWED_SCHEMES =
+    buildConf("spark.sql.avro.schemaUrlAllowedSchemes")
+      .internal()
+      .doc("A comma-separated allowlist of URI schemes permitted for the 'avroSchemaUrl' Avro " +
+        "option. Empty by default, which permits any scheme and preserves the previous behavior; " +
+        "when non-empty, an avroSchemaUrl whose scheme is not listed is rejected before it is " +
+        "opened.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
+  val KAFKA_DISALLOWED_OPTIONS =
+    buildConf("spark.sql.kafka.disallowedOptions")
+      .internal()
+      .doc("A comma-separated list of Kafka client option names (without the 'kafka.' prefix) " +
+        "that are not allowed to be set through Kafka source/sink options. Empty by default, " +
+        "which allows all options and preserves the previous behavior; when non-empty, setting a " +
+        "listed option raises an error.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   val JSON_ENABLE_PARTIAL_RESULTS =
     buildConf("spark.sql.json.enablePartialResults")
       .internal()
