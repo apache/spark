@@ -128,7 +128,8 @@ class SparkSqlParser extends AbstractSqlParser {
       sqlText: String): PositionedSqlStatementSplitResult =
     SqlStatementSplitter.splitWithPositions(
       sqlText,
-      SparkSqlParser.substituteVariablesForValidation)
+      SparkSqlParser.substituteVariablesForValidation,
+      preserveMalformedCompoundBoundaries = true)
 
   /**
    * Internal parse method that handles both parameter substitution and regular parsing.

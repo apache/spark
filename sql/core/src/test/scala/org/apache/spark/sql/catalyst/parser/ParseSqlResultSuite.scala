@@ -127,6 +127,14 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(statements(1) \ "error" \ "errorClass" === JString("PARSE_SYNTAX_ERROR"))
   }
 
+  test("malformed balanced SQL scripts remain one statement in a batch") {
+    val statements = objs("BEGIN SELECT 1; SELEC 2; END; SELECT 3")
+    assert(statements.size === 2)
+    assert(statements.map(_ \ "start") === Seq(JInt(1), JInt(31)))
+    assert(statements.map(_ \ "length") === Seq(JInt(28), JInt(8)))
+    assert(statements.map(_ \ "parse_success") === Seq(JBool(false), JBool(true)))
+  }
+
   test("SQL scripts remain one statement in a batch") {
     val statements = objs("BEGIN SELECT 1; SELECT 2; END; SELECT 3")
     assert(statements.size === 2)

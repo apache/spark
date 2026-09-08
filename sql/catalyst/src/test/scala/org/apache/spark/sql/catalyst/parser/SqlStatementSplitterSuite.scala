@@ -516,6 +516,29 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
     assert(result.partialStatement.isEmpty)
   }
 
+  test("malformed balanced BEGIN block remains one statement") {
+    val block = "BEGIN SELECT 1; SELEC 2; END"
+    val result = SqlStatementSplitter
+      .splitWithPositions(
+        s"$block; SELECT 3;",
+        identity,
+        preserveMalformedCompoundBoundaries = true)
+      .withoutPositions
+    assert(result.completeStatements == Seq(
+      statement(block),
+      statement("SELECT 3")))
+    assert(result.partialStatement.isEmpty)
+
+    val withoutTerminator = SqlStatementSplitter
+      .splitWithPositions(
+        block,
+        identity,
+        preserveMalformedCompoundBoundaries = true)
+      .withoutPositions
+    assert(withoutTerminator.completeStatements == Seq(SqlStatement(block, "")))
+    assert(withoutTerminator.partialStatement.isEmpty)
+  }
+
   test("Valid BEGIN..END block is never split at internal ;") {
     // A valid `BEGIN ... END` block must be confirmed in full -- the splitter
     // must never emit at an internal `;`, even if a shorter prefix happens to
