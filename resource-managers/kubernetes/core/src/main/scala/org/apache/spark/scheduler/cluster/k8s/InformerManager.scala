@@ -31,16 +31,23 @@ import org.apache.spark.util.Utils
  * informer-based mode is enabled. The informer is scoped server-side to the current
  * application's executor pods that are not marked inactive, matching the filter set used by
  * [[ExecutorPodsWatchSnapshotSource]] and [[ExecutorPodsPollingSnapshotSource]].
+ *
+ * The informer is configured with an [[io.fabric8.kubernetes.client.informers.ExceptionHandler]]
+ * that forces retries so transient errors self-heal instead of leaving executor pod state
+ * silently frozen.
  */
-class InformerManager(kubernetesClient: KubernetesClient, conf: SparkConf)
+private[spark] class InformerManager(kubernetesClient: KubernetesClient, conf: SparkConf)
   extends Logging {
 
   private val resyncInterval = conf.get(KUBERNETES_EXECUTOR_INFORMER_RESYNC_INTERVAL)
-  // VisibleForTesting
   private[k8s] var informer: SharedIndexInformer[Pod] = _
   private var stopped = false
 
   def initInformer(applicationId: String): Unit = {
+    if (stopped) {
+      throw new IllegalStateException(
+        "Cannot re-initialize informer after stopInformer() has been called.")
+    }
     if (informer == null) {
       logInfo(s"Initializing executor pods informer for application $applicationId")
       informer = kubernetesClient.pods()
@@ -48,6 +55,10 @@ class InformerManager(kubernetesClient: KubernetesClient, conf: SparkConf)
         .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
         .withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
         .runnableInformer(resyncInterval)
+        .exceptionHandler((_: Boolean, t: Throwable) => {
+          logWarning("Executor pods informer hit an error; will retry", t)
+          true
+        })
     }
   }
 
@@ -65,12 +76,15 @@ class InformerManager(kubernetesClient: KubernetesClient, conf: SparkConf)
         "Informer has not been initialized. Call initInformer() first.")
     }
     if (stopped) {
-      throw new IllegalStateException("Cannot run informer after stopInformer() has been called.")
+      throw new IllegalStateException(
+        "Cannot run informer after stopInformer() has been called.")
     }
     if (!informer.isRunning) {
-      informer.run()
+      // Non-blocking start; run() would block the SparkContext creation thread on the initial
+      // LIST. The lister source guards against operating on an unsynced cache via hasSynced().
+      informer.start()
     } else {
-      logInfo("Informer is already running.")
+      logDebug("Informer is already running.")
     }
   }
 
@@ -80,7 +94,7 @@ class InformerManager(kubernetesClient: KubernetesClient, conf: SparkConf)
         informer.close()
       }
       informer = null
-      stopped = true
     }
+    stopped = true
   }
 }

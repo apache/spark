@@ -16,12 +16,23 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
+
 /**
+ * :: DeveloperApi ::
+ *
  * Publishes snapshots of the set of executor pods that Kubernetes reports as running for an
  * application. Built-in implementations are chosen by
  * [[org.apache.spark.deploy.k8s.Config.KUBERNETES_EXECUTOR_ENABLE_INFORMER]].
+ *
+ * @since 4.4.0
  */
+@Stable
+@DeveloperApi
 trait ExecutorPodsSnapshotSource {
+  @Since("4.4.0")
   def start(applicationId: String): Unit
+
+  @Since("4.4.0")
   def stop(): Unit
 }

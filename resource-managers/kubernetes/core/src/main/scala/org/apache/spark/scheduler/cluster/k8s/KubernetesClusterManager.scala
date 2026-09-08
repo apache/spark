@@ -200,7 +200,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     allocatorInstance
   }
 
-  private def makeSnapshotSources(
+  private[k8s] def makeSnapshotSources(
       conf: SparkConf,
       kubernetesClient: KubernetesClient,
       snapshotsStore: ExecutorPodsSnapshotsStore): Seq[ExecutorPodsSnapshotSource] = {
