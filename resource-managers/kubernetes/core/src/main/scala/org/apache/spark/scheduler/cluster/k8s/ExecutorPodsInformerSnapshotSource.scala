@@ -27,12 +27,16 @@ import org.apache.spark.util.Utils
  * owned by [[InformerManager]]. Event-driven counterpart of [[ExecutorPodsListerSnapshotSource]],
  * which periodically snapshots the same informer's local cache.
  */
-class ExecutorPodsInformerSnapshotSource(
+private[spark] class ExecutorPodsInformerSnapshotSource(
     snapshotsStore: ExecutorPodsSnapshotsStore,
     informerManager: InformerManager)
   extends ExecutorPodsSnapshotSource with Logging {
 
+  private var started = false
+
   override def start(applicationId: String): Unit = {
+    require(!started, "Cannot start the informer source twice.")
+    started = true
     informerManager.initInformer(applicationId)
     informerManager.getInformer().addEventHandler(new ExecutorPodsInformer())
     informerManager.startInformer()
@@ -51,8 +55,14 @@ class ExecutorPodsInformerSnapshotSource(
     }
 
     override def onUpdate(oldPod: Pod, newPod: Pod): Unit = {
-      logDebug(s"Received update executor pod event for pod named ${newPod.getMetadata.getName}")
-      snapshotsStore.updatePod(newPod)
+      // When the informer runs with a non-zero resync period, every cached pod is replayed as
+      // an onUpdate with an unchanged resourceVersion. Skip those no-op replays to avoid
+      // driving snapshot subscribers with N churn snapshots per resync round.
+      if (oldPod.getMetadata.getResourceVersion != newPod.getMetadata.getResourceVersion) {
+        logDebug(s"Received update executor pod event for pod named " +
+          s"${newPod.getMetadata.getName}")
+        snapshotsStore.updatePod(newPod)
+      }
     }
 
     override def onDelete(pod: Pod, deletedFinalStateUnknown: Boolean): Unit = {

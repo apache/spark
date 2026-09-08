@@ -19,29 +19,24 @@ package org.apache.spark.scheduler.cluster.k8s
 import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.informers.{ResourceEventHandler, SharedIndexInformer}
-import org.mockito.{ArgumentCaptor, Mock, Mockito, MockitoAnnotations}
+import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfterEach
-import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_EXECUTOR_INFORMER_RESYNC_INTERVAL
-import org.apache.spark.deploy.k8s.Constants.{SPARK_APP_ID_LABEL, SPARK_EXECUTOR_INACTIVE_LABEL, SPARK_POD_EXECUTOR_ROLE, SPARK_ROLE_LABEL}
 import org.apache.spark.deploy.k8s.Fabric8Aliases.{LABELED_PODS, PODS}
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils.{runningExecutor, TEST_SPARK_APP_ID}
 
-class ExecutorPodsInformerSnapshotSourceSuite
-  extends SparkFunSuite
-  with BeforeAndAfterEach
-  with MockitoSugar {
-
-  private var snapshotSource: ExecutorPodsInformerSnapshotSource = _
-  private var informerManager: InformerManager = _
+class ExecutorPodsInformerSnapshotSourceSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   private val sparkConf = new SparkConf()
   private val resyncInterval = sparkConf.get(KUBERNETES_EXECUTOR_INFORMER_RESYNC_INTERVAL)
-  private val handlerCaptor: ArgumentCaptor[ResourceEventHandler[Pod]] =
-    ArgumentCaptor.forClass(classOf[ResourceEventHandler[Pod]])
+
+  private var snapshotSource: ExecutorPodsInformerSnapshotSource = _
+  private var informerManager: InformerManager = _
+  private var handlerCaptor: ArgumentCaptor[ResourceEventHandler[Pod]] = _
 
   @Mock
   private var kubernetesClient: KubernetesClient = _
@@ -59,29 +54,32 @@ class ExecutorPodsInformerSnapshotSourceSuite
   private var scopedPods: LABELED_PODS = _
 
   override def beforeEach(): Unit = {
-    MockitoAnnotations.initMocks(this)
+    MockitoAnnotations.openMocks(this).close()
+    handlerCaptor = ArgumentCaptor.forClass(classOf[ResourceEventHandler[Pod]])
+    InformerTestUtils.stubInformerBuilder(
+      kubernetesClient, podOperations, scopedPods, informer, TEST_SPARK_APP_ID, resyncInterval)
 
-    when(kubernetesClient.pods()).thenReturn(podOperations)
-    when(podOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(scopedPods)
-    when(scopedPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(scopedPods)
-    when(scopedPods.withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")).thenReturn(scopedPods)
-    when(scopedPods.runnableInformer(resyncInterval)).thenReturn(informer)
-    when(informer.isRunning).thenReturn(false)
-
-    informerManager = Mockito.spy[InformerManager](
-      new InformerManager(kubernetesClient, sparkConf))
+    informerManager = new InformerManager(kubernetesClient, sparkConf)
     snapshotSource = new ExecutorPodsInformerSnapshotSource(snapshotsStore, informerManager)
   }
 
-  test("Informer should be run when snapshot source is started") {
+  test("Informer should be started when snapshot source is started") {
     snapshotSource.start(TEST_SPARK_APP_ID)
-    verify(informer, times(1)).run()
+    verify(informer, times(1)).start()
   }
 
   test("Informer should stop running when snapshot source is stopped") {
     snapshotSource.start(TEST_SPARK_APP_ID)
     snapshotSource.stop()
     verify(informer, times(1)).close()
+  }
+
+  test("start should throw when called twice") {
+    snapshotSource.start(TEST_SPARK_APP_ID)
+    val e = intercept[IllegalArgumentException] {
+      snapshotSource.start(TEST_SPARK_APP_ID)
+    }
+    assert(e.getMessage.contains("Cannot start the informer source twice"))
   }
 
   test("Informer onAdd/onUpdate/onDelete should push updates to the snapshots store") {
@@ -102,6 +100,17 @@ class ExecutorPodsInformerSnapshotSourceSuite
     verify(snapshotsStore).updatePod(exec1)
     verify(snapshotsStore).updatePod(exec2ResourceVersionChanged)
     verify(snapshotsStore).updatePod(exec3)
+  }
+
+  test("Informer onUpdate should skip when resourceVersion is unchanged (resync replay)") {
+    snapshotSource.start(TEST_SPARK_APP_ID)
+    verify(informer).addEventHandler(handlerCaptor.capture())
+    val handler = handlerCaptor.getValue
+
+    val exec = withNewResourceVersion(runningExecutor(1), "42")
+    handler.onUpdate(exec, exec)
+
+    verify(snapshotsStore, never()).updatePod(any(classOf[Pod]))
   }
 
   def withNewResourceVersion(pod: Pod, version: String): Pod = {

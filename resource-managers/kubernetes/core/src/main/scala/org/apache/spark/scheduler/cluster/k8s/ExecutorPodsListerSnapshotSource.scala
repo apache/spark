@@ -34,7 +34,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * contents of the [[ExecutorPodsSnapshotsStore]] with the result. Companion to
  * [[ExecutorPodsInformerSnapshotSource]], which pushes updates as informer events arrive.
  */
-class ExecutorPodsListerSnapshotSource(
+private[spark] class ExecutorPodsListerSnapshotSource(
     conf: SparkConf,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
@@ -47,6 +47,7 @@ class ExecutorPodsListerSnapshotSource(
   private var pollingFuture: Future[_] = _
 
   override def start(applicationId: String): Unit = {
+    require(pollingFuture == null, "Cannot start lister polling more than once.")
     informerManager.initInformer(applicationId)
     informerManager.startInformer()
     val lister = new Lister[Pod](
@@ -68,9 +69,18 @@ class ExecutorPodsListerSnapshotSource(
 
   private class PollRunnable(lister: Lister[Pod]) extends Runnable {
     override def run(): Unit = Utils.tryLogNonFatalError {
-      // The informer is already scoped server-side to app-id + role=executor + non-inactive
-      // pods, so we can hand its snapshot to the store as-is.
-      snapshotsStore.replaceSnapshot(lister.list().asScala.toSeq)
+      // Skip the round if the informer has not completed its initial LIST yet. Otherwise the
+      // empty local cache would be handed to replaceSnapshot() and wipe every known executor
+      // from the snapshot store. Combined with InformerManager's force-retry exceptionHandler,
+      // a never-synced informer will keep retrying until sync completes rather than leaving
+      // polls skipped forever.
+      if (informerManager.getInformer().hasSynced) {
+        // The informer is already scoped server-side to app-id + role=executor + non-inactive
+        // pods, so we can hand its snapshot to the store as-is.
+        snapshotsStore.replaceSnapshot(lister.list().asScala.toSeq)
+      } else {
+        logDebug("Informer has not completed its initial sync yet; skipping this poll.")
+      }
     }
   }
 }
