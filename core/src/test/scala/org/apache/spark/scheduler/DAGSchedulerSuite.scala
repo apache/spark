@@ -154,14 +154,15 @@ class MyRDD(
   override def toString: String = "DAGSchedulerSuiteRDD " + id
 }
 
-/** A ShuffleDependency whose handle reports its output as reliably stored off-executor. */
+/** A ShuffleDependency whose handle reports a per-shuffle reliable-storage signal. */
 class ReliablyStoredShuffleDependency(
     rdd: RDD[_ <: Product2[Int, Int]],
-    partitioner: Partitioner)
+    partitioner: Partitioner,
+    reliablyStoredSignal: Option[Boolean] = Some(true))
   extends ShuffleDependency[Int, Int, Int](rdd, partitioner) {
   override val shuffleHandle: ShuffleHandle =
     new BaseShuffleHandle(shuffleId, this) {
-      override def isReliablyStored: Boolean = true
+      override def reliablyStored: Option[Boolean] = reliablyStoredSignal
     }
 }
 
@@ -1153,6 +1154,63 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     intercept[MetadataFetchFailedException] {
       mapOutputTracker.getMapSizesByExecutorId(localDep.shuffleId, 0)
     }
+  }
+
+  test("SPARK-59138: per-shuffle reliablyStored=false overrides a global supportsReliableStorage") {
+    // Mixed/fallback case: the manager reports the app-global capability as true, but a specific
+    // shuffle fell back to local disk and reports Some(false) on its handle. The per-shuffle value
+    // must win, so that shuffle's outputs are dropped on executor loss.
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "false")
+    conf.set(config.SHUFFLE_IO_PLUGIN_CLASS.key,
+      classOf[TestShuffleDataIOWithMockedComponents].getName)
+    when(sc.shuffleDriverComponents.supportsReliableStorage()).thenReturn(true)
+
+    val reliableRdd = new MyRDD(sc, 2, Nil)
+    val reliableDep = new ReliablyStoredShuffleDependency(reliableRdd, new HashPartitioner(1))
+    val fallbackRdd = new MyRDD(sc, 2, Nil)
+    val fallbackDep =
+      new ReliablyStoredShuffleDependency(fallbackRdd, new HashPartitioner(1), Some(false))
+    val reduceRdd = new MyRDD(sc, 1, List(reliableDep, fallbackDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0))
+
+    completeShuffleMapStageSuccessfully(0, 0, 1)
+    completeShuffleMapStageSuccessfully(1, 0, 1)
+
+    runEvent(ExecutorLost("hostA-exec", ExecutorKilled))
+
+    // Some(true) keeps hostA's output despite the global flag; Some(false) loses it despite it.
+    assert(mapOutputTracker.getMapSizesByExecutorId(reliableDep.shuffleId, 0).map(_._1).toSet ===
+      HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
+    intercept[MetadataFetchFailedException] {
+      mapOutputTracker.getMapSizesByExecutorId(fallbackDep.shuffleId, 0)
+    }
+  }
+
+  test("SPARK-59138: same-epoch FetchFailed after selective executor-loss cleanup is not skipped") {
+    // Selective cleanup on executor loss preserves a reliably-stored shuffle's outputs but must not
+    // record shuffleFileLostEpoch as a full cleanup: a later same-epoch FetchFailed for one of the
+    // preserved-but-actually-gone outputs must still trigger the real removal.
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "false")
+
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ReliablyStoredShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0, 1))
+    completeShuffleMapStageSuccessfully(0, 0, reduceRdd.partitions.length)
+
+    // Executor loss: reliably-stored shuffle is preserved (selective cleanup), no output removed.
+    runEvent(ExecutorLost("hostA-exec", ExecutorKilled))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1.host).toSet ===
+      HashSet("hostA", "hostB"))
+
+    // A reducer running at the same epoch reports FetchFailed for hostA's output, which is really
+    // gone. The selective cleanup didn't stamp shuffleFileLostEpoch, so the epoch-gated bulk
+    // cleanup proceeds instead of being skipped.
+    complete(taskSets(1), Seq(
+      (Success, 42),
+      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 0, 1, "ignored"), null)))
+    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec", false)
   }
 
   test("SPARK-28967 properties must be cloned before posting to listener bus for 0 partition") {
