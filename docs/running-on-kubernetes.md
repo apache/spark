@@ -425,6 +425,135 @@ If no volume is set as local storage, Spark uses temporary scratch space to spil
 
 In this case it may be desirable to set `spark.kubernetes.local.dirs.tmpfs=true` in your configuration which will cause the `emptyDir` volumes to be configured as `tmpfs` i.e. RAM backed volumes.  When configured like this Spark's local storage usage will count towards your pods memory usage therefore you may wish to increase your memory requests by increasing the value of `spark.{driver,executor}.memoryOverheadFactor` as appropriate.
 
+## Heterogeneous Executor Management
+
+By default, every executor of a Spark application is created from the same pod specification and keeps
+the same memory limit, local storage size, and task concurrency for its whole lifetime. On Kubernetes,
+Spark can instead adjust individual executors at runtime, so that executors of one application differ
+in memory, disk, and the number of tasks they accept, based on what the workload actually needs
+rather than on what was fixed at submission time. Three features implement this: two built-in plugins
+that grow the resources of running executors in place, and a recovery mode that changes how
+replacement executors are created after an out-of-memory failure.
+
+Spark already supports executors with different resources through
+[stage level scheduling](#stage-level-scheduling-overview) and `ResourceProfile`. That mechanism is
+declarative: the application states up front which resources each stage needs, and executors for a
+custom profile are requested with those fixed resources, typically via dynamic allocation. The features
+in this section are complementary and observation-driven: they act on executors that already exist,
+based on the memory and disk they actually use or on an OOM that actually happened, and require no
+change to the application code. They apply to executor pods of every resource profile.
+
+The resize plugins are registered via `spark.plugins` and run in the driver, while the recovery mode is
+built into the executor pod allocator and needs no plugin. All three features require the default
+`direct` pods allocator (`spark.kubernetes.allocation.pods.allocator`).
+
+### Executor Memory Resize
+
+`org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin` monitors the memory usage of the
+executor containers and raises their memory request and limit in place while the executors keep
+running. Every `spark.kubernetes.executor.resizeInterval`, the driver reads the container memory usage
+of each executor pod from the Kubernetes metrics API. When the usage exceeds
+`spark.kubernetes.executor.resizeThreshold` of the current memory limit, both the limit and the
+request are increased by `spark.kubernetes.executor.resizeFactor`, up to
+`spark.kubernetes.executor.resizeMaxMemory`. The pod is patched through the `resize` subresource, so
+the container is not restarted.
+
+```
+--conf spark.plugins=org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin
+--conf spark.kubernetes.executor.resizeInterval=1m
+```
+
+Prerequisites:
+
+* Kubernetes 1.33 or later, where in-place pod resize is enabled by default and exposed through the
+  `pods/resize` subresource. Spark already declares a `NotRequired` resize policy for `cpu` and `memory`
+  in the executor container, so a resize does not restart the container.
+* A metrics server, or another provider of the `metrics.k8s.io` API, so that the driver can read the
+  container memory usage.
+* The driver service account must be allowed to `list` `pods`, to `get` `pods` in the `metrics.k8s.io`
+  API group, and to `patch` the `pods/resize` subresource.
+
+Only the container memory request and limit change. The executor JVM heap (`-Xmx`) is fixed at
+submission time, so the additional memory benefits off-heap and native usage, for example Python
+workers, native libraries, and other non-heap memory, and protects executors from being killed by
+the container memory limit. Kubernetes may reject or defer a resize when the node does not have
+enough free memory; the plugin logs the failure and tries again at the next interval.
+
+### Executor PVC Resize
+
+`org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin` grows the persistent volume claims
+that back the executor local directories (see [Local Storage](#local-storage)). Each executor measures
+the filesystem usage of its local directories and reports the highest usage ratio to the driver every
+`spark.kubernetes.executor.pvc.resizeInterval`. When the ratio is above
+`spark.kubernetes.executor.pvc.resizeThreshold`, the driver grows the storage request of every
+`spark-local-dir-*` PVC mounted by that executor pod by `spark.kubernetes.executor.pvc.resizeFactor`,
+up to `spark.kubernetes.executor.pvc.resizeMaxStorage`.
+
+```
+--conf spark.plugins=org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin
+--conf spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.claimName=OnDemand
+--conf spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.storageClass=gp3
+--conf spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.sizeLimit=100Gi
+--conf spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.path=/data
+--conf spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.readOnly=false
+```
+
+Prerequisites:
+
+* Executor local directories on `persistentVolumeClaim` volumes whose names start with
+  `spark-local-dir-`. Other volume types are not resized.
+* A `StorageClass` with `allowVolumeExpansion: true`, and a storage driver that supports online
+  expansion because the pod keeps running during the resize.
+* The driver service account must be allowed to `list` `pods` and to `get` and `patch`
+  `persistentvolumeclaims`.
+
+The interval must be 0 or a positive multiple of 5 minutes, and 0 disables the plugin. A PVC only
+grows and never shrinks, and a PVC whose resize failed is skipped for the rest of the application.
+While an expansion is still in progress, the plugin waits instead of requesting another one. When
+PVCs are owned and reused by the driver (see
+[PVC-oriented executor pod allocation](#pvc-oriented-executor-pod-allocation)), the next executor that
+reuses a grown PVC inherits its new size.
+
+### Recovery-mode Executors
+
+Recovery mode is a reactive safety net for out-of-memory failures. When the driver removes an executor
+whose loss reason mentions OOM, for example exit code 52 (JVM OOM) or 137 (SIGKILL, possibly a
+container OOM), it switches the executor pod allocator to recovery mode. From then on, every newly
+created executor announces `ceil(spark.task.cpus)` cores to the scheduler and therefore accepts a
+single task at a time, while its pod still requests the configured executor cores and memory. A
+memory-hungry task gets the whole executor memory to itself instead of sharing it with other tasks,
+which lets the remaining tasks and stages finish instead of failing repeatedly with the same OOM.
+
+The property is unset by default, so recovery mode is off until the driver detects the first OOM.
+At that point the driver turns it on and it stays on for the rest of the driver's lifetime. Executors
+that were already running are not changed. Recovery-mode executors always derive their announced cores
+from `spark.task.cpus`, not from the resource profile of the stage. To disable the automatic switch:
+
+```
+--conf spark.kubernetes.allocation.recoveryMode.enabled=false
+```
+
+Setting the property to `true` starts the application in recovery mode from the beginning. See the
+description of `spark.kubernetes.allocation.recoveryMode.enabled` in the
+[Spark Properties](#spark-properties) table for the behavior when `spark.task.cpus` is 0.5 or less.
+
+### Combining the Features
+
+The three features are complementary. The resize plugins are proactive: they observe running executors
+and grow their memory or storage before a limit is hit, so that the executors stay alive. Recovery mode
+is reactive: it takes effect only after an executor has already been lost to an OOM, and it changes how
+the replacement executors behave rather than the resources of the existing ones. Both plugins can be
+registered together:
+
+```
+--conf spark.plugins=org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin,org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin
+```
+
+All of these features operate at the level of the driver, not of an individual job or session. In a
+long-running driver such as a Spark Connect server, the resized executors and the recovery mode are
+shared by all sessions of that driver: once one session triggers an OOM, every executor created
+afterwards for any session is a recovery-mode executor.
+
 
 ## Introspection and Debugging
 
