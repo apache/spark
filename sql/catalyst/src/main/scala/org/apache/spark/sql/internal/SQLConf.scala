@@ -7384,6 +7384,7 @@ object SQLConf {
         "join planning. The fallback may still use a broadcast nested loop join. By setting " +
         "this value to -1, the broadcast hash join optimization can be disabled.")
       .version("4.2.1")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(Long.MaxValue)
 
