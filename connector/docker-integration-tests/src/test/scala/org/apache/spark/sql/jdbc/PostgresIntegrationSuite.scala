@@ -402,8 +402,8 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
         .option("password", restrictedPassword)
         .load()
     }
-    assert(postgresError.getSQLState === "42501")
-    assert(postgresError.getMessage === "ERROR: permission denied for table bar")
+    assertResult("42501")(postgresError.getSQLState)
+    assertResult("ERROR: permission denied for table bar")(postgresError.getMessage)
   }
 
   test("write byte as smallint") {
