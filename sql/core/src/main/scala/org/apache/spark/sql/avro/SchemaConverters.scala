@@ -96,6 +96,23 @@ object SchemaConverters extends Logging {
   // The property specifies Catalyst type of the given field
   private val CATALYST_TYPE_PROP_NAME = "spark.sql.catalyst.type"
 
+  // Parses the Catalyst type carried in the `spark.sql.catalyst.type` Avro property with the
+  // recursive-descent Catalyst parser. A pathologically deep type string can exhaust the stack
+  // while parsing; the parser only converts `ParseException`, so such a `StackOverflowError`
+  // would otherwise escape as an unhandled error. Convert it into an `IncompatibleSchemaException`
+  // so it surfaces as a normal schema error. This runs on both the driver (schema inference) and
+  // executors (`AvroDeserializer`).
+  private def parseCatalystType(catalystTypeAttrValue: String): DataType = {
+    try {
+      CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+    } catch {
+      case e: StackOverflowError =>
+        throw new IncompatibleSchemaException(
+          s"Cannot parse the $CATALYST_TYPE_PROP_NAME Avro schema property because it is nested " +
+            "too deeply.", e)
+    }
+  }
+
   private def toSqlTypeHelper(
       avroSchema: Schema,
       existingRecordNames: Map[String, Int],
@@ -110,7 +127,7 @@ object SchemaConverters extends Logging {
           val catalystType = if (catalystTypeAttrValue == null) {
             IntegerType
           } else {
-            CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+            parseCatalystType(catalystTypeAttrValue)
           }
           SchemaType(catalystType, nullable = false)
       }
@@ -138,7 +155,7 @@ object SchemaConverters extends Logging {
           val nanosType = if (catalystTypeAttrValue == null) {
             TimestampLTZNanosType()
           } else {
-            CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+            parseCatalystType(catalystTypeAttrValue)
               .asInstanceOf[TimestampLTZNanosType]
           }
           SchemaType(nanosType, nullable = false)
@@ -147,7 +164,7 @@ object SchemaConverters extends Logging {
           val nanosType = if (catalystTypeAttrValue == null) {
             TimestampNTZNanosType()
           } else {
-            CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+            parseCatalystType(catalystTypeAttrValue)
               .asInstanceOf[TimestampNTZNanosType]
           }
           SchemaType(nanosType, nullable = false)
@@ -158,7 +175,7 @@ object SchemaConverters extends Logging {
           val timeType = if (catalystTypeAttrValue == null) {
             TimeType(TimeType.MICROS_PRECISION)
           } else {
-            CatalystSqlParser.parseDataType(catalystTypeAttrValue).asInstanceOf[TimeType]
+            parseCatalystType(catalystTypeAttrValue).asInstanceOf[TimeType]
           }
           SchemaType(timeType, nullable = false)
         case _ =>
@@ -166,7 +183,7 @@ object SchemaConverters extends Logging {
           val catalystType = if (catalystTypeAttrValue == null) {
             LongType
           } else {
-            CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+            parseCatalystType(catalystTypeAttrValue)
           }
           SchemaType(catalystType, nullable = false)
       }
