@@ -88,7 +88,11 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
         val currentEncoder = featureEncoders(featureIndex)
         indices = ArrayBuilder.make[Int]
         values = ArrayBuilder.make[Double]
-        size *= currentEncoder.outputSize
+        // Use an overflow-checked multiplication: declared nominal attribute sizes in
+        // column metadata can multiply past Int.MaxValue, which would otherwise wrap to a bogus
+        // (possibly negative) output-vector size and produce corrupt indices. Legitimate feature
+        // interactions must fit in an Int-indexed vector, so this never rejects valid input.
+        size = Math.multiplyExact(size, currentEncoder.outputSize)
         currentEncoder.foreachNonzeroOutput(row(featureIndex), (i, a) => {
           var j = 0
           while (j < prevIndices.length) {
