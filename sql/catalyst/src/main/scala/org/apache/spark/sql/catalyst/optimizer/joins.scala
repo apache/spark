@@ -529,6 +529,56 @@ trait JoinSelectionHelper extends Logging {
     hint.rightHint.exists(_.strategy.contains(NO_BROADCAST_AND_REPLICATION))
   }
 
+  def hintToRuntimeFilterSourceLeft(hint: JoinHint): Boolean = {
+    hint.leftHint.exists(_.runtimeFilterSource)
+  }
+
+  def hintToRuntimeFilterSourceRight(hint: JoinHint): Boolean = {
+    hint.rightHint.exists(_.runtimeFilterSource)
+  }
+
+  /**
+   * The join side a [[RuntimeFilterHint]] names as the runtime filter source, i.e. the side a
+   * runtime filter is built from to prune the other side. `None` when neither side is hinted, and
+   * also when both are: each side would then have to be the other's source, so the hint is
+   * ambiguous and ignored, see [[isRuntimeFilterHintAmbiguous]].
+   */
+  def runtimeFilterSourceSide(hint: JoinHint): Option[BuildSide] = {
+    (hintToRuntimeFilterSourceLeft(hint), hintToRuntimeFilterSourceRight(hint)) match {
+      case (true, false) => Some(BuildLeft)
+      case (false, true) => Some(BuildRight)
+      case _ => None
+    }
+  }
+
+  def isRuntimeFilterHintAmbiguous(hint: JoinHint): Boolean = {
+    hintToRuntimeFilterSourceLeft(hint) && hintToRuntimeFilterSourceRight(hint)
+  }
+
+  /**
+   * Whether `plan` can serve as a runtime filter source, i.e. produces the same rows each time it
+   * is evaluated. A runtime filter evaluates its source separately from the join, so a source that
+   * can yield different rows on re-evaluation could prune rows the join itself matches.
+   *
+   * `deterministic` covers expressions only. Some operators produce a row set that depends on
+   * evaluation order even with deterministic expressions: an unordered LIMIT, OFFSET or TAIL keeps
+   * whichever rows arrive first, and a SAMPLE above anything but a leaf sees a different row order
+   * per run. An ordered LIMIT is accepted: it is repeatable up to ties at the cutoff, which Spark
+   * leaves to the user wherever a top-n plan is evaluated more than once.
+   */
+  def isRepeatableRuntimeFilterSource(plan: LogicalPlan): Boolean = {
+    def isOrdered(p: LogicalPlan): Boolean = p match {
+      case Sort(_, true, _, _) => true
+      case _: Project | _: GlobalLimit | _: LocalLimit | _: Offset => isOrdered(p.children.head)
+      case _ => false
+    }
+    !plan.isStreaming && plan.deterministic && !plan.exists {
+      case l @ (_: GlobalLimit | _: LocalLimit | _: Offset | _: Tail) => !isOrdered(l.children.head)
+      case Sample(_, _, _, _, child, _) => !child.isInstanceOf[LeafNode]
+      case _ => false
+    }
+  }
+
   private def getBuildSide(
       canBuildLeft: Boolean,
       canBuildRight: Boolean,

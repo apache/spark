@@ -82,8 +82,13 @@ object JoinHint {
  * The hint attributes to be applied on a specific node.
  *
  * @param strategy The preferred join strategy.
+ * @param runtimeFilterSource Whether this side was hinted as a runtime filter source, i.e. the
+ *                            side a runtime filter should be built from to prune the other side
+ *                            of the join.
  */
-case class HintInfo(strategy: Option[JoinStrategyHint] = None) {
+case class HintInfo(
+    strategy: Option[JoinStrategyHint] = None,
+    runtimeFilterSource: Boolean = false) {
 
   /**
    * Combine this [[HintInfo]] with another [[HintInfo]] and return the new [[HintInfo]].
@@ -95,17 +100,27 @@ case class HintInfo(strategy: Option[JoinStrategyHint] = None) {
    * [[HintInfo]] if defined, otherwise the strategy in the other [[HintInfo]]. The
    * `hintOverriddenCallback` will be called if this [[HintInfo]] and the other [[HintInfo]]
    * both have a strategy defined but the join strategies are different.
+   *
+   * A runtime filter hint is not a join strategy, so it composes with one rather than overriding
+   * it: the merged [[HintInfo]] is a runtime filter source if either side is. Only the strategy
+   * is reported as overridden, since only the strategy is.
    */
   def merge(other: HintInfo, hintErrorHandler: HintErrorHandler): HintInfo = {
     if (this.strategy.isDefined &&
         other.strategy.isDefined &&
         this.strategy.get != other.strategy.get) {
-      hintErrorHandler.hintOverridden(other)
+      hintErrorHandler.hintOverridden(other.copy(runtimeFilterSource = false))
     }
-    HintInfo(strategy = this.strategy.orElse(other.strategy))
+    HintInfo(
+      strategy = this.strategy.orElse(other.strategy),
+      runtimeFilterSource = this.runtimeFilterSource || other.runtimeFilterSource)
   }
 
-  override def toString: String = strategy.map(s => s"(strategy=$s)").getOrElse("none")
+  override def toString: String = {
+    val fields = strategy.map(s => s"strategy=$s").toSeq ++
+      Option.when(runtimeFilterSource)("runtime_filter_source")
+    if (fields.isEmpty) "none" else fields.mkString("(", ", ", ")")
+  }
 }
 
 sealed abstract class JoinStrategyHint {
@@ -203,6 +218,21 @@ abstract class AggregateHint
 abstract class WindowHint
 
 abstract class SortHint
+
+/**
+ * The relation-level hint that marks a join side as a runtime filter source, i.e. the side a
+ * runtime filter is built from to prune the other side of the join, e.g.
+ * "RUNTIME_FILTER(dim)". Unlike a [[JoinStrategyHint]] this does not choose a join
+ * implementation, so it composes with one; it also does not name a filtering mechanism, leaving
+ * Spark free to pick one.
+ */
+object RuntimeFilterHint {
+  val hintName: String = "RUNTIME_FILTER"
+
+  def isRuntimeFilterHintName(name: String): Boolean = {
+    name.toUpperCase(Locale.ROOT) == hintName
+  }
+}
 
 /**
  * The callback for implementing customized strategies of handling hint errors.
