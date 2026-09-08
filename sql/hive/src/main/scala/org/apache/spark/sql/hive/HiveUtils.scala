@@ -200,6 +200,19 @@ private[spark] object HiveUtils extends Logging {
     .booleanConf
     .createWithDefault(false)
 
+  val INITIALIZE_METASTORE_FORMAT_CLASSES =
+    buildConf("spark.sql.hive.initializeMetastoreFormatClasses")
+      .doc("When true, an InputFormat/OutputFormat class name stored in the Hive metastore is " +
+        "resolved with its static initializer run at resolution time. When false, the class is " +
+        "resolved without running its static initializer, which then runs when the format is " +
+        "instantiated for a scan/write. Only the class name is needed when converting metastore " +
+        "metadata, so setting this to false avoids running a format class's static initializer " +
+        "during a metadata operation.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val HIVE_METASTORE_SHARED_PREFIXES = buildStaticConf("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
       "that is shared between Spark SQL and a specific version of Hive. An example of classes " +
