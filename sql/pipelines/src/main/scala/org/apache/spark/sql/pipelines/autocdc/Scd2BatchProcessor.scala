@@ -232,24 +232,20 @@ case class Scd2BatchProcessor(
             changeArgs = changeArgs,
             resolver = resolver
           )
+
+        // Only upsert rows get a populated version map. By convention, delete-encoded
+        // rows always maintain a null version map.
         val isUpsertRow = !changeArgs.deleteCondition.getOrElse(F.lit(false))
+        val versionMap = F.when(isUpsertRow, Scd2VersionMap.buildVersionMap(
+          schema = schemaEligibleForNullAuthorshipTracking,
+          ignoreNullSelection = ignoreNullSelection,
+          resolver = resolver
+        ))
 
         projectedDf.withColumn(
           colName = AutoCdcReservedNames.cdcMetadataColName,
-          col = Scd2BatchProcessor.constructCdcMetadataCol(
-            recordStartAt = Scd2BatchProcessor.recordStartAtOf(cdcMetadataCol),
-            // Only upsert rows get a populated version map. By convention, delete-encoded rows
-            // always maintain a null version map.
-            versionMap = F.when(
-              isUpsertRow,
-              Scd2VersionMap.buildVersionMap(
-                schema = schemaEligibleForNullAuthorshipTracking,
-                ignoreNullSelection = ignoreNullSelection,
-                resolver = resolver
-              )
-            ),
-            sequencingType = resolvedSequencingType
-          )
+          col = cdcMetadataCol
+            .withField(Scd2BatchProcessor.versionMapFieldName, versionMap)
         )
     }
 
