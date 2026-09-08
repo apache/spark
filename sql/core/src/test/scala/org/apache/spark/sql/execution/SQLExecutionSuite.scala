@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.classic
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
-import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
+import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.functions.{count, lit}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -512,6 +512,13 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key -> "true") {
         val observation = new Observation("obs")
+        val endEvents = new AtomicInteger(0)
+        spark.sparkContext.addSparkListener(new SparkListener {
+          override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+            case _: SparkListenerSQLExecutionEnd => endEvents.incrementAndGet()
+            case _ =>
+          }
+        })
         val df = spark.range(0, 4).repartition(2).observe(observation, count(lit(1)).as("cnt"))
         val qe = df.queryExecution
         // The cleanup runs `removeShuffle` only when the mode is not DoNotCleanup and the plan
@@ -522,8 +529,7 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
         val bodyFailure = new IllegalStateException("body failed")
         // Reproduce the teardown state that reaches this `finally`: both `dagScheduler` and the
         // `BlockManagerMaster` are down (stop() nulls the former before stopping `SparkEnv`). The
-        // shuffle cleanup runs first, so `removeShuffle` NPEs; the body's failure must still win
-        // and the observation must still complete.
+        // shuffle cleanup runs first, so `removeShuffle` NPEs; the body's failure must still win.
         val thrown = intercept[IllegalStateException] {
           withStoppedDagScheduler(spark) {
             withStoppedBlockManagerMaster(spark) {
@@ -534,8 +540,64 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
           }
         }
         assert(thrown eq bodyFailure)
+        // The observation must be completed and the end event posted, both from the same `finally`.
         assert(observation.future.isCompleted)
+        spark.sparkContext.listenerBus.waitUntilEmpty()
+        assert(endEvents.get() > 0)
       }
+    } finally {
+      spark.stop()
+    }
+  }
+
+  test("SPARK-59242: shuffle cleanup attempts every shuffle even after one fails") {
+    val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
+    try {
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key -> "true") {
+        // Two aggregations produce more than one shuffle.
+        val df = spark.range(0, 10).groupBy("id").count().groupBy("count").count()
+        val qe = df.queryExecution
+        val shuffleIds = qe.executedPlan.collect { case e: ShuffleExchangeLike => e.shuffleId }
+        assert(shuffleIds.size > 1)
+
+        // With the `BlockManagerMaster` stopped every `removeShuffle` fails, so a warning per
+        // shuffle id proves the cleanup did not abandon the rest after the first failure.
+        val appender = new LogAppender("shuffle cleanup")
+        withLogAppender(appender) {
+          withStoppedBlockManagerMaster(spark) {
+            SQLExecution.withNewExecutionId(qe)("result")
+          }
+        }
+        val failures = appender.loggingEvents
+          .map(_.getMessage.getFormattedMessage)
+          .count(_.contains("Failed to remove shuffle"))
+        assert(failures == shuffleIds.size)
+      }
+    } finally {
+      spark.stop()
+    }
+  }
+
+  test("SPARK-59242: an error while ending the execution still completes the observation") {
+    val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
+    try {
+      val observation = new Observation("obs")
+      val df = spark.range(1, 10).observe(observation, count(lit(1)).as("cnt"))
+      val qe = df.queryExecution
+      // A failure whose message cannot be rendered. `errorMessage` is computed inside the
+      // `finally`'s try, so its throw must not skip `tryComplete`.
+      val bodyFailure = new RuntimeException("body failed") {
+        override def getMessage: String = throw new IllegalStateException("cannot render message")
+      }
+      val thrown = intercept[IllegalStateException] {
+        SQLExecution.withNewExecutionId(qe) {
+          throw bodyFailure
+        }
+      }
+      assert(thrown.getMessage == "cannot render message")
+      assert(observation.future.isCompleted)
     } finally {
       spark.stop()
     }

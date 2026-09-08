@@ -143,21 +143,28 @@ object SQLExecution extends Logging {
           extractShuffleIds(plan)
       }
       shuffleIds.foreach { shuffleId =>
-        try {
-          queryExecution.shuffleCleanupMode match {
-            case RemoveShuffleFiles =>
+        queryExecution.shuffleCleanupMode match {
+          case RemoveShuffleFiles =>
+            try {
               // Same as ContextCleaner.doCleanupShuffle, but do not unregister the shuffle on
               // MapOutputTracker so that stage retries would be triggered. Blocking is
               // Utils.isTesting to deflake unit tests.
               sc.shuffleDriverComponents.removeShuffle(shuffleId, Utils.isTesting)
-            case SkipMigration =>
+            } catch {
+              case NonFatal(e) =>
+                logWarning(log"Failed to remove shuffle ${MDC(SHUFFLE_ID, shuffleId)} for " +
+                  log"execution ${MDC(EXECUTION_ID, executionId)}; its files may be left " +
+                  log"on disk.", e)
+            }
+          case SkipMigration =>
+            try {
               SparkEnv.get.blockManager.migratableResolver.addShuffleToSkip(shuffleId)
-            case _ => // this should not happen
-          }
-        } catch {
-          case NonFatal(e) =>
-            logWarning(log"Failed to clean up shuffle ${MDC(SHUFFLE_ID, shuffleId)} for " +
-              log"execution ${MDC(EXECUTION_ID, executionId)}; its files may be left on disk.", e)
+            } catch {
+              case NonFatal(e) =>
+                logWarning(log"Failed to mark shuffle ${MDC(SHUFFLE_ID, shuffleId)} to skip " +
+                  log"migration for execution ${MDC(EXECUTION_ID, executionId)}.", e)
+            }
+          case _ => // this should not happen
         }
       }
     } catch {
@@ -300,21 +307,20 @@ object SQLExecution extends Logging {
                 ex = Some(e)
                 throw e
             } finally {
-              val endTime = System.nanoTime()
-              val errorMessage = ex.map {
-                case e: SparkThrowable =>
-                  SparkThrowableHelper.getMessage(e, ErrorMessageFormat.PRETTY)
-                case e =>
-                  Utils.exceptionString(e)
-              }
-              // The rest of this `finally` runs while the query may be unwinding as the
-              // `SparkContext` is torn down: `SparkContext.stop()` nulls `dagScheduler` before it
-              // stops the listener bus, then stops `SparkEnv` (and the `BlockManagerMaster`). Each
-              // cleanup step below is best-effort so a teardown failure does not replace the
-              // query's real exception, and `tryComplete` runs from a `finally` so an
-              // `Observation.get` waiter is never left hung whatever the cleanup or event post
-              // throws.
+              // This whole `finally` runs while the query may be unwinding as the `SparkContext`
+              // is torn down: `SparkContext.stop()` nulls `dagScheduler` before it stops the
+              // listener bus, then stops `SparkEnv` (and the `BlockManagerMaster`). Rendering the
+              // error and each cleanup step below is best-effort so a teardown failure does not
+              // replace the query's real exception, and `tryComplete` runs from a `finally` so an
+              // `Observation.get` waiter is never left hung whatever this block throws.
               try {
+                val endTime = System.nanoTime()
+                val errorMessage = ex.map {
+                  case e: SparkThrowable =>
+                    SparkThrowableHelper.getMessage(e, ErrorMessageFormat.PRETTY)
+                  case e =>
+                    Utils.exceptionString(e)
+                }
                 if (queryExecution.shuffleCleanupMode != DoNotCleanup && isExecutedPlanAvailable) {
                   cleanupShuffleDependencies(queryExecution, executionId)
                 }
