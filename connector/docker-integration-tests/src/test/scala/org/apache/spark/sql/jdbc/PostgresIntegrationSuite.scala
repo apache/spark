@@ -385,7 +385,7 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
     assert(sql("select c1, c3 from queryOption").collect().toSet == expectedResult)
   }
 
-  test("SPARK-57780: do not classify insufficient privilege as a syntax error") {
+  test("SPARK-59336: do not classify insufficient privilege as a syntax error") {
     val restrictedUser = "restricted_user"
     val restrictedPassword = "restricted_password"
     val restrictedJdbcUrl = s"jdbc:postgresql://$dockerIp:$externalPort/postgres"

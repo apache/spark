@@ -82,7 +82,7 @@ class PostgresDialectSuite extends SparkFunSuite with MockitoSugar {
     verify(conn).setAutoCommit(false)
   }
 
-  test("SPARK-57780: classify only syntax error SQLSTATEs as syntax errors") {
+  test("SPARK-59336: classify only syntax error SQLSTATEs as syntax errors") {
     assert(dialect.isSyntaxErrorBestEffort(new SQLException("syntax error", "42000")))
     assert(dialect.isSyntaxErrorBestEffort(new SQLException("syntax error", "42601")))
     assert(!dialect.isSyntaxErrorBestEffort(new SQLException("permission denied", "42501")))
