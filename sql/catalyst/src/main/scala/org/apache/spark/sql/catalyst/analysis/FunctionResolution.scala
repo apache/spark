@@ -408,10 +408,12 @@ class FunctionResolution(
         case Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Builtin) =>
           return true
         case Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Temp) =>
-          // Honor stored-view temp visibility so this probe picks the same owner the resolver
-          // would: a temp not captured by the view is hidden here too, just as the persistent
-          // branch below expands through the view's frozen catalog.
-          if (v1SessionCatalog.isTemporaryScalarFunctionVisible(FunctionIdentifier(functionName))) {
+          // A visible temp scalar function shadows the builtin; a visible temp *table* function
+          // makes scalar resolution terminal at this PATH entry (NOT_A_SCALAR_FUNCTION). Either way
+          // the name never reaches system.builtin, mirroring `resolveFunctionCandidate`.
+          val ident = FunctionIdentifier(functionName)
+          if (v1SessionCatalog.isTemporaryScalarFunctionVisible(ident) ||
+              v1SessionCatalog.isTemporaryTableFunctionVisible(ident)) {
             return false
           }
         case None =>

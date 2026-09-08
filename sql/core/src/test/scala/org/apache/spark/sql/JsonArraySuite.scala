@@ -18,11 +18,12 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkRuntimeException
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{Cast, Collate, JsonArray, JsonConstructorNullBehavior, JsonQuery, JsonQueryBehavior, JsonQueryQuotes, JsonQueryWrapper, Literal, ResolvedCollation}
-import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.connector.catalog.InMemoryCatalog
+import org.apache.spark.sql.catalyst.plans.logical.{Project, Range}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, InMemoryCatalog}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{CharType, GeographyType, GeometryType, IntegerType, MapType, StringType, VarcharType}
@@ -691,6 +692,39 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
           sql("SET PATH = DEFAULT_PATH")
           sql("DROP FUNCTION IF EXISTS path_json_array.json_array")
         }
+      }
+    }
+  }
+
+  test("plain JSON_ARRAY(*) with a temp table function shadow reports NOT_A_SCALAR_FUNCTION") {
+    // A temp *table* function ahead of system.builtin makes scalar resolution terminal at that
+    // entry (scalar-miss/table-hit -> NOT_A_SCALAR_FUNCTION), so the bare-* guard must not fire:
+    // json_array(*) yields the same NOT_A_SCALAR_FUNCTION as json_array(1).
+    val tableRegistry = spark.sessionState.tableFunctionRegistry
+    val tempIdent = FunctionIdentifier(
+      "json_array",
+      Some(CatalogManager.SESSION_NAMESPACE),
+      Some(CatalogManager.SYSTEM_CATALOG_NAME))
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      try {
+        tableRegistry.createOrReplaceTempFunction(
+          "json_array", _ => Range(0, 1, 1, 1), "scala_udf")
+        sql("SET PATH = system.session, system.builtin")
+        Seq(false, true).foreach { singlePass =>
+          withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString) {
+            Seq("SELECT json_array(*) FROM VALUES (1, 'x') AS t(a, b)", "SELECT json_array(1)")
+              .foreach { query =>
+                val e = intercept[AnalysisException] {
+                  sql(query).queryExecution.analyzed
+                }
+                assert(e.getCondition == "NOT_A_SCALAR_FUNCTION",
+                  s"singlePass=$singlePass for $query")
+              }
+          }
+        }
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        tableRegistry.dropFunction(tempIdent)
       }
     }
   }

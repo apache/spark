@@ -1802,6 +1802,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
       // Outside any view context, a registered temp scalar function is visible.
       assert(catalog.isTemporaryScalarFunctionVisible(FunctionIdentifier("temp_json")))
+      assert(!catalog.isTemporaryTableFunctionVisible(FunctionIdentifier("temp_json")))
 
       // Inside a view that did NOT capture it (e.g. an unrelated temp created after the view), it
       // is hidden, matching handleViewContext used by actual resolution -- so the builtin-ownership
@@ -1816,11 +1817,10 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     }
   }
 
-  test("isTemporaryScalarFunctionVisible ignores a same-named temp table function") {
-    // The probe governs scalar builtin star handling, which mirrors the scalar-only
-    // resolveScalarFunctionByIdentifier. A temp table function of the same name is not a scalar
-    // shadow, so it must not make the name look shadowed (which would suppress count(*) -> count(1)
-    // or the json_array(*) bare-star rejection).
+  test("temp table function is visible to the table probe, not the scalar probe") {
+    // Scalar and table temp functions are probed separately. The scalar probe mirrors the
+    // scalar-only resolveScalarFunctionByIdentifier, so a same-named temp *table* function is not
+    // visible to it; its effect (making scalar resolution terminal) is reported by the table probe.
     val extCatalog = newEmptyCatalog()
     extCatalog.createDatabase(newDb("default"), ignoreIfExists = true)
     val scalarRegistry = new SimpleFunctionRegistry()
@@ -1838,6 +1838,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         "a temp table function should count as a temporary function")
       assert(!catalog.isTemporaryScalarFunctionVisible(FunctionIdentifier("count")),
         "a temp table function must not be visible to the scalar ownership probe")
+      assert(catalog.isTemporaryTableFunctionVisible(FunctionIdentifier("count")),
+        "a temp table function must be visible to the table ownership probe")
     } finally {
       catalog.reset()
     }
