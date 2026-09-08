@@ -241,15 +241,18 @@ class JDBCTableCatalogSuite extends SharedSparkSession {
       searchPath = "not available")
   }
 
-  test("SPARK-58945: H2 alterTable deleteColumn reports source table") {
+  // `test`.`people` exists, so H2 reports `test`.`PEOPLE` as not found with candidates (42103).
+  // Only the parser's not-found path returns 42103. `renameTable` resolves the table in
+  // `AlterTable.update()`, which always returns 42102, so `alterTable` is needed here.
+  test("SPARK-58945: H2 alterTable reports source table when it is missing") {
     val e = intercept[NoSuchTableException] {
       tableCatalog.alterTable(
-        Identifier.of(Array("test"), "people"),
-        TableChange.deleteColumn(Array("missing_col"), false))
+        Identifier.of(Array("test"), "PEOPLE"),
+        TableChange.deleteColumn(Array("id"), false))
     }
     checkErrorTableNotFoundWithSearchPath(
       e,
-      "`test`.`people`",
+      "`test`.`PEOPLE`",
       searchPath = "not available")
   }
 
