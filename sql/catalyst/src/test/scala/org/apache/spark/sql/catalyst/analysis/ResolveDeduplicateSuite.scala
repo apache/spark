@@ -135,31 +135,33 @@ class ResolveDeduplicateSuite extends AnalysisTest {
     assert(resolved.asInstanceOf[DeduplicateWithinWatermark].keys.map(_.name) === Seq("a"))
   }
 
-  test("streaming recomputation excludes metadata added after the deduplication boundary") {
-    val evolvedDataColumn = $"evolved".int
+  test("recomputation excludes metadata added after the deduplication boundary") {
     val metadataAddedAfterDeduplication = MetadataAttribute("_metadata", StringType)
-    val expandedRelation = RelationWithMetadata(
-      rel.output :+ evolvedDataColumn, Seq(metadataAddedAfterDeduplication))
-    val recomputationChild = Project(
-      expandedRelation.output :+ metadataAddedAfterDeduplication, expandedRelation)
+    val relation = RelationWithMetadata(rel.output, Seq(metadataAddedAfterDeduplication))
+    // Model AddMetadataColumns promoting a downstream metadata reference after keys were resolved.
+    val childAfterMetadataPropagation = Project(
+      relation.output :+ metadataAddedAfterDeduplication, relation)
+    val originalKeys = rel.output
     val spec = DeduplicateSpec(DeduplicateAllColumnsAsKey, viaSparkClassic = true)
 
     val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
-      rel.output, recomputationChild, spec, orderDeterministically = true, SQLConf.get.resolver)
+      originalKeys, childAfterMetadataPropagation, spec, orderDeterministically = true,
+      SQLConf.get.resolver)
 
-    assert(recomputedKeys === rel.output :+ evolvedDataColumn)
+    assert(recomputedKeys === originalKeys)
   }
 
-  test("streaming recomputation retains metadata visible at the deduplication boundary") {
+  test("recomputation retains metadata visible at the deduplication boundary") {
     val metadataSelectedBeforeDeduplication = MetadataAttribute("_metadata", StringType)
     val relation = RelationWithMetadata(rel.output, Seq(metadataSelectedBeforeDeduplication))
-    val recomputationChild = Project(
+    // Model an explicit metadata projection before deduplication keys were resolved.
+    val childWithSelectedMetadata = Project(
       relation.output :+ metadataSelectedBeforeDeduplication, relation)
-    val originalKeys = recomputationChild.output
+    val originalKeys = childWithSelectedMetadata.output
     val spec = DeduplicateSpec(DeduplicateAllColumnsAsKey, viaSparkClassic = true)
 
     val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
-      originalKeys, recomputationChild, spec, orderDeterministically = true,
+      originalKeys, childWithSelectedMetadata, spec, orderDeterministically = true,
       SQLConf.get.resolver)
 
     assert(recomputedKeys === originalKeys)
