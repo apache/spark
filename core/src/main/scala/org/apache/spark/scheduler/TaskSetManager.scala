@@ -1229,17 +1229,19 @@ private[spark] class TaskSetManager(
     // producer's set; this guard also covers a PARTIALLY-complete producer losing an executor on
     // decommission.
 
-    // OR, not AND: a shuffle reliably stored off-executor (globally, or just this one via a remote
-    // shuffle service) keeps its map output when the executor dies. The per-shuffle bit only ever
-    // adds reliability (defaults to false, set true solely by an opting-in manager), so a false
-    // there means "no info", not "unreliable".
-    val reliablyStored = sched.sc.shuffleDriverComponents.supportsReliableStorage() ||
-      taskSet.shuffleId.exists { shuffleId =>
+    // Per-shuffle reliability is authoritative. The tracker's stored value already folds in the
+    // app-global supportsReliableStorage() at registerShuffle time (a handle that sets
+    // reliablyStored wins, else the global flag), so use it for a registered shuffle and fall back
+    // to the global flag only when the shuffle isn't registered here.
+    val reliablyStored = taskSet.shuffleId match {
+      case Some(shuffleId) =>
         sched.mapOutputTracker match {
-          case master: MapOutputTrackerMaster => master.isReliablyStored(shuffleId)
-          case _ => false
+          case master: MapOutputTrackerMaster if master.containsShuffle(shuffleId) =>
+            master.isReliablyStored(shuffleId)
+          case _ => sched.sc.shuffleDriverComponents.supportsReliableStorage()
         }
-      }
+      case None => sched.sc.shuffleDriverComponents.supportsReliableStorage()
+    }
     val maybeShuffleMapOutputLoss = isShuffleMapTasks && !taskSet.isPipelined &&
       !reliablyStored &&
       (reason.isInstanceOf[ExecutorDecommission] || !env.blockManager.externalShuffleServiceEnabled)
